@@ -32,7 +32,13 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
     const fnMatch = jsxCode.match(/function\s+(\w+)\s*\(/);
     const fnName = fnMatch?.[1] ?? "GeneratedUI";
 
-    const wrappedCode = `${code}\nreturn ${fnName};`;
+    // Destructure Recharts and React hooks so generated code can use names directly
+    const preamble = [
+      "const { useState, useEffect, useMemo, useCallback, useRef, Fragment } = React;",
+      "const { BarChart, LineChart, PieChart, AreaChart, RadarChart, Bar, Line, Pie, Area, Radar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ComposedChart, Scatter, RadialBarChart, RadialBar, Treemap, Funnel, FunnelChart } = Recharts;",
+    ].join("\n");
+
+    const wrappedCode = `${preamble}\n${code}\nreturn ${fnName};`;
 
     // Execute in controlled scope — no DOM, no network, no globals
     const factory = new Function("React", "Recharts", "LucideReact", wrappedCode);

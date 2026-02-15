@@ -10,6 +10,21 @@ import {
 } from "./ui-generator.js";
 
 /**
+ * Strip Gemini thinking/reasoning blocks from response text.
+ * Gemini 2.5 Flash outputs thinking as regular text with bold headers
+ * (e.g. "**Analyzing...**\n\nreasoning text\n\n\n") before the actual response.
+ */
+function stripThinkingBlocks(text: string): string {
+  // Match one or more thinking blocks at the start of the text:
+  // **Bold Title**\n\n<reasoning content>\n\n\n
+  const stripped = text.replace(
+    /^(?:\*\*[^*]+\*\*\s*\n\n[\s\S]*?\n\n\n)+/,
+    "",
+  );
+  return stripped.trim() || text;
+}
+
+/**
  * Deliver an agent reply payload to a connected browser client.
  * Called from the buffered block dispatcher's `deliver` callback.
  */
@@ -23,7 +38,7 @@ export async function deliverEnsoReply(params: {
   statusSink?: (patch: { lastOutboundAt?: number }) => void;
 }): Promise<void> {
   const { payload, client, runId, seq, account, userMessage, statusSink } = params;
-  const text = payload.text ?? "";
+  const text = stripThinkingBlocks(payload.text ?? "");
   console.log(`[enso:outbound] deliverEnsoReply called, seq=${seq}, textLen=${text.length}`);
 
   // Collect media URLs from payload, converting local paths to HTTP URLs
@@ -105,7 +120,7 @@ export async function deliverToEnso(ctx: {
   }
 
   const messageId = randomUUID();
-  const text = ctx.text ?? "";
+  const text = stripThinkingBlocks(ctx.text ?? "");
   console.log(`[enso:outbound] deliverToEnso called, to=${ctx.to}, textLen=${text.length}, targets=${targets.length}, mediaUrl=${ctx.mediaUrl ?? "none"}, keys=${Object.keys(ctx).join(",")}`);
 
   let data: unknown = undefined;
