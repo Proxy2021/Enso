@@ -1,0 +1,12 @@
+{
+  "name": "@openclaw/enso",
+  "version": "2026.2.15",
+  "description": "OpenClaw Enso plugin — React-based AI channel with dynamic UI generation",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "dependencies": {}
+}

@@ -1,0 +1,9 @@
+{
+  "id": "enso",
+  "channels": ["enso"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
