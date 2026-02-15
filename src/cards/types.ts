@@ -1,4 +1,4 @@
-import type { ServerMessage } from "@shared/types";
+import type { ServerMessage, ToolQuestion } from "@shared/types";
 
 // ── Card ──
 
@@ -18,6 +18,9 @@ export interface Card {
 
   // Tool/routing context
   toolMeta?: { toolId: string; toolSessionId?: string };
+
+  // Interactive questions (from Claude Code AskUserQuestion)
+  pendingQuestions?: ToolQuestion[];
 
   // Timestamps
   createdAt: number;

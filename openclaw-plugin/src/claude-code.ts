@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { createInterface } from "readline";
 import { randomUUID } from "crypto";
 import type { ConnectedClient } from "./server.js";
-import type { ServerMessage } from "./types.js";
+import type { ServerMessage, ToolQuestion } from "./types.js";
 
 /**
  * Directly invoke the Claude Code CLI, streaming results back to the
@@ -88,11 +88,12 @@ export async function runClaudeCode(params: {
     } as ServerMessage);
   };
 
-  const sendDelta = (text: string) => {
-    if (!text) return;
-    totalTextSent += text.length;
-    lastCharNewline = text.endsWith("\n");
-    send({ state: "delta", text });
+  const sendDelta = (text?: string, extra?: Partial<ServerMessage>) => {
+    if (text) {
+      totalTextSent += text.length;
+      lastCharNewline = text.endsWith("\n");
+    }
+    send({ state: "delta", ...(text ? { text } : {}), ...extra });
   };
 
   const sendFinal = () => {
@@ -152,20 +153,41 @@ export async function runClaudeCode(params: {
         return;
       }
 
-      // ── Assistant turn (full text per turn) ──
-      // Used as fallback when no streaming deltas are available.
-      // Skip if we already received streaming deltas for this content.
+      // ── Assistant turn (full text per turn + tool_use blocks) ──
       if (event.type === "assistant") {
         const msg = event.message as Record<string, unknown> | undefined;
         const content = msg?.content as Array<Record<string, unknown>> | undefined;
         if (Array.isArray(content)) {
+          // Fallback: send full text if no streaming deltas arrived
           const textParts = content
             .filter((c) => c.type === "text" && typeof c.text === "string")
             .map((c) => c.text as string);
           const fullText = textParts.join("");
-          // Only use assistant text if we haven't received any streaming deltas
           if (fullText && totalTextSent === 0) {
             sendDelta(fullText);
+          }
+
+          // Detect AskUserQuestion tool_use blocks
+          for (const block of content) {
+            if (block.type === "tool_use" && block.name === "AskUserQuestion") {
+              const input = (block.input ?? {}) as {
+                questions?: Array<{
+                  question: string;
+                  options: Array<{ label: string; description?: string }>;
+                }>;
+              };
+              if (input.questions && input.questions.length > 0) {
+                const questions: ToolQuestion[] = input.questions.map((q) => ({
+                  question: q.question,
+                  options: q.options.map((o) => ({
+                    label: o.label,
+                    ...(o.description ? { description: o.description } : {}),
+                  })),
+                }));
+                console.log(`[claude-code] AskUserQuestion: ${questions.length} question(s)`);
+                sendDelta(undefined, { questions });
+              }
+            }
           }
         }
         return;

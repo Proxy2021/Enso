@@ -29,6 +29,13 @@ export type EnsoInboundMessage = {
   timestamp: number;
 };
 
+/** Interactive Questions (from Claude Code AskUserQuestion) */
+
+export interface ToolQuestion {
+  question: string;
+  options: Array<{ label: string; description?: string }>;
+}
+
 /** Protocol types shared with the browser client */
 
 export interface ToolRouting {
@@ -51,6 +58,7 @@ export interface ServerMessage {
   toolMeta?: { toolId: string; toolSessionId?: string };
   targetCardId?: string;
   projects?: Array<{ name: string; path: string }>;
+  questions?: ToolQuestion[];
   timestamp: number;
 }
 

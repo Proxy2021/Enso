@@ -60,10 +60,6 @@ function TerminalInput({ onSubmit }: { onSubmit: (text: string) => void }) {
     }
   }
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
   return (
     <div className="flex items-center gap-2 pt-2 border-t border-gray-800/50 mt-2">
       <span className="text-green-400 font-bold shrink-0">{"\u276F"}</span>
@@ -73,9 +69,41 @@ function TerminalInput({ onSubmit }: { onSubmit: (text: string) => void }) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Type a message..."
+        placeholder="Ask Claude Code..."
         className="flex-1 bg-transparent text-gray-100 text-sm outline-none placeholder-gray-600 font-mono"
       />
+    </div>
+  );
+}
+
+// ── Question Options ──
+
+function QuestionOptions({
+  questions,
+  onSelect,
+}: {
+  questions: NonNullable<Card["pendingQuestions"]>;
+  onSelect: (text: string) => void;
+}) {
+  return (
+    <div className="mt-3 mb-1 space-y-4">
+      {questions.map((q, qi) => (
+        <div key={qi}>
+          <div className="text-gray-300 text-sm mb-2 pl-5">{q.question}</div>
+          <div className="flex flex-wrap gap-2 pl-5">
+            {q.options.map((opt, oi) => (
+              <button
+                key={oi}
+                onClick={() => onSelect(opt.label)}
+                className="px-3 py-1.5 text-xs rounded-md border border-gray-700 bg-gray-800/60 text-gray-200 hover:bg-gray-700 hover:border-gray-600 hover:text-white transition-colors cursor-pointer"
+                title={opt.description}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -203,6 +231,10 @@ export default function TerminalCard({ card }: CardRendererProps) {
               {entries.map((entry, i) => (
                 <TerminalBlock key={i} entry={entry} />
               ))}
+
+              {card.pendingQuestions && card.pendingQuestions.length > 0 && !isStreaming && (
+                <QuestionOptions questions={card.pendingQuestions} onSelect={handleInput} />
+              )}
             </>
           )}
 

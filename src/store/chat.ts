@@ -155,6 +155,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 ...card,
                 text: (card.text ?? "") + `>>> ${displayText}\n`,
                 status: "streaming",
+                pendingQuestions: undefined, // clear questions when user responds
                 updatedAt: now,
               },
             },
@@ -337,15 +338,19 @@ export const useChatStore = create<CardStore>((set, get) => ({
         if (!card) return { isWaiting: false };
 
         if (msg.state === "delta") {
-          // Don't clear isWaiting on delta — wait for final/error
+          // When questions arrive, Claude is blocked waiting for input —
+          // mark the card as complete so buttons render and cursor stops.
+          const hasQuestions = msg.questions && msg.questions.length > 0;
           return {
+            ...(hasQuestions ? { isWaiting: false } : {}),
             cards: {
               ...state.cards,
               [cardId]: {
                 ...card,
                 text: (card.text ?? "") + (msg.text ?? ""),
-                status: "streaming",
+                status: hasQuestions ? "complete" : "streaming",
                 toolMeta: msg.toolMeta ?? card.toolMeta,
+                ...(hasQuestions ? { pendingQuestions: msg.questions } : {}),
                 updatedAt: now,
               },
             },
