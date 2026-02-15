@@ -10,6 +10,7 @@ import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
 import { handleEnsoInbound } from "./inbound.js";
 import { handlePluginCardAction } from "./outbound.js";
+import { runClaudeCode } from "./claude-code.js";
 
 export type ConnectedClient = {
   id: string;
@@ -58,6 +59,40 @@ export function broadcastToSession(sessionKey: string, msg: ServerMessage): void
   for (const client of getClientsBySession(sessionKey)) {
     client.send(msg);
   }
+}
+
+/**
+ * Scan for git-based projects in common directories.
+ */
+function scanProjects(): Array<{ name: string; path: string }> {
+  const projects: Array<{ name: string; path: string }> = [];
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const searchDirs = [
+    join(home, "Github"),
+    join(home, "Projects"),
+    join(home, "repos"),
+    join(home, "src"),
+    "D:\\Github",
+    "C:\\Github",
+  ];
+
+  for (const dir of searchDirs) {
+    try {
+      if (!existsSync(dir)) continue;
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const projectPath = join(dir, entry.name);
+        if (existsSync(join(projectPath, ".git"))) {
+          projects.push({ name: entry.name, path: projectPath });
+        }
+      }
+    } catch {
+      // Directory not readable
+    }
+  }
+
+  return projects;
 }
 
 export async function startEnsoServer(opts: {
@@ -165,7 +200,17 @@ export async function startEnsoServer(opts: {
 
         switch (msg.type) {
           case "chat.send":
-            if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
+            // Direct tool invocation — bypass OpenClaw pipeline entirely
+            if (msg.routing?.toolId === "claude-code" && msg.text) {
+              runtime.log?.(`[enso] direct claude-code: "${msg.text.slice(0, 60)}"`);
+              await runClaudeCode({
+                prompt: msg.text,
+                cwd: msg.routing.cwd,
+                toolSessionId: msg.routing.toolSessionId,
+                client,
+                runId: randomUUID(),
+              });
+            } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
               await handleEnsoInbound({
                 message: {
                   messageId: randomUUID(),
@@ -179,6 +224,7 @@ export async function startEnsoServer(opts: {
                 config,
                 runtime,
                 client,
+                routing: msg.routing,
                 statusSink,
               });
             }
@@ -216,6 +262,19 @@ export async function startEnsoServer(opts: {
               });
             }
             break;
+          case "tools.list_projects": {
+            const projects = scanProjects();
+            send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey,
+              seq: 0,
+              state: "final",
+              projects,
+              timestamp: Date.now(),
+            });
+            break;
+          }
           case "chat.history":
             break;
         }

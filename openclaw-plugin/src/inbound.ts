@@ -4,7 +4,7 @@ import {
   type RuntimeEnv,
 } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
-import type { CoreConfig, EnsoInboundMessage, ServerMessage } from "./types.js";
+import type { CoreConfig, EnsoInboundMessage, ServerMessage, ToolRouting } from "./types.js";
 import type { ConnectedClient } from "./server.js";
 import { getEnsoRuntime } from "./runtime.js";
 import { deliverEnsoReply } from "./outbound.js";
@@ -18,10 +18,11 @@ export async function handleEnsoInbound(params: {
   config: CoreConfig;
   runtime: RuntimeEnv;
   client: ConnectedClient;
+  routing?: ToolRouting;
   targetCardId?: string;
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }): Promise<void> {
-  const { message, account, config, runtime, client, targetCardId, statusSink } = params;
+  const { message, account, config, runtime, client, routing, targetCardId, statusSink } = params;
   const core = getEnsoRuntime();
 
   const rawBody = message.text?.trim() ?? "";
@@ -112,6 +113,7 @@ export async function handleEnsoInbound(params: {
     dispatcherOptions: {
       ...prefixOptions,
       deliver: async (payload) => {
+        const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
         await deliverEnsoReply({
           payload: payload as { text?: string; mediaUrl?: string; mediaUrls?: string[] },
           client,
@@ -120,6 +122,7 @@ export async function handleEnsoInbound(params: {
           account,
           userMessage: rawBody,
           targetCardId,
+          toolMeta,
           statusSink,
         });
       },

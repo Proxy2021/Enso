@@ -54,9 +54,10 @@ export async function deliverEnsoReply(params: {
   account: ResolvedEnsoAccount;
   userMessage: string;
   targetCardId?: string;
+  toolMeta?: { toolId: string; toolSessionId?: string };
   statusSink?: (patch: { lastOutboundAt?: number }) => void;
 }): Promise<void> {
-  const { payload, client, runId, seq, account, userMessage, targetCardId, statusSink } = params;
+  const { payload, client, runId, seq, account, userMessage, targetCardId, toolMeta, statusSink } = params;
   const text = stripThinkingBlocks(payload.text ?? "");
   console.log(`[enso:outbound] deliverEnsoReply called, seq=${seq}, textLen=${text.length}`);
 
@@ -69,6 +70,26 @@ export async function deliverEnsoReply(params: {
   }
 
   if (!text.trim() && mediaUrls.length === 0) {
+    return;
+  }
+
+  // Tool-routed messages (e.g. claude-code) bypass UI generation —
+  // they're rendered as raw text in a terminal card.
+  if (toolMeta) {
+    const msg: ServerMessage = {
+      id: targetCardId ?? randomUUID(),
+      runId,
+      sessionKey: client.sessionKey,
+      seq,
+      state: "final",
+      text,
+      toolMeta,
+      mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+      ...(targetCardId ? { targetCardId } : {}),
+      timestamp: Date.now(),
+    };
+    client.send(msg);
+    statusSink?.({ lastOutboundAt: Date.now() });
     return;
   }
 
