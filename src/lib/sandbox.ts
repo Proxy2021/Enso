@@ -2,9 +2,15 @@ import React from "react";
 import * as Recharts from "recharts";
 import * as LucideReact from "lucide-react";
 import { transform } from "sucrase";
+import type { ToolRouting } from "@shared/types";
 
 interface CompileResult {
-  Component: React.FC<{ data: unknown; sendMessage: (text: string) => void; theme: string }>;
+  Component: React.FC<{
+    data: unknown;
+    sendMessage: (text: string, routing?: ToolRouting) => void;
+    onAction: (action: string, payload?: unknown) => void;
+    theme: string;
+  }>;
   error?: undefined;
 }
 

@@ -1,27 +1,56 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
-import type { ServerMessage } from "@shared/types";
-import type { ChatMessage } from "../types";
+import type { ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
+import type { Card } from "../cards/types";
+import { cardRegistry } from "../cards/registry";
 import { createWSClient, type ConnectionState } from "../lib/ws-client";
 
-interface ChatStore {
-  messages: ChatMessage[];
+export interface ProjectInfo {
+  name: string;
+  path: string;
+}
+
+interface CardStore {
+  // Card state (normalized)
+  cardOrder: string[];
+  cards: Record<string, Card>;
+
+  // Connection & session
   connectionState: ConnectionState;
   isWaiting: boolean;
   _wsClient: ReturnType<typeof createWSClient> | null;
 
+  // Claude Code session state
+  projects: ProjectInfo[];
+  codeSessionCwd: string | null;
+  codeSessionId: string | null;
+
+  // Internal: active terminal card
+  _activeTerminalCardId: string | null;
+
+  // Actions
   connect: () => void;
   disconnect: () => void;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, routing?: ToolRouting) => void;
   sendMessageWithMedia: (text: string, mediaFiles: File[]) => Promise<void>;
+  sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
+  collapseCard: (cardId: string) => void;
+  expandCard: (cardId: string) => void;
+  fetchProjects: () => void;
+  setCodeSessionCwd: (cwd: string) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
-export const useChatStore = create<ChatStore>((set, get) => ({
-  messages: [],
+export const useChatStore = create<CardStore>((set, get) => ({
+  cardOrder: [],
+  cards: {},
   connectionState: "disconnected",
   isWaiting: false,
   _wsClient: null,
+  projects: [],
+  codeSessionCwd: null,
+  codeSessionId: null,
+  _activeTerminalCardId: null,
 
   connect: () => {
     const existing = get()._wsClient;
@@ -47,18 +76,118 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ _wsClient: null, connectionState: "disconnected" });
   },
 
-  sendMessage: (text: string) => {
+  sendMessage: (text: string, routing?: ToolRouting) => {
+    let displayText = text;
+    let finalRouting = routing;
+
+    // Bare "/code" opens project picker
+    if (text.trim() === "/code") {
+      get().fetchProjects();
+      const id = uuidv4();
+      const now = Date.now();
+      const card: Card = {
+        id,
+        runId: id,
+        type: "terminal",
+        role: "assistant",
+        status: "complete",
+        display: "expanded",
+        toolMeta: { toolId: "claude-code" },
+        createdAt: now,
+        updatedAt: now,
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, id],
+        cards: { ...s.cards, [id]: card },
+        _activeTerminalCardId: id,
+      }));
+      return;
+    }
+
+    // /code prefix auto-routes to claude-code tool
+    if (!finalRouting && text.startsWith("/code ")) {
+      displayText = text.slice(6);
+      const cwd = get().codeSessionCwd;
+      const toolSessionId = get().codeSessionId;
+      finalRouting = {
+        mode: "direct_tool",
+        toolId: "claude-code",
+        ...(toolSessionId ? { toolSessionId } : {}),
+        ...(cwd ? { cwd } : {}),
+      };
+    }
+
+    // Terminal routing: append to active terminal card
+    if (finalRouting?.toolId === "claude-code") {
+      const now = Date.now();
+      let termCardId = get()._activeTerminalCardId;
+
+      if (!termCardId) {
+        // Create a terminal card if none exists
+        termCardId = uuidv4();
+        const card: Card = {
+          id: termCardId,
+          runId: termCardId,
+          type: "terminal",
+          role: "assistant",
+          status: "streaming",
+          display: "expanded",
+          text: `>>> ${displayText}\n`,
+          toolMeta: { toolId: "claude-code" },
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({
+          cardOrder: [...s.cardOrder, termCardId!],
+          cards: { ...s.cards, [termCardId!]: card },
+          _activeTerminalCardId: termCardId,
+          isWaiting: true,
+        }));
+      } else {
+        // Append user prompt to existing terminal card
+        set((s) => {
+          const card = s.cards[termCardId!];
+          if (!card) return s;
+          return {
+            cards: {
+              ...s.cards,
+              [termCardId!]: {
+                ...card,
+                text: (card.text ?? "") + `>>> ${displayText}\n`,
+                status: "streaming",
+                updatedAt: now,
+              },
+            },
+            isWaiting: true,
+          };
+        });
+      }
+
+      get()._wsClient?.send({ type: "chat.send", text: displayText, routing: finalRouting });
+      return;
+    }
+
+    // Regular message — create user bubble card
     const id = uuidv4();
-    const userMsg: ChatMessage = {
+    const now = Date.now();
+    const card: Card = {
       id,
       runId: id,
+      type: "user-bubble",
       role: "user",
-      text,
-      state: "complete",
+      status: "complete",
+      display: "expanded",
+      text: displayText,
+      createdAt: now,
+      updatedAt: now,
     };
 
-    set((s) => ({ messages: [...s.messages, userMsg], isWaiting: true }));
-    get()._wsClient?.send({ type: "chat.send", text });
+    set((s) => ({
+      cardOrder: [...s.cardOrder, id],
+      cards: { ...s.cards, [id]: card },
+      isWaiting: true,
+    }));
+    get()._wsClient?.send({ type: "chat.send", text: displayText, routing: finalRouting });
   },
 
   sendMessageWithMedia: async (text: string, mediaFiles: File[]) => {
@@ -77,16 +206,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     const id = uuidv4();
-    const userMsg: ChatMessage = {
+    const now = Date.now();
+    const card: Card = {
       id,
       runId: id,
+      type: "user-bubble",
       role: "user",
+      status: "complete",
+      display: "expanded",
       text,
       mediaUrls: mediaFiles.map((f) => URL.createObjectURL(f)),
-      state: "complete",
+      createdAt: now,
+      updatedAt: now,
     };
 
-    set((s) => ({ messages: [...s.messages, userMsg], isWaiting: true }));
+    set((s) => ({
+      cardOrder: [...s.cardOrder, id],
+      cards: { ...s.cards, [id]: card },
+      isWaiting: true,
+    }));
     get()._wsClient?.send({
       type: "chat.send",
       text,
@@ -94,105 +232,299 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
 
-  _handleServerMessage: (msg: ServerMessage) => {
-    set((state) => {
-      const existing = state.messages.find(
-        (m) => m.runId === msg.runId && m.role === "assistant"
-      );
-      const isWaiting = false;
+  sendCardAction: (cardId: string, action: string, payload?: unknown) => {
+    const card = get().cards[cardId];
+    if (!card) {
+      console.warn("[card-action] Card not found:", cardId);
+      return;
+    }
 
-      if (msg.state === "delta") {
-        if (existing) {
-          return {
-            isWaiting,
-            messages: state.messages.map((m) =>
-              m.runId === msg.runId && m.role === "assistant"
-                ? { ...m, text: m.text + (msg.text ?? ""), state: "streaming" as const }
-                : m
-            ),
-          };
+    // Optimistic loading state
+    set((s) => ({
+      cards: {
+        ...s.cards,
+        [cardId]: { ...s.cards[cardId]!, status: "streaming", updatedAt: Date.now() },
+      },
+    }));
+
+    const wsClient = get()._wsClient;
+    const msg: ClientMessage = {
+      type: "card.action",
+      cardId,
+      cardAction: action,
+      cardPayload: payload,
+      routing: card.toolMeta ? { mode: "direct_tool" as const, toolId: card.toolMeta.toolId } : undefined,
+    };
+    console.log("[card-action] Sending:", msg);
+    if (!wsClient) {
+      console.error("[card-action] No WS client!");
+    }
+    wsClient?.send(msg);
+  },
+
+  collapseCard: (cardId: string) => {
+    set((s) => {
+      const card = s.cards[cardId];
+      if (!card) return s;
+      return {
+        cards: {
+          ...s.cards,
+          [cardId]: { ...card, display: "collapsed" },
+        },
+      };
+    });
+  },
+
+  expandCard: (cardId: string) => {
+    set((s) => {
+      const card = s.cards[cardId];
+      if (!card) return s;
+      return {
+        cards: {
+          ...s.cards,
+          [cardId]: { ...card, display: "expanded" },
+        },
+      };
+    });
+  },
+
+  fetchProjects: () => {
+    get()._wsClient?.send({ type: "tools.list_projects" });
+  },
+
+  setCodeSessionCwd: (cwd: string) => {
+    set({ codeSessionCwd: cwd });
+  },
+
+  _handleServerMessage: (msg: ServerMessage) => {
+    // Handle project list responses
+    if (msg.projects) {
+      set({ projects: msg.projects });
+      return;
+    }
+
+    set((state) => {
+      const now = Date.now();
+
+      // ── Route card updates by targetCardId ──
+      if (msg.targetCardId) {
+        console.log("[card-action] Received targetCardId response:", msg.targetCardId, "state:", msg.state);
+        const card = state.cards[msg.targetCardId];
+        if (!card) {
+          console.warn("[card-action] Card not found for targetCardId:", msg.targetCardId);
+          return state;
         }
         return {
-          isWaiting,
-          messages: [
-            ...state.messages,
-            {
-              id: msg.id,
-              runId: msg.runId,
-              role: "assistant" as const,
-              text: msg.text ?? "",
-              state: "streaming" as const,
+          isWaiting: false,
+          cards: {
+            ...state.cards,
+            [msg.targetCardId]: {
+              ...card,
+              data: msg.data ?? card.data,
+              generatedUI: msg.generatedUI ?? card.generatedUI,
+              text: msg.text ?? card.text,
+              status: msg.state === "error" ? "error" : "complete",
+              updatedAt: now,
             },
-          ],
+          },
+        };
+      }
+
+      // ── Route claude-code messages to active terminal card ──
+      if (msg.toolMeta?.toolId === "claude-code" && state._activeTerminalCardId) {
+        const cardId = state._activeTerminalCardId;
+        const card = state.cards[cardId];
+        if (!card) return { isWaiting: false };
+
+        if (msg.state === "delta") {
+          // Don't clear isWaiting on delta — wait for final/error
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                text: (card.text ?? "") + (msg.text ?? ""),
+                status: "streaming",
+                toolMeta: msg.toolMeta ?? card.toolMeta,
+                updatedAt: now,
+              },
+            },
+          };
+        }
+
+        const storeUpdates: Partial<CardStore> = { isWaiting: false };
+
+        if (msg.state === "final") {
+          if (msg.toolMeta?.toolSessionId) {
+            storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
+          }
+          return {
+            ...storeUpdates,
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                // Don't replace text — deltas already delivered the full output
+                status: "complete",
+                toolMeta: msg.toolMeta ?? card.toolMeta,
+                updatedAt: now,
+              },
+            },
+          };
+        }
+
+        if (msg.state === "error") {
+          return {
+            ...storeUpdates,
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                text: (card.text ?? "") + (msg.text ?? "Error occurred."),
+                status: "error",
+                toolMeta: msg.toolMeta ?? card.toolMeta,
+                updatedAt: now,
+              },
+            },
+          };
+        }
+
+        return state;
+      }
+
+      // ── Normal card flow ──
+      // Find existing card by runId (assistant role)
+      const existingId = state.cardOrder.find(
+        (id) => state.cards[id]?.runId === msg.runId && state.cards[id]?.role === "assistant",
+      );
+      const existing = existingId ? state.cards[existingId] : undefined;
+
+      if (msg.state === "delta") {
+        // Don't clear isWaiting on delta — wait for final/error
+        if (existing && existingId) {
+          return {
+            cards: {
+              ...state.cards,
+              [existingId]: {
+                ...existing,
+                text: (existing.text ?? "") + (msg.text ?? ""),
+                status: "streaming",
+                updatedAt: now,
+              },
+            },
+          };
+        }
+        // Create new card — use "chat" type during streaming (will resolve on final)
+        const cardId = msg.id;
+        const card: Card = {
+          id: cardId,
+          runId: msg.runId,
+          type: "chat",
+          role: "assistant",
+          status: "streaming",
+          display: "expanded",
+          text: msg.text ?? "",
+          toolMeta: msg.toolMeta,
+          createdAt: now,
+          updatedAt: now,
+        };
+        return {
+          cardOrder: [...state.cardOrder, cardId],
+          cards: { ...state.cards, [cardId]: card },
         };
       }
 
       if (msg.state === "final") {
-        // Merge mediaUrls from this message with any previously accumulated
         const mergedMediaUrls = [
           ...(existing?.mediaUrls ?? []),
           ...(msg.mediaUrls ?? []),
         ];
         const mediaUrls = mergedMediaUrls.length > 0 ? mergedMediaUrls : undefined;
 
-        if (existing) {
+        const storeUpdates: Partial<CardStore> = { isWaiting: false };
+        if (msg.toolMeta?.toolId === "claude-code" && msg.toolMeta.toolSessionId) {
+          storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
+        }
+
+        // Resolve card type from the full message
+        const type = msg.cardType ?? cardRegistry.resolve(msg, "assistant");
+
+        if (existing && existingId) {
           return {
-            isWaiting,
-            messages: state.messages.map((m) =>
-              m.runId === msg.runId && m.role === "assistant"
-                ? {
-                    ...m,
-                    text: msg.text ?? m.text,
-                    data: msg.data,
-                    generatedUI: msg.generatedUI,
-                    mediaUrls,
-                    state: "complete" as const,
-                  }
-                : m
-            ),
+            ...storeUpdates,
+            cards: {
+              ...state.cards,
+              [existingId]: {
+                ...existing,
+                text: msg.text ?? existing.text,
+                data: msg.data,
+                generatedUI: msg.generatedUI,
+                mediaUrls,
+                toolMeta: msg.toolMeta ?? existing.toolMeta,
+                type,
+                status: "complete",
+                updatedAt: now,
+              },
+            },
           };
         }
+
+        const cardId = msg.id;
+        const card: Card = {
+          id: cardId,
+          runId: msg.runId,
+          type,
+          role: "assistant",
+          status: "complete",
+          display: "expanded",
+          text: msg.text ?? "",
+          data: msg.data,
+          generatedUI: msg.generatedUI,
+          mediaUrls,
+          toolMeta: msg.toolMeta,
+          createdAt: now,
+          updatedAt: now,
+        };
         return {
-          isWaiting,
-          messages: [
-            ...state.messages,
-            {
-              id: msg.id,
-              runId: msg.runId,
-              role: "assistant" as const,
-              text: msg.text ?? "",
-              data: msg.data,
-              generatedUI: msg.generatedUI,
-              mediaUrls,
-              state: "complete" as const,
-            },
-          ],
+          ...storeUpdates,
+          cardOrder: [...state.cardOrder, cardId],
+          cards: { ...state.cards, [cardId]: card },
         };
       }
 
       if (msg.state === "error") {
-        if (existing) {
+        if (existing && existingId) {
           return {
-            isWaiting,
-            messages: state.messages.map((m) =>
-              m.runId === msg.runId && m.role === "assistant"
-                ? { ...m, text: msg.text ?? "An error occurred.", state: "error" as const }
-                : m
-            ),
+            isWaiting: false,
+            cards: {
+              ...state.cards,
+              [existingId]: {
+                ...existing,
+                text: msg.text ?? "An error occurred.",
+                toolMeta: msg.toolMeta ?? existing.toolMeta,
+                status: "error",
+                updatedAt: now,
+              },
+            },
           };
         }
+        const cardId = msg.id;
+        const card: Card = {
+          id: cardId,
+          runId: msg.runId,
+          type: "chat",
+          role: "assistant",
+          status: "error",
+          display: "expanded",
+          text: msg.text ?? "An error occurred.",
+          toolMeta: msg.toolMeta,
+          createdAt: now,
+          updatedAt: now,
+        };
         return {
-          isWaiting,
-          messages: [
-            ...state.messages,
-            {
-              id: msg.id,
-              runId: msg.runId,
-              role: "assistant" as const,
-              text: msg.text ?? "An error occurred.",
-              state: "error" as const,
-            },
-          ],
+          isWaiting: false,
+          cardOrder: [...state.cardOrder, cardId],
+          cards: { ...state.cards, [cardId]: card },
         };
       }
 

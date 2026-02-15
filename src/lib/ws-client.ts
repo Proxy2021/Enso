@@ -65,6 +65,8 @@ export function createWSClient(options: WSClientOptions): WSClient {
   function send(msg: ClientMessage) {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
+    } else {
+      console.warn("[WS] Message dropped — not connected. readyState:", ws?.readyState, "msg:", msg.type);
     }
   }
 

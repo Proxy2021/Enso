@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { useChatStore } from "./store/chat";
-import ChatThread from "./components/ChatThread";
+import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
+// Initialize card registry (registers all built-in card types)
+import "./cards";
 
 function ConnectionDot() {
   const state = useChatStore((s) => s.connectionState);
@@ -35,7 +37,7 @@ export default function App() {
         <h1 className="text-lg font-semibold">Enso</h1>
         <ConnectionDot />
       </header>
-      <ChatThread />
+      <CardTimeline />
       <ChatInput />
     </div>
   );

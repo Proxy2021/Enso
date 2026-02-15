@@ -1,10 +1,2 @@
-export interface ChatMessage {
-  id: string;
-  runId: string;
-  role: "user" | "assistant";
-  text: string;
-  data?: unknown;
-  generatedUI?: string;
-  mediaUrls?: string[];
-  state: "sending" | "streaming" | "complete" | "error";
-}
+// Re-export card types as the primary frontend types
+export type { Card, CardRendererProps, CardTypeRegistration } from "./cards/types";

@@ -18,9 +18,10 @@ export async function handleEnsoInbound(params: {
   config: CoreConfig;
   runtime: RuntimeEnv;
   client: ConnectedClient;
+  targetCardId?: string;
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }): Promise<void> {
-  const { message, account, config, runtime, client, statusSink } = params;
+  const { message, account, config, runtime, client, targetCardId, statusSink } = params;
   const core = getEnsoRuntime();
 
   const rawBody = message.text?.trim() ?? "";
@@ -118,6 +119,7 @@ export async function handleEnsoInbound(params: {
           seq: seq++,
           account,
           userMessage: rawBody,
+          targetCardId,
           statusSink,
         });
       },

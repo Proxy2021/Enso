@@ -9,6 +9,24 @@ import {
   serverGenerateUIFromText,
 } from "./ui-generator.js";
 
+// ── Card Interaction Context ──
+
+interface CardContext {
+  cardId: string;
+  originalPrompt: string;
+  originalResponse: string;
+  currentData: unknown;
+  geminiApiKey?: string;
+  account: ResolvedEnsoAccount;
+  actionHistory: Array<{
+    action: string;
+    payload: unknown;
+    timestamp: number;
+  }>;
+}
+
+const cardContexts = new Map<string, CardContext>();
+
 /**
  * Strip Gemini thinking/reasoning blocks from response text.
  * Gemini 2.5 Flash outputs thinking as regular text with bold headers
@@ -35,9 +53,10 @@ export async function deliverEnsoReply(params: {
   seq: number;
   account: ResolvedEnsoAccount;
   userMessage: string;
+  targetCardId?: string;
   statusSink?: (patch: { lastOutboundAt?: number }) => void;
 }): Promise<void> {
-  const { payload, client, runId, seq, account, userMessage, statusSink } = params;
+  const { payload, client, runId, seq, account, userMessage, targetCardId, statusSink } = params;
   const text = stripThinkingBlocks(payload.text ?? "");
   console.log(`[enso:outbound] deliverEnsoReply called, seq=${seq}, textLen=${text.length}`);
 
@@ -81,8 +100,32 @@ export async function deliverEnsoReply(params: {
     }
   }
 
+  const msgId = targetCardId ?? randomUUID();
+
+  // Register card context for interactive actions
+  if (data && generatedUI && !targetCardId) {
+    cardContexts.set(msgId, {
+      cardId: msgId,
+      originalPrompt: userMessage,
+      originalResponse: text,
+      currentData: structuredClone(data),
+      geminiApiKey: account.geminiApiKey,
+      account,
+      actionHistory: [],
+    });
+  }
+
+  // When targeting an existing card, update its context
+  if (targetCardId) {
+    const existingCtx = cardContexts.get(targetCardId);
+    if (existingCtx) {
+      existingCtx.originalResponse = text;
+      if (data) existingCtx.currentData = structuredClone(data);
+    }
+  }
+
   const msg: ServerMessage = {
-    id: randomUUID(),
+    id: msgId,
     runId,
     sessionKey: client.sessionKey,
     seq,
@@ -91,6 +134,7 @@ export async function deliverEnsoReply(params: {
     data: data ?? undefined,
     generatedUI,
     mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+    ...(targetCardId ? { targetCardId } : {}),
     timestamp: Date.now(),
   };
 
@@ -160,6 +204,19 @@ export async function deliverToEnso(ctx: {
 
   const mediaUrls = ctx.mediaUrl ? [toMediaUrl(ctx.mediaUrl)] : undefined;
 
+  // Register card context for interactive actions
+  if (data && generatedUI && account) {
+    cardContexts.set(messageId, {
+      cardId: messageId,
+      originalPrompt: "",
+      originalResponse: text,
+      currentData: structuredClone(data),
+      geminiApiKey,
+      account,
+      actionHistory: [],
+    });
+  }
+
   const msg: ServerMessage = {
     id: messageId,
     runId: randomUUID(),
@@ -178,6 +235,235 @@ export async function deliverToEnso(ctx: {
   }
 
   return { channel: "enso", messageId, target: ctx.to };
+}
+
+// ── Card Action Processing ──
+
+/**
+ * Processes an interactive action on an existing card (plugin path).
+ * Applies mechanical data mutations, regenerates UI via Gemini,
+ * and sends the update back targeted to the same card.
+ */
+export async function handlePluginCardAction(params: {
+  cardId: string;
+  action: string;
+  payload: unknown;
+  client: ConnectedClient;
+  config: CoreConfig;
+  runtime: RuntimeEnv;
+  statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
+}): Promise<void> {
+  const { cardId, action, payload, client, config, runtime, statusSink } = params;
+  const ctx = cardContexts.get(cardId);
+  if (!ctx) {
+    client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "error",
+      targetCardId: cardId,
+      text: "Card context not found — the server may have restarted.",
+      timestamp: Date.now(),
+    });
+    return;
+  }
+
+  // Record action in history
+  ctx.actionHistory.push({ action, payload, timestamp: Date.now() });
+
+  // Try mechanical data mutation first
+  const updatedData = applyAction(ctx.currentData, action, payload);
+  const dataChanged = updatedData !== ctx.currentData;
+
+  if (dataChanged) {
+    // Mechanical mutation succeeded — regenerate UI with updated data
+    ctx.currentData = updatedData;
+
+    const uiResult = await serverGenerateUI({
+      data: updatedData,
+      userMessage: `${ctx.originalPrompt} [Action: ${action}${payload ? ` ${JSON.stringify(payload)}` : ""}]`,
+      assistantText: ctx.originalResponse,
+      geminiApiKey: ctx.geminiApiKey,
+    });
+
+    console.log(
+      `[enso:outbound] Card action (mechanical): cardId=${cardId} action=${action} shape=${uiResult.shapeKey}`,
+    );
+
+    client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "final",
+      targetCardId: cardId,
+      data: updatedData,
+      generatedUI: uiResult.code,
+      timestamp: Date.now(),
+    });
+    return;
+  }
+
+  // No mechanical handler matched — route through OpenClaw agent.
+  // The agent response will be delivered back to this card via targetCardId.
+  const p = (payload ?? {}) as Record<string, unknown>;
+  let actionMessage: string;
+
+  if (action === "send_message" && typeof p.text === "string") {
+    // Redirected sendMessage call — use the text directly as the query,
+    // with card context so the agent can provide a relevant follow-up.
+    actionMessage = `${p.text}\n\nContext: The user is viewing a card from the prompt "${ctx.originalPrompt}". The card shows: ${JSON.stringify(ctx.currentData).slice(0, 500)}.`;
+  } else {
+    const payloadStr = payload ? ` ${JSON.stringify(payload)}` : "";
+    actionMessage = `[Card action: ${action}${payloadStr}] Context: The user is viewing a card that was created from the prompt "${ctx.originalPrompt}". The card shows: ${JSON.stringify(ctx.currentData).slice(0, 500)}. The user clicked: ${action}${payloadStr}. Respond with updated or detailed information based on this action.`;
+  }
+
+  console.log(
+    `[enso:outbound] Card action (agent): cardId=${cardId} action=${action} → routing to OpenClaw agent`,
+  );
+
+  const { handleEnsoInbound } = await import("./inbound.js");
+  await handleEnsoInbound({
+    message: {
+      messageId: randomUUID(),
+      sessionId: client.sessionKey,
+      senderNick: `user_${client.id}`,
+      text: actionMessage,
+      timestamp: Date.now(),
+    },
+    account: ctx.account,
+    config,
+    runtime,
+    client,
+    targetCardId: cardId,
+    statusSink,
+  });
+}
+
+// ── Mechanical Action Handlers ──
+
+function applyAction(data: unknown, action: string, payload: unknown): unknown {
+  if (!data || typeof data !== "object") return data;
+  const d = data as Record<string, unknown>;
+
+  // Task board (has "columns" array) — only clone for known task actions
+  if (Array.isArray(d.columns)) {
+    switch (action) {
+      case "complete_task":
+      case "move_task":
+      case "delete_task":
+      case "add_task":
+        return applyTaskAction(structuredClone(d) as TaskBoardData, action, payload);
+    }
+  }
+
+  // Sales dashboard (has "quarters" array) — only clone for known sales actions
+  if (Array.isArray(d.quarters)) {
+    switch (action) {
+      case "sort_by":
+      case "filter":
+        return applySalesAction(structuredClone(d) as SalesData, action, payload);
+    }
+  }
+
+  // Unknown action — return original reference so dataChanged === false,
+  // allowing the agent-routed fallback to handle it.
+  return data;
+}
+
+interface TaskItem { id: number; title: string; priority: string; assignee: string }
+interface TaskColumn { name: string; tasks: TaskItem[] }
+interface TaskBoardData { projectName: string; columns: TaskColumn[]; [key: string]: unknown }
+
+function applyTaskAction(data: TaskBoardData, action: string, payload: unknown): TaskBoardData {
+  const p = (payload ?? {}) as Record<string, unknown>;
+
+  switch (action) {
+    case "complete_task": {
+      const taskId = p.taskId as number | undefined;
+      if (taskId == null) return data;
+      let task: TaskItem | undefined;
+      for (const col of data.columns) {
+        const idx = col.tasks.findIndex((t) => t.id === taskId);
+        if (idx !== -1) { task = col.tasks.splice(idx, 1)[0]; break; }
+      }
+      if (task) {
+        let doneCol = data.columns.find((c) => c.name === "Done");
+        if (!doneCol) { doneCol = { name: "Done", tasks: [] }; data.columns.push(doneCol); }
+        doneCol.tasks.push(task);
+      }
+      return data;
+    }
+    case "move_task": {
+      const taskId = p.taskId as number | undefined;
+      const targetColumn = p.targetColumn as string | undefined;
+      if (taskId == null || !targetColumn) return data;
+      let task: TaskItem | undefined;
+      for (const col of data.columns) {
+        const idx = col.tasks.findIndex((t) => t.id === taskId);
+        if (idx !== -1) { task = col.tasks.splice(idx, 1)[0]; break; }
+      }
+      if (task) {
+        let target = data.columns.find((c) => c.name === targetColumn);
+        if (!target) { target = { name: targetColumn, tasks: [] }; data.columns.push(target); }
+        target.tasks.push(task);
+      }
+      return data;
+    }
+    case "delete_task": {
+      const taskId = p.taskId as number | undefined;
+      if (taskId == null) return data;
+      for (const col of data.columns) {
+        const idx = col.tasks.findIndex((t) => t.id === taskId);
+        if (idx !== -1) { col.tasks.splice(idx, 1); break; }
+      }
+      return data;
+    }
+    case "add_task": {
+      const title = p.title as string | undefined;
+      const column = (p.column as string) ?? "To Do";
+      const priority = (p.priority as string) ?? "medium";
+      const assignee = (p.assignee as string) ?? "Unassigned";
+      if (!title) return data;
+      const maxId = data.columns.flatMap((c) => c.tasks).reduce((max, t) => Math.max(max, t.id), 0);
+      let target = data.columns.find((c) => c.name === column);
+      if (!target) { target = { name: column, tasks: [] }; data.columns.push(target); }
+      target.tasks.push({ id: maxId + 1, title, priority, assignee });
+      return data;
+    }
+    default:
+      return data;
+  }
+}
+
+interface QuarterData { quarter: string; revenue: number; deals: number }
+interface SalesData { quarters: QuarterData[]; [key: string]: unknown }
+
+function applySalesAction(data: SalesData, action: string, payload: unknown): SalesData {
+  const p = (payload ?? {}) as Record<string, unknown>;
+
+  switch (action) {
+    case "sort_by": {
+      const field = (p.field as keyof QuarterData) ?? "revenue";
+      const dir = (p.direction as string) ?? "desc";
+      data.quarters.sort((a, b) => {
+        const av = a[field] as number;
+        const bv = b[field] as number;
+        return dir === "asc" ? av - bv : bv - av;
+      });
+      return data;
+    }
+    case "filter": {
+      const minRevenue = p.minRevenue as number | undefined;
+      if (minRevenue != null) {
+        data.quarters = data.quarters.filter((q) => q.revenue >= minRevenue);
+      }
+      return data;
+    }
+    default:
+      return data;
+  }
 }
 
 /**

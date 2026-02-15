@@ -17,6 +17,7 @@ type BlockNode =
   | { type: "heading"; level: number; content: string }
   | { type: "code-block"; lang: string; content: string }
   | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "blockquote"; content: string }
   | { type: "paragraph"; content: string };
 
 function parseMarkdown(text: string): React.ReactNode[] {
@@ -50,6 +51,19 @@ function parseMarkdown(text: string): React.ReactNode[] {
         content: headingMatch[2],
       });
       i++;
+      continue;
+    }
+
+    // Blockquote
+    const bqMatch = line.match(/^>\s?(.*)/);
+    if (bqMatch) {
+      const bqLines: string[] = [bqMatch[1]];
+      i++;
+      while (i < lines.length && lines[i].match(/^>\s?(.*)/)) {
+        bqLines.push(lines[i].match(/^>\s?(.*)/)![1]);
+        i++;
+      }
+      blocks.push({ type: "blockquote", content: bqLines.join("\n") });
       continue;
     }
 
@@ -116,6 +130,15 @@ function parseMarkdown(text: string): React.ReactNode[] {
           >
             <code>{block.content}</code>
           </pre>
+        );
+      case "blockquote":
+        return (
+          <div
+            key={idx}
+            className="border-l-2 border-indigo-500/60 pl-3 my-1.5 text-sm text-gray-300"
+          >
+            {renderInline(block.content)}
+          </div>
         );
       case "list": {
         const Tag = block.ordered ? "ol" : "ul";

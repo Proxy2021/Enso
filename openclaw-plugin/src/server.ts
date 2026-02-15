@@ -9,6 +9,7 @@ import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
 import { handleEnsoInbound } from "./inbound.js";
+import { handlePluginCardAction } from "./outbound.js";
 
 export type ConnectedClient = {
   id: string;
@@ -197,6 +198,20 @@ export async function startEnsoServer(opts: {
                 config,
                 runtime,
                 client,
+                statusSink,
+              });
+            }
+            break;
+          case "card.action":
+            if (msg.cardId && msg.cardAction) {
+              runtime.log?.(`[enso] card action: ${msg.cardId} ${msg.cardAction}`);
+              await handlePluginCardAction({
+                cardId: msg.cardId,
+                action: msg.cardAction,
+                payload: msg.cardPayload,
+                client,
+                config,
+                runtime,
                 statusSink,
               });
             }

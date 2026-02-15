@@ -37,14 +37,27 @@ Your philosophy: "OpenClaw, but every answer is an app." The component you gener
 Output ONLY valid JSX code for a single React component. No markdown fences, no explanation.
 
 COMPONENT SIGNATURE:
-export default function GeneratedUI({ data, sendMessage, theme })
+export default function GeneratedUI({ data, onAction, theme })
 
-INTERACTIVITY — sendMessage(text):
-sendMessage() sends a follow-up message to the AI on behalf of the user. This is how the app comes alive:
-- Every data point the user might want to explore → tappable with sendMessage("Tell me more about X")
-- Every list item → clickable to drill deeper
-- Action buttons for logical next steps: "Compare these", "Create portfolio", "Show history", "Analyze risk"
-- Think: what would the user tap next? Wire that up
+INTERACTIVITY — two layers:
+
+1. LOCAL STATE (useState) — for UI-only interactions that don't need new data from the server:
+   - Expand/collapse sections: const [expanded, setExpanded] = useState(false)
+   - Switch tabs: const [tab, setTab] = useState("overview")
+   - Toggle views (list ↔ grid, chart ↔ table)
+   - Sort/filter the EXISTING data locally
+   - Show/hide details that are already in the data
+   - These are instant — no loading, no server call.
+
+2. onAction(name, payload) — for interactions that need NEW data from the server:
+   - Drill into an item for more info: onAction("learn_more", { item: "AAPL" })
+   - Complete/modify a task: onAction("complete_task", { taskId: 1 })
+   - Request updated data: onAction("refresh", {})
+   - Any click that needs information NOT already in the data prop.
+
+RULE OF THUMB: If the data to show is already in the data prop → use useState. If you need the server to fetch or compute something new → use onAction.
+
+ABSOLUTE RULE: NEVER use sendMessage. It does not exist.
 - Use cursor-pointer and hover:bg-gray-700/hover:bg-gray-800 to signal interactivity
 
 AVAILABLE LIBRARIES (already in scope — do NOT import):
@@ -95,7 +108,7 @@ RESPONSE FORMAT:
 Option A — Build the app:
 {
   "extractedData": { ... all structured data extracted from the text ... },
-  "componentCode": "export default function GeneratedUI({ data, sendMessage, theme }) { ... }"
+  "componentCode": "export default function GeneratedUI({ data, onAction, theme }) { ... }"
 }
 
 Option B — Skip:
@@ -116,23 +129,33 @@ Your extractedData is the foundation. Extract EVERYTHING:
 ═══════════════════════════════════════
 BUILDING THE COMPONENT
 ═══════════════════════════════════════
-Signature: export default function GeneratedUI({ data, sendMessage, theme })
+Signature: export default function GeneratedUI({ data, onAction, theme })
 - data contains your extractedData
-- sendMessage(text) sends a follow-up chat message — THIS IS HOW YOUR APP COMES ALIVE
 - Do NOT import anything — React, Recharts, LucideReact are all in scope
 
-INTERACTIVITY IS EVERYTHING:
-Your app must feel alive. sendMessage() is the bridge between tapping and getting more info.
+INTERACTIVITY — two layers:
+Your app must feel alive. Two mechanisms power interactions:
 
-Required interactions:
-1. EVERY item in a list → tappable: onClick={() => sendMessage("Tell me more about ITEM_NAME")}
-2. Action buttons for logical next steps based on the content:
-   - Financial data → "Compare these", "Create portfolio with X, Y, Z", "Show 52-week history"
-   - Task lists → "Mark X as done", "Break down task X into subtasks"
-   - Recommendations → "Why did you recommend X?", "Show alternatives to X"
-   - Technical content → "Show me an example of X", "Explain X in more detail"
-3. Aggregate actions at the bottom: "Summarize all", "Export as table", "Compare top 3"
-4. Visual feedback: cursor-pointer, hover:bg-gray-700, active:scale-[0.98], transition-colors
+1. LOCAL STATE (useState) — for UI-only interactions that don't need new data from the server:
+   - Expand/collapse sections: const [expanded, setExpanded] = useState(false)
+   - Switch tabs: const [tab, setTab] = useState("overview")
+   - Toggle views (list ↔ grid, chart ↔ table)
+   - Sort/filter the EXISTING data locally using useMemo
+   - Show/hide details that are already in the data
+   - These are instant — no loading, no server call.
+
+2. onAction(name, payload) — for interactions that need NEW data from the server:
+   - Drill into an item for more info: onAction("learn_more", { item: "AAPL" })
+   - Every tappable item in a list that needs more detail → onClick={() => onAction("learn_more", { item: itemName })}
+   - Complete/modify a task: onAction("complete_task", { taskId: 1 })
+   - Request updated data: onAction("refresh", {})
+   - Any click that needs information NOT already in the data prop.
+
+RULE OF THUMB: If the data to show is already in the data prop → use useState. If you need the server to fetch or compute something → use onAction.
+
+ABSOLUTE RULE: NEVER use sendMessage. It does not exist.
+
+Visual feedback: cursor-pointer, hover:bg-gray-700, active:scale-[0.98], transition-colors
 
 USE COMPONENT STATE — this is an app, not a template:
 - useState for: active tab, selected filter, sort order, expanded items, view mode
@@ -218,6 +241,12 @@ const FALLBACK_COMPONENT = `export default function GeneratedUI({ data }) {
   );
 }`;
 
+/**
+ * Cache version — increment to invalidate all cached components.
+ * Bump this whenever prompts change significantly.
+ */
+const CACHE_VERSION = 3;
+
 /** In-memory cache for generated UI components. */
 const cache = new Map<string, string>();
 
@@ -272,7 +301,7 @@ export async function serverGenerateUI(params: {
   }
 
   const shape = computeDataShape(params.data);
-  const shapeKey = `shape_${djb2Hash(shape)}`;
+  const shapeKey = `v${CACHE_VERSION}_shape_${djb2Hash(shape)}`;
 
   const cached = cache.get(shapeKey);
   if (cached) {
@@ -318,7 +347,7 @@ export async function serverGenerateUIFromText(params: {
   }
 
   const textHash = djb2Hash(params.assistantText);
-  const cacheKey = `text_${textHash}`;
+  const cacheKey = `v${CACHE_VERSION}_text_${textHash}`;
 
   const cachedCode = cache.get(cacheKey);
   const cachedData = dataCache.get(cacheKey);
@@ -360,6 +389,26 @@ ${params.assistantText}`;
 }
 
 /**
+ * Fix double-escaped newlines from LLM JSON output.
+ * When Gemini double-escapes (\\n in JSON), JSON.parse produces literal \n
+ * (two characters) instead of real newlines. A valid React component always
+ * has many real newlines, so if we see more escaped than real, unescape them.
+ */
+function unescapeComponentCode(code: string): string {
+  const realNewlines = (code.match(/\n/g) ?? []).length;
+  const escapedNewlines = (code.match(/\\n/g) ?? []).length;
+
+  if (escapedNewlines > realNewlines) {
+    return code
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
+  return code;
+}
+
+/**
  * Parse the LLM response that contains both extractedData and componentCode.
  */
 function parseGeneratorResponse(
@@ -369,10 +418,12 @@ function parseGeneratorResponse(
   try {
     const obj = JSON.parse(raw);
     if (obj.extractedData && obj.componentCode) {
-      const code = obj.componentCode
-        .replace(/^```(?:jsx?|tsx?)?\n?/m, "")
-        .replace(/\n?```$/m, "")
-        .trim();
+      const code = unescapeComponentCode(
+        obj.componentCode
+          .replace(/^```(?:jsx?|tsx?)?\n?/m, "")
+          .replace(/\n?```$/m, "")
+          .trim(),
+      );
       return { code, data: obj.extractedData };
     }
   } catch {

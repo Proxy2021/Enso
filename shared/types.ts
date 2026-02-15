@@ -1,3 +1,12 @@
+// ── Tool Routing ──
+
+export interface ToolRouting {
+  mode: "direct_tool";
+  toolId: string;
+  toolSessionId?: string;
+  cwd?: string;
+}
+
 // ── Protocol Messages ──
 
 export interface ServerMessage {
@@ -10,11 +19,15 @@ export interface ServerMessage {
   data?: unknown;
   generatedUI?: string;
   mediaUrls?: string[];
+  toolMeta?: { toolId: string; toolSessionId?: string };
+  cardType?: string;
+  targetCardId?: string;
+  projects?: Array<{ name: string; path: string }>;
   timestamp: number;
 }
 
 export interface ClientMessage {
-  type: "chat.send" | "chat.history" | "ui_action";
+  type: "chat.send" | "chat.history" | "ui_action" | "tools.list_projects" | "card.action";
   text?: string;
   mediaUrls?: string[];
   sessionKey?: string;
@@ -23,24 +36,9 @@ export interface ClientMessage {
     action: string;
     payload?: unknown;
   };
-}
-
-// ── UIGenerator Types ──
-
-export interface UIGeneratorContext {
-  data: unknown;
-  userMessage: string;
-  assistantText: string;
-}
-
-export interface UIGeneratorResult {
-  code: string;
-  shapeKey: string;
-  cached: boolean;
-}
-
-export interface UIGeneratorDeps {
-  callLLM: (prompt: string) => Promise<string>;
-  cacheGet: (key: string) => string | undefined;
-  cacheSet: (key: string, value: string) => void;
+  routing?: ToolRouting;
+  // card.action fields
+  cardId?: string;
+  cardAction?: string;
+  cardPayload?: unknown;
 }
