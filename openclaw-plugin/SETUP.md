@@ -153,13 +153,35 @@ OpenClaw Gateway (:18789)
     |  resolveAgentRoute -> dispatchReply
     v
 Agent Runtime (Gemini / configured LLM)
-    |  Response text
+    |  Response text + tool calls
     v
 Enso deliver callback
-    |  Optional: UIGenerator (Gemini Flash)
+    |  after_tool_call hook → tool-call-store (time-windowed)
+    |  consumeRecentToolCall() → auto-generated action descriptions
+    |  UIGenerator (Gemini Flash) with tool-aware action hints
     v
 Browser via WebSocket
+    |  User clicks card button
+    v
+Three-path action dispatch:
+    1. Mechanical (built-in data mutations)
+    2. Native tool (prefix + action → direct tool execution via registry)
+    3. Agent fallback (re-route through OpenClaw agent)
 ```
+
+### Native Tool Bridge
+
+Enso automatically integrates with any co-loaded OpenClaw plugin's tools — zero configuration required. When the agent calls a tool from another plugin (e.g., AlphaRank), Enso:
+
+1. Records the tool call via the `after_tool_call` hook
+2. Auto-detects the tool's plugin and computes its name prefix (e.g., `alpharank_`)
+3. Auto-generates action descriptions from the plugin registry (tool names, descriptions, parameter schemas)
+4. Injects action hints into the Gemini UI generation prompt so buttons map to real tools
+5. Attaches a `nativeToolHint` to the card context for direct tool invocation on interactions
+
+When a user clicks a button on a tool-produced card, the action name is resolved as `prefix + action` and executed directly against the plugin registry — no LLM round-trip needed. If the tool name doesn't match, it falls back to the agent.
+
+This bridge requires no tool-specific code in Enso. Any OpenClaw plugin that registers tools with `api.registerTool()` is automatically available.
 
 ## Troubleshooting
 

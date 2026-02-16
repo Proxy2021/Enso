@@ -8,6 +8,8 @@ import {
   serverGenerateUI,
   serverGenerateUIFromText,
 } from "./ui-generator.js";
+import { executeToolDirect, getActionDescriptions, isToolRegistered, getToolPluginId, getPluginToolPrefix } from "./native-tools/registry.js";
+import { consumeRecentToolCall } from "./native-tools/tool-call-store.js";
 
 // ── Card Interaction Context ──
 
@@ -23,6 +25,19 @@ interface CardContext {
     payload: unknown;
     timestamp: number;
   }>;
+  /**
+   * Present when the agent used a tool from a co-loaded OpenClaw plugin
+   * to produce this card's data. Enables card actions to bypass the agent
+   * and call the tool directly via the plugin registry.
+   */
+  nativeToolHint?: {
+    /** The full tool name that produced the original data, e.g. "alpharank_latest_predictions" */
+    toolName: string;
+    /** The params the agent passed to the tool */
+    params: Record<string, unknown>;
+    /** The action map prefix, used to look up the handler, e.g. "alpharank_" */
+    handlerPrefix: string;
+  };
 }
 
 const cardContexts = new Map<string, CardContext>();
@@ -96,6 +111,13 @@ export async function deliverEnsoReply(params: {
   let data: unknown = undefined;
   let generatedUI: string | undefined;
 
+  // Check if a native tool was used to produce this response BEFORE
+  // generating UI, so we can tell Gemini about available actions.
+  const recentCall = consumeRecentToolCall();
+  const actionHints = recentCall
+    ? getActionDescriptions(recentCall.toolName)
+    : undefined;
+
   // Path 1: Try to detect structured JSON data in the response
   const structuredData = extractStructuredData(text);
 
@@ -105,6 +127,7 @@ export async function deliverEnsoReply(params: {
       userMessage,
       assistantText: text,
       geminiApiKey: account.geminiApiKey,
+      actionHints,
     });
     data = structuredData;
     generatedUI = uiResult.code;
@@ -114,6 +137,7 @@ export async function deliverEnsoReply(params: {
       userMessage,
       assistantText: text,
       geminiApiKey: account.geminiApiKey,
+      actionHints,
     });
     if (textResult) {
       data = textResult.data;
@@ -125,7 +149,7 @@ export async function deliverEnsoReply(params: {
 
   // Register card context for interactive actions
   if (data && generatedUI && !targetCardId) {
-    cardContexts.set(msgId, {
+    const cardCtx: CardContext = {
       cardId: msgId,
       originalPrompt: userMessage,
       originalResponse: text,
@@ -133,7 +157,25 @@ export async function deliverEnsoReply(params: {
       geminiApiKey: account.geminiApiKey,
       account,
       actionHistory: [],
-    });
+    };
+
+    // Attach native tool hint so card actions can call the tool directly
+    if (recentCall && isToolRegistered(recentCall.toolName)) {
+      const pluginId = getToolPluginId(recentCall.toolName);
+      const prefix = pluginId ? getPluginToolPrefix(pluginId) : undefined;
+      if (prefix) {
+        cardCtx.nativeToolHint = {
+          toolName: recentCall.toolName,
+          params: recentCall.params,
+          handlerPrefix: prefix,
+        };
+        console.log(
+          `[enso:outbound] attached native tool hint: ${recentCall.toolName} (prefix: ${prefix}) → card ${msgId}`,
+        );
+      }
+    }
+
+    cardContexts.set(msgId, cardCtx);
   }
 
   // When targeting an existing card, update its context
@@ -199,6 +241,12 @@ export async function deliverToEnso(ctx: {
   });
   const geminiApiKey = account?.geminiApiKey;
 
+  // Check for native tool usage before UI generation
+  const recentCall = consumeRecentToolCall();
+  const actionHints = recentCall
+    ? getActionDescriptions(recentCall.toolName)
+    : undefined;
+
   if (text.trim().length >= 100) {
     const structuredData = extractStructuredData(text);
     if (structuredData) {
@@ -207,6 +255,7 @@ export async function deliverToEnso(ctx: {
         userMessage: "",
         assistantText: text,
         geminiApiKey,
+        actionHints,
       });
       data = structuredData;
       generatedUI = uiResult.code;
@@ -215,6 +264,7 @@ export async function deliverToEnso(ctx: {
         userMessage: "",
         assistantText: text,
         geminiApiKey,
+        actionHints,
       });
       if (textResult) {
         data = textResult.data;
@@ -227,7 +277,7 @@ export async function deliverToEnso(ctx: {
 
   // Register card context for interactive actions
   if (data && generatedUI && account) {
-    cardContexts.set(messageId, {
+    const cardCtx: CardContext = {
       cardId: messageId,
       originalPrompt: "",
       originalResponse: text,
@@ -235,7 +285,21 @@ export async function deliverToEnso(ctx: {
       geminiApiKey,
       account,
       actionHistory: [],
-    });
+    };
+
+    if (recentCall && isToolRegistered(recentCall.toolName)) {
+      const pluginId = getToolPluginId(recentCall.toolName);
+      const prefix = pluginId ? getPluginToolPrefix(pluginId) : undefined;
+      if (prefix) {
+        cardCtx.nativeToolHint = {
+          toolName: recentCall.toolName,
+          params: recentCall.params,
+          handlerPrefix: prefix,
+        };
+      }
+    }
+
+    cardContexts.set(messageId, cardCtx);
   }
 
   const msg: ServerMessage = {
@@ -301,11 +365,17 @@ export async function handlePluginCardAction(params: {
     // Mechanical mutation succeeded — regenerate UI with updated data
     ctx.currentData = updatedData;
 
+    // If the card has a native tool hint, include action hints for UI regen
+    const mechanicalActionHints = ctx.nativeToolHint
+      ? getActionDescriptions(ctx.nativeToolHint.toolName)
+      : undefined;
+
     const uiResult = await serverGenerateUI({
       data: updatedData,
       userMessage: `${ctx.originalPrompt} [Action: ${action}${payload ? ` ${JSON.stringify(payload)}` : ""}]`,
       assistantText: ctx.originalResponse,
       geminiApiKey: ctx.geminiApiKey,
+      actionHints: mechanicalActionHints,
     });
 
     console.log(
@@ -326,6 +396,93 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Path 2: Native tool invocation ──
+  // If the card was produced by a tool from a co-loaded OpenClaw plugin,
+  // try to handle the action by calling the tool directly via the registry.
+  if (ctx.nativeToolHint) {
+    let toolCall: { toolName: string; params: Record<string, unknown> } | null = null;
+
+    if (action === "refresh") {
+      // Re-run the same tool that produced the card originally
+      toolCall = {
+        toolName: ctx.nativeToolHint.toolName,
+        params: ctx.nativeToolHint.params,
+      };
+    } else {
+      // Interpret the action name as a tool name (prefix + action).
+      // Auto-generated action names are derived directly from tool names
+      // (e.g. "portfolio_checkin" → alpharank_portfolio_checkin).
+      const candidateToolName = `${ctx.nativeToolHint.handlerPrefix}${action}`;
+      if (isToolRegistered(candidateToolName)) {
+        toolCall = {
+          toolName: candidateToolName,
+          params: (payload ?? {}) as Record<string, unknown>,
+        };
+      }
+    }
+
+    if (toolCall) {
+      console.log(
+        `[enso:outbound] Card action (native tool): cardId=${cardId} action=${action} → ${toolCall.toolName}`,
+      );
+
+      try {
+        const result = await executeToolDirect(toolCall.toolName, toolCall.params);
+
+        if (result.success && result.data != null) {
+          // Update the card's data with the fresh tool result
+          ctx.currentData = structuredClone(result.data);
+
+          // Update the native tool hint to reflect the tool just called,
+          // so subsequent "refresh" re-runs the latest tool, not the original.
+          ctx.nativeToolHint = {
+            toolName: toolCall.toolName,
+            params: toolCall.params,
+            handlerPrefix: ctx.nativeToolHint.handlerPrefix,
+          };
+
+          // Regenerate UI via Gemini for the new data, with action hints
+          const nativeActionHints = getActionDescriptions(toolCall.toolName);
+          const uiResult = await serverGenerateUI({
+            data: result.data,
+            userMessage: `${ctx.originalPrompt} [Action: ${action}${payload ? ` ${JSON.stringify(payload)}` : ""}]`,
+            assistantText: ctx.originalResponse,
+            geminiApiKey: ctx.geminiApiKey,
+            actionHints: nativeActionHints,
+          });
+
+          console.log(
+            `[enso:outbound] Card action (native tool): success, shape=${uiResult.shapeKey}`,
+          );
+
+          client.send({
+            id: randomUUID(),
+            runId: randomUUID(),
+            sessionKey: client.sessionKey,
+            seq: 0,
+            state: "final",
+            targetCardId: cardId,
+            data: result.data,
+            generatedUI: uiResult.code,
+            timestamp: Date.now(),
+          });
+          return;
+        }
+
+        // Tool returned an error or no data — log and fall through to agent
+        console.log(
+          `[enso:outbound] Card action (native tool): failed (${result.error ?? "no data"}), falling back to agent`,
+        );
+      } catch (err) {
+        console.log(
+          `[enso:outbound] Card action (native tool): exception ${String(err)}, falling back to agent`,
+        );
+      }
+      // Fall through to agent round-trip on any failure
+    }
+  }
+
+  // ── Path 3: Agent round-trip fallback ──
   // No mechanical handler matched — route through OpenClaw agent.
   // The agent response will be delivered back to this card via targetCardId.
   const p = (payload ?? {}) as Record<string, unknown>;

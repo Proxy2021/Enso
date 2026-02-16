@@ -245,7 +245,7 @@ const FALLBACK_COMPONENT = `export default function GeneratedUI({ data }) {
  * Cache version — increment to invalidate all cached components.
  * Bump this whenever prompts change significantly.
  */
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 /** In-memory cache for generated UI components. */
 const cache = new Map<string, string>();
@@ -293,6 +293,8 @@ export async function serverGenerateUI(params: {
   userMessage: string;
   assistantText: string;
   geminiApiKey?: string;
+  /** Prompt-friendly description of available tool actions for onAction() calls */
+  actionHints?: string;
 }): Promise<UIGeneratorResult> {
   const apiKey = params.geminiApiKey;
   if (!apiKey) {
@@ -301,19 +303,24 @@ export async function serverGenerateUI(params: {
   }
 
   const shape = computeDataShape(params.data);
-  const shapeKey = `v${CACHE_VERSION}_shape_${djb2Hash(shape)}`;
+  // Include action hints in cache key so tool-aware and generic UIs are cached separately
+  const shapeKey = `v${CACHE_VERSION}_shape_${djb2Hash(shape + (params.actionHints ?? ""))}`;
 
   const cached = cache.get(shapeKey);
   if (cached) {
     return { code: cached, shapeKey, cached: true };
   }
 
+  const actionSection = params.actionHints
+    ? `\n\n${params.actionHints}`
+    : "";
+
   const userPrompt = `Generate a React component to display this data:
 
 Data shape: ${shape}
 Sample data: ${JSON.stringify(params.data, null, 2)}
 User's request: ${params.userMessage}
-Assistant context: ${params.assistantText.slice(0, 500)}
+Assistant context: ${params.assistantText.slice(0, 500)}${actionSection}
 
 Remember: output ONLY the component code, starting with "export default function GeneratedUI"`;
 
@@ -339,6 +346,8 @@ export async function serverGenerateUIFromText(params: {
   userMessage: string;
   assistantText: string;
   geminiApiKey?: string;
+  /** Prompt-friendly description of available tool actions for onAction() calls */
+  actionHints?: string;
 }): Promise<{ code: string; data: unknown; cacheKey: string; cached: boolean } | null> {
   const apiKey = params.geminiApiKey;
   if (!apiKey) {
@@ -346,7 +355,7 @@ export async function serverGenerateUIFromText(params: {
     return null;
   }
 
-  const textHash = djb2Hash(params.assistantText);
+  const textHash = djb2Hash(params.assistantText + (params.actionHints ?? ""));
   const cacheKey = `v${CACHE_VERSION}_text_${textHash}`;
 
   const cachedCode = cache.get(cacheKey);
@@ -355,10 +364,14 @@ export async function serverGenerateUIFromText(params: {
     return { code: cachedCode, data: cachedData, cacheKey, cached: true };
   }
 
+  const actionSection = params.actionHints
+    ? `\n\n${params.actionHints}`
+    : "";
+
   const userPrompt = `User's question: ${params.userMessage}
 
 Assistant's response:
-${params.assistantText}`;
+${params.assistantText}${actionSection}`;
 
   try {
     console.log("[enso:ui-gen] Requesting UI generation from Gemini...");
