@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import { resolveEnsoAccount } from "./accounts.js";
 import type { ConnectedClient } from "./server.js";
