@@ -20,17 +20,29 @@ function truncate(text: string | undefined, max: number): string {
   return oneLine.length > max ? oneLine.slice(0, max) + "..." : oneLine;
 }
 
-function CardLoadingOverlay() {
+/** Format a snake_case or camelCase action name into readable text. */
+function formatAction(action: string): string {
+  return action
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function CardLoadingOverlay({ action }: { action?: string }) {
+  const label = action ? formatAction(action) : "Updating";
   return (
     <div className="absolute inset-0 z-10 rounded-xl pointer-events-none overflow-hidden">
       {/* Dim overlay */}
       <div className="absolute inset-0 bg-gray-900/40" />
       {/* Shimmer sweep */}
       <div className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
-      {/* Loading indicator */}
-      <div className="absolute bottom-2 right-3 flex items-center gap-1.5 bg-gray-800/90 rounded-full px-2.5 py-1 border border-gray-600/50">
-        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-        <span className="text-[10px] text-gray-400">Updating</span>
+      {/* Action indicator */}
+      <div className="absolute bottom-2 right-3 flex items-center gap-2 bg-gray-800/95 rounded-full pl-2.5 pr-3 py-1.5 border border-gray-600/50 shadow-lg">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
+        </span>
+        <span className="text-[11px] text-gray-300 font-medium">{label}</span>
       </div>
     </div>
   );
@@ -96,7 +108,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             isActive={isActive}
             onAction={(action, payload) => sendCardAction(card.id, action, payload)}
           />
-          {isLoading && <CardLoadingOverlay />}
+          {isLoading && <CardLoadingOverlay action={card.pendingAction} />}
         </div>
       )}
     </div>

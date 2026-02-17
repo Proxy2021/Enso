@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
-import type { ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
+import type { ChannelMode, ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
 import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
 import { createWSClient, type ConnectionState } from "../lib/ws-client";
@@ -20,6 +20,9 @@ interface CardStore {
   isWaiting: boolean;
   _wsClient: ReturnType<typeof createWSClient> | null;
 
+  // Channel mode
+  channelMode: ChannelMode;
+
   // Claude Code session state
   projects: ProjectInfo[];
   codeSessionCwd: string | null;
@@ -36,9 +39,27 @@ interface CardStore {
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
   collapseCard: (cardId: string) => void;
   expandCard: (cardId: string) => void;
+  setChannelMode: (mode: ChannelMode) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
+}
+
+/** Format a card action + payload into a readable user-facing label. */
+function formatActionLabel(action: string, payload?: unknown): string {
+  const name = action
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  if (!payload || typeof payload !== "object") return name;
+  const p = payload as Record<string, unknown>;
+
+  // Pick the most descriptive value from the payload
+  const hint =
+    p.toolName ?? p.name ?? p.title ?? p.item ?? p.text ?? p.id ?? p.emailId ?? p.tickerId;
+  if (hint != null) return `${name}: ${String(hint)}`;
+  return name;
 }
 
 export const useChatStore = create<CardStore>((set, get) => ({
@@ -47,6 +68,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   connectionState: "disconnected",
   isWaiting: false,
   _wsClient: null,
+  channelMode: "full",
   projects: [],
   codeSessionCwd: null,
   codeSessionId: null,
@@ -192,7 +214,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   sendMessageWithMedia: async (text: string, mediaFiles: File[]) => {
-    const mediaUrls: string[] = [];
+    const serverPaths: string[] = [];
+    const previewUrls: string[] = [];
 
     for (const file of mediaFiles) {
       const res = await fetch("/upload", {
@@ -201,8 +224,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
         body: file,
       });
       if (res.ok) {
-        const { filePath } = await res.json();
-        mediaUrls.push(filePath);
+        const { filePath, mediaUrl } = await res.json();
+        serverPaths.push(filePath);
+        previewUrls.push(mediaUrl);
       }
     }
 
@@ -216,7 +240,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "complete",
       display: "expanded",
       text,
-      mediaUrls: mediaFiles.map((f) => URL.createObjectURL(f)),
+      mediaUrls: previewUrls,
       createdAt: now,
       updatedAt: now,
     };
@@ -229,7 +253,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     get()._wsClient?.send({
       type: "chat.send",
       text,
-      mediaUrls,
+      mediaUrls: serverPaths,
     });
   },
 
@@ -240,13 +264,42 @@ export const useChatStore = create<CardStore>((set, get) => ({
       return;
     }
 
-    // Optimistic loading state
+    // Optimistic loading state with action label
     set((s) => ({
       cards: {
         ...s.cards,
-        [cardId]: { ...s.cards[cardId]!, status: "streaming", updatedAt: Date.now() },
+        [cardId]: {
+          ...s.cards[cardId]!,
+          status: "streaming",
+          pendingAction: action,
+          updatedAt: Date.now(),
+        },
       },
     }));
+
+    // Create an action bubble so the user sees what was clicked
+    const mode = get().channelMode;
+    if (mode === "ui" || mode === "full") {
+      const bubbleId = uuidv4();
+      const now = Date.now();
+      const label = formatActionLabel(action, payload);
+      const bubble: Card = {
+        id: bubbleId,
+        runId: bubbleId,
+        type: "user-bubble",
+        role: "user",
+        status: "complete",
+        display: "expanded",
+        text: label,
+        createdAt: now,
+        updatedAt: now,
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, bubbleId],
+        cards: { ...s.cards, [bubbleId]: bubble },
+        isWaiting: true,
+      }));
+    }
 
     const wsClient = get()._wsClient;
     const msg: ClientMessage = {
@@ -289,6 +342,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
+  setChannelMode: (mode: ChannelMode) => {
+    set({ channelMode: mode });
+    get()._wsClient?.send({ type: "settings.set_mode", mode });
+  },
+
   fetchProjects: () => {
     get()._wsClient?.send({ type: "tools.list_projects" });
   },
@@ -298,6 +356,12 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   _handleServerMessage: (msg: ServerMessage) => {
+    // Handle settings messages (mode changes)
+    if (msg.settings) {
+      set({ channelMode: msg.settings.mode });
+      return;
+    }
+
     // Handle project list responses
     if (msg.projects) {
       set({ projects: msg.projects });
@@ -325,6 +389,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
               generatedUI: msg.generatedUI ?? card.generatedUI,
               text: msg.text ?? card.text,
               status: msg.state === "error" ? "error" : "complete",
+              pendingAction: undefined,
               updatedAt: now,
             },
           },

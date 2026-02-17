@@ -22,6 +22,9 @@ export type ConnectedClient = {
 /** All connected browser clients, keyed by connection id. */
 const clients = new Map<string, ConnectedClient>();
 
+/** Live runtime account — mutated by settings.set_mode, visible to all handlers. */
+let activeAccount: ResolvedEnsoAccount | null = null;
+
 /** Current server port for constructing media URLs. */
 let activePort = 3001;
 
@@ -41,6 +44,10 @@ export function toMediaUrl(pathOrUrl: string): string {
   const encoded = Buffer.from(pathOrUrl, "utf-8").toString("base64url");
   const ext = extname(pathOrUrl).toLowerCase();
   return `/media/${encoded}${ext ? `?ext=${ext}` : ""}`;
+}
+
+export function getActiveAccount(): ResolvedEnsoAccount | null {
+  return activeAccount;
 }
 
 export function getConnectedClient(id: string): ConnectedClient | undefined {
@@ -74,8 +81,10 @@ function scanProjects(): Array<{ name: string; path: string }> {
   const projects: Array<{ name: string; path: string }> = [];
   const home = process.env.HOME || process.env.USERPROFILE || "";
   const searchDirs = [
+    join(home, "Desktop", "Github"),
     join(home, "Github"),
     join(home, "Projects"),
+    join(home, "Desktop", "Projects"),
     join(home, "repos"),
     join(home, "src"),
     "D:\\Github",
@@ -111,6 +120,7 @@ export async function startEnsoServer(opts: {
   const { account, config, runtime, statusSink } = opts;
   const port = account.port;
   activePort = port;
+  activeAccount = account;
 
   const app = express();
   app.use(express.json());
@@ -209,6 +219,17 @@ export async function startEnsoServer(opts: {
     const client: ConnectedClient = { id: connectionId, sessionKey, ws, send };
     clients.set(connectionId, client);
 
+    // Send current mode to newly connected client
+    send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey,
+      seq: 0,
+      state: "final",
+      settings: { mode: account.mode ?? "full" },
+      timestamp: Date.now(),
+    });
+
     ws.on("message", async (raw) => {
       try {
         const msg: ClientMessage = JSON.parse(raw.toString());
@@ -267,6 +288,18 @@ export async function startEnsoServer(opts: {
             }
             break;
           case "card.action":
+            if (account.mode === "im") {
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "error",
+                text: "Card actions are not available in IM mode.",
+                timestamp: Date.now(),
+              });
+              break;
+            }
             if (msg.cardId && msg.cardAction) {
               runtime.log?.(`[enso] card action: ${msg.cardId} ${msg.cardAction}`);
               await handlePluginCardAction({
@@ -291,6 +324,23 @@ export async function startEnsoServer(opts: {
               projects,
               timestamp: Date.now(),
             });
+            break;
+          }
+          case "settings.set_mode": {
+            const validModes = ["im", "ui", "full"] as const;
+            if (msg.mode && validModes.includes(msg.mode as typeof validModes[number])) {
+              account.mode = msg.mode as typeof validModes[number];
+              runtime.log?.(`[enso] mode changed to: ${account.mode}`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                settings: { mode: account.mode },
+                timestamp: Date.now(),
+              });
+            }
             break;
           }
           case "chat.history":

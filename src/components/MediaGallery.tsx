@@ -1,6 +1,9 @@
 import { useState } from "react";
 
 const getMediaType = (url: string) => {
+  // Blob URLs have no extension — treat as image (uploads are image/*)
+  if (url.startsWith("blob:")) return "image";
+
   // For /media/ URLs the path is base64url-encoded with no extension.
   // The server appends ?ext=.mp4 etc. so check that first.
   const extParam = new URL(url, "http://localhost").searchParams.get("ext");

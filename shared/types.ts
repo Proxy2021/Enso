@@ -1,3 +1,7 @@
+// ── Channel Mode ──
+
+export type ChannelMode = "im" | "ui" | "full";
+
 // ── Interactive Questions (from Claude Code AskUserQuestion) ──
 
 export interface ToolQuestion {
@@ -31,11 +35,13 @@ export interface ServerMessage {
   targetCardId?: string;
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
+  settings?: { mode: ChannelMode };
   timestamp: number;
 }
 
 export interface ClientMessage {
-  type: "chat.send" | "chat.history" | "ui_action" | "tools.list_projects" | "card.action";
+  type: "chat.send" | "chat.history" | "ui_action" | "tools.list_projects" | "card.action" | "settings.set_mode";
+  mode?: ChannelMode;
   text?: string;
   mediaUrls?: string[];
   sessionKey?: string;

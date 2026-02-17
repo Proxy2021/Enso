@@ -261,7 +261,7 @@ async function callGeminiLLM(prompt: string, apiKey: string): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 8192 },
+        generationConfig: { maxOutputTokens: 16384 },
       }),
     },
   );

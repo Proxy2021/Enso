@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useChatStore } from "./store/chat";
 import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
+import ModePicker from "./components/ModePicker";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
 
@@ -35,7 +36,10 @@ export default function App() {
     <div className="flex flex-col h-screen bg-gray-950 text-gray-100">
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <h1 className="text-lg font-semibold">Enso</h1>
-        <ConnectionDot />
+        <div className="flex items-center gap-3">
+          <ModePicker />
+          <ConnectionDot />
+        </div>
       </header>
       <CardTimeline />
       <ChatInput />

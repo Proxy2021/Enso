@@ -5,7 +5,7 @@ import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import { resolveEnsoAccount } from "./accounts.js";
 import type { ConnectedClient } from "./server.js";
-import { toMediaUrl, MAX_MEDIA_FILE_SIZE } from "./server.js";
+import { toMediaUrl, MAX_MEDIA_FILE_SIZE, getActiveAccount } from "./server.js";
 import type { CoreConfig, ServerMessage } from "./types.js";
 import {
   serverGenerateUI,
@@ -23,6 +23,7 @@ interface CardContext {
   currentData: unknown;
   geminiApiKey?: string;
   account: ResolvedEnsoAccount;
+  mode: "im" | "ui" | "full";
   actionHistory: Array<{
     action: string;
     payload: unknown;
@@ -44,6 +45,13 @@ interface CardContext {
 }
 
 const cardContexts = new Map<string, CardContext>();
+
+/**
+ * Stable card ID per runId — ensures all blocks of a multi-block response
+ * use the same msg.id. The frontend creates the card with the first block's
+ * id, so the card context must be registered under the same id.
+ */
+const runCardIds = new Map<string, string>();
 
 /**
  * Strip Gemini thinking/reasoning blocks from response text.
@@ -117,6 +125,24 @@ export async function deliverEnsoReply(params: {
     return;
   }
 
+  // IM mode: skip UI generation entirely, send plain text only
+  if (account.mode === "im") {
+    const msg: ServerMessage = {
+      id: targetCardId ?? randomUUID(),
+      runId,
+      sessionKey: client.sessionKey,
+      seq,
+      state: "final",
+      text,
+      mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+      ...(targetCardId ? { targetCardId } : {}),
+      timestamp: Date.now(),
+    };
+    client.send(msg);
+    statusSink?.({ lastOutboundAt: Date.now() });
+    return;
+  }
+
   let data: unknown = undefined;
   let generatedUI: string | undefined;
 
@@ -154,7 +180,21 @@ export async function deliverEnsoReply(params: {
     }
   }
 
-  const msgId = targetCardId ?? randomUUID();
+  // Use a stable card ID across all blocks of the same run.
+  // The frontend creates the card with the first block's msg.id,
+  // so the context must be registered under the same id.
+  let msgId: string;
+  if (targetCardId) {
+    msgId = targetCardId;
+  } else {
+    const existing = runCardIds.get(runId);
+    if (existing) {
+      msgId = existing;
+    } else {
+      msgId = randomUUID();
+      runCardIds.set(runId, msgId);
+    }
+  }
 
   // Register card context for interactive actions
   if (data && generatedUI && !targetCardId) {
@@ -165,6 +205,7 @@ export async function deliverEnsoReply(params: {
       currentData: structuredClone(data),
       geminiApiKey: account.geminiApiKey,
       account,
+      mode: account.mode,
       actionHistory: [],
     };
 
@@ -185,6 +226,7 @@ export async function deliverEnsoReply(params: {
     }
 
     cardContexts.set(msgId, cardCtx);
+    runCardIds.delete(runId);
   }
 
   // When targeting an existing card, update its context
@@ -242,13 +284,39 @@ export async function deliverToEnso(ctx: {
   let data: unknown = undefined;
   let generatedUI: string | undefined;
 
-  // Resolve Gemini API key for UI generation
+  // Use runtime account (has live mode) when available, fall back to config
+  const runtimeAccount = getActiveAccount();
   const accountId = ctx.accountId ?? "default";
-  const account = resolveEnsoAccount({
+  const account = runtimeAccount ?? resolveEnsoAccount({
     cfg: (ctx.cfg ?? {}) as CoreConfig,
     accountId,
   });
   const geminiApiKey = account?.geminiApiKey;
+
+  // IM mode: skip UI generation entirely, send plain text only
+  if (account.mode === "im") {
+    const mediaUrls: string[] = [];
+    if (ctx.mediaUrl) mediaUrls.push(toMediaUrl(ctx.mediaUrl));
+    for (const localPath of extractMediaPaths(text)) {
+      const url = toMediaUrl(localPath);
+      if (!mediaUrls.includes(url)) mediaUrls.push(url);
+    }
+
+    const msg: ServerMessage = {
+      id: messageId,
+      runId: randomUUID(),
+      sessionKey: ctx.to,
+      seq: 0,
+      state: "final",
+      text,
+      mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+      timestamp: Date.now(),
+    };
+    for (const client of targets) {
+      client.send(msg);
+    }
+    return { channel: "enso", messageId, target: ctx.to };
+  }
 
   // Check for native tool usage before UI generation
   const recentCall = consumeRecentToolCall();
@@ -300,6 +368,7 @@ export async function deliverToEnso(ctx: {
       currentData: structuredClone(data),
       geminiApiKey,
       account,
+      mode: account.mode,
       actionHistory: [],
     };
 
@@ -370,8 +439,83 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // IM mode has no card actions — reject early
+  if (ctx.mode === "im") {
+    client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "error",
+      targetCardId: cardId,
+      text: "Card actions are not available in IM mode.",
+      timestamp: Date.now(),
+    });
+    return;
+  }
+
   // Record action in history
   ctx.actionHistory.push({ action, payload, timestamp: Date.now() });
+
+  /**
+   * Send an action result respecting the card's mode:
+   * - full: in-place update via targetCardId
+   * - ui: restore source card, then create a new card below
+   */
+  const sendActionResult = (resultData: unknown, generatedUI: string) => {
+    if (ctx.mode === "ui") {
+      // Restore the source card (frontend preserves original data/generatedUI
+      // when msg.data is absent via `msg.data ?? card.data`)
+      client.send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "final",
+        targetCardId: cardId,
+        timestamp: Date.now(),
+      });
+
+      // Create a new card with the action result
+      const newCardId = randomUUID();
+      client.send({
+        id: newCardId,
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "final",
+        data: resultData,
+        generatedUI,
+        timestamp: Date.now(),
+      });
+
+      // Register context for the new card so it can receive further actions
+      cardContexts.set(newCardId, {
+        cardId: newCardId,
+        originalPrompt: ctx.originalPrompt,
+        originalResponse: ctx.originalResponse,
+        currentData: structuredClone(resultData),
+        geminiApiKey: ctx.geminiApiKey,
+        account: ctx.account,
+        mode: ctx.mode,
+        nativeToolHint: ctx.nativeToolHint,
+        actionHistory: [],
+      });
+    } else {
+      // Full mode: in-place update
+      client.send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "final",
+        targetCardId: cardId,
+        data: resultData,
+        generatedUI,
+        timestamp: Date.now(),
+      });
+    }
+  };
 
   // Try mechanical data mutation first
   const updatedData = applyAction(ctx.currentData, action, payload);
@@ -398,17 +542,7 @@ export async function handlePluginCardAction(params: {
       `[enso:outbound] Card action (mechanical): cardId=${cardId} action=${action} shape=${uiResult.shapeKey}`,
     );
 
-    client.send({
-      id: randomUUID(),
-      runId: randomUUID(),
-      sessionKey: client.sessionKey,
-      seq: 0,
-      state: "final",
-      targetCardId: cardId,
-      data: updatedData,
-      generatedUI: uiResult.code,
-      timestamp: Date.now(),
-    });
+    sendActionResult(updatedData, uiResult.code);
     return;
   }
 
@@ -471,17 +605,7 @@ export async function handlePluginCardAction(params: {
             `[enso:outbound] Card action (native tool): success, shape=${uiResult.shapeKey}`,
           );
 
-          client.send({
-            id: randomUUID(),
-            runId: randomUUID(),
-            sessionKey: client.sessionKey,
-            seq: 0,
-            state: "final",
-            targetCardId: cardId,
-            data: result.data,
-            generatedUI: uiResult.code,
-            timestamp: Date.now(),
-          });
+          sendActionResult(result.data, uiResult.code);
           return;
         }
 
@@ -500,7 +624,6 @@ export async function handlePluginCardAction(params: {
 
   // ── Path 3: Agent round-trip fallback ──
   // No mechanical handler matched — route through OpenClaw agent.
-  // The agent response will be delivered back to this card via targetCardId.
   const p = (payload ?? {}) as Record<string, unknown>;
   let actionMessage: string;
 
@@ -517,6 +640,20 @@ export async function handlePluginCardAction(params: {
     `[enso:outbound] Card action (agent): cardId=${cardId} action=${action} → routing to OpenClaw agent`,
   );
 
+  // UI mode: restore source card first, then route to agent WITHOUT targetCardId
+  // so the agent response creates a new card. Full mode: pass targetCardId for in-place update.
+  if (ctx.mode === "ui") {
+    client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "final",
+      targetCardId: cardId,
+      timestamp: Date.now(),
+    });
+  }
+
   const { handleEnsoInbound } = await import("./inbound.js");
   await handleEnsoInbound({
     message: {
@@ -530,7 +667,7 @@ export async function handlePluginCardAction(params: {
     config,
     runtime,
     client,
-    targetCardId: cardId,
+    targetCardId: ctx.mode === "full" ? cardId : undefined,
     statusSink,
   });
 }

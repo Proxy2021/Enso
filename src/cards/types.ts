@@ -22,6 +22,9 @@ export interface Card {
   // Interactive questions (from Claude Code AskUserQuestion)
   pendingQuestions?: ToolQuestion[];
 
+  // Card action in progress
+  pendingAction?: string;
+
   // Timestamps
   createdAt: number;
   updatedAt: number;

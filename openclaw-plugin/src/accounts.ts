@@ -15,6 +15,7 @@ export type ResolvedEnsoAccount = {
   port: number;
   host: string;
   geminiApiKey: string;
+  mode: "im" | "ui" | "full";
   config: EnsoAccountConfig;
 };
 
@@ -35,6 +36,7 @@ export function resolveEnsoAccount(params: {
     section.geminiApiKey ?? process.env.GEMINI_API_KEY ?? readKeyFile(GEMINI_KEY_FILE);
 
   const configured = true;
+  const mode = section.mode ?? "full";
 
   return {
     accountId,
@@ -44,6 +46,7 @@ export function resolveEnsoAccount(params: {
     port,
     host,
     geminiApiKey,
+    mode,
     config: section,
   };
 }

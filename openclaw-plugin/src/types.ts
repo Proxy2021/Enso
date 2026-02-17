@@ -18,7 +18,10 @@ export type EnsoAccountConfig = {
   blockStreaming?: boolean;
   blockStreamingCoalesce?: { minChars?: number; idleMs?: number };
   textChunkLimit?: number;
+  mode?: "im" | "ui" | "full";
 };
+
+export type ChannelMode = "im" | "ui" | "full";
 
 export type EnsoInboundMessage = {
   messageId: string;
@@ -59,11 +62,13 @@ export interface ServerMessage {
   targetCardId?: string;
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
+  settings?: { mode: ChannelMode };
   timestamp: number;
 }
 
 export interface ClientMessage {
-  type: "chat.send" | "chat.history" | "ui_action" | "tools.list_projects" | "card.action";
+  type: "chat.send" | "chat.history" | "ui_action" | "tools.list_projects" | "card.action" | "settings.set_mode";
+  mode?: ChannelMode;
   text?: string;
   mediaUrls?: string[];
   sessionKey?: string;
