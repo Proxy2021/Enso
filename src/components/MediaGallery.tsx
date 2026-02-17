@@ -1,10 +1,13 @@
 import { useState } from "react";
 
 const getMediaType = (url: string) => {
-  const extension = url.split(".").pop()?.toLowerCase();
+  // For /media/ URLs the path is base64url-encoded with no extension.
+  // The server appends ?ext=.mp4 etc. so check that first.
+  const extParam = new URL(url, "http://localhost").searchParams.get("ext");
+  const extension = (extParam ?? url.split(".").pop() ?? "").replace(/^\./, "").toLowerCase();
   if (!extension) return "unknown";
 
-  if (["jpg", "jpeg", "png", "gif", "webp"].includes(extension)) return "image";
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(extension)) return "image";
   if (["mp4", "webm", "ogg"].includes(extension)) return "video";
   if (["mp3", "wav", "aac", "ogg"].includes(extension)) return "audio";
 

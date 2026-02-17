@@ -2,7 +2,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
-import { existsSync, createReadStream, readdirSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, statSync, createReadStream, readdirSync, writeFileSync, mkdirSync } from "fs";
 import { extname, dirname, basename, join } from "path";
 import { tmpdir } from "os";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
@@ -25,8 +25,13 @@ const clients = new Map<string, ConnectedClient>();
 /** Current server port for constructing media URLs. */
 let activePort = 3001;
 
+/** Maximum file size for served media (300 MB). */
+export const MAX_MEDIA_FILE_SIZE = 300 * 1024 * 1024;
+
 /**
  * Convert a local file path to an HTTP URL served by the Enso media endpoint.
+ * Appends `?ext=` with the original file extension so the frontend can detect
+ * media type even though the URL path itself is base64url-encoded.
  * Returns the original string if it's already an HTTP(S) URL.
  */
 export function toMediaUrl(pathOrUrl: string): string {
@@ -34,7 +39,8 @@ export function toMediaUrl(pathOrUrl: string): string {
     return pathOrUrl;
   }
   const encoded = Buffer.from(pathOrUrl, "utf-8").toString("base64url");
-  return `/media/${encoded}`;
+  const ext = extname(pathOrUrl).toLowerCase();
+  return `/media/${encoded}${ext ? `?ext=${ext}` : ""}`;
 }
 
 export function getConnectedClient(id: string): ConnectedClient | undefined {
@@ -130,6 +136,18 @@ export async function startEnsoServer(opts: {
 
     if (!existsSync(filePath)) {
       res.status(404).json({ error: "File not found" });
+      return;
+    }
+
+    // Enforce file size limit
+    try {
+      const stat = statSync(filePath);
+      if (stat.size > MAX_MEDIA_FILE_SIZE) {
+        res.status(413).json({ error: "File too large (max 300 MB)" });
+        return;
+      }
+    } catch {
+      res.status(500).json({ error: "Cannot read file" });
       return;
     }
 

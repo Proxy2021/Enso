@@ -1,9 +1,11 @@
 import { randomUUID } from "crypto";
+import { existsSync, statSync } from "fs";
+import { extname } from "path";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import { resolveEnsoAccount } from "./accounts.js";
 import type { ConnectedClient } from "./server.js";
-import { toMediaUrl } from "./server.js";
+import { toMediaUrl, MAX_MEDIA_FILE_SIZE } from "./server.js";
 import type { CoreConfig, ServerMessage } from "./types.js";
 import {
   serverGenerateUI,
@@ -82,6 +84,12 @@ export async function deliverEnsoReply(params: {
   if (payload.mediaUrls) mediaUrls.push(...payload.mediaUrls.map(toMediaUrl));
   if (payload.mediaUrl) {
     const url = toMediaUrl(payload.mediaUrl);
+    if (!mediaUrls.includes(url)) mediaUrls.push(url);
+  }
+
+  // Auto-detect local file paths in response text
+  for (const localPath of extractMediaPaths(text)) {
+    const url = toMediaUrl(localPath);
     if (!mediaUrls.includes(url)) mediaUrls.push(url);
   }
 
@@ -274,7 +282,14 @@ export async function deliverToEnso(ctx: {
     }
   }
 
-  const mediaUrls = ctx.mediaUrl ? [toMediaUrl(ctx.mediaUrl)] : undefined;
+  const mediaUrls: string[] = [];
+  if (ctx.mediaUrl) mediaUrls.push(toMediaUrl(ctx.mediaUrl));
+
+  // Auto-detect local file paths in response text
+  for (const localPath of extractMediaPaths(text)) {
+    const url = toMediaUrl(localPath);
+    if (!mediaUrls.includes(url)) mediaUrls.push(url);
+  }
 
   // Register card context for interactive actions
   if (data && generatedUI && account) {
@@ -312,7 +327,7 @@ export async function deliverToEnso(ctx: {
     text,
     data: data ?? undefined,
     generatedUI,
-    mediaUrls,
+    mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
     timestamp: Date.now(),
   };
 
@@ -643,6 +658,47 @@ function applySalesAction(data: SalesData, action: string, payload: unknown): Sa
     default:
       return data;
   }
+}
+
+/**
+ * Scan agent response text for absolute local file paths that point to
+ * supported media files. Returns validated paths (exist on disk, within
+ * size limit) that can be converted to media URLs.
+ */
+function extractMediaPaths(text: string): string[] {
+  // Match absolute Unix paths ending with a supported media extension.
+  // Paths may appear bare, inside backticks, or inside quotes.
+  const pattern = /(\/(?:[\w.@%+~-]+\/)*[\w.@%+~-]+\.(?:png|jpe?g|gif|webp|svg|bmp|mp4|webm|pdf))/gi;
+
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const filePath = match[1];
+
+    // Skip if this looks like part of a URL (e.g. https://example.com/image.png)
+    const preContext = text.slice(Math.max(0, match.index - 10), match.index);
+    if (/https?:\/\//.test(preContext)) continue;
+
+    if (seen.has(filePath)) continue;
+    seen.add(filePath);
+
+    // Must actually exist on disk
+    if (!existsSync(filePath)) continue;
+
+    // Must be a regular file within the size limit
+    try {
+      const stat = statSync(filePath);
+      if (!stat.isFile() || stat.size > MAX_MEDIA_FILE_SIZE) continue;
+    } catch {
+      continue;
+    }
+
+    paths.push(filePath);
+  }
+
+  return paths;
 }
 
 /**
