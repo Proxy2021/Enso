@@ -4,6 +4,7 @@ set -euo pipefail
 
 ENSO_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLIST="$HOME/Library/LaunchAgents/ai.openclaw.gateway.plist"
+LABEL="ai.openclaw.gateway"
 UID_NUM="$(id -u)"
 
 echo "=== Restarting Enso services ==="
@@ -19,25 +20,34 @@ else
 fi
 
 # ── 2. Stop OpenClaw gateway ──
-if launchctl print "gui/$UID_NUM/ai.openclaw.gateway" &>/dev/null; then
-  echo "[openclaw] Stopping gateway service"
-  launchctl bootout "gui/$UID_NUM" "$PLIST" 2>/dev/null || true
-  sleep 2
-else
-  # Fallback: kill by process name
-  GW_PIDS=$(pgrep -f 'openclaw-gateway' 2>/dev/null || true)
-  if [ -n "$GW_PIDS" ]; then
-    echo "[openclaw] Stopping gateway (PIDs: $GW_PIDS)"
-    kill $GW_PIDS 2>/dev/null || true
-    sleep 2
-  else
-    echo "[openclaw] Gateway not running"
+echo "[openclaw] Stopping gateway service"
+launchctl bootout "gui/$UID_NUM/$LABEL" 2>/dev/null || true
+launchctl bootout "gui/$UID_NUM" "$PLIST" 2>/dev/null || true
+
+# Fallback: kill lingering gateway processes if launchctl bootout misses any
+GW_PIDS=$(pgrep -f 'openclaw-gateway|openclaw gateway|gateway serve' 2>/dev/null || true)
+if [ -n "$GW_PIDS" ]; then
+  echo "[openclaw] Killing lingering gateway process(es): $GW_PIDS"
+  kill $GW_PIDS 2>/dev/null || true
+  sleep 1
+  GW_PIDS_FORCE=$(pgrep -f 'openclaw-gateway|openclaw gateway|gateway serve' 2>/dev/null || true)
+  if [ -n "$GW_PIDS_FORCE" ]; then
+    echo "[openclaw] Force killing remaining process(es): $GW_PIDS_FORCE"
+    kill -9 $GW_PIDS_FORCE 2>/dev/null || true
   fi
+else
+  echo "[openclaw] No lingering gateway process found"
 fi
+sleep 1
 
 # ── 3. Start OpenClaw gateway ──
 echo "[openclaw] Starting gateway"
-launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>/dev/null || openclaw gateway install 2>/dev/null || true
+if [ -f "$PLIST" ]; then
+  launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>/dev/null || true
+else
+  openclaw gateway install >/dev/null 2>&1 || true
+fi
+launchctl kickstart -k "gui/$UID_NUM/$LABEL" 2>/dev/null || true
 
 # Wait for gateway + Enso plugin server
 echo -n "[openclaw] Waiting for plugin server"
@@ -80,3 +90,9 @@ IP=$(ipconfig getifaddr en0 2>/dev/null || echo "unknown")
 echo "  Network:  http://$IP:5173"
 echo "  Plugin:   http://localhost:3001/health"
 echo "  Vite log: /tmp/enso-vite.log"
+echo ""
+echo "=== TUI Tips ==="
+echo "  Fresh session:"
+echo "    openclaw tui --session \"scratch-\$(date +%s)\" --history-limit 0"
+echo "  Reuse current session with minimal history:"
+echo "    openclaw tui --session main --history-limit 10"

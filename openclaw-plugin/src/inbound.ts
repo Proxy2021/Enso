@@ -4,7 +4,7 @@ import {
   type RuntimeEnv,
 } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
-import type { CoreConfig, EnsoInboundMessage, ServerMessage, ToolRouting } from "./types.js";
+import type { CoreConfig, EnsoInboundMessage, ToolRouting } from "./types.js";
 import type { ConnectedClient } from "./server.js";
 import { getEnsoRuntime } from "./runtime.js";
 import { deliverEnsoReply } from "./outbound.js";
@@ -105,7 +105,11 @@ export async function handleEnsoInbound(params: {
   });
 
   const runId = randomUUID();
+  const stableCardId = targetCardId ?? randomUUID();
   let seq = 0;
+  const steps: Array<{ seq: number; text: string }> = [];
+
+  console.log(`[enso:inbound] dispatching: runId=${runId}, cardId=${stableCardId}, peer=${peerId}, targetCardId=${targetCardId ?? "none"}, textLen=${rawBody.length}`);
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
@@ -114,14 +118,22 @@ export async function handleEnsoInbound(params: {
       ...prefixOptions,
       deliver: async (payload) => {
         const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
+        const blockText = (payload as { text?: string }).text ?? "";
+        const currentSeq = seq++;
+        if (blockText.trim()) {
+          steps.push({ seq: currentSeq, text: blockText });
+        }
+        console.log(`[enso:inbound] block delivered: seq=${currentSeq}, blockLen=${blockText.length}, totalSteps=${steps.length}`);
         await deliverEnsoReply({
           payload: payload as { text?: string; mediaUrl?: string; mediaUrls?: string[] },
           client,
           runId,
-          seq: seq++,
+          seq: currentSeq,
           account,
           userMessage: rawBody,
           targetCardId,
+          cardId: stableCardId,
+          steps: steps.length > 0 ? [...steps] : undefined,
           toolMeta,
           statusSink,
         });

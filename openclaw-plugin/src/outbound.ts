@@ -1,18 +1,40 @@
 import { randomUUID } from "crypto";
 import { existsSync, statSync } from "fs";
-import { extname } from "path";
+import { extname, join } from "path";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
-import { resolveEnsoAccount } from "./accounts.js";
 import type { ConnectedClient } from "./server.js";
 import { toMediaUrl, MAX_MEDIA_FILE_SIZE, getActiveAccount } from "./server.js";
-import type { CoreConfig, ServerMessage } from "./types.js";
+import type { AgentStep } from "@shared/types";
+import type { CardModeDetail, CoreConfig, OperationStage, ServerMessage } from "./types.js";
 import {
+  selectToolForContent,
+  serverGenerateConstrainedFollowupUI,
   serverGenerateUI,
-  serverGenerateUIFromText,
 } from "./ui-generator.js";
-import { executeToolDirect, getActionDescriptions, isToolRegistered, getToolPluginId, getPluginToolPrefix } from "./native-tools/registry.js";
-import { consumeRecentToolCall } from "./native-tools/tool-call-store.js";
+import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
+import {
+  inferToolTemplate,
+  executeToolDirect,
+  getActionDescriptions,
+  getRegisteredToolCatalog,
+  getToolTemplate,
+  getToolTemplateCode,
+  getToolPluginId,
+  getPluginToolPrefix,
+  isToolActionCovered,
+  isToolRegistered,
+  normalizeDataForToolTemplate,
+  registerToolTemplateCandidate,
+  getPreferredToolProviderForFamily,
+  type ToolTemplateCoverageStatus,
+} from "./native-tools/registry.js";
+import {
+  buildToolConsoleFamilyData,
+  buildToolConsoleHomeData,
+  handleToolConsoleAdd,
+} from "./tooling-console.js";
+// import { parseAgentText } from "./text-parser.js";
 
 // ── Card Interaction Context ──
 
@@ -42,6 +64,10 @@ interface CardContext {
     /** The action map prefix, used to look up the handler, e.g. "alpharank_" */
     handlerPrefix: string;
   };
+  interactionMode: "llm" | "tool";
+  toolFamily?: string;
+  signatureId?: string;
+  coverageStatus?: ToolTemplateCoverageStatus;
 }
 
 const cardContexts = new Map<string, CardContext>();
@@ -51,7 +77,6 @@ const cardContexts = new Map<string, CardContext>();
  * use the same msg.id. The frontend creates the card with the first block's
  * id, so the card context must be registered under the same id.
  */
-const runCardIds = new Map<string, string>();
 
 /**
  * Strip Gemini thinking/reasoning blocks from response text.
@@ -68,6 +93,313 @@ function stripThinkingBlocks(text: string): string {
   return stripped.trim() || text;
 }
 
+function compactPromptText(prompt: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed) return "User request";
+
+  // If this is an action-generated wrapper prompt, recover the original user prompt.
+  const wrappedMatch = trimmed.match(/created from the prompt "([^"]+)"/i);
+  if (wrappedMatch?.[1]) {
+    return wrappedMatch[1];
+  }
+
+  if (trimmed.length <= 220) return trimmed;
+  return `${trimmed.slice(0, 220)}...`;
+}
+
+function summarizeCardDataForAgent(data: unknown): string {
+  try {
+    const json = JSON.stringify(data);
+    if (!json) return "No card data";
+    return json.length > 380 ? `${json.slice(0, 380)}...` : json;
+  } catch {
+    return "Unserializable card data";
+  }
+}
+
+function rewriteExecCommandNotFound(text: string): string {
+  const execFailure = text.match(/Exec:\s*([\s\S]*?)\s+failed:\s*([\s\S]*)$/i);
+  const failedCommand = execFailure?.[1]?.trim();
+  const failureReason = execFailure?.[2]?.trim();
+
+  const missing = text.match(/command not found:\s*([^\s]+)/i);
+  if (!missing) return text;
+  const cmd = missing[1];
+
+  // Special-case clawhub: provide an immediate ecosystem discovery fallback
+  // using the loaded OpenClaw runtime registry instead of external CLI tools.
+  if (cmd.toLowerCase() === "clawhub" || /exec:\s*clawhub/i.test(text)) {
+    const catalog = getRegisteredToolCatalog();
+    if (catalog.length > 0) {
+      const preview = catalog
+        .slice(0, 8)
+        .map((entry) => `- ${entry.pluginId} (${entry.tools.length} tools)`)
+        .join("\n");
+      return `I cannot run \`clawhub\` in this environment, but I can still show the loaded OpenClaw ecosystem directly.
+
+Loaded plugins right now: ${catalog.length}
+${preview}
+
+To explore more, ask:
+- "list all loaded plugins"
+- "search loaded tools for <keyword>"
+- "show details for plugin <name>"`;
+    }
+  }
+
+  return `The requested command is not available in this runtime environment.
+
+Missing command: \`${cmd}\`
+
+Try one of these next steps:
+- Ask me to list currently loaded OpenClaw plugins/tools directly (no CLI required).
+- If you expected this command to exist, install/configure it in the host environment and retry.
+- Use a plugin/tool-centric request instead of a shell command (for example: "show loaded tools" or "search loaded tools for X").`;
+}
+
+function rewriteExecFailure(text: string): string {
+  const commandNotFoundRewrite = rewriteExecCommandNotFound(text);
+  if (commandNotFoundRewrite !== text) return commandNotFoundRewrite;
+
+  const execFailure = text.match(/Exec:\s*([\s\S]*?)\s+failed:\s*([\s\S]*)$/i);
+  if (!execFailure) return text;
+
+  const cmd = execFailure[1].trim();
+  const reason = execFailure[2].trim();
+  const cmdPreview = cmd.length > 140 ? `${cmd.slice(0, 140)}...` : cmd;
+
+  // Common case: one probe command in a chain fails with non-zero exit.
+  if (/command exited with code\s+\d+/i.test(reason)) {
+    return `A shell probe failed before the full check completed.
+
+What failed:
+- Command: \`${cmdPreview}\`
+- Reason: ${reason}
+
+What to do next:
+- Re-run with narrower checks (one tool family at a time) to avoid brittle chained probes.
+- Ask for a resilient inventory format (e.g. "check python/node/git/docker individually and summarize").
+- If you want OpenClaw ecosystem discovery, use runtime-native requests like:
+  - "list all loaded plugins"
+  - "search loaded tools for <keyword>"`;
+  }
+
+  return `A shell execution step failed.
+
+What failed:
+- Command: \`${cmdPreview}\`
+- Reason: ${reason}
+
+Try a narrower request or a runtime-native tool query so Enso can recover gracefully if one probe fails.`;
+}
+
+function applyDetectedToolTemplate(ctx: CardContext, signature: ReturnType<typeof inferToolTemplate>): void {
+  if (!signature) return;
+  ctx.interactionMode = "tool";
+  ctx.toolFamily = signature.toolFamily;
+  ctx.signatureId = signature.signatureId;
+  ctx.coverageStatus = signature.coverageStatus;
+}
+
+function cardModeFromContext(ctx: CardContext | undefined): CardModeDetail | undefined {
+  if (!ctx) return undefined;
+  return {
+    interactionMode: ctx.interactionMode,
+    ...(ctx.toolFamily ? { toolFamily: ctx.toolFamily } : {}),
+    ...(ctx.signatureId ? { signatureId: ctx.signatureId } : {}),
+    ...(ctx.coverageStatus ? { coverageStatus: ctx.coverageStatus } : {}),
+  };
+}
+
+function inferDesktopLikePathFromPrompt(prompt: string): string | undefined {
+  const lower = prompt.toLowerCase();
+  if (lower.includes("desktop")) return "~/Desktop";
+  if (lower.includes("download")) return "~/Downloads";
+  if (lower.includes("document")) return "~/Documents";
+  if (lower.includes("home folder") || lower.includes("home directory") || lower.includes("home")) return "~";
+  return undefined;
+}
+
+function inferWorkspaceLikePathFromPrompt(prompt: string): string | undefined {
+  const lower = prompt.toLowerCase();
+  if (lower.includes("github")) return "~/Desktop/Github";
+  if (lower.includes("project")) return "~/Desktop/Github";
+  return undefined;
+}
+
+
+function hydrateFilesystemLikeData(data: unknown, prompt: string): unknown {
+  if (
+    Array.isArray(data)
+    && data.every((entry) => entry && typeof entry === "object" && "name" in (entry as Record<string, unknown>))
+  ) {
+    const inferredPath = inferDesktopLikePathFromPrompt(prompt) ?? ".";
+    return {
+      title: "Directory listing",
+      files: data.map((entry) => {
+        const record = entry as Record<string, unknown>;
+        if (typeof record.path === "string" && record.path.trim()) return entry;
+        const name = typeof record.name === "string" ? record.name.trim() : "";
+        if (!name) return entry;
+        return { ...record, path: join(inferredPath, name) };
+      }),
+      path: inferredPath,
+    };
+  }
+  if (!data || typeof data !== "object") return data;
+  const source = data as Record<string, unknown>;
+  const hasFiles = Array.isArray(source.files);
+  const hasItems = Array.isArray(source.items);
+  if (!hasFiles && !hasItems) return data;
+
+  const inferredPath =
+    (typeof source.path === "string" && source.path.trim()) ? source.path : inferDesktopLikePathFromPrompt(prompt);
+  if (!inferredPath) return data;
+
+  const clone: Record<string, unknown> = { ...source, path: inferredPath };
+  const listKey = hasFiles ? "files" : "items";
+  const list = (clone[listKey] as unknown[]).map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.path === "string" && record.path.trim()) return entry;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!name) return entry;
+    return { ...record, path: join(inferredPath, name) };
+  });
+  clone[listKey] = list;
+  return clone;
+}
+
+function attachSyntheticNativeToolHint(ctx: CardContext, data: unknown, prompt: string): void {
+  if (ctx.nativeToolHint || !ctx.toolFamily) return;
+  const hydrated = (data && typeof data === "object") ? (data as Record<string, unknown>) : {};
+  if (ctx.toolFamily === "filesystem") {
+    const provider = getPreferredToolProviderForFamily("filesystem");
+    if (!provider) return;
+    const path =
+      (typeof hydrated.path === "string" && hydrated.path.trim())
+        ? hydrated.path
+        : (inferDesktopLikePathFromPrompt(prompt) ?? ".");
+    ctx.nativeToolHint = {
+      toolName: provider.toolName,
+      params: { path },
+      handlerPrefix: provider.handlerPrefix,
+    };
+    return;
+  }
+  if (ctx.toolFamily === "code_workspace") {
+    const provider = getPreferredToolProviderForFamily("code_workspace");
+    if (!provider) return;
+    const pathCandidate =
+      (typeof hydrated.path === "string" && hydrated.path.trim())
+      || (typeof hydrated.parentPath === "string" && hydrated.parentPath.trim())
+      || (typeof hydrated.basePath === "string" && hydrated.basePath.trim())
+      || inferWorkspaceLikePathFromPrompt(prompt)
+      || "~/Desktop/Github";
+    ctx.nativeToolHint = {
+      toolName: provider.toolName,
+      params: { path: pathCandidate },
+      handlerPrefix: provider.handlerPrefix,
+    };
+    return;
+  }
+  if (ctx.toolFamily === "multimedia") {
+    const provider = getPreferredToolProviderForFamily("multimedia");
+    if (!provider) return;
+    const pathCandidate =
+      (typeof hydrated.path === "string" && hydrated.path.trim())
+      || (typeof hydrated.scannedPath === "string" && hydrated.scannedPath.trim())
+      || inferDesktopLikePathFromPrompt(prompt)
+      || "~/Desktop";
+    ctx.nativeToolHint = {
+      toolName: provider.toolName,
+      params: { path: pathCandidate },
+      handlerPrefix: provider.handlerPrefix,
+    };
+    return;
+  }
+  if (ctx.toolFamily === "travel_planner") {
+    const provider = getPreferredToolProviderForFamily("travel_planner");
+    if (!provider) return;
+    const destination =
+      (typeof hydrated.destination === "string" && hydrated.destination.trim())
+      || "Tokyo";
+    const days =
+      (typeof hydrated.days === "number" && hydrated.days > 0)
+      ? Math.floor(hydrated.days)
+      : 5;
+    ctx.nativeToolHint = {
+      toolName: provider.toolName,
+      params: { destination, days },
+      handlerPrefix: provider.handlerPrefix,
+    };
+    return;
+  }
+  if (ctx.toolFamily === "meal_planner") {
+    const provider = getPreferredToolProviderForFamily("meal_planner");
+    if (!provider) return;
+    const diet =
+      (typeof hydrated.diet === "string" && hydrated.diet.trim())
+      || "balanced";
+    ctx.nativeToolHint = {
+      toolName: provider.toolName,
+      params: { diet },
+      handlerPrefix: provider.handlerPrefix,
+    };
+  }
+}
+
+function isToolConsoleCommand(text: string): boolean {
+  return /^\/tool\s+enso\b/i.test(text.trim());
+}
+
+async function renderFollowupUI(params: {
+  ctx: CardContext;
+  action: string;
+  payload: unknown;
+  data: unknown;
+  assistantText: string;
+  actionHints?: string;
+}): Promise<{ generatedUI: string; renderData: unknown }> {
+  const { ctx, action, payload, data, assistantText, actionHints } = params;
+  if (ctx.interactionMode === "tool" && ctx.toolFamily && ctx.signatureId) {
+    const signature = getToolTemplate(ctx.toolFamily, ctx.signatureId)
+      ?? inferToolTemplate({ toolName: ctx.nativeToolHint?.toolName, data });
+    if (signature) {
+      const templateCode = getToolTemplateCode(signature);
+      if (templateCode) {
+        return {
+          generatedUI: templateCode,
+          renderData: normalizeDataForToolTemplate(signature, data),
+        };
+      }
+    }
+    const fallback = await serverGenerateConstrainedFollowupUI({
+      data,
+      userMessage: `${compactPromptText(ctx.originalPrompt)} [Action: ${action}${payload ? ` ${JSON.stringify(payload)}` : ""}]`,
+      assistantText,
+      geminiApiKey: ctx.geminiApiKey,
+      action,
+      signatureId: ctx.signatureId,
+      toolFamily: ctx.toolFamily,
+      actionHints,
+    });
+    if (signature) {
+      registerToolTemplateCandidate(signature, fallback.code);
+    }
+    return { generatedUI: fallback.code, renderData: data };
+  }
+
+  const uiResult = await serverGenerateUI({
+    data,
+    userMessage: `${compactPromptText(ctx.originalPrompt)} [Action: ${action}${payload ? ` ${JSON.stringify(payload)}` : ""}]`,
+    assistantText,
+    geminiApiKey: ctx.geminiApiKey,
+    actionHints,
+  });
+  return { generatedUI: uiResult.code, renderData: data };
+}
+
 /**
  * Deliver an agent reply payload to a connected browser client.
  * Called from the buffered block dispatcher's `deliver` callback.
@@ -80,12 +412,20 @@ export async function deliverEnsoReply(params: {
   account: ResolvedEnsoAccount;
   userMessage: string;
   targetCardId?: string;
+  cardId?: string;
+  steps?: AgentStep[];
   toolMeta?: { toolId: string; toolSessionId?: string };
   statusSink?: (patch: { lastOutboundAt?: number }) => void;
 }): Promise<void> {
-  const { payload, client, runId, seq, account, userMessage, targetCardId, toolMeta, statusSink } = params;
-  const text = stripThinkingBlocks(payload.text ?? "");
-  console.log(`[enso:outbound] deliverEnsoReply called, seq=${seq}, textLen=${text.length}`);
+  const { payload, client, runId, seq, targetCardId, toolMeta, statusSink } = params;
+
+  // Use last step's text as primary content when multi-block steps are available
+  const lastStepText = params.steps?.length
+    ? params.steps[params.steps.length - 1].text
+    : undefined;
+  const rawText = lastStepText ?? payload.text ?? "";
+  const text = rewriteExecFailure(stripThinkingBlocks(rawText));
+  console.log(`[enso:outbound] deliverEnsoReply: seq=${seq}, cardId=${params.cardId ?? "auto"}, textLen=${text.length}, steps=${params.steps?.length ?? 0}, targetCardId=${targetCardId ?? "none"}`);
 
   // Collect media URLs from payload, converting local paths to HTTP URLs
   const mediaUrls: string[] = [];
@@ -105,11 +445,14 @@ export async function deliverEnsoReply(params: {
     return;
   }
 
+  // Stable card ID ensures all blocks of the same run reference the same card
+  const msgId = params.cardId ?? targetCardId ?? randomUUID();
+
   // Tool-routed messages (e.g. claude-code) bypass UI generation —
   // they're rendered as raw text in a terminal card.
   if (toolMeta) {
     const msg: ServerMessage = {
-      id: targetCardId ?? randomUUID(),
+      id: msgId,
       runId,
       sessionKey: client.sessionKey,
       seq,
@@ -125,119 +468,6 @@ export async function deliverEnsoReply(params: {
     return;
   }
 
-  // IM mode: skip UI generation entirely, send plain text only
-  if (account.mode === "im") {
-    const msg: ServerMessage = {
-      id: targetCardId ?? randomUUID(),
-      runId,
-      sessionKey: client.sessionKey,
-      seq,
-      state: "final",
-      text,
-      mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
-      ...(targetCardId ? { targetCardId } : {}),
-      timestamp: Date.now(),
-    };
-    client.send(msg);
-    statusSink?.({ lastOutboundAt: Date.now() });
-    return;
-  }
-
-  let data: unknown = undefined;
-  let generatedUI: string | undefined;
-
-  // Check if a native tool was used to produce this response BEFORE
-  // generating UI, so we can tell Gemini about available actions.
-  const recentCall = consumeRecentToolCall();
-  const actionHints = recentCall
-    ? getActionDescriptions(recentCall.toolName)
-    : undefined;
-
-  // Path 1: Try to detect structured JSON data in the response
-  const structuredData = extractStructuredData(text);
-
-  if (structuredData) {
-    const uiResult = await serverGenerateUI({
-      data: structuredData,
-      userMessage,
-      assistantText: text,
-      geminiApiKey: account.geminiApiKey,
-      actionHints,
-    });
-    data = structuredData;
-    generatedUI = uiResult.code;
-  } else if (text.trim().length >= 100) {
-    // Let the LLM decide whether this response warrants rich UI
-    const textResult = await serverGenerateUIFromText({
-      userMessage,
-      assistantText: text,
-      geminiApiKey: account.geminiApiKey,
-      actionHints,
-    });
-    if (textResult) {
-      data = textResult.data;
-      generatedUI = textResult.code;
-    }
-  }
-
-  // Use a stable card ID across all blocks of the same run.
-  // The frontend creates the card with the first block's msg.id,
-  // so the context must be registered under the same id.
-  let msgId: string;
-  if (targetCardId) {
-    msgId = targetCardId;
-  } else {
-    const existing = runCardIds.get(runId);
-    if (existing) {
-      msgId = existing;
-    } else {
-      msgId = randomUUID();
-      runCardIds.set(runId, msgId);
-    }
-  }
-
-  // Register card context for interactive actions
-  if (data && generatedUI && !targetCardId) {
-    const cardCtx: CardContext = {
-      cardId: msgId,
-      originalPrompt: userMessage,
-      originalResponse: text,
-      currentData: structuredClone(data),
-      geminiApiKey: account.geminiApiKey,
-      account,
-      mode: account.mode,
-      actionHistory: [],
-    };
-
-    // Attach native tool hint so card actions can call the tool directly
-    if (recentCall && isToolRegistered(recentCall.toolName)) {
-      const pluginId = getToolPluginId(recentCall.toolName);
-      const prefix = pluginId ? getPluginToolPrefix(pluginId) : undefined;
-      if (prefix) {
-        cardCtx.nativeToolHint = {
-          toolName: recentCall.toolName,
-          params: recentCall.params,
-          handlerPrefix: prefix,
-        };
-        console.log(
-          `[enso:outbound] attached native tool hint: ${recentCall.toolName} (prefix: ${prefix}) → card ${msgId}`,
-        );
-      }
-    }
-
-    cardContexts.set(msgId, cardCtx);
-    runCardIds.delete(runId);
-  }
-
-  // When targeting an existing card, update its context
-  if (targetCardId) {
-    const existingCtx = cardContexts.get(targetCardId);
-    if (existingCtx) {
-      existingCtx.originalResponse = text;
-      if (data) existingCtx.currentData = structuredClone(data);
-    }
-  }
-
   const msg: ServerMessage = {
     id: msgId,
     runId,
@@ -245,15 +475,231 @@ export async function deliverEnsoReply(params: {
     seq,
     state: "final",
     text,
-    data: data ?? undefined,
-    generatedUI,
     mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+    steps: params.steps && params.steps.length > 1 ? params.steps : undefined,
     ...(targetCardId ? { targetCardId } : {}),
     timestamp: Date.now(),
   };
 
   client.send(msg);
   statusSink?.({ lastOutboundAt: Date.now() });
+}
+
+/**
+ * Handle a user-triggered "Enhance to App" request on a card.
+ * Makes a single LLM call to select the best tool, executes it directly,
+ * and sends back the app view data + pre-built template code.
+ */
+export async function handleCardEnhance(params: {
+  cardId: string;
+  cardText: string;
+  client: ConnectedClient;
+  account: ResolvedEnsoAccount;
+}): Promise<void> {
+  const { cardId, cardText, client, account } = params;
+
+  const sendEnhanceResult = (enhanceResult: ServerMessage["enhanceResult"]) => {
+    const msg: ServerMessage = {
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "final",
+      targetCardId: cardId,
+      enhanceResult,
+      timestamp: Date.now(),
+    };
+    client.send(msg);
+  };
+
+  console.log(`[enso:enhance] request: cardId=${cardId}, textLen=${cardText.length}`);
+
+  if (!account.geminiApiKey) {
+    console.log(`[enso:enhance] aborted: no geminiApiKey configured`);
+    sendEnhanceResult(null);
+    return;
+  }
+
+  const selection = await selectToolForContent({
+    cardText,
+    geminiApiKey: account.geminiApiKey,
+    toolFamilies: TOOL_FAMILY_CAPABILITIES,
+  });
+
+  if (!selection) {
+    console.log(`[enso:enhance] no tool selected by LLM for cardId=${cardId}`);
+    sendEnhanceResult(null);
+    return;
+  }
+  console.log(`[enso:enhance] LLM selection: tool=${selection.toolName}, family=${selection.toolFamily}, params=${JSON.stringify(selection.params)}`);
+
+  // ── Fix 1: Validate / correct tool name ──
+  // The LLM sometimes invents tool names like "enso_meal_planner_grocery_list"
+  // instead of the registered "enso_meal_grocery_list". Derive the real prefix
+  // by stripping the fallback tool's own action suffix.
+  let toolName = selection.toolName;
+  const capability = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === selection.toolFamily);
+  if (capability) {
+    const fallbackSuffix = capability.actionSuffixes.find((s) =>
+      capability.fallbackToolName.endsWith(`_${s}`),
+    );
+    const familyPrefix = fallbackSuffix
+      ? capability.fallbackToolName.slice(0, -fallbackSuffix.length)
+      : capability.fallbackToolName.replace(/_[^_]+$/, "_");
+
+    const matchedSuffix = capability.actionSuffixes.find((s) => toolName.endsWith(`_${s}`));
+    if (matchedSuffix) {
+      toolName = `${familyPrefix}${matchedSuffix}`;
+    } else {
+      toolName = capability.fallbackToolName;
+    }
+  }
+
+  // ── Fix 2: Normalize param names ──
+  // LLM may return variations like "location" instead of "destination",
+  // "dietary_preferences" instead of "diet", "duration" instead of "days".
+  const execParams: Record<string, unknown> = { ...selection.params };
+  const paramAliases: Record<string, string> = {
+    location: "destination",
+    city: "destination",
+    duration: "days",
+    duration_days: "days",
+    num_days: "days",
+    dietary_preferences: "diet",
+    dietary: "diet",
+    diet_type: "diet",
+    num_servings: "servings",
+    day_index: "dayIndex",
+    meal: "mealType",
+    meal_type: "mealType",
+    weekly_cost: "budget",
+    weekly_budget: "budget",
+    budget_usd: "budget",
+  };
+  for (const [alias, canonical] of Object.entries(paramAliases)) {
+    if (alias in execParams && !(canonical in execParams)) {
+      execParams[canonical] = execParams[alias];
+      delete execParams[alias];
+    }
+  }
+  // Coerce string numbers to actual numbers for common numeric params
+  for (const numKey of ["days", "budget", "servings", "day", "dayIndex", "limit"]) {
+    if (typeof execParams[numKey] === "string") {
+      const n = parseFloat(execParams[numKey] as string);
+      if (!Number.isNaN(n)) execParams[numKey] = n;
+    }
+  }
+
+  console.log(`[enso:enhance] tool selected: ${toolName} (family: ${selection.toolFamily}), params: ${JSON.stringify(execParams)}`);
+
+  // ── Fix 3: Normalize path params ──
+  // LLM may return relative paths, bare /Desktop, /home/Desktop, /Users/$USER/Desktop,
+  // /Users/username/Desktop, or literal shell variables instead of ~/Desktop
+  const home = process.env.HOME ?? ".";
+  const user = process.env.USER ?? "user";
+  const resolvePathParam = (val: unknown): string => {
+    let p = typeof val === "string" ? val.trim() : "";
+    if (!p) return home;
+    // Replace literal shell variables: $USER, ${USER}, $HOME, ${HOME}
+    p = p.replace(/\$\{?USER\}?/g, user);
+    p = p.replace(/\$\{?HOME\}?/g, home);
+    if (p.startsWith("~")) return join(home, p.slice(1));
+    // Strip /Users/<placeholder>/ prefix — LLM often invents usernames
+    const usersMatch = p.match(/^\/Users\/[^/]+\/(.*)/);
+    if (usersMatch) return join(home, usersMatch[1]);
+    // Strip /home/ prefix — LLM sometimes uses Linux conventions
+    if (p.match(/^\/home\b/)) p = p.replace(/^\/home(\/[^/]+)?/, "");
+    if (p.startsWith("/") && !p.startsWith(home)) return join(home, p);
+    if (!p.startsWith("/")) return join(home, p);
+    return p;
+  };
+
+  if (selection.toolFamily === "filesystem" || selection.toolFamily === "multimedia") {
+    execParams.path = resolvePathParam(execParams.path);
+  } else if (selection.toolFamily === "code_workspace") {
+    execParams.path = resolvePathParam(execParams.path ?? execParams.root);
+  }
+
+  let toolResult = await executeToolDirect(toolName, execParams);
+
+  // If the tool fails, retry: different tool → family fallback; same tool → parent directory
+  if (!toolResult.success && capability) {
+    const fallbackParams = { ...execParams };
+    if (toolName !== capability.fallbackToolName) {
+      console.log(`[enso:enhance] ${toolName} failed (${toolResult.error}), retrying with ${capability.fallbackToolName}`);
+      if (typeof fallbackParams.path === "string" && fallbackParams.path.includes("/")) {
+        const parentDir = fallbackParams.path.replace(/\/[^/]+$/, "");
+        if (parentDir) fallbackParams.path = parentDir;
+      }
+      toolName = capability.fallbackToolName;
+      toolResult = await executeToolDirect(toolName, fallbackParams);
+    } else if (typeof fallbackParams.path === "string" && fallbackParams.path.includes("/")) {
+      const parentDir = fallbackParams.path.replace(/\/[^/]+$/, "");
+      if (parentDir && parentDir !== fallbackParams.path) {
+        console.log(`[enso:enhance] ${toolName} failed (${toolResult.error}), retrying with parent dir: ${parentDir}`);
+        toolResult = await executeToolDirect(toolName, { ...fallbackParams, path: parentDir });
+      }
+    }
+  }
+
+  if (!toolResult.success || toolResult.data == null) {
+    console.log(`[enso:enhance] tool execution failed: ${toolResult.error ?? "no data"}`);
+    sendEnhanceResult(null);
+    return;
+  }
+
+  const signature = inferToolTemplate({ toolName, data: toolResult.data });
+  const templateCode = signature ? getToolTemplateCode(signature) : undefined;
+
+  if (!templateCode) {
+    console.log(`[enso:enhance] no template found for ${toolName}`);
+    sendEnhanceResult(null);
+    return;
+  }
+
+  const data = signature
+    ? normalizeDataForToolTemplate(signature, toolResult.data)
+    : toolResult.data;
+
+  // Register card context so card actions work in app mode
+  const cardCtx: CardContext = {
+    cardId,
+    originalPrompt: "",
+    originalResponse: cardText,
+    currentData: structuredClone(data),
+    geminiApiKey: account.geminiApiKey,
+    account,
+    mode: account.mode,
+    actionHistory: [],
+    interactionMode: "tool",
+    toolFamily: selection.toolFamily,
+    signatureId: signature?.signatureId,
+    coverageStatus: signature?.coverageStatus,
+  };
+
+  const pluginId = getToolPluginId(toolName);
+  const prefix = pluginId ? getPluginToolPrefix(pluginId) : undefined;
+  if (prefix) {
+    cardCtx.nativeToolHint = {
+      toolName,
+      params: execParams,
+      handlerPrefix: prefix,
+    };
+  }
+
+  cardContexts.set(cardId, cardCtx);
+  console.log(`[enso:enhance] context registered: cardId=${cardId}, family=${selection.toolFamily}, signature=${signature?.signatureId ?? "none"}, prefix=${prefix ?? "none"}, hasNativeHint=${!!cardCtx.nativeToolHint}`);
+
+  sendEnhanceResult({
+    data,
+    generatedUI: templateCode,
+    cardMode: {
+      interactionMode: "tool",
+      toolFamily: selection.toolFamily,
+      signatureId: signature?.signatureId,
+      coverageStatus: signature?.coverageStatus,
+    },
+  });
 }
 
 /**
@@ -278,113 +724,14 @@ export async function deliverToEnso(ctx: {
   }
 
   const messageId = randomUUID();
-  const text = stripThinkingBlocks(ctx.text ?? "");
+  const text = rewriteExecFailure(stripThinkingBlocks(ctx.text ?? ""));
   console.log(`[enso:outbound] deliverToEnso called, to=${ctx.to}, textLen=${text.length}, targets=${targets.length}, mediaUrl=${ctx.mediaUrl ?? "none"}, keys=${Object.keys(ctx).join(",")}`);
-
-  let data: unknown = undefined;
-  let generatedUI: string | undefined;
-
-  // Use runtime account (has live mode) when available, fall back to config
-  const runtimeAccount = getActiveAccount();
-  const accountId = ctx.accountId ?? "default";
-  const account = runtimeAccount ?? resolveEnsoAccount({
-    cfg: (ctx.cfg ?? {}) as CoreConfig,
-    accountId,
-  });
-  const geminiApiKey = account?.geminiApiKey;
-
-  // IM mode: skip UI generation entirely, send plain text only
-  if (account.mode === "im") {
-    const mediaUrls: string[] = [];
-    if (ctx.mediaUrl) mediaUrls.push(toMediaUrl(ctx.mediaUrl));
-    for (const localPath of extractMediaPaths(text)) {
-      const url = toMediaUrl(localPath);
-      if (!mediaUrls.includes(url)) mediaUrls.push(url);
-    }
-
-    const msg: ServerMessage = {
-      id: messageId,
-      runId: randomUUID(),
-      sessionKey: ctx.to,
-      seq: 0,
-      state: "final",
-      text,
-      mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
-      timestamp: Date.now(),
-    };
-    for (const client of targets) {
-      client.send(msg);
-    }
-    return { channel: "enso", messageId, target: ctx.to };
-  }
-
-  // Check for native tool usage before UI generation
-  const recentCall = consumeRecentToolCall();
-  const actionHints = recentCall
-    ? getActionDescriptions(recentCall.toolName)
-    : undefined;
-
-  if (text.trim().length >= 100) {
-    const structuredData = extractStructuredData(text);
-    if (structuredData) {
-      const uiResult = await serverGenerateUI({
-        data: structuredData,
-        userMessage: "",
-        assistantText: text,
-        geminiApiKey,
-        actionHints,
-      });
-      data = structuredData;
-      generatedUI = uiResult.code;
-    } else {
-      const textResult = await serverGenerateUIFromText({
-        userMessage: "",
-        assistantText: text,
-        geminiApiKey,
-        actionHints,
-      });
-      if (textResult) {
-        data = textResult.data;
-        generatedUI = textResult.code;
-      }
-    }
-  }
 
   const mediaUrls: string[] = [];
   if (ctx.mediaUrl) mediaUrls.push(toMediaUrl(ctx.mediaUrl));
-
-  // Auto-detect local file paths in response text
   for (const localPath of extractMediaPaths(text)) {
     const url = toMediaUrl(localPath);
     if (!mediaUrls.includes(url)) mediaUrls.push(url);
-  }
-
-  // Register card context for interactive actions
-  if (data && generatedUI && account) {
-    const cardCtx: CardContext = {
-      cardId: messageId,
-      originalPrompt: "",
-      originalResponse: text,
-      currentData: structuredClone(data),
-      geminiApiKey,
-      account,
-      mode: account.mode,
-      actionHistory: [],
-    };
-
-    if (recentCall && isToolRegistered(recentCall.toolName)) {
-      const pluginId = getToolPluginId(recentCall.toolName);
-      const prefix = pluginId ? getPluginToolPrefix(pluginId) : undefined;
-      if (prefix) {
-        cardCtx.nativeToolHint = {
-          toolName: recentCall.toolName,
-          params: recentCall.params,
-          handlerPrefix: prefix,
-        };
-      }
-    }
-
-    cardContexts.set(messageId, cardCtx);
   }
 
   const msg: ServerMessage = {
@@ -394,8 +741,6 @@ export async function deliverToEnso(ctx: {
     seq: 0,
     state: "final",
     text,
-    data: data ?? undefined,
-    generatedUI,
     mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
     timestamp: Date.now(),
   };
@@ -418,14 +763,39 @@ export async function handlePluginCardAction(params: {
   cardId: string;
   action: string;
   payload: unknown;
+  mode?: "im" | "ui" | "full";
   client: ConnectedClient;
   config: CoreConfig;
   runtime: RuntimeEnv;
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }): Promise<void> {
-  const { cardId, action, payload, client, config, runtime, statusSink } = params;
+  const { cardId, action, payload, mode, client, config, runtime, statusSink } = params;
+  const operationId = randomUUID();
+  const sendOperation = (stage: OperationStage, label: string, message?: string) => {
+    client.send({
+      id: randomUUID(),
+      runId: operationId,
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "delta",
+      targetCardId: cardId,
+      operation: {
+        operationId,
+        stage,
+        label,
+        message,
+        cancellable: false,
+      },
+      timestamp: Date.now(),
+    });
+  };
+
+  console.log(`[enso:action] received: cardId=${cardId}, action=${action}, payload=${JSON.stringify(payload)}`);
+  sendOperation("processing", "Processing action");
+
   const ctx = cardContexts.get(cardId);
   if (!ctx) {
+    console.log(`[enso:action] FAILED: card context not found for cardId=${cardId} (contexts: ${cardContexts.size} total)`);
     client.send({
       id: randomUUID(),
       runId: randomUUID(),
@@ -434,13 +804,27 @@ export async function handlePluginCardAction(params: {
       state: "error",
       targetCardId: cardId,
       text: "Card context not found — the server may have restarted.",
+      operation: {
+        operationId,
+        stage: "error",
+        label: "Action failed",
+        cancellable: false,
+      },
       timestamp: Date.now(),
     });
     return;
   }
 
+  console.log(`[enso:action] context found: cardId=${cardId}, family=${ctx.toolFamily ?? "none"}, signature=${ctx.signatureId ?? "none"}, mode=${ctx.interactionMode}, hasNativeHint=${!!ctx.nativeToolHint}, prefix=${ctx.nativeToolHint?.handlerPrefix ?? "none"}`);
+
+  // Determine effective mode at click-time to avoid stale per-card mode.
+  // Priority: explicit client mode > active account mode > card context mode.
+  const activeMode = getActiveAccount()?.mode;
+  const effectiveMode = mode ?? activeMode ?? ctx.mode;
+  ctx.mode = effectiveMode;
+
   // IM mode has no card actions — reject early
-  if (ctx.mode === "im") {
+  if (effectiveMode === "im") {
     client.send({
       id: randomUUID(),
       runId: randomUUID(),
@@ -449,6 +833,12 @@ export async function handlePluginCardAction(params: {
       state: "error",
       targetCardId: cardId,
       text: "Card actions are not available in IM mode.",
+      operation: {
+        operationId,
+        stage: "error",
+        label: "Action not allowed",
+        cancellable: false,
+      },
       timestamp: Date.now(),
     });
     return;
@@ -463,7 +853,7 @@ export async function handlePluginCardAction(params: {
    * - ui: restore source card, then create a new card below
    */
   const sendActionResult = (resultData: unknown, generatedUI: string) => {
-    if (ctx.mode === "ui") {
+    if (effectiveMode === "ui") {
       // Restore the source card (frontend preserves original data/generatedUI
       // when msg.data is absent via `msg.data ?? card.data`)
       client.send({
@@ -473,6 +863,13 @@ export async function handlePluginCardAction(params: {
         seq: 0,
         state: "final",
         targetCardId: cardId,
+        cardMode: cardModeFromContext(ctx),
+        operation: {
+          operationId,
+          stage: "complete",
+          label: "Action complete",
+          cancellable: false,
+        },
         timestamp: Date.now(),
       });
 
@@ -486,6 +883,13 @@ export async function handlePluginCardAction(params: {
         state: "final",
         data: resultData,
         generatedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: {
+          operationId,
+          stage: "complete",
+          label: "Action complete",
+          cancellable: false,
+        },
         timestamp: Date.now(),
       });
 
@@ -500,6 +904,10 @@ export async function handlePluginCardAction(params: {
         mode: ctx.mode,
         nativeToolHint: ctx.nativeToolHint,
         actionHistory: [],
+        interactionMode: ctx.interactionMode,
+        toolFamily: ctx.toolFamily,
+        signatureId: ctx.signatureId,
+        coverageStatus: ctx.coverageStatus,
       });
     } else {
       // Full mode: in-place update
@@ -512,6 +920,13 @@ export async function handlePluginCardAction(params: {
         targetCardId: cardId,
         data: resultData,
         generatedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: {
+          operationId,
+          stage: "complete",
+          label: "Action complete",
+          cancellable: false,
+        },
         timestamp: Date.now(),
       });
     }
@@ -522,7 +937,8 @@ export async function handlePluginCardAction(params: {
   const dataChanged = updatedData !== ctx.currentData;
 
   if (dataChanged) {
-    // Mechanical mutation succeeded — regenerate UI with updated data
+    console.log(`[enso:action] path=mechanical: action=${action} mutated data`);
+    sendOperation("generating_ui", "Generating UI");
     ctx.currentData = updatedData;
 
     // If the card has a native tool hint, include action hints for UI regen
@@ -530,19 +946,95 @@ export async function handlePluginCardAction(params: {
       ? getActionDescriptions(ctx.nativeToolHint.toolName)
       : undefined;
 
-    const uiResult = await serverGenerateUI({
+    const followup = await renderFollowupUI({
+      ctx,
+      action,
+      payload,
       data: updatedData,
-      userMessage: `${ctx.originalPrompt} [Action: ${action}${payload ? ` ${JSON.stringify(payload)}` : ""}]`,
       assistantText: ctx.originalResponse,
-      geminiApiKey: ctx.geminiApiKey,
       actionHints: mechanicalActionHints,
     });
+    ctx.currentData = structuredClone(followup.renderData);
+    sendActionResult(followup.renderData, followup.generatedUI);
+    return;
+  }
 
-    console.log(
-      `[enso:outbound] Card action (mechanical): cardId=${cardId} action=${action} shape=${uiResult.shapeKey}`,
-    );
+  // ── Built-in plugin catalog actions (CLI-free) ──
+  if (action === "list_all_plugins" || action === "search_plugins") {
+    const catalog = getRegisteredToolCatalog();
+    const query = String(((payload ?? {}) as Record<string, unknown>).query ?? "").trim().toLowerCase();
 
-    sendActionResult(updatedData, uiResult.code);
+    const filtered = action === "search_plugins" && query
+      ? catalog.filter((entry) =>
+          entry.pluginId.toLowerCase().includes(query)
+          || entry.tools.some((t) => t.toLowerCase().includes(query)))
+      : catalog;
+
+    const resultData = {
+      title: action === "search_plugins"
+        ? `OpenClaw plugins matching "${query}"`
+        : "Loaded OpenClaw plugins",
+      totalPlugins: filtered.length,
+      totalTools: filtered.reduce((acc, e) => acc + e.tools.length, 0),
+      query: action === "search_plugins" ? query : undefined,
+      plugins: filtered.map((entry) => ({
+        pluginId: entry.pluginId,
+        toolCount: entry.tools.length,
+        tools: entry.tools,
+      })),
+      nextActions: [
+        "search_plugins",
+        "list_all_plugins",
+      ],
+    };
+
+    sendOperation("generating_ui", "Rendering plugin catalog");
+    const followup = await renderFollowupUI({
+      ctx,
+      action,
+      payload,
+      data: resultData,
+      assistantText: "Showing currently loaded OpenClaw plugins and tools from runtime registry.",
+    });
+    ctx.currentData = structuredClone(followup.renderData);
+
+    sendActionResult(followup.renderData, followup.generatedUI);
+    return;
+  }
+
+  if (ctx.toolFamily === "enso_tooling") {
+    let resultData: Record<string, unknown>;
+    if (action === "view_tool_family") {
+      const family = String(((payload ?? {}) as Record<string, unknown>).toolFamily ?? "").trim();
+      resultData = buildToolConsoleFamilyData(family);
+    } else if (action === "tooling_back" || action === "refresh") {
+      resultData = buildToolConsoleHomeData();
+    } else if (action === "tooling_add_tool") {
+      const description = String(((payload ?? {}) as Record<string, unknown>).description ?? "");
+      resultData = {
+        ...buildToolConsoleHomeData(),
+        creationResult: await handleToolConsoleAdd(description),
+      };
+    } else {
+      resultData = {
+        ...buildToolConsoleHomeData(),
+        creationResult: {
+          status: "unsupported_action",
+          message: `Unknown tool-console action: ${action}`,
+        },
+      };
+    }
+
+    sendOperation("generating_ui", "Updating tool console");
+    const followup = await renderFollowupUI({
+      ctx,
+      action,
+      payload,
+      data: resultData,
+      assistantText: "Tool console action update.",
+    });
+    ctx.currentData = structuredClone(followup.renderData);
+    sendActionResult(followup.renderData, followup.generatedUI);
     return;
   }
 
@@ -551,75 +1043,114 @@ export async function handlePluginCardAction(params: {
   // try to handle the action by calling the tool directly via the registry.
   if (ctx.nativeToolHint) {
     let toolCall: { toolName: string; params: Record<string, unknown> } | null = null;
+    let resolvedVia = "";
 
     if (action === "refresh") {
-      // Re-run the same tool that produced the card originally
       toolCall = {
         toolName: ctx.nativeToolHint.toolName,
         params: ctx.nativeToolHint.params,
       };
+      resolvedVia = "refresh";
     } else {
-      // Interpret the action name as a tool name (prefix + action).
-      // Auto-generated action names are derived directly from tool names
-      // (e.g. "portfolio_checkin" → alpharank_portfolio_checkin).
+      const actionParams = (payload ?? {}) as Record<string, unknown>;
+
+      // 1. Exact match: prefix + action
       const candidateToolName = `${ctx.nativeToolHint.handlerPrefix}${action}`;
       if (isToolRegistered(candidateToolName)) {
-        toolCall = {
-          toolName: candidateToolName,
-          params: (payload ?? {}) as Record<string, unknown>,
-        };
+        toolCall = { toolName: candidateToolName, params: actionParams };
+        resolvedVia = "exact";
+      } else {
+        console.log(`[enso:action] path=native: exact match "${candidateToolName}" not registered`);
+      }
+
+      // 2. Suffix match
+      if (!toolCall && ctx.toolFamily) {
+        const capability = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === ctx.toolFamily);
+        if (capability) {
+          const suffixRe = (s: string) => new RegExp(`(^|_)${s}(_|$)`);
+          const matchedSuffix = capability.actionSuffixes.find(
+            (s) => action === s || action.endsWith(`_${s}`) || action.startsWith(`${s}_`) || suffixRe(s).test(action),
+          );
+          if (matchedSuffix) {
+            const suffixTool = `${ctx.nativeToolHint.handlerPrefix}${matchedSuffix}`;
+            if (isToolRegistered(suffixTool)) {
+              toolCall = { toolName: suffixTool, params: actionParams };
+              resolvedVia = `suffix(${matchedSuffix})`;
+            } else {
+              console.log(`[enso:action] path=native: suffix match "${suffixTool}" not registered`);
+            }
+          }
+          // 3. Family fallback tool
+          if (!toolCall && isToolRegistered(capability.fallbackToolName)) {
+            toolCall = {
+              toolName: capability.fallbackToolName,
+              params: { ...ctx.nativeToolHint.params, ...actionParams },
+            };
+            resolvedVia = "fallback";
+          }
+        }
       }
     }
 
     if (toolCall) {
-      console.log(
-        `[enso:outbound] Card action (native tool): cardId=${cardId} action=${action} → ${toolCall.toolName}`,
-      );
+      console.log(`[enso:action] path=native: resolved=${resolvedVia}, tool=${toolCall.toolName}, params=${JSON.stringify(toolCall.params)}`);
+      sendOperation("calling_tool", `Calling ${toolCall.toolName}`);
 
       try {
-        const result = await executeToolDirect(toolCall.toolName, toolCall.params);
+        let result = await executeToolDirect(toolCall.toolName, toolCall.params);
+        console.log(`[enso:action] path=native: execute result success=${result.success}, hasData=${result.data != null}, error=${result.error ?? "none"}`);
+
+        // Retry with family fallback if tool fails
+        if (!result.success && ctx.toolFamily) {
+          const cap = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === ctx.toolFamily);
+          if (cap && toolCall.toolName !== cap.fallbackToolName && isToolRegistered(cap.fallbackToolName)) {
+            console.log(`[enso:action] path=native: retrying with fallback ${cap.fallbackToolName}`);
+            toolCall = {
+              toolName: cap.fallbackToolName,
+              params: { ...ctx.nativeToolHint.params, ...toolCall.params },
+            };
+            result = await executeToolDirect(toolCall.toolName, toolCall.params);
+            console.log(`[enso:action] path=native: fallback result success=${result.success}, hasData=${result.data != null}`);
+          }
+        }
 
         if (result.success && result.data != null) {
-          // Update the card's data with the fresh tool result
           ctx.currentData = structuredClone(result.data);
 
-          // Update the native tool hint to reflect the tool just called,
-          // so subsequent "refresh" re-runs the latest tool, not the original.
           ctx.nativeToolHint = {
             toolName: toolCall.toolName,
             params: toolCall.params,
             handlerPrefix: ctx.nativeToolHint.handlerPrefix,
           };
 
-          // Regenerate UI via Gemini for the new data, with action hints
           const nativeActionHints = getActionDescriptions(toolCall.toolName);
-          const uiResult = await serverGenerateUI({
+          applyDetectedToolTemplate(ctx, inferToolTemplate({ toolName: toolCall.toolName, data: result.data }));
+          sendOperation("generating_ui", "Generating UI");
+          const followup = await renderFollowupUI({
+            ctx,
+            action,
+            payload,
             data: result.data,
-            userMessage: `${ctx.originalPrompt} [Action: ${action}${payload ? ` ${JSON.stringify(payload)}` : ""}]`,
             assistantText: ctx.originalResponse,
-            geminiApiKey: ctx.geminiApiKey,
             actionHints: nativeActionHints,
           });
+          ctx.currentData = structuredClone(followup.renderData);
 
-          console.log(
-            `[enso:outbound] Card action (native tool): success, shape=${uiResult.shapeKey}`,
-          );
+          console.log(`[enso:action] path=native: complete, delivering result mode=${effectiveMode}`);
 
-          sendActionResult(result.data, uiResult.code);
+          sendActionResult(followup.renderData, followup.generatedUI);
           return;
         }
 
-        // Tool returned an error or no data — log and fall through to agent
-        console.log(
-          `[enso:outbound] Card action (native tool): failed (${result.error ?? "no data"}), falling back to agent`,
-        );
+        console.log(`[enso:action] path=native: tool failed (${result.error ?? "no data"}), falling through to agent`);
       } catch (err) {
-        console.log(
-          `[enso:outbound] Card action (native tool): exception ${String(err)}, falling back to agent`,
-        );
+        console.log(`[enso:action] path=native: exception ${String(err)}, falling through to agent`);
       }
-      // Fall through to agent round-trip on any failure
+    } else {
+      console.log(`[enso:action] path=native: no tool resolved for action="${action}", falling through to agent`);
     }
+  } else {
+    console.log(`[enso:action] no nativeToolHint on card, skipping native path`);
   }
 
   // ── Path 3: Agent round-trip fallback ──
@@ -628,21 +1159,22 @@ export async function handlePluginCardAction(params: {
   let actionMessage: string;
 
   if (action === "send_message" && typeof p.text === "string") {
-    // Redirected sendMessage call — use the text directly as the query,
-    // with card context so the agent can provide a relevant follow-up.
-    actionMessage = `${p.text}\n\nContext: The user is viewing a card from the prompt "${ctx.originalPrompt}". The card shows: ${JSON.stringify(ctx.currentData).slice(0, 500)}.`;
+    // Redirected sendMessage call — keep prompt compact to prevent recursive prompt growth.
+    actionMessage = `${p.text}\n\nCard context:\n- Base request: "${compactPromptText(ctx.originalPrompt)}"\n- Current card summary: ${summarizeCardDataForAgent(ctx.currentData)}`;
   } else {
     const payloadStr = payload ? ` ${JSON.stringify(payload)}` : "";
-    actionMessage = `[Card action: ${action}${payloadStr}] Context: The user is viewing a card that was created from the prompt "${ctx.originalPrompt}". The card shows: ${JSON.stringify(ctx.currentData).slice(0, 500)}. The user clicked: ${action}${payloadStr}. Respond with updated or detailed information based on this action.`;
+    actionMessage = `User clicked card action "${action}"${payloadStr}.
+Base request: "${compactPromptText(ctx.originalPrompt)}"
+Current card summary: ${summarizeCardDataForAgent(ctx.currentData)}
+Please respond with updated or detailed information for this action.`;
   }
 
-  console.log(
-    `[enso:outbound] Card action (agent): cardId=${cardId} action=${action} → routing to OpenClaw agent`,
-  );
+  console.log(`[enso:action] path=agent: cardId=${cardId} action=${action} mode=${effectiveMode}, msgLen=${actionMessage.length}`);
+  sendOperation("agent_fallback", "Routing through agent");
 
   // UI mode: restore source card first, then route to agent WITHOUT targetCardId
   // so the agent response creates a new card. Full mode: pass targetCardId for in-place update.
-  if (ctx.mode === "ui") {
+  if (effectiveMode === "ui") {
     client.send({
       id: randomUUID(),
       runId: randomUUID(),
@@ -667,7 +1199,7 @@ export async function handlePluginCardAction(params: {
     config,
     runtime,
     client,
-    targetCardId: ctx.mode === "full" ? cardId : undefined,
+    targetCardId: effectiveMode === "full" ? cardId : undefined,
     statusSink,
   });
 }

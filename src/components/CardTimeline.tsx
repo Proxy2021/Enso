@@ -4,8 +4,8 @@ import CardContainer from "./CardContainer";
 
 function TypingIndicator() {
   return (
-    <div className="flex justify-start mb-4 max-w-3xl mx-auto">
-      <div className="bg-gray-800 rounded-2xl px-4 py-3 flex items-center gap-1.5">
+    <div className="flex justify-start mb-4">
+      <div className="bg-gray-900/80 border border-gray-700/70 rounded-2xl px-4 py-3 flex items-center gap-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
         <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
         <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
         <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
@@ -47,8 +47,8 @@ export default function CardTimeline() {
   if (cardOrder.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-500">
-        <div className="text-center">
-          <p className="text-lg font-medium">Enso</p>
+        <div className="text-center border border-gray-800/80 bg-gray-900/60 backdrop-blur rounded-2xl px-6 py-5 shadow-[0_10px_40px_rgba(0,0,0,0.45)]">
+          <p className="text-lg font-medium text-gray-200">Enso</p>
           <p className="text-sm mt-1 text-gray-400">
             OpenClaw, but every answer is an app.
           </p>
@@ -58,20 +58,22 @@ export default function CardTimeline() {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto p-4">
-      {cardOrder.map((id) => {
-        const card = cards[id];
-        if (!card) return null;
-        return (
-          <CardContainer
-            key={id}
-            card={card}
-            isActive={id === lastCardId}
-          />
-        );
-      })}
-      {isWaiting && <TypingIndicator />}
-      <div ref={bottomRef} />
+    <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-5">
+      <div className="max-w-5xl mx-auto">
+        {cardOrder.map((id) => {
+          const card = cards[id];
+          if (!card) return null;
+          return (
+            <CardContainer
+              key={id}
+              card={card}
+              isActive={id === lastCardId}
+            />
+          );
+        })}
+        {isWaiting && <TypingIndicator />}
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

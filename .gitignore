@@ -4,3 +4,6 @@ dist
 *.key
 .claude
 tsconfig.tsbuildinfo
+.DS_Store
+openclaw-plugin/ui-cache/
+scripts/

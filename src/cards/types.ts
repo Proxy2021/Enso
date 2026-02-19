@@ -1,6 +1,8 @@
-import type { ServerMessage, ToolQuestion } from "@shared/types";
+import type { AgentStep, CardModeDetail, OperationStatus, ServerMessage, ToolQuestion } from "@shared/types";
 
 // ── Card ──
+
+export type EnhanceStatus = "idle" | "loading" | "ready" | "unavailable";
 
 export interface Card {
   id: string;
@@ -24,6 +26,18 @@ export interface Card {
 
   // Card action in progress
   pendingAction?: string;
+  operation?: OperationStatus;
+  cardMode?: CardModeDetail;
+
+  // Multi-block agent steps (for expandable intermediate content)
+  steps?: AgentStep[];
+
+  // App enhancement (user-triggered)
+  appData?: unknown;
+  appGeneratedUI?: string;
+  appCardMode?: CardModeDetail;
+  viewMode?: "original" | "app";
+  enhanceStatus?: EnhanceStatus;
 
   // Timestamps
   createdAt: number;

@@ -1,4 +1,13 @@
 import { randomUUID } from "crypto";
+import { getAlphaRankTemplateCode, isAlphaRankSignature } from "./templates/alpharank.js";
+import { getWorkspaceTemplateCode, isWorkspaceSignature } from "./templates/workspace.js";
+import { getMediaTemplateCode, isMediaSignature } from "./templates/media.js";
+import { getTravelTemplateCode, isTravelSignature } from "./templates/travel.js";
+import { getMealTemplateCode, isMealSignature } from "./templates/meal.js";
+import { getToolingTemplateCode, isToolingSignature } from "./templates/tooling.js";
+import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/system.js";
+import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
+import { TOOL_FAMILY_CAPABILITIES, getCapabilityForFamily } from "../tool-families/catalog.js";
 
 // ── Types ──
 
@@ -13,6 +22,29 @@ export interface NativeToolResult {
   rawText?: string;
   /** Human-readable error on failure */
   error?: string;
+}
+
+export interface RegisteredToolCatalogEntry {
+  pluginId: string;
+  tools: string[];
+}
+
+export interface RegisteredToolDetail {
+  pluginId: string;
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+export type ToolInteractionMode = "llm" | "tool";
+export type ToolTemplateCoverageStatus = "covered" | "partial";
+
+export interface ToolTemplate {
+  toolFamily: string;
+  signatureId: string;
+  templateId: string;
+  supportedActions: string[];
+  coverageStatus: ToolTemplateCoverageStatus;
 }
 
 /**
@@ -65,6 +97,14 @@ export interface NativeToolActionMap {
 // ── Action Map Registry ──
 
 const actionMaps = new Map<string, NativeToolActionMap>();
+const signatureRegistry = new Map<string, ToolTemplate>();
+const signatureTemplateCandidates = new Map<string, string[]>();
+const runtimeDataHints: Array<{ toolFamily: string; signatureId: string; requiredKeys: string[] }> = [];
+const dynamicPrefixSignatureMap = new Map<string, { toolFamily: string; signatureId: string }>();
+
+function signatureKey(toolFamily: string, signatureId: string): string {
+  return `${toolFamily}:${signatureId}`;
+}
 
 /**
  * Register an action map for a tool family. Called at module-load time
@@ -73,6 +113,138 @@ const actionMaps = new Map<string, NativeToolActionMap>();
 export function registerActionMap(map: NativeToolActionMap): void {
   actionMaps.set(map.prefix, map);
   console.log(`[enso:native-tools] registered action map "${map.name}" (prefix: ${map.prefix})`);
+}
+
+export function registerToolTemplate(signature: ToolTemplate): void {
+  signatureRegistry.set(signatureKey(signature.toolFamily, signature.signatureId), signature);
+}
+
+export function registerToolTemplateDataHint(input: {
+  toolFamily: string;
+  signatureId: string;
+  requiredKeys: string[];
+}): void {
+  const requiredKeys = input.requiredKeys
+    .map((k) => k.trim())
+    .filter(Boolean);
+  if (requiredKeys.length === 0) return;
+  const exists = runtimeDataHints.some((hint) =>
+    hint.toolFamily === input.toolFamily
+    && hint.signatureId === input.signatureId
+    && hint.requiredKeys.length === requiredKeys.length
+    && hint.requiredKeys.every((k, idx) => k === requiredKeys[idx]));
+  if (exists) return;
+  runtimeDataHints.push({
+    toolFamily: input.toolFamily,
+    signatureId: input.signatureId,
+    requiredKeys,
+  });
+}
+
+function registerDefaultSignatures(): void {
+  const defaults: ToolTemplate[] = [
+    {
+      toolFamily: "alpharank",
+      signatureId: "ranked_predictions_table",
+      templateId: "market-top-picks-v1",
+      supportedActions: ["refresh", "predictions", "market_regime", "daily_routine", "status"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "alpharank",
+      signatureId: "market_regime_snapshot",
+      templateId: "market-regime-v1",
+      supportedActions: ["refresh", "predictions", "daily_routine"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "alpharank",
+      signatureId: "routine_execution_report",
+      templateId: "routine-report-v1",
+      supportedActions: ["refresh", "predictions", "market_regime", "daily_routine"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "alpharank",
+      signatureId: "ticker_detail",
+      templateId: "ticker-detail-v1",
+      supportedActions: ["refresh", "predictions", "market_regime"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "plugin_discovery",
+      signatureId: "plugin_catalog_list",
+      templateId: "plugin-catalog-v1",
+      supportedActions: ["refresh", "search_plugins", "list_all_plugins", "get_plugin_details", "install_plugin"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "filesystem",
+      signatureId: "directory_listing",
+      templateId: "filesystem-browser-v1",
+      supportedActions: ["refresh", "list_directory", "read_text_file", "stat_path", "search_paths"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "multimedia",
+      signatureId: "media_gallery",
+      templateId: "media-gallery-v1",
+      supportedActions: ["refresh", "scan_library", "inspect_file", "group_by_type"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "code_workspace",
+      signatureId: "workspace_inventory",
+      templateId: "code-workspace-v1",
+      supportedActions: ["refresh", "list_repos", "detect_dev_tools", "project_overview"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "travel_planner",
+      signatureId: "itinerary_board",
+      templateId: "travel-itinerary-v1",
+      supportedActions: ["refresh", "plan_trip", "optimize_day", "budget_breakdown"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "meal_planner",
+      signatureId: "weekly_meal_plan",
+      templateId: "meal-weekly-v1",
+      supportedActions: ["refresh", "plan_week", "grocery_list", "swap_meal"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "enso_tooling",
+      signatureId: "tool_console",
+      templateId: "tool-console-v1",
+      supportedActions: ["refresh", "view_tool_family", "tooling_back", "tooling_add_tool"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "general",
+      signatureId: "smart_text_card",
+      templateId: "smart-text-card-v1",
+      supportedActions: ["send_message"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "data_table_explorer",
+      signatureId: "table_rows_columns",
+      templateId: "table-explorer-v1",
+      supportedActions: ["refresh", "filter", "sort_by", "view_details"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "tool_inspector",
+      signatureId: "tool_run_summary",
+      templateId: "tool-inspector-v1",
+      supportedActions: ["refresh", "retry", "show_logs", "show_details"],
+      coverageStatus: "covered",
+    },
+  ];
+  for (const signature of defaults) {
+    registerToolTemplate(signature);
+  }
 }
 
 /**
@@ -120,6 +292,668 @@ export function getActionDescriptions(toolName: string): string | undefined {
   return undefined;
 }
 
+export function getToolTemplate(toolFamily: string, signatureId: string): ToolTemplate | undefined {
+  return signatureRegistry.get(signatureKey(toolFamily, signatureId));
+}
+
+export function getAllToolTemplates(): ToolTemplate[] {
+  return Array.from(signatureRegistry.values());
+}
+
+export function isToolActionCovered(signature: ToolTemplate, action: string): boolean {
+  return signature.supportedActions.includes(action) || action === "refresh";
+}
+
+export function detectToolTemplateForToolName(toolName: string): ToolTemplate | undefined {
+  ensureDynamicSystemTemplatesFromRegistry();
+  const lower = toolName.toLowerCase();
+
+  // Specific prefix handlers first — they distinguish sub-signatures within
+  // the same family (e.g. alpharank regime vs predictions).
+  if (lower.startsWith("alpharank_")) {
+    if (lower.includes("market_regime") || lower.includes("regime")) {
+      return getToolTemplate("alpharank", "market_regime_snapshot");
+    }
+    if (lower.includes("daily_routine") || lower.includes("daily") || lower.includes("routine")) {
+      return getToolTemplate("alpharank", "routine_execution_report");
+    }
+    return getToolTemplate("alpharank", "ranked_predictions_table");
+  }
+  if (lower.startsWith("enso_ws_")) {
+    return getToolTemplate("code_workspace", "workspace_inventory");
+  }
+  if (lower.startsWith("enso_media_")) {
+    return getToolTemplate("multimedia", "media_gallery");
+  }
+  if (lower.startsWith("enso_fs_")) {
+    return getToolTemplate("filesystem", "directory_listing");
+  }
+  if (lower.startsWith("enso_travel_")) {
+    return getToolTemplate("travel_planner", "itinerary_board");
+  }
+  if (lower.startsWith("enso_meal_")) {
+    return getToolTemplate("meal_planner", "weekly_meal_plan");
+  }
+  if (lower.includes("plugin") || lower.includes("clawhub")) {
+    return getToolTemplate("plugin_discovery", "plugin_catalog_list");
+  }
+
+  // Capability-suffix detection — catch-all for non-Enso providers
+  // that expose equivalent operations under a different prefix.
+  for (const capability of TOOL_FAMILY_CAPABILITIES) {
+    const match = capability.actionSuffixes.some((suffix) => lower.endsWith(`_${suffix}`));
+    if (match) {
+      return getToolTemplate(capability.toolFamily, capability.signatureId);
+    }
+  }
+
+  const matchedDynamicPrefix = Array.from(dynamicPrefixSignatureMap.keys())
+    .filter((prefix) => lower.startsWith(prefix))
+    .sort((a, b) => b.length - a.length)[0];
+  if (matchedDynamicPrefix) {
+    const mapped = dynamicPrefixSignatureMap.get(matchedDynamicPrefix);
+    if (mapped) return getToolTemplate(mapped.toolFamily, mapped.signatureId);
+  }
+  return undefined;
+}
+
+export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefined {
+  ensureDynamicSystemTemplatesFromRegistry();
+  if (Array.isArray(data)) {
+    if (data.every((x) => x && typeof x === "object" && "name" in (x as Record<string, unknown>))) {
+      return getToolTemplate("filesystem", "directory_listing");
+    }
+    return undefined;
+  }
+  if (!data || typeof data !== "object") return undefined;
+  const record = data as Record<string, unknown>;
+  if (
+    Array.isArray(record.files)
+    && record.files.every((x) => x && typeof x === "object" && "name" in (x as Record<string, unknown>))
+  ) {
+    return getToolTemplate("filesystem", "directory_listing");
+  }
+  if (Array.isArray(record.items) && record.items.every((x) => x && typeof x === "object" && "name" in (x as Record<string, unknown>))) {
+    return getToolTemplate("filesystem", "directory_listing");
+  }
+  if (Array.isArray(record.plugins) || "totalPlugins" in record) {
+    return getToolTemplate("plugin_discovery", "plugin_catalog_list");
+  }
+  if ("single_ticker_data" in record) {
+    return getToolTemplate("alpharank", "ticker_detail");
+  }
+  if (Array.isArray(record.top_picks) || Array.isArray(record.picks) || Array.isArray(record.predictions)) {
+    if ("ticker" in record && !Array.isArray(record.top_picks)) {
+      return getToolTemplate("alpharank", "ticker_detail");
+    }
+    return getToolTemplate("alpharank", "ranked_predictions_table");
+  }
+  if ("regime" in record || "regimeConfidence" in record) {
+    return getToolTemplate("alpharank", "market_regime_snapshot");
+  }
+  if (Array.isArray(record.steps) && ("status" in record || "routine" in record)) {
+    return getToolTemplate("alpharank", "routine_execution_report");
+  }
+  if (Array.isArray(record.rows) && Array.isArray(record.columns)) {
+    return getToolTemplate("data_table_explorer", "table_rows_columns");
+  }
+  if (Array.isArray(record.steps) && ("logs" in record || "failure" in record)) {
+    return getToolTemplate("tool_inspector", "tool_run_summary");
+  }
+  if (Array.isArray(record.media) || Array.isArray(record.images) || Array.isArray(record.videos)) {
+    return getToolTemplate("multimedia", "media_gallery");
+  }
+  if (Array.isArray(record.developmentTools) || "workspace" in record || "projectDirectories" in record) {
+    return getToolTemplate("code_workspace", "workspace_inventory");
+  }
+  if (Array.isArray(record.itinerary) || "destination" in record || Array.isArray(record.categories)) {
+    return getToolTemplate("travel_planner", "itinerary_board");
+  }
+  if (Array.isArray(record.mealPlan) || Array.isArray(record.groceryGroups) || "weeklyBudget" in record) {
+    return getToolTemplate("meal_planner", "weekly_meal_plan");
+  }
+  for (const hint of runtimeDataHints) {
+    if (hint.requiredKeys.every((k) => k in record)) {
+      const signature = getToolTemplate(hint.toolFamily, hint.signatureId);
+      if (signature) return signature;
+    }
+  }
+  return undefined;
+}
+
+export function inferToolTemplate(input: { toolName?: string; data?: unknown }): ToolTemplate | undefined {
+  const fromTool = input.toolName ? detectToolTemplateForToolName(input.toolName) : undefined;
+  // When the tool name maps to a family's default template but the data shape
+  // suggests a more specific template, prefer the data-driven detection.
+  if (fromTool && input.data) {
+    const fromData = detectToolTemplateFromData(input.data);
+    if (fromData && fromData.toolFamily === fromTool.toolFamily && fromData.signatureId !== fromTool.signatureId) {
+      return fromData;
+    }
+  }
+  if (fromTool) return fromTool;
+  return detectToolTemplateFromData(input.data);
+}
+
+export function registerToolTemplateCandidate(signature: ToolTemplate, componentCode: string): void {
+  const key = signatureKey(signature.toolFamily, signature.signatureId);
+  const candidates = signatureTemplateCandidates.get(key) ?? [];
+  if (candidates.length >= 5) return;
+  candidates.push(componentCode);
+  signatureTemplateCandidates.set(key, candidates);
+}
+
+function signatureTitle(signature: ToolTemplate): string {
+  return `${signature.toolFamily.replace(/_/g, " ")} · ${signature.signatureId.replace(/_/g, " ")}`;
+}
+
+export function getToolTemplateCode(signature: ToolTemplate): string {
+  if (isAlphaRankSignature(signature.signatureId)) {
+    return getAlphaRankTemplateCode(signature);
+  }
+  if (isWorkspaceSignature(signature.signatureId)) {
+    return getWorkspaceTemplateCode(signature);
+  }
+  if (isMediaSignature(signature.signatureId)) {
+    return getMediaTemplateCode(signature);
+  }
+  if (isTravelSignature(signature.signatureId)) {
+    return getTravelTemplateCode(signature);
+  }
+  if (isMealSignature(signature.signatureId)) {
+    return getMealTemplateCode(signature);
+  }
+  if (isToolingSignature(signature.signatureId)) {
+    return getToolingTemplateCode(signature);
+  }
+  if (isGeneralSignature(signature.signatureId)) {
+    return getGeneralTemplateCode(signature);
+  }
+  if (isSystemAutoSignature(signature.signatureId)) {
+    return getSystemAutoTemplateCode(signature);
+  }
+  if (signature.signatureId === "directory_listing") {
+    return `export default function GeneratedUI({ data, onAction }) {
+  const rows = Array.isArray(data?.rows)
+    ? data.rows
+    : Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.matches)
+        ? data.matches
+        : [];
+  const currentPath = String(data?.path ?? ".");
+  const [query, setQuery] = useState("");
+
+  const isDir = (type) => type === "directory" || type === "symlink";
+  const toMediaUrl = (path) => { const bytes = new TextEncoder().encode(path); let b = ""; for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]); return "/media/" + btoa(b).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); };
+  const fileExt = (name) => { const i = name.lastIndexOf("."); return i > 0 ? name.slice(i).toLowerCase() : ""; };
+  const previewExts = new Set([".png",".jpg",".jpeg",".gif",".webp",".svg",".bmp",".mp4",".webm",".pdf",".txt",".md",".json",".csv",".log",".html",".css",".js",".ts",".py",".sh",".xml",".yaml",".yml"]);
+
+  return (
+    <div className="bg-gray-900 rounded-xl p-3 border border-gray-700 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-gray-400">Tool mode</div>
+          <div className="text-sm font-semibold text-gray-100 truncate">Filesystem Explorer</div>
+          <div className="text-[11px] text-gray-500 truncate">{currentPath}</div>
+        </div>
+        <button
+          onClick={() => onAction("refresh", {})}
+          className="px-2.5 py-1 text-xs rounded-full bg-gray-700 border border-gray-600 hover:bg-gray-600 cursor-pointer transition-all duration-150 active:scale-[0.98]"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div className="flex gap-1.5">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search files/folders"
+          className="flex-1 bg-gray-800 border border-gray-600/60 rounded-md px-2 py-1.5 text-xs text-gray-100 focus:outline-none"
+        />
+        <button
+          onClick={() => onAction("search_paths", { path: currentPath, query, type: "any" })}
+          className="px-2.5 py-1.5 text-xs rounded-md bg-blue-600/30 border border-blue-500/60 hover:bg-blue-600/45 cursor-pointer"
+        >
+          Search
+        </button>
+      </div>
+
+      <div className="space-y-1.5 max-h-72 overflow-y-auto">
+        {rows.length > 0 ? rows.slice(0, 60).map((item, idx) => {
+          const name = String(item?.name ?? item?.path ?? ("Item " + (idx + 1)));
+          const type = String(item?.type ?? "file");
+          const itemPath = String(item?.path ?? "");
+          const ext = fileExt(name);
+          const canPreview = previewExts.has(ext);
+          return (
+            <div key={itemPath || idx} className="bg-gray-800 rounded-md border border-gray-600/50 px-2.5 py-2">
+              <div className="text-xs text-gray-100 truncate">{name}</div>
+              <div className="text-[11px] text-gray-500 truncate">{type} {itemPath ? "• " + itemPath : ""}</div>
+              <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                {isDir(type) && (
+                  <button
+                    onClick={() => onAction("list_directory", { path: itemPath })}
+                    className="px-2 py-1 text-[11px] rounded bg-blue-700/30 border border-blue-500/50 hover:bg-blue-700/45 cursor-pointer"
+                  >
+                    Open
+                  </button>
+                )}
+                {!isDir(type) && (
+                  <a
+                    href={toMediaUrl(itemPath)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2 py-1 text-[11px] rounded bg-violet-700/30 border border-violet-500/50 hover:bg-violet-700/45 cursor-pointer inline-block text-violet-200 no-underline"
+                  >
+                    {canPreview ? "Preview" : "Download"}
+                  </a>
+                )}
+                <button
+                  onClick={() => onAction("stat_path", { path: itemPath })}
+                  className="px-2 py-1 text-[11px] rounded bg-gray-700 border border-gray-600 hover:bg-gray-600 cursor-pointer"
+                >
+                  Stat
+                </button>
+                {!isDir(type) && (
+                  <button
+                    onClick={() => onAction("read_text_file", { path: itemPath })}
+                    className="px-2 py-1 text-[11px] rounded bg-emerald-700/30 border border-emerald-500/50 hover:bg-emerald-700/45 cursor-pointer"
+                  >
+                    Read
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="bg-gray-800 rounded-md border border-gray-600/50 px-2.5 py-2 text-xs text-gray-400">
+            No files or folders to display.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}`;
+  }
+
+  return `export default function GeneratedUI({ data, onAction }) {
+  const rows = Array.isArray(data?.rows)
+    ? data.rows
+    : Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.plugins)
+        ? data.plugins
+        : Array.isArray(data?.picks)
+          ? data.picks
+          : Array.isArray(data?.predictions)
+            ? data.predictions
+            : [];
+  const labels = rows.slice(0, 6).map((row, idx) => {
+    if (row && typeof row === "object") {
+      const r = row;
+      return String(r.name ?? r.ticker ?? r.pluginId ?? r.title ?? r.id ?? ("Item " + (idx + 1)));
+    }
+    return "Item " + (idx + 1);
+  });
+  return (
+    <div className="bg-gray-900 rounded-xl p-3 border border-gray-700 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs text-gray-400">Tool mode</div>
+          <div className="text-sm font-semibold text-gray-100">${signatureTitle(signature)}</div>
+        </div>
+        <button
+          onClick={() => onAction("refresh", {})}
+          className="px-2.5 py-1 text-xs rounded-full bg-gray-700 border border-gray-600 hover:bg-gray-600 cursor-pointer transition-all duration-150 active:scale-[0.98]"
+        >
+          Refresh
+        </button>
+      </div>
+      {rows.length > 0 ? (
+        <div className="space-y-1.5">
+          {labels.map((label, idx) => (
+            <div key={idx} className="bg-gray-800 rounded-md border border-gray-600/50 px-2.5 py-1.5 text-xs text-gray-300">
+              {label}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-gray-800 rounded-md border border-gray-600/50 px-2.5 py-2 text-xs text-gray-400">
+          No rows available for this signature yet.
+        </div>
+      )}
+      <div className="text-[11px] text-gray-500">This card uses a deterministic tool template for follow-up actions.</div>
+    </div>
+  );
+}`;
+}
+
+export function normalizeDataForToolTemplate(signature: ToolTemplate, data: unknown): Record<string, unknown> {
+  const source = (data && typeof data === "object" && !Array.isArray(data)) ? (data as Record<string, unknown>) : {};
+  switch (signature.signatureId) {
+    case "plugin_catalog_list": {
+      const plugins = Array.isArray(source.plugins) ? source.plugins : [];
+      return {
+        ...source,
+        title: source.title ?? "Loaded OpenClaw plugins",
+        totalPlugins: source.totalPlugins ?? plugins.length,
+        rows: plugins,
+      };
+    }
+    case "ranked_predictions_table": {
+      const picks = Array.isArray(source.top_picks)
+        ? source.top_picks
+        : Array.isArray(source.picks)
+          ? source.picks
+          : Array.isArray(source.predictions)
+            ? source.predictions
+            : Array.isArray(source.rows) && (source.rows as unknown[]).length > 0
+              ? source.rows
+              : [];
+      return {
+        ...source,
+        title: source.title ?? "Ranked predictions",
+        rows: picks,
+        totalStocksScanned: source.totalStocksScanned ?? source.total_stocks ?? source.total ?? (picks as unknown[]).length,
+      };
+    }
+    case "market_regime_snapshot": {
+      return {
+        ...source,
+        regime: source.regime ?? source.state ?? source.market_regime ?? "Unknown",
+        confidence: source.confidence ?? source.regimeConfidence ?? source.regime_confidence ?? 0,
+        guidance: Array.isArray(source.guidance) ? source.guidance : [],
+      };
+    }
+    case "routine_execution_report": {
+      return {
+        ...source,
+        steps: Array.isArray(source.steps) ? source.steps : [],
+        status: source.status ?? "completed",
+      };
+    }
+    case "ticker_detail": {
+      const single = (source.single_ticker_data && typeof source.single_ticker_data === "object")
+        ? source.single_ticker_data as Record<string, unknown>
+        : {};
+      const s = { ...source, ...single };
+      const factors: Array<{ name: string; value: number }> = [];
+      if (Array.isArray(s.factors) && s.factors.length > 0) {
+        factors.push(...(s.factors as Array<{ name: string; value: number }>));
+      } else {
+        if (s.rf_score != null) factors.push({ name: "RF Score", value: Number(s.rf_score) });
+        if (s.lgb_score != null) factors.push({ name: "LGB Score", value: Number(s.lgb_score) });
+        if (s.ranker_score != null) factors.push({ name: "Ranker Score", value: Number(s.ranker_score) });
+      }
+      return {
+        ...s,
+        ticker: s.ticker ?? s.symbol ?? "Ticker",
+        score: s.ranker_score ?? s.score ?? s.rankerScore ?? 0,
+        rank: s.rank ?? s.composite_rank ?? null,
+        compositeRank: s.composite_rank ?? s.compositeRank ?? null,
+        predictionDate: s.prediction_date ?? s.date ?? null,
+        rfRank: s.rf_rank ?? null,
+        lgbRank: s.lgb_rank ?? null,
+        rankerRank: s.ranker_rank ?? null,
+        factors,
+      };
+    }
+    case "smart_text_card": {
+      return { ...source };
+    }
+    case "directory_listing": {
+      const rowsFromArray = Array.isArray(data) ? data : [];
+      const items = Array.isArray(source.items) ? source.items : [];
+      const files = Array.isArray(source.files) ? source.files : [];
+      const matches = Array.isArray(source.matches) ? source.matches : [];
+      return {
+        ...source,
+        title: source.title ?? "Directory listing",
+        rows: items.length > 0 ? items : files.length > 0 ? files : matches.length > 0 ? matches : rowsFromArray,
+      };
+    }
+    case "table_rows_columns": {
+      const rows = Array.isArray(source.rows) ? source.rows : [];
+      return {
+        ...source,
+        title: source.title ?? "Table explorer",
+        rows,
+        columns: Array.isArray(source.columns) ? source.columns : [],
+      };
+    }
+    case "workspace_inventory": {
+      const repos = Array.isArray(source.repos) ? source.repos : Array.isArray(source.repositories) ? source.repositories : [];
+      const found = Array.isArray(source.found) ? source.found : [];
+      return {
+        ...source,
+        title: source.title ?? "Workspace inventory",
+        rows: repos.length > 0 ? repos : found,
+      };
+    }
+    case "media_gallery": {
+      const items = Array.isArray(source.items) ? source.items : [];
+      const groups = Array.isArray(source.groups)
+        ? source.groups
+        : Array.isArray(source.mediaTypes)
+          ? source.mediaTypes
+          : [];
+      return {
+        ...source,
+        title: source.title ?? "Media gallery",
+        rows: items,
+        groups,
+      };
+    }
+    case "itinerary_board": {
+      const itinerary = Array.isArray(source.itinerary) ? source.itinerary : [];
+      const categories = Array.isArray(source.categories) ? source.categories : [];
+      return {
+        ...source,
+        title: source.title ?? "Travel itinerary",
+        rows: itinerary,
+        categories,
+      };
+    }
+    case "weekly_meal_plan": {
+      const mealPlan = Array.isArray(source.mealPlan) ? source.mealPlan : [];
+      const groceryGroups = Array.isArray(source.groceryGroups) ? source.groceryGroups : [];
+      return {
+        ...source,
+        title: source.title ?? "Weekly meal plan",
+        rows: mealPlan,
+        groceryGroups,
+      };
+    }
+    default: {
+      if (isSystemAutoSignature(signature.signatureId)) {
+        if (Array.isArray(data)) {
+          return {
+            title: source.title ?? "System tool results",
+            rows: data,
+          };
+        }
+        const rows = Array.isArray(source.rows)
+          ? source.rows
+          : Array.isArray(source.items)
+            ? source.items
+            : Array.isArray(source.results)
+              ? source.results
+              : Array.isArray(source.records)
+                ? source.records
+                : [];
+        return {
+          ...source,
+          title: source.title ?? "System tool results",
+          rows,
+        };
+      }
+      return { ...source };
+    }
+  }
+}
+
+// Backward-compatible aliases during migration.
+export type SignatureCoverageStatus = ToolTemplateCoverageStatus;
+export type ToolSignature = ToolTemplate;
+export const registerToolSignature = registerToolTemplate;
+export const getToolSignature = getToolTemplate;
+export const isSignatureActionCovered = isToolActionCovered;
+export const detectSignatureForToolName = detectToolTemplateForToolName;
+export const detectCapabilitySignature = detectToolTemplateFromData;
+export const registerSignatureTemplateCandidate = registerToolTemplateCandidate;
+export const getSignatureTemplateCode = getToolTemplateCode;
+export const normalizeDataForSignature = normalizeDataForToolTemplate;
+export const registerSignatureDataHint = registerToolTemplateDataHint;
+
+function extractToolPrefix(toolName: string): string | undefined {
+  const idx = toolName.lastIndexOf("_");
+  if (idx <= 0) return undefined;
+  return `${toolName.slice(0, idx + 1)}`;
+}
+
+function sanitizeForId(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    || "tool_family";
+}
+
+function supportedActionsForPrefix(prefix: string): string[] {
+  const toolNames = getAllRegisteredToolNames();
+  const actions = new Set<string>();
+  for (const name of toolNames) {
+    const lower = name.toLowerCase();
+    if (!lower.startsWith(prefix)) continue;
+    const action = lower.slice(prefix.length);
+    if (action) actions.add(action);
+  }
+  return Array.from(actions).sort();
+}
+
+function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: string }): void {
+  const knownPrefixes = [
+    "alpharank_",
+    "enso_fs_",
+    "enso_ws_",
+    "enso_media_",
+    "enso_travel_",
+    "enso_meal_",
+  ];
+  if (knownPrefixes.includes(input.prefix)) return;
+  if (dynamicPrefixSignatureMap.has(input.prefix)) return;
+
+  const actions = supportedActionsForPrefix(input.prefix);
+  if (actions.length === 0) return;
+  const familyBase = input.pluginId ? sanitizeForId(input.pluginId) : sanitizeForId(input.prefix.replace(/_+$/, ""));
+  const signatureBase = sanitizeForId(input.prefix.replace(/_+$/, ""));
+  const toolFamily = `system_${familyBase}`;
+  const signatureId = `system_auto_${signatureBase}`;
+  registerToolTemplate({
+    toolFamily,
+    signatureId,
+    templateId: `system-auto-${signatureBase}-v1`,
+    supportedActions: actions,
+    coverageStatus: "covered",
+  });
+  dynamicPrefixSignatureMap.set(input.prefix, { toolFamily, signatureId });
+}
+
+function ensureDynamicSystemTemplatesFromRegistry(): void {
+  const registry = getPluginRegistry();
+  if (!registry) return;
+  for (const entry of registry.tools) {
+    const prefix = getPluginToolPrefix(entry.pluginId).toLowerCase();
+    if (!prefix) continue;
+    registerDynamicSystemTemplate({ prefix, pluginId: entry.pluginId });
+  }
+}
+
+function getAllRegisteredToolNames(): string[] {
+  const registry = getPluginRegistry();
+  if (!registry) return [];
+  const names = new Set<string>();
+  for (const entry of registry.tools) {
+    for (const name of entry.names) names.add(name);
+  }
+  return Array.from(names);
+}
+
+/**
+ * Detect if another provider already supports a family by matching action suffixes.
+ * Returns the best provider prefix and a representative tool name.
+ */
+export function findExistingProviderForActionSuffixes(input: {
+  excludePrefix: string;
+  actionSuffixes: string[];
+  minMatches?: number;
+}): { prefix: string; sampleToolName: string } | undefined {
+  const tools = getAllRegisteredToolNames();
+  if (tools.length === 0) return undefined;
+  const suffixes = new Set(input.actionSuffixes.map((s) => s.toLowerCase()));
+  const minMatches = input.minMatches ?? 2;
+
+  const byPrefix = new Map<string, { tools: string[]; matchedSuffixes: Set<string> }>();
+  for (const name of tools) {
+    const lower = name.toLowerCase();
+    const prefix = extractToolPrefix(lower);
+    if (!prefix || prefix === input.excludePrefix.toLowerCase()) continue;
+    const suffix = lower.slice(prefix.length);
+    if (!suffixes.has(suffix)) continue;
+    const bucket = byPrefix.get(prefix) ?? { tools: [], matchedSuffixes: new Set<string>() };
+    bucket.tools.push(name);
+    bucket.matchedSuffixes.add(suffix);
+    byPrefix.set(prefix, bucket);
+  }
+
+  const ranked = Array.from(byPrefix.entries())
+    .map(([prefix, meta]) => ({
+      prefix,
+      score: meta.matchedSuffixes.size,
+      sampleToolName: meta.tools[0],
+    }))
+    .filter((x) => x.score >= minMatches)
+    .sort((a, b) => b.score - a.score);
+
+  if (ranked.length === 0) return undefined;
+  return {
+    prefix: ranked[0].prefix,
+    sampleToolName: ranked[0].sampleToolName,
+  };
+}
+
+export function getPreferredToolProviderForFamily(toolFamily: string): {
+  toolName: string;
+  handlerPrefix: string;
+} | undefined {
+  const capability = getCapabilityForFamily(toolFamily);
+  if (!capability) return undefined;
+
+  const fallbackPrefix = extractToolPrefix(capability.fallbackToolName);
+  if (!fallbackPrefix) return undefined;
+
+  const existing = findExistingProviderForActionSuffixes({
+    excludePrefix: fallbackPrefix,
+    actionSuffixes: capability.actionSuffixes,
+    minMatches: Math.min(2, capability.actionSuffixes.length),
+  });
+  if (existing) {
+    return {
+      toolName: existing.sampleToolName,
+      handlerPrefix: existing.prefix,
+    };
+  }
+  if (isToolRegistered(capability.fallbackToolName)) {
+    return {
+      toolName: capability.fallbackToolName,
+      handlerPrefix: fallbackPrefix,
+    };
+  }
+  return undefined;
+}
+
 /**
  * Detect the tool prefix for a given tool name by looking up its plugin
  * in the OpenClaw registry and computing the common prefix.
@@ -140,6 +974,59 @@ function detectPrefixForTool(toolName: string): string | undefined {
 function getPluginRegistry(): { tools: Array<{ pluginId: string; factory: (ctx: Record<string, unknown>) => unknown; names: string[]; optional: boolean; source: string }> } | null {
   const state = (globalThis as Record<symbol, { registry?: unknown }>)[Symbol.for("openclaw.pluginRegistryState")];
   return (state?.registry as ReturnType<typeof getPluginRegistry>) ?? null;
+}
+
+/**
+ * Return the currently loaded OpenClaw tool catalog grouped by plugin.
+ * Useful for "list/search plugins" UX actions without requiring shell CLIs.
+ */
+export function getRegisteredToolCatalog(): RegisteredToolCatalogEntry[] {
+  const registry = getPluginRegistry();
+  if (!registry) return [];
+
+  const byPlugin = new Map<string, Set<string>>();
+  for (const entry of registry.tools) {
+    const bucket = byPlugin.get(entry.pluginId) ?? new Set<string>();
+    for (const name of entry.names) bucket.add(name);
+    byPlugin.set(entry.pluginId, bucket);
+  }
+
+  return Array.from(byPlugin.entries())
+    .map(([pluginId, tools]) => ({
+      pluginId,
+      tools: Array.from(tools).sort(),
+    }))
+    .sort((a, b) => a.pluginId.localeCompare(b.pluginId));
+}
+
+export function getRegisteredToolsDetailed(): RegisteredToolDetail[] {
+  const registry = getPluginRegistry();
+  if (!registry) return [];
+  const details: RegisteredToolDetail[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of registry.tools) {
+    try {
+      const resolved = entry.factory({});
+      if (!resolved) continue;
+      const tools = Array.isArray(resolved) ? resolved : [resolved];
+      for (const tool of tools) {
+        const t = tool as { name?: string; description?: string; parameters?: unknown };
+        if (!t.name || seen.has(t.name)) continue;
+        seen.add(t.name);
+        details.push({
+          pluginId: entry.pluginId,
+          name: t.name,
+          description: t.description ?? "",
+          parameters: (t.parameters ?? {}) as Record<string, unknown>,
+        });
+      }
+    } catch {
+      // ignore one broken registry factory; continue with others
+    }
+  }
+
+  return details.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -418,3 +1305,5 @@ function parseToolOutput(raw: string): unknown {
     return { rawOutput: raw, type: "text_result" };
   }
 }
+
+registerDefaultSignatures();

@@ -183,6 +183,47 @@ When a user clicks a button on a tool-produced card, the action name is resolved
 
 This bridge requires no tool-specific code in Enso. Any OpenClaw plugin that registers tools with `api.registerTool()` is automatically available.
 
+### Built-In Tool Families
+
+Enso currently includes first-party tool families with deterministic app-mode templates:
+
+- Filesystem: `enso_fs_*`
+- Workspace: `enso_ws_*`
+- Media: `enso_media_*`
+- Travel planner: `enso_travel_*`
+- Meal planner: `enso_meal_*`
+- Tool console: `/tool enso` (template + tool-family browser + add-tool request flow)
+
+### `/tool enso` Console
+
+From the Enso UI input, run:
+
+```text
+/tool enso
+```
+
+This opens a tool-console card that lets you:
+
+1. List all currently supported tool families
+2. Drill into a family to inspect registered templates
+3. Go back to the family list
+4. Submit a new tool description via "Add Tool"
+   - if a similar family already exists, it reports the match
+   - otherwise, it queues a domain-evolution generation job
+
+### Domain Evolution Jobs
+
+Domain evolution queue endpoints:
+
+- `GET /domain-evolution/jobs`
+- `GET /domain-evolution/jobs/:id`
+
+Optional webhook for stronger external coding-LLM orchestration:
+
+- `ENSO_DOMAIN_EVOLUTION_WEBHOOK_URL`
+
+If unset, Enso uses local fallback blueprint synthesis and registers partial signatures automatically.
+
 ## Troubleshooting
 
 **Plugin shows as `loaded` but channel not in `channels status`**

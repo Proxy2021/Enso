@@ -1,0 +1,61 @@
+# Enso Cursor Rules (Current State)
+
+## Product Direction
+
+- Enso's primary UX contract is: "the component is the answer."
+- Prefer deterministic tool-mode app experiences over free-form LLM UI when a domain is supported.
+- Keep card interactions in-place (`full` mode) unless user explicitly chooses `ui` mode behavior.
+
+## Runtime Architecture Priorities
+
+- Three-path card-action routing remains required:
+  1. Mechanical mutation
+  2. Native tool dispatch (`prefix + action`)
+  3. Agent fallback
+- Preserve `cardMode` continuity across initial render and follow-up actions.
+- Never silently drop tool-mode metadata (`interactionMode`, `toolFamily`, `signatureId`, `coverageStatus`).
+
+## Supported Tool Families (Built-In)
+
+- `alpharank`
+- `filesystem` (`enso_fs_*`)
+- `code_workspace` (`enso_ws_*`)
+- `multimedia` (`enso_media_*`)
+- `travel_planner` (`enso_travel_*`)
+- `meal_planner` (`enso_meal_*`)
+- `enso_tooling` (`/tool enso` console)
+
+## Tool Console Rules
+
+- `/tool enso` must always open deterministic tool-console UI.
+- Console must support:
+  - list families
+  - view family templates
+  - back navigation
+  - add-tool description flow
+- Add-tool flow must:
+  - detect and report existing matching support
+  - otherwise queue domain-evolution generation job and report status/job id
+
+## Domain Evolution Rules
+
+- When a card remains in `llm` mode with generated structured data, enqueue domain-gap signal.
+- Preserve dedupe behavior by fingerprint; do not create duplicate jobs for the same request/data shape.
+- Keep evolution jobs inspectable via API endpoints:
+  - `/domain-evolution/jobs`
+  - `/domain-evolution/jobs/:id`
+
+## Testing Expectations
+
+- Changes to tool routing/template detection require unit tests in:
+  - `openclaw-plugin/src/signature-path.test.ts`
+  - `openclaw-plugin/src/outbound.test.ts`
+- New tool families require:
+  - backend tool tests
+  - template detection/normalization tests
+  - live E2E validation when feasible
+
+## Cleanup and Hygiene
+
+- Do not reintroduce disk-based UI cache artifacts under `openclaw-plugin/ui-cache/`.
+- Keep docs in sync (`CLAUDE.md`, `openclaw-plugin/SETUP.md`) whenever tool families or runtime flows change.

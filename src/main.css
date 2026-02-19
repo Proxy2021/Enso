@@ -4,6 +4,21 @@
   --animate-shimmer: shimmer 1.5s ease-in-out infinite;
 }
 
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-gray-950 text-gray-100 antialiased;
+    background-image:
+      radial-gradient(circle at 20% -10%, rgba(99, 102, 241, 0.18), transparent 38%),
+      radial-gradient(circle at 80% 0%, rgba(56, 189, 248, 0.12), transparent 32%),
+      radial-gradient(circle at 50% 120%, rgba(139, 92, 246, 0.08), transparent 30%);
+    background-attachment: fixed;
+  }
+}
+
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }

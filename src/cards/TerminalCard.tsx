@@ -185,6 +185,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
   const codeSessionCwd = useChatStore((s) => s.codeSessionCwd);
   const codeSessionId = useChatStore((s) => s.codeSessionId);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const cancelOperation = useChatStore((s) => s.cancelOperation);
   const activeTerminalCardId = useChatStore((s) => s._activeTerminalCardId);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -217,8 +218,22 @@ export default function TerminalCard({ card }: CardRendererProps) {
             <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
           </div>
           <span className="text-gray-400 ml-1">Claude Code</span>
+          {card.operation?.label && (
+            <span className="text-gray-500 ml-2 truncate max-w-[30%]">{card.operation.label}</span>
+          )}
+          {card.operation?.cancellable && card.operation.operationId && (
+            <button
+              onClick={() => cancelOperation(card.operation!.operationId)}
+              className="ml-auto px-2 py-0.5 rounded border border-red-700/60 text-red-300 hover:bg-red-900/40 transition-colors"
+              title="Cancel current operation"
+            >
+              Cancel
+            </button>
+          )}
           {codeSessionCwd && (
-            <span className="text-gray-600 ml-auto truncate max-w-[60%]">{codeSessionCwd}</span>
+            <span className={`text-gray-600 truncate ${card.operation?.cancellable ? "max-w-[30%]" : "ml-auto max-w-[60%]"}`}>
+              {codeSessionCwd}
+            </span>
           )}
         </div>
 

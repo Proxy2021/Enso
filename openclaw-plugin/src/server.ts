@@ -9,8 +9,9 @@ import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
 import { handleEnsoInbound } from "./inbound.js";
-import { handlePluginCardAction } from "./outbound.js";
-import { runClaudeCode } from "./claude-code.js";
+import { handleCardEnhance, handlePluginCardAction } from "./outbound.js";
+import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
+import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 
 export type ConnectedClient = {
   id: string;
@@ -135,6 +136,24 @@ export async function startEnsoServer(opts: {
     });
   });
 
+  // Inspect domain-evolution queue/state for newly discovered uncaptured domains.
+  app.get("/domain-evolution/jobs", (_req, res) => {
+    const jobs = getDomainEvolutionJobs();
+    res.json({
+      total: jobs.length,
+      jobs,
+    });
+  });
+
+  app.get("/domain-evolution/jobs/:id", (req, res) => {
+    const job = getDomainEvolutionJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    res.json(job);
+  });
+
   // Serve local media files referenced in agent responses
   app.get("/media/:encodedPath", (req, res) => {
     let filePath = Buffer.from(req.params.encodedPath, "base64url").toString("utf-8");
@@ -242,12 +261,13 @@ export async function startEnsoServer(opts: {
             // Direct tool invocation — bypass OpenClaw pipeline entirely
             if (msg.routing?.toolId === "claude-code" && msg.text) {
               runtime.log?.(`[enso] direct claude-code: "${msg.text.slice(0, 60)}"`);
+              const runId = randomUUID();
               await runClaudeCode({
                 prompt: msg.text,
                 cwd: msg.routing.cwd,
                 toolSessionId: msg.routing.toolSessionId,
                 client,
-                runId: randomUUID(),
+                runId,
               });
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
               await handleEnsoInbound({
@@ -266,6 +286,28 @@ export async function startEnsoServer(opts: {
                 routing: msg.routing,
                 statusSink,
               });
+            }
+            break;
+          case "operation.cancel":
+            if (msg.operationId) {
+              const cancelled = cancelClaudeCodeRun(msg.operationId);
+              if (!cancelled) {
+                send({
+                  id: randomUUID(),
+                  runId: msg.operationId,
+                  sessionKey,
+                  seq: 0,
+                  state: "error",
+                  text: "Operation is no longer running.",
+                  operation: {
+                    operationId: msg.operationId,
+                    stage: "error",
+                    label: "Not running",
+                    cancellable: false,
+                  },
+                  timestamp: Date.now(),
+                });
+              }
             }
             break;
           case "ui_action":
@@ -306,10 +348,22 @@ export async function startEnsoServer(opts: {
                 cardId: msg.cardId,
                 action: msg.cardAction,
                 payload: msg.cardPayload,
+                mode: msg.mode,
                 client,
                 config,
                 runtime,
                 statusSink,
+              });
+            }
+            break;
+          case "card.enhance":
+            if (msg.cardId && msg.cardText) {
+              runtime.log?.(`[enso] card enhance: ${msg.cardId}`);
+              await handleCardEnhance({
+                cardId: msg.cardId,
+                cardText: msg.cardText,
+                client,
+                account,
               });
             }
             break;

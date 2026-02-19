@@ -39,6 +39,34 @@ export interface ToolQuestion {
   options: Array<{ label: string; description?: string }>;
 }
 
+export type OperationStage =
+  | "processing"
+  | "calling_tool"
+  | "generating_ui"
+  | "agent_fallback"
+  | "streaming"
+  | "complete"
+  | "cancelled"
+  | "error";
+
+export interface OperationStatus {
+  operationId: string;
+  stage: OperationStage;
+  label?: string;
+  cancellable?: boolean;
+  message?: string;
+}
+
+export type CardInteractionMode = "llm" | "tool";
+export type CardCoverageStatus = "covered" | "partial";
+
+export interface CardModeDetail {
+  interactionMode: CardInteractionMode;
+  toolFamily?: string;
+  signatureId?: string;
+  coverageStatus?: CardCoverageStatus;
+}
+
 /** Protocol types shared with the browser client */
 
 export interface ToolRouting {
@@ -46,6 +74,12 @@ export interface ToolRouting {
   toolId: string;
   toolSessionId?: string;
   cwd?: string;
+}
+
+export interface EnhanceResult {
+  data: unknown;
+  generatedUI: string;
+  cardMode: CardModeDetail;
 }
 
 export interface ServerMessage {
@@ -59,15 +93,26 @@ export interface ServerMessage {
   generatedUI?: string;
   mediaUrls?: string[];
   toolMeta?: { toolId: string; toolSessionId?: string };
+  cardMode?: CardModeDetail;
   targetCardId?: string;
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
+  operation?: OperationStatus;
   settings?: { mode: ChannelMode };
+  enhanceResult?: EnhanceResult | null;
   timestamp: number;
 }
 
 export interface ClientMessage {
-  type: "chat.send" | "chat.history" | "ui_action" | "tools.list_projects" | "card.action" | "settings.set_mode";
+  type:
+    | "chat.send"
+    | "chat.history"
+    | "ui_action"
+    | "tools.list_projects"
+    | "card.action"
+    | "card.enhance"
+    | "settings.set_mode"
+    | "operation.cancel";
   mode?: ChannelMode;
   text?: string;
   mediaUrls?: string[];
@@ -82,6 +127,10 @@ export interface ClientMessage {
   cardId?: string;
   cardAction?: string;
   cardPayload?: unknown;
+  // card.enhance fields
+  cardText?: string;
+  // operation.cancel fields
+  operationId?: string;
 }
 
 /** UIGenerator types */

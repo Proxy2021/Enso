@@ -83,7 +83,29 @@ USE COMPONENT STATE:
 - useState for tabs, filters, sorting, expanded/collapsed sections, selected items
 - Let the user switch views (list ↔ grid, chart ↔ table)
 - Collapsible sections for dense data
-- The component should feel like a real app, not a static render`;
+- The component should feel like a real app, not a static render
+
+WORLD-CLASS UX BAR (Linear + Notion + Vercel style):
+- High hierarchy, low noise: one strong primary area, secondary metadata de-emphasized
+- Progressive disclosure: summary first, details behind toggles/sections/tabs
+- Contextual actions: each action sits next to the data it affects
+- Every state is designed: loading, empty, error, success
+- No dead zones: if it looks clickable, make the full area clickable
+- Strong affordance: hover/active/focus-visible states on all interactive elements
+
+INTERACTION POLISH:
+- Buttons/chips: transition-all duration-150 active:scale-[0.98]
+- Hover states increase contrast, not decrease
+- Prefer compact information density with clear grouping and whitespace rhythm
+- Use font-variant-numeric: tabular-nums for metrics
+- Every interactive control needs explicit verb-first labels (e.g. "View Details", "Refresh Data", "Open Activity Log")
+- Add short helper microcopy near action clusters that explains what click does (e.g. "Selecting an item opens a detailed follow-up card")
+- Do not make entire large cards clickable unless clearly styled as a single CTA
+
+ACCESSIBILITY:
+- Include aria-label for icon-only buttons
+- Use semantic headings and role-safe controls
+- Never rely on color alone for status; include text labels/badges`;
 
 const TEXT_ANALYSIS_SYSTEM_PROMPT = `You are Enso — you turn AI responses into apps. Not cards. Not summaries. Apps.
 
@@ -229,23 +251,134 @@ Charts (when data has numbers):
 - Minimal axis labels, subtle gridlines
 - Match accent colors from color palette above
 
+WORLD-CLASS UX BAR (Linear + Notion + Vercel style):
+- Strong hierarchy, low clutter, and clear visual alignment
+- Progressive disclosure first: summary row + drill-in sections/tabs
+- Contextual actions near the item they affect; avoid detached global controls
+- Design all states: loading, empty, sparse, dense, and error
+- Primary interactions must have clear affordance with hover/focus/active states
+
+MICRO-INTERACTIONS:
+- Use transition-all duration-150 for controls
+- Use active:scale-[0.98] for press feedback
+- Interactive controls always use cursor-pointer
+- Keep hit targets generous (at least button-like sizing with px/py padding)
+- Action labels must describe the outcome clearly (avoid vague labels like "Go", "Open", "Run")
+- Add one line of contextual "what happens next" microcopy for dense action groups
+- Avoid hidden click zones; clickable areas must look obviously interactive
+
+ACCESSIBILITY & LEGIBILITY:
+- Use text labels in addition to color for statuses
+- Use tabular numbers for metrics (font-variant-numeric: tabular-nums)
+- Keep section headings clear and scannable
+- Add aria-label on icon-only buttons
+
 Output ONLY the JSON object (or __NO_UI__). No markdown fences. No explanation.`;
 
 const FALLBACK_COMPONENT = `export default function GeneratedUI({ data }) {
   return (
-    <div className="bg-gray-800 rounded-lg p-4 overflow-auto max-h-96">
-      <pre className="text-sm text-gray-300 whitespace-pre-wrap">
+    <div className="bg-gray-900 border border-gray-700/80 rounded-xl p-4 overflow-auto max-h-96 shadow-[0_10px_24px_rgba(0,0,0,0.35)]">
+      <div className="text-xs text-gray-400 mb-2">Structured data view</div>
+      <pre className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-950/60 rounded-lg p-3 border border-gray-800">
         {JSON.stringify(data, null, 2)}
       </pre>
     </div>
   );
 }`;
 
+function buildDomainUxGuidance(input: { userMessage: string; assistantText: string }): string {
+  const text = `${input.userMessage}\n${input.assistantText}`.toLowerCase();
+
+  const dashboardSignals = [
+    "dashboard",
+    "kpi",
+    "metric",
+    "revenue",
+    "forecast",
+    "trend",
+    "quarter",
+    "monthly",
+    "analytics",
+    "scorecard",
+    "performance",
+  ];
+  const taskSignals = [
+    "task",
+    "kanban",
+    "board",
+    "backlog",
+    "sprint",
+    "todo",
+    "to do",
+    "in progress",
+    "done",
+    "assignee",
+    "priority",
+    "ticket",
+  ];
+  const inspectorSignals = [
+    "tool",
+    "execution",
+    "logs",
+    "output",
+    "trace",
+    "terminal",
+    "error",
+    "warning",
+    "diff",
+    "command",
+    "result",
+    "action history",
+  ];
+
+  const hasSignal = (signals: string[]) => signals.some((s) => text.includes(s));
+  const sections: string[] = [];
+
+  if (hasSignal(dashboardSignals)) {
+    sections.push(`DOMAIN UX: Executive Dashboard
+- Top band: 3-6 KPI tiles with clear delta badges (up/down/flat + text label).
+- Provide fast time-window controls (7d/30d/QTD/YTD) as chips.
+- Main body should include at least two perspectives: trend view + breakdown view.
+- Use strong comparative context (vs prior period, target, benchmark) on key metrics.
+- Keep dense numeric information readable with tabular-nums and compact labels.
+- Include action points section (risks, wins, next actions) for decision support.
+- Progressive disclosure: details behind expandable rows/panels, not all at once.`);
+  }
+
+  if (hasSignal(taskSignals)) {
+    sections.push(`DOMAIN UX: Task / Kanban Workflow
+- Prefer board-style grouping by status columns with visible counts per column.
+- Each task card should show priority, assignee, and short metadata chips.
+- Primary actions should be obvious and contextual (complete, move, assign, reprioritize).
+- Use local state for view/filter/sort and onAction for server mutations.
+- Support quick filtering by assignee, priority, and status using compact chips.
+- Keep interactions lightweight: hover affordance, press feedback, no modal dependency unless necessary.
+- Provide empty-column and empty-board states with clear suggested next step.`);
+  }
+
+  if (hasSignal(inspectorSignals)) {
+    sections.push(`DOMAIN UX: Tool-Result Inspector
+- Use a split information hierarchy: summary bar, key findings, then detailed logs/results.
+- Surface status first (success/warning/error) with both color and explicit text.
+- Present chronology or step timeline for multi-step tool runs.
+- Include structured sections for: Inputs, Actions Taken, Outputs, Errors, and Follow-up Actions.
+- Make dense outputs scannable with collapsible blocks and monospace regions where useful.
+- Add focused controls for refresh/retry/copy/open-details actions near relevant blocks.
+- If there are errors, include a "What to do next" remediation section.`);
+  }
+
+  if (sections.length === 0) {
+    return "";
+  }
+
+  return `\n\n${sections.join("\n\n")}`;
+}
+
 /**
  * Cache version — increment to invalidate all cached components.
  * Bump this whenever prompts change significantly.
  */
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 
 /** In-memory cache for generated UI components. */
 const cache = new Map<string, string>();
@@ -253,36 +386,82 @@ const cache = new Map<string, string>();
 /** Cache for extracted data paired with components. */
 const dataCache = new Map<string, unknown>();
 
-async function callGeminiLLM(prompt: string, apiKey: string): Promise<string> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 16384 },
-      }),
-    },
-  );
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  if (!response.ok) {
-    const err = await response.text();
-    console.error("[enso:ui-gen] Gemini API error:", err);
-    throw new Error(`Gemini API error: ${response.status}`);
+function isRetryableGeminiError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.message.includes("timeout")) return true;
+  if (err.message.includes("Gemini API error: 429")) return true;
+  if (err.message.includes("Gemini API error: 500")) return true;
+  if (err.message.includes("Gemini API error: 502")) return true;
+  if (err.message.includes("Gemini API error: 503")) return true;
+  if (err.message.includes("Gemini API error: 504")) return true;
+  return false;
+}
+
+async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 16384 },
+        }),
+        signal: controller.signal,
+      },
+    );
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("[enso:ui-gen] Gemini API error:", err);
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const result = (await response.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Empty Gemini response");
+
+    // Strip markdown fences if present
+    return text
+      .replace(/^```(?:json|jsx?|tsx?)?\n?/m, "")
+      .replace(/\n?```$/m, "")
+      .trim();
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new Error(`Gemini API timeout after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
+}
 
-  const result = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty Gemini response");
-
-  // Strip markdown fences if present
-  return text
-    .replace(/^```(?:json|jsx?|tsx?)?\n?/m, "")
-    .replace(/\n?```$/m, "")
-    .trim();
+async function callGeminiLLMWithRetry(prompt: string, apiKey: string): Promise<string> {
+  const maxAttempts = 3;
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await callGeminiLLM(prompt, apiKey);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryableGeminiError(err) || attempt === maxAttempts) {
+        throw err;
+      }
+      const delayMs = 500 * 2 ** (attempt - 1);
+      console.warn(`[enso:ui-gen] retrying Gemini call (${attempt}/${maxAttempts}) in ${delayMs}ms`);
+      await sleep(delayMs);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Gemini call failed");
 }
 
 /**
@@ -314,18 +493,22 @@ export async function serverGenerateUI(params: {
   const actionSection = params.actionHints
     ? `\n\n${params.actionHints}`
     : "";
+  const domainSection = buildDomainUxGuidance({
+    userMessage: params.userMessage,
+    assistantText: params.assistantText,
+  });
 
   const userPrompt = `Generate a React component to display this data:
 
 Data shape: ${shape}
 Sample data: ${JSON.stringify(params.data, null, 2)}
 User's request: ${params.userMessage}
-Assistant context: ${params.assistantText.slice(0, 500)}${actionSection}
+Assistant context: ${params.assistantText.slice(0, 500)}${actionSection}${domainSection}
 
 Remember: output ONLY the component code, starting with "export default function GeneratedUI"`;
 
   try {
-    const code = await callGeminiLLM(
+    const code = await callGeminiLLMWithRetry(
       `${STRUCTURED_DATA_SYSTEM_PROMPT}\n\n${userPrompt}`,
       apiKey,
     );
@@ -367,15 +550,19 @@ export async function serverGenerateUIFromText(params: {
   const actionSection = params.actionHints
     ? `\n\n${params.actionHints}`
     : "";
+  const domainSection = buildDomainUxGuidance({
+    userMessage: params.userMessage,
+    assistantText: params.assistantText,
+  });
 
   const userPrompt = `User's question: ${params.userMessage}
 
 Assistant's response:
-${params.assistantText}${actionSection}`;
+${params.assistantText}${actionSection}${domainSection}`;
 
   try {
     console.log("[enso:ui-gen] Requesting UI generation from Gemini...");
-    const raw = await callGeminiLLM(
+    const raw = await callGeminiLLMWithRetry(
       `${TEXT_ANALYSIS_SYSTEM_PROMPT}\n\n${userPrompt}`,
       apiKey,
     );
@@ -399,6 +586,37 @@ ${params.assistantText}${actionSection}`;
     console.error("[enso:ui-gen] Text-based generation failed:", err);
     return null;
   }
+}
+
+export async function serverGenerateConstrainedFollowupUI(params: {
+  data: unknown;
+  userMessage: string;
+  assistantText: string;
+  geminiApiKey?: string;
+  action: string;
+  signatureId: string;
+  toolFamily: string;
+  actionHints?: string;
+}): Promise<UIGeneratorResult> {
+  const constrainedPrompt = `Follow-up regeneration for tool mode.
+Tool family: ${params.toolFamily}
+Signature: ${params.signatureId}
+Triggered action: ${params.action}
+
+Maintain interaction continuity with the existing card:
+- Keep action names stable and verb-first.
+- Keep layout compact and deterministic for repeated follow-ups.
+- Preserve the same information hierarchy when possible.
+- Avoid introducing unrelated sections.
+`;
+
+  return serverGenerateUI({
+    data: params.data,
+    userMessage: `${params.userMessage} [Signature follow-up: ${params.signatureId}]`,
+    assistantText: `${params.assistantText}\n\n${constrainedPrompt}`,
+    geminiApiKey: params.geminiApiKey,
+    actionHints: params.actionHints,
+  });
 }
 
 /**
@@ -470,3 +688,141 @@ function parseGeneratorResponse(
 
   return null;
 }
+
+// ── Tool Selection for Card Enhancement ──
+
+export interface ToolSelectionResult {
+  toolFamily: string;
+  toolName: string;
+  params: Record<string, unknown>;
+}
+
+export async function selectToolForContent(params: {
+  cardText: string;
+  geminiApiKey: string;
+  toolFamilies: Array<{
+    toolFamily: string;
+    fallbackToolName: string;
+    actionSuffixes: string[];
+    description?: string;
+  }>;
+}): Promise<ToolSelectionResult | null> {
+  if (!params.geminiApiKey) return null;
+  if (params.toolFamilies.length === 0) return null;
+
+  const familiesPayload = params.toolFamilies.map((f) => ({
+    family: f.toolFamily,
+    description: f.description,
+    defaultTool: f.fallbackToolName,
+    actions: f.actionSuffixes,
+  }));
+
+  const prompt = `You are Enso's tool selector.
+Given an AI assistant's text response, decide which ONE tool family and tool best serves this content as an interactive app.
+Return ONLY strict JSON:
+{
+  "matched": boolean,
+  "toolFamily": string,
+  "toolName": string,
+  "params": object,
+  "reasoning": string
+}
+
+Rules:
+- Only select from the provided tool families and their tools.
+- CRITICAL: toolName must be EXACTLY the defaultTool or constructed as: take the defaultTool name, strip its last segment after the final underscore, then append an action suffix. Example: defaultTool "enso_meal_plan_week" has prefix "enso_meal_", so valid tools are "enso_meal_plan_week", "enso_meal_grocery_list", "enso_meal_swap_meal".
+- If the content doesn't clearly map to any tool family, return {"matched": false}.
+- DO NOT match generic greetings, opinions, jokes, code snippets, or explanations — only match content that describes structured real-world data.
+- Use the EXACT parameter names the tool expects. For travel tools: use "destination" (not "location"), "days" (not "duration"). For meal tools: use "diet" (not "dietary_preferences"), "servings" (not "num_servings"). For filesystem/workspace: use "path".
+- Infer params from the text content (e.g. paths, destinations, dietary preferences).
+
+Tool families:
+${JSON.stringify(familiesPayload, null, 2)}
+
+Assistant response to analyze:
+${params.cardText.slice(0, 4000)}`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${params.geminiApiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              maxOutputTokens: 512,
+              temperature: 0,
+              responseMimeType: "application/json",
+            },
+          }),
+          signal: controller.signal,
+        },
+      );
+      if (!response.ok) {
+        console.log(`[enso:tool-select] Gemini returned HTTP ${response.status}`);
+        return null;
+      }
+
+      const result = (await response.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string; thought?: boolean }> };
+        }>;
+      };
+      const parts = result.candidates?.[0]?.content?.parts;
+      // Gemini 2.5 Flash may return thinking parts first; pick the last non-thought text part
+      const textPart = parts?.filter((p) => p.text && !p.thought).pop();
+      const text = textPart?.text;
+      if (!text) {
+        console.log(`[enso:tool-select] Gemini returned no text. parts: ${JSON.stringify(parts?.map((p) => ({ len: p.text?.length, thought: p.thought })))}`);
+        return null;
+      }
+
+      const cleaned = text
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+
+      console.log(`[enso:tool-select] response (${text.length} chars)`);
+
+      let parsed: {
+        matched?: boolean;
+        toolFamily?: string;
+        toolName?: string;
+        params?: Record<string, unknown>;
+      };
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        // Gemini 2.5 Flash may return slightly malformed JSON — try extracting object
+        const objMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (!objMatch) {
+          console.log(`[enso:tool-select] could not extract JSON object from response`);
+          return null;
+        }
+        parsed = JSON.parse(objMatch[0]);
+      }
+
+      if (!parsed.matched || !parsed.toolFamily || !parsed.toolName) {
+        console.log(`[enso:tool-select] no match (matched=${parsed.matched})`);
+        return null;
+      }
+
+      return {
+        toolFamily: parsed.toolFamily,
+        toolName: parsed.toolName,
+        params: parsed.params && typeof parsed.params === "object" ? parsed.params : {},
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (err) {
+    console.log(`[enso:tool-select] error: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+

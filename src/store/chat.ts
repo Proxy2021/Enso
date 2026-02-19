@@ -37,6 +37,9 @@ interface CardStore {
   sendMessage: (text: string, routing?: ToolRouting) => void;
   sendMessageWithMedia: (text: string, mediaFiles: File[]) => Promise<void>;
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
+  enhanceCard: (cardId: string) => void;
+  toggleCardView: (cardId: string, viewMode: "original" | "app") => void;
+  cancelOperation: (operationId: string) => void;
   collapseCard: (cardId: string) => void;
   expandCard: (cardId: string) => void;
   setChannelMode: (mode: ChannelMode) => void;
@@ -60,6 +63,12 @@ function formatActionLabel(action: string, payload?: unknown): string {
     p.toolName ?? p.name ?? p.title ?? p.item ?? p.text ?? p.id ?? p.emailId ?? p.tickerId;
   if (hint != null) return `${name}: ${String(hint)}`;
   return name;
+}
+
+function formatActionOutcome(mode: ChannelMode): string {
+  if (mode === "ui") return "creates a follow-up card";
+  if (mode === "full") return "updates the current card";
+  return "runs an action";
 }
 
 export const useChatStore = create<CardStore>((set, get) => ({
@@ -263,6 +272,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
       console.warn("[card-action] Card not found:", cardId);
       return;
     }
+    if (card.status === "streaming") {
+      console.log("[card-action] Ignored while card is busy:", cardId, action);
+      return;
+    }
 
     // Optimistic loading state with action label
     set((s) => ({
@@ -272,6 +285,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
           ...s.cards[cardId]!,
           status: "streaming",
           pendingAction: action,
+          operation: card.operation
+            ? { ...card.operation, stage: "processing", label: "Processing action", cancellable: false }
+            : undefined,
           updatedAt: Date.now(),
         },
       },
@@ -283,6 +299,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       const bubbleId = uuidv4();
       const now = Date.now();
       const label = formatActionLabel(action, payload);
+      const outcome = formatActionOutcome(mode);
       const bubble: Card = {
         id: bubbleId,
         runId: bubbleId,
@@ -290,7 +307,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         role: "user",
         status: "complete",
         display: "expanded",
-        text: label,
+        text: `Action: ${label} (${outcome})`,
         createdAt: now,
         updatedAt: now,
       };
@@ -304,6 +321,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const wsClient = get()._wsClient;
     const msg: ClientMessage = {
       type: "card.action",
+      mode,
       cardId,
       cardAction: action,
       cardPayload: payload,
@@ -312,8 +330,59 @@ export const useChatStore = create<CardStore>((set, get) => ({
     console.log("[card-action] Sending:", msg);
     if (!wsClient) {
       console.error("[card-action] No WS client!");
+      set((s) => ({
+        cards: {
+          ...s.cards,
+          [cardId]: {
+            ...s.cards[cardId]!,
+            status: "error",
+            pendingAction: undefined,
+            updatedAt: Date.now(),
+          },
+        },
+      }));
+      return;
     }
-    wsClient?.send(msg);
+    wsClient.send(msg);
+  },
+
+  enhanceCard: (cardId: string) => {
+    const card = get().cards[cardId];
+    if (!card || card.enhanceStatus === "loading") return;
+
+    set((s) => ({
+      cards: {
+        ...s.cards,
+        [cardId]: {
+          ...s.cards[cardId]!,
+          enhanceStatus: "loading",
+          updatedAt: Date.now(),
+        },
+      },
+    }));
+
+    get()._wsClient?.send({
+      type: "card.enhance",
+      cardId,
+      cardText: card.text ?? "",
+    });
+  },
+
+  toggleCardView: (cardId: string, viewMode: "original" | "app") => {
+    set((s) => {
+      const card = s.cards[cardId];
+      if (!card) return s;
+      return {
+        cards: {
+          ...s.cards,
+          [cardId]: { ...card, viewMode, updatedAt: Date.now() },
+        },
+      };
+    });
+  },
+
+  cancelOperation: (operationId: string) => {
+    get()._wsClient?.send({ type: "operation.cancel", operationId });
   },
 
   collapseCard: (cardId: string) => {
@@ -373,25 +442,75 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
       // ── Route card updates by targetCardId ──
       if (msg.targetCardId) {
-        console.log("[card-action] Received targetCardId response:", msg.targetCardId, "state:", msg.state);
         const card = state.cards[msg.targetCardId];
-        if (!card) {
-          console.warn("[card-action] Card not found for targetCardId:", msg.targetCardId);
-          return state;
+        if (!card) return state;
+
+        // Handle enhance result (user-triggered app enhancement)
+        if (msg.enhanceResult !== undefined) {
+          if (msg.enhanceResult === null) {
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  enhanceStatus: "unavailable",
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+          return {
+            cards: {
+              ...state.cards,
+              [msg.targetCardId]: {
+                ...card,
+                appData: msg.enhanceResult.data,
+                appGeneratedUI: msg.enhanceResult.generatedUI,
+                appCardMode: msg.enhanceResult.cardMode,
+                enhanceStatus: "ready",
+                viewMode: "app",
+                updatedAt: now,
+              },
+            },
+          };
         }
+
+        const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready";
+        const updatedCard: Card = {
+          ...card,
+          text: msg.text ?? card.text,
+          status:
+            msg.state === "error"
+              ? "error"
+              : msg.state === "delta"
+                ? "streaming"
+                : "complete",
+          pendingAction: msg.state === "delta" ? card.pendingAction : undefined,
+          operation:
+            msg.operation ??
+            (msg.state === "delta"
+              ? card.operation
+              : undefined),
+          cardMode: msg.cardMode ?? card.cardMode,
+          updatedAt: now,
+        };
+
+        if (isAppView) {
+          if (msg.data != null) updatedCard.appData = msg.data;
+          if (msg.generatedUI != null) updatedCard.appGeneratedUI = msg.generatedUI;
+          if (msg.cardMode != null) updatedCard.appCardMode = msg.cardMode;
+          updatedCard.data = msg.data ?? card.data;
+          updatedCard.generatedUI = msg.generatedUI ?? card.generatedUI;
+        } else {
+          updatedCard.data = msg.data ?? card.data;
+          updatedCard.generatedUI = msg.generatedUI ?? card.generatedUI;
+        }
+
         return {
-          isWaiting: false,
+          isWaiting: msg.state === "delta" ? state.isWaiting : false,
           cards: {
             ...state.cards,
-            [msg.targetCardId]: {
-              ...card,
-              data: msg.data ?? card.data,
-              generatedUI: msg.generatedUI ?? card.generatedUI,
-              text: msg.text ?? card.text,
-              status: msg.state === "error" ? "error" : "complete",
-              pendingAction: undefined,
-              updatedAt: now,
-            },
+            [msg.targetCardId]: updatedCard,
           },
         };
       }
@@ -415,6 +534,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 text: (card.text ?? "") + (msg.text ?? ""),
                 status: hasQuestions ? "complete" : "streaming",
                 toolMeta: msg.toolMeta ?? card.toolMeta,
+                operation: msg.operation ?? card.operation,
+                cardMode: msg.cardMode ?? card.cardMode,
                 ...(hasQuestions ? { pendingQuestions: msg.questions } : {}),
                 updatedAt: now,
               },
@@ -437,6 +558,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 // Don't replace text — deltas already delivered the full output
                 status: "complete",
                 toolMeta: msg.toolMeta ?? card.toolMeta,
+                operation: msg.operation,
+                cardMode: msg.cardMode ?? card.cardMode,
                 updatedAt: now,
               },
             },
@@ -453,6 +576,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 text: (card.text ?? "") + (msg.text ?? "Error occurred."),
                 status: "error",
                 toolMeta: msg.toolMeta ?? card.toolMeta,
+                operation: msg.operation,
+                cardMode: msg.cardMode ?? card.cardMode,
                 updatedAt: now,
               },
             },
@@ -479,6 +604,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 ...existing,
                 text: (existing.text ?? "") + (msg.text ?? ""),
                 status: "streaming",
+                operation: msg.operation ?? existing.operation,
+                cardMode: msg.cardMode ?? existing.cardMode,
                 updatedAt: now,
               },
             },
@@ -495,6 +622,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
           display: "expanded",
           text: msg.text ?? "",
           toolMeta: msg.toolMeta,
+          operation: msg.operation,
+          cardMode: msg.cardMode,
           createdAt: now,
           updatedAt: now,
         };
@@ -527,12 +656,15 @@ export const useChatStore = create<CardStore>((set, get) => ({
               [existingId]: {
                 ...existing,
                 text: msg.text ?? existing.text,
-                data: msg.data,
-                generatedUI: msg.generatedUI,
+                data: msg.data ?? existing.data,
+                generatedUI: msg.generatedUI ?? existing.generatedUI,
                 mediaUrls,
                 toolMeta: msg.toolMeta ?? existing.toolMeta,
                 type,
                 status: "complete",
+                operation: msg.operation,
+                cardMode: msg.cardMode ?? existing.cardMode,
+                steps: msg.steps ?? existing.steps,
                 updatedAt: now,
               },
             },
@@ -552,6 +684,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
           generatedUI: msg.generatedUI,
           mediaUrls,
           toolMeta: msg.toolMeta,
+          operation: msg.operation,
+          cardMode: msg.cardMode,
+          steps: msg.steps,
           createdAt: now,
           updatedAt: now,
         };
@@ -573,6 +708,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 text: msg.text ?? "An error occurred.",
                 toolMeta: msg.toolMeta ?? existing.toolMeta,
                 status: "error",
+                operation: msg.operation,
+                cardMode: msg.cardMode ?? existing.cardMode,
                 updatedAt: now,
               },
             },
@@ -588,6 +725,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
           display: "expanded",
           text: msg.text ?? "An error occurred.",
           toolMeta: msg.toolMeta,
+          operation: msg.operation,
+          cardMode: msg.cardMode,
           createdAt: now,
           updatedAt: now,
         };

@@ -4,6 +4,25 @@ import { randomUUID } from "crypto";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage, ToolQuestion } from "./types.js";
 
+type ActiveClaudeRun = {
+  child: ReturnType<typeof spawn>;
+  client: ConnectedClient;
+  runId: string;
+};
+
+const activeClaudeRuns = new Map<string, ActiveClaudeRun>();
+
+export function cancelClaudeCodeRun(runId: string): boolean {
+  const activeRun = activeClaudeRuns.get(runId);
+  if (!activeRun) return false;
+  try {
+    activeRun.child.kill("SIGTERM");
+  } catch {
+    // ignore kill errors; process cleanup is handled by close/error hooks
+  }
+  return true;
+}
+
 /**
  * Directly invoke the Claude Code CLI, streaming results back to the
  * browser client via WebSocket. Bypasses OpenClaw entirely — no agent
@@ -67,6 +86,7 @@ export async function runClaudeCode(params: {
   let totalTextSent = 0;
   let lastCharNewline = true;
   let resultSent = false;
+  let wasCancelled = false;
   let stderrBuf = "";
 
   const toolMeta = (): ServerMessage["toolMeta"] => ({
@@ -96,6 +116,15 @@ export async function runClaudeCode(params: {
     send({ state: "delta", ...(text ? { text } : {}), ...extra });
   };
 
+  sendDelta(undefined, {
+    operation: {
+      operationId: runId,
+      stage: "processing",
+      label: "Starting Claude Code",
+      cancellable: true,
+    },
+  });
+
   const sendFinal = () => {
     if (resultSent) return;
     resultSent = true;
@@ -103,18 +132,37 @@ export async function runClaudeCode(params: {
     if (totalTextSent > 0 && !lastCharNewline) {
       sendDelta("\n");
     }
-    send({ state: "final" });
+    send({
+      state: "final",
+      operation: {
+        operationId: runId,
+        stage: "complete",
+        label: "Completed",
+        cancellable: false,
+      },
+    });
   };
 
   const sendError = (text: string) => {
     if (resultSent) return;
     resultSent = true;
-    send({ state: "error", text });
+    send({
+      state: "error",
+      text,
+      operation: {
+        operationId: runId,
+        stage: wasCancelled ? "cancelled" : "error",
+        label: wasCancelled ? "Cancelled" : "Failed",
+        cancellable: false,
+      },
+    });
   };
 
   const rl = createInterface({ input: child.stdout! });
 
   return new Promise<{ sessionId: string }>((resolve) => {
+    activeClaudeRuns.set(runId, { child, client, runId });
+
     rl.on("line", (line) => {
       if (!line.trim()) return;
 
@@ -138,7 +186,14 @@ export async function runClaudeCode(params: {
         if (inner?.type === "content_block_delta") {
           const delta = inner.delta as Record<string, unknown> | undefined;
           if (delta?.type === "text_delta" && typeof delta.text === "string") {
-            sendDelta(delta.text);
+            sendDelta(delta.text, {
+              operation: {
+                operationId: runId,
+                stage: "streaming",
+                label: "Streaming output",
+                cancellable: true,
+              },
+            });
           }
         }
         return;
@@ -148,7 +203,14 @@ export async function runClaudeCode(params: {
       if (event.type === "content_block_delta") {
         const delta = event.delta as Record<string, unknown> | undefined;
         if (delta?.type === "text_delta" && typeof delta.text === "string") {
-          sendDelta(delta.text);
+          sendDelta(delta.text, {
+            operation: {
+              operationId: runId,
+              stage: "streaming",
+              label: "Streaming output",
+              cancellable: true,
+            },
+          });
         }
         return;
       }
@@ -223,7 +285,13 @@ export async function runClaudeCode(params: {
     });
 
     child.on("close", (code) => {
+      activeClaudeRuns.delete(runId);
       if (!resultSent) {
+        if (wasCancelled) {
+          sendError("Claude Code run cancelled.");
+          resolve({ sessionId });
+          return;
+        }
         if (code !== 0) {
           const detail = stderrBuf.trim();
           sendError(`Claude Code exited with code ${code}${detail ? `: ${detail}` : ""}`);
@@ -235,8 +303,15 @@ export async function runClaudeCode(params: {
     });
 
     child.on("error", (err) => {
+      activeClaudeRuns.delete(runId);
       sendError(`Failed to start Claude Code: ${err.message}`);
       resolve({ sessionId: "" });
+    });
+
+    child.on("exit", (_code, signal) => {
+      if (signal === "SIGTERM") {
+        wasCancelled = true;
+      }
     });
   });
 }
