@@ -27,6 +27,7 @@ import {
   normalizeDataForToolTemplate,
   registerToolTemplateCandidate,
   getPreferredToolProviderForFamily,
+  getDataHintForSignature,
   type ToolTemplateCoverageStatus,
 } from "./native-tools/registry.js";
 import {
@@ -387,10 +388,24 @@ async function renderFollowupUI(params: {
     if (signature) {
       const templateCode = getToolTemplateCode(signature);
       if (templateCode) {
-        return {
-          generatedUI: templateCode,
-          renderData: normalizeDataForToolTemplate(signature, data),
-        };
+        // Check if the returned data shape matches what the primary template expects.
+        // For generated apps, the template only renders the primary tool's data shape
+        // (e.g., "movies" array). If an action tool returns a different shape (e.g.,
+        // "movie_details" object), we must fall through to Gemini-based one-off generation.
+        const dataRecord = (data && typeof data === "object" && !Array.isArray(data))
+          ? data as Record<string, unknown> : {};
+        const primaryHint = getDataHintForSignature(ctx.toolFamily, ctx.signatureId);
+        const shapeMismatch = primaryHint
+          && primaryHint.requiredKeys.length > 0
+          && !primaryHint.requiredKeys.some((k) => k in dataRecord);
+
+        if (!shapeMismatch) {
+          return {
+            generatedUI: templateCode,
+            renderData: normalizeDataForToolTemplate(signature, data),
+          };
+        }
+        console.log(`[enso:action] data shape mismatch for ${ctx.toolFamily}/${ctx.signatureId}: expected keys [${primaryHint!.requiredKeys.join(",")}], got [${Object.keys(dataRecord).join(",")}] — generating one-off UI`);
       }
     }
     const fallback = await serverGenerateConstrainedFollowupUI({

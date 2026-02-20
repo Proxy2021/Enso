@@ -462,10 +462,10 @@ export async function startEnsoServer(opts: {
           }
           case "apps.run": {
             if (msg.toolFamily) {
-              runtime.log?.(`[enso] apps.run: ${msg.toolFamily}`);
+              runtime.log?.(`[enso:app-runner] apps.run: ${msg.toolFamily}`);
               try {
                 const { loadApps } = await import("./app-persistence.js");
-                const { executeToolDirect, getToolTemplateCode, inferToolTemplate, normalizeDataForToolTemplate } = await import("./native-tools/registry.js");
+                const { executeToolDirect } = await import("./native-tools/registry.js");
                 const apps = loadApps();
                 const app = apps.find((a) => a.spec.toolFamily === msg.toolFamily);
                 if (!app) {
@@ -490,10 +490,15 @@ export async function startEnsoServer(opts: {
                   ? result.data
                   : primary.sampleData;
 
-                // Get template
-                const signature = inferToolTemplate({ toolName: primaryToolName, data });
-                const generatedUI = signature ? getToolTemplateCode(signature) : app.templateJSX;
-                const normalizedData = signature ? normalizeDataForToolTemplate(signature, data) : data;
+                const dataKeys = data && typeof data === "object" ? Object.keys(data) : [];
+                runtime.log?.(`[enso:app-runner] tool=${primaryToolName} success=${result.success} dataKeys=[${dataKeys.join(",")}] using app's own template`);
+                if (!result.success) {
+                  runtime.log?.(`[enso:app-runner] tool execution failed (${result.error ?? "unknown"}), falling back to sampleData`);
+                }
+
+                // Use the app's own template directly — no template inference needed.
+                // The app's executor produces data in exactly the shape its template expects.
+                const generatedUI = app.templateJSX;
 
                 // Register card context for future actions
                 const { registerCardContext } = await import("./outbound.js");
@@ -502,7 +507,7 @@ export async function startEnsoServer(opts: {
                   cardId,
                   originalPrompt: `Run app: ${app.spec.toolFamily}`,
                   originalResponse: "",
-                  currentData: structuredClone(normalizedData),
+                  currentData: structuredClone(data),
                   geminiApiKey: account.geminiApiKey,
                   account,
                   mode: "full",
@@ -518,13 +523,15 @@ export async function startEnsoServer(opts: {
                   coverageStatus: "covered",
                 });
 
+                runtime.log?.(`[enso:app-runner] card=${cardId} prefix=${app.spec.toolPrefix} family=${app.spec.toolFamily}`);
+
                 send({
                   id: cardId,
                   runId: randomUUID(),
                   sessionKey,
                   seq: 0,
                   state: "final",
-                  data: normalizedData,
+                  data,
                   generatedUI,
                   cardMode: {
                     interactionMode: "tool",
@@ -536,7 +543,7 @@ export async function startEnsoServer(opts: {
                   timestamp: Date.now(),
                 });
               } catch (err) {
-                runtime.error?.(`[enso] apps.run failed: ${err instanceof Error ? err.message : String(err)}`);
+                runtime.error?.(`[enso:app-runner] apps.run failed: ${err instanceof Error ? err.message : String(err)}`);
                 send({
                   id: randomUUID(),
                   runId: randomUUID(),

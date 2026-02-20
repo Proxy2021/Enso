@@ -200,6 +200,20 @@ export function registerToolTemplateDataHint(input: {
   });
 }
 
+/**
+ * Look up a data hint for a given tool family + signature.
+ * Returns the required data keys the primary template expects, or undefined if no hint exists.
+ * Used by renderFollowupUI to detect data shape mismatches for generated app templates.
+ */
+export function getDataHintForSignature(
+  toolFamily: string,
+  signatureId: string,
+): { requiredKeys: string[] } | undefined {
+  return runtimeDataHints.find(
+    (h) => h.toolFamily === toolFamily && h.signatureId === signatureId,
+  );
+}
+
 function registerDefaultSignatures(): void {
   const defaults: ToolTemplate[] = [
     {
