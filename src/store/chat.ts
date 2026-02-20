@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
-import type { ChannelMode, ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
+import type { AppInfo, ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
 import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
 import { createWSClient, type ConnectionState } from "../lib/ws-client";
@@ -20,8 +20,8 @@ interface CardStore {
   isWaiting: boolean;
   _wsClient: ReturnType<typeof createWSClient> | null;
 
-  // Channel mode
-  channelMode: ChannelMode;
+  // Apps
+  apps: AppInfo[];
 
   // Claude Code session state
   projects: ProjectInfo[];
@@ -38,11 +38,15 @@ interface CardStore {
   sendMessageWithMedia: (text: string, mediaFiles: File[]) => Promise<void>;
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
   enhanceCard: (cardId: string) => void;
+  buildApp: (cardId: string, cardText: string, definition: string) => void;
+  proposeApp: (cardId: string, cardText: string, context: string) => void;
   toggleCardView: (cardId: string, viewMode: "original" | "app") => void;
   cancelOperation: (operationId: string) => void;
   collapseCard: (cardId: string) => void;
   expandCard: (cardId: string) => void;
-  setChannelMode: (mode: ChannelMode) => void;
+  deleteAllApps: () => void;
+  fetchApps: () => void;
+  runApp: (toolFamily: string) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
@@ -65,19 +69,13 @@ function formatActionLabel(action: string, payload?: unknown): string {
   return name;
 }
 
-function formatActionOutcome(mode: ChannelMode): string {
-  if (mode === "ui") return "creates a follow-up card";
-  if (mode === "full") return "updates the current card";
-  return "runs an action";
-}
-
 export const useChatStore = create<CardStore>((set, get) => ({
   cardOrder: [],
   cards: {},
   connectionState: "disconnected",
   isWaiting: false,
   _wsClient: null,
-  channelMode: "full",
+  apps: [],
   projects: [],
   codeSessionCwd: null,
   codeSessionId: null,
@@ -110,6 +108,12 @@ export const useChatStore = create<CardStore>((set, get) => ({
   sendMessage: (text: string, routing?: ToolRouting) => {
     let displayText = text;
     let finalRouting = routing;
+
+    // "/delete-apps" command — delete all dynamically created apps
+    if (text.trim() === "/delete-apps") {
+      get().deleteAllApps();
+      return;
+    }
 
     // Bare "/code" opens project picker
     if (text.trim() === "/code") {
@@ -294,34 +298,30 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }));
 
     // Create an action bubble so the user sees what was clicked
-    const mode = get().channelMode;
-    if (mode === "ui" || mode === "full") {
-      const bubbleId = uuidv4();
-      const now = Date.now();
-      const label = formatActionLabel(action, payload);
-      const outcome = formatActionOutcome(mode);
-      const bubble: Card = {
-        id: bubbleId,
-        runId: bubbleId,
-        type: "user-bubble",
-        role: "user",
-        status: "complete",
-        display: "expanded",
-        text: `Action: ${label} (${outcome})`,
-        createdAt: now,
-        updatedAt: now,
-      };
-      set((s) => ({
-        cardOrder: [...s.cardOrder, bubbleId],
-        cards: { ...s.cards, [bubbleId]: bubble },
-        isWaiting: true,
-      }));
-    }
+    const bubbleId = uuidv4();
+    const now = Date.now();
+    const label = formatActionLabel(action, payload);
+    const bubble: Card = {
+      id: bubbleId,
+      runId: bubbleId,
+      type: "user-bubble",
+      role: "user",
+      status: "complete",
+      display: "expanded",
+      text: `Action: ${label} (updates the current card)`,
+      createdAt: now,
+      updatedAt: now,
+    };
+    set((s) => ({
+      cardOrder: [...s.cardOrder, bubbleId],
+      cards: { ...s.cards, [bubbleId]: bubble },
+      isWaiting: true,
+    }));
 
     const wsClient = get()._wsClient;
     const msg: ClientMessage = {
       type: "card.action",
-      mode,
+      mode: "full",
       cardId,
       cardAction: action,
       cardPayload: payload,
@@ -368,6 +368,38 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
+  buildApp: (cardId: string, cardText: string, definition: string) => {
+    const card = get().cards[cardId];
+    if (!card || card.enhanceStatus === "building") return;
+
+    set((s) => ({
+      cards: {
+        ...s.cards,
+        [cardId]: {
+          ...s.cards[cardId]!,
+          enhanceStatus: "building",
+          updatedAt: Date.now(),
+        },
+      },
+    }));
+
+    get()._wsClient?.send({
+      type: "card.build_app",
+      cardId,
+      cardText,
+      buildAppDefinition: definition,
+    });
+  },
+
+  proposeApp: (cardId: string, cardText: string, context: string) => {
+    get()._wsClient?.send({
+      type: "card.propose_app",
+      cardId,
+      cardText,
+      conversationContext: context,
+    });
+  },
+
   toggleCardView: (cardId: string, viewMode: "original" | "app") => {
     set((s) => {
       const card = s.cards[cardId];
@@ -411,9 +443,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
-  setChannelMode: (mode: ChannelMode) => {
-    set({ channelMode: mode });
-    get()._wsClient?.send({ type: "settings.set_mode", mode });
+  deleteAllApps: () => {
+    get()._wsClient?.send({ type: "card.delete_all_apps" });
+  },
+
+  fetchApps: () => {
+    get()._wsClient?.send({ type: "apps.list" });
+  },
+
+  runApp: (toolFamily: string) => {
+    get()._wsClient?.send({ type: "apps.run", toolFamily });
   },
 
   fetchProjects: () => {
@@ -425,15 +464,67 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   _handleServerMessage: (msg: ServerMessage) => {
-    // Handle settings messages (mode changes)
+    // Handle settings messages (mode changes) — kept for backwards compat
     if (msg.settings) {
-      set({ channelMode: msg.settings.mode });
       return;
     }
 
     // Handle project list responses
     if (msg.projects) {
       set({ projects: msg.projects });
+      return;
+    }
+
+    // Handle apps list
+    if (msg.appsList) {
+      set({ apps: msg.appsList });
+      return;
+    }
+
+    // Handle apps deleted confirmation
+    if (msg.appsDeleted) {
+      const { families, count } = msg.appsDeleted;
+      const id = msg.id;
+      const now = Date.now();
+      const text = count > 0
+        ? `Deleted ${count} app(s): ${families.join(", ")}`
+        : "No apps to delete.";
+      const card: Card = {
+        id,
+        runId: msg.runId,
+        type: "chat",
+        role: "assistant",
+        status: "complete",
+        display: "expanded",
+        text,
+        createdAt: now,
+        updatedAt: now,
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, id],
+        cards: { ...s.cards, [id]: card },
+        apps: [], // Clear apps list since all were deleted
+      }));
+      return;
+    }
+
+    // Handle app proposal (auto-generated app description) — no targetCardId
+    if (msg.appProposal && msg.appProposal.cardId) {
+      set((state) => {
+        const proposalCardId = msg.appProposal!.cardId;
+        const proposalCard = state.cards[proposalCardId];
+        if (!proposalCard) return state;
+        return {
+          cards: {
+            ...state.cards,
+            [proposalCardId]: {
+              ...proposalCard,
+              pendingProposal: msg.appProposal!.proposal,
+              updatedAt: Date.now(),
+            },
+          },
+        };
+      });
       return;
     }
 
@@ -467,6 +558,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 appData: msg.enhanceResult.data,
                 appGeneratedUI: msg.enhanceResult.generatedUI,
                 appCardMode: msg.enhanceResult.cardMode,
+                appBuildSummary: msg.enhanceResult.buildSummary,
                 enhanceStatus: "ready",
                 viewMode: "app",
                 updatedAt: now,

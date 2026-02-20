@@ -1,8 +1,8 @@
-import type { AgentStep, CardModeDetail, OperationStatus, ServerMessage, ToolQuestion } from "@shared/types";
+import type { AgentStep, CardModeDetail, OperationStatus, ServerMessage, ToolBuildSummary, ToolQuestion } from "@shared/types";
 
 // ── Card ──
 
-export type EnhanceStatus = "idle" | "loading" | "ready" | "unavailable";
+export type EnhanceStatus = "idle" | "loading" | "ready" | "unavailable" | "building";
 
 export interface Card {
   id: string;
@@ -36,8 +36,10 @@ export interface Card {
   appData?: unknown;
   appGeneratedUI?: string;
   appCardMode?: CardModeDetail;
+  appBuildSummary?: ToolBuildSummary;
   viewMode?: "original" | "app";
   enhanceStatus?: EnhanceStatus;
+  pendingProposal?: string;
 
   // Timestamps
   createdAt: number;

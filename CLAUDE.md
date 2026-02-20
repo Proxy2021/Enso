@@ -228,6 +228,8 @@ Consistent `[enso:*]` prefix for filtering:
 
 ## Development
 
+**All development must be done on the main branch directly** — do not use worktrees or feature branches. Edit files in the main tree at `/Users/kkwong/Desktop/Github/Enso/`.
+
 ```bash
 # Run frontend dev server (Vite :5173)
 npm run dev
@@ -240,6 +242,10 @@ node scripts/live-e2e-tool-mode.js
 ```
 
 Enso requires a running OpenClaw gateway with the Enso plugin enabled. The plugin starts its own Express + WS server (default port 3001). Vite dev server proxies `/ws`, `/media`, `/upload` to the plugin's server at localhost:3001.
+
+### Dev Commands
+
+- `/delete-apps` — Delete all dynamically created apps (disk + memory). Useful for clearing test apps during development.
 
 ## OpenClaw Framework Context
 

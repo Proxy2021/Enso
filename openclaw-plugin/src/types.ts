@@ -76,10 +76,22 @@ export interface ToolRouting {
   cwd?: string;
 }
 
+export interface ToolBuildSummary {
+  toolFamily: string;
+  toolNames: string[];
+  description: string;
+  scenario: string;
+  actions: string[];
+  steps: Array<{ label: string; status: "passed" | "failed" }>;
+  skillGenerated?: boolean;
+  persisted?: boolean;
+}
+
 export interface EnhanceResult {
   data: unknown;
   generatedUI: string;
   cardMode: CardModeDetail;
+  buildSummary?: ToolBuildSummary;
 }
 
 export interface ServerMessage {
@@ -100,6 +112,9 @@ export interface ServerMessage {
   operation?: OperationStatus;
   settings?: { mode: ChannelMode };
   enhanceResult?: EnhanceResult | null;
+  appProposal?: { cardId: string; proposal: string };
+  appsDeleted?: { families: string[]; count: number };
+  appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string }>;
   timestamp: number;
 }
 
@@ -111,6 +126,11 @@ export interface ClientMessage {
     | "tools.list_projects"
     | "card.action"
     | "card.enhance"
+    | "card.build_app"
+    | "card.propose_app"
+    | "card.delete_all_apps"
+    | "apps.list"
+    | "apps.run"
     | "settings.set_mode"
     | "operation.cancel";
   mode?: ChannelMode;
@@ -127,8 +147,14 @@ export interface ClientMessage {
   cardId?: string;
   cardAction?: string;
   cardPayload?: unknown;
-  // card.enhance fields
+  // card.enhance / card.build_app / card.propose_app fields
   cardText?: string;
+  // card.build_app fields
+  buildAppDefinition?: string;
+  // card.propose_app fields
+  conversationContext?: string;
+  // apps.run fields
+  toolFamily?: string;
   // operation.cancel fields
   operationId?: string;
 }

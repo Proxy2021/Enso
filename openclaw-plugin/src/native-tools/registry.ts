@@ -102,6 +102,65 @@ const signatureTemplateCandidates = new Map<string, string[]>();
 const runtimeDataHints: Array<{ toolFamily: string; signatureId: string; requiredKeys: string[] }> = [];
 const dynamicPrefixSignatureMap = new Map<string, { toolFamily: string; signatureId: string }>();
 
+// ── Generated Tool Storage (from Tool Factory) ──
+
+/** In-memory store for dynamically generated tool executors. */
+const generatedToolExecutors = new Map<string, {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+}>();
+
+/** In-memory store for dynamically generated template JSX code, keyed by signatureId. */
+const generatedTemplateCode = new Map<string, string>();
+
+export function registerGeneratedTool(tool: {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+}): void {
+  generatedToolExecutors.set(tool.name, tool);
+  console.log(`[enso:native-tools] registered generated tool "${tool.name}"`);
+}
+
+export function registerGeneratedTemplateCode(signatureId: string, code: string): void {
+  generatedTemplateCode.set(signatureId, code);
+  console.log(`[enso:native-tools] registered generated template code for signature "${signatureId}"`);
+}
+
+/** Remove a generated tool executor by name. Returns true if it existed. */
+export function unregisterGeneratedTool(toolName: string): boolean {
+  const existed = generatedToolExecutors.delete(toolName);
+  if (existed) console.log(`[enso:native-tools] unregistered generated tool "${toolName}"`);
+  return existed;
+}
+
+/** Remove generated template code by signatureId. Returns true if it existed. */
+export function unregisterGeneratedTemplateCode(signatureId: string): boolean {
+  const existed = generatedTemplateCode.delete(signatureId);
+  if (existed) console.log(`[enso:native-tools] unregistered generated template code for signature "${signatureId}"`);
+  return existed;
+}
+
+/** Remove a tool template (signature) from the registry. Returns true if it existed. */
+export function unregisterToolTemplate(toolFamily: string, sigId: string): boolean {
+  const key = signatureKey(toolFamily, sigId);
+  const existed = signatureRegistry.delete(key);
+  if (existed) console.log(`[enso:native-tools] unregistered tool template "${key}"`);
+  return existed;
+}
+
+/** Remove runtime data hints for a given toolFamily. */
+export function unregisterToolTemplateDataHints(toolFamily: string): void {
+  for (let i = runtimeDataHints.length - 1; i >= 0; i--) {
+    if (runtimeDataHints[i].toolFamily === toolFamily) {
+      runtimeDataHints.splice(i, 1);
+    }
+  }
+}
+
 function signatureKey(toolFamily: string, signatureId: string): string {
   return `${toolFamily}:${signatureId}`;
 }
@@ -472,6 +531,10 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   if (isSystemAutoSignature(signature.signatureId)) {
     return getSystemAutoTemplateCode(signature);
   }
+  // Check dynamically generated template code (from Tool Factory)
+  const generatedCode = generatedTemplateCode.get(signature.signatureId);
+  if (generatedCode) return generatedCode;
+
   if (signature.signatureId === "directory_listing") {
     return `export default function GeneratedUI({ data, onAction }) {
   const rows = Array.isArray(data?.rows)
@@ -1058,6 +1121,12 @@ function resolveToolByName(toolName: string): { name: string; execute: (callId: 
     }
   }
 
+  // Fallback: check dynamically generated tool executors (from Tool Factory)
+  const generated = generatedToolExecutors.get(toolName);
+  if (generated && typeof generated.execute === "function") {
+    return generated as ReturnType<typeof resolveToolByName>;
+  }
+
   return null;
 }
 
@@ -1066,6 +1135,7 @@ function resolveToolByName(toolName: string): { name: string; execute: (callId: 
  * Used to validate action names that might correspond to tool names.
  */
 export function isToolRegistered(toolName: string): boolean {
+  if (generatedToolExecutors.has(toolName)) return true;
   const registry = getPluginRegistry();
   if (!registry) return false;
   return registry.tools.some((entry) => entry.names.includes(toolName));

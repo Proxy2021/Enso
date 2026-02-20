@@ -30,7 +30,7 @@ function djb2Hash(input: string): string {
   return hash.toString(16);
 }
 
-const STRUCTURED_DATA_SYSTEM_PROMPT = `You build apps, not cards. You are Enso's UI engine — every response becomes a living, interactive micro-app.
+export const STRUCTURED_DATA_SYSTEM_PROMPT = `You build apps, not cards. You are Enso's UI engine — every response becomes a living, interactive micro-app.
 
 Your philosophy: "OpenClaw, but every answer is an app." The component you generate IS the answer. Not a summary card. Not a data table. A real app the user can tap, explore, and act on.
 
@@ -445,7 +445,7 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000):
   }
 }
 
-async function callGeminiLLMWithRetry(prompt: string, apiKey: string): Promise<string> {
+export async function callGeminiLLMWithRetry(prompt: string, apiKey: string): Promise<string> {
   const maxAttempts = 3;
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {

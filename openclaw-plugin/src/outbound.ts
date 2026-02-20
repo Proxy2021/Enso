@@ -72,6 +72,25 @@ interface CardContext {
 
 const cardContexts = new Map<string, CardContext>();
 
+/** Register a card context externally (used by tool-factory). */
+export function registerCardContext(cardId: string, ctx: {
+  cardId: string;
+  originalPrompt: string;
+  originalResponse: string;
+  currentData: unknown;
+  geminiApiKey?: string;
+  account: ResolvedEnsoAccount;
+  mode: "im" | "ui" | "full";
+  actionHistory: Array<{ action: string; payload: unknown; timestamp: number }>;
+  nativeToolHint?: { toolName: string; params: Record<string, unknown>; handlerPrefix: string };
+  interactionMode: "llm" | "tool";
+  toolFamily?: string;
+  signatureId?: string;
+  coverageStatus?: "covered" | "partial";
+}): void {
+  cardContexts.set(cardId, ctx as CardContext);
+}
+
 /**
  * Stable card ID per runId — ensures all blocks of a multi-block response
  * use the same msg.id. The frontend creates the card with the first block's

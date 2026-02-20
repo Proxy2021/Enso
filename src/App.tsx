@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useChatStore } from "./store/chat";
 import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
-import ModePicker from "./components/ModePicker";
+import AppsMenu from "./components/AppsMenu";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
 
@@ -40,7 +40,7 @@ export default function App() {
           <p className="text-[11px] text-gray-500 leading-none mt-0.5">OpenClaw, but every answer is an app.</p>
         </div>
         <div className="flex items-center gap-3">
-          <ModePicker />
+          <AppsMenu />
           <ConnectionDot />
         </div>
       </header>

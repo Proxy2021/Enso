@@ -55,3 +55,26 @@ export function getCapabilityForFamily(toolFamily: string): ToolFamilyCapability
   return TOOL_FAMILY_CAPABILITIES.find((item) => item.toolFamily === toolFamily);
 }
 
+/** Add a new capability at runtime (from Tool Factory). No-op if toolFamily already exists. */
+export function addCapability(capability: ToolFamilyCapability): void {
+  if (TOOL_FAMILY_CAPABILITIES.some((c) => c.toolFamily === capability.toolFamily)) return;
+  TOOL_FAMILY_CAPABILITIES.push(capability);
+  console.log(`[enso:catalog] registered new capability "${capability.toolFamily}"`);
+}
+
+/** Remove a dynamically added capability by toolFamily. Returns true if removed. */
+export function removeCapability(toolFamily: string): boolean {
+  const idx = TOOL_FAMILY_CAPABILITIES.findIndex((c) => c.toolFamily === toolFamily);
+  if (idx === -1) return false;
+  TOOL_FAMILY_CAPABILITIES.splice(idx, 1);
+  console.log(`[enso:catalog] removed capability "${toolFamily}"`);
+  return true;
+}
+
+/** List all dynamically added tool families (not the built-in ones). */
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner"]);
+
+export function getDynamicCapabilities(): ToolFamilyCapability[] {
+  return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));
+}
+

@@ -2,7 +2,8 @@ import { useChatStore } from "../store/chat";
 import { cardRegistry } from "../cards";
 import type { Card } from "../cards/types";
 import { useMemo, useState } from "react";
-import type { AgentStep } from "@shared/types";
+import type { AgentStep, ToolBuildSummary } from "@shared/types";
+import { AppBuilderDialog } from "./AppBuilderDialog";
 
 interface CardContainerProps {
   card: Card;
@@ -46,8 +47,84 @@ function CardLoadingOverlay({ action }: { action?: string }) {
   );
 }
 
+function BuildSummaryBanner({ summary, onDismiss }: { summary: ToolBuildSummary; onDismiss: () => void }) {
+  const [expanded, setExpanded] = useState(true);
+  const allPassed = summary.steps.every((s) => s.status === "passed");
+  const familyLabel = summary.toolFamily.replace(/_/g, " ");
+
+  return (
+    <div className="mx-3 mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${allPassed ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-amber-500/40 bg-amber-500/10 text-amber-300"}`}>
+            {allPassed ? "Built" : "Partial"}
+          </span>
+          <span className="text-xs text-gray-200 font-medium truncate">
+            New app: {familyLabel} ({summary.toolNames.length} tools)
+          </span>
+          {summary.persisted && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-gray-400">Saved</span>
+          )}
+          {summary.skillGenerated && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-sky-400/70">Agent-ready</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onDismiss(); }}
+            className="text-gray-500 hover:text-gray-300 text-xs px-1"
+            title="Dismiss"
+          >
+            &times;
+          </button>
+          <span className="text-gray-500 text-[10px]">{expanded ? "\u25B2" : "\u25BC"}</span>
+        </div>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2.5 space-y-2">
+          <div className="text-[11px] text-gray-400 leading-relaxed">{summary.description}</div>
+          <div className="flex flex-wrap gap-1">
+            {summary.toolNames.map((name) => (
+              <span key={name} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-amber-300/80 font-mono">
+                {name}
+              </span>
+            ))}
+          </div>
+          <div className="space-y-1">
+            {summary.steps.map((step, i) => (
+              <div key={i} className="flex items-center gap-2 text-[11px]">
+                <span className={step.status === "passed" ? "text-emerald-400" : "text-rose-400"}>
+                  {step.status === "passed" ? "\u2713" : "\u2717"}
+                </span>
+                <span className="text-gray-300">{step.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-700/40">
+            <span className="text-[10px] text-gray-500">Actions:</span>
+            <div className="flex flex-wrap gap-1">
+              {summary.actions.map((a) => (
+                <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-gray-400">
+                  {a.replace(/_/g, " ")}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="text-[10px] text-gray-500">
+            Scenario: {summary.scenario.length > 120 ? summary.scenario.slice(0, 120) + "..." : summary.scenario}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EnhanceButton({ card }: { card: Card }) {
   const enhanceCard = useChatStore((s) => s.enhanceCard);
+  const [showFactory, setShowFactory] = useState(false);
   const status = card.enhanceStatus;
 
   if (status === "loading") {
@@ -62,14 +139,39 @@ function EnhanceButton({ card }: { card: Card }) {
     );
   }
 
+  if (status === "building") {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300">
+        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span className="text-[10px]">Building tool</span>
+      </div>
+    );
+  }
+
   if (status === "unavailable") {
     return (
-      <div
-        className="text-[10px] px-2 py-0.5 rounded-full border border-gray-600/30 bg-gray-700/10 text-gray-500 cursor-default"
-        title="No app experience available for this content"
-      >
-        No app
-      </div>
+      <>
+        <button
+          onClick={() => setShowFactory(true)}
+          className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors"
+          title="Build a new app for this content"
+        >
+          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Build App
+        </button>
+        {showFactory && (
+          <AppBuilderDialog
+            cardId={card.id}
+            cardText={card.text ?? ""}
+            onClose={() => setShowFactory(false)}
+          />
+        )}
+      </>
     );
   }
 
@@ -175,8 +277,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const collapseCard = useChatStore((s) => s.collapseCard);
   const expandCard = useChatStore((s) => s.expandCard);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
-  const channelMode = useChatStore((s) => s.channelMode);
   const [confirmAction, setConfirmAction] = useState<{ action: string; payload?: unknown } | null>(null);
+  const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
 
   const isCollapsed = card.display === "collapsed";
   const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI;
@@ -219,10 +321,12 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     );
   }
 
-  const isLoading = card.status === "streaming" || card.enhanceStatus === "loading";
+  const isLoading = card.status === "streaming" || card.enhanceStatus === "loading" || card.enhanceStatus === "building";
   const loadingLabel = card.enhanceStatus === "loading"
     ? "Enhancing to app"
-    : card.operation?.label ?? card.pendingAction;
+    : card.enhanceStatus === "building"
+      ? (card.operation?.label ?? "Building tool")
+      : card.operation?.label ?? card.pendingAction;
   const statusLabel = card.status === "streaming" ? "live" : card.status === "error" ? "error" : "ready";
   const statusTone =
     card.status === "streaming"
@@ -238,9 +342,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
 
   function actionIntentText(action: string): string {
     const name = formatAction(action);
-    if (channelMode === "ui") return `${name} and create a follow-up card.`;
-    if (channelMode === "full") return `${name} and update this card in place.`;
-    return `${name}.`;
+    return `${name} and update this card in place.`;
   }
 
   function handleAction(action: string, payload?: unknown) {
@@ -297,6 +399,12 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             isActive={isActive}
             onAction={handleAction}
           />
+          {isAppView && card.appBuildSummary && !buildSummaryDismissed && (
+            <BuildSummaryBanner
+              summary={card.appBuildSummary}
+              onDismiss={() => setBuildSummaryDismissed(true)}
+            />
+          )}
           {card.steps && card.steps.length > 1 && (
             <AgentSteps steps={card.steps} />
           )}

@@ -123,6 +123,17 @@ export async function startEnsoServer(opts: {
   activePort = port;
   activeAccount = account;
 
+  // Re-hydrate saved apps from disk before setting up routes
+  try {
+    const { loadAndRegisterSavedApps } = await import("./app-persistence.js");
+    const appCount = loadAndRegisterSavedApps();
+    if (appCount > 0) {
+      console.log(`[enso] re-hydrated ${appCount} saved app(s) from disk`);
+    }
+  } catch (err) {
+    console.log(`[enso] app re-hydration failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   const app = express();
   app.use(express.json());
 
@@ -367,6 +378,206 @@ export async function startEnsoServer(opts: {
               });
             }
             break;
+          case "card.build_app":
+            if (msg.cardId && msg.cardText && msg.buildAppDefinition) {
+              runtime.log?.(`[enso] card build-app: ${msg.cardId}`);
+              const { handleBuildTool } = await import("./tool-factory.js");
+              await handleBuildTool({
+                cardId: msg.cardId,
+                cardText: msg.cardText,
+                toolDefinition: msg.buildAppDefinition,
+                client,
+                account,
+              });
+            }
+            break;
+          case "card.propose_app":
+            if (msg.cardId && msg.cardText) {
+              runtime.log?.(`[enso] card propose-app: ${msg.cardId}`);
+              try {
+                const { generateAppProposal } = await import("./tool-factory.js");
+                const proposal = await generateAppProposal({
+                  cardText: msg.cardText,
+                  conversationContext: msg.conversationContext ?? "",
+                  apiKey: account.geminiApiKey,
+                });
+                send({
+                  id: randomUUID(),
+                  runId: randomUUID(),
+                  sessionKey,
+                  seq: 0,
+                  state: "final",
+                  appProposal: { cardId: msg.cardId, proposal },
+                  timestamp: Date.now(),
+                });
+              } catch (err) {
+                runtime.error?.(`[enso] propose-app failed: ${err instanceof Error ? err.message : String(err)}`);
+                send({
+                  id: randomUUID(),
+                  runId: randomUUID(),
+                  sessionKey,
+                  seq: 0,
+                  state: "final",
+                  appProposal: { cardId: msg.cardId, proposal: "" },
+                  timestamp: Date.now(),
+                });
+              }
+            }
+            break;
+          case "apps.list": {
+            try {
+              const { loadApps } = await import("./app-persistence.js");
+              const apps = loadApps();
+              const appsList = apps.map((app) => {
+                const primary = app.spec.tools.find((t) => t.isPrimary) ?? app.spec.tools[0];
+                return {
+                  toolFamily: app.spec.toolFamily,
+                  description: app.spec.description,
+                  toolCount: app.spec.tools.length,
+                  primaryToolName: `${app.spec.toolPrefix}${primary.suffix}`,
+                };
+              });
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                appsList,
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.(`[enso] apps.list failed: ${err instanceof Error ? err.message : String(err)}`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                appsList: [],
+                timestamp: Date.now(),
+              });
+            }
+            break;
+          }
+          case "apps.run": {
+            if (msg.toolFamily) {
+              runtime.log?.(`[enso] apps.run: ${msg.toolFamily}`);
+              try {
+                const { loadApps } = await import("./app-persistence.js");
+                const { executeToolDirect, getToolTemplateCode, inferToolTemplate, normalizeDataForToolTemplate } = await import("./native-tools/registry.js");
+                const apps = loadApps();
+                const app = apps.find((a) => a.spec.toolFamily === msg.toolFamily);
+                if (!app) {
+                  send({
+                    id: randomUUID(),
+                    runId: randomUUID(),
+                    sessionKey,
+                    seq: 0,
+                    state: "error",
+                    text: `App "${msg.toolFamily}" not found.`,
+                    timestamp: Date.now(),
+                  });
+                  break;
+                }
+
+                const primary = app.spec.tools.find((t) => t.isPrimary) ?? app.spec.tools[0];
+                const primaryToolName = `${app.spec.toolPrefix}${primary.suffix}`;
+
+                // Execute the primary tool with sample params
+                const result = await executeToolDirect(primaryToolName, primary.sampleParams);
+                const data = result.success && result.data != null
+                  ? result.data
+                  : primary.sampleData;
+
+                // Get template
+                const signature = inferToolTemplate({ toolName: primaryToolName, data });
+                const generatedUI = signature ? getToolTemplateCode(signature) : app.templateJSX;
+                const normalizedData = signature ? normalizeDataForToolTemplate(signature, data) : data;
+
+                // Register card context for future actions
+                const { registerCardContext } = await import("./outbound.js");
+                const cardId = randomUUID();
+                registerCardContext(cardId, {
+                  cardId,
+                  originalPrompt: `Run app: ${app.spec.toolFamily}`,
+                  originalResponse: "",
+                  currentData: structuredClone(normalizedData),
+                  geminiApiKey: account.geminiApiKey,
+                  account,
+                  mode: "full",
+                  actionHistory: [],
+                  nativeToolHint: {
+                    toolName: primaryToolName,
+                    params: primary.sampleParams,
+                    handlerPrefix: app.spec.toolPrefix,
+                  },
+                  interactionMode: "tool",
+                  toolFamily: app.spec.toolFamily,
+                  signatureId: app.spec.signatureId,
+                  coverageStatus: "covered",
+                });
+
+                send({
+                  id: cardId,
+                  runId: randomUUID(),
+                  sessionKey,
+                  seq: 0,
+                  state: "final",
+                  data: normalizedData,
+                  generatedUI,
+                  cardMode: {
+                    interactionMode: "tool",
+                    toolFamily: app.spec.toolFamily,
+                    signatureId: app.spec.signatureId,
+                    coverageStatus: "covered",
+                  },
+                  targetCardId: undefined,
+                  timestamp: Date.now(),
+                });
+              } catch (err) {
+                runtime.error?.(`[enso] apps.run failed: ${err instanceof Error ? err.message : String(err)}`);
+                send({
+                  id: randomUUID(),
+                  runId: randomUUID(),
+                  sessionKey,
+                  seq: 0,
+                  state: "error",
+                  text: `Failed to run app: ${err instanceof Error ? err.message : String(err)}`,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+            break;
+          }
+          case "card.delete_all_apps": {
+            runtime.log?.(`[enso] delete all apps requested`);
+            try {
+              const { deleteAllApps } = await import("./app-persistence.js");
+              const deleted = deleteAllApps();
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                appsDeleted: { families: deleted, count: deleted.length },
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.(`[enso] delete all apps failed: ${err instanceof Error ? err.message : String(err)}`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "error",
+                text: `Failed to delete apps: ${err instanceof Error ? err.message : String(err)}`,
+                timestamp: Date.now(),
+              });
+            }
+            break;
+          }
           case "tools.list_projects": {
             const projects = scanProjects();
             send({
