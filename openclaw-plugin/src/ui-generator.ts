@@ -401,12 +401,18 @@ function isRetryableGeminiError(err: unknown): boolean {
   return false;
 }
 
-async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000): Promise<string> {
+/** Default fast model for UI generation and tool selection. */
+const GEMINI_MODEL_FAST = "gemini-2.5-flash";
+
+/** Powerful model for code generation (app spec, executors, templates). */
+export const GEMINI_MODEL_PRO = "gemini-3-pro-preview";
+
+async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000, model = GEMINI_MODEL_FAST): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -420,7 +426,7 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000):
 
     if (!response.ok) {
       const err = await response.text();
-      console.error("[enso:ui-gen] Gemini API error:", err);
+      console.error(`[enso:ui-gen] Gemini API error (${model}):`, err);
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
@@ -445,19 +451,19 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000):
   }
 }
 
-export async function callGeminiLLMWithRetry(prompt: string, apiKey: string): Promise<string> {
+export async function callGeminiLLMWithRetry(prompt: string, apiKey: string, model?: string): Promise<string> {
   const maxAttempts = 3;
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await callGeminiLLM(prompt, apiKey);
+      return await callGeminiLLM(prompt, apiKey, 30000, model);
     } catch (err) {
       lastError = err;
       if (!isRetryableGeminiError(err) || attempt === maxAttempts) {
         throw err;
       }
       const delayMs = 500 * 2 ** (attempt - 1);
-      console.warn(`[enso:ui-gen] retrying Gemini call (${attempt}/${maxAttempts}) in ${delayMs}ms`);
+      console.warn(`[enso:ui-gen] retrying Gemini call (${attempt}/${maxAttempts}) in ${delayMs}ms — model=${model ?? GEMINI_MODEL_FAST}`);
       await sleep(delayMs);
     }
   }

@@ -159,6 +159,25 @@ export interface ClientMessage {
   operationId?: string;
 }
 
+/** Executor Context — injected into generated app executors as `ctx` */
+
+export interface ExecutorContext {
+  /** Call any registered OpenClaw tool by name. */
+  callTool(toolName: string, params: Record<string, unknown>): Promise<{ success: boolean; data: unknown; error?: string }>;
+
+  /** Convenience: list a directory (wraps enso_fs_list_directory). */
+  listDir(path: string): Promise<{ success: boolean; data: unknown; error?: string }>;
+
+  /** Convenience: read a text file (wraps enso_fs_read_text_file). */
+  readFile(path: string): Promise<{ success: boolean; data: unknown; error?: string }>;
+
+  /** Convenience: search for files/dirs by name (wraps enso_fs_search_paths). */
+  searchFiles(rootPath: string, name: string): Promise<{ success: boolean; data: unknown; error?: string }>;
+
+  /** Sandboxed HTTP fetch (timeout 10s, max 512KB response, HTTPS only). */
+  fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; data: unknown }>;
+}
+
 /** UIGenerator types */
 
 export interface UIGeneratorResult {

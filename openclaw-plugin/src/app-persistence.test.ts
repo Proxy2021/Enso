@@ -14,6 +14,7 @@ vi.mock("./native-tools/registry.js", () => ({
   unregisterGeneratedTemplateCode: vi.fn(),
   unregisterToolTemplate: vi.fn(),
   unregisterToolTemplateDataHints: vi.fn(),
+  executeToolDirect: vi.fn().mockResolvedValue({ success: false, data: null, error: "not available in test" }),
 }));
 
 vi.mock("./tool-families/catalog.js", () => ({
@@ -33,6 +34,7 @@ import {
   deleteAllApps,
   unregisterApp,
   generateSkillMd,
+  buildExecutorContext,
   type SavedApp,
 } from "./app-persistence.js";
 import type { PluginSpec } from "./tool-factory.js";
@@ -442,22 +444,52 @@ Replace a specific exercise in a day's workout.`;
 });
 
 describe("registered tool executors work", () => {
-  it("re-hydrated executors produce correct output", () => {
+  it("re-hydrated executors produce correct output with ctx (3-param)", () => {
     const app = makeSavedApp();
     saveApp(app, tmpBase);
     const loaded = loadApps(tmpBase);
 
-    // Manually reconstruct an executor and test it
+    // Manually reconstruct an executor with 3 params (ctx ignored by old executors)
     const body = loaded[0].executors.get("plan_week")!;
-    const fn = new Function("callId", "params", body) as (
+    const fn = new Function("callId", "params", "ctx", body) as (
       callId: string,
       params: Record<string, unknown>,
+      ctx: unknown,
     ) => { content: Array<{ type: string; text?: string }> };
 
-    const result = fn("test", { goal: "strength" });
+    const dummyCtx = {};
+    const result = fn("test", { goal: "strength" }, dummyCtx);
     expect(result.content[0].text).toBeDefined();
     const parsed = JSON.parse(result.content[0].text!);
     expect(parsed.tool).toBe("enso_workout_plan_week");
     expect(parsed.goal).toBe("strength");
+  });
+
+  it("old 2-param executor bodies work fine with 3-param Function (backward compat)", () => {
+    // An old executor body that doesn't reference ctx at all
+    const oldBody = `var x = params.goal || "default";
+return { content: [{ type: "text", text: JSON.stringify({ tool: "test_tool", goal: x }) }] };`;
+
+    const fn = new Function("callId", "params", "ctx", oldBody) as (
+      callId: string,
+      params: Record<string, unknown>,
+      ctx: unknown,
+    ) => { content: Array<{ type: string; text?: string }> };
+
+    const result = fn("test", { goal: "power" }, {});
+    const parsed = JSON.parse(result.content[0].text!);
+    expect(parsed.tool).toBe("test_tool");
+    expect(parsed.goal).toBe("power");
+  });
+});
+
+describe("buildExecutorContext", () => {
+  it("returns an object with all expected methods", () => {
+    const ctx = buildExecutorContext("test_family", "test_suffix");
+    expect(typeof ctx.callTool).toBe("function");
+    expect(typeof ctx.listDir).toBe("function");
+    expect(typeof ctx.readFile).toBe("function");
+    expect(typeof ctx.searchFiles).toBe("function");
+    expect(typeof ctx.fetch).toBe("function");
   });
 });

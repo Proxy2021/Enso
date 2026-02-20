@@ -4,10 +4,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("openclaw/plugin-sdk", () => ({}));
 
-const mockCallGemini = vi.fn<(prompt: string, apiKey: string) => Promise<string>>();
+const mockCallGemini = vi.fn<(prompt: string, apiKey: string, model?: string) => Promise<string>>();
 
 vi.mock("./ui-generator.js", () => ({
-  callGeminiLLMWithRetry: (...args: unknown[]) => mockCallGemini(args[0] as string, args[1] as string),
+  callGeminiLLMWithRetry: (...args: unknown[]) => mockCallGemini(args[0] as string, args[1] as string, args[2] as string | undefined),
+  GEMINI_MODEL_PRO: "gemini-2.5-pro",
   STRUCTURED_DATA_SYSTEM_PROMPT: "You build apps.",
 }));
 
@@ -35,6 +36,13 @@ const mockSaveApp = vi.fn();
 vi.mock("./app-persistence.js", () => ({
   saveApp: (...args: unknown[]) => mockSaveApp(...args),
   generateSkillMd: vi.fn((_spec: unknown, _proposal?: string) => "---\nname: workout_planner\n---\n\n# Workout Planner\n"),
+  buildExecutorContext: vi.fn(() => ({
+    callTool: vi.fn().mockResolvedValue({ success: false, data: null, error: "not available in test" }),
+    listDir: vi.fn().mockResolvedValue({ success: false, data: null, error: "not available in test" }),
+    readFile: vi.fn().mockResolvedValue({ success: false, data: null, error: "not available in test" }),
+    searchFiles: vi.fn().mockResolvedValue({ success: false, data: null, error: "not available in test" }),
+    fetch: vi.fn().mockResolvedValue({ ok: false, status: 0, data: "not available in test" }),
+  })),
 }));
 
 vi.mock("./accounts.js", () => ({

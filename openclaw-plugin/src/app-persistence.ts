@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { PluginSpec, PluginToolDef } from "./tool-factory.js";
+import type { ExecutorContext } from "./types.js";
 import {
   registerGeneratedTool,
   registerGeneratedTemplateCode,
@@ -11,6 +12,7 @@ import {
   unregisterGeneratedTemplateCode,
   unregisterToolTemplate,
   unregisterToolTemplateDataHints,
+  executeToolDirect,
   type ToolTemplate,
 } from "./native-tools/registry.js";
 import { addCapability, removeCapability } from "./tool-families/catalog.js";
@@ -35,6 +37,118 @@ interface AppManifest {
   version: 1;
   spec: PluginSpec;
   createdAt: number;
+}
+
+// ── Executor Context ──
+
+const EXECUTOR_CTX_TIMEOUT_MS = 10_000;
+const EXECUTOR_CTX_MAX_DEPTH = 3;
+const EXECUTOR_FETCH_MAX_BYTES = 512 * 1024; // 512KB
+
+/**
+ * Build an ExecutorContext that bridges generated app executors to real
+ * OpenClaw capabilities. Each call is logged, timed, and guarded with
+ * a timeout + max nesting depth.
+ */
+export function buildExecutorContext(toolFamily?: string, toolSuffix?: string): ExecutorContext {
+  let callDepth = 0;
+  const tag = toolFamily && toolSuffix ? `${toolFamily}/${toolSuffix}` : "executor";
+
+  async function withTimeout<T>(label: string, fn: () => Promise<T>): Promise<T> {
+    const t0 = Date.now();
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), EXECUTOR_CTX_TIMEOUT_MS);
+
+    try {
+      if (callDepth >= EXECUTOR_CTX_MAX_DEPTH) {
+        throw new Error(`ctx call depth exceeded (max ${EXECUTOR_CTX_MAX_DEPTH})`);
+      }
+      callDepth++;
+      const result = await Promise.race([
+        fn(),
+        new Promise<never>((_, reject) => {
+          ac.signal.addEventListener("abort", () => reject(new Error(`ctx.${label} timed out after ${EXECUTOR_CTX_TIMEOUT_MS}ms`)));
+        }),
+      ]);
+      console.log(`[enso:executor-ctx] ${tag} → ${label} [${Date.now() - t0}ms]`);
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[enso:executor-ctx] ${tag} → ${label} FAILED [${Date.now() - t0}ms] — ${msg}`);
+      throw err;
+    } finally {
+      callDepth--;
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    async callTool(toolName: string, params: Record<string, unknown>) {
+      return withTimeout(`callTool("${toolName}")`, async () => {
+        const result = await executeToolDirect(toolName, params);
+        return { success: result.success, data: result.data, error: result.error ?? undefined };
+      });
+    },
+
+    async listDir(dirPath: string) {
+      return withTimeout(`listDir("${dirPath}")`, async () => {
+        const result = await executeToolDirect("enso_fs_list_directory", { path: dirPath });
+        return { success: result.success, data: result.data, error: result.error ?? undefined };
+      });
+    },
+
+    async readFile(filePath: string) {
+      return withTimeout(`readFile("${filePath}")`, async () => {
+        const result = await executeToolDirect("enso_fs_read_text_file", { path: filePath });
+        return { success: result.success, data: result.data, error: result.error ?? undefined };
+      });
+    },
+
+    async searchFiles(rootPath: string, name: string) {
+      return withTimeout(`searchFiles("${rootPath}", "${name}")`, async () => {
+        const result = await executeToolDirect("enso_fs_search_paths", { root_path: rootPath, name });
+        return { success: result.success, data: result.data, error: result.error ?? undefined };
+      });
+    },
+
+    async fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string }) {
+      return withTimeout(`fetch("${url}")`, async () => {
+        // Enforce HTTPS only
+        if (!url.startsWith("https://")) {
+          return { ok: false, status: 0, data: "Only HTTPS URLs are allowed" };
+        }
+
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), EXECUTOR_CTX_TIMEOUT_MS);
+        try {
+          const resp = await globalThis.fetch(url, {
+            method: options?.method ?? "GET",
+            headers: options?.headers,
+            body: options?.body,
+            signal: ac.signal,
+          });
+
+          // Read with size limit
+          const buf = await resp.arrayBuffer();
+          if (buf.byteLength > EXECUTOR_FETCH_MAX_BYTES) {
+            return { ok: false, status: resp.status, data: `Response too large (${buf.byteLength} bytes, max ${EXECUTOR_FETCH_MAX_BYTES})` };
+          }
+
+          const text = new TextDecoder().decode(buf);
+          let data: unknown;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = text;
+          }
+
+          return { ok: resp.ok, status: resp.status, data };
+        } finally {
+          clearTimeout(timer);
+        }
+      });
+    },
+  };
 }
 
 // ── Paths ──
@@ -127,6 +241,9 @@ export function loadApps(basePath?: string): LoadedApp[] {
 
 // ── Register ──
 
+// AsyncFunction constructor: supports `await` in executor bodies
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as typeof Function;
+
 export function registerLoadedApp(app: LoadedApp): void {
   const { spec } = app;
   const registeredToolNames: string[] = [];
@@ -137,17 +254,20 @@ export function registerLoadedApp(app: LoadedApp): void {
     if (!body) continue;
 
     const toolName = `${spec.toolPrefix}${toolDef.suffix}`;
-    const executeFn = new Function("callId", "params", body) as (
+    // Executor receives 3 args: callId, params, ctx — uses AsyncFunction to support await
+    const executeFn = new AsyncFunction("callId", "params", "ctx", body) as (
       callId: string,
       params: Record<string, unknown>,
-    ) => Promise<{ content: Array<{ type: string; text?: string }> }> | { content: Array<{ type: string; text?: string }> };
+      ctx: ExecutorContext,
+    ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
     registerGeneratedTool({
       name: toolName,
       description: toolDef.description,
       parameters: toolDef.parameters,
       execute: async (callId: string, toolParams: Record<string, unknown>) => {
-        const result = await Promise.resolve(executeFn(callId, toolParams));
+        const ctx = buildExecutorContext(spec.toolFamily, toolDef.suffix);
+        const result = await executeFn(callId, toolParams, ctx);
         return result;
       },
     });

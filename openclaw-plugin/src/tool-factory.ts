@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ConnectedClient } from "./server.js";
-import type { ServerMessage, OperationStage, ToolBuildSummary } from "./types.js";
-import { callGeminiLLMWithRetry, STRUCTURED_DATA_SYSTEM_PROMPT } from "./ui-generator.js";
+import type { ServerMessage, OperationStage, ToolBuildSummary, ExecutorContext } from "./types.js";
+import { callGeminiLLMWithRetry, GEMINI_MODEL_PRO, STRUCTURED_DATA_SYSTEM_PROMPT } from "./ui-generator.js";
 import {
   registerToolTemplate,
   registerToolTemplateDataHint,
@@ -13,7 +13,7 @@ import {
 } from "./native-tools/registry.js";
 import { TOOL_FAMILY_CAPABILITIES, addCapability } from "./tool-families/catalog.js";
 import { registerCardContext } from "./outbound.js";
-import { saveApp, generateSkillMd } from "./app-persistence.js";
+import { saveApp, generateSkillMd, buildExecutorContext } from "./app-persistence.js";
 
 // ── Types ──
 
@@ -209,12 +209,27 @@ ${cardText.slice(0, 3000)}
 USER'S SCENARIO:
 ${toolDefinition}
 
+CAPABILITIES — Executors receive a \`ctx\` parameter with real system access:
+- await ctx.callTool(toolName, params) — Call any registered tool. Returns { success, data, error }.
+- await ctx.listDir(path) — List directory contents (files/folders with metadata).
+- await ctx.readFile(path) — Read a text file. Returns file content.
+- await ctx.searchFiles(rootPath, name) — Search for files by name pattern.
+- await ctx.fetch(url, options?) — HTTPS fetch (max 512KB, 10s timeout). Returns { ok, status, data }.
+
+When designing tools, ALWAYS prefer REAL data sources over synthetic data:
+- File system browsing/reading (ctx.listDir, ctx.readFile, ctx.searchFiles) — for file/project scenarios
+- Any registered OpenClaw tools (ctx.callTool with tool name) — for system integration
+- HTTP APIs (ctx.fetch for public APIs) — for movies, weather, news, sports, stocks, prices, etc.
+  Examples: TMDB API (movies), Open-Meteo (weather), public REST APIs
+Design tools that USE ctx. Synthetic/hardcoded data is ONLY for fallback when ctx calls fail.
+
 RULES:
-- Each tool must generate DETERMINISTIC synthetic data — no external APIs, no file system, no randomness.
+- Each tool's sampleData defines the OUTPUT SHAPE and serves as FALLBACK when ctx calls fail.
 - The primary tool's sampleData should be a rich, complete data structure.
 - Action tools should return data in a shape compatible with the primary (re-renderable by the same template).
 - Each tool's sampleData MUST include a "tool" field set to the full tool name (prefix + suffix).
 - Every tool must have at least one required parameter.
+- Executors MUST try ctx first (fetch, listDir, callTool, etc.) and only use sampleData-shaped synthetic data as a fallback on error.
 
 Respond with ONLY valid JSON (no markdown fences):
 {
@@ -249,7 +264,7 @@ function buildToolExecutePrompt(spec: PluginSpec, toolDef: PluginToolDef): strin
   const toolName = `${spec.toolPrefix}${toolDef.suffix}`;
   return `Generate a JavaScript function body for a tool executor.
 
-The function receives two arguments: callId (string) and params (object).
+The function receives THREE arguments: callId (string), params (object), and ctx (ExecutorContext).
 It must return: { content: [{ type: "text", text: JSON.stringify(resultData) }] }
 
 TOOL SPECIFICATION:
@@ -258,24 +273,59 @@ TOOL SPECIFICATION:
 - Parameters: ${JSON.stringify(toolDef.parameters)}
 - Expected output shape: ${JSON.stringify(toolDef.sampleData)}
 
+EXECUTOR CONTEXT (ctx) — Available capabilities:
+- await ctx.callTool(toolName, params) — Call any registered OpenClaw tool. Returns { success, data, error }.
+- await ctx.listDir(path) — List a directory. Returns { success, data, error } where data has file/folder entries.
+- await ctx.readFile(path) — Read a text file. Returns { success, data, error } where data is the file content.
+- await ctx.searchFiles(rootPath, name) — Search files by name. Returns { success, data, error }.
+- await ctx.fetch(url, options?) — HTTPS fetch (max 512KB, 10s timeout). Returns { ok, status, data }.
+
 RULES:
-- The function body will be wrapped in: new Function("callId", "params", YOUR_BODY)
-- Generate realistic SYNTHETIC/DETERMINISTIC data based on the params. No randomness.
+- The function body will be wrapped in: new AsyncFunction("callId", "params", "ctx", YOUR_BODY)
+- The executor is ASYNC — you can use \`await\` freely with ctx methods.
 - The output data shape MUST match the sampleData structure.
 - Include a "tool" field in the output set to "${toolName}".
 - Use only standard JavaScript (no TypeScript, no JSX, no imports, no require).
-- NO external API calls, NO file system access, NO network calls.
-- Use params values to customize the output (e.g., use param names in generated text).
+- Use params values to customize the output.
 - Return reasonable default data when optional params are missing.
 
-EXAMPLE PATTERN:
+CRITICAL — WHEN TO USE ctx:
+- **PREFER ctx.fetch for ANY scenario involving external data** — movies, weather, news, stocks, sports, prices, etc.
+  Use free/public APIs: TMDB (movies), Open-Meteo (weather), etc.
+- **PREFER ctx.listDir / ctx.readFile** for scenarios involving the user's files or projects.
+- **PREFER ctx.callTool** for scenarios that map to registered system tools.
+- Use synthetic/hardcoded data ONLY as a FALLBACK when ctx calls fail — NEVER as the primary data source when a real API exists.
+- ALWAYS try the real data path FIRST, then fall back to synthetic data in the catch block.
+- ALWAYS handle errors gracefully with try/catch and a synthetic fallback.
+
+EXAMPLE — ctx.fetch with real API (PREFERRED for external data):
 \`\`\`
-const destination = (params.destination || "").trim() || "Default";
-const days = Math.max(1, Math.min(14, Math.floor(Number(params.days) || 5)));
-const items = Array.from({ length: days }).map(function(_, idx) {
-  return { day: idx + 1, activity: "Visit " + destination + " area " + (idx + 1) };
-});
-return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", destination: destination, days: days, items: items }) }] };
+var page = Math.max(1, Math.floor(Number(params.page) || 1));
+try {
+  var resp = await ctx.fetch("https://api.themoviedb.org/3/movie/now_playing?api_key=DEMO_KEY&region=HK&page=" + page);
+  if (resp.ok && resp.data && resp.data.results) {
+    var movies = resp.data.results.map(function(m) {
+      return { movie_id: "M" + m.id, title: m.title, rating: m.vote_average, genre: "Film", poster_url: "https://image.tmdb.org/t/p/w300" + m.poster_path };
+    });
+    return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", movies: movies, current_page: page, total_pages: resp.data.total_pages }) }] };
+  }
+} catch (e) { /* fall through to synthetic fallback */ }
+var fallback = [{ movie_id: "M001", title: "Sample Movie", rating: 8.0, genre: "Drama", poster_url: "" }];
+return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", movies: fallback, current_page: 1, total_pages: 1 }) }] };
+\`\`\`
+
+EXAMPLE — ctx.listDir for filesystem data:
+\`\`\`
+var dirPath = (params.path || "").trim() || ".";
+try {
+  var result = await ctx.listDir(dirPath);
+  if (result.success) {
+    var entries = Array.isArray(result.data) ? result.data : (result.data && result.data.entries) || [];
+    return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", path: dirPath, entries: entries }) }] };
+  }
+} catch (e) { /* fall through to synthetic */ }
+var fallback = [{ name: "example.txt", type: "file", size: 1024 }];
+return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", path: dirPath, entries: fallback }) }] };
 \`\`\`
 
 Respond with ONLY the function body (no function keyword, no wrapper, no markdown fences). The code must start directly with variable declarations or return statements.`;
@@ -327,6 +377,9 @@ Build a rich, interactive app component for this data. Use tabs, expandable sect
 
 // ── Validation ──
 
+// AsyncFunction constructor: supports `await` in executor bodies
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as typeof Function;
+
 export async function validateToolExecutor(params: {
   executeBody: string;
   sampleParams: Record<string, unknown>;
@@ -335,12 +388,14 @@ export async function validateToolExecutor(params: {
   const errors: string[] = [];
 
   try {
-    const executeFn = new Function("callId", "params", params.executeBody) as (
+    const executeFn = new AsyncFunction("callId", "params", "ctx", params.executeBody) as (
       callId: string,
       params: Record<string, unknown>,
-    ) => Promise<{ content: Array<{ type: string; text?: string }> }> | { content: Array<{ type: string; text?: string }> };
+      ctx: ExecutorContext,
+    ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
-    const result = await Promise.resolve(executeFn("test-call", params.sampleParams));
+    const ctx = buildExecutorContext("validation", "test");
+    const result = await executeFn("test-call", params.sampleParams, ctx);
     if (!result?.content?.[0]?.text) {
       errors.push("Execute function did not return expected { content: [{ type, text }] } structure");
     } else {
@@ -503,8 +558,8 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
     trace.beginStep();
 
     const specPrompt = buildPluginSpecPrompt(cardText, toolDefinition);
-    trace.info(`spec prompt: ${specPrompt.length} chars`);
-    const specRaw = await callGeminiLLMWithRetry(specPrompt, apiKey);
+    trace.info(`spec prompt: ${specPrompt.length} chars — model=${GEMINI_MODEL_PRO}`);
+    const specRaw = await callGeminiLLMWithRetry(specPrompt, apiKey, GEMINI_MODEL_PRO);
     trace.info(`spec response: ${specRaw.length} chars`);
 
     let spec: PluginSpec;
@@ -556,7 +611,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
 
     const executeResults = await Promise.all(
       spec.tools.map(async (toolDef) => {
-        const raw = await callGeminiLLMWithRetry(buildToolExecutePrompt(spec, toolDef), apiKey);
+        const raw = await callGeminiLLMWithRetry(buildToolExecutePrompt(spec, toolDef), apiKey, GEMINI_MODEL_PRO);
         return { suffix: toolDef.suffix, body: stripMarkdownFences(raw), bodyLen: raw.length };
       }),
     );
@@ -577,6 +632,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
     let templateJSX = await callGeminiLLMWithRetry(
       buildPluginTemplatePrompt(spec),
       apiKey,
+      GEMINI_MODEL_PRO,
     );
     templateJSX = ensureExportDefault(stripMarkdownFences(templateJSX));
 
@@ -595,7 +651,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
       trace.beginStep();
       const retryPrompt = buildPluginTemplatePrompt(spec)
         + `\n\nPREVIOUS ATTEMPT FAILED WITH ERRORS:\n${templateValidation.errors.join("\n")}\n\nFix the JSX syntax errors.`;
-      templateJSX = await callGeminiLLMWithRetry(retryPrompt, apiKey);
+      templateJSX = await callGeminiLLMWithRetry(retryPrompt, apiKey, GEMINI_MODEL_PRO);
       templateJSX = ensureExportDefault(stripMarkdownFences(templateJSX));
 
       const retry = await validateTemplateJSX(templateJSX);
@@ -632,7 +688,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
         trace.beginStep();
         const retryPrompt = buildToolExecutePrompt(spec, toolDef)
           + `\n\nPREVIOUS ATTEMPT FAILED WITH ERRORS:\n${validation.errors.join("\n")}\n\nFix these issues.`;
-        body = stripMarkdownFences(await callGeminiLLMWithRetry(retryPrompt, apiKey));
+        body = stripMarkdownFences(await callGeminiLLMWithRetry(retryPrompt, apiKey, GEMINI_MODEL_PRO));
 
         const retry = await validateToolExecutor({
           executeBody: body,
@@ -680,17 +736,19 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
 
     for (const { def, body } of validatedTools) {
       const toolName = `${spec.toolPrefix}${def.suffix}`;
-      const executeFn = new Function("callId", "params", body) as (
+      const executeFn = new AsyncFunction("callId", "params", "ctx", body) as (
         callId: string,
         params: Record<string, unknown>,
-      ) => Promise<{ content: Array<{ type: string; text?: string }> }> | { content: Array<{ type: string; text?: string }> };
+        ctx: ExecutorContext,
+      ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
       registerGeneratedTool({
         name: toolName,
         description: def.description,
         parameters: def.parameters,
         execute: async (callId: string, toolParams: Record<string, unknown>) => {
-          const result = await Promise.resolve(executeFn(callId, toolParams));
+          const ctx = buildExecutorContext(spec.toolFamily, def.suffix);
+          const result = await executeFn(callId, toolParams, ctx);
           return result;
         },
       });
