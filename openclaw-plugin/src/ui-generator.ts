@@ -63,7 +63,12 @@ ABSOLUTE RULE: NEVER use sendMessage. It does not exist.
 AVAILABLE LIBRARIES (already in scope — do NOT import):
 - React: useState, useEffect, useMemo, useCallback, etc.
 - Recharts: BarChart, LineChart, PieChart, AreaChart, Bar, Line, Pie, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
-- Lucide icons: LucideReact.IconName (TrendingUp, TrendingDown, DollarSign, ArrowUp, ArrowDown, Star, BarChart3, AlertCircle, CheckCircle, Info, ExternalLink, Clock, Calendar, Target, Award, Zap, Shield, Activity, Search, Filter, ChevronRight, ChevronDown, Layers, Grid, List, RefreshCw, Plus, Minus, Eye, Settings, etc.)
+- Lucide icons: Use LucideReact.IconName DIRECTLY in JSX (TrendingUp, TrendingDown, DollarSign, ArrowUp, ArrowDown, Star, BarChart3, AlertCircle, CheckCircle, Info, ExternalLink, Clock, Calendar, Target, Award, Zap, Shield, Activity, Search, Filter, ChevronRight, ChevronDown, Layers, Grid, List, RefreshCw, Plus, Minus, Eye, Settings, Disc, Music, etc.)
+
+ICON USAGE RULES:
+- ALWAYS use LucideReact.IconName directly in JSX: <LucideReact.Star className="w-4 h-4" />
+- NEVER create intermediate icon alias objects like "const Icons = { Album: LucideReact.Disc }". This creates bugs where you forget the alias and use the wrong name.
+- If you need to pick an icon dynamically, use a function: const getIcon = (type) => type === 'album' ? LucideReact.Disc : LucideReact.Music;
 
 DESIGN SYSTEM:
 - Outer container: bg-gray-900 rounded-xl p-3 border border-gray-700
