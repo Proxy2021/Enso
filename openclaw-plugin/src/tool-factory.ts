@@ -323,6 +323,7 @@ CRITICAL — WHEN TO USE ctx:
 - Use synthetic/hardcoded data ONLY as a FALLBACK when ctx calls fail — NEVER as the primary data source when a real API exists.
 - ALWAYS try the real data path FIRST, then fall back to synthetic data in the catch block.
 - ALWAYS handle errors gracefully with try/catch and a synthetic fallback.
+- ALWAYS guard ctx.search with: if (typeof ctx.search === "function") before calling it (it may not be available in all environments).
 
 EXAMPLE — ctx.fetch with real API (PREFERRED for external data):
 \`\`\`
@@ -358,12 +359,14 @@ EXAMPLE — ctx.search for discovery (showtimes, reviews, local info):
 \`\`\`
 var query = (params.title || "Movie") + " showtimes " + (params.location || "");
 try {
-  var sr = await ctx.search(query.trim(), { count: 5 });
-  if (sr.ok && sr.results.length > 0) {
-    var showtimes = sr.results.map(function(r) {
-      return { source: r.title, url: r.url, snippet: r.description };
-    });
-    return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", query: query, results: showtimes }) }] };
+  if (typeof ctx.search === "function") {
+    var sr = await ctx.search(query.trim(), { count: 5 });
+    if (sr.ok && sr.results.length > 0) {
+      var showtimes = sr.results.map(function(r) {
+        return { source: r.title, url: r.url, snippet: r.description };
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", query: query, results: showtimes }) }] };
+    }
   }
 } catch (e) { /* fall through to synthetic fallback */ }
 var fallback = [{ source: "No results", url: "", snippet: "Search unavailable" }];
