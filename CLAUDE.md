@@ -97,13 +97,16 @@ shared/                       # Code shared between frontend and plugin
 
 ### WebSocket Protocol
 
-- **Client → Server**: `ClientMessage` with types `chat.send`, `chat.history`, `ui_action`, `tools.list_projects`, `card.action`, `card.enhance`, `settings.set_mode`, `operation.cancel`
+- **Client → Server**: `ClientMessage` with types `chat.send`, `chat.history`, `ui_action`, `tools.list_projects`, `card.action`, `card.enhance`, `card.build_app`, `card.propose_app`, `card.delete_all_apps`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`
 - **Server → Client**: `ServerMessage` with states `delta` (streaming), `final`, `error`
 - Messages carry: `text`, `data` (structured), `generatedUI` (JSX code), `mediaUrls`, `targetCardId` (for in-place card updates), `steps` (multi-block agent steps)
 - `chat.send` can include `routing?: ToolRouting` — when `toolId: "claude-code"`, the server bypasses OpenClaw and directly spawns the Claude CLI
 - `card.action` messages carry: `cardId`, `cardAction`, `cardPayload` — routed to the card's interaction context for data mutation + UI regeneration
 - `card.enhance` messages carry: `cardId`, `cardText` — triggers LLM-based tool selection and app view generation
+- `card.build_app` messages carry: `cardId`, `cardText`, `buildAppDefinition` — triggers the async app build pipeline (fire-and-forget)
+- `card.propose_app` messages carry: `cardId`, `cardText`, `conversationContext` — generates an LLM app proposal before showing the Build App dialog
 - `enhanceResult` on server messages — carries app view data (`data`, `generatedUI`, `cardMode`) back to the requesting card
+- `buildComplete` on server messages — async notification when the build pipeline finishes: `{ cardId, success, summary?, error? }`. Client creates a notification card and updates the source card's enhance status.
 - `steps?: AgentStep[]` — when the agent self-iterates (multiple blocks), all intermediate steps are retained
 - `questions?: ToolQuestion[]` on deltas — interactive questions from Claude Code's `AskUserQuestion` tool, rendered as clickable buttons
 
@@ -121,6 +124,7 @@ When the OpenClaw agent self-iterates (e.g., a tool call fails and it retries), 
 
 Agent responses arrive as plain text chat cards. Users can optionally enhance any card into an interactive app:
 
+**Fast Enhance** (existing tool family matches):
 1. User clicks the "App" enhance button on a chat card
 2. `card.enhance` message sent to server with the card's text
 3. **LLM tool selection** (`ui-generator.ts`): Gemini analyzes the text and selects the best matching tool family + tool name + params from `TOOL_FAMILY_CAPABILITIES`
@@ -129,6 +133,15 @@ Agent responses arrive as plain text chat cards. Users can optionally enhance an
 6. **App view delivered**: `enhanceResult` sent back with `data`, `generatedUI`, `cardMode`
 7. **Frontend**: Card gains an Original/App toggle. App view renders the compiled JSX template in the sandbox.
 8. **Card actions**: Buttons in the app view trigger `card.action` → three-path dispatch (mechanical / native tool / agent fallback)
+
+**Build App** (no existing tool family — async pipeline):
+1. User clicks "Build App" button → `card.propose_app` generates an LLM proposal
+2. Proposal arrives → dialog opens with editable app definition
+3. User submits → `card.build_app` fires the build pipeline **asynchronously** (fire-and-forget)
+4. Dialog closes immediately, card remains fully interactive (no loading overlay)
+5. Build runs in background (2-3+ min): spec design → executor generation → UI template → validation → registration → persistence
+6. On completion, server sends `buildComplete` notification → client creates a chat card: "✓ New app built: **family** (N tools)" or "✗ App build failed: reason"
+7. Source card's `enhanceStatus` is updated to `"ready"`, gaining the Original/App toggle
 
 ### Dynamic UI Sandbox
 
@@ -273,6 +286,6 @@ Enso is a plugin for [OpenClaw](../OpenClaw), a local-first multi-channel AI gat
 
 ## Current Status (Phase 5)
 
-**Implemented**: Card-based chat UI, WebSocket messaging, text streaming (delta/final), media upload, OpenClaw plugin integration, multi-block response accumulation with expandable agent steps, user-triggered app enhancement (LLM tool selection → deterministic execution → pre-built template UI), Original/App view toggle, interactive card actions with three-path dispatch (mechanical / native tool / agent fallback), card interaction context with action history, Claude Code CLI integration with direct tool routing, NDJSON streaming from CLI, session resumption, interactive AskUserQuestion with clickable option buttons, project picker with git repo scanning, persistent terminal card with multi-turn conversations, zero-config native tool bridge (auto-discovery from OpenClaw plugin registry, direct tool execution), deterministic tool-mode templates for AlphaRank/filesystem/workspace/media/travel/meal domains, `/tool enso` tool console for template introspection + add-tool requests, comprehensive server-side logging (`[enso:inbound/outbound/enhance/action]`), and runtime mode switching (IM/UI/Full).
+**Implemented**: Card-based chat UI, WebSocket messaging, text streaming (delta/final), media upload, OpenClaw plugin integration, multi-block response accumulation with expandable agent steps, user-triggered app enhancement (LLM tool selection → deterministic execution → pre-built template UI), Original/App view toggle, interactive card actions with three-path dispatch (mechanical / native tool / agent fallback), card interaction context with action history, Claude Code CLI integration with direct tool routing, NDJSON streaming from CLI, session resumption, interactive AskUserQuestion with clickable option buttons, project picker with git repo scanning, persistent terminal card with multi-turn conversations, zero-config native tool bridge (auto-discovery from OpenClaw plugin registry, direct tool execution), deterministic tool-mode templates for AlphaRank/filesystem/workspace/media/travel/meal domains, `/tool enso` tool console for template introspection + add-tool requests, comprehensive server-side logging (`[enso:inbound/outbound/enhance/action]`), runtime mode switching (IM/UI/Full), async app build pipeline (fire-and-forget with `buildComplete` notification), and deferred Build App dialog (waits for LLM proposal before showing).
 
 **Not yet implemented**: Persistent chat history, user authentication, multi-user session isolation, rate limiting, full inline tool activity trace cards (reads/edits/bash timeline), cost tracking per run, abort button for active Claude Code runs.

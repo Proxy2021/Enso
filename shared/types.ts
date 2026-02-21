@@ -105,6 +105,12 @@ export interface ServerMessage {
   appProposal?: { cardId: string; proposal: string };
   appsDeleted?: { families: string[]; count: number };
   appsList?: AppInfo[];
+  buildComplete?: {
+    cardId: string;
+    success: boolean;
+    summary?: ToolBuildSummary;
+    error?: string;
+  };
   timestamp: number;
 }
 

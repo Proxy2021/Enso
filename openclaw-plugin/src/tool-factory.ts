@@ -87,6 +87,25 @@ function sendEnhanceResult(
   client.send(msg);
 }
 
+function sendBuildComplete(
+  client: ConnectedClient,
+  cardId: string,
+  success: boolean,
+  summary?: ToolBuildSummary,
+  error?: string,
+): void {
+  const msg: ServerMessage = {
+    id: randomUUID(),
+    runId: randomUUID(),
+    sessionKey: client.sessionKey,
+    seq: 0,
+    state: "final",
+    buildComplete: { cardId, success, summary, error },
+    timestamp: Date.now(),
+  };
+  client.send(msg);
+}
+
 // ── Build Trace Logger ──
 
 interface TraceStep {
@@ -546,6 +565,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
     trace.info("aborted: no geminiApiKey configured");
     trace.finish("aborted");
     sendEnhanceResult(client, cardId, null);
+    sendBuildComplete(client, cardId, false, undefined, "No Gemini API key configured");
     return;
   }
 
@@ -570,6 +590,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
       buildSteps.push({ label: "Design app specification", status: "failed" });
       trace.finish("failed");
       sendEnhanceResult(client, cardId, null);
+      sendBuildComplete(client, cardId, false, undefined, "Failed to parse app specification");
       return;
     }
 
@@ -579,6 +600,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
       buildSteps.push({ label: "Design app specification", status: "failed" });
       trace.finish("failed");
       sendEnhanceResult(client, cardId, null);
+      sendBuildComplete(client, cardId, false, undefined, "App specification missing required fields");
       return;
     }
 
@@ -660,6 +682,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
         buildSteps.push({ label: "Validate UI template", status: "failed" });
         trace.finish("failed");
         sendEnhanceResult(client, cardId, null);
+        sendBuildComplete(client, cardId, false, undefined, "UI template validation failed after retry");
         return;
       }
       trace.step("Validate UI template (retry)", "ok", `${templateJSX.length} chars`);
@@ -704,6 +727,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
           if (toolDef === primaryTool) {
             trace.finish("failed");
             sendEnhanceResult(client, cardId, null);
+            sendBuildComplete(client, cardId, false, undefined, `Primary tool ${spec.toolPrefix}${toolDef.suffix} validation failed`);
             return;
           }
           // Non-primary → drop this tool, continue with others
@@ -722,6 +746,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
       trace.info("no tools passed validation");
       trace.finish("failed");
       sendEnhanceResult(client, cardId, null);
+      sendBuildComplete(client, cardId, false, undefined, "No tools passed validation");
       return;
     }
 
@@ -881,9 +906,11 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
       },
       buildSummary,
     });
+    sendBuildComplete(client, cardId, true, buildSummary);
   } catch (err) {
     trace.error(`fatal: ${err instanceof Error ? err.message : String(err)}`);
     trace.finish("failed");
     sendEnhanceResult(client, cardId, null);
+    sendBuildComplete(client, cardId, false, undefined, err instanceof Error ? err.message : String(err));
   }
 }

@@ -380,14 +380,17 @@ export async function startEnsoServer(opts: {
             break;
           case "card.build_app":
             if (msg.cardId && msg.cardText && msg.buildAppDefinition) {
-              runtime.log?.(`[enso] card build-app: ${msg.cardId}`);
+              runtime.log?.(`[enso] card build-app (async): ${msg.cardId}`);
               const { handleBuildTool } = await import("./tool-factory.js");
-              await handleBuildTool({
+              // Fire-and-forget: build runs in background, sends buildComplete when done
+              handleBuildTool({
                 cardId: msg.cardId,
                 cardText: msg.cardText,
                 toolDefinition: msg.buildAppDefinition,
                 client,
                 account,
+              }).catch((err) => {
+                runtime.error?.(`[enso] build-app unhandled error: ${err instanceof Error ? err.message : String(err)}`);
               });
             }
             break;

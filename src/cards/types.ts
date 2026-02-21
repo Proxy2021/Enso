@@ -2,7 +2,7 @@ import type { AgentStep, CardModeDetail, OperationStatus, ServerMessage, ToolBui
 
 // ── Card ──
 
-export type EnhanceStatus = "idle" | "loading" | "ready" | "unavailable" | "building";
+export type EnhanceStatus = "idle" | "loading" | "ready" | "unavailable";
 
 export interface Card {
   id: string;

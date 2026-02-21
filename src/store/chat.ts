@@ -370,19 +370,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   buildApp: (cardId: string, cardText: string, definition: string) => {
     const card = get().cards[cardId];
-    if (!card || card.enhanceStatus === "building") return;
+    if (!card) return;
 
-    set((s) => ({
-      cards: {
-        ...s.cards,
-        [cardId]: {
-          ...s.cards[cardId]!,
-          enhanceStatus: "building",
-          updatedAt: Date.now(),
-        },
-      },
-    }));
-
+    // Fire-and-forget: no loading state on the card — build runs in background
     get()._wsClient?.send({
       type: "card.build_app",
       cardId,
@@ -528,6 +518,57 @@ export const useChatStore = create<CardStore>((set, get) => ({
       return;
     }
 
+    // Handle build completion (async build pipeline notification)
+    if (msg.buildComplete) {
+      const { cardId: buildCardId, success, summary, error } = msg.buildComplete;
+      const now = Date.now();
+      const notifId = msg.id;
+
+      // Create a notification chat card
+      let notifText: string;
+      if (success && summary) {
+        const familyLabel = summary.toolFamily.replace(/_/g, " ");
+        notifText = `✓ New app built: **${familyLabel}** (${summary.toolNames.length} tools)\n\n${summary.description}`;
+      } else {
+        notifText = `✗ App build failed${error ? `: ${error}` : ""}`;
+      }
+
+      const notifCard: Card = {
+        id: notifId,
+        runId: msg.runId,
+        type: "chat",
+        role: "assistant",
+        status: "complete",
+        display: "expanded",
+        text: notifText,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      set((state) => {
+        const updates: Partial<CardStore> = {
+          cardOrder: [...state.cardOrder, notifId],
+          cards: { ...state.cards, [notifId]: notifCard },
+        };
+
+        // If the source card still exists, update its enhance status
+        const sourceCard = state.cards[buildCardId];
+        if (sourceCard && success) {
+          updates.cards = {
+            ...updates.cards!,
+            [buildCardId]: {
+              ...sourceCard,
+              enhanceStatus: "ready",
+              updatedAt: now,
+            },
+          };
+        }
+
+        return updates;
+      });
+      return;
+    }
+
     set((state) => {
       const now = Date.now();
 
@@ -539,17 +580,26 @@ export const useChatStore = create<CardStore>((set, get) => ({
         // Handle enhance result (user-triggered app enhancement)
         if (msg.enhanceResult !== undefined) {
           if (msg.enhanceResult === null) {
+            // Only set unavailable if the card was actively loading (fast enhance path).
+            // Background builds send their own buildComplete notification.
+            const newEnhanceStatus = card.enhanceStatus === "loading" ? "unavailable" as const : card.enhanceStatus;
             return {
               cards: {
                 ...state.cards,
                 [msg.targetCardId]: {
                   ...card,
-                  enhanceStatus: "unavailable",
+                  enhanceStatus: newEnhanceStatus,
+                  status: "complete",
+                  operation: undefined,
+                  pendingAction: undefined,
                   updatedAt: now,
                 },
               },
             };
           }
+          // Auto-switch to app view only for the fast enhance path (enhanceStatus was "loading").
+          // Background builds keep the current viewMode — user will be notified via buildComplete.
+          const wasLoading = card.enhanceStatus === "loading";
           return {
             cards: {
               ...state.cards,
@@ -560,7 +610,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 appCardMode: msg.enhanceResult.cardMode,
                 appBuildSummary: msg.enhanceResult.buildSummary,
                 enhanceStatus: "ready",
-                viewMode: "app",
+                status: "complete",
+                viewMode: wasLoading ? "app" : (card.viewMode ?? "app"),
+                operation: undefined,
+                pendingAction: undefined,
                 updatedAt: now,
               },
             },
