@@ -148,6 +148,51 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string): 
         }
       });
     },
+
+    async search(query: string, options?: { count?: number; country?: string }) {
+      return withTimeout(`search("${query}")`, async () => {
+        const apiKey = process.env.BRAVE_API_KEY;
+        if (!apiKey) {
+          console.log(`[enso:executor-ctx] ${tag} → search: no BRAVE_API_KEY, returning empty`);
+          return { ok: false as const, results: [] };
+        }
+
+        const count = Math.min(Math.max(options?.count ?? 3, 1), 5);
+        const searchUrl = new URL("https://api.search.brave.com/res/v1/web/search");
+        searchUrl.searchParams.set("q", query);
+        searchUrl.searchParams.set("count", String(count));
+        if (options?.country) searchUrl.searchParams.set("country", options.country);
+
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), EXECUTOR_CTX_TIMEOUT_MS);
+        try {
+          const resp = await globalThis.fetch(searchUrl.toString(), {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              "X-Subscription-Token": apiKey,
+            },
+            signal: ac.signal,
+          });
+
+          if (!resp.ok) {
+            return { ok: false as const, results: [] };
+          }
+
+          const data = await resp.json() as { web?: { results?: Array<{ title?: string; url?: string; description?: string }> } };
+          const rawResults = data?.web?.results ?? [];
+          const results = rawResults.slice(0, count).map((r) => ({
+            title: r.title ?? "",
+            url: r.url ?? "",
+            description: r.description ?? "",
+          }));
+
+          return { ok: true as const, results };
+        } finally {
+          clearTimeout(timer);
+        }
+      });
+    },
   };
 }
 

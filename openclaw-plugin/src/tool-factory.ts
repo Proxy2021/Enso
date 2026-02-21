@@ -234,8 +234,11 @@ CAPABILITIES — Executors receive a \`ctx\` parameter with real system access:
 - await ctx.readFile(path) — Read a text file. Returns file content.
 - await ctx.searchFiles(rootPath, name) — Search for files by name pattern.
 - await ctx.fetch(url, options?) — HTTPS fetch (max 512KB, 10s timeout). Returns { ok, status, data }.
+- await ctx.search(query, options?) — Web search via Brave Search API. Returns { ok, results: [{ title, url, description }] }.
+  Use for discovery: showtimes, reviews, local info, event details, product lookups.
 
 When designing tools, ALWAYS prefer REAL data sources over synthetic data:
+- Web search (ctx.search) — for discovering showtimes, reviews, local businesses, events, product details
 - File system browsing/reading (ctx.listDir, ctx.readFile, ctx.searchFiles) — for file/project scenarios
 - Any registered OpenClaw tools (ctx.callTool with tool name) — for system integration
 - HTTP APIs (ctx.fetch for public APIs) — for movies, weather, news, sports, stocks, prices, etc.
@@ -298,6 +301,8 @@ EXECUTOR CONTEXT (ctx) — Available capabilities:
 - await ctx.readFile(path) — Read a text file. Returns { success, data, error } where data is the file content.
 - await ctx.searchFiles(rootPath, name) — Search files by name. Returns { success, data, error }.
 - await ctx.fetch(url, options?) — HTTPS fetch (max 512KB, 10s timeout). Returns { ok, status, data }.
+- await ctx.search(query, options?) — Web search via Brave Search API. Returns { ok, results: [{ title, url, description }] }.
+  Use for discovery: finding showtimes, reviews, detailed info, local businesses, event schedules, etc.
 
 RULES:
 - The function body will be wrapped in: new AsyncFunction("callId", "params", "ctx", YOUR_BODY)
@@ -309,8 +314,10 @@ RULES:
 - Return reasonable default data when optional params are missing.
 
 CRITICAL — WHEN TO USE ctx:
-- **PREFER ctx.fetch for ANY scenario involving external data** — movies, weather, news, stocks, sports, prices, etc.
-  Use free/public APIs: TMDB (movies), Open-Meteo (weather), etc.
+- **PREFER ctx.search for DISCOVERY scenarios** — finding showtimes, reviews, local businesses, event details, product comparisons, detailed info about specific items.
+  ctx.search returns titles, URLs, and descriptions. Use ctx.fetch on the returned URLs if you need to scrape deeper data.
+- **PREFER ctx.fetch for KNOWN API scenarios** — movies (TMDB), weather (Open-Meteo), stocks, etc.
+  Use free/public APIs when you know the endpoint.
 - **PREFER ctx.listDir / ctx.readFile** for scenarios involving the user's files or projects.
 - **PREFER ctx.callTool** for scenarios that map to registered system tools.
 - Use synthetic/hardcoded data ONLY as a FALLBACK when ctx calls fail — NEVER as the primary data source when a real API exists.
@@ -345,6 +352,22 @@ try {
 } catch (e) { /* fall through to synthetic */ }
 var fallback = [{ name: "example.txt", type: "file", size: 1024 }];
 return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", path: dirPath, entries: fallback }) }] };
+\`\`\`
+
+EXAMPLE — ctx.search for discovery (showtimes, reviews, local info):
+\`\`\`
+var query = (params.title || "Movie") + " showtimes " + (params.location || "");
+try {
+  var sr = await ctx.search(query.trim(), { count: 5 });
+  if (sr.ok && sr.results.length > 0) {
+    var showtimes = sr.results.map(function(r) {
+      return { source: r.title, url: r.url, snippet: r.description };
+    });
+    return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", query: query, results: showtimes }) }] };
+  }
+} catch (e) { /* fall through to synthetic fallback */ }
+var fallback = [{ source: "No results", url: "", snippet: "Search unavailable" }];
+return { content: [{ type: "text", text: JSON.stringify({ tool: "${toolName}", query: query, results: fallback }) }] };
 \`\`\`
 
 Respond with ONLY the function body (no function keyword, no wrapper, no markdown fences). The code must start directly with variable declarations or return statements.`;

@@ -182,6 +182,12 @@ export interface ExecutorContext {
 
   /** Sandboxed HTTP fetch (timeout 10s, max 512KB response, HTTPS only). */
   fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; data: unknown }>;
+
+  /** Web search via Brave Search API. Returns structured search results for discovery scenarios. */
+  search(query: string, options?: { count?: number; country?: string }): Promise<{
+    ok: boolean;
+    results: Array<{ title: string; url: string; description: string }>;
+  }>;
 }
 
 /** UIGenerator types */
