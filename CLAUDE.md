@@ -64,6 +64,12 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
 ├── index.ts                  # Plugin entry, registers channel + after_tool_call hook
 ├── openclaw.plugin.json      # Plugin metadata
 ├── SETUP.md                  # Integration guide
+├── apps/                     # Codebase apps (checked into git, same format as user apps)
+│   └── <family>/             # e.g., meal_planner/
+│       ├── app.json          #   Manifest with PluginSpec + metadata
+│       ├── template.jsx      #   JSX template string (compiled in browser sandbox)
+│       └── executors/        #   Tool executor function bodies (plain JS)
+│           └── <suffix>.js   #     e.g., plan_week.js, swap_meal.js
 └── src/
     ├── channel.ts            # ChannelPlugin implementation + config schema
     ├── runtime.ts            # OpenClaw runtime singleton
@@ -81,6 +87,8 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── media-tools.ts        # enso_media_* tool registrations
     ├── travel-tools.ts       # enso_travel_* tool registrations
     ├── meal-tools.ts         # enso_meal_* tool registrations
+    ├── app-persistence.ts    # Save/load/register dynamic apps from disk (codebase + user)
+    ├── tool-factory.ts       # Build pipeline: spec → executors → template → persist
     ├── tool-families/        # Tool family capability catalog
     │   └── catalog.ts        # TOOL_FAMILY_CAPABILITIES definitions
     └── native-tools/         # Zero-config native tool bridge
@@ -89,6 +97,12 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
         └── templates/        # Pre-built JSX templates per tool family
             ├── alpharank.ts
             ├── filesystem.ts
+            ├── workspace.ts
+            ├── media.ts
+            ├── travel.ts
+            ├── meal.ts
+            ├── system.ts
+            ├── tooling.ts
             └── general.ts
 
 shared/                       # Code shared between frontend and plugin
@@ -282,9 +296,229 @@ The `/tool enso` command opens a dedicated in-app tool console card that:
 
 ## Building Enso Applications
 
-This section is the authoritative guide for creating new built-in Enso applications (tool families). Follow it exactly when using `/code` or building manually.
+Enso has two approaches for creating apps. **Dynamic apps** are the primary workflow — create them from within Enso itself and optionally promote them into the git repo. **Built-in apps** are the advanced path for deeply integrated tool families that need hardcoded TypeScript.
 
-### Quick Reference — 5 Files to Create/Modify
+### Dynamic Apps (Primary Workflow)
+
+Dynamic apps are created via Enso's **Build App** pipeline (or manually) and stored as a portable directory of JSON + JS files. They can live in two places:
+
+| Location | Path | Purpose |
+|----------|------|---------|
+| **User apps** | `~/.openclaw/enso-apps/<family>/` | Created by the Build App pipeline. Personal, not in git. |
+| **Codebase apps** | `openclaw-plugin/apps/<family>/` | Promoted from user apps via "Save to Codebase". Checked into git, ships with the project. |
+
+At startup, `loadAllApps()` merges both directories. User apps override codebase apps with the same `toolFamily` name (useful for iterating locally before committing).
+
+#### App Directory Structure
+
+```
+<family>/                    # e.g., meal_planner/
+├── app.json                 # Manifest: PluginSpec + metadata
+├── template.jsx             # JSX template string (compiled in browser sandbox)
+└── executors/               # One file per tool
+    ├── plan_week.js         # Executor function body for enso_meal_plan_week
+    ├── swap_meal.js         # Executor function body for enso_meal_swap_meal
+    └── grocery_list.js      # Executor function body for enso_meal_grocery_list
+```
+
+#### app.json Schema
+
+```typescript
+{
+  "version": 1,                  // Always 1
+  "createdAt": 1709123456789,    // Timestamp
+  "spec": {
+    "toolFamily": "meal_planner",            // Unique ID (snake_case)
+    "toolPrefix": "enso_meal_",              // Always "enso_<family>_"
+    "description": "Weekly meal planning",   // What the plugin does
+    "signatureId": "weekly_meal_plan",       // Template identifier
+    "tools": [                               // 2-4 tool definitions
+      {
+        "suffix": "plan_week",               // Action name → enso_meal_plan_week
+        "description": "Generate weekly meal plan",
+        "parameters": {                      // JSON Schema
+          "type": "object",
+          "additionalProperties": false,     // CRITICAL — OpenClaw rejects without this
+          "properties": {
+            "diet": { "type": "string", "description": "Dietary preference" }
+          },
+          "required": ["diet"]
+        },
+        "sampleParams": { "diet": "balanced" },
+        "sampleData": {                      // Example output — MUST include "tool" field
+          "tool": "enso_meal_plan_week",
+          "meals": [{ "day": "Monday", "breakfast": "oatmeal" }]
+        },
+        "requiredDataKeys": ["tool", "meals"],
+        "isPrimary": true                    // One tool must be primary (default view)
+      }
+    ]
+  }
+}
+```
+
+**Critical rules:**
+- Every tool's `sampleData` MUST include a `"tool"` field set to the full tool name — the template uses this to detect which view to render
+- Exactly one tool must have `isPrimary: true` — this is the tool executed when the app is first opened
+- `additionalProperties: false` is required in all parameter schemas
+
+#### Executor Format (Plain JavaScript)
+
+Executors are **function bodies** — not modules, not full functions. They become the body of `new AsyncFunction("callId", "params", "ctx", body)`.
+
+```javascript
+// NO imports, NO function wrapper — code starts directly
+var diet = (params.diet || "").trim() || "balanced";
+
+// Use ctx methods for real capabilities
+var result = await ctx.ask("Create a 7-day " + diet + " meal plan as JSON array");
+var meals = [];
+try { meals = JSON.parse(result.text); } catch(e) { /* fallback */ }
+
+// MUST return this exact shape:
+return {
+  content: [{
+    type: "text",
+    text: JSON.stringify({
+      tool: "enso_meal_plan_week",     // ← REQUIRED: matches suffix → prefix+suffix
+      diet: diet,
+      meals: meals
+    })
+  }]
+};
+```
+
+**Executor rules:**
+- No `import` or `require` — everything provided via `ctx`
+- No JSX — plain JavaScript only
+- `async`/`await` is available (runs as AsyncFunction)
+- Must return `{ content: [{ type: "text", text: JSON.stringify(data) }] }`
+- Output JSON MUST include `"tool": "enso_<family>_<suffix>"` field
+- Use `var` instead of `const`/`let` for maximum compatibility
+
+**Available via `ctx` (ExecutorContext):**
+
+| Method | Returns | Use Case |
+|--------|---------|----------|
+| `ctx.callTool(name, params)` | `{success, data, error}` | Call any registered OpenClaw tool |
+| `ctx.listDir(path)` | `{success, data, error}` | List directory contents |
+| `ctx.readFile(path)` | `{success, data, error}` | Read file text |
+| `ctx.searchFiles(root, name)` | `{success, data, error}` | Find files by pattern |
+| `ctx.fetch(url, opts?)` | `{ok, status, data}` | HTTPS fetch (512KB max, 10s timeout) |
+| `ctx.search(query, opts?)` | `{ok, results:[{title,url,description}]}` | Brave web search |
+| `ctx.ask(prompt, opts?)` | `{ok, text}` | Ask Gemini Flash (summarize, classify, analyze) |
+| `ctx.store.get(key)` | `value \| null` | Read persistent KV (scoped per family) |
+| `ctx.store.set(key, value)` | `void` | Write persistent KV (1MB limit per family) |
+| `ctx.store.delete(key)` | `boolean` | Delete a key |
+
+#### Template JSX Format
+
+Templates are **strings containing JSX** — NOT actual JSX files. They get compiled by Sucrase at runtime in the browser sandbox.
+
+```jsx
+export default function GeneratedUI({ data, onAction }) {
+  // ALL hooks MUST be at top level — NEVER inside if/loops
+  const [query, setQuery] = useState("");
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  // Polymorphic: detect which view based on data.tool
+  const isSwapView = data?.tool === "enso_meal_swap_meal";
+  const isPlanView = data?.tool === "enso_meal_plan_week" || Array.isArray(data?.meals);
+
+  if (isSwapView) {
+    return (
+      <UICard header="Meal Swapped">
+        <Badge variant="success">Updated {data.mealType} for {data.day}</Badge>
+        <Button onClick={() => onAction("plan_week", { diet: data.diet })}>Back to Plan</Button>
+      </UICard>
+    );
+  }
+
+  // Default plan view
+  const meals = data?.meals ?? [];
+  return (
+    <div className="space-y-3">
+      <Stat label="Diet" value={data?.diet || "balanced"} accent="emerald" />
+      <DataTable
+        columns={[
+          { key: "day", label: "Day", sortable: true },
+          { key: "breakfast", label: "Breakfast" },
+          { key: "lunch", label: "Lunch" },
+          { key: "dinner", label: "Dinner" },
+        ]}
+        data={meals}
+        striped
+      />
+    </div>
+  );
+}
+```
+
+**Template sandbox — what's available (no imports needed):**
+
+| Category | Available |
+|----------|-----------|
+| **React** | `useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`, `Fragment` |
+| **EnsoUI** | `Tabs`, `DataTable`, `Stat`, `Badge`, `Button`, `UICard`, `Progress`, `Accordion`, `Dialog`, `Select`, `Input`, `Switch`, `Slider`, `Separator`, `EmptyState` |
+| **Namespaced** | `EnsoUI.Tooltip` (avoids Recharts collision), `EnsoUI.VideoPlayer` |
+| **Recharts** | `BarChart`, `LineChart`, `PieChart`, `Bar`, `Line`, `Pie`, `XAxis`, `YAxis`, `CartesianGrid`, `Tooltip` (Recharts), `Legend`, `ResponsiveContainer` |
+| **Lucide** | `LucideReact.FileText`, `LucideReact.Folder`, etc. (500+ icons) |
+
+**Template rules:**
+- No imports — everything pre-injected
+- No DOM/window/console/fetch access
+- All hooks at top level (React rules — conditional hooks crash)
+- Use `onAction("suffix", payload)` for button clicks → resolves to `enso_<family>_<suffix>`
+- Use `data.tool` to switch between views (polymorphic rendering)
+- Prefer EnsoUI components over hand-coded HTML
+
+#### Creating Apps — Three Methods
+
+**Method 1: Build from Enso UI (recommended)**
+1. Chat with Enso to get a text response
+2. Click the "App" enhance button → select "Build custom app..."
+3. Review and edit the LLM-generated app proposal
+4. Submit → build pipeline runs async (~10-15s)
+5. Notification card appears on completion
+6. Open Apps menu → click bookmark icon to save to codebase
+
+**Method 2: Via the Code button (for iteration)**
+1. Open Apps menu → click "Code" button
+2. Claude Code opens with Enso project context (this CLAUDE.md)
+3. Ask it to create/modify an app, specifying the family name and tools
+4. It writes files directly to `openclaw-plugin/apps/<family>/`
+5. Restart server to load the new app
+
+**Method 3: Manual (for full control)**
+1. Create `openclaw-plugin/apps/<family>/` directory
+2. Write `app.json` with the PluginSpec schema above
+3. Write `template.jsx` with the JSX template
+4. Write `executors/<suffix>.js` for each tool
+5. Restart server → app loads automatically via `loadAllApps()`
+
+#### App Lifecycle
+
+```
+Build App (in Enso UI)
+    ↓
+Saved to ~/.openclaw/enso-apps/<family>/     (user app)
+    ↓
+Click bookmark icon in Apps menu
+    ↓
+Copied to openclaw-plugin/apps/<family>/     (codebase app)
+    ↓
+git add + git commit                         (shipped with project)
+```
+
+- **`loadAllApps()`** merges codebase + user directories at startup. User apps override codebase apps with the same family name.
+- **`/delete-apps`** clears user apps only — codebase apps persist.
+- **Apps menu** shows all apps in a flat list. Codebase apps show "in repo" label. User-only apps show a bookmark icon for save-to-codebase.
+
+### Built-in Apps (Advanced — Hardcoded TypeScript)
+
+For deeply integrated tool families that need TypeScript, direct access to Node.js APIs, or complex multi-file logic, use the built-in 5-file pattern. This is the original approach used by filesystem, workspace, media, travel, and meal families.
+
+#### Quick Reference — 5 Files to Create/Modify
 
 ```
 1. openclaw-plugin/src/<family>-tools.ts       ← Tool functions
@@ -296,7 +530,7 @@ This section is the authoritative guide for creating new built-in Enso applicati
 
 **Data flow:** Tool execution → data normalization → JSX template (compiled in browser sandbox) → `onAction()` callback → four-path action dispatch → tool re-execution → re-render
 
-### Step 1: Create Tool Functions
+#### Step 1: Create Tool Functions
 
 **File:** `openclaw-plugin/src/<family>-tools.ts`
 
@@ -357,7 +591,7 @@ return jsonResult({
 
 **Serving binary files:** Use `toMediaUrl(filePath)` from `server.ts` to convert local paths to `/media/:encodedPath` URLs. The media endpoint handles Range requests for streaming.
 
-### Step 2: Register in Catalog
+#### Step 2: Register in Catalog
 
 **File:** `openclaw-plugin/src/tool-families/catalog.ts`
 
@@ -377,7 +611,7 @@ Add an entry to `TOOL_FAMILY_CAPABILITIES[]`:
 - `actionSuffixes`: Must list ALL action suffixes. Used for native tool bridge resolution.
 - `signatureId`: Must match what the template module checks in `isXSignature()`
 
-### Step 3: Create JSX Template
+#### Step 3: Create JSX Template
 
 **File:** `openclaw-plugin/src/native-tools/templates/<family>.ts`
 
@@ -451,7 +685,7 @@ data.tool === "enso_myfam_detail" → detail view
 data.tool === "enso_myfam_search" → search results view
 ```
 
-### Step 4: Wire Up Registry
+#### Step 4: Wire Up Registry
 
 **File:** `openclaw-plugin/src/native-tools/registry.ts`
 
@@ -485,7 +719,7 @@ if (data?.tool?.startsWith("enso_myfam_") || Array.isArray(data?.mySpecificKey))
 }
 ```
 
-### Step 5: Register in Plugin Entry
+#### Step 5: Register in Plugin Entry
 
 **File:** `openclaw-plugin/index.ts`
 
@@ -501,7 +735,7 @@ maybeRegisterFallbackToolFamily({
 });
 ```
 
-### Action Dispatch Reference
+#### Action Dispatch Reference
 
 When a user clicks a button in the app view:
 
@@ -528,7 +762,7 @@ Result → normalizeData → re-render template with new data
 2. Suffix match: `"detail"` in `actionSuffixes`? → execute with prefix
 3. Family fallback: use `fallbackToolName` with merged params
 
-### Common Pitfalls
+#### Common Pitfalls
 
 | Pitfall | Consequence | Fix |
 |---------|-------------|-----|
@@ -581,7 +815,7 @@ Consistent `[enso:*]` prefix for filtering:
 
 ## Development
 
-**All development must be done on the main branch directly** — do not use worktrees or feature branches. Edit files in the main tree at `/Users/kkwong/Desktop/Github/Enso/`.
+**All development must be done on the main branch directly** — do not use worktrees or feature branches. Edit files in the main tree at `D:\Github\Enso\`.
 
 ```bash
 # Run frontend dev server (Vite :5173)
@@ -626,6 +860,6 @@ Enso is a plugin for [OpenClaw](../OpenClaw), a local-first multi-channel AI gat
 
 ## Current Status (Phase 7)
 
-**Implemented**: Card-based chat UI, WebSocket messaging, text streaming (delta/final), media upload, OpenClaw plugin integration, multi-block response accumulation with expandable agent steps, user-triggered app enhancement (LLM tool selection → deterministic execution → pre-built template UI), Original/App view toggle, interactive card actions with four-path dispatch (refine / mechanical / native tool / agent fallback), card interaction context with action history, Claude Code CLI integration with direct tool routing, NDJSON streaming from CLI, session resumption, interactive AskUserQuestion with clickable option buttons, project picker with git repo scanning, persistent terminal card with multi-turn conversations, zero-config native tool bridge (auto-discovery from OpenClaw plugin registry, direct tool execution), deterministic tool-mode templates for AlphaRank/filesystem/workspace/media/travel/meal domains, `/tool enso` tool console for template introspection + add-tool requests, comprehensive server-side logging (`[enso:inbound/outbound/enhance/action/build]`), runtime mode switching (IM/UI/Full), async app build pipeline (fire-and-forget with `buildComplete` notification), deferred Build App dialog (waits for LLM proposal before showing), enhance menu with tool family vocabulary (dropdown showing available app types for instant enhance), conversation context threading (chat history passed through build pipeline for context-aware spec design), parallelized build pipeline (executor + template generation run concurrently, saving 3-5s), `ctx.ask()` LLM capability (Gemini Flash available in executors for summarization/classification/analysis), incremental iteration via Refine (single-LLM-call template regeneration from app view), `ctx.store` key-value persistence (JSON-backed per-family storage surviving restarts), and **EnsoUI component library** (16 pre-styled React + Tailwind components — Tabs, DataTable, Stat, Badge, Button, Card, Progress, Accordion, Dialog, Select, Input, Switch, Slider, Separator, EmptyState, Tooltip — injected into the sandbox scope, with LLM prompts updated to prefer them over hand-coded equivalents, reducing generated template tokens by ~40-50%).
+**Implemented**: Card-based chat UI, WebSocket messaging, text streaming (delta/final), media upload, OpenClaw plugin integration, multi-block response accumulation with expandable agent steps, user-triggered app enhancement (LLM tool selection → deterministic execution → pre-built template UI), Original/App view toggle, interactive card actions with four-path dispatch (refine / mechanical / native tool / agent fallback), card interaction context with action history, Claude Code CLI integration with direct tool routing, NDJSON streaming from CLI, session resumption, interactive AskUserQuestion with clickable option buttons, project picker with git repo scanning, persistent terminal card with multi-turn conversations, zero-config native tool bridge (auto-discovery from OpenClaw plugin registry, direct tool execution), deterministic tool-mode templates for AlphaRank/filesystem/workspace/media/travel/meal domains, `/tool enso` tool console for template introspection + add-tool requests, comprehensive server-side logging (`[enso:inbound/outbound/enhance/action/build]`), runtime mode switching (IM/UI/Full), async app build pipeline (fire-and-forget with `buildComplete` notification), deferred Build App dialog (waits for LLM proposal before showing), enhance menu with tool family vocabulary (dropdown showing available app types for instant enhance), conversation context threading (chat history passed through build pipeline for context-aware spec design), parallelized build pipeline (executor + template generation run concurrently, saving 3-5s), `ctx.ask()` LLM capability (Gemini Flash available in executors for summarization/classification/analysis), incremental iteration via Refine (single-LLM-call template regeneration from app view), `ctx.store` key-value persistence (JSON-backed per-family storage surviving restarts), **EnsoUI component library** (17 pre-styled React + Tailwind components — Tabs, DataTable, Stat, Badge, Button, Card, Progress, Accordion, Dialog, Select, Input, Switch, Slider, Separator, EmptyState, Tooltip, VideoPlayer — injected into the sandbox scope, with LLM prompts updated to prefer them over hand-coded equivalents, reducing generated template tokens by ~40-50%), **unified app model** (codebase apps in `openclaw-plugin/apps/` + user apps in `~/.openclaw/enso-apps/`, merged by `loadAllApps()`, save-to-codebase promotion via Apps menu bookmark icon), **Apps menu** (flat list of all apps with run, save-to-codebase, restart server, and launch Code buttons).
 
 **Not yet implemented**: Persistent chat history, user authentication, multi-user session isolation, rate limiting, full inline tool activity trace cards (reads/edits/bash timeline), cost tracking per run, abort button for active Claude Code runs.
