@@ -49,6 +49,7 @@ interface CardStore {
   deleteAllApps: () => void;
   fetchApps: () => void;
   runApp: (toolFamily: string) => void;
+  saveAppToCodebase: (toolFamily: string) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
@@ -439,6 +440,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
     get()._wsClient?.send({ type: "apps.run", toolFamily });
   },
 
+  saveAppToCodebase: (toolFamily: string) => {
+    get()._wsClient?.send({ type: "app.save_to_codebase", toolFamily });
+  },
+
   fetchProjects: () => {
     get()._wsClient?.send({ type: "tools.list_projects" });
   },
@@ -492,6 +497,35 @@ export const useChatStore = create<CardStore>((set, get) => ({
         cards: { ...s.cards, [id]: card },
         apps: [], // Clear apps list since all were deleted
       }));
+      return;
+    }
+
+    // Handle app saved to codebase confirmation
+    if (msg.appSaved) {
+      const { toolFamily, success, error } = msg.appSaved;
+      const familyLabel = toolFamily.replace(/_/g, " ");
+      const id = msg.id;
+      const now = Date.now();
+      const text = success
+        ? `App **${familyLabel}** saved to codebase. You can now \`git commit\` it.`
+        : `Failed to save app **${familyLabel}** to codebase: ${error}`;
+      const card: Card = {
+        id,
+        runId: msg.runId,
+        type: "chat",
+        role: "assistant",
+        status: "complete",
+        display: "expanded",
+        text,
+        createdAt: now,
+        updatedAt: now,
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, id],
+        cards: { ...s.cards, [id]: card },
+      }));
+      // Refresh apps list to update codebase flags
+      get().fetchApps();
       return;
     }
 

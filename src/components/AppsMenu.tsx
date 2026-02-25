@@ -14,6 +14,7 @@ export default function AppsMenu() {
   const apps = useChatStore((s) => s.apps);
   const fetchApps = useChatStore((s) => s.fetchApps);
   const runApp = useChatStore((s) => s.runApp);
+  const saveAppToCodebase = useChatStore((s) => s.saveAppToCodebase);
   const connectionState = useChatStore((s) => s.connectionState);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -42,8 +43,11 @@ export default function AppsMenu() {
     setOpen(false);
   }
 
-  const builtIn = apps.filter((a) => a.builtIn);
-  const custom = apps.filter((a) => !a.builtIn);
+  function handleSaveToCodebase(e: React.MouseEvent, toolFamily: string) {
+    e.stopPropagation();
+    saveAppToCodebase(toolFamily);
+    setOpen(false);
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -82,79 +86,53 @@ export default function AppsMenu() {
             </div>
           ) : (
             <div className="max-h-96 overflow-y-auto">
-              {/* Built-in apps */}
-              {builtIn.length > 0 && (
-                <>
-                  <div className="px-3 py-1.5 border-b border-gray-700/50">
-                    <span className="text-[10px] uppercase tracking-wider text-gray-500">
-                      Built-in
+              {apps.map((app) => (
+                <button
+                  key={app.toolFamily}
+                  onClick={() => handleRun(app.toolFamily)}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-700/50 transition-colors border-b border-gray-700/20 last:border-b-0"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base shrink-0">
+                      {FAMILY_ICONS[app.toolFamily] ?? "\u2728"}
                     </span>
-                  </div>
-                  {builtIn.map((app) => (
-                    <button
-                      key={app.toolFamily}
-                      onClick={() => handleRun(app.toolFamily)}
-                      className="w-full text-left px-3 py-2 hover:bg-gray-700/50 transition-colors border-b border-gray-700/20 last:border-b-0"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base shrink-0">
-                          {FAMILY_ICONS[app.toolFamily] ?? "\uD83D\uDD27"}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-200 font-medium capitalize">
+                          {app.toolFamily.replace(/_/g, " ")}
                         </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-200 font-medium capitalize">
-                              {app.toolFamily.replace(/_/g, " ")}
+                        <div className="flex items-center gap-1.5">
+                          {/* Save to codebase — only for user-local apps */}
+                          {!app.builtIn && !app.codebase && (
+                            <span
+                              role="button"
+                              title="Save to codebase"
+                              onClick={(e) => handleSaveToCodebase(e, app.toolFamily)}
+                              className="text-gray-500 hover:text-blue-400 transition-colors cursor-pointer p-0.5"
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                              </svg>
                             </span>
-                            <span className="text-[10px] text-gray-500">
-                              {app.toolCount} action{app.toolCount !== 1 ? "s" : ""}
+                          )}
+                          {/* Codebase indicator */}
+                          {app.codebase && (
+                            <span className="text-[9px] text-emerald-500/70" title="Saved in codebase">
+                              in repo
                             </span>
-                          </div>
-                          <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
-                            {app.description}
-                          </div>
+                          )}
+                          <span className="text-[10px] text-gray-500">
+                            {app.toolCount} tool{app.toolCount !== 1 ? "s" : ""}
+                          </span>
                         </div>
                       </div>
-                    </button>
-                  ))}
-                </>
-              )}
-
-              {/* Custom apps */}
-              {custom.length > 0 && (
-                <>
-                  <div className="px-3 py-1.5 border-b border-gray-700/50">
-                    <span className="text-[10px] uppercase tracking-wider text-gray-500">
-                      Custom {custom.length > 0 && `(${custom.length})`}
-                    </span>
-                  </div>
-                  {custom.map((app) => (
-                    <button
-                      key={app.toolFamily}
-                      onClick={() => handleRun(app.toolFamily)}
-                      className="w-full text-left px-3 py-2 hover:bg-gray-700/50 transition-colors border-b border-gray-700/20 last:border-b-0"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base shrink-0">
-                          {FAMILY_ICONS[app.toolFamily] ?? "\u2728"}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-200 font-medium capitalize">
-                              {app.toolFamily.replace(/_/g, " ")}
-                            </span>
-                            <span className="text-[10px] text-gray-500 bg-gray-900/60 px-1.5 py-0.5 rounded">
-                              {app.toolCount} tool{app.toolCount !== 1 ? "s" : ""}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
-                            {app.description}
-                          </div>
-                        </div>
+                      <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
+                        {app.description}
                       </div>
-                    </button>
-                  ))}
-                </>
-              )}
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </div>

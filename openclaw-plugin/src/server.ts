@@ -471,10 +471,10 @@ export async function startEnsoServer(opts: {
             break;
           case "apps.list": {
             try {
-              const { loadApps } = await import("./app-persistence.js");
+              const { loadAllApps, isCodebaseApp } = await import("./app-persistence.js");
               const { TOOL_FAMILY_CAPABILITIES } = await import("./tool-families/catalog.js");
               const { isToolRegistered } = await import("./native-tools/registry.js");
-              const apps = loadApps();
+              const apps = loadAllApps();
               const dynamicApps = apps.map((app) => {
                 const primary = app.spec.tools.find((t) => t.isPrimary) ?? app.spec.tools[0];
                 return {
@@ -482,6 +482,7 @@ export async function startEnsoServer(opts: {
                   description: app.spec.description,
                   toolCount: app.spec.tools.length,
                   primaryToolName: `${app.spec.toolPrefix}${primary.suffix}`,
+                  codebase: isCodebaseApp(app.spec.toolFamily),
                 };
               });
               // Include built-in tool families whose fallback tool is registered
@@ -523,10 +524,10 @@ export async function startEnsoServer(opts: {
             if (msg.toolFamily) {
               runtime.log?.(`[enso:app-runner] apps.run: ${msg.toolFamily}`);
               try {
-                const { loadApps } = await import("./app-persistence.js");
+                const { loadAllApps } = await import("./app-persistence.js");
                 const { executeToolDirect, normalizeDataForToolTemplate, getToolTemplateCode, getToolTemplate } = await import("./native-tools/registry.js");
                 const { getCapabilityForFamily } = await import("./tool-families/catalog.js");
-                const apps = loadApps();
+                const apps = loadAllApps();
                 const app = apps.find((a) => a.spec.toolFamily === msg.toolFamily);
 
                 if (app) {
@@ -713,6 +714,45 @@ export async function startEnsoServer(opts: {
                 text: `Failed to delete apps: ${err instanceof Error ? err.message : String(err)}`,
                 timestamp: Date.now(),
               });
+            }
+            break;
+          }
+          case "app.save_to_codebase": {
+            if (msg.toolFamily) {
+              runtime.log?.(`[enso] save app to codebase: ${msg.toolFamily}`);
+              try {
+                const { saveAppToCodebase } = await import("./app-persistence.js");
+                const result = saveAppToCodebase(msg.toolFamily);
+                send({
+                  id: randomUUID(),
+                  runId: randomUUID(),
+                  sessionKey,
+                  seq: 0,
+                  state: "final",
+                  appSaved: {
+                    toolFamily: msg.toolFamily,
+                    success: result.success,
+                    path: result.path,
+                    error: result.error,
+                  },
+                  timestamp: Date.now(),
+                });
+              } catch (err) {
+                runtime.error?.(`[enso] save to codebase failed: ${err instanceof Error ? err.message : String(err)}`);
+                send({
+                  id: randomUUID(),
+                  runId: randomUUID(),
+                  sessionKey,
+                  seq: 0,
+                  state: "final",
+                  appSaved: {
+                    toolFamily: msg.toolFamily,
+                    success: false,
+                    error: err instanceof Error ? err.message : String(err),
+                  },
+                  timestamp: Date.now(),
+                });
+              }
             }
             break;
           }

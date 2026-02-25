@@ -115,7 +115,8 @@ export interface ServerMessage {
   enhanceHint?: { toolFamily: string };
   appProposal?: { cardId: string; proposal: string };
   appsDeleted?: { families: string[]; count: number };
-  appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string; builtIn?: boolean }>;
+  appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string; builtIn?: boolean; codebase?: boolean }>;
+  appSaved?: { toolFamily: string; success: boolean; path?: string; error?: string };
   buildComplete?: {
     cardId: string;
     success: boolean;
@@ -138,6 +139,7 @@ export interface ClientMessage {
     | "card.delete_all_apps"
     | "apps.list"
     | "apps.run"
+    | "app.save_to_codebase"
     | "settings.set_mode"
     | "operation.cancel";
   mode?: ChannelMode;

@@ -61,6 +61,7 @@ export interface AppInfo {
   toolCount: number;
   primaryToolName: string;
   builtIn?: boolean;
+  codebase?: boolean;
 }
 
 // ── Protocol Messages ──
@@ -107,6 +108,7 @@ export interface ServerMessage {
   appProposal?: { cardId: string; proposal: string };
   appsDeleted?: { families: string[]; count: number };
   appsList?: AppInfo[];
+  appSaved?: { toolFamily: string; success: boolean; path?: string; error?: string };
   buildComplete?: {
     cardId: string;
     success: boolean;
@@ -129,6 +131,7 @@ export interface ClientMessage {
     | "card.delete_all_apps"
     | "apps.list"
     | "apps.run"
+    | "app.save_to_codebase"
     | "settings.set_mode"
     | "operation.cancel";
   mode?: ChannelMode;
