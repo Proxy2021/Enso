@@ -29,6 +29,8 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [fileContent, setFileContent] = useState(null);
+  const [videoError, setVideoError] = useState(false);
+  const [audioError, setAudioError] = useState(false);
 
   // If the data contains file content (read_text_file result), show it
   const isFileView = data?.tool === "enso_fs_read_text_file" && data?.content != null;
@@ -148,7 +150,6 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
     }
 
     if (data.fileType === "video") {
-      const [videoError, setVideoError] = useState(false);
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -185,7 +186,6 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
     }
 
     if (data.fileType === "audio") {
-      const [audioError, setAudioError] = useState(false);
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
