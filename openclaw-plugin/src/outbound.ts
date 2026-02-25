@@ -28,6 +28,8 @@ import {
   registerToolTemplateCandidate,
   getPreferredToolProviderForFamily,
   getDataHintForSignature,
+  getGeneratedTemplateCodeBySignature,
+  registerGeneratedTemplateCode,
   type ToolTemplateCoverageStatus,
 } from "./native-tools/registry.js";
 import {
@@ -527,6 +529,7 @@ export async function deliverEnsoReply(params: {
 export async function handleCardEnhance(params: {
   cardId: string;
   cardText: string;
+  suggestedFamily?: string;
   client: ConnectedClient;
   account: ResolvedEnsoAccount;
 }): Promise<void> {
@@ -554,18 +557,27 @@ export async function handleCardEnhance(params: {
     return;
   }
 
-  const selection = await selectToolForContent({
-    cardText,
-    geminiApiKey: account.geminiApiKey,
-    toolFamilies: TOOL_FAMILY_CAPABILITIES,
-  });
+  // When a family is pre-selected from the menu, skip the LLM tool selection call
+  let selection: { toolFamily: string; toolName: string; params: Record<string, unknown> } | null;
+  if (params.suggestedFamily) {
+    const cap = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === params.suggestedFamily);
+    if (cap) {
+      selection = { toolFamily: cap.toolFamily, toolName: cap.fallbackToolName, params: {} };
+      console.log(`[enso:enhance] family pre-selected: ${cap.toolFamily}, using fallback tool ${cap.fallbackToolName}`);
+    } else {
+      console.log(`[enso:enhance] suggested family "${params.suggestedFamily}" not found, falling back to LLM selection`);
+      selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: TOOL_FAMILY_CAPABILITIES });
+    }
+  } else {
+    selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: TOOL_FAMILY_CAPABILITIES });
+  }
 
   if (!selection) {
     console.log(`[enso:enhance] no tool selected by LLM for cardId=${cardId}`);
     sendEnhanceResult(null);
     return;
   }
-  console.log(`[enso:enhance] LLM selection: tool=${selection.toolName}, family=${selection.toolFamily}, params=${JSON.stringify(selection.params)}`);
+  console.log(`[enso:enhance] selection: tool=${selection.toolName}, family=${selection.toolFamily}, params=${JSON.stringify(selection.params)}`);
 
   // ── Fix 1: Validate / correct tool name ──
   // The LLM sometimes invents tool names like "enso_meal_planner_grocery_list"
@@ -880,6 +892,92 @@ export async function handlePluginCardAction(params: {
 
   // Record action in history
   ctx.actionHistory.push({ action, payload, timestamp: Date.now() });
+
+  // ── Refine action: re-generate template only ──
+  if (action === "refine" && ctx.signatureId && ctx.geminiApiKey) {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const instruction = String(p.instruction ?? "").trim();
+    if (!instruction) {
+      client.send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "error",
+        targetCardId: cardId,
+        text: "Refine instruction is empty.",
+        operation: { operationId, stage: "error", label: "Refine failed", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    console.log(`[enso:action] path=refine: cardId=${cardId}, instruction="${instruction.slice(0, 100)}"`);
+    sendOperation("generating_ui", "Refining template");
+
+    try {
+      const { refineTemplate } = await import("./tool-factory.js");
+      const existingTemplate = getGeneratedTemplateCodeBySignature(ctx.signatureId);
+      const result = await refineTemplate({
+        toolFamily: ctx.toolFamily ?? "unknown",
+        signatureId: ctx.signatureId,
+        currentData: ctx.currentData,
+        instruction,
+        existingTemplate: existingTemplate ?? undefined,
+        apiKey: ctx.geminiApiKey,
+      });
+
+      if (!result.valid) {
+        console.log(`[enso:action] path=refine: template validation failed: ${result.errors.join("; ")}`);
+        client.send({
+          id: randomUUID(),
+          runId: randomUUID(),
+          sessionKey: client.sessionKey,
+          seq: 0,
+          state: "error",
+          targetCardId: cardId,
+          text: `Template refinement failed: ${result.errors.join("; ")}`,
+          operation: { operationId, stage: "error", label: "Refine failed", cancellable: false },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Update stored template code
+      registerGeneratedTemplateCode(ctx.signatureId, result.templateJSX);
+      console.log(`[enso:action] path=refine: template updated for ${ctx.signatureId} (${result.templateJSX.length} chars)`);
+
+      // Send updated card with new template + existing data
+      client.send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "final",
+        targetCardId: cardId,
+        data: ctx.currentData,
+        generatedUI: result.templateJSX,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "complete", label: "Refined", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    } catch (err) {
+      console.log(`[enso:action] path=refine: error: ${String(err)}`);
+      client.send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "error",
+        targetCardId: cardId,
+        text: `Refine error: ${err instanceof Error ? err.message : String(err)}`,
+        operation: { operationId, stage: "error", label: "Refine failed", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+  }
 
   /**
    * Send an action result respecting the card's mode:

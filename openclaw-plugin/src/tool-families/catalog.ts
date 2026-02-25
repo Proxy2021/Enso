@@ -9,10 +9,16 @@ export interface ToolFamilyCapability {
 export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
   {
     toolFamily: "alpharank",
-    fallbackToolName: "alpharank_predictions",
-    actionSuffixes: ["predictions", "market_regime", "daily_routine", "status", "backtest"],
+    fallbackToolName: "alpharank_latest_predictions",
+    actionSuffixes: [
+      "latest_predictions", "predict", "market_regime", "daily",
+      "status", "backtest",
+      "portfolio_performance", "portfolio_list", "portfolio_checkin",
+      "portfolio_create", "portfolio_simulate", "portfolio_audit",
+      "predictions", "daily_routine", // backward-compat for template onAction() names
+    ],
     signatureId: "ranked_predictions_table",
-    description: "Stock market analysis: ranked stock predictions, market regime analysis, daily data pipeline, system status, backtesting",
+    description: "Stock market analysis: ranked stock predictions, market regime, portfolio management, daily pipeline, backtesting",
   },
   {
     toolFamily: "filesystem",
@@ -77,4 +83,5 @@ const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));
 }
+
 

@@ -61,14 +61,54 @@ ABSOLUTE RULE: NEVER use sendMessage. It does not exist.
 - Use cursor-pointer and hover:bg-gray-700/hover:bg-gray-800 to signal interactivity
 
 AVAILABLE LIBRARIES (already in scope — do NOT import):
-- React: useState, useEffect, useMemo, useCallback, etc.
-- Recharts: BarChart, LineChart, PieChart, AreaChart, Bar, Line, Pie, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+- React: useState, useEffect, useMemo, useCallback, useRef, Fragment
+- Recharts: BarChart, LineChart, PieChart, AreaChart, RadarChart, ComposedChart, Bar, Line, Pie, Area, Radar, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBarChart, RadialBar, Treemap, Funnel, FunnelChart
 - Lucide icons: Use LucideReact.IconName DIRECTLY in JSX (TrendingUp, TrendingDown, DollarSign, ArrowUp, ArrowDown, Star, BarChart3, AlertCircle, CheckCircle, Info, ExternalLink, Clock, Calendar, Target, Award, Zap, Shield, Activity, Search, Filter, ChevronRight, ChevronDown, Layers, Grid, List, RefreshCw, Plus, Minus, Eye, Settings, Disc, Music, etc.)
 
 ICON USAGE RULES:
 - ALWAYS use LucideReact.IconName directly in JSX: <LucideReact.Star className="w-4 h-4" />
 - NEVER create intermediate icon alias objects like "const Icons = { Album: LucideReact.Disc }". This creates bugs where you forget the alias and use the wrong name.
 - If you need to pick an icon dynamically, use a function: const getIcon = (type) => type === 'album' ? LucideReact.Disc : LucideReact.Music;
+
+ENSO UI COMPONENTS (pre-built, styled — ALWAYS use instead of coding from scratch):
+All below are in scope. Do NOT import them. Dark-themed and consistent.
+
+Layout:
+- <UICard accent="blue|emerald|amber|purple|rose|cyan|orange" header={<>Title</>}>content</UICard> — styled card. Use INSTEAD of raw <div className="bg-gray-800...">.
+- <Stat label="Revenue" value="$1.2M" change={12.5} trend="up" accent="emerald" icon={<LucideReact.DollarSign className="w-4 h-4" />} /> — KPI metric tile.
+- <Separator /> — divider.  <EmptyState title="No data" action={{label: "Reset", onClick: fn}} />
+
+Navigation:
+- <Tabs tabs={[{value: "overview", label: "Overview"}, ...]} defaultValue="overview" variant="pills|underline|boxed">{(activeTab) => activeTab === "overview" ? <A /> : <B />}</Tabs>
+  THE #1 component. Use for ANY multi-view app. Children = render function {(tab) => ...}.
+- <Select options={[{value: "asc", label: "Ascending"}]} value={v} onChange={setV} placeholder="Sort by..." />
+- <Accordion items={[{value: "s1", title: "Section 1", content: <p>...</p>}]} type="single|multiple" defaultOpen="s1" />
+
+Controls:
+- <Button onClick={fn} variant="default|primary|ghost|danger|outline" size="sm|md|lg" icon={<LucideReact.RefreshCw className="w-3.5 h-3.5" />} loading={isLoading}>Label</Button>
+- <Badge variant="default|success|warning|danger|info|outline" dot>Active</Badge>
+- <Switch checked={v} onChange={setV} label="Show advanced" />
+- <Input value={v} onChange={setV} placeholder="Search..." icon={<LucideReact.Search className="w-3.5 h-3.5" />} />
+- <Slider value={v} onChange={setV} min={0} max={100} step={5} label="Threshold" showValue />
+- <Progress value={75} variant="default|success|warning|danger" showLabel label="Completion" />
+
+Data Display:
+- <DataTable columns={[{key: "name", label: "Name", sortable: true}, {key: "score", label: "Score", sortable: true, render: (v) => <Badge variant="info">{v}</Badge>}]} data={items} pageSize={10} striped onRowClick={(row) => onAction("select", row)} />
+  Sortable, paginated table. Use INSTEAD of manual <table> with sort logic.
+
+Overlays:
+- <Dialog open={show} onClose={() => setShow(false)} title="Confirm" footer={<><Button variant="ghost" onClick={() => setShow(false)}>Cancel</Button><Button variant="primary" onClick={fn}>OK</Button></>}>Content</Dialog>
+- <EnsoUI.Tooltip content="Help text"><span>Hover me</span></EnsoUI.Tooltip>  (NOT destructured — use EnsoUI.Tooltip to avoid Recharts Tooltip collision)
+
+MANDATORY: PREFER EnsoUI over hand-coded equivalents:
+- Tabs > manual tab buttons + useState
+- DataTable > manual <table> with sort logic
+- Badge > hand-coded colored pills
+- Button > raw <button> with Tailwind
+- Stat > custom KPI divs
+- UICard > plain <div className="bg-gray-800 rounded-lg border...">
+- Accordion > manual expand/collapse
+- Progress > custom progress bars
 
 DESIGN SYSTEM:
 - Outer container: bg-gray-900 rounded-xl p-3 border border-gray-700
@@ -193,14 +233,25 @@ USE COMPONENT STATE — this is an app, not a template:
 - Filter chips for categorized data
 
 AVAILABLE LIBRARIES (in scope — do NOT import):
-- React: useState, useEffect, useMemo, useCallback
-- Recharts: BarChart, LineChart, PieChart, AreaChart, Bar, Line, Pie, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+- React: useState, useEffect, useMemo, useCallback, useRef, Fragment
+- Recharts: BarChart, LineChart, PieChart, AreaChart, RadarChart, ComposedChart, Bar, Line, Pie, Area, Radar, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBarChart, RadialBar, Treemap, Funnel, FunnelChart
 - Lucide icons: LucideReact.IconName — use generously for visual richness:
   TrendingUp, TrendingDown, DollarSign, ArrowUp, ArrowDown, ArrowRight, Star, BarChart3,
   AlertCircle, CheckCircle, Info, ExternalLink, Clock, Calendar, Target, Award, Zap,
   Shield, Activity, Search, Filter, ChevronRight, ChevronDown, ChevronUp, Layers,
   Grid, List, RefreshCw, Plus, Minus, Eye, Settings, Hash, Tag, Bookmark,
   ThumbsUp, ThumbsDown, MessageSquare, Share2, Copy, Download, Upload
+
+ENSO UI COMPONENTS (pre-built, styled — ALWAYS use instead of hand-coding):
+All in scope. Do NOT import them.
+- UICard (accent, header, footer), Stat (label, value, change, trend, accent), Separator, EmptyState
+- Tabs (tabs=[{value, label}], defaultValue, variant="pills|underline|boxed", children as render function)
+- Select (options, value, onChange, placeholder), Accordion (items, type, defaultOpen)
+- Button (variant="default|primary|ghost|danger|outline", icon, loading), Badge (variant="success|warning|danger|info")
+- Switch (checked, onChange, label), Input (value, onChange, icon), Slider (min, max, showValue), Progress (value, variant, showLabel)
+- DataTable (columns=[{key, label, sortable, render}], data, pageSize, striped, onRowClick) — sortable, paginated!
+- Dialog (open, onClose, title, footer), EnsoUI.Tooltip (content, side — use as EnsoUI.Tooltip, not Tooltip)
+MANDATORY: Use Tabs for multi-view, DataTable for tables, Badge for status, Button for actions, Stat for KPIs.
 
 ═══════════════════════════════════════
 DESIGN SYSTEM

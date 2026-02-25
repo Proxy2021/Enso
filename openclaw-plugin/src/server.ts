@@ -12,6 +12,7 @@ import { handleEnsoInbound } from "./inbound.js";
 import { handleCardEnhance, handlePluginCardAction } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
+import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
 
 export type ConnectedClient = {
   id: string;
@@ -249,14 +250,15 @@ export async function startEnsoServer(opts: {
     const client: ConnectedClient = { id: connectionId, sessionKey, ws, send };
     clients.set(connectionId, client);
 
-    // Send current mode to newly connected client
+    // Send current mode + available tool families to newly connected client
+    const toolFamilies = TOOL_FAMILY_CAPABILITIES.map((c) => ({ toolFamily: c.toolFamily, description: c.description }));
     send({
       id: randomUUID(),
       runId: randomUUID(),
       sessionKey,
       seq: 0,
       state: "final",
-      settings: { mode: account.mode ?? "full" },
+      settings: { mode: account.mode ?? "full", toolFamilies },
       timestamp: Date.now(),
     });
 
@@ -369,10 +371,11 @@ export async function startEnsoServer(opts: {
             break;
           case "card.enhance":
             if (msg.cardId && msg.cardText) {
-              runtime.log?.(`[enso] card enhance: ${msg.cardId}`);
+              runtime.log?.(`[enso] card enhance: ${msg.cardId}${msg.suggestedFamily ? ` (family=${msg.suggestedFamily})` : ""}`);
               await handleCardEnhance({
                 cardId: msg.cardId,
                 cardText: msg.cardText,
+                suggestedFamily: msg.suggestedFamily,
                 client,
                 account,
               });
@@ -387,6 +390,7 @@ export async function startEnsoServer(opts: {
                 cardId: msg.cardId,
                 cardText: msg.cardText,
                 toolDefinition: msg.buildAppDefinition,
+                conversationContext: msg.conversationContext,
                 client,
                 account,
               }).catch((err) => {

@@ -3,9 +3,13 @@ import {
   detectToolTemplateForToolName,
   getToolTemplateCode,
   getToolTemplate,
+  getDataHintForSignature,
   inferToolTemplate,
   isToolActionCovered,
   normalizeDataForToolTemplate,
+  registerToolTemplate,
+  registerToolTemplateDataHint,
+  registerGeneratedTemplateCode,
 } from "./native-tools/registry";
 
 describe("tool-driven follow-up path", () => {
@@ -154,5 +158,60 @@ describe("tool-driven follow-up path", () => {
     expect(code).toContain("System Toolkit");
 
     globalRecord[key] = previous;
+  });
+});
+
+describe("generated app shape mismatch detection", () => {
+  it("detects shape mismatch when action tool returns different data than primary", () => {
+    const family = "test_video_explorer";
+    const sigId = "test_video_explorer_v1";
+
+    registerToolTemplate({
+      toolFamily: family,
+      signatureId: sigId,
+      templateId: `generated-${sigId}-v1`,
+      supportedActions: ["browse_videos", "watch_video"],
+      coverageStatus: "covered",
+    });
+
+    // Register data hint WITHOUT "tool" (simulating the fix in tool-factory/app-persistence)
+    registerToolTemplateDataHint({
+      toolFamily: family,
+      signatureId: sigId,
+      requiredKeys: ["results"],
+    });
+
+    registerGeneratedTemplateCode(sigId, `export default function TestUI({ data }) {
+      return <div>{JSON.stringify(data)}</div>;
+    }`);
+
+    const hint = getDataHintForSignature(family, sigId);
+    expect(hint).toBeDefined();
+    expect(hint!.requiredKeys).toEqual(["results"]);
+
+    // Primary tool data (browse) has "results" — should match
+    const browseData = { tool: "enso_test_browse_videos", query: "test", results: [{ id: "abc" }] };
+    const browseHasMatch = hint!.requiredKeys.some((k) => k in browseData);
+    expect(browseHasMatch).toBe(true);
+
+    // Action tool data (watch) has NO "results" — should NOT match
+    const watchData = { tool: "enso_test_watch_video", videoId: "abc", embedUrl: "https://youtube.com/embed/abc" };
+    const watchHasMatch = hint!.requiredKeys.some((k) => k in watchData);
+    expect(watchHasMatch).toBe(false);
+  });
+
+  it("old requiredKeys with 'tool' would falsely match any action tool output", () => {
+    // Demonstrates the pre-fix bug: if "tool" is in requiredKeys,
+    // every tool output matches because all include a "tool" field
+    const badRequiredKeys = ["tool", "results"];
+    const watchData = { tool: "enso_test_watch_video", videoId: "abc", embedUrl: "https://youtube.com/embed/abc" };
+
+    const falseMatch = badRequiredKeys.some((k) => k in watchData);
+    expect(falseMatch).toBe(true); // BUG: would reuse primary template for watch data
+
+    // With "tool" filtered out, the mismatch is correctly detected
+    const goodRequiredKeys = badRequiredKeys.filter((k) => k !== "tool");
+    const correctMismatch = !goodRequiredKeys.some((k) => k in watchData);
+    expect(correctMismatch).toBe(true); // FIX: correctly detects shape mismatch
   });
 });

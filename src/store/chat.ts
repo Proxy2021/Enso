@@ -22,6 +22,7 @@ interface CardStore {
 
   // Apps
   apps: AppInfo[];
+  toolFamilies: Array<{ toolFamily: string; description: string }>;
 
   // Claude Code session state
   projects: ProjectInfo[];
@@ -38,7 +39,8 @@ interface CardStore {
   sendMessageWithMedia: (text: string, mediaFiles: File[]) => Promise<void>;
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
   enhanceCard: (cardId: string) => void;
-  buildApp: (cardId: string, cardText: string, definition: string) => void;
+  enhanceCardWithFamily: (cardId: string, family: string) => void;
+  buildApp: (cardId: string, cardText: string, definition: string, conversationContext?: string) => void;
   proposeApp: (cardId: string, cardText: string, context: string) => void;
   toggleCardView: (cardId: string, viewMode: "original" | "app") => void;
   cancelOperation: (operationId: string) => void;
@@ -76,6 +78,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   isWaiting: false,
   _wsClient: null,
   apps: [],
+  toolFamilies: [],
   projects: [],
   codeSessionCwd: null,
   codeSessionId: null,
@@ -368,7 +371,30 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
-  buildApp: (cardId: string, cardText: string, definition: string) => {
+  enhanceCardWithFamily: (cardId: string, family: string) => {
+    const card = get().cards[cardId];
+    if (!card || card.enhanceStatus === "loading") return;
+
+    set((s) => ({
+      cards: {
+        ...s.cards,
+        [cardId]: {
+          ...s.cards[cardId]!,
+          enhanceStatus: "loading",
+          updatedAt: Date.now(),
+        },
+      },
+    }));
+
+    get()._wsClient?.send({
+      type: "card.enhance",
+      cardId,
+      cardText: card.text ?? "",
+      suggestedFamily: family,
+    });
+  },
+
+  buildApp: (cardId: string, cardText: string, definition: string, conversationContext?: string) => {
     const card = get().cards[cardId];
     if (!card) return;
 
@@ -378,6 +404,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cardId,
       cardText,
       buildAppDefinition: definition,
+      conversationContext,
     });
   },
 
@@ -454,8 +481,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   _handleServerMessage: (msg: ServerMessage) => {
-    // Handle settings messages (mode changes) — kept for backwards compat
+    // Handle settings messages (mode + tool families)
     if (msg.settings) {
+      if (msg.settings.toolFamilies) {
+        set({ toolFamilies: msg.settings.toolFamilies });
+      }
       return;
     }
 

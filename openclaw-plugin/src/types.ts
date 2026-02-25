@@ -188,6 +188,16 @@ export interface ExecutorContext {
     ok: boolean;
     results: Array<{ title: string; url: string; description: string }>;
   }>;
+
+  /** Ask the LLM a question. For data analysis, summarization, or classification within executors. */
+  ask(prompt: string, options?: { maxTokens?: number }): Promise<{ ok: boolean; text: string }>;
+
+  /** Per-family key-value store for persistent state across sessions. */
+  store: {
+    get(key: string): Promise<unknown | null>;
+    set(key: string, value: unknown): Promise<void>;
+    delete(key: string): Promise<boolean>;
+  };
 }
 
 /** UIGenerator types */

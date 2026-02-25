@@ -44,13 +44,46 @@ interface AppManifest {
 const EXECUTOR_CTX_TIMEOUT_MS = 10_000;
 const EXECUTOR_CTX_MAX_DEPTH = 3;
 const EXECUTOR_FETCH_MAX_BYTES = 512 * 1024; // 512KB
+const STORE_MAX_SIZE = 1024 * 1024; // 1MB per family store
+
+// ── Key-Value Store ──
+
+const storeCache = new Map<string, Record<string, unknown>>();
+
+function loadStoreForFamily(family: string): Record<string, unknown> {
+  if (storeCache.has(family)) return storeCache.get(family)!;
+  const storePath = path.join(os.homedir(), ".openclaw", "enso-apps", family, "store.json");
+  try {
+    if (fs.existsSync(storePath)) {
+      const raw = fs.readFileSync(storePath, "utf-8");
+      const data = JSON.parse(raw) as Record<string, unknown>;
+      storeCache.set(family, data);
+      return data;
+    }
+  } catch {
+    // Corrupt store — start fresh
+  }
+  const empty: Record<string, unknown> = {};
+  storeCache.set(family, empty);
+  return empty;
+}
+
+function saveStoreForFamily(family: string, data: Record<string, unknown>): void {
+  const storePath = path.join(os.homedir(), ".openclaw", "enso-apps", family, "store.json");
+  const json = JSON.stringify(data, null, 2);
+  if (json.length > STORE_MAX_SIZE) {
+    throw new Error(`Store for "${family}" exceeds ${STORE_MAX_SIZE} bytes`);
+  }
+  fs.mkdirSync(path.dirname(storePath), { recursive: true });
+  fs.writeFileSync(storePath, json);
+}
 
 /**
  * Build an ExecutorContext that bridges generated app executors to real
  * OpenClaw capabilities. Each call is logged, timed, and guarded with
  * a timeout + max nesting depth.
  */
-export function buildExecutorContext(toolFamily?: string, toolSuffix?: string): ExecutorContext {
+export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, apiKey?: string): ExecutorContext {
   let callDepth = 0;
   const tag = toolFamily && toolSuffix ? `${toolFamily}/${toolSuffix}` : "executor";
 
@@ -193,6 +226,43 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string): 
         }
       });
     },
+
+    async ask(prompt: string, _options?: { maxTokens?: number }) {
+      return withTimeout(`ask("${prompt.slice(0, 40)}...")`, async () => {
+        if (!apiKey) {
+          return { ok: false as const, text: "No LLM API key available" };
+        }
+        try {
+          const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
+          const text = await callGeminiLLMWithRetry(prompt, apiKey);
+          return { ok: true as const, text };
+        } catch (err) {
+          return { ok: false as const, text: err instanceof Error ? err.message : String(err) };
+        }
+      });
+    },
+
+    store: {
+      async get(key: string): Promise<unknown | null> {
+        if (!toolFamily) return null;
+        const data = loadStoreForFamily(toolFamily);
+        return key in data ? data[key] : null;
+      },
+      async set(key: string, value: unknown): Promise<void> {
+        if (!toolFamily) throw new Error("No tool family for store");
+        const data = loadStoreForFamily(toolFamily);
+        data[key] = value;
+        saveStoreForFamily(toolFamily, data);
+      },
+      async delete(key: string): Promise<boolean> {
+        if (!toolFamily) return false;
+        const data = loadStoreForFamily(toolFamily);
+        if (!(key in data)) return false;
+        delete data[key];
+        saveStoreForFamily(toolFamily, data);
+        return true;
+      },
+    },
   };
 }
 
@@ -311,7 +381,10 @@ export function registerLoadedApp(app: LoadedApp): void {
       description: toolDef.description,
       parameters: toolDef.parameters,
       execute: async (callId: string, toolParams: Record<string, unknown>) => {
-        const ctx = buildExecutorContext(spec.toolFamily, toolDef.suffix);
+        // Lazy API key resolution — apps are loaded at startup before any account is active
+        const { getActiveAccount } = await import("./server.js");
+        const activeApiKey = getActiveAccount()?.geminiApiKey;
+        const ctx = buildExecutorContext(spec.toolFamily, toolDef.suffix, activeApiKey);
         const result = await executeFn(callId, toolParams, ctx);
         return result;
       },

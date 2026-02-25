@@ -3,6 +3,7 @@ import * as Recharts from "recharts";
 import * as LucideReact from "lucide-react";
 import { transform } from "sucrase";
 import type { ToolRouting } from "@shared/types";
+import { EnsoUI } from "./enso-ui";
 
 interface CompileResult {
   Component: React.FC<{
@@ -38,17 +39,18 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
     const fnMatch = jsxCode.match(/function\s+(\w+)\s*\(/);
     const fnName = fnMatch?.[1] ?? "GeneratedUI";
 
-    // Destructure Recharts and React hooks so generated code can use names directly
+    // Destructure Recharts, React hooks, and EnsoUI so generated code can use names directly
     const preamble = [
       "const { useState, useEffect, useMemo, useCallback, useRef, Fragment } = React;",
       "const { BarChart, LineChart, PieChart, AreaChart, RadarChart, Bar, Line, Pie, Area, Radar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ComposedChart, Scatter, RadialBarChart, RadialBar, Treemap, Funnel, FunnelChart } = Recharts;",
+      "const { Tabs, Button, Badge, Card: UICard, Select, Input, Switch, Slider, Progress, Accordion, Dialog, DataTable, Stat, Separator, EmptyState } = EnsoUI;",
     ].join("\n");
 
     const wrappedCode = `${preamble}\n${code}\nreturn ${fnName};`;
 
     // Execute in controlled scope — no DOM, no network, no globals
-    const factory = new Function("React", "Recharts", "LucideReact", wrappedCode);
-    const Component = factory(React, Recharts, LucideReact);
+    const factory = new Function("React", "Recharts", "LucideReact", "EnsoUI", wrappedCode);
+    const Component = factory(React, Recharts, LucideReact, EnsoUI);
 
     if (typeof Component !== "function") {
       return { error: "Generated code did not produce a valid component function" };

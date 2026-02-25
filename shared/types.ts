@@ -99,7 +99,7 @@ export interface ServerMessage {
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
   operation?: OperationStatus;
-  settings?: { mode: ChannelMode };
+  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }> };
   steps?: AgentStep[];
   enhanceResult?: EnhanceResult | null;
   appProposal?: { cardId: string; proposal: string };
@@ -145,9 +145,11 @@ export interface ClientMessage {
   cardPayload?: unknown;
   // card.enhance / card.build_app / card.propose_app fields
   cardText?: string;
+  // card.enhance fields
+  suggestedFamily?: string;
   // card.build_app fields
   buildAppDefinition?: string;
-  // card.propose_app fields
+  // card.propose_app + card.build_app fields
   conversationContext?: string;
   // apps.run fields
   toolFamily?: string;

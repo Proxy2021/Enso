@@ -21,6 +21,7 @@ interface BuildToolParams {
   cardId: string;
   cardText: string;
   toolDefinition: string;
+  conversationContext?: string;
   client: ConnectedClient;
   account: ResolvedEnsoAccount;
 }
@@ -202,7 +203,7 @@ function ensureExportDefault(jsx: string): string {
 
 // ── Gemini Prompts ──
 
-function buildPluginSpecPrompt(cardText: string, toolDefinition: string): string {
+function buildPluginSpecPrompt(cardText: string, toolDefinition: string, conversationContext?: string): string {
   const existingPlugins = TOOL_FAMILY_CAPABILITIES.map(
     (c) => `  - ${c.toolFamily}: ${c.description} (prefix: "enso_${c.toolFamily}_", suffixes: ${c.actionSuffixes.join(", ")})`,
   ).join("\n");
@@ -224,7 +225,7 @@ PATTERN EXAMPLES:
 
 ORIGINAL AI RESPONSE:
 ${cardText.slice(0, 3000)}
-
+${conversationContext ? `\nCONVERSATION CONTEXT (recent exchanges for additional context):\n${conversationContext.slice(0, 2000)}\n` : ""}
 USER'S SCENARIO:
 ${toolDefinition}
 
@@ -303,6 +304,13 @@ EXECUTOR CONTEXT (ctx) — Available capabilities:
 - await ctx.fetch(url, options?) — HTTPS fetch (max 512KB, 10s timeout). Returns { ok, status, data }.
 - await ctx.search(query, options?) — Web search via Brave Search API. Returns { ok, results: [{ title, url, description }] }.
   Use for discovery: finding showtimes, reviews, detailed info, local businesses, event schedules, etc.
+- await ctx.ask(prompt, options?) — Ask the LLM a question. Returns { ok, text }.
+  Use for: summarizing fetched data, classifying items, generating descriptions, sentiment analysis.
+  Cost-aware: only use when you need intelligent processing, not for simple string operations.
+- ctx.store.get(key) — Read a value from persistent storage. Returns the value or null. Scoped per tool family.
+- ctx.store.set(key, value) — Write a value to persistent storage. Value must be JSON-serializable. 1MB limit per family.
+- ctx.store.delete(key) — Remove a key from persistent storage. Returns true if key existed.
+  Use for: saving user preferences, caching expensive computations, tracking history across sessions.
 
 RULES:
 - The function body will be wrapped in: new AsyncFunction("callId", "params", "ctx", YOUR_BODY)
@@ -417,7 +425,7 @@ ${actionRules}
 - Each action button should pass relevant context from the current data item
 - Use the SUFFIX only as the action name (not the full tool name)
 
-Build a rich, interactive app component for this data. Use tabs, expandable sections, and action buttons that invoke the other tools in this plugin.`;
+Build a rich, interactive app component for this data. Use EnsoUI components (Tabs, DataTable, Stat, Badge, Button, UICard, Accordion, etc.) — they are in scope. Use tabs for multi-view layouts, DataTable for tabular data, Stat for KPI summaries, and action buttons that invoke the other tools in this plugin.`;
 }
 
 // ── Validation ──
@@ -439,7 +447,7 @@ export async function validateToolExecutor(params: {
       ctx: ExecutorContext,
     ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
-    const ctx = buildExecutorContext("validation", "test");
+    const ctx = buildExecutorContext("validation", "test"); // no apiKey during validation
     const result = await executeFn("test-call", params.sampleParams, ctx);
     if (!result?.content?.[0]?.text) {
       errors.push("Execute function did not return expected { content: [{ type, text }] } structure");
@@ -574,6 +582,68 @@ export async function generateAppProposal(params: {
   }
 }
 
+// ── Refine Template ──
+
+export async function refineTemplate(params: {
+  toolFamily: string;
+  signatureId: string;
+  currentData: unknown;
+  instruction: string;
+  existingTemplate?: string;
+  apiKey: string;
+}): Promise<{ templateJSX: string; valid: boolean; errors: string[] }> {
+  const { toolFamily, signatureId, currentData, instruction, existingTemplate, apiKey } = params;
+
+  const dataShape = (() => {
+    try {
+      const json = JSON.stringify(currentData, null, 2);
+      return json.length > 3000 ? json.slice(0, 3000) + "\n..." : json;
+    } catch {
+      return "{}";
+    }
+  })();
+
+  const prompt = `${STRUCTURED_DATA_SYSTEM_PROMPT}
+
+DATA SHAPE (current data rendered by this component):
+${dataShape}
+
+PLUGIN CONTEXT:
+- Plugin family: ${toolFamily}
+- Signature: ${signatureId}
+
+${existingTemplate ? `EXISTING TEMPLATE (modify this — keep the same overall structure but apply the user's instruction):
+\`\`\`jsx
+${existingTemplate}
+\`\`\`
+
+` : ""}USER'S REFINEMENT INSTRUCTION:
+${instruction}
+
+${existingTemplate
+    ? "Modify the existing template according to the user's instruction. Keep all existing functionality (onAction calls, data rendering, action buttons) intact unless the user specifically asks to change them. Focus on the UI/styling/layout changes requested."
+    : "Build a rich, interactive app component for this data. Include refresh and action buttons using onAction()."}
+
+Respond with ONLY the JSX component code. Must start with: export default function GeneratedUI({ data, onAction })`;
+
+  let rawJSX = await callGeminiLLMWithRetry(prompt, apiKey, GEMINI_MODEL_PRO);
+  let templateJSX = ensureExportDefault(stripMarkdownFences(rawJSX));
+
+  const validation = await validateTemplateJSX(templateJSX);
+  if (!validation.valid) {
+    // Retry once with error context
+    const retryPrompt = prompt
+      + `\n\nPREVIOUS ATTEMPT FAILED WITH ERRORS:\n${validation.errors.join("\n")}\n\nFix the JSX syntax errors.`;
+    rawJSX = await callGeminiLLMWithRetry(retryPrompt, apiKey, GEMINI_MODEL_PRO);
+    templateJSX = ensureExportDefault(stripMarkdownFences(rawJSX));
+
+    const retry = await validateTemplateJSX(templateJSX);
+    return { templateJSX, valid: retry.valid, errors: retry.errors };
+  }
+
+  return { templateJSX, valid: true, errors: [] };
+}
+
 // ── Main Entry Point ──
 
 export async function handleBuildTool(params: BuildToolParams): Promise<void> {
@@ -603,7 +673,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
     sendProgress(client, cardId, "processing", "Designing app");
     trace.beginStep();
 
-    const specPrompt = buildPluginSpecPrompt(cardText, toolDefinition);
+    const specPrompt = buildPluginSpecPrompt(cardText, toolDefinition, params.conversationContext);
     trace.info(`spec prompt: ${specPrompt.length} chars — model=${GEMINI_MODEL_PRO}`);
     const specRaw = await callGeminiLLMWithRetry(specPrompt, apiKey, GEMINI_MODEL_PRO);
     trace.info(`spec response: ${specRaw.length} chars`);
@@ -653,17 +723,23 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
     trace.setContext({ toolFamily: spec.toolFamily, signatureId: spec.signatureId, toolCount });
     buildSteps.push({ label: "Design app specification", status: "passed" });
 
-    // ── Step 2: Generate execute functions (parallel) ──
-    sendProgress(client, cardId, "calling_tool", `Generating tools (${toolCount})`);
+    // ── Steps 2+3: Generate executors and template in parallel ──
+    sendProgress(client, cardId, "calling_tool", `Generating ${toolCount} tools + template`);
     trace.beginStep();
 
-    const executeResults = await Promise.all(
-      spec.tools.map(async (toolDef) => {
-        const raw = await callGeminiLLMWithRetry(buildToolExecutePrompt(spec, toolDef), apiKey, GEMINI_MODEL_PRO);
-        return { suffix: toolDef.suffix, body: stripMarkdownFences(raw), bodyLen: raw.length };
-      }),
-    );
+    const [executeResults, rawTemplateJSX] = await Promise.all([
+      // Step 2: executor bodies (parallel per tool)
+      Promise.all(
+        spec.tools.map(async (toolDef) => {
+          const raw = await callGeminiLLMWithRetry(buildToolExecutePrompt(spec, toolDef), apiKey, GEMINI_MODEL_PRO);
+          return { suffix: toolDef.suffix, body: stripMarkdownFences(raw), bodyLen: raw.length };
+        }),
+      ),
+      // Step 3: template JSX (runs concurrently with executors)
+      callGeminiLLMWithRetry(buildPluginTemplatePrompt(spec), apiKey, GEMINI_MODEL_PRO),
+    ]);
 
+    // Process executor results
     const executeBodies = new Map<string, string>();
     for (const r of executeResults) {
       executeBodies.set(r.suffix, r.body);
@@ -673,17 +749,8 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
     trace.step(`Generate ${toolCount} executors`, "ok", executorSizes);
     buildSteps.push({ label: `Generate ${toolCount} tool executors`, status: "passed" });
 
-    // ── Step 3: Generate shared UI template ──
-    sendProgress(client, cardId, "generating_ui", "Generating UI template");
-    trace.beginStep();
-
-    let templateJSX = await callGeminiLLMWithRetry(
-      buildPluginTemplatePrompt(spec),
-      apiKey,
-      GEMINI_MODEL_PRO,
-    );
-    templateJSX = ensureExportDefault(stripMarkdownFences(templateJSX));
-
+    // Process template result
+    let templateJSX = ensureExportDefault(stripMarkdownFences(rawTemplateJSX));
     trace.step("Generate UI template", "ok", `${templateJSX.length} chars`);
     buildSteps.push({ label: "Generate shared UI template", status: "passed" });
 
@@ -798,7 +865,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
         description: def.description,
         parameters: def.parameters,
         execute: async (callId: string, toolParams: Record<string, unknown>) => {
-          const ctx = buildExecutorContext(spec.toolFamily, def.suffix);
+          const ctx = buildExecutorContext(spec.toolFamily, def.suffix, apiKey);
           const result = await executeFn(callId, toolParams, ctx);
           return result;
         },

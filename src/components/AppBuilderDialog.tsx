@@ -6,10 +6,11 @@ interface AppBuilderDialogProps {
   cardId: string;
   cardText: string;
   initialProposal: string;
+  conversationContext?: string;
   onClose: () => void;
 }
 
-export function AppBuilderDialog({ cardId, cardText, initialProposal, onClose }: AppBuilderDialogProps) {
+export function AppBuilderDialog({ cardId, cardText, initialProposal, conversationContext, onClose }: AppBuilderDialogProps) {
   const [definition, setDefinition] = useState(initialProposal);
   const buildApp = useChatStore((s) => s.buildApp);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -22,7 +23,7 @@ export function AppBuilderDialog({ cardId, cardText, initialProposal, onClose }:
   const handleSubmit = () => {
     const trimmed = definition.trim();
     if (!trimmed) return;
-    buildApp(cardId, cardText, trimmed);
+    buildApp(cardId, cardText, trimmed, conversationContext);
     onClose();
   };
 

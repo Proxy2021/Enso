@@ -220,11 +220,11 @@ describe("registerLoadedApp", () => {
       }),
     );
 
-    // Data hint registered
+    // Data hint registered — "tool" metadata key is filtered out
     expect(registerToolTemplateDataHint).toHaveBeenCalledWith(
       expect.objectContaining({
         toolFamily: "workout_planner",
-        requiredKeys: ["tool", "goal", "days"],
+        requiredKeys: ["goal", "days"],
       }),
     );
 

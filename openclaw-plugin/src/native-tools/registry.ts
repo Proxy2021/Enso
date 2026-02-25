@@ -137,6 +137,11 @@ export function unregisterGeneratedTool(toolName: string): boolean {
   return existed;
 }
 
+/** Retrieve generated template code by signatureId. Returns undefined if not found. */
+export function getGeneratedTemplateCodeBySignature(signatureId: string): string | undefined {
+  return generatedTemplateCode.get(signatureId);
+}
+
 /** Remove generated template code by signatureId. Returns true if it existed. */
 export function unregisterGeneratedTemplateCode(signatureId: string): boolean {
   const existed = generatedTemplateCode.delete(signatureId);

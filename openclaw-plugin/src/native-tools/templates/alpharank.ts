@@ -37,7 +37,7 @@ function predictionsTemplate(): string {
         <div className="flex gap-1.5">
           <button onClick={() => onAction("refresh", {})} className="px-2.5 py-1 text-xs rounded-full bg-gray-700 border border-gray-600 hover:bg-gray-600 cursor-pointer">Refresh</button>
           <button onClick={() => onAction("market_regime", {})} className="px-2.5 py-1 text-xs rounded-full bg-indigo-600/30 border border-indigo-500/60 hover:bg-indigo-600/45 cursor-pointer">Market Regime</button>
-          <button onClick={() => onAction("daily_routine", {})} className="px-2.5 py-1 text-xs rounded-full bg-emerald-600/30 border border-emerald-500/60 hover:bg-emerald-600/45 cursor-pointer">Run Daily Routine</button>
+          <button onClick={() => onAction("daily", {})} className="px-2.5 py-1 text-xs rounded-full bg-emerald-600/30 border border-emerald-500/60 hover:bg-emerald-600/45 cursor-pointer">Run Daily Routine</button>
         </div>
       </div>
       <div className="flex gap-1.5">
@@ -110,7 +110,7 @@ function regimeTemplate(): string {
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <button onClick={() => onAction("predictions", {})} className="px-2.5 py-1.5 text-xs rounded-md bg-blue-600/30 border border-blue-500/60 hover:bg-blue-600/45 cursor-pointer">View Predictions</button>
-        <button onClick={() => onAction("daily_routine", {})} className="px-2.5 py-1.5 text-xs rounded-md bg-emerald-600/30 border border-emerald-500/60 hover:bg-emerald-600/45 cursor-pointer">Run Routine</button>
+        <button onClick={() => onAction("daily", {})} className="px-2.5 py-1.5 text-xs rounded-md bg-emerald-600/30 border border-emerald-500/60 hover:bg-emerald-600/45 cursor-pointer">Run Routine</button>
       </div>
       <div className="space-y-1.5">
         {(guidance.length > 0 ? guidance : ["Rotate exposure based on regime shifts.", "Prefer high-liquidity names in uncertainty."]).slice(0, 4).map((item, idx) => (
@@ -134,7 +134,7 @@ function routineTemplate(): string {
           <div className="text-sm font-semibold text-gray-100">Daily Routine Execution</div>
           <div className="text-[11px] text-gray-500">{status}</div>
         </div>
-        <button onClick={() => onAction("daily_routine", {})} className="px-2.5 py-1 text-xs rounded-full bg-emerald-600/30 border border-emerald-500/60 hover:bg-emerald-600/45 cursor-pointer">Run Again</button>
+        <button onClick={() => onAction("daily", {})} className="px-2.5 py-1 text-xs rounded-full bg-emerald-600/30 border border-emerald-500/60 hover:bg-emerald-600/45 cursor-pointer">Run Again</button>
       </div>
       <div className="space-y-1.5">
         {(steps.length > 0 ? steps : [{ step: "Load market data", status: "done" }, { step: "Generate ranking", status: "done" }, { step: "Publish picks", status: "done" }]).map((s, idx) => (

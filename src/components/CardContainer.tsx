@@ -5,6 +5,15 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
 
+const FAMILY_ICONS: Record<string, string> = {
+  alpharank: "\uD83D\uDCC8",
+  filesystem: "\uD83D\uDCC1",
+  code_workspace: "\uD83D\uDCBB",
+  multimedia: "\uD83C\uDFA5",
+  travel_planner: "\u2708\uFE0F",
+  meal_planner: "\uD83C\uDF7D\uFE0F",
+};
+
 interface CardContainerProps {
   card: Card;
   isActive: boolean;
@@ -133,21 +142,41 @@ function getConversationContext(): string {
 
 function EnhanceButton({ card }: { card: Card }) {
   const enhanceCard = useChatStore((s) => s.enhanceCard);
+  const enhanceCardWithFamily = useChatStore((s) => s.enhanceCardWithFamily);
   const proposeApp = useChatStore((s) => s.proposeApp);
+  const toolFamilies = useChatStore((s) => s.toolFamilies);
+  const [showMenu, setShowMenu] = useState(false);
   const [showFactory, setShowFactory] = useState(false);
   const [isProposing, setIsProposing] = useState(false);
+  const [cachedContext, setCachedContext] = useState("");
   const pendingProposal = useChatStore((s) => s.cards[card.id]?.pendingProposal);
   const status = card.enhanceStatus;
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Cleanup subscription on unmount
   const unsubRef = useRef<(() => void) | null>(null);
   useEffect(() => () => { unsubRef.current?.(); }, []);
 
+  // Close menu on click outside
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showMenu]);
+
   const handleBuildAppClick = useCallback(() => {
     if (isProposing) return;
+    setShowMenu(false);
     const currentProposal = useChatStore.getState().cards[card.id]?.pendingProposal;
     setIsProposing(true);
-    proposeApp(card.id, card.text ?? "", getConversationContext());
+    const context = getConversationContext();
+    setCachedContext(context);
+    proposeApp(card.id, card.text ?? "", context);
 
     // Subscribe to store: when pendingProposal changes, open dialog
     unsubRef.current?.(); // clean up any prior subscription
@@ -172,6 +201,11 @@ function EnhanceButton({ card }: { card: Card }) {
       }
     }, 45_000);
   }, [card.id, card.text, proposeApp, isProposing]);
+
+  const handleFamilyClick = useCallback((family: string) => {
+    setShowMenu(false);
+    enhanceCardWithFamily(card.id, family);
+  }, [card.id, enhanceCardWithFamily]);
 
   if (status === "loading") {
     return (
@@ -213,6 +247,7 @@ function EnhanceButton({ card }: { card: Card }) {
             cardId={card.id}
             cardText={card.text ?? ""}
             initialProposal={pendingProposal ?? ""}
+            conversationContext={cachedContext}
             onClose={() => setShowFactory(false)}
           />
         )}
@@ -222,17 +257,92 @@ function EnhanceButton({ card }: { card: Card }) {
 
   if (status === "ready") return null;
 
+  // Default state — show "App" button with dropdown menu
   return (
-    <button
-      onClick={() => enhanceCard(card.id)}
-      className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
-      title="Turn this response into an interactive app"
-    >
-      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-      </svg>
-      App
-    </button>
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => {
+          if (toolFamilies.length > 0) {
+            setShowMenu((v) => !v);
+          } else {
+            enhanceCard(card.id);
+          }
+        }}
+        className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
+        title="Turn this response into an interactive app"
+      >
+        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+        </svg>
+        App
+        {toolFamilies.length > 0 && (
+          <svg className="h-2.5 w-2.5 ml-0.5 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        )}
+      </button>
+
+      {showMenu && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-gray-900 border border-gray-700/80 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] overflow-hidden">
+          {/* Auto-detect option */}
+          <button
+            onClick={() => { setShowMenu(false); enhanceCard(card.id); }}
+            className="w-full text-left px-3 py-2 hover:bg-gray-800/70 transition-colors border-b border-gray-700/50"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm">&#x2728;</span>
+              <div>
+                <div className="text-xs text-violet-300 font-medium">Auto-detect</div>
+                <div className="text-[10px] text-gray-500">LLM picks the best app type</div>
+              </div>
+            </div>
+          </button>
+
+          {/* Tool family list */}
+          <div className="max-h-48 overflow-y-auto">
+            {toolFamilies.map((f) => (
+              <button
+                key={f.toolFamily}
+                onClick={() => handleFamilyClick(f.toolFamily)}
+                className="w-full text-left px-3 py-1.5 hover:bg-gray-800/70 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{FAMILY_ICONS[f.toolFamily] ?? "\uD83D\uDD27"}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs text-gray-200 truncate">{f.toolFamily.replace(/_/g, " ")}</div>
+                    <div className="text-[10px] text-gray-500 truncate">{f.description}</div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Build custom app */}
+          <button
+            onClick={handleBuildAppClick}
+            className="w-full text-left px-3 py-2 hover:bg-gray-800/70 transition-colors border-t border-gray-700/50"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm">&#x2795;</span>
+              <div>
+                <div className="text-xs text-amber-300 font-medium">Build custom app...</div>
+                <div className="text-[10px] text-gray-500">Generate a new app type with AI</div>
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {showFactory && (
+        <AppBuilderDialog
+          cardId={card.id}
+          cardText={card.text ?? ""}
+          initialProposal={pendingProposal ?? ""}
+          conversationContext={cachedContext}
+          onClose={() => setShowFactory(false)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -314,6 +424,75 @@ function ViewToggle({ card }: { card: Card }) {
       >
         App
       </button>
+    </div>
+  );
+}
+
+function RefineFooter({ cardId, onRefine }: { cardId: string; onRefine: (instruction: string) => void }) {
+  const [showInput, setShowInput] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showInput && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [showInput]);
+
+  const handleSubmit = () => {
+    const trimmed = instruction.trim();
+    if (!trimmed) return;
+    onRefine(trimmed);
+    setInstruction("");
+    setShowInput(false);
+  };
+
+  return (
+    <div className="px-3 pb-2">
+      <div className="border-t border-gray-700/50 pt-2 flex items-center gap-2">
+        {showInput ? (
+          <div className="flex-1 flex items-center gap-1.5">
+            <input
+              ref={inputRef}
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") { setShowInput(false); setInstruction(""); } }}
+              placeholder="e.g. use blue theme, add a chart, make cards bigger..."
+              className="flex-1 bg-gray-800 border border-gray-600/60 rounded-md px-2 py-1 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!instruction.trim()}
+              className="px-2 py-1 text-[11px] rounded-md border border-violet-500/50 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Refine
+            </button>
+            <button
+              onClick={() => { setShowInput(false); setInstruction(""); }}
+              className="px-1.5 py-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              &times;
+            </button>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500">
+              Buttons run actions. You will get a quick confirmation before anything executes.
+            </span>
+            <button
+              onClick={() => setShowInput(true)}
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 transition-colors shrink-0 ml-2"
+              title="Refine this app's UI"
+            >
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Refine
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -452,11 +631,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             <AgentSteps steps={card.steps} />
           )}
           {isAppView && !isLoading && (
-            <div className="px-3 pb-2">
-              <div className="text-[11px] text-gray-500 border-t border-gray-700/50 pt-2">
-                Buttons run actions. You will get a quick confirmation before anything executes.
-              </div>
-            </div>
+            <RefineFooter cardId={card.id} onRefine={(instruction) => sendCardAction(card.id, "refine", { instruction })} />
           )}
           {isLoading && <CardLoadingOverlay action={loadingLabel} />}
         </div>
