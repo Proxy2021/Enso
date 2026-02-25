@@ -216,9 +216,27 @@ export async function startEnsoServer(opts: {
     };
     const contentType = mimeTypes[ext] ?? "application/octet-stream";
 
+    const fileSize = statSync(filePath).size;
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=3600");
-    createReadStream(filePath).pipe(res);
+    res.setHeader("Accept-Ranges", "bytes");
+
+    // Range request support — required for <video> and <audio> playback
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Content-Length": chunkSize,
+      });
+      createReadStream(filePath, { start, end }).pipe(res);
+    } else {
+      res.setHeader("Content-Length", fileSize);
+      createReadStream(filePath).pipe(res);
+    }
   });
 
   // Accept image uploads from the browser client
