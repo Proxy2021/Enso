@@ -13,7 +13,7 @@ import {
 } from "./native-tools/registry.js";
 import { TOOL_FAMILY_CAPABILITIES, addCapability } from "./tool-families/catalog.js";
 import { registerCardContext } from "./outbound.js";
-import { saveApp, generateSkillMd, buildExecutorContext } from "./app-persistence.js";
+import { saveApp, generateSkillMd, buildExecutorContext, trackAppSpec } from "./app-persistence.js";
 
 // ── Types ──
 
@@ -484,6 +484,84 @@ export async function validateTemplateJSX(templateJSX: string): Promise<{ valid:
   return { valid: errors.length === 0, errors };
 }
 
+// ── Auto-Heal ──
+
+/**
+ * Attempt to auto-fix a failing dynamic app executor using Gemini.
+ * Returns the fixed function body on success, or an error message on failure.
+ */
+export async function autoHealExecutor(params: {
+  toolName: string;
+  toolFamily: string;
+  executorBody: string;
+  errorMessage: string;
+  failedParams: Record<string, unknown>;
+  sampleData: Record<string, unknown>;
+  expectedKeys: string[];
+  apiKey: string;
+}): Promise<{ success: boolean; fixedBody?: string; error?: string }> {
+  try {
+    const prompt = buildExecutorFixPrompt(params);
+    const raw = await callGeminiLLMWithRetry(prompt, params.apiKey);
+    const fixedBody = stripMarkdownFences(raw);
+
+    // Validate the fixed executor
+    const validation = await validateToolExecutor({
+      executeBody: fixedBody,
+      sampleParams: params.failedParams,
+      expectedKeys: params.expectedKeys,
+    });
+
+    if (!validation.valid) {
+      return { success: false, error: `Fix validation failed: ${validation.errors.join("; ")}` };
+    }
+
+    return { success: true, fixedBody };
+  } catch (err) {
+    return { success: false, error: `Auto-heal error: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+function buildExecutorFixPrompt(params: {
+  toolName: string;
+  executorBody: string;
+  errorMessage: string;
+  failedParams: Record<string, unknown>;
+  sampleData: Record<string, unknown>;
+}): string {
+  return `You are a JavaScript code fixer. A tool executor function body is failing at runtime.
+
+TOOL: ${params.toolName}
+PARAMS THAT CAUSED THE ERROR: ${JSON.stringify(params.failedParams)}
+EXPECTED OUTPUT SHAPE (example): ${JSON.stringify(params.sampleData)}
+
+CURRENT EXECUTOR BODY (this runs as: new AsyncFunction("callId", "params", "ctx", BODY)):
+\`\`\`javascript
+${params.executorBody}
+\`\`\`
+
+RUNTIME ERROR:
+${params.errorMessage}
+
+EXECUTOR CONTEXT — ctx has these methods:
+- await ctx.callTool(name, params) → { success, data, error }
+- await ctx.listDir(path) → { success, data, error }
+- await ctx.readFile(path) → { success, data, error }
+- await ctx.searchFiles(root, name) → { success, data, error }
+- await ctx.fetch(url, opts?) → { ok, status, data }
+- await ctx.search(query, opts?) → { ok, results }
+- await ctx.ask(prompt, opts?) → { ok, text }
+- ctx.store.get/set/delete(key) → KV persistence
+
+Fix the executor body. The output must:
+1. Return { content: [{ type: "text", text: JSON.stringify(data) }] }
+2. Include "tool": "${params.toolName}" in the output JSON
+3. Handle the error case gracefully (try/catch with fallback data)
+4. Use var instead of const/let for compatibility
+
+Respond with ONLY the fixed function body. No function keyword, no wrapper, no markdown fences.`;
+}
+
 // ── App Proposal Generation ──
 
 function buildAppProposalPrompt(cardText: string, conversationContext: string): string {
@@ -851,6 +929,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
 
     const registeredToolNames: string[] = [];
     const actionSuffixes: string[] = [];
+    trackAppSpec(spec);
 
     for (const { def, body } of validatedTools) {
       const toolName = `${spec.toolPrefix}${def.suffix}`;
@@ -864,6 +943,7 @@ export async function handleBuildTool(params: BuildToolParams): Promise<void> {
         name: toolName,
         description: def.description,
         parameters: def.parameters,
+        body,
         execute: async (callId: string, toolParams: Record<string, unknown>) => {
           const ctx = buildExecutorContext(spec.toolFamily, def.suffix, apiKey);
           const result = await executeFn(callId, toolParams, ctx);

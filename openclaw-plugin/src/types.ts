@@ -123,6 +123,11 @@ export interface ServerMessage {
     summary?: ToolBuildSummary;
     error?: string;
   };
+  autoHeal?: {
+    stage: "fixing" | "fixed" | "failed";
+    toolName: string;
+    error?: string;
+  };
   timestamp: number;
 }
 

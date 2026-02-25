@@ -707,6 +707,21 @@ export const useChatStore = create<CardStore>((set, get) => ({
           return state;
         }
 
+        // Handle auto-heal status updates
+        if (msg.autoHeal) {
+          return {
+            cards: {
+              ...state.cards,
+              [msg.targetCardId]: {
+                ...card,
+                autoHealStatus: msg.autoHeal.stage,
+                autoHealError: msg.autoHeal.error,
+                updatedAt: now,
+              },
+            },
+          };
+        }
+
         const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready";
         const updatedCard: Card = {
           ...card,

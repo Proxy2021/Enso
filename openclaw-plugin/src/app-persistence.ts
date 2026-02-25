@@ -25,6 +25,50 @@ const PLUGIN_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 /** Codebase apps directory — checked into git, ships with the project */
 export const CODEBASE_APPS_DIR = path.join(PLUGIN_DIR, "apps");
 
+// ── Auto-heal: Spec Tracking ──
+
+/** In-memory map of loaded app specs, keyed by toolFamily. Used by auto-heal to look up sampleData. */
+const loadedAppSpecs = new Map<string, PluginSpec>();
+
+/** Track an app spec so auto-heal can look up sampleData and requiredDataKeys. */
+export function trackAppSpec(spec: PluginSpec): void {
+  loadedAppSpecs.set(spec.toolFamily, spec);
+}
+
+/** Find the PluginSpec that owns a given tool name (by prefix match). */
+export function getAppSpecForTool(toolName: string): PluginSpec | undefined {
+  for (const spec of loadedAppSpecs.values()) {
+    if (toolName.startsWith(spec.toolPrefix)) return spec;
+  }
+  return undefined;
+}
+
+/** Persist a fixed executor body to disk (user apps first, then codebase). */
+export function persistExecutorFix(toolFamily: string, suffix: string, body: string): void {
+  for (const dir of [appsDir(), CODEBASE_APPS_DIR]) {
+    const execPath = path.join(dir, toolFamily, "executors", `${suffix}.js`);
+    if (fs.existsSync(execPath)) {
+      fs.writeFileSync(execPath, body, "utf-8");
+      console.log(`[enso:autoheal] persisted executor fix for ${toolFamily}/${suffix} at ${execPath}`);
+      return;
+    }
+  }
+  console.log(`[enso:autoheal] could not find executor file on disk for ${toolFamily}/${suffix} — fix is in-memory only`);
+}
+
+/** Persist a fixed template JSX to disk (user apps first, then codebase). */
+export function persistTemplateFix(toolFamily: string, templateJSX: string): void {
+  for (const dir of [appsDir(), CODEBASE_APPS_DIR]) {
+    const templatePath = path.join(dir, toolFamily, "template.jsx");
+    if (fs.existsSync(templatePath)) {
+      fs.writeFileSync(templatePath, templateJSX, "utf-8");
+      console.log(`[enso:autoheal] persisted template fix for ${toolFamily} at ${templatePath}`);
+      return;
+    }
+  }
+  console.log(`[enso:autoheal] could not find template file on disk for ${toolFamily} — fix is in-memory only`);
+}
+
 // ── Types ──
 
 export interface SavedApp {
@@ -417,6 +461,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as
 
 export function registerLoadedApp(app: LoadedApp): void {
   const { spec } = app;
+  trackAppSpec(spec);
   const registeredToolNames: string[] = [];
   const actionSuffixes: string[] = [];
 
@@ -436,6 +481,7 @@ export function registerLoadedApp(app: LoadedApp): void {
       name: toolName,
       description: toolDef.description,
       parameters: toolDef.parameters,
+      body,
       execute: async (callId: string, toolParams: Record<string, unknown>) => {
         // Lazy API key resolution — apps are loaded at startup before any account is active
         const { getActiveAccount } = await import("./server.js");

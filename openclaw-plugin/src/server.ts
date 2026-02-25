@@ -761,26 +761,39 @@ export async function startEnsoServer(opts: {
           case "server.restart": {
             runtime.log?.(`[enso] server restart requested`);
             try {
-              const { spawn } = await import("node:child_process");
-              const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-              const ensoRoot = join(pluginRoot, "..");
-              const restartScript = join(ensoRoot, "restart.ps1");
-              // Spawn restart script as a detached process — it kills us and restarts everything
-              const child = spawn("powershell", ["-ExecutionPolicy", "Bypass", "-File", restartScript], {
-                detached: true,
-                stdio: "ignore",
-                cwd: ensoRoot,
-              });
-              child.unref();
+              const { exec } = await import("node:child_process");
+              const { writeFileSync } = await import("node:fs");
+              const { tmpdir } = await import("node:os");
+              const { join } = await import("node:path");
+              const myPid = process.pid;
+              // Write a temp batch file that kills our PID and starts a fresh gateway.
+              // Then use WMI to run it in a process independent of our tree (parented
+              // to WMI Provider Host, survives when our process is killed).
+              const script = join(tmpdir(), "enso-restart.cmd");
+              writeFileSync(script, [
+                `@echo off`,
+                `timeout /t 1 /nobreak >nul`,
+                `taskkill /PID ${myPid} /F >nul 2>&1`,
+                `timeout /t 3 /nobreak >nul`,
+                `schtasks /run /tn "OpenClaw Gateway"`,
+              ].join("\r\n"));
+              exec(
+                `powershell.exe -Command "([wmiclass]'Win32_Process').Create('cmd.exe /c ${script.replace(/\\/g, "\\\\")}')"`,
+                { windowsHide: true },
+                (err) => {
+                  if (err) runtime.error?.(`[enso] WMI restart spawn failed: ${err.message}`);
+                },
+              );
               send({
                 id: randomUUID(),
                 runId: randomUUID(),
                 sessionKey,
                 seq: 0,
                 state: "final",
-                text: "Restarting services...",
+                text: "Restarting gateway...",
                 timestamp: Date.now(),
               });
+              // The WMI process will kill us after ~1s, then start a fresh gateway.
             } catch (err) {
               runtime.error?.(`[enso] restart failed: ${err instanceof Error ? err.message : String(err)}`);
               send({

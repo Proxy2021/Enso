@@ -30,6 +30,9 @@ import {
   getDataHintForSignature,
   getGeneratedTemplateCodeBySignature,
   registerGeneratedTemplateCode,
+  isDynamicTool,
+  getExecutorBody,
+  hotSwapExecutor,
   type ToolTemplateCoverageStatus,
 } from "./native-tools/registry.js";
 import {
@@ -893,6 +896,185 @@ export async function handlePluginCardAction(params: {
   // Record action in history
   ctx.actionHistory.push({ action, payload, timestamp: Date.now() });
 
+  // ── Auto-heal template: fix compile/runtime errors via refine ──
+  if (action === "auto_heal_template" && ctx.signatureId && ctx.geminiApiKey) {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const errorStr = String(p.error ?? "Unknown error").trim();
+    const errorType = String(p.errorType ?? "runtime"); // "compile" | "runtime"
+
+    console.log(`[enso:autoheal] template fix requested: cardId=${cardId}, type=${errorType}, error="${errorStr.slice(0, 120)}"`);
+    sendOperation("generating_ui", "Auto-fixing template...");
+
+    // Send auto-heal "fixing" status to frontend
+    client.send({
+      id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+      state: "delta", targetCardId: cardId,
+      autoHeal: { stage: "fixing", toolName: ctx.signatureId, error: errorStr },
+      timestamp: Date.now(),
+    } as ServerMessage);
+
+    try {
+      const { refineTemplate } = await import("./tool-factory.js");
+      const { persistTemplateFix } = await import("./app-persistence.js");
+      const existingTemplate = getGeneratedTemplateCodeBySignature(ctx.signatureId);
+
+      const fixInstruction = errorType === "compile"
+        ? `The template has a compile error and fails to load. Error: "${errorStr}". Fix the code so it compiles. Do not change the overall layout or functionality — only fix the error.`
+        : `The template crashes at runtime with this error: "${errorStr}". Fix the code to handle this case gracefully. Do not change the overall layout or functionality — only fix the error.`;
+
+      const result = await refineTemplate({
+        toolFamily: ctx.toolFamily ?? "unknown",
+        signatureId: ctx.signatureId,
+        currentData: ctx.currentData,
+        instruction: fixInstruction,
+        existingTemplate: existingTemplate ?? undefined,
+        apiKey: ctx.geminiApiKey,
+      });
+
+      if (!result.valid) {
+        console.log(`[enso:autoheal] template fix validation failed: ${result.errors.join("; ")}`);
+        client.send({
+          id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+          state: "delta", targetCardId: cardId,
+          autoHeal: { stage: "failed", toolName: ctx.signatureId, error: `Fix validation failed: ${result.errors.join("; ")}` },
+          timestamp: Date.now(),
+        } as ServerMessage);
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "error", targetCardId: cardId,
+          text: `Template auto-fix failed: ${result.errors.join("; ")}`,
+          operation: { operationId, stage: "error", label: "Auto-fix failed", cancellable: false },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Update stored template code
+      registerGeneratedTemplateCode(ctx.signatureId, result.templateJSX);
+
+      // Persist to disk
+      if (ctx.toolFamily) {
+        persistTemplateFix(ctx.toolFamily, result.templateJSX);
+      }
+
+      console.log(`[enso:autoheal] template fix successful for ${ctx.signatureId} (${result.templateJSX.length} chars)`);
+
+      // Send "fixed" status
+      client.send({
+        id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+        state: "delta", targetCardId: cardId,
+        autoHeal: { stage: "fixed", toolName: ctx.signatureId },
+        timestamp: Date.now(),
+      } as ServerMessage);
+
+      // Send updated card with new template + existing data
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: ctx.currentData,
+        generatedUI: result.templateJSX,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "complete", label: "Fixed", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    } catch (err) {
+      console.log(`[enso:autoheal] template fix exception: ${String(err)}`);
+      client.send({
+        id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+        state: "delta", targetCardId: cardId,
+        autoHeal: { stage: "failed", toolName: ctx.signatureId, error: String(err) },
+        timestamp: Date.now(),
+      } as ServerMessage);
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "error", targetCardId: cardId,
+        text: `Template auto-fix error: ${err instanceof Error ? err.message : String(err)}`,
+        operation: { operationId, stage: "error", label: "Auto-fix failed", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+  }
+
+  // ── Fix with Code: launch Claude Code debugging session ──
+  if (action === "fix_with_code") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const errorStr = String(p.error ?? "Unknown error").trim();
+    const toolName = String(p.toolName ?? ctx.nativeToolHint?.toolName ?? "unknown");
+
+    console.log(`[enso:action] path=fix_with_code: launching Claude Code debug for "${toolName}"`);
+
+    // Build debugging prompt with context
+    const debugParts: string[] = [
+      `An Enso app tool is failing and needs debugging.`,
+      ``,
+      `## Error`,
+      `\`\`\``,
+      errorStr,
+      `\`\`\``,
+      ``,
+      `## Tool Name`,
+      toolName,
+    ];
+
+    // Include executor body if it's a dynamic tool
+    if (isDynamicTool(toolName)) {
+      const execBody = getExecutorBody(toolName);
+      if (execBody) {
+        debugParts.push(``, `## Executor Source`, `\`\`\`javascript`, execBody, `\`\`\``);
+      }
+    }
+
+    // Include template if available
+    if (ctx.signatureId) {
+      const templateCode = getGeneratedTemplateCodeBySignature(ctx.signatureId);
+      if (templateCode) {
+        debugParts.push(``, `## Template JSX`, `\`\`\`jsx`, templateCode.slice(0, 3000), `\`\`\``);
+      }
+    }
+
+    debugParts.push(
+      ``,
+      `## Instructions`,
+      `Please investigate and fix this error. The tool/template files are in:`,
+      `- Dynamic apps: ~/.openclaw/enso-apps/<family>/ or openclaw-plugin/apps/<family>/`,
+      `- Built-in apps: openclaw-plugin/src/`,
+      ``,
+      `After identifying the issue, edit the appropriate file(s) to fix the bug.`,
+    );
+
+    const debugPrompt = debugParts.join("\n");
+
+    // Send complete status to restore the source card
+    client.send({
+      id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+      state: "final", targetCardId: cardId,
+      operation: { operationId, stage: "complete", label: "Launching debugger", cancellable: false },
+      timestamp: Date.now(),
+    });
+
+    // Launch Claude Code directly (same path as chat.send with claude-code routing)
+    try {
+      const { runClaudeCode } = await import("./claude-code.js");
+      const runId = randomUUID();
+      await runClaudeCode({
+        prompt: debugPrompt,
+        client,
+        runId,
+      });
+    } catch (err) {
+      console.error(`[enso:action] fix_with_code failed:`, err);
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "error", targetCardId: cardId,
+        text: `Failed to launch debugger: ${err instanceof Error ? err.message : String(err)}`,
+        timestamp: Date.now(),
+      });
+    }
+    return;
+  }
+
   // ── Refine action: re-generate template only ──
   if (action === "refine" && ctx.signatureId && ctx.geminiApiKey) {
     const p = (payload ?? {}) as Record<string, unknown>;
@@ -1274,7 +1456,96 @@ export async function handlePluginCardAction(params: {
           return;
         }
 
-        console.log(`[enso:action] path=native: tool failed (${result.error ?? "no data"}), falling through to agent`);
+        // ── Auto-heal: attempt to fix failing dynamic app executors ──
+        const errorMsg = result.error ?? "Tool returned no data";
+        if (isDynamicTool(toolCall.toolName)) {
+          const execBody = getExecutorBody(toolCall.toolName);
+          const activeAccount = getActiveAccount();
+          const healApiKey = ctx.geminiApiKey ?? activeAccount?.geminiApiKey;
+          if (execBody && healApiKey) {
+            try {
+              console.log(`[enso:autoheal] attempting fix for "${toolCall.toolName}": ${errorMsg}`);
+              sendOperation("processing", "Auto-fixing...");
+              client.send({
+                id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+                state: "delta", targetCardId: cardId,
+                autoHeal: { stage: "fixing", toolName: toolCall.toolName, error: errorMsg },
+                timestamp: Date.now(),
+              } as ServerMessage);
+
+              const { autoHealExecutor } = await import("./tool-factory.js");
+              const { getAppSpecForTool, persistExecutorFix } = await import("./app-persistence.js");
+              const spec = getAppSpecForTool(toolCall.toolName);
+              const toolDef = spec?.tools.find((t) => `${spec.toolPrefix}${t.suffix}` === toolCall.toolName);
+              const healResult = await autoHealExecutor({
+                toolName: toolCall.toolName,
+                toolFamily: ctx.toolFamily ?? "unknown",
+                executorBody: execBody,
+                errorMessage: errorMsg,
+                failedParams: toolCall.params,
+                sampleData: toolDef?.sampleData ?? {},
+                expectedKeys: toolDef?.requiredDataKeys ?? ["tool"],
+                apiKey: healApiKey,
+              });
+
+              if (healResult.success && healResult.fixedBody) {
+                // Hot-swap + persist
+                hotSwapExecutor(toolCall.toolName, healResult.fixedBody, ctx.toolFamily ?? "unknown", healApiKey);
+                if (ctx.toolFamily) {
+                  const suffix = toolCall.toolName.replace(spec?.toolPrefix ?? "", "");
+                  persistExecutorFix(ctx.toolFamily, suffix, healResult.fixedBody);
+                }
+
+                // Re-execute with original params
+                const retryResult = await executeToolDirect(toolCall.toolName, toolCall.params);
+                if (retryResult.success && retryResult.data != null) {
+                  ctx.currentData = structuredClone(retryResult.data);
+                  ctx.nativeToolHint = {
+                    toolName: toolCall.toolName,
+                    params: toolCall.params,
+                    handlerPrefix: ctx.nativeToolHint.handlerPrefix,
+                  };
+                  const nativeActionHints = getActionDescriptions(toolCall.toolName);
+                  applyDetectedToolTemplate(ctx, inferToolTemplate({ toolName: toolCall.toolName, data: retryResult.data }));
+                  const followup = await renderFollowupUI({
+                    ctx, action, payload, data: retryResult.data,
+                    assistantText: ctx.originalResponse, actionHints: nativeActionHints,
+                  });
+                  ctx.currentData = structuredClone(followup.renderData);
+
+                  console.log(`[enso:autoheal] fix successful, delivering healed result`);
+                  client.send({
+                    id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+                    state: "delta", targetCardId: cardId,
+                    autoHeal: { stage: "fixed", toolName: toolCall.toolName },
+                    timestamp: Date.now(),
+                  } as ServerMessage);
+                  sendActionResult(followup.renderData, followup.generatedUI);
+                  return;
+                }
+                console.log(`[enso:autoheal] re-execution still failed after fix, falling through`);
+              }
+              // Auto-heal failed
+              console.log(`[enso:autoheal] fix failed: ${healResult.error ?? "unknown"}`);
+              client.send({
+                id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+                state: "delta", targetCardId: cardId,
+                autoHeal: { stage: "failed", toolName: toolCall.toolName, error: healResult.error ?? "Fix failed" },
+                timestamp: Date.now(),
+              } as ServerMessage);
+            } catch (healErr) {
+              console.log(`[enso:autoheal] exception during auto-heal: ${String(healErr)}`);
+              client.send({
+                id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+                state: "delta", targetCardId: cardId,
+                autoHeal: { stage: "failed", toolName: toolCall.toolName, error: String(healErr) },
+                timestamp: Date.now(),
+              } as ServerMessage);
+            }
+          }
+        }
+
+        console.log(`[enso:action] path=native: tool failed (${errorMsg}), falling through to agent`);
       } catch (err) {
         console.log(`[enso:action] path=native: exception ${String(err)}, falling through to agent`);
       }

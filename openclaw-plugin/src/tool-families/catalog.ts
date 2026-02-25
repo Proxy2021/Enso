@@ -55,6 +55,13 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
     signatureId: "weekly_meal_plan",
     description: "Meal planning: weekly meal plans, dietary preferences, grocery lists, recipe suggestions, nutrition",
   },
+  {
+    toolFamily: "web_browser",
+    fallbackToolName: "enso_browser_open",
+    actionSuffixes: ["open", "navigate", "click", "scroll", "back", "type"],
+    signatureId: "remote_browser",
+    description: "Remote browser: browse the web, view bookmarks, click, scroll, type — all from within an Enso card",
+  },
 ];
 
 export function getCapabilityForFamily(toolFamily: string): ToolFamilyCapability | undefined {
@@ -78,7 +85,7 @@ export function removeCapability(toolFamily: string): boolean {
 }
 
 /** List all dynamically added tool families (not the built-in ones). */
-const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner"]);
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner", "web_browser"]);
 
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));

@@ -42,6 +42,10 @@ export interface Card {
   suggestedFamily?: string;
   pendingProposal?: string;
 
+  // Auto-heal status
+  autoHealStatus?: "fixing" | "fixed" | "failed";
+  autoHealError?: string;
+
   // Timestamps
   createdAt: number;
   updatedAt: number;

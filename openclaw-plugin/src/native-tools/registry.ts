@@ -8,6 +8,7 @@ import { getMealTemplateCode, isMealSignature } from "./templates/meal.js";
 import { getToolingTemplateCode, isToolingSignature } from "./templates/tooling.js";
 import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/system.js";
 import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
+import { getBrowserTemplateCode, isBrowserSignature } from "./templates/browser.js";
 import { TOOL_FAMILY_CAPABILITIES, getCapabilityForFamily } from "../tool-families/catalog.js";
 
 // ── Types ──
@@ -110,6 +111,7 @@ const generatedToolExecutors = new Map<string, {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  body?: string;
   execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }>();
 
@@ -120,10 +122,59 @@ export function registerGeneratedTool(tool: {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  body?: string;
   execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }): void {
   generatedToolExecutors.set(tool.name, tool);
   console.log(`[enso:native-tools] registered generated tool "${tool.name}"`);
+}
+
+// ── Auto-heal helpers ──
+
+/** Check whether a tool name belongs to a dynamically generated (non-built-in) executor. */
+export function isDynamicTool(toolName: string): boolean {
+  return generatedToolExecutors.has(toolName);
+}
+
+/** Retrieve the raw JavaScript function body for a dynamic tool (for auto-heal diagnosis). */
+export function getExecutorBody(toolName: string): string | undefined {
+  return generatedToolExecutors.get(toolName)?.body;
+}
+
+/** Hot-swap a dynamic tool's executor with a fixed body. Does NOT persist to disk. */
+export function hotSwapExecutor(
+  toolName: string,
+  newBody: string,
+  toolFamily: string,
+  apiKey?: string,
+): void {
+  const existing = generatedToolExecutors.get(toolName);
+  if (!existing) return;
+
+  const AsyncFn = Object.getPrototypeOf(async function () {}).constructor as new (...args: string[]) => (
+    callId: string,
+    params: Record<string, unknown>,
+    ctx: unknown,
+  ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+  const executeFn = new AsyncFn("callId", "params", "ctx", newBody);
+
+  generatedToolExecutors.set(toolName, {
+    ...existing,
+    body: newBody,
+    execute: async (callId: string, toolParams: Record<string, unknown>) => {
+      const { buildExecutorContext } = await import("../app-persistence.js");
+      const suffix = toolName.slice(toolName.lastIndexOf("_") + 1);
+      let key = apiKey;
+      if (!key) {
+        const { getActiveAccount } = await import("../server.js");
+        key = getActiveAccount()?.geminiApiKey;
+      }
+      const ctx = buildExecutorContext(toolFamily, suffix, key);
+      return executeFn(callId, toolParams, ctx);
+    },
+  });
+
+  console.log(`[enso:autoheal] hot-swapped executor for "${toolName}" (${newBody.length} chars)`);
 }
 
 export function registerGeneratedTemplateCode(signatureId: string, code: string): void {
@@ -290,6 +341,13 @@ function registerDefaultSignatures(): void {
       signatureId: "weekly_meal_plan",
       templateId: "meal-weekly-v1",
       supportedActions: ["refresh", "plan_week", "grocery_list", "swap_meal"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "web_browser",
+      signatureId: "remote_browser",
+      templateId: "remote-browser-v1",
+      supportedActions: ["refresh", "open", "navigate", "click", "scroll", "back", "type"],
       coverageStatus: "covered",
     },
     {
@@ -494,6 +552,9 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if (Array.isArray(record.mealPlan) || Array.isArray(record.groceryGroups) || "weeklyBudget" in record) {
     return getToolTemplate("meal_planner", "weekly_meal_plan");
   }
+  if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_browser_")) || ("screenshotUrl" in record && "viewportWidth" in record)) {
+    return getToolTemplate("web_browser", "remote_browser");
+  }
   for (const hint of runtimeDataHints) {
     if (hint.requiredKeys.every((k) => k in record)) {
       const signature = getToolTemplate(hint.toolFamily, hint.signatureId);
@@ -547,6 +608,9 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isMealSignature(signature.signatureId)) {
     return getMealTemplateCode(signature);
+  }
+  if (isBrowserSignature(signature.signatureId)) {
+    return getBrowserTemplateCode(signature);
   }
   if (isToolingSignature(signature.signatureId)) {
     return getToolingTemplateCode(signature);

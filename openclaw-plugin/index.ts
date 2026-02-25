@@ -9,6 +9,7 @@ import { registerWorkspaceTools } from "./src/workspace-tools.js";
 import { registerMediaTools } from "./src/media-tools.js";
 import { registerTravelTools } from "./src/travel-tools.js";
 import { registerMealTools } from "./src/meal-tools.js";
+import { registerBrowserTools } from "./src/browser-tools.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./src/tool-families/catalog.js";
 
 function maybeRegisterFallbackToolFamily(input: {
@@ -68,6 +69,12 @@ const plugin = {
       fallbackPrefix: "enso_meal_",
       actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "meal_planner")?.actionSuffixes ?? [],
       register: () => registerMealTools(api),
+    });
+    maybeRegisterFallbackToolFamily({
+      familyLabel: "browser",
+      fallbackPrefix: "enso_browser_",
+      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "web_browser")?.actionSuffixes ?? [],
+      register: () => registerBrowserTools(api),
     });
 
     // ── Native Tool Bridge: capture agent tool usage ──
