@@ -201,8 +201,17 @@ export async function startEnsoServer(opts: {
       ".webp": "image/webp",
       ".svg": "image/svg+xml",
       ".bmp": "image/bmp",
+      ".ico": "image/x-icon",
       ".mp4": "video/mp4",
       ".webm": "video/webm",
+      ".avi": "video/x-msvideo",
+      ".mov": "video/quicktime",
+      ".mp3": "audio/mpeg",
+      ".wav": "audio/wav",
+      ".ogg": "audio/ogg",
+      ".flac": "audio/flac",
+      ".m4a": "audio/mp4",
+      ".aac": "audio/aac",
       ".pdf": "application/pdf",
     };
     const contentType = mimeTypes[ext] ?? "application/octet-stream";

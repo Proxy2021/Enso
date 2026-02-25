@@ -23,7 +23,7 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
   {
     toolFamily: "filesystem",
     fallbackToolName: "enso_fs_list_drives",
-    actionSuffixes: ["list_drives", "list_directory", "read_text_file", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path"],
+    actionSuffixes: ["list_drives", "list_directory", "read_text_file", "open_file", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path"],
     signatureId: "directory_listing",
     description: "File manager: browse directories, read files, search, create/rename/delete/move files and folders",
   },

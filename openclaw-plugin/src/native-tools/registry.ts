@@ -261,7 +261,7 @@ function registerDefaultSignatures(): void {
       toolFamily: "filesystem",
       signatureId: "directory_listing",
       templateId: "filesystem-browser-v2",
-      supportedActions: ["refresh", "list_drives", "list_directory", "read_text_file", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path"],
+      supportedActions: ["refresh", "list_drives", "list_directory", "read_text_file", "open_file", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path"],
       coverageStatus: "covered",
     },
     {

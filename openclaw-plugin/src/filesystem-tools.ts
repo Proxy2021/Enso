@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "path";
 import { execSync } from "child_process";
 import { homedir, platform } from "os";
+import { toMediaUrl } from "./server.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -50,6 +51,23 @@ const DEFAULT_LIST_LIMIT = 120;
 const DEFAULT_SEARCH_LIMIT = 60;
 const DEFAULT_MAX_CHARS = 12000;
 const DEFAULT_SEARCH_DEPTH = 4;
+
+// File-type detection for open_file
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"]);
+const VIDEO_EXTS = new Set([".mp4", ".webm", ".avi", ".mov", ".mkv", ".m4v"]);
+const AUDIO_EXTS = new Set([".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"]);
+const PDF_EXTS = new Set([".pdf"]);
+const TEXT_EXTS = new Set([
+  ".txt", ".md", ".json", ".xml", ".csv", ".yml", ".yaml", ".toml",
+  ".js", ".ts", ".jsx", ".tsx", ".py", ".sh", ".bash", ".zsh",
+  ".rs", ".go", ".java", ".c", ".cpp", ".h", ".hpp", ".cs",
+  ".rb", ".php", ".swift", ".kt", ".scala", ".r", ".lua",
+  ".html", ".htm", ".css", ".scss", ".less", ".sql",
+  ".env", ".gitignore", ".dockerignore", ".editorconfig",
+  ".cfg", ".ini", ".conf", ".log", ".bat", ".ps1", ".cmd",
+]);
+
+type OpenFileParams = { path: string };
 
 function jsonResult(data: unknown): AgentToolResult {
   return {
@@ -186,6 +204,63 @@ function readTextFile(params: ReadTextFileParams): AgentToolResult {
     size: stat.size,
     truncated,
     content,
+  });
+}
+
+function openFile(params: OpenFileParams): AgentToolResult {
+  const safe = safeResolvePath(params.path);
+  if (!safe.ok) return errorResult(safe.error);
+  if (!existsSync(safe.path)) return errorResult(`path does not exist: ${safe.path}`);
+  const stat = lstatSync(safe.path);
+  if (!stat.isFile()) return errorResult(`path is not a file: ${safe.path}`);
+
+  const name = basename(safe.path);
+  const ext = extname(name).toLowerCase();
+
+  if (IMAGE_EXTS.has(ext)) {
+    return jsonResult({
+      tool: "enso_fs_open_file", fileType: "image",
+      path: safe.path, name, ext, size: stat.size,
+      mediaUrl: toMediaUrl(safe.path),
+    });
+  }
+  if (VIDEO_EXTS.has(ext)) {
+    return jsonResult({
+      tool: "enso_fs_open_file", fileType: "video",
+      path: safe.path, name, ext, size: stat.size,
+      mediaUrl: toMediaUrl(safe.path),
+    });
+  }
+  if (AUDIO_EXTS.has(ext)) {
+    return jsonResult({
+      tool: "enso_fs_open_file", fileType: "audio",
+      path: safe.path, name, ext, size: stat.size,
+      mediaUrl: toMediaUrl(safe.path),
+    });
+  }
+  if (PDF_EXTS.has(ext)) {
+    return jsonResult({
+      tool: "enso_fs_open_file", fileType: "pdf",
+      path: safe.path, name, ext, size: stat.size,
+      mediaUrl: toMediaUrl(safe.path),
+    });
+  }
+  if (TEXT_EXTS.has(ext) || ext === "") {
+    const maxChars = DEFAULT_MAX_CHARS;
+    const raw = readFileSync(safe.path, "utf-8");
+    const truncated = raw.length > maxChars;
+    const content = truncated ? `${raw.slice(0, maxChars)}\n...` : raw;
+    return jsonResult({
+      tool: "enso_fs_open_file", fileType: "text",
+      path: safe.path, name, ext, size: stat.size,
+      content, truncated,
+    });
+  }
+
+  // Unknown binary
+  return jsonResult({
+    tool: "enso_fs_open_file", fileType: "binary",
+    path: safe.path, name, ext, size: stat.size,
   });
 }
 
@@ -343,6 +418,20 @@ export function createFilesystemTools(): AnyAgentTool[] {
         required: ["path"],
       },
       execute: async (_callId: string, params: Record<string, unknown>) => readTextFile(params as ReadTextFileParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_fs_open_file",
+      label: "Filesystem Open File",
+      description: "Open a file with appropriate viewer based on type (text, image, video, audio, PDF).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "File path to open." },
+        },
+        required: ["path"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => openFile(params as OpenFileParams),
     } as AnyAgentTool,
     {
       name: "enso_fs_stat_path",

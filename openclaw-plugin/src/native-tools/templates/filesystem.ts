@@ -32,6 +32,8 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
   // If the data contains file content (read_text_file result), show it
   const isFileView = data?.tool === "enso_fs_read_text_file" && data?.content != null;
+  // If the data is an open_file result (media-aware viewer)
+  const isOpenFileView = data?.tool === "enso_fs_open_file";
   // If the data contains stat info, show it
   const isStatView = data?.tool === "enso_fs_stat_path" && data?.type != null;
   // If the data contains drives list, show drives view
@@ -109,6 +111,141 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
           </div>
         </div>
         <pre className="bg-gray-950 border border-gray-700/60 rounded-lg p-3 text-xs text-gray-300 overflow-auto max-h-96 whitespace-pre-wrap break-words font-mono leading-relaxed">{data.content}</pre>
+      </div>
+    );
+  }
+
+  // ── Open file viewer (media-aware) ──
+  if (isOpenFileView) {
+    const filePath = data.path ?? currentPath;
+    const parent = filePath.split(/[\\\\/]/).slice(0, -1).join(pathSep);
+    const backBtn = (
+      <button
+        onClick={() => onAction("list_directory", { path: parent })}
+        className="px-2 py-1 text-xs rounded-md bg-gray-700 border border-gray-600 hover:bg-gray-600 shrink-0"
+      >\u2190 Back</button>
+    );
+
+    if (data.fileType === "image") {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            {backBtn}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-100 truncate">\uD83D\uDDBC\uFE0F {data.name}</div>
+              <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
+            </div>
+          </div>
+          <div className="bg-gray-950 border border-gray-700/60 rounded-lg p-2 flex items-center justify-center min-h-[200px]">
+            <img
+              src={data.mediaUrl}
+              alt={data.name}
+              style={{ maxWidth: "100%", maxHeight: "480px", objectFit: "contain", borderRadius: "6px" }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (data.fileType === "video") {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            {backBtn}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-100 truncate">\uD83C\uDFA5 {data.name}</div>
+              <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
+            </div>
+          </div>
+          <div className="bg-gray-950 border border-gray-700/60 rounded-lg p-2">
+            <video
+              src={data.mediaUrl}
+              controls
+              style={{ maxWidth: "100%", maxHeight: "480px", borderRadius: "6px" }}
+            >
+              Your browser does not support video playback.
+            </video>
+          </div>
+        </div>
+      );
+    }
+
+    if (data.fileType === "audio") {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            {backBtn}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-100 truncate">\uD83C\uDFB5 {data.name}</div>
+              <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
+            </div>
+          </div>
+          <div className="bg-gray-950 border border-gray-700/60 rounded-lg px-4 py-6 flex flex-col items-center gap-3">
+            <div className="text-3xl">\uD83C\uDFB5</div>
+            <div className="text-sm text-gray-200 font-medium">{data.name}</div>
+            <audio
+              src={data.mediaUrl}
+              controls
+              style={{ width: "100%", maxWidth: "400px" }}
+            >
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+        </div>
+      );
+    }
+
+    if (data.fileType === "pdf") {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            {backBtn}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-100 truncate">\uD83D\uDCC4 {data.name}</div>
+              <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
+            </div>
+          </div>
+          <div className="bg-gray-950 border border-gray-700/60 rounded-lg overflow-hidden" style={{ height: "500px" }}>
+            <iframe
+              src={data.mediaUrl}
+              style={{ width: "100%", height: "100%", border: "none" }}
+              title={data.name}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (data.fileType === "text" && data.content != null) {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {backBtn}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-100 truncate">\uD83D\uDCDD {data.name}</div>
+              <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}{data.truncated ? " (truncated)" : ""}</div>
+            </div>
+          </div>
+          <pre className="bg-gray-950 border border-gray-700/60 rounded-lg p-3 text-xs text-gray-300 overflow-auto max-h-96 whitespace-pre-wrap break-words font-mono leading-relaxed">{data.content}</pre>
+        </div>
+      );
+    }
+
+    // Unknown binary
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          {backBtn}
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-100 truncate">\uD83D\uDCC4 {data.name}</div>
+            <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
+          </div>
+        </div>
+        <div className="bg-gray-800 border border-gray-700/50 rounded-lg px-4 py-6 text-center">
+          <div className="text-2xl mb-2">\uD83D\uDCC2</div>
+          <div className="text-xs text-gray-400">This file type ({data.ext || "unknown"}) cannot be previewed.</div>
+          <div className="text-[10px] text-gray-500 mt-1">{formatSize(data.size)}</div>
+        </div>
       </div>
     );
   }
@@ -353,7 +490,7 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
                   isDir(type) ? (
                     <button onClick={() => onAction("list_directory", { path: itemPath })} className="text-xs text-blue-300 hover:text-blue-200 hover:underline truncate text-left">{name}</button>
                   ) : (
-                    <span className="text-xs text-gray-200 truncate">{name}</span>
+                    <button onClick={() => onAction("open_file", { path: itemPath })} className="text-xs text-gray-200 hover:text-blue-300 hover:underline truncate text-left">{name}</button>
                   )
                 )}
               </div>
@@ -364,7 +501,7 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
               {/* Actions */}
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {!isDir(type) && (
-                  <button onClick={() => onAction("read_text_file", { path: itemPath })} className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-700/30 border border-emerald-500/40 hover:bg-emerald-700/50 text-emerald-300" title="Read file">\u{1F4D6}</button>
+                  <button onClick={() => onAction("open_file", { path: itemPath })} className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-700/30 border border-emerald-500/40 hover:bg-emerald-700/50 text-emerald-300" title="Open file">\u{1F4D6}</button>
                 )}
                 <button onClick={() => onAction("stat_path", { path: itemPath })} className="px-1.5 py-0.5 text-[10px] rounded bg-gray-700 border border-gray-600 hover:bg-gray-600" title="Info">\u2139\uFE0F</button>
                 <button onClick={() => { setRenamingIdx(idx); setRenameValue(name); }} className="px-1.5 py-0.5 text-[10px] rounded bg-gray-700 border border-gray-600 hover:bg-gray-600" title="Rename">\u270F\uFE0F</button>
