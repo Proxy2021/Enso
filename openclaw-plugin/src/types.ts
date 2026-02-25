@@ -115,7 +115,7 @@ export interface ServerMessage {
   enhanceHint?: { toolFamily: string };
   appProposal?: { cardId: string; proposal: string };
   appsDeleted?: { families: string[]; count: number };
-  appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string }>;
+  appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string; builtIn?: boolean }>;
   buildComplete?: {
     cardId: string;
     success: boolean;

@@ -60,6 +60,7 @@ export interface AppInfo {
   description: string;
   toolCount: number;
   primaryToolName: string;
+  builtIn?: boolean;
 }
 
 // ── Protocol Messages ──

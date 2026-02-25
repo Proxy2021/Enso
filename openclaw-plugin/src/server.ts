@@ -434,8 +434,10 @@ export async function startEnsoServer(opts: {
           case "apps.list": {
             try {
               const { loadApps } = await import("./app-persistence.js");
+              const { TOOL_FAMILY_CAPABILITIES } = await import("./tool-families/catalog.js");
+              const { isToolRegistered } = await import("./native-tools/registry.js");
               const apps = loadApps();
-              const appsList = apps.map((app) => {
+              const dynamicApps = apps.map((app) => {
                 const primary = app.spec.tools.find((t) => t.isPrimary) ?? app.spec.tools[0];
                 return {
                   toolFamily: app.spec.toolFamily,
@@ -444,6 +446,18 @@ export async function startEnsoServer(opts: {
                   primaryToolName: `${app.spec.toolPrefix}${primary.suffix}`,
                 };
               });
+              // Include built-in tool families whose fallback tool is registered
+              const dynamicFamilies = new Set(dynamicApps.map((a) => a.toolFamily));
+              const builtInApps = TOOL_FAMILY_CAPABILITIES
+                .filter((cap) => !dynamicFamilies.has(cap.toolFamily) && isToolRegistered(cap.fallbackToolName))
+                .map((cap) => ({
+                  toolFamily: cap.toolFamily,
+                  description: cap.description,
+                  toolCount: cap.actionSuffixes.length,
+                  primaryToolName: cap.fallbackToolName,
+                  builtIn: true,
+                }));
+              const appsList = [...builtInApps, ...dynamicApps];
               send({
                 id: randomUUID(),
                 runId: randomUUID(),
@@ -472,83 +486,155 @@ export async function startEnsoServer(opts: {
               runtime.log?.(`[enso:app-runner] apps.run: ${msg.toolFamily}`);
               try {
                 const { loadApps } = await import("./app-persistence.js");
-                const { executeToolDirect } = await import("./native-tools/registry.js");
+                const { executeToolDirect, normalizeDataForToolTemplate, getToolTemplateCode, getToolTemplate } = await import("./native-tools/registry.js");
+                const { getCapabilityForFamily } = await import("./tool-families/catalog.js");
                 const apps = loadApps();
                 const app = apps.find((a) => a.spec.toolFamily === msg.toolFamily);
-                if (!app) {
-                  send({
-                    id: randomUUID(),
-                    runId: randomUUID(),
-                    sessionKey,
-                    seq: 0,
-                    state: "error",
-                    text: `App "${msg.toolFamily}" not found.`,
-                    timestamp: Date.now(),
-                  });
-                  break;
-                }
 
-                const primary = app.spec.tools.find((t) => t.isPrimary) ?? app.spec.tools[0];
-                const primaryToolName = `${app.spec.toolPrefix}${primary.suffix}`;
+                if (app) {
+                  // ── Dynamic app path ──
+                  const primary = app.spec.tools.find((t) => t.isPrimary) ?? app.spec.tools[0];
+                  const primaryToolName = `${app.spec.toolPrefix}${primary.suffix}`;
 
-                // Execute the primary tool with sample params
-                const result = await executeToolDirect(primaryToolName, primary.sampleParams);
-                const data = result.success && result.data != null
-                  ? result.data
-                  : primary.sampleData;
+                  const result = await executeToolDirect(primaryToolName, primary.sampleParams);
+                  const data = result.success && result.data != null
+                    ? result.data
+                    : primary.sampleData;
 
-                const dataKeys = data && typeof data === "object" ? Object.keys(data) : [];
-                runtime.log?.(`[enso:app-runner] tool=${primaryToolName} success=${result.success} dataKeys=[${dataKeys.join(",")}] using app's own template`);
-                if (!result.success) {
-                  runtime.log?.(`[enso:app-runner] tool execution failed (${result.error ?? "unknown"}), falling back to sampleData`);
-                }
+                  const dataKeys = data && typeof data === "object" ? Object.keys(data) : [];
+                  runtime.log?.(`[enso:app-runner] tool=${primaryToolName} success=${result.success} dataKeys=[${dataKeys.join(",")}] using app's own template`);
+                  if (!result.success) {
+                    runtime.log?.(`[enso:app-runner] tool execution failed (${result.error ?? "unknown"}), falling back to sampleData`);
+                  }
 
-                // Use the app's own template directly — no template inference needed.
-                // The app's executor produces data in exactly the shape its template expects.
-                const generatedUI = app.templateJSX;
-
-                // Register card context for future actions
-                const { registerCardContext } = await import("./outbound.js");
-                const cardId = randomUUID();
-                registerCardContext(cardId, {
-                  cardId,
-                  originalPrompt: `Run app: ${app.spec.toolFamily}`,
-                  originalResponse: "",
-                  currentData: structuredClone(data),
-                  geminiApiKey: account.geminiApiKey,
-                  account,
-                  mode: "full",
-                  actionHistory: [],
-                  nativeToolHint: {
-                    toolName: primaryToolName,
-                    params: primary.sampleParams,
-                    handlerPrefix: app.spec.toolPrefix,
-                  },
-                  interactionMode: "tool",
-                  toolFamily: app.spec.toolFamily,
-                  signatureId: app.spec.signatureId,
-                  coverageStatus: "covered",
-                });
-
-                runtime.log?.(`[enso:app-runner] card=${cardId} prefix=${app.spec.toolPrefix} family=${app.spec.toolFamily}`);
-
-                send({
-                  id: cardId,
-                  runId: randomUUID(),
-                  sessionKey,
-                  seq: 0,
-                  state: "final",
-                  data,
-                  generatedUI,
-                  cardMode: {
+                  const generatedUI = app.templateJSX;
+                  const { registerCardContext } = await import("./outbound.js");
+                  const cardId = randomUUID();
+                  registerCardContext(cardId, {
+                    cardId,
+                    originalPrompt: `Run app: ${app.spec.toolFamily}`,
+                    originalResponse: "",
+                    currentData: structuredClone(data),
+                    geminiApiKey: account.geminiApiKey,
+                    account,
+                    mode: "full",
+                    actionHistory: [],
+                    nativeToolHint: {
+                      toolName: primaryToolName,
+                      params: primary.sampleParams,
+                      handlerPrefix: app.spec.toolPrefix,
+                    },
                     interactionMode: "tool",
                     toolFamily: app.spec.toolFamily,
                     signatureId: app.spec.signatureId,
                     coverageStatus: "covered",
-                  },
-                  targetCardId: undefined,
-                  timestamp: Date.now(),
-                });
+                  });
+
+                  runtime.log?.(`[enso:app-runner] card=${cardId} prefix=${app.spec.toolPrefix} family=${app.spec.toolFamily}`);
+
+                  send({
+                    id: cardId,
+                    runId: randomUUID(),
+                    sessionKey,
+                    seq: 0,
+                    state: "final",
+                    data,
+                    generatedUI,
+                    cardMode: {
+                      interactionMode: "tool",
+                      toolFamily: app.spec.toolFamily,
+                      signatureId: app.spec.signatureId,
+                      coverageStatus: "covered",
+                    },
+                    targetCardId: undefined,
+                    timestamp: Date.now(),
+                  });
+                } else {
+                  // ── Built-in tool family path ──
+                  const cap = getCapabilityForFamily(msg.toolFamily);
+                  if (!cap) {
+                    send({
+                      id: randomUUID(),
+                      runId: randomUUID(),
+                      sessionKey,
+                      seq: 0,
+                      state: "error",
+                      text: `App "${msg.toolFamily}" not found.`,
+                      timestamp: Date.now(),
+                    });
+                    break;
+                  }
+
+                  const toolName = cap.fallbackToolName;
+                  const result = await executeToolDirect(toolName, {});
+                  if (!result.success) {
+                    runtime.log?.(`[enso:app-runner] built-in tool ${toolName} failed: ${result.error}`);
+                    send({
+                      id: randomUUID(),
+                      runId: randomUUID(),
+                      sessionKey,
+                      seq: 0,
+                      state: "error",
+                      text: `Failed to run app: ${result.error ?? "unknown error"}`,
+                      timestamp: Date.now(),
+                    });
+                    break;
+                  }
+
+                  const template = getToolTemplate(cap.toolFamily, cap.signatureId);
+                  const normalized = template
+                    ? normalizeDataForToolTemplate(template, result.data)
+                    : (result.data as Record<string, unknown>);
+                  const generatedUI = template ? getToolTemplateCode(template) : undefined;
+
+                  // Derive prefix by stripping the fallback suffix from the tool name
+                  const fallbackSuffix = cap.actionSuffixes.find((s) => toolName.endsWith(`_${s}`));
+                  const handlerPrefix = fallbackSuffix
+                    ? toolName.slice(0, -fallbackSuffix.length)
+                    : toolName.replace(/_[^_]+$/, "_");
+
+                  const { registerCardContext } = await import("./outbound.js");
+                  const cardId = randomUUID();
+                  registerCardContext(cardId, {
+                    cardId,
+                    originalPrompt: `Run app: ${cap.toolFamily}`,
+                    originalResponse: "",
+                    currentData: structuredClone(normalized),
+                    geminiApiKey: account.geminiApiKey,
+                    account,
+                    mode: "full",
+                    actionHistory: [],
+                    nativeToolHint: {
+                      toolName,
+                      params: {},
+                      handlerPrefix,
+                    },
+                    interactionMode: "tool",
+                    toolFamily: cap.toolFamily,
+                    signatureId: cap.signatureId,
+                    coverageStatus: "covered",
+                  });
+
+                  runtime.log?.(`[enso:app-runner] built-in card=${cardId} tool=${toolName} family=${cap.toolFamily}`);
+
+                  send({
+                    id: cardId,
+                    runId: randomUUID(),
+                    sessionKey,
+                    seq: 0,
+                    state: "final",
+                    data: normalized,
+                    generatedUI,
+                    cardMode: {
+                      interactionMode: "tool",
+                      toolFamily: cap.toolFamily,
+                      signatureId: cap.signatureId,
+                      coverageStatus: "covered",
+                    },
+                    targetCardId: undefined,
+                    timestamp: Date.now(),
+                  });
+                }
               } catch (err) {
                 runtime.error?.(`[enso:app-runner] apps.run failed: ${err instanceof Error ? err.message : String(err)}`);
                 send({
