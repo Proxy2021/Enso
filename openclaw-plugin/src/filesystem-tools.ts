@@ -1,7 +1,8 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "path";
-import { homedir } from "os";
+import { execSync } from "child_process";
+import { homedir, platform } from "os";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -60,16 +61,6 @@ function errorResult(message: string): AgentToolResult {
   return { content: [{ type: "text", text: `[ERROR] ${message}` }] };
 }
 
-function getAllowedRoots(): string[] {
-  const roots = [resolve(homedir()), resolve(process.cwd())];
-  return Array.from(new Set(roots));
-}
-
-function isPathAllowed(targetPath: string): boolean {
-  const resolved = resolve(targetPath);
-  return getAllowedRoots().some((root) => resolved === root || resolved.startsWith(`${root}${sep}`));
-}
-
 function resolveUserPath(inputPath: string): string {
   const expanded = inputPath.startsWith("~")
     ? join(homedir(), inputPath.slice(1))
@@ -83,10 +74,65 @@ function resolveUserPath(inputPath: string): string {
 function safeResolvePath(inputPath: string): { ok: true; path: string } | { ok: false; error: string } {
   if (!inputPath || !inputPath.trim()) return { ok: false, error: "path is required" };
   const resolved = resolveUserPath(inputPath);
-  if (!isPathAllowed(resolved)) {
-    return { ok: false, error: `path is outside allowed roots: ${resolved}` };
-  }
   return { ok: true, path: resolved };
+}
+
+/** Detect available root drives / mount points. */
+function getSystemDrives(): Array<{ name: string; path: string; type: "drive" }> {
+  if (platform() === "win32") {
+    try {
+      const raw = execSync("wmic logicaldisk get name", { encoding: "utf-8", timeout: 3000 });
+      const drives = raw.split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => /^[A-Z]:$/i.test(l))
+        .map((d) => ({ name: d + "\\", path: d + "\\", type: "drive" as const }));
+      if (drives.length > 0) return drives;
+    } catch { /* fallback below */ }
+    // Fallback: probe common letters
+    const letters = "CDEFGHIJKLMNOPQRSTUVWXYZAB";
+    return [...letters].filter((l) => existsSync(`${l}:\\`)).map((l) => ({
+      name: `${l}:\\`,
+      path: `${l}:\\`,
+      type: "drive" as const,
+    }));
+  }
+  // macOS / Linux: return top-level mount points + home
+  const mounts: Array<{ name: string; path: string; type: "drive" }> = [
+    { name: "/", path: "/", type: "drive" },
+  ];
+  if (existsSync("/Volumes")) {
+    try {
+      for (const name of readdirSync("/Volumes")) {
+        mounts.push({ name: `/Volumes/${name}`, path: `/Volumes/${name}`, type: "drive" });
+      }
+    } catch { /* ignore */ }
+  }
+  if (existsSync("/mnt")) {
+    try {
+      for (const name of readdirSync("/mnt")) {
+        const p = `/mnt/${name}`;
+        if (existsSync(p) && lstatSync(p).isDirectory()) {
+          mounts.push({ name: p, path: p, type: "drive" });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  const home = homedir();
+  if (!mounts.some((m) => m.path === home)) {
+    mounts.push({ name: `~ (${home})`, path: home, type: "drive" });
+  }
+  return mounts;
+}
+
+function listDrives(): AgentToolResult {
+  const drives = getSystemDrives();
+  return jsonResult({
+    tool: "enso_fs_list_drives",
+    drives,
+    total: drives.length,
+    home: homedir(),
+    cwd: process.cwd(),
+  });
 }
 
 function listDirectory(params: ListDirectoryParams): AgentToolResult {
@@ -256,6 +302,17 @@ function movePath(params: MovePathParams): AgentToolResult {
 
 export function createFilesystemTools(): AnyAgentTool[] {
   return [
+    {
+      name: "enso_fs_list_drives",
+      label: "Filesystem List Drives",
+      description: "List all available system drives / root mount points.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+      execute: async () => listDrives(),
+    } as AnyAgentTool,
     {
       name: "enso_fs_list_directory",
       label: "Filesystem List Directory",

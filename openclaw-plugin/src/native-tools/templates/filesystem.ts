@@ -34,6 +34,8 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const isFileView = data?.tool === "enso_fs_read_text_file" && data?.content != null;
   // If the data contains stat info, show it
   const isStatView = data?.tool === "enso_fs_stat_path" && data?.type != null;
+  // If the data contains drives list, show drives view
+  const isDrivesView = data?.tool === "enso_fs_list_drives" || Array.isArray(data?.drives);
 
   const isDir = (type) => type === "directory" || type === "symlink";
   const formatSize = (bytes) => {
@@ -145,6 +147,72 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
     );
   }
 
+  // ── Drives view ──
+  if (isDrivesView) {
+    const drives = Array.isArray(data?.drives) ? data.drives : [];
+    const home = data?.home ?? "";
+    const cwd = data?.cwd ?? "";
+    const driveIcon = (name) => {
+      const n = String(name).toLowerCase();
+      if (n.includes("volume") || n.includes("mnt")) return "\uD83D\uDCBF";
+      if (n.startsWith("~") || n.includes("home") || n.includes("users")) return "\uD83C\uDFE0";
+      if (/^[a-z]:/i.test(n)) return "\uD83D\uDCBE";
+      if (n === "/") return "\uD83D\uDDA5\uFE0F";
+      return "\uD83D\uDCBE";
+    };
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-gray-100">\uD83D\uDCBB System Drives</div>
+          <button
+            onClick={() => onAction("list_drives", {})}
+            className="px-2 py-1 text-[11px] rounded-md bg-gray-700 border border-gray-600 hover:bg-gray-600"
+          >\u21BB Refresh</button>
+        </div>
+
+        {/* Quick-access */}
+        {(home || cwd) && (
+          <div className="flex gap-2">
+            {home && (
+              <button
+                onClick={() => onAction("list_directory", { path: home })}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-blue-600/15 border border-blue-500/40 hover:bg-blue-600/25 text-blue-300 transition-colors"
+              ><span>\uD83C\uDFE0</span> Home <span className="text-[10px] text-blue-400/60 truncate max-w-[140px]">({home})</span></button>
+            )}
+            {cwd && cwd !== home && (
+              <button
+                onClick={() => onAction("list_directory", { path: cwd })}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-purple-600/15 border border-purple-500/40 hover:bg-purple-600/25 text-purple-300 transition-colors"
+              ><span>\uD83D\uDCC2</span> Working Dir <span className="text-[10px] text-purple-400/60 truncate max-w-[140px]">({cwd})</span></button>
+            )}
+          </div>
+        )}
+
+        {/* Drives grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {drives.map((drive, idx) => (
+            <button
+              key={drive.path || idx}
+              onClick={() => onAction("list_directory", { path: drive.path })}
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-gray-800 border border-gray-700/60 hover:bg-gray-700/70 hover:border-gray-600 transition-colors text-left group"
+            >
+              <span className="text-lg">{driveIcon(drive.name)}</span>
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-gray-200 group-hover:text-gray-100 truncate">{drive.name}</div>
+                {drive.path !== drive.name && <div className="text-[10px] text-gray-500 truncate">{drive.path}</div>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {drives.length === 0 && (
+          <div className="px-2 py-6 text-center text-xs text-gray-500">No drives detected.</div>
+        )}
+        <div className="text-[10px] text-gray-500">{drives.length} drive{drives.length !== 1 ? "s" : ""} available</div>
+      </div>
+    );
+  }
+
   // ── Main directory view ──
   return (
     <div className="space-y-2">
@@ -175,6 +243,11 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
             className="px-2 py-1 text-[11px] rounded-md bg-gray-700 border border-gray-600 hover:bg-gray-600"
           >\u2191 Up</button>
         )}
+        <button
+          onClick={() => onAction("list_drives", {})}
+          className="px-2 py-1 text-[11px] rounded-md bg-gray-700 border border-gray-600 hover:bg-gray-600"
+          title="Show all system drives"
+        >\uD83D\uDCBB Drives</button>
         <button
           onClick={() => onAction("refresh", {})}
           className="px-2 py-1 text-[11px] rounded-md bg-gray-700 border border-gray-600 hover:bg-gray-600"
