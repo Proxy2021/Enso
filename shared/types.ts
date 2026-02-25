@@ -132,6 +132,7 @@ export interface ClientMessage {
     | "apps.list"
     | "apps.run"
     | "app.save_to_codebase"
+    | "server.restart"
     | "settings.set_mode"
     | "operation.cancel";
   mode?: ChannelMode;

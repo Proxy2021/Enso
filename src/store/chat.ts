@@ -50,6 +50,7 @@ interface CardStore {
   fetchApps: () => void;
   runApp: (toolFamily: string) => void;
   saveAppToCodebase: (toolFamily: string) => void;
+  restartServer: () => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
@@ -442,6 +443,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   saveAppToCodebase: (toolFamily: string) => {
     get()._wsClient?.send({ type: "app.save_to_codebase", toolFamily });
+  },
+
+  restartServer: () => {
+    get()._wsClient?.send({ type: "server.restart" });
   },
 
   fetchProjects: () => {

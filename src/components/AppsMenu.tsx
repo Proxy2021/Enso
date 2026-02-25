@@ -15,6 +15,7 @@ export default function AppsMenu() {
   const fetchApps = useChatStore((s) => s.fetchApps);
   const runApp = useChatStore((s) => s.runApp);
   const saveAppToCodebase = useChatStore((s) => s.saveAppToCodebase);
+  const restartServer = useChatStore((s) => s.restartServer);
   const connectionState = useChatStore((s) => s.connectionState);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -46,6 +47,11 @@ export default function AppsMenu() {
   function handleSaveToCodebase(e: React.MouseEvent, toolFamily: string) {
     e.stopPropagation();
     saveAppToCodebase(toolFamily);
+    setOpen(false);
+  }
+
+  function handleRestart() {
+    restartServer();
     setOpen(false);
   }
 
@@ -135,6 +141,18 @@ export default function AppsMenu() {
               ))}
             </div>
           )}
+          {/* Restart button — always shown at the bottom */}
+          <div className="border-t border-gray-700/50">
+            <button
+              onClick={handleRestart}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Restart Services
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
 import { existsSync, statSync, createReadStream, readdirSync, writeFileSync, mkdirSync } from "fs";
 import { extname, dirname, basename, join } from "path";
+import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
@@ -753,6 +754,43 @@ export async function startEnsoServer(opts: {
                   timestamp: Date.now(),
                 });
               }
+            }
+            break;
+          }
+          case "server.restart": {
+            runtime.log?.(`[enso] server restart requested`);
+            try {
+              const { spawn } = await import("node:child_process");
+              const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+              const ensoRoot = join(pluginRoot, "..");
+              const restartScript = join(ensoRoot, "restart.ps1");
+              // Spawn restart script as a detached process — it kills us and restarts everything
+              const child = spawn("powershell", ["-ExecutionPolicy", "Bypass", "-File", restartScript], {
+                detached: true,
+                stdio: "ignore",
+                cwd: ensoRoot,
+              });
+              child.unref();
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                text: "Restarting services...",
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.(`[enso] restart failed: ${err instanceof Error ? err.message : String(err)}`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "error",
+                text: `Restart failed: ${err instanceof Error ? err.message : String(err)}`,
+                timestamp: Date.now(),
+              });
             }
             break;
           }
