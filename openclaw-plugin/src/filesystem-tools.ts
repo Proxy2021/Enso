@@ -1,5 +1,5 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "fs";
+import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "path";
 import { execSync } from "child_process";
 import { homedir, platform } from "os";
@@ -58,7 +58,33 @@ const DEFAULT_SEARCH_DEPTH = 4;
 
 // File-type detection for open_file
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"]);
-const VIDEO_EXTS = new Set([".mp4", ".webm", ".avi", ".mov", ".mkv", ".m4v"]);
+const VIDEO_EXTS = new Set([".mp4", ".webm", ".avi", ".mov", ".mkv", ".m4v", ".mts"]);
+
+/**
+ * Detect actual container format by inspecting file magic bytes.
+ * MPEG-TS: 0x47 sync byte at 188-byte intervals (offsets 0, 188, 376).
+ * MP4: "ftyp" atom signature at bytes 4-7.
+ */
+function detectVideoContainer(filePath: string): "mpegts" | "mp4" | "unknown" {
+  try {
+    const fd = openSync(filePath, "r");
+    const buf = Buffer.alloc(377);
+    const bytesRead = readSync(fd, buf, 0, 377, 0);
+    closeSync(fd);
+    if (bytesRead < 8) return "unknown";
+
+    // MP4: bytes 4-7 = "ftyp"
+    if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return "mp4";
+
+    // MPEG-TS: 0x47 sync byte at 188-byte packet boundaries
+    if (bytesRead >= 377 && buf[0] === 0x47 && buf[188] === 0x47 && buf[376] === 0x47) return "mpegts";
+    if (bytesRead >= 189 && buf[0] === 0x47 && buf[188] === 0x47) return "mpegts";
+
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 const AUDIO_EXTS = new Set([".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"]);
 const PDF_EXTS = new Set([".pdf"]);
 const TEXT_EXTS = new Set([
@@ -229,10 +255,12 @@ function openFile(params: OpenFileParams): AgentToolResult {
     });
   }
   if (VIDEO_EXTS.has(ext)) {
+    const container = detectVideoContainer(safe.path);
     return jsonResult({
       tool: "enso_fs_open_file", fileType: "video",
       path: safe.path, name, ext, size: stat.size,
       mediaUrl: toMediaUrl(safe.path),
+      container,
     });
   }
   if (AUDIO_EXTS.has(ext)) {
@@ -248,6 +276,19 @@ function openFile(params: OpenFileParams): AgentToolResult {
       path: safe.path, name, ext, size: stat.size,
       mediaUrl: toMediaUrl(safe.path),
     });
+  }
+  // .ts could be TypeScript or MPEG-TS — sniff the actual bytes
+  if (ext === ".ts") {
+    const container = detectVideoContainer(safe.path);
+    if (container === "mpegts") {
+      return jsonResult({
+        tool: "enso_fs_open_file", fileType: "video",
+        path: safe.path, name, ext, size: stat.size,
+        mediaUrl: toMediaUrl(safe.path),
+        container: "mpegts",
+      });
+    }
+    // Not MPEG-TS — fall through to text handler
   }
   if (TEXT_EXTS.has(ext) || ext === "") {
     const maxChars = DEFAULT_MAX_CHARS;

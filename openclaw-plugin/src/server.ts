@@ -35,7 +35,7 @@ export const MAX_MEDIA_FILE_SIZE = 300 * 1024 * 1024; // 300 MB for non-streamab
 
 /** Extensions that support HTTP Range streaming — exempt from the size limit. */
 const STREAMABLE_EXTS = new Set([
-  ".mp4", ".webm", ".avi", ".mov", ".mkv", ".m4v",
+  ".mp4", ".webm", ".avi", ".mov", ".mkv", ".m4v", ".ts", ".mts",
   ".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma",
 ]);
 
@@ -215,6 +215,8 @@ export async function startEnsoServer(opts: {
       ".webm": "video/webm",
       ".avi": "video/x-msvideo",
       ".mov": "video/quicktime",
+      ".ts": "video/mp2t",
+      ".mts": "video/mp2t",
       ".mp3": "audio/mpeg",
       ".wav": "audio/wav",
       ".ogg": "audio/ogg",

@@ -172,12 +172,10 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
             </div>
           ) : (
             <div className="bg-gray-950 border border-gray-700/60 rounded-lg p-2">
-              <video
+              <EnsoUI.VideoPlayer
                 src={data.mediaUrl}
-                controls
-                preload="metadata"
+                container={data.container}
                 onError={() => setVideoError(true)}
-                style={{ width: "100%", maxHeight: "480px", borderRadius: "6px", background: "#000" }}
               />
             </div>
           )}

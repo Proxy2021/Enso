@@ -9,6 +9,7 @@
  *   bg-gray-900 (outer), bg-gray-800 (cards), border-gray-600/50, text-gray-100
  */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import mpegts from "mpegts.js";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ACCENT COLORS — shared palette used across components
@@ -939,6 +940,102 @@ function EmptyState({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   17. VIDEO PLAYER — Smart video player with MPEG-TS transmuxing support
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function VideoPlayer({
+  src,
+  container,
+  onError,
+  className = "",
+  style,
+}: {
+  src: string;
+  container?: "mpegts" | "mp4" | "unknown";
+  onError?: () => void;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<mpegts.Player | null>(null);
+  const [error, setError] = useState(false);
+  const [useMpegts, setUseMpegts] = useState(container === "mpegts");
+
+  // Tear down any active mpegts.js player instance
+  const destroyPlayer = useCallback(() => {
+    if (playerRef.current) {
+      try {
+        playerRef.current.pause();
+        playerRef.current.unload();
+        playerRef.current.detachMediaElement();
+        playerRef.current.destroy();
+      } catch { /* ignore cleanup errors */ }
+      playerRef.current = null;
+    }
+  }, []);
+
+  // Initialize mpegts.js when useMpegts flips to true
+  useEffect(() => {
+    if (!useMpegts || !videoRef.current) return;
+    if (!mpegts.isSupported()) {
+      // MSE unavailable — nothing we can do
+      setError(true);
+      onError?.();
+      return;
+    }
+
+    const player = mpegts.createPlayer(
+      { type: "mpegts", url: src, isLive: false },
+      { enableWorker: false, enableStashBuffer: true },
+    );
+
+    player.attachMediaElement(videoRef.current);
+    player.load();
+    playerRef.current = player;
+
+    player.on(mpegts.Events.ERROR, () => {
+      destroyPlayer();
+      setError(true);
+      onError?.();
+    });
+
+    return () => { destroyPlayer(); };
+  }, [src, useMpegts, destroyPlayer, onError]);
+
+  // Native <video> error → try mpegts.js as fallback
+  const handleNativeError = useCallback(() => {
+    if (!useMpegts && !error && mpegts.isSupported()) {
+      setUseMpegts(true);
+    } else {
+      setError(true);
+      onError?.();
+    }
+  }, [useMpegts, error, onError]);
+
+  if (error) return null; // parent shows the error/System Player UI
+
+  const defaultStyle: React.CSSProperties = {
+    width: "100%",
+    maxHeight: "480px",
+    borderRadius: "6px",
+    background: "#000",
+    ...style,
+  };
+
+  return (
+    <video
+      ref={videoRef}
+      src={useMpegts ? undefined : src}
+      controls
+      preload="metadata"
+      onError={useMpegts ? undefined : handleNativeError}
+      className={className}
+      style={defaultStyle}
+    />
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    EXPORT — Single namespace object injected into sandbox
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -959,4 +1056,5 @@ export const EnsoUI = {
   DataTable,
   Stat,
   EmptyState,
+  VideoPlayer,
 };
