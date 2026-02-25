@@ -47,6 +47,10 @@ type MovePathParams = {
   destination: string;
 };
 
+type OpenExternalParams = {
+  path: string;
+};
+
 const DEFAULT_LIST_LIMIT = 120;
 const DEFAULT_SEARCH_LIMIT = 60;
 const DEFAULT_MAX_CHARS = 12000;
@@ -264,6 +268,31 @@ function openFile(params: OpenFileParams): AgentToolResult {
   });
 }
 
+function openExternal(params: OpenExternalParams): AgentToolResult {
+  const safe = safeResolvePath(params.path);
+  if (!safe.ok) return errorResult(safe.error);
+  if (!existsSync(safe.path)) return errorResult(`path does not exist: ${safe.path}`);
+
+  try {
+    const plat = platform();
+    if (plat === "win32") {
+      execSync(`start "" "${safe.path}"`, { stdio: "ignore", windowsHide: true });
+    } else if (plat === "darwin") {
+      execSync(`open "${safe.path}"`, { stdio: "ignore" });
+    } else {
+      execSync(`xdg-open "${safe.path}"`, { stdio: "ignore" });
+    }
+    return jsonResult({
+      tool: "enso_fs_open_external",
+      path: safe.path,
+      name: basename(safe.path),
+      opened: true,
+    });
+  } catch (err: any) {
+    return errorResult(`Failed to open file: ${err.message ?? err}`);
+  }
+}
+
 function statPath(params: StatPathParams): AgentToolResult {
   const safe = safeResolvePath(params.path);
   if (!safe.ok) return errorResult(safe.error);
@@ -432,6 +461,20 @@ export function createFilesystemTools(): AnyAgentTool[] {
         required: ["path"],
       },
       execute: async (_callId: string, params: Record<string, unknown>) => openFile(params as OpenFileParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_fs_open_external",
+      label: "Filesystem Open External",
+      description: "Open a file with the system's default application.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "File path to open externally." },
+        },
+        required: ["path"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => openExternal(params as OpenExternalParams),
     } as AnyAgentTool,
     {
       name: "enso_fs_stat_path",

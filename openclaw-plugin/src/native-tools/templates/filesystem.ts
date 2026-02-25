@@ -148,48 +148,72 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
     }
 
     if (data.fileType === "video") {
+      const [videoError, setVideoError] = useState(false);
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             {backBtn}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-gray-100 truncate">\uD83C\uDFA5 {data.name}</div>
               <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
             </div>
+            <button
+              onClick={() => onAction("open_external", { path: data.path })}
+              className="px-2.5 py-1 text-xs rounded-md bg-blue-700/40 border border-blue-500/40 hover:bg-blue-700/60 text-blue-200 shrink-0 flex items-center gap-1"
+              title="Open with system video player"
+            >\u25B6 System Player</button>
           </div>
-          <div className="bg-gray-950 border border-gray-700/60 rounded-lg p-2">
-            <video
-              src={data.mediaUrl}
-              controls
-              style={{ maxWidth: "100%", maxHeight: "480px", borderRadius: "6px" }}
-            >
-              Your browser does not support video playback.
-            </video>
-          </div>
+          {videoError ? (
+            <div className="bg-gray-950 border border-gray-700/60 rounded-lg px-4 py-8 flex flex-col items-center gap-3">
+              <div className="text-2xl">\uD83C\uDFA5</div>
+              <div className="text-sm text-gray-400">Cannot play this video in the browser.</div>
+              <div className="text-[10px] text-gray-600">The codec may not be supported. Use the System Player button above.</div>
+            </div>
+          ) : (
+            <div className="bg-gray-950 border border-gray-700/60 rounded-lg p-2">
+              <video
+                src={data.mediaUrl}
+                controls
+                preload="metadata"
+                onError={() => setVideoError(true)}
+                style={{ width: "100%", maxHeight: "480px", borderRadius: "6px", background: "#000" }}
+              />
+            </div>
+          )}
         </div>
       );
     }
 
     if (data.fileType === "audio") {
+      const [audioError, setAudioError] = useState(false);
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             {backBtn}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-gray-100 truncate">\uD83C\uDFB5 {data.name}</div>
               <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
             </div>
+            <button
+              onClick={() => onAction("open_external", { path: data.path })}
+              className="px-2.5 py-1 text-xs rounded-md bg-blue-700/40 border border-blue-500/40 hover:bg-blue-700/60 text-blue-200 shrink-0 flex items-center gap-1"
+              title="Open with system audio player"
+            >\u25B6 System Player</button>
           </div>
           <div className="bg-gray-950 border border-gray-700/60 rounded-lg px-4 py-6 flex flex-col items-center gap-3">
             <div className="text-3xl">\uD83C\uDFB5</div>
             <div className="text-sm text-gray-200 font-medium">{data.name}</div>
-            <audio
-              src={data.mediaUrl}
-              controls
-              style={{ width: "100%", maxWidth: "400px" }}
-            >
-              Your browser does not support audio playback.
-            </audio>
+            {audioError ? (
+              <div className="text-sm text-gray-500">Cannot play \u2014 use System Player above.</div>
+            ) : (
+              <audio
+                src={data.mediaUrl}
+                controls
+                preload="metadata"
+                onError={() => setAudioError(true)}
+                style={{ width: "100%", maxWidth: "400px" }}
+              />
+            )}
           </div>
         </div>
       );
@@ -236,14 +260,19 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           {backBtn}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-gray-100 truncate">\uD83D\uDCC4 {data.name}</div>
             <div className="text-[10px] text-gray-500 truncate">{data.path} \u2022 {formatSize(data.size)}</div>
           </div>
+          <button
+            onClick={() => onAction("open_external", { path: data.path })}
+            className="px-2.5 py-1 text-xs rounded-md bg-blue-700/40 border border-blue-500/40 hover:bg-blue-700/60 text-blue-200 shrink-0"
+            title="Open with system default application"
+          >\u25B6 Open</button>
         </div>
         <div className="bg-gray-800 border border-gray-700/50 rounded-lg px-4 py-6 text-center">
           <div className="text-2xl mb-2">\uD83D\uDCC2</div>
-          <div className="text-xs text-gray-400">This file type ({data.ext || "unknown"}) cannot be previewed.</div>
+          <div className="text-xs text-gray-400">This file type ({data.ext || "unknown"}) cannot be previewed in the browser.</div>
           <div className="text-[10px] text-gray-500 mt-1">{formatSize(data.size)}</div>
         </div>
       </div>
