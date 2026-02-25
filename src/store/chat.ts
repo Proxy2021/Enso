@@ -23,6 +23,7 @@ interface CardStore {
   // Apps
   apps: AppInfo[];
   toolFamilies: Array<{ toolFamily: string; description: string }>;
+  ensoProjectPath: string | null;
 
   // Claude Code session state
   projects: ProjectInfo[];
@@ -51,6 +52,7 @@ interface CardStore {
   runApp: (toolFamily: string) => void;
   saveAppToCodebase: (toolFamily: string) => void;
   restartServer: () => void;
+  launchEnsoCode: () => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
@@ -65,6 +67,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _wsClient: null,
   apps: [],
   toolFamilies: [],
+  ensoProjectPath: null,
   projects: [],
   codeSessionCwd: null,
   codeSessionId: null,
@@ -449,6 +452,34 @@ export const useChatStore = create<CardStore>((set, get) => ({
     get()._wsClient?.send({ type: "server.restart" });
   },
 
+  launchEnsoCode: () => {
+    const ensoPath = get().ensoProjectPath;
+    if (!ensoPath) return;
+
+    // Set CWD to Enso project, start fresh session
+    set({ codeSessionCwd: ensoPath, codeSessionId: null });
+
+    // Create terminal card (same as bare "/code" but skips project picker)
+    const id = uuidv4();
+    const now = Date.now();
+    const card: Card = {
+      id,
+      runId: id,
+      type: "terminal",
+      role: "assistant",
+      status: "complete",
+      display: "expanded",
+      toolMeta: { toolId: "claude-code" },
+      createdAt: now,
+      updatedAt: now,
+    };
+    set((s) => ({
+      cardOrder: [...s.cardOrder, id],
+      cards: { ...s.cards, [id]: card },
+      _activeTerminalCardId: id,
+    }));
+  },
+
   fetchProjects: () => {
     get()._wsClient?.send({ type: "tools.list_projects" });
   },
@@ -460,9 +491,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _handleServerMessage: (msg: ServerMessage) => {
     // Handle settings messages (mode + tool families)
     if (msg.settings) {
-      if (msg.settings.toolFamilies) {
-        set({ toolFamilies: msg.settings.toolFamilies });
-      }
+      const patch: Partial<CardStore> = {};
+      if (msg.settings.toolFamilies) patch.toolFamilies = msg.settings.toolFamilies;
+      if (msg.settings.ensoProjectPath) patch.ensoProjectPath = msg.settings.ensoProjectPath;
+      if (Object.keys(patch).length > 0) set(patch);
       return;
     }
 

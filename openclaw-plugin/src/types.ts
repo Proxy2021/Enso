@@ -110,7 +110,7 @@ export interface ServerMessage {
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
   operation?: OperationStatus;
-  settings?: { mode: ChannelMode };
+  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }>; ensoProjectPath?: string };
   enhanceResult?: EnhanceResult | null;
   enhanceHint?: { toolFamily: string };
   appProposal?: { cardId: string; proposal: string };

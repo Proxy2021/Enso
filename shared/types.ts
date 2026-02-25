@@ -101,7 +101,7 @@ export interface ServerMessage {
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
   operation?: OperationStatus;
-  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }> };
+  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }>; ensoProjectPath?: string };
   steps?: AgentStep[];
   enhanceResult?: EnhanceResult | null;
   enhanceHint?: { toolFamily: string };

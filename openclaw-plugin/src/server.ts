@@ -289,15 +289,16 @@ export async function startEnsoServer(opts: {
     const client: ConnectedClient = { id: connectionId, sessionKey, ws, send };
     clients.set(connectionId, client);
 
-    // Send current mode + available tool families to newly connected client
+    // Send current mode + available tool families + project path to newly connected client
     const toolFamilies = TOOL_FAMILY_CAPABILITIES.map((c) => ({ toolFamily: c.toolFamily, description: c.description }));
+    const ensoProjectPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
     send({
       id: randomUUID(),
       runId: randomUUID(),
       sessionKey,
       seq: 0,
       state: "final",
-      settings: { mode: account.mode ?? "full", toolFamilies },
+      settings: { mode: account.mode ?? "full", toolFamilies, ensoProjectPath },
       timestamp: Date.now(),
     });
 
