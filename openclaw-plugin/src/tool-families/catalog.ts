@@ -23,9 +23,9 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
   {
     toolFamily: "filesystem",
     fallbackToolName: "enso_fs_list_directory",
-    actionSuffixes: ["list_directory", "read_text_file", "stat_path", "search_paths"],
+    actionSuffixes: ["list_directory", "read_text_file", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path"],
     signatureId: "directory_listing",
-    description: "Files and directories: listing folder contents, reading files, file stats, searching paths",
+    description: "File manager: browse directories, read files, search, create/rename/delete/move files and folders",
   },
   {
     toolFamily: "code_workspace",

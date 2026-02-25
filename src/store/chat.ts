@@ -324,6 +324,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         [cardId]: {
           ...s.cards[cardId]!,
           enhanceStatus: "loading",
+          suggestedFamily: undefined,
           updatedAt: Date.now(),
         },
       },
@@ -346,6 +347,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         [cardId]: {
           ...s.cards[cardId]!,
           enhanceStatus: "loading",
+          suggestedFamily: undefined,
           updatedAt: Date.now(),
         },
       },
@@ -613,6 +615,25 @@ export const useChatStore = create<CardStore>((set, get) => ({
               },
             },
           };
+        }
+
+        // Handle background compatibility hint (proactive app detection)
+        if (msg.enhanceHint?.toolFamily) {
+          // Only apply if the card hasn't been enhanced or interacted with yet
+          if (!card.enhanceStatus || card.enhanceStatus === "idle") {
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  enhanceStatus: "suggested" as const,
+                  suggestedFamily: msg.enhanceHint.toolFamily,
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+          return state;
         }
 
         const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready";

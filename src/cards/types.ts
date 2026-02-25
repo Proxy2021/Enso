@@ -2,7 +2,7 @@ import type { AgentStep, CardModeDetail, OperationStatus, ServerMessage, ToolBui
 
 // ── Card ──
 
-export type EnhanceStatus = "idle" | "loading" | "ready" | "unavailable";
+export type EnhanceStatus = "idle" | "loading" | "ready" | "unavailable" | "suggested";
 
 export interface Card {
   id: string;
@@ -39,6 +39,7 @@ export interface Card {
   appBuildSummary?: ToolBuildSummary;
   viewMode?: "original" | "app";
   enhanceStatus?: EnhanceStatus;
+  suggestedFamily?: string;
   pendingProposal?: string;
 
   // Timestamps

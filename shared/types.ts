@@ -102,6 +102,7 @@ export interface ServerMessage {
   settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }> };
   steps?: AgentStep[];
   enhanceResult?: EnhanceResult | null;
+  enhanceHint?: { toolFamily: string };
   appProposal?: { cardId: string; proposal: string };
   appsDeleted?: { families: string[]; count: number };
   appsList?: AppInfo[];

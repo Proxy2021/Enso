@@ -8,7 +8,45 @@ import type { CoreConfig, EnsoInboundMessage, ToolRouting } from "./types.js";
 import type { ConnectedClient } from "./server.js";
 import { getEnsoRuntime } from "./runtime.js";
 import { deliverEnsoReply } from "./outbound.js";
+import { selectToolForContent } from "./ui-generator.js";
+import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
 import { randomUUID } from "crypto";
+
+// ── Background app compatibility check ──
+
+async function runBackgroundCompatCheck(params: {
+  cardId: string;
+  cardText: string;
+  geminiApiKey: string;
+  client: ConnectedClient;
+}): Promise<void> {
+  const { cardId, cardText, geminiApiKey, client } = params;
+  console.log(`[enso:enhance] bg compat check: cardId=${cardId}, textLen=${cardText.length}`);
+
+  const result = await selectToolForContent({
+    cardText,
+    geminiApiKey,
+    toolFamilies: TOOL_FAMILY_CAPABILITIES,
+  });
+
+  if (!result) {
+    console.log(`[enso:enhance] bg compat check: no match for cardId=${cardId}`);
+    return;
+  }
+
+  console.log(`[enso:enhance] bg compat check: match for cardId=${cardId}, family=${result.toolFamily}`);
+
+  client.send({
+    id: randomUUID(),
+    runId: randomUUID(),
+    sessionKey: client.sessionKey,
+    seq: 0,
+    state: "final",
+    targetCardId: cardId,
+    enhanceHint: { toolFamily: result.toolFamily },
+    timestamp: Date.now(),
+  });
+}
 
 const CHANNEL_ID = "enso" as const;
 
@@ -159,4 +197,26 @@ export async function handleEnsoInbound(params: {
           : undefined,
     },
   });
+
+  // Background app compatibility check (fire-and-forget).
+  // Only for fresh agent responses (not tool-routed or card-action updates).
+  if (
+    !routing &&
+    !targetCardId &&
+    account.geminiApiKey &&
+    steps.length > 0 &&
+    TOOL_FAMILY_CAPABILITIES.length > 0
+  ) {
+    const finalText = steps[steps.length - 1].text;
+    if (finalText.trim().length >= 50) {
+      runBackgroundCompatCheck({
+        cardId: stableCardId,
+        cardText: finalText,
+        geminiApiKey: account.geminiApiKey,
+        client,
+      }).catch((err) => {
+        console.log(`[enso:enhance] bg compat check failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }
+  }
 }

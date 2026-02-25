@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { getAlphaRankTemplateCode, isAlphaRankSignature } from "./templates/alpharank.js";
+import { getFilesystemTemplateCode, isFilesystemSignature } from "./templates/filesystem.js";
 import { getWorkspaceTemplateCode, isWorkspaceSignature } from "./templates/workspace.js";
 import { getMediaTemplateCode, isMediaSignature } from "./templates/media.js";
 import { getTravelTemplateCode, isTravelSignature } from "./templates/travel.js";
@@ -259,8 +260,8 @@ function registerDefaultSignatures(): void {
     {
       toolFamily: "filesystem",
       signatureId: "directory_listing",
-      templateId: "filesystem-browser-v1",
-      supportedActions: ["refresh", "list_directory", "read_text_file", "stat_path", "search_paths"],
+      templateId: "filesystem-browser-v2",
+      supportedActions: ["refresh", "list_directory", "read_text_file", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path"],
       coverageStatus: "covered",
     },
     {
@@ -529,6 +530,9 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   if (isAlphaRankSignature(signature.signatureId)) {
     return getAlphaRankTemplateCode(signature);
   }
+  if (isFilesystemSignature(signature.signatureId)) {
+    return getFilesystemTemplateCode(signature);
+  }
   if (isWorkspaceSignature(signature.signatureId)) {
     return getWorkspaceTemplateCode(signature);
   }
@@ -553,112 +557,6 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   // Check dynamically generated template code (from Tool Factory)
   const generatedCode = generatedTemplateCode.get(signature.signatureId);
   if (generatedCode) return generatedCode;
-
-  if (signature.signatureId === "directory_listing") {
-    return `export default function GeneratedUI({ data, onAction }) {
-  const rows = Array.isArray(data?.rows)
-    ? data.rows
-    : Array.isArray(data?.items)
-      ? data.items
-      : Array.isArray(data?.matches)
-        ? data.matches
-        : [];
-  const currentPath = String(data?.path ?? ".");
-  const [query, setQuery] = useState("");
-
-  const isDir = (type) => type === "directory" || type === "symlink";
-  const toMediaUrl = (path) => { const bytes = new TextEncoder().encode(path); let b = ""; for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]); return "/media/" + btoa(b).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); };
-  const fileExt = (name) => { const i = name.lastIndexOf("."); return i > 0 ? name.slice(i).toLowerCase() : ""; };
-  const previewExts = new Set([".png",".jpg",".jpeg",".gif",".webp",".svg",".bmp",".mp4",".webm",".pdf",".txt",".md",".json",".csv",".log",".html",".css",".js",".ts",".py",".sh",".xml",".yaml",".yml"]);
-
-  return (
-    <div className="bg-gray-900 rounded-xl p-3 border border-gray-700 space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs text-gray-400">Tool mode</div>
-          <div className="text-sm font-semibold text-gray-100 truncate">Filesystem Explorer</div>
-          <div className="text-[11px] text-gray-500 truncate">{currentPath}</div>
-        </div>
-        <button
-          onClick={() => onAction("refresh", {})}
-          className="px-2.5 py-1 text-xs rounded-full bg-gray-700 border border-gray-600 hover:bg-gray-600 cursor-pointer transition-all duration-150 active:scale-[0.98]"
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div className="flex gap-1.5">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search files/folders"
-          className="flex-1 bg-gray-800 border border-gray-600/60 rounded-md px-2 py-1.5 text-xs text-gray-100 focus:outline-none"
-        />
-        <button
-          onClick={() => onAction("search_paths", { path: currentPath, query, type: "any" })}
-          className="px-2.5 py-1.5 text-xs rounded-md bg-blue-600/30 border border-blue-500/60 hover:bg-blue-600/45 cursor-pointer"
-        >
-          Search
-        </button>
-      </div>
-
-      <div className="space-y-1.5 max-h-72 overflow-y-auto">
-        {rows.length > 0 ? rows.slice(0, 60).map((item, idx) => {
-          const name = String(item?.name ?? item?.path ?? ("Item " + (idx + 1)));
-          const type = String(item?.type ?? "file");
-          const itemPath = String(item?.path ?? "");
-          const ext = fileExt(name);
-          const canPreview = previewExts.has(ext);
-          return (
-            <div key={itemPath || idx} className="bg-gray-800 rounded-md border border-gray-600/50 px-2.5 py-2">
-              <div className="text-xs text-gray-100 truncate">{name}</div>
-              <div className="text-[11px] text-gray-500 truncate">{type} {itemPath ? "• " + itemPath : ""}</div>
-              <div className="mt-1.5 flex gap-1.5 flex-wrap">
-                {isDir(type) && (
-                  <button
-                    onClick={() => onAction("list_directory", { path: itemPath })}
-                    className="px-2 py-1 text-[11px] rounded bg-blue-700/30 border border-blue-500/50 hover:bg-blue-700/45 cursor-pointer"
-                  >
-                    Open
-                  </button>
-                )}
-                {!isDir(type) && (
-                  <a
-                    href={toMediaUrl(itemPath)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2 py-1 text-[11px] rounded bg-violet-700/30 border border-violet-500/50 hover:bg-violet-700/45 cursor-pointer inline-block text-violet-200 no-underline"
-                  >
-                    {canPreview ? "Preview" : "Download"}
-                  </a>
-                )}
-                <button
-                  onClick={() => onAction("stat_path", { path: itemPath })}
-                  className="px-2 py-1 text-[11px] rounded bg-gray-700 border border-gray-600 hover:bg-gray-600 cursor-pointer"
-                >
-                  Stat
-                </button>
-                {!isDir(type) && (
-                  <button
-                    onClick={() => onAction("read_text_file", { path: itemPath })}
-                    className="px-2 py-1 text-[11px] rounded bg-emerald-700/30 border border-emerald-500/50 hover:bg-emerald-700/45 cursor-pointer"
-                  >
-                    Read
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        }) : (
-          <div className="bg-gray-800 rounded-md border border-gray-600/50 px-2.5 py-2 text-xs text-gray-400">
-            No files or folders to display.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}`;
-  }
 
   return `export default function GeneratedUI({ data, onAction }) {
   const rows = Array.isArray(data?.rows)

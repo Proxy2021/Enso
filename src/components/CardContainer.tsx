@@ -150,6 +150,7 @@ function EnhanceButton({ card }: { card: Card }) {
   const [isProposing, setIsProposing] = useState(false);
   const [cachedContext, setCachedContext] = useState("");
   const pendingProposal = useChatStore((s) => s.cards[card.id]?.pendingProposal);
+  const suggestedFamily = useChatStore((s) => s.cards[card.id]?.suggestedFamily);
   const status = card.enhanceStatus;
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -256,6 +257,25 @@ function EnhanceButton({ card }: { card: Card }) {
   }
 
   if (status === "ready") return null;
+
+  // Suggested state — server detected a matching tool family in the background
+  if (status === "suggested" && suggestedFamily) {
+    const familyIcon = FAMILY_ICONS[suggestedFamily] ?? "\u2728";
+    const familyLabel = suggestedFamily.replace(/_/g, " ");
+    return (
+      <button
+        onClick={() => enhanceCardWithFamily(card.id, suggestedFamily)}
+        className="flex items-center gap-1.5 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-colors"
+        title={`Enhance as ${familyLabel} (auto-detected)`}
+      >
+        <span className="text-xs leading-none">{familyIcon}</span>
+        <span className="capitalize">{familyLabel}</span>
+        <svg className="h-3 w-3 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </button>
+    );
+  }
 
   // Default state — show "App" button with dropdown menu
   return (
@@ -401,6 +421,9 @@ function AgentSteps({ steps }: { steps: AgentStep[] }) {
 function ViewToggle({ card }: { card: Card }) {
   const toggleCardView = useChatStore((s) => s.toggleCardView);
   const viewMode = card.viewMode ?? "original";
+  const family = card.appCardMode?.toolFamily;
+  const familyIcon = family ? (FAMILY_ICONS[family] ?? "\u2728") : null;
+  const familyLabel = family ? family.replace(/_/g, " ") : "App";
 
   return (
     <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
@@ -422,7 +445,8 @@ function ViewToggle({ card }: { card: Card }) {
             : "text-gray-400 hover:text-gray-300"
         }`}
       >
-        App
+        {familyIcon && <span className="mr-1">{familyIcon}</span>}
+        <span className="capitalize">{familyLabel}</span>
       </button>
     </div>
   );
@@ -601,9 +625,11 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             <div className="flex items-center gap-1.5">
               {card.enhanceStatus === "ready" && <ViewToggle card={card} />}
               {canEnhance && <EnhanceButton card={card} />}
-              <div className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusTone}`}>
-                {statusLabel}
-              </div>
+              {statusLabel !== "ready" && (
+                <div className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusTone}`}>
+                  {statusLabel}
+                </div>
+              )}
             </div>
           </div>
           <Renderer

@@ -1,6 +1,6 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { existsSync, lstatSync, readdirSync, readFileSync } from "fs";
-import { extname, isAbsolute, join, normalize, resolve } from "path";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "fs";
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "path";
 import { homedir } from "os";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
@@ -27,6 +27,24 @@ type SearchPathsParams = {
   limit?: number;
 };
 
+type CreateDirectoryParams = {
+  path: string;
+};
+
+type RenamePathParams = {
+  path: string;
+  newName: string;
+};
+
+type DeletePathParams = {
+  path: string;
+};
+
+type MovePathParams = {
+  source: string;
+  destination: string;
+};
+
 const DEFAULT_LIST_LIMIT = 120;
 const DEFAULT_SEARCH_LIMIT = 60;
 const DEFAULT_MAX_CHARS = 12000;
@@ -49,7 +67,7 @@ function getAllowedRoots(): string[] {
 
 function isPathAllowed(targetPath: string): boolean {
   const resolved = resolve(targetPath);
-  return getAllowedRoots().some((root) => resolved === root || resolved.startsWith(`${root}/`));
+  return getAllowedRoots().some((root) => resolved === root || resolved.startsWith(`${root}${sep}`));
 }
 
 function resolveUserPath(inputPath: string): string {
@@ -185,6 +203,57 @@ function searchPaths(params: SearchPathsParams): AgentToolResult {
   });
 }
 
+function createDirectory(params: CreateDirectoryParams): AgentToolResult {
+  const safe = safeResolvePath(params.path);
+  if (!safe.ok) return errorResult(safe.error);
+  if (existsSync(safe.path)) return errorResult(`path already exists: ${safe.path}`);
+  mkdirSync(safe.path, { recursive: true });
+  // Return the parent listing so the UI refreshes with the new folder visible
+  const parent = dirname(safe.path);
+  return listDirectory({ path: parent });
+}
+
+function renamePath(params: RenamePathParams): AgentToolResult {
+  const safe = safeResolvePath(params.path);
+  if (!safe.ok) return errorResult(safe.error);
+  if (!existsSync(safe.path)) return errorResult(`path does not exist: ${safe.path}`);
+  if (!params.newName?.trim()) return errorResult("newName is required");
+  if (params.newName.includes("/") || params.newName.includes("\\")) return errorResult("newName must not contain path separators");
+  const parent = dirname(safe.path);
+  const dest = join(parent, params.newName);
+  if (existsSync(dest)) return errorResult(`destination already exists: ${dest}`);
+  renameSync(safe.path, dest);
+  return listDirectory({ path: parent });
+}
+
+function deletePath(params: DeletePathParams): AgentToolResult {
+  const safe = safeResolvePath(params.path);
+  if (!safe.ok) return errorResult(safe.error);
+  if (!existsSync(safe.path)) return errorResult(`path does not exist: ${safe.path}`);
+  const parent = dirname(safe.path);
+  rmSync(safe.path, { recursive: true, force: true });
+  return listDirectory({ path: parent });
+}
+
+function movePath(params: MovePathParams): AgentToolResult {
+  const safeSrc = safeResolvePath(params.source);
+  if (!safeSrc.ok) return errorResult(`source: ${safeSrc.error}`);
+  if (!existsSync(safeSrc.path)) return errorResult(`source does not exist: ${safeSrc.path}`);
+  const safeDest = safeResolvePath(params.destination);
+  if (!safeDest.ok) return errorResult(`destination: ${safeDest.error}`);
+
+  // If destination is a directory, move into it keeping the original name
+  let finalDest = safeDest.path;
+  if (existsSync(safeDest.path) && lstatSync(safeDest.path).isDirectory()) {
+    finalDest = join(safeDest.path, basename(safeSrc.path));
+  }
+  if (existsSync(finalDest)) return errorResult(`destination already exists: ${finalDest}`);
+  renameSync(safeSrc.path, finalDest);
+
+  // Return listing of the destination's parent so the UI shows where the file went
+  return listDirectory({ path: dirname(finalDest) });
+}
+
 export function createFilesystemTools(): AnyAgentTool[] {
   return [
     {
@@ -248,6 +317,64 @@ export function createFilesystemTools(): AnyAgentTool[] {
         required: ["query"],
       },
       execute: async (_callId: string, params: Record<string, unknown>) => searchPaths(params as SearchPathsParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_fs_create_directory",
+      label: "Filesystem Create Directory",
+      description: "Create a new directory. Returns the updated parent listing.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "Full path for the new directory." },
+        },
+        required: ["path"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => createDirectory(params as CreateDirectoryParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_fs_rename_path",
+      label: "Filesystem Rename",
+      description: "Rename a file or directory. Returns the updated parent listing.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "Current path of the file or directory." },
+          newName: { type: "string", description: "New name (not a full path, just the filename)." },
+        },
+        required: ["path", "newName"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => renamePath(params as RenamePathParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_fs_delete_path",
+      label: "Filesystem Delete",
+      description: "Delete a file or directory recursively. Returns the updated parent listing.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "Path to delete." },
+        },
+        required: ["path"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => deletePath(params as DeletePathParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_fs_move_path",
+      label: "Filesystem Move",
+      description: "Move a file or directory to a new location. Returns the updated destination listing.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          source: { type: "string", description: "Source path." },
+          destination: { type: "string", description: "Destination path or directory." },
+        },
+        required: ["source", "destination"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => movePath(params as MovePathParams),
     } as AnyAgentTool,
   ];
 }
