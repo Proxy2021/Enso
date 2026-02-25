@@ -31,7 +31,13 @@ let activeAccount: ResolvedEnsoAccount | null = null;
 let activePort = 3001;
 
 /** Maximum file size for served media (300 MB). */
-export const MAX_MEDIA_FILE_SIZE = 300 * 1024 * 1024;
+export const MAX_MEDIA_FILE_SIZE = 300 * 1024 * 1024; // 300 MB for non-streamable files
+
+/** Extensions that support HTTP Range streaming — exempt from the size limit. */
+const STREAMABLE_EXTS = new Set([
+  ".mp4", ".webm", ".avi", ".mov", ".mkv", ".m4v",
+  ".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma",
+]);
 
 /**
  * Convert a local file path to an HTTP URL served by the Enso media endpoint.
@@ -180,19 +186,22 @@ export async function startEnsoServer(opts: {
       return;
     }
 
-    // Enforce file size limit
-    try {
-      const stat = statSync(filePath);
-      if (stat.size > MAX_MEDIA_FILE_SIZE) {
-        res.status(413).json({ error: "File too large (max 300 MB)" });
+    const ext = extname(filePath).toLowerCase();
+
+    // Enforce file size limit — skip for streamable video/audio (Range requests serve small chunks)
+    if (!STREAMABLE_EXTS.has(ext)) {
+      try {
+        const stat = statSync(filePath);
+        if (stat.size > MAX_MEDIA_FILE_SIZE) {
+          res.status(413).json({ error: "File too large (max 300 MB)" });
+          return;
+        }
+      } catch {
+        res.status(500).json({ error: "Cannot read file" });
         return;
       }
-    } catch {
-      res.status(500).json({ error: "Cannot read file" });
-      return;
     }
 
-    const ext = extname(filePath).toLowerCase();
     const mimeTypes: Record<string, string> = {
       ".png": "image/png",
       ".jpg": "image/jpeg",
