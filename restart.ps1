@@ -134,6 +134,11 @@ if ($SkipBuild) {
 # ==========================================================================
 Write-Step "Starting OpenClaw gateway on :$GatewayPort ..."
 
+# Redirect stdin to an empty file so child node.exe processes don't inherit
+# the console's stdin handle (which would consume keystrokes from this terminal).
+$nullInput = Join-Path $env:TEMP "openclaw-null-input.txt"
+if (-not (Test-Path $nullInput)) { [System.IO.File]::WriteAllText($nullInput, "") }
+
 $gatewayLog    = Join-Path $env:TEMP "openclaw-gateway.log"
 $gatewayErrLog = Join-Path $env:TEMP "openclaw-gateway-err.log"
 
@@ -147,6 +152,7 @@ $gatewayProc = Start-Process -FilePath $nodeExe `
     -ArgumentList "--disable-warning=ExperimentalWarning", $openclawMjs, "gateway", "--port", $GatewayPort `
     -WorkingDirectory $OpenClawDir `
     -WindowStyle Hidden `
+    -RedirectStandardInput $nullInput `
     -RedirectStandardOutput $gatewayLog `
     -RedirectStandardError $gatewayErrLog `
     -PassThru
@@ -192,6 +198,7 @@ if ($NoDev) {
         -ArgumentList $npmCli, "run", "dev" `
         -WorkingDirectory $EnsoDir `
         -WindowStyle Hidden `
+        -RedirectStandardInput $nullInput `
         -RedirectStandardOutput $viteLog `
         -RedirectStandardError $viteErrLog `
         -PassThru
