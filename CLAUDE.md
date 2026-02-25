@@ -25,7 +25,7 @@ User clicks "App" enhance button → LLM selects tool → deterministic tool exe
     ↓
 User can toggle between Original (text) and App (interactive) views
     ↓
-Card actions in App view → three-path dispatch (mechanical / native tool / agent fallback)
+Card actions in App view → four-path dispatch (refine / mechanical / native tool / agent fallback)
 ```
 
 **Claude Code direct tool** (bypasses OpenClaw agent):
@@ -57,7 +57,7 @@ src/                          # React frontend (Vite entry)
 ├── lib/
 │   ├── ws-client.ts          # WebSocket client with auto-reconnect
 │   ├── sandbox.ts            # Sucrase JSX→JS, scope injection, compilation
-│   └── enso-ui.tsx           # EnsoUI component library (16 pre-styled components)
+│   └── enso-ui.tsx           # EnsoUI component library (17 pre-styled components)
 └── types.ts                  # Frontend types
 
 openclaw-plugin/              # OpenClaw channel plugin (the backend)
@@ -88,6 +88,7 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
         ├── tool-call-store.ts # Time-windowed store linking after_tool_call events to card delivery
         └── templates/        # Pre-built JSX templates per tool family
             ├── alpharank.ts
+            ├── filesystem.ts
             └── general.ts
 
 shared/                       # Code shared between frontend and plugin
@@ -198,7 +199,7 @@ When app views render compiled JSX:
 
 ### EnsoUI Component Library
 
-`src/lib/enso-ui.tsx` provides 16 pre-styled React + Tailwind components injected into the sandbox scope as the `EnsoUI` namespace. Zero npm dependencies. All components match Enso's dark theme.
+`src/lib/enso-ui.tsx` provides 17 pre-styled React + Tailwind components injected into the sandbox scope as the `EnsoUI` namespace. All components match Enso's dark theme.
 
 **Components available in generated templates** (destructured in the preamble):
 
@@ -220,6 +221,7 @@ When app views render compiled JSX:
 | `Separator` | Divider lines | `orientation` |
 | `EmptyState` | Zero-state placeholders | `icon`, `title`, `description`, `action` |
 | `EnsoUI.Tooltip` | CSS hover tooltips | `content`, `side` (not destructured — use via namespace) |
+| `EnsoUI.VideoPlayer` | Smart video with MPEG-TS fallback | `src`, `container?`, `onError?` (not destructured — use via namespace) |
 
 **Accent colors** (13): `blue`, `emerald`, `amber`, `purple`, `rose`, `cyan`, `orange`, `red`, `gray`, `violet`, `indigo`, `teal`, `pink`. Unknown values safely fall back to `blue`.
 
@@ -277,6 +279,266 @@ The `/tool enso` command opens a dedicated in-app tool console card that:
 2. Allows drilling into each family to inspect its registered templates
 3. Supports adding new tool requests by description
 4. Reports if matching support already exists
+
+## Building Enso Applications
+
+This section is the authoritative guide for creating new built-in Enso applications (tool families). Follow it exactly when using `/code` or building manually.
+
+### Quick Reference — 5 Files to Create/Modify
+
+```
+1. openclaw-plugin/src/<family>-tools.ts       ← Tool functions
+2. openclaw-plugin/src/tool-families/catalog.ts ← Catalog entry
+3. openclaw-plugin/src/native-tools/templates/<family>.ts ← JSX template
+4. openclaw-plugin/src/native-tools/registry.ts ← Registry wiring
+5. openclaw-plugin/index.ts                     ← Plugin registration
+```
+
+**Data flow:** Tool execution → data normalization → JSX template (compiled in browser sandbox) → `onAction()` callback → four-path action dispatch → tool re-execution → re-render
+
+### Step 1: Create Tool Functions
+
+**File:** `openclaw-plugin/src/<family>-tools.ts`
+
+**Naming convention:** All tools MUST follow `enso_<family>_<action>` (e.g., `enso_fs_list_directory`, `enso_media_search`).
+
+**Exports:** Every tools file MUST export two functions:
+
+```typescript
+// Creates the tool array (used by maybeRegisterFallbackToolFamily)
+export function createMyFamilyTools(): AnyAgentTool[] { return [...]; }
+
+// Registers tools with OpenClaw API
+export function registerMyFamilyTools(api: OpenClawPluginApi): void {
+  for (const tool of createMyFamilyTools()) api.registerTool(tool);
+}
+```
+
+**Tool definition shape:**
+
+```typescript
+{
+  name: "enso_myfam_do_thing",
+  label: "My Family Do Thing",              // Human-readable for agent
+  description: "Does a specific thing.",     // Capability description
+  parameters: {
+    type: "object",
+    additionalProperties: false,             // CRITICAL — OpenClaw rejects without this
+    properties: {
+      path: { type: "string", description: "Target path." },
+      limit: { type: "number", description: "Max results." },
+    },
+    required: ["path"],
+  },
+  execute: async (_callId: string, params: Record<string, unknown>) =>
+    doThing(params as DoThingParams),
+} as AnyAgentTool
+```
+
+**Result pattern — the `tool` field is critical:**
+
+```typescript
+type AgentToolResult = { content: Array<{ type: string; text?: string }> };
+
+function jsonResult(data: unknown): AgentToolResult {
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+}
+function errorResult(msg: string): AgentToolResult {
+  return { content: [{ type: "text", text: `[ERROR] ${msg}` }] };
+}
+
+// EVERY result MUST include tool field so the template can detect which view to render:
+return jsonResult({
+  tool: "enso_myfam_do_thing",   // ← Template checks this to pick the right view
+  path: safe.path,
+  items: [...],
+});
+```
+
+**Serving binary files:** Use `toMediaUrl(filePath)` from `server.ts` to convert local paths to `/media/:encodedPath` URLs. The media endpoint handles Range requests for streaming.
+
+### Step 2: Register in Catalog
+
+**File:** `openclaw-plugin/src/tool-families/catalog.ts`
+
+Add an entry to `TOOL_FAMILY_CAPABILITIES[]`:
+
+```typescript
+{
+  toolFamily: "my_family",                        // Unique family ID
+  fallbackToolName: "enso_myfam_default_action",  // Tool called when family is selected from menu
+  actionSuffixes: ["default_action", "detail", "search"],  // All action names (without prefix)
+  signatureId: "my_family_view",                  // Links to the JSX template
+  description: "My Family: does X, Y, and Z",    // Shown in enhance dropdown menu
+}
+```
+
+- `fallbackToolName`: The default tool executed when user selects this family from the Apps/Enhance menu
+- `actionSuffixes`: Must list ALL action suffixes. Used for native tool bridge resolution.
+- `signatureId`: Must match what the template module checks in `isXSignature()`
+
+### Step 3: Create JSX Template
+
+**File:** `openclaw-plugin/src/native-tools/templates/<family>.ts`
+
+**CRITICAL: The template is a JavaScript string containing JSX, NOT actual JSX.** It gets compiled at runtime by Sucrase in the browser's sandbox.
+
+**Module structure:**
+
+```typescript
+import type { ToolTemplate } from "../registry.js";
+
+export function isMyFamilySignature(signatureId: string): boolean {
+  return signatureId === "my_family_view";
+}
+
+export function getMyFamilyTemplateCode(_signature: ToolTemplate): string {
+  return MY_FAMILY_TEMPLATE;
+}
+
+const MY_FAMILY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
+  // ALL hooks MUST be declared here at top level — NEVER inside conditionals
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+
+  // Detect which view to render based on tool field
+  const isDetailView = data?.tool === "enso_myfam_detail";
+  const isListView = data?.tool === "enso_myfam_default_action" || Array.isArray(data?.items);
+
+  if (isDetailView) {
+    return (
+      <div>
+        <button onClick={() => onAction("default_action", {})}>Back</button>
+        <div>{data.name}</div>
+      </div>
+    );
+  }
+
+  // Default list view
+  const items = data?.items ?? [];
+  return (
+    <div>
+      <Input placeholder="Search..." value={query} onChange={(e) => setQuery(e.target.value)} />
+      {items.map((item, i) => (
+        <UICard key={i} header={item.name}>
+          <Button onClick={() => onAction("detail", { id: item.id })}>View</Button>
+        </UICard>
+      ))}
+    </div>
+  );
+}`;
+```
+
+**Template sandbox rules:**
+
+| Rule | Details |
+|------|---------|
+| **No imports** | Everything is pre-injected. `useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`, `Fragment` from React. |
+| **No DOM access** | No `document`, `window`, `fetch`, `XMLHttpRequest`, `localStorage`. |
+| **No globals** | No `console`, `process`, `require`, `eval`. |
+| **Hooks at top level** | ALL `useState`/`useEffect` MUST be before any `if`/`return`. React hooks rule — conditional hooks cause "Rendered more hooks" crash. |
+| **EnsoUI components** | `<Button>`, `<Tabs>`, `<DataTable>`, `<Badge>`, `<Stat>`, `<UICard>`, `<Progress>`, `<Accordion>`, `<Dialog>`, `<Select>`, `<Input>`, `<Switch>`, `<Slider>`, `<Separator>`, `<EmptyState>` — all destructured, use directly. |
+| **Namespace access** | `<EnsoUI.Tooltip>` (avoids Recharts collision), `<EnsoUI.VideoPlayer>` for video. |
+| **Recharts** | `<BarChart>`, `<LineChart>`, `<PieChart>`, `<Bar>`, `<Line>`, `<Pie>`, `<XAxis>`, `<YAxis>`, `<CartesianGrid>`, `<Tooltip>` (this is Recharts Tooltip), `<Legend>`, `<ResponsiveContainer>`, etc. |
+| **Lucide icons** | `<LucideReact.FileText />`, `<LucideReact.Folder />`, etc. — 500+ icons via namespace. |
+| **onAction** | `onAction("action_suffix", { key: value })` → server resolves to `enso_<family>_<action_suffix>` and executes the tool. |
+
+**Polymorphic views:** A single template handles all views for a family. Use `data.tool` to switch:
+
+```
+data.tool === "enso_myfam_list"   → list view
+data.tool === "enso_myfam_detail" → detail view
+data.tool === "enso_myfam_search" → search results view
+```
+
+### Step 4: Wire Up Registry
+
+**File:** `openclaw-plugin/src/native-tools/registry.ts`
+
+Four changes required:
+
+**4a. Import template module** (top of file):
+```typescript
+import { isMyFamilySignature, getMyFamilyTemplateCode } from "./templates/my-family.js";
+```
+
+**4b. Register signature** in `registerDefaultSignatures()`:
+```typescript
+{
+  toolFamily: "my_family",
+  signatureId: "my_family_view",
+  templateId: "my-family-browser-v1",
+  supportedActions: ["default_action", "detail", "search"],  // Same as catalog actionSuffixes
+  coverageStatus: "covered",
+}
+```
+
+**4c. Add template code routing** in `getToolTemplateCode()`:
+```typescript
+if (isMyFamilySignature(sig.signatureId)) return getMyFamilyTemplateCode(sig);
+```
+
+**4d. Add data shape detection** in `detectToolTemplateFromData()`:
+```typescript
+if (data?.tool?.startsWith("enso_myfam_") || Array.isArray(data?.mySpecificKey)) {
+  return getToolTemplate("my_family", "my_family_view");
+}
+```
+
+### Step 5: Register in Plugin Entry
+
+**File:** `openclaw-plugin/index.ts`
+
+```typescript
+import { registerMyFamilyTools } from "./src/my-family-tools.js";
+
+// Inside register():
+maybeRegisterFallbackToolFamily({
+  familyLabel: "my_family",
+  fallbackPrefix: "enso_myfam_",
+  actionSuffixes: TOOL_FAMILY_CAPABILITIES.find(c => c.toolFamily === "my_family")?.actionSuffixes ?? [],
+  register: () => registerMyFamilyTools(api),
+});
+```
+
+### Action Dispatch Reference
+
+When a user clicks a button in the app view:
+
+```
+onAction("detail", { id: 5 })
+    ↓
+Browser sends: { type: "card.action", cardAction: "detail", cardPayload: { id: 5 } }
+    ↓
+Server resolves tool: "enso_myfam_" + "detail" = "enso_myfam_detail"
+    ↓
+executeToolDirect("enso_myfam_detail", { id: 5 })
+    ↓
+Result → normalizeData → re-render template with new data
+```
+
+**Four-path dispatch order** (first match wins):
+1. **Refine** — `action === "refine"` → regenerate template JSX only (1 LLM call)
+2. **Mechanical** — built-in data mutations (task boards, sorting)
+3. **Native tool** — resolve `prefix + action` to a registered tool → execute directly
+4. **Agent fallback** — unmatched action sent through OpenClaw agent pipeline
+
+**Native tool resolution chain:**
+1. Exact match: `enso_myfam_detail` registered? → execute
+2. Suffix match: `"detail"` in `actionSuffixes`? → execute with prefix
+3. Family fallback: use `fallbackToolName` with merged params
+
+### Common Pitfalls
+
+| Pitfall | Consequence | Fix |
+|---------|-------------|-----|
+| `useState` inside `if` block | "Rendered more hooks than during the previous render" crash | Move ALL hooks to top of component, before any conditionals |
+| Missing `additionalProperties: false` in params | OpenClaw may reject tool calls with extra params | Always include in every tool's parameters schema |
+| Missing `tool` field in result data | Template can't detect which view to render | Always include `tool: "enso_<family>_<action>"` in jsonResult |
+| Using `<Tooltip>` for hover tips | Gets Recharts Tooltip (chart component) | Use `<EnsoUI.Tooltip content="...">` instead |
+| Adding `import` statements in template | Sandbox compilation fails | Everything is pre-injected — no imports needed |
+| Large media files without Range support | Video/audio won't play in browser | Add extension to `STREAMABLE_EXTS` in server.ts |
+| Not adding action to `actionSuffixes` | Button clicks fall through to agent fallback instead of direct tool call | Add every action name to both catalog `actionSuffixes` and registry `supportedActions` |
 
 ### Caching
 
