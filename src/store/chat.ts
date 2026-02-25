@@ -54,22 +54,6 @@ interface CardStore {
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
-/** Format a card action + payload into a readable user-facing label. */
-function formatActionLabel(action: string, payload?: unknown): string {
-  const name = action
-    .replace(/_/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-  if (!payload || typeof payload !== "object") return name;
-  const p = payload as Record<string, unknown>;
-
-  // Pick the most descriptive value from the payload
-  const hint =
-    p.toolName ?? p.name ?? p.title ?? p.item ?? p.text ?? p.id ?? p.emailId ?? p.tickerId;
-  if (hint != null) return `${name}: ${String(hint)}`;
-  return name;
-}
 
 export const useChatStore = create<CardStore>((set, get) => ({
   cardOrder: [],
@@ -300,26 +284,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       },
     }));
 
-    // Create an action bubble so the user sees what was clicked
-    const bubbleId = uuidv4();
-    const now = Date.now();
-    const label = formatActionLabel(action, payload);
-    const bubble: Card = {
-      id: bubbleId,
-      runId: bubbleId,
-      type: "user-bubble",
-      role: "user",
-      status: "complete",
-      display: "expanded",
-      text: `Action: ${label} (updates the current card)`,
-      createdAt: now,
-      updatedAt: now,
-    };
-    set((s) => ({
-      cardOrder: [...s.cardOrder, bubbleId],
-      cards: { ...s.cards, [bubbleId]: bubble },
-      isWaiting: true,
-    }));
+    set((s) => ({ isWaiting: true }));
 
     const wsClient = get()._wsClient;
     const msg: ClientMessage = {

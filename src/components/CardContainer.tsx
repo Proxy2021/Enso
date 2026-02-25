@@ -477,7 +477,7 @@ function RefineFooter({ cardId, onRefine }: { cardId: string; onRefine: (instruc
         ) : (
           <div className="flex-1 flex items-center justify-between">
             <span className="text-[11px] text-gray-500">
-              Buttons run actions. You will get a quick confirmation before anything executes.
+              Buttons run actions that update this card.
             </span>
             <button
               onClick={() => setShowInput(true)}
@@ -501,7 +501,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const collapseCard = useChatStore((s) => s.collapseCard);
   const expandCard = useChatStore((s) => s.expandCard);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
-  const [confirmAction, setConfirmAction] = useState<{ action: string; payload?: unknown } | null>(null);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
 
   const isCollapsed = card.display === "collapsed";
@@ -562,17 +561,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     ? [activeCardMode.toolFamily, activeCardMode.signatureId].filter(Boolean).join("/")
     : undefined;
 
-  function actionIntentText(action: string): string {
-    const name = formatAction(action);
-    return `${name} and update this card in place.`;
-  }
-
   function handleAction(action: string, payload?: unknown) {
     if (isLoading) return;
-    if (isAppView || card.type === "dynamic-ui") {
-      setConfirmAction({ action, payload });
-      return;
-    }
     sendCardAction(card.id, action, payload);
   }
 
@@ -637,43 +627,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         </div>
       )}
 
-      {confirmAction && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)]">
-            <div className="px-4 py-3 border-b border-gray-700/70">
-              <h3 className="text-sm font-semibold text-gray-100">Confirm action</h3>
-              <p className="text-xs text-gray-400 mt-1">
-                This action may call tools or the agent depending on card context.
-              </p>
-            </div>
-            <div className="px-4 py-3 space-y-2">
-              <div className="text-sm text-gray-200">{actionIntentText(confirmAction.action)}</div>
-              {confirmAction.payload != null && (
-                <pre className="text-xs text-gray-300 bg-gray-950/70 border border-gray-800 rounded-lg p-2 overflow-auto max-h-40">
-                  {JSON.stringify(confirmAction.payload, null, 2)}
-                </pre>
-              )}
-            </div>
-            <div className="px-4 py-3 border-t border-gray-700/70 flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmAction(null)}
-                className="px-3 py-1.5 text-xs rounded-md border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  sendCardAction(card.id, confirmAction.action, confirmAction.payload);
-                  setConfirmAction(null);
-                }}
-                className="px-3 py-1.5 text-xs rounded-md border border-indigo-500/60 bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 transition-colors"
-              >
-                Run action
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
