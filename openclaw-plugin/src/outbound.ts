@@ -610,7 +610,7 @@ export async function handleCardEnhance(params: {
   const execParams: Record<string, unknown> = { ...selection.params };
   const paramAliases: Record<string, string> = {
     location: "destination",
-    city: "destination",
+    ...(selection.toolFamily !== "city_planner" ? { city: "destination" } : {}),
     duration: "days",
     duration_days: "days",
     num_days: "days",
@@ -667,6 +667,12 @@ export async function handleCardEnhance(params: {
     execParams.path = resolvePathParam(execParams.path);
   } else if (selection.toolFamily === "code_workspace") {
     execParams.path = resolvePathParam(execParams.path ?? execParams.root);
+  } else if (selection.toolFamily === "city_planner" && !execParams.city) {
+    // Extract city name from card text when using suggestedFamily shortcut
+    // Simple heuristic: look for capitalized words after common prepositions
+    const cityMatch = cardText.match(/(?:about|in|visit|explore|to)\s+([A-Z][a-zA-ZÀ-ÿ\s]{1,30}?)(?:\s*[-–—.,;:!?\n]|$)/);
+    execParams.city = cityMatch?.[1]?.trim() || cardText.split(/\s+/).slice(0, 3).join(" ");
+    console.log(`[enso:enhance] extracted city from card text: "${execParams.city}"`);
   }
 
   let toolResult = await executeToolDirect(toolName, execParams);

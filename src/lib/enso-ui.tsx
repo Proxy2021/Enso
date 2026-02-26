@@ -396,6 +396,7 @@ function Input({
   value: controlledValue,
   defaultValue,
   onChange,
+  onKeyDown,
   placeholder = "",
   type = "text",
   icon,
@@ -406,6 +407,7 @@ function Input({
   value?: string;
   defaultValue?: string;
   onChange?: (value: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   placeholder?: string;
   type?: "text" | "number" | "search" | "email" | "url";
   icon?: React.ReactNode;
@@ -436,6 +438,7 @@ function Input({
         type={type}
         value={currentValue}
         onChange={handleChange}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         disabled={disabled}
         className={`bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 w-full focus:outline-none focus:border-violet-500/50 transition-colors disabled:opacity-50 ${sizeStyles} ${icon ? "pl-7 pr-2.5" : "px-2.5"}`}

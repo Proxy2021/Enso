@@ -9,6 +9,7 @@ import { getToolingTemplateCode, isToolingSignature } from "./templates/tooling.
 import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/system.js";
 import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
 import { getBrowserTemplateCode, isBrowserSignature } from "./templates/browser.js";
+import { getCityTemplateCode, isCitySignature } from "./templates/city.js";
 import { TOOL_FAMILY_CAPABILITIES, getCapabilityForFamily } from "../tool-families/catalog.js";
 
 // ── Types ──
@@ -318,8 +319,13 @@ function registerDefaultSignatures(): void {
     {
       toolFamily: "multimedia",
       signatureId: "media_gallery",
-      templateId: "media-gallery-v1",
-      supportedActions: ["refresh", "scan_library", "inspect_file", "group_by_type"],
+      templateId: "media-gallery-v2",
+      supportedActions: [
+        "refresh", "list_drives", "scan_library", "inspect_file", "group_by_type",
+        "browse_folder", "view_photo", "bookmark_folder",
+        "describe_photo", "search_photos", "batch_tag",
+        "toggle_favorite", "manage_collection", "rate_photo",
+      ],
       coverageStatus: "covered",
     },
     {
@@ -334,6 +340,13 @@ function registerDefaultSignatures(): void {
       signatureId: "itinerary_board",
       templateId: "travel-itinerary-v1",
       supportedActions: ["refresh", "plan_trip", "optimize_day", "budget_breakdown"],
+      coverageStatus: "covered",
+    },
+    {
+      toolFamily: "city_planner",
+      signatureId: "city_research_board",
+      templateId: "city-research-v1",
+      supportedActions: ["refresh", "explore", "restaurants", "photo_spots", "landmarks", "send_email"],
       coverageStatus: "covered",
     },
     {
@@ -540,11 +553,14 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if (Array.isArray(record.steps) && ("logs" in record || "failure" in record)) {
     return getToolTemplate("tool_inspector", "tool_run_summary");
   }
-  if (Array.isArray(record.media) || Array.isArray(record.images) || Array.isArray(record.videos)) {
+  if (Array.isArray(record.media) || Array.isArray(record.images) || Array.isArray(record.videos) || (Array.isArray(record.drives) && "quickAccess" in record)) {
     return getToolTemplate("multimedia", "media_gallery");
   }
   if (Array.isArray(record.developmentTools) || "workspace" in record || "projectDirectories" in record) {
     return getToolTemplate("code_workspace", "workspace_inventory");
+  }
+  if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_city_")) || (Array.isArray(record.places) && "city" in record && ("category" in record || Array.isArray(record.sections)))) {
+    return getToolTemplate("city_planner", "city_research_board");
   }
   if (Array.isArray(record.itinerary) || "destination" in record || Array.isArray(record.categories)) {
     return getToolTemplate("travel_planner", "itinerary_board");
@@ -611,6 +627,9 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isBrowserSignature(signature.signatureId)) {
     return getBrowserTemplateCode(signature);
+  }
+  if (isCitySignature(signature.signatureId)) {
+    return getCityTemplateCode(signature);
   }
   if (isToolingSignature(signature.signatureId)) {
     return getToolingTemplateCode(signature);
@@ -786,11 +805,24 @@ export function normalizeDataForToolTemplate(signature: ToolTemplate, data: unkn
         : Array.isArray(source.mediaTypes)
           ? source.mediaTypes
           : [];
+      const directories = Array.isArray(source.directories) ? source.directories : [];
+      const results = Array.isArray(source.results) ? source.results : [];
+      const collections = Array.isArray(source.collections) ? source.collections : [];
+      const drives = Array.isArray(source.drives) ? source.drives : [];
+      const quickAccess = Array.isArray(source.quickAccess) ? source.quickAccess : [];
+      const bookmarks = Array.isArray(source.bookmarks) ? source.bookmarks : [];
       return {
         ...source,
-        title: source.title ?? "Media gallery",
+        title: source.title ?? "Photo Gallery",
         rows: items,
+        items,
         groups,
+        directories,
+        results,
+        collections,
+        drives,
+        quickAccess,
+        bookmarks,
       };
     }
     case "itinerary_board": {
@@ -888,6 +920,7 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
     "enso_media_",
     "enso_travel_",
     "enso_meal_",
+    "enso_city_",
   ];
   if (knownPrefixes.includes(input.prefix)) return;
   if (dynamicPrefixSignatureMap.has(input.prefix)) return;

@@ -10,6 +10,7 @@ import { registerMediaTools } from "./src/media-tools.js";
 import { registerTravelTools } from "./src/travel-tools.js";
 import { registerMealTools } from "./src/meal-tools.js";
 import { registerBrowserTools } from "./src/browser-tools.js";
+import { registerCityTools } from "./src/city-tools.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./src/tool-families/catalog.js";
 
 function maybeRegisterFallbackToolFamily(input: {
@@ -69,6 +70,12 @@ const plugin = {
       fallbackPrefix: "enso_meal_",
       actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "meal_planner")?.actionSuffixes ?? [],
       register: () => registerMealTools(api),
+    });
+    maybeRegisterFallbackToolFamily({
+      familyLabel: "city",
+      fallbackPrefix: "enso_city_",
+      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "city_planner")?.actionSuffixes ?? [],
+      register: () => registerCityTools(api),
     });
     maybeRegisterFallbackToolFamily({
       familyLabel: "browser",

@@ -36,10 +36,15 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
   },
   {
     toolFamily: "multimedia",
-    fallbackToolName: "enso_media_scan_library",
-    actionSuffixes: ["scan_library", "inspect_file", "group_by_type"],
+    fallbackToolName: "enso_media_list_drives",
+    actionSuffixes: [
+      "list_drives", "scan_library", "inspect_file", "group_by_type",
+      "browse_folder", "view_photo", "bookmark_folder",
+      "describe_photo", "search_photos", "batch_tag",
+      "toggle_favorite", "manage_collection", "rate_photo",
+    ],
     signatureId: "media_gallery",
-    description: "Photos, videos, and media files: scanning media libraries, inspecting media metadata, grouping by type",
+    description: "Photo gallery: browse photos with thumbnails, EXIF metadata, AI-powered descriptions and search, favorites, collections, ratings",
   },
   {
     toolFamily: "travel_planner",
@@ -54,6 +59,13 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
     actionSuffixes: ["plan_week", "grocery_list", "swap_meal"],
     signatureId: "weekly_meal_plan",
     description: "Meal planning: weekly meal plans, dietary preferences, grocery lists, recipe suggestions, nutrition",
+  },
+  {
+    toolFamily: "city_planner",
+    fallbackToolName: "enso_city_explore",
+    actionSuffixes: ["explore", "restaurants", "photo_spots", "landmarks", "send_email"],
+    signatureId: "city_research_board",
+    description: "City research: top restaurants, photography spots, tourist landmarks — with web images, AI summaries, and email reports",
   },
   {
     toolFamily: "web_browser",
@@ -85,7 +97,7 @@ export function removeCapability(toolFamily: string): boolean {
 }
 
 /** List all dynamically added tool families (not the built-in ones). */
-const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner", "web_browser"]);
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner", "city_planner", "web_browser"]);
 
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));
