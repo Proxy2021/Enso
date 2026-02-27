@@ -74,6 +74,13 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
     signatureId: "remote_browser",
     description: "Remote browser: browse the web, view bookmarks, click, scroll, type — all from within an Enso card",
   },
+  {
+    toolFamily: "researcher",
+    fallbackToolName: "enso_researcher_search",
+    actionSuffixes: ["search", "deep_dive", "compare", "follow_up", "send_report"],
+    signatureId: "research_board",
+    description: "Web researcher: deep multi-angle research on any topic with source attribution, comparisons, follow-up Q&A, and email reports",
+  },
 ];
 
 export function getCapabilityForFamily(toolFamily: string): ToolFamilyCapability | undefined {
@@ -97,7 +104,7 @@ export function removeCapability(toolFamily: string): boolean {
 }
 
 /** List all dynamically added tool families (not the built-in ones). */
-const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner", "city_planner", "web_browser"]);
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner", "city_planner", "web_browser", "researcher"]);
 
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));

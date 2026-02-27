@@ -673,6 +673,10 @@ export async function handleCardEnhance(params: {
     const cityMatch = cardText.match(/(?:about|in|visit|explore|to)\s+([A-Z][a-zA-ZÀ-ÿ\s]{1,30}?)(?:\s*[-–—.,;:!?\n]|$)/);
     execParams.city = cityMatch?.[1]?.trim() || cardText.split(/\s+/).slice(0, 3).join(" ");
     console.log(`[enso:enhance] extracted city from card text: "${execParams.city}"`);
+  } else if (selection.toolFamily === "researcher" && !execParams.topic) {
+    // Use card text as the research topic (first 200 chars, trimmed)
+    execParams.topic = cardText.slice(0, 200).trim();
+    console.log(`[enso:enhance] extracted research topic from card text`);
   }
 
   let toolResult = await executeToolDirect(toolName, execParams);

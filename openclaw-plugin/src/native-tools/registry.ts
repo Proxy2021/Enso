@@ -10,6 +10,7 @@ import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/sy
 import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
 import { getBrowserTemplateCode, isBrowserSignature } from "./templates/browser.js";
 import { getCityTemplateCode, isCitySignature } from "./templates/city.js";
+import { getResearcherTemplateCode, isResearcherSignature } from "./templates/researcher.js";
 import { TOOL_FAMILY_CAPABILITIES, getCapabilityForFamily } from "../tool-families/catalog.js";
 
 // ── Types ──
@@ -357,6 +358,13 @@ function registerDefaultSignatures(): void {
       coverageStatus: "covered",
     },
     {
+      toolFamily: "researcher",
+      signatureId: "research_board",
+      templateId: "researcher-v1",
+      supportedActions: ["refresh", "search", "deep_dive", "compare", "follow_up", "send_report"],
+      coverageStatus: "covered",
+    },
+    {
       toolFamily: "web_browser",
       signatureId: "remote_browser",
       templateId: "remote-browser-v1",
@@ -484,6 +492,9 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
   if (lower.startsWith("enso_meal_")) {
     return getToolTemplate("meal_planner", "weekly_meal_plan");
   }
+  if (lower.startsWith("enso_researcher_")) {
+    return getToolTemplate("researcher", "research_board");
+  }
   if (lower.includes("plugin") || lower.includes("clawhub")) {
     return getToolTemplate("plugin_discovery", "plugin_catalog_list");
   }
@@ -562,6 +573,9 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_city_")) || (Array.isArray(record.places) && "city" in record && ("category" in record || Array.isArray(record.sections)))) {
     return getToolTemplate("city_planner", "city_research_board");
   }
+  if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_researcher_")) || (Array.isArray(record.keyFindings) && Array.isArray(record.sections) && "topic" in record)) {
+    return getToolTemplate("researcher", "research_board");
+  }
   if (Array.isArray(record.itinerary) || "destination" in record || Array.isArray(record.categories)) {
     return getToolTemplate("travel_planner", "itinerary_board");
   }
@@ -630,6 +644,9 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isCitySignature(signature.signatureId)) {
     return getCityTemplateCode(signature);
+  }
+  if (isResearcherSignature(signature.signatureId)) {
+    return getResearcherTemplateCode(signature);
   }
   if (isToolingSignature(signature.signatureId)) {
     return getToolingTemplateCode(signature);
@@ -921,6 +938,7 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
     "enso_travel_",
     "enso_meal_",
     "enso_city_",
+    "enso_researcher_",
   ];
   if (knownPrefixes.includes(input.prefix)) return;
   if (dynamicPrefixSignatureMap.has(input.prefix)) return;
