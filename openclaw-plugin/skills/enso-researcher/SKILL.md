@@ -65,10 +65,10 @@ enso_researcher_follow_up({ topic: "quantum computing", question: "What are the 
 
 ### enso_researcher_send_report
 
-Email a research report. Pass the data from a previous search result.
+Email a full research report to a recipient. Pulls all data (narrative, findings, sections, sources, media) from the research cache automatically — just provide recipient and topic.
 
 ```
-enso_researcher_send_report({ recipient: "user@example.com", topic: "...", summary: "...", narrative: "...", keyFindings: [...], sections: [...], sources: [...] })
+enso_researcher_send_report({ recipient: "user@example.com", topic: "quantum computing" })
 ```
 
 ### enso_researcher_delete_history

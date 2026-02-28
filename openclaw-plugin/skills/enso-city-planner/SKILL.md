@@ -68,14 +68,14 @@ enso_city_landmarks({ city: "Rome", limit: 8 })
 
 ### enso_city_send_email
 
-Compile city research into a styled HTML email report and send via Resend API.
+Email a full city travel guide to a recipient. Pulls all data (sections, videos, sources) from the exploration cache automatically — just provide recipient and city.
 
 ```
-enso_city_send_email({ recipient: "user@example.com", city: "Tokyo", category: "overview", places: [...], summary: "..." })
+enso_city_send_email({ recipient: "user@example.com", city: "Tokyo" })
 ```
 
-- Pass the structured data from a previous explore/research result
-- Falls back to generating HTML for manual use if RESEND_API_KEY is not set
+- The city must have been explored first via `enso_city_explore`
+- Sends via himalaya (local SMTP) — no external API key needed
 
 ### enso_city_delete_history
 
