@@ -15,6 +15,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const [filter, setFilter] = useState("");
   const [imgErrors, setImgErrors] = useState({});
   const [cityInput, setCityInput] = useState("");
+  const [playingVideo, setPlayingVideo] = useState(null);
 
   const city = String(data?.city ?? "");
   const category = String(data?.category ?? "overview");
@@ -46,6 +47,28 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
     const days = Math.floor(hrs / 24);
     if (days < 7) return days + "d ago";
     return Math.floor(days / 7) + "w ago";
+  };
+
+  // ── Helpers ──
+
+  const toYouTubeEmbedUrl = (url) => {
+    if (!url) return null;
+    try {
+      var u = new URL(url);
+      // youtube.com/watch?v=ID
+      if ((u.hostname === "www.youtube.com" || u.hostname === "youtube.com") && u.searchParams.get("v")) {
+        return "https://www.youtube.com/embed/" + u.searchParams.get("v") + "?autoplay=1&rel=0";
+      }
+      // youtu.be/ID
+      if (u.hostname === "youtu.be" && u.pathname.length > 1) {
+        return "https://www.youtube.com/embed/" + u.pathname.slice(1) + "?autoplay=1&rel=0";
+      }
+      // youtube.com/embed/ID (already embed)
+      if ((u.hostname === "www.youtube.com" || u.hostname === "youtube.com") && u.pathname.startsWith("/embed/")) {
+        return url + (url.includes("?") ? "&autoplay=1" : "?autoplay=1&rel=0");
+      }
+    } catch(e) {}
+    return null;
   };
 
   // ── Reusable components ──
@@ -102,23 +125,58 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
           <LucideReact.Play className="w-4 h-4 text-rose-400" />
           Video Guides ({items.length})
         </div>
+
+        {playingVideo && (
+          <UICard accent="rose">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-gray-100 line-clamp-1 flex-1 mr-2">{playingVideo.title}</div>
+                <Button variant="ghost" onClick={() => setPlayingVideo(null)}>
+                  <LucideReact.X className="w-4 h-4" />
+                </Button>
+              </div>
+              {toYouTubeEmbedUrl(playingVideo.url) ? (
+                <div className="w-full rounded-lg overflow-hidden" style={{ aspectRatio: "16/9" }}>
+                  <iframe
+                    src={toYouTubeEmbedUrl(playingVideo.url)}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    style={{ border: "none" }}
+                  />
+                </div>
+              ) : (
+                <a href={playingVideo.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 underline">
+                  Open video in new tab
+                </a>
+              )}
+              <div className="flex items-center gap-2">
+                {playingVideo.creator && <span className="text-[10px] text-gray-400">{playingVideo.creator}</span>}
+                {playingVideo.duration && <Badge variant="default">{playingVideo.duration}</Badge>}
+              </div>
+            </div>
+          </UICard>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {items.map((vid, idx) => (
             <UICard key={idx} accent="rose">
-              {vid.thumbnail && !imgErrors["vid_" + idx] && (
-                <div className="w-full h-24 overflow-hidden rounded-t-lg -mt-3 -mx-3 mb-2 relative" style={{ width: "calc(100% + 1.5rem)" }}>
-                  <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" onError={() => handleImgError("vid_" + idx)} referrerPolicy="no-referrer" />
-                  {vid.duration && (
-                    <div className="absolute bottom-1 right-1 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded">{vid.duration}</div>
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
-                      <LucideReact.Play className="w-5 h-5 text-white ml-0.5" />
+              <div className="cursor-pointer" onClick={() => setPlayingVideo(vid)}>
+                {vid.thumbnail && !imgErrors["vid_" + idx] && (
+                  <div className="w-full h-24 overflow-hidden rounded-t-lg -mt-3 -mx-3 mb-2 relative" style={{ width: "calc(100% + 1.5rem)" }}>
+                    <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" onError={() => handleImgError("vid_" + idx)} referrerPolicy="no-referrer" />
+                    {vid.duration && (
+                      <div className="absolute bottom-1 right-1 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded">{vid.duration}</div>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-red-600/90 flex items-center justify-center">
+                        <LucideReact.Play className="w-5 h-5 text-white ml-0.5" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              <div className="text-xs font-medium text-gray-100 line-clamp-2">{vid.title}</div>
+                )}
+                <div className="text-xs font-medium text-gray-100 line-clamp-2">{vid.title}</div>
+              </div>
               <div className="flex items-center gap-2 mt-1">
                 {vid.creator && <span className="text-[10px] text-gray-400 truncate">{vid.creator}</span>}
                 {vid.age && <span className="text-[10px] text-gray-500">{vid.age}</span>}
