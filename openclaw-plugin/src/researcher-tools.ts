@@ -113,7 +113,14 @@ function errorResult(message: string): AgentToolResult {
 }
 
 function getBraveApiKey(): string | undefined {
-  return process.env.BRAVE_API_KEY;
+  if (process.env.BRAVE_API_KEY) return process.env.BRAVE_API_KEY;
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const cfgPath = path.join(process.env.OPENCLAW_STATE_DIR || path.join(require("os").homedir(), ".openclaw"), "openclaw.json");
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+    return cfg?.tools?.web?.search?.apiKey;
+  } catch { return undefined; }
 }
 
 async function getGeminiApiKey(): Promise<string | undefined> {

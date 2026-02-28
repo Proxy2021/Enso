@@ -246,7 +246,16 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
 
     async search(query: string, options?: { count?: number; country?: string }) {
       return withTimeout(`search("${query}")`, async () => {
-        const apiKey = process.env.BRAVE_API_KEY;
+        let apiKey = process.env.BRAVE_API_KEY;
+        if (!apiKey) {
+          try {
+            const fs = require("fs");
+            const pathMod = require("path");
+            const cfgPath = pathMod.join(process.env.OPENCLAW_STATE_DIR || pathMod.join(require("os").homedir(), ".openclaw"), "openclaw.json");
+            const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+            apiKey = cfg?.tools?.web?.search?.apiKey;
+          } catch { /* ignore */ }
+        }
         if (!apiKey) {
           console.log(`[enso:executor-ctx] ${tag} → search: no BRAVE_API_KEY, returning empty`);
           return { ok: false as const, results: [] };
