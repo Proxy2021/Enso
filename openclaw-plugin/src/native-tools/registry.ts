@@ -338,7 +338,7 @@ function registerDefaultSignatures(): void {
       toolFamily: "city_planner",
       signatureId: "city_research_board",
       templateId: "city-research-v1",
-      supportedActions: ["refresh", "explore", "restaurants", "photo_spots", "landmarks", "send_email"],
+      supportedActions: ["refresh", "explore", "restaurants", "photo_spots", "landmarks", "send_email", "delete_history"],
       coverageStatus: "covered",
     },
     {

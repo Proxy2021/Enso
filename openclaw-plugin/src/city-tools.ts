@@ -1,10 +1,11 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { getDocCollection, type DocMeta } from "./persistence.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
 // ── Param types ──
 
-type ExploreParams = { city: string };
+type ExploreParams = { city: string; force?: boolean };
 type RestaurantsParams = { city: string; cuisine?: string; limit?: number };
 type PhotoSpotsParams = { city: string; limit?: number };
 type LandmarksParams = { city: string; limit?: number };
@@ -15,6 +16,7 @@ type SendEmailParams = {
   places?: Array<{ name: string; description: string; imageUrl?: string; category?: string; rating?: string }>;
   summary?: string;
 };
+type DeleteHistoryParams = { city: string };
 
 // ── Shared data types ──
 
@@ -29,6 +31,17 @@ interface Place {
   location?: string;
 }
 
+interface CityVideo {
+  title: string;
+  url: string;         // video page URL
+  thumbnail: string;
+  description: string;
+  duration?: string;
+  creator?: string;
+  publisher?: string;
+  age?: string;
+}
+
 interface BraveWebResult {
   title: string;
   url: string;
@@ -39,6 +52,43 @@ interface BraveImageResult {
   title: string;
   url: string;         // page URL
   thumbnail: string;   // image thumbnail src
+}
+
+// ── Persistent exploration cache ──
+
+interface CachedCityExploration {
+  city: string;
+  sections: Array<{ label: string; category: string; places: Place[] }>;
+  places: Place[];
+  summary: string;
+  searchSources: string[];
+  videos: CityVideo[];
+  timestamp: number;
+}
+
+interface CityHistoryMeta extends DocMeta {
+  city: string;
+  placeCount: number;
+  videoCount: number;
+  summaryPreview: string;
+}
+
+const cityCache = new Map<string, CachedCityExploration>();
+
+const cityHistory = getDocCollection<CachedCityExploration, CityHistoryMeta>(
+  "city_planner",
+  "explorations",
+  { maxEntries: 30 },
+);
+
+function citySlug(city: string): string {
+  return city.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+}
+
+// Hydrate in-memory cache from disk on module load
+for (const entry of cityHistory.list()) {
+  const data = cityHistory.load(entry.id);
+  if (data) cityCache.set(data.city.toLowerCase(), data);
 }
 
 // ── Helpers ──
@@ -65,6 +115,50 @@ async function getGeminiApiKey(): Promise<string | undefined> {
 }
 
 // ── Brave Search helpers ──
+
+async function braveVideoSearch(query: string, count = 6): Promise<CityVideo[]> {
+  const apiKey = getBraveApiKey();
+  if (!apiKey) return [];
+
+  const url = new URL("https://api.search.brave.com/res/v1/videos/search");
+  url.searchParams.set("q", query);
+  url.searchParams.set("count", String(Math.min(Math.max(count, 1), 10)));
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 10_000);
+  try {
+    const resp = await globalThis.fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json", "X-Subscription-Token": apiKey },
+      signal: ac.signal,
+    });
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as {
+      results?: Array<{
+        title: string;
+        url: string;
+        description?: string;
+        age?: string;
+        video?: { duration?: string; creator?: string; publisher?: string };
+        thumbnail?: { src: string };
+      }>;
+    };
+    return (body.results ?? []).map((r) => ({
+      title: r.title ?? "",
+      url: r.url ?? "",
+      thumbnail: r.thumbnail?.src ?? "",
+      description: r.description ?? "",
+      duration: r.video?.duration,
+      creator: r.video?.creator,
+      publisher: r.video?.publisher,
+      age: r.age,
+    }));
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function braveWebSearch(query: string, count = 5): Promise<BraveWebResult[]> {
   const apiKey = getBraveApiKey();
@@ -380,7 +474,14 @@ Rules:
 async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
   const city = params.city?.trim();
   if (!city) {
-    // Return welcome/landing state — template renders a city search input
+    // Return welcome/landing state — template renders a city search input + recent explorations
+    const recentCities = cityHistory.list().slice(0, 8).map((entry) => ({
+      city: entry.meta.city,
+      placeCount: entry.meta.placeCount,
+      videoCount: entry.meta.videoCount,
+      summaryPreview: entry.meta.summaryPreview,
+      timestamp: entry.timestamp,
+    }));
     return jsonResult({
       tool: "enso_city_explore",
       city: "",
@@ -389,14 +490,35 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       places: [],
       summary: "",
       searchSources: [],
+      videos: [],
+      recentCities,
     });
   }
 
-  // Research all 3 categories in parallel, 4 results each
-  const [restaurants, photoSpots, landmarks] = await Promise.all([
+  // Check cache unless force=true
+  const cacheKey = city.toLowerCase();
+  if (!params.force && cityCache.has(cacheKey)) {
+    const cached = cityCache.get(cacheKey)!;
+    console.log(`[enso:city] cache hit for "${city}" (${cached.places.length} places, ${cached.videos.length} videos)`);
+    return jsonResult({
+      tool: "enso_city_explore",
+      city: cached.city,
+      category: "overview",
+      sections: cached.sections,
+      places: cached.places,
+      summary: cached.summary,
+      searchSources: cached.searchSources,
+      videos: cached.videos,
+      fromHistory: true,
+    });
+  }
+
+  // Research all 3 categories + videos in parallel
+  const [restaurants, photoSpots, landmarks, videos] = await Promise.all([
     researchCategory(city, "restaurants", { limit: 4 }),
     researchCategory(city, "photo_spots", { limit: 4 }),
     researchCategory(city, "landmarks", { limit: 4 }),
+    braveVideoSearch(`${city} travel guide things to do`, 6),
   ]);
 
   const allSources = [
@@ -405,18 +527,47 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     ...landmarks.searchSources,
   ];
 
+  const sections = [
+    { label: "Top Restaurants", category: "restaurants", places: restaurants.places },
+    { label: "Photo Spots", category: "photo_spots", places: photoSpots.places },
+    { label: "Landmarks", category: "landmarks", places: landmarks.places },
+  ];
+  const allPlaces = [...restaurants.places, ...photoSpots.places, ...landmarks.places];
+  const summaryText = `Explore ${city}: ${restaurants.places.length} restaurants, ${photoSpots.places.length} photo spots, and ${landmarks.places.length} landmarks discovered.`;
+  const sourcesDeduped = [...new Set(allSources)].slice(0, 15);
+
+  // Persist to cache + disk
+  const cacheEntry: CachedCityExploration = {
+    city,
+    sections,
+    places: allPlaces,
+    summary: summaryText,
+    searchSources: sourcesDeduped,
+    videos,
+    timestamp: Date.now(),
+  };
+  cityCache.set(cacheKey, cacheEntry);
+  try {
+    cityHistory.save(citySlug(city), cacheEntry, {
+      city,
+      placeCount: allPlaces.length,
+      videoCount: videos.length,
+      summaryPreview: summaryText.slice(0, 120),
+    });
+    console.log(`[enso:city] saved exploration for "${city}" (${allPlaces.length} places, ${videos.length} videos)`);
+  } catch (err) {
+    console.log(`[enso:city] failed to persist exploration: ${err}`);
+  }
+
   return jsonResult({
     tool: "enso_city_explore",
     city,
     category: "overview",
-    sections: [
-      { label: "Top Restaurants", category: "restaurants", places: restaurants.places },
-      { label: "Photo Spots", category: "photo_spots", places: photoSpots.places },
-      { label: "Landmarks", category: "landmarks", places: landmarks.places },
-    ],
-    places: [...restaurants.places, ...photoSpots.places, ...landmarks.places],
-    summary: `Explore ${city}: ${restaurants.places.length} restaurants, ${photoSpots.places.length} photo spots, and ${landmarks.places.length} landmarks discovered.`,
-    searchSources: [...new Set(allSources)].slice(0, 15),
+    sections,
+    places: allPlaces,
+    summary: summaryText,
+    searchSources: sourcesDeduped,
+    videos,
   });
 }
 
@@ -532,6 +683,55 @@ async function citySendEmail(params: SendEmailParams): Promise<AgentToolResult> 
   });
 }
 
+async function cityDeleteHistory(params: DeleteHistoryParams): Promise<AgentToolResult> {
+  const city = params.city?.trim();
+  if (!city) {
+    // Delete all history
+    const entries = cityHistory.list();
+    for (const entry of entries) {
+      cityHistory.remove(entry.id);
+    }
+    cityCache.clear();
+    return jsonResult({
+      tool: "enso_city_explore",
+      city: "",
+      category: "welcome",
+      sections: [],
+      places: [],
+      summary: "",
+      videos: [],
+      recentCities: [],
+      deletedCount: entries.length,
+    });
+  }
+
+  // Delete specific city
+  const slug = citySlug(city);
+  const removed = cityHistory.remove(slug);
+  cityCache.delete(city.toLowerCase());
+
+  // Return welcome with updated recent list
+  const recentCities = cityHistory.list().slice(0, 8).map((entry) => ({
+    city: entry.meta.city,
+    placeCount: entry.meta.placeCount,
+    videoCount: entry.meta.videoCount,
+    summaryPreview: entry.meta.summaryPreview,
+    timestamp: entry.timestamp,
+  }));
+
+  return jsonResult({
+    tool: "enso_city_explore",
+    city: "",
+    category: "welcome",
+    sections: [],
+    places: [],
+    summary: "",
+    videos: [],
+    recentCities,
+    deletedCity: removed ? city : null,
+  });
+}
+
 function buildEmailHtml(
   city: string,
   category: string,
@@ -593,12 +793,13 @@ export function createCityTools(): AnyAgentTool[] {
     {
       name: "enso_city_explore",
       label: "City Explore",
-      description: "Full city overview — discovers top restaurants, photography spots, and tourist landmarks using web research and AI synthesis.",
+      description: "Full city overview — discovers top restaurants, photography spots, and tourist landmarks using web research, AI synthesis, and video guides. Results are cached for fast revisits.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          city: { type: "string", description: "City name (e.g. 'Paris', 'Tokyo')" },
+          city: { type: "string", description: "City name (e.g. 'Paris', 'Tokyo'). Empty string returns welcome view with recent explorations." },
+          force: { type: "boolean", description: "Force fresh research even if cached results exist" },
         },
         required: ["city"],
       },
@@ -687,6 +888,21 @@ export function createCityTools(): AnyAgentTool[] {
       },
       execute: async (_callId: string, params: Record<string, unknown>) =>
         citySendEmail(params as SendEmailParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_city_delete_history",
+      label: "City Delete History",
+      description: "Delete saved city exploration history. Provide a city name to delete one, or empty string to clear all.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          city: { type: "string", description: "City name to delete (empty string = delete all)" },
+        },
+        required: ["city"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) =>
+        cityDeleteHistory(params as DeleteHistoryParams),
     } as AnyAgentTool,
   ];
 }

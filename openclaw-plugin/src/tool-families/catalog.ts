@@ -49,9 +49,9 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
   {
     toolFamily: "city_planner",
     fallbackToolName: "enso_city_explore",
-    actionSuffixes: ["explore", "restaurants", "photo_spots", "landmarks", "send_email"],
+    actionSuffixes: ["explore", "restaurants", "photo_spots", "landmarks", "send_email", "delete_history"],
     signatureId: "city_research_board",
-    description: "City research: top restaurants, photography spots, tourist landmarks — with web images, AI summaries, and email reports",
+    description: "City research: top restaurants, photography spots, tourist landmarks — with web images, video guides, persistent history, AI summaries, and email reports",
   },
   {
     toolFamily: "web_browser",

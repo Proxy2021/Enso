@@ -565,7 +565,48 @@ export function loadAndRegisterSavedApps(basePath?: string): number {
       console.log(`[enso:persistence] failed to register app "${app.spec.toolFamily}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+
+  // Ensure SKILL.md exists for each loaded app (idempotent — won't overwrite existing)
+  for (const app of apps) {
+    try {
+      ensureSkillMd(app, basePath);
+    } catch (err) {
+      console.log(`[enso:persistence] failed to ensure SKILL.md for "${app.spec.toolFamily}": ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   return apps.length;
+}
+
+/**
+ * Ensure a SKILL.md file exists for a loaded app, so OpenClaw's agent can
+ * discover and invoke its tools. Idempotent — never overwrites existing files.
+ *
+ * - All apps: writes to ~/.openclaw/skills/<family>/SKILL.md (managed skills dir)
+ * - Codebase apps: also writes to openclaw-plugin/skills/<family>/SKILL.md (plugin-shipped)
+ */
+function ensureSkillMd(app: LoadedApp, basePath?: string): void {
+  const family = app.spec.toolFamily;
+
+  // 1. Ensure managed skill (~/.openclaw/skills/<family>/SKILL.md)
+  const managedSkillDir = path.join(skillsDir(basePath), family);
+  const managedSkillPath = path.join(managedSkillDir, "SKILL.md");
+  if (!fs.existsSync(managedSkillPath)) {
+    fs.mkdirSync(managedSkillDir, { recursive: true });
+    fs.writeFileSync(managedSkillPath, generateSkillMd(app.spec));
+    console.log(`[enso:persistence] generated SKILL.md for "${family}" at ${managedSkillDir}`);
+  }
+
+  // 2. For codebase apps, also ensure plugin-shipped skill exists
+  if (codebaseFamilies.has(family)) {
+    const pluginSkillDir = path.join(PLUGIN_DIR, "skills", family);
+    const pluginSkillPath = path.join(pluginSkillDir, "SKILL.md");
+    if (!fs.existsSync(pluginSkillPath)) {
+      fs.mkdirSync(pluginSkillDir, { recursive: true });
+      fs.writeFileSync(pluginSkillPath, generateSkillMd(app.spec));
+      console.log(`[enso:persistence] generated plugin SKILL.md for codebase app "${family}" (consider committing)`);
+    }
+  }
 }
 
 // ── Delete ──
@@ -626,6 +667,23 @@ export function saveAppToCodebase(toolFamily: string, basePath?: string): { succ
       fs.mkdirSync(targetExecDir, { recursive: true });
       for (const file of fs.readdirSync(sourceExecDir)) {
         fs.copyFileSync(path.join(sourceExecDir, file), path.join(targetExecDir, file));
+      }
+    }
+
+    // Copy/generate SKILL.md into plugin skills directory
+    const pluginSkillDir = path.join(PLUGIN_DIR, "skills", toolFamily);
+    fs.mkdirSync(pluginSkillDir, { recursive: true });
+
+    // Prefer existing SKILL.md from user skills dir (may be hand-crafted or from build pipeline)
+    const userSkillMd = path.join(skillsDir(basePath), toolFamily, "SKILL.md");
+    if (fs.existsSync(userSkillMd)) {
+      fs.copyFileSync(userSkillMd, path.join(pluginSkillDir, "SKILL.md"));
+    } else {
+      // Generate from spec
+      const manifestPath = path.join(sourceDir, "app.json");
+      if (fs.existsSync(manifestPath)) {
+        const manifest: AppManifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+        fs.writeFileSync(path.join(pluginSkillDir, "SKILL.md"), generateSkillMd(manifest.spec));
       }
     }
 
