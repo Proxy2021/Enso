@@ -89,11 +89,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         <div className="flex gap-2">
           <div className="flex-1">
             <Input
-              placeholder="Enter any research topic..."
+              placeholder="Search any research topic..."
               value={topicInput}
               onChange={(val) => setTopicInput(val)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-              icon="Search"
+              icon={<LucideReact.Search className="w-3.5 h-3.5" />}
             />
           </div>
           <Select
@@ -239,7 +239,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                 setFollowUpInput("");
               }
             }}
-            icon="MessageCircle"
+            icon={<LucideReact.MessageCircle className="w-3.5 h-3.5" />}
           />
           <Button variant="primary" onClick={() => {
             if (followUpInput.trim()) {
@@ -272,7 +272,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             <div className="text-xs text-gray-400 mt-0.5">{String(item.detail)}</div>
           </UICard>
         ))}
-        {items.length === 0 && <EmptyState icon="Minus" title="No data" description="No comparison data available" />}
+        {items.length === 0 && <EmptyState icon={<LucideReact.Minus className="w-5 h-5" />} title="No data" description="No comparison data available" />}
       </div>
     );
 
@@ -386,7 +386,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                 setFollowUpInput("");
               }
             }}
-            icon="MessageCircle"
+            icon={<LucideReact.MessageCircle className="w-3.5 h-3.5" />}
           />
           <Button variant="primary" onClick={() => {
             if (followUpInput.trim()) {
@@ -466,7 +466,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           // ── Findings tab ──
           if (tab === "findings") {
             if (keyFindings.length === 0) {
-              return <EmptyState icon="Lightbulb" title="No findings" description="No key findings were extracted" />;
+              return <EmptyState icon={<LucideReact.Lightbulb className="w-5 h-5" />} title="No findings" description="No key findings were extracted" />;
             }
             return (
               <div className="space-y-2">
@@ -495,7 +495,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           // ── Sections tab ──
           if (tab === "sections") {
             if (sections.length === 0) {
-              return <EmptyState icon="BookOpen" title="No sections" description="No research sections generated" />;
+              return <EmptyState icon={<LucideReact.BookOpen className="w-5 h-5" />} title="No sections" description="No research sections generated" />;
             }
             return (
               <div className="space-y-2">
@@ -552,7 +552,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             const hasImages = galleryImages.length > 0;
             const hasVideos = videos.length > 0;
             if (!hasImages && !hasVideos) {
-              return <EmptyState icon="Image" title="No media" description="No images or videos found for this topic" />;
+              return <EmptyState icon={<LucideReact.Image className="w-5 h-5" />} title="No media" description="No images or videos found for this topic" />;
             }
             return (
               <div className="space-y-3">
@@ -634,7 +634,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
           // ── Sources tab ──
           if (sources.length === 0) {
-            return <EmptyState icon="ExternalLink" title="No sources" description="No web sources found (check API key)" />;
+            return <EmptyState icon={<LucideReact.ExternalLink className="w-5 h-5" />} title="No sources" description="No web sources found (check API key)" />;
           }
           return (
             <div className="space-y-2">
@@ -642,7 +642,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                 placeholder="Filter sources..."
                 value={sourceFilter}
                 onChange={(val) => setSourceFilter(val)}
-                icon="Filter"
+                icon={<LucideReact.Filter className="w-3.5 h-3.5" />}
               />
               <div className="space-y-1">
                 {filteredSources.slice(0, 20).map((s, i) => (
@@ -678,7 +678,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                 setFollowUpInput("");
               }
             }}
-            icon="MessageCircle"
+            icon={<LucideReact.MessageCircle className="w-3.5 h-3.5" />}
           />
           <Button variant="primary" onClick={() => {
             if (followUpInput.trim()) {
@@ -699,7 +699,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                 setCompareInput("");
               }
             }}
-            icon="GitCompare"
+            icon={<LucideReact.GitCompare className="w-3.5 h-3.5" />}
           />
           <Button variant="outline" onClick={() => {
             if (compareInput.trim()) {
@@ -720,7 +720,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           }}>Send Report</Button>
         </div>
       }>
-        <Input placeholder="recipient@example.com" value={emailAddr} onChange={(val) => setEmailAddr(val)} icon="Mail" />
+        <Input placeholder="recipient@example.com" value={emailAddr} onChange={(val) => setEmailAddr(val)} icon={<LucideReact.Mail className="w-3.5 h-3.5" />} />
       </Dialog>
     </div>
   );
