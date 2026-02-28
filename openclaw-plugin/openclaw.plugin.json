@@ -1,6 +1,7 @@
 {
   "id": "enso",
   "channels": ["enso"],
+  "skills": ["skills"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
