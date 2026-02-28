@@ -206,6 +206,19 @@ export interface ExecutorContext {
     get(key: string): Promise<unknown | null>;
     set(key: string, value: unknown): Promise<void>;
     delete(key: string): Promise<boolean>;
+    /** Get a document collection for structured data persistence (indexed, auto-pruned). */
+    docs<T = unknown>(
+      collection: string,
+      opts?: { maxEntries?: number },
+    ): {
+      list(): Promise<Array<{ id: string; timestamp: number; meta: Record<string, string | number | boolean> }>>;
+      save(id: string, data: T, meta?: Record<string, string | number | boolean>): Promise<void>;
+      load(id: string): Promise<T | null>;
+      has(id: string): Promise<boolean>;
+      remove(id: string): Promise<boolean>;
+      clear(): Promise<void>;
+      count(): Promise<number>;
+    };
   };
 }
 

@@ -33,7 +33,7 @@ export function resolveEnsoAccount(params: {
   const port = section.port ?? parseInt(process.env.ENSO_PORT ?? "3001", 10);
   const host = section.host ?? process.env.ENSO_HOST ?? "0.0.0.0";
   const geminiApiKey =
-    section.geminiApiKey ?? process.env.GEMINI_API_KEY ?? readKeyFile(GEMINI_KEY_FILE);
+    section.geminiApiKey ?? process.env.GEMINI_API_KEY ?? readKeyFile(GEMINI_KEY_FILE) ?? "";
 
   const configured = true;
   const mode = section.mode ?? "full";
@@ -51,10 +51,11 @@ export function resolveEnsoAccount(params: {
   };
 }
 
-function readKeyFile(path: string): string {
+function readKeyFile(path: string): string | undefined {
   try {
-    return readFileSync(path, "utf-8").trim();
+    const content = readFileSync(path, "utf-8").trim();
+    return content || undefined;
   } catch {
-    return "";
+    return undefined;
   }
 }

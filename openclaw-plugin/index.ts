@@ -11,6 +11,40 @@ import { registerBrowserTools } from "./src/browser-tools.js";
 import { registerCityTools } from "./src/city-tools.js";
 import { registerResearcherTools } from "./src/researcher-tools.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./src/tool-families/catalog.js";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * Load .env file from the Enso project root into process.env.
+ * Only sets keys that are NOT already present (system env takes precedence).
+ * No external dependencies — pure Node.js.
+ */
+function loadEnvFile(): void {
+  try {
+    const pluginDir = dirname(fileURLToPath(import.meta.url));
+    const envPath = resolve(pluginDir, "..", ".env");
+    const content = readFileSync(envPath, "utf-8");
+    let loaded = 0;
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx < 1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) {
+        process.env[key] = value;
+        loaded++;
+      }
+    }
+    if (loaded > 0) {
+      console.log(`[enso] Loaded ${loaded} env var(s) from ${envPath}`);
+    }
+  } catch {
+    // .env file not found or unreadable — that's fine, rely on system env
+  }
+}
 
 function maybeRegisterFallbackToolFamily(input: {
   familyLabel: string;
@@ -38,6 +72,7 @@ const plugin = {
   description: "React-based AI channel with dynamic UI generation",
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
+    loadEnvFile();
     setEnsoRuntime(api.runtime);
     api.registerChannel({ plugin: ensoPlugin as ChannelPlugin });
     maybeRegisterFallbackToolFamily({

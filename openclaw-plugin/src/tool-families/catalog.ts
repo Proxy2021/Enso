@@ -63,7 +63,7 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
   {
     toolFamily: "researcher",
     fallbackToolName: "enso_researcher_search",
-    actionSuffixes: ["search", "deep_dive", "compare", "follow_up", "send_report"],
+    actionSuffixes: ["search", "deep_dive", "compare", "follow_up", "send_report", "delete_history"],
     signatureId: "research_board",
     description: "Web researcher: deep multi-angle research on any topic with source attribution, comparisons, follow-up Q&A, and email reports",
   },

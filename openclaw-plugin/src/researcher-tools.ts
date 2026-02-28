@@ -1,10 +1,11 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { getDocCollection, type DocMeta } from "./persistence.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
 // ── Param types ──
 
-type SearchParams = { topic: string; depth?: "quick" | "standard" | "deep" };
+type SearchParams = { topic: string; depth?: "quick" | "standard" | "deep"; force?: boolean };
 type DeepDiveParams = { topic: string; subtopic: string };
 type CompareParams = { topicA: string; topicB: string; context?: string };
 type FollowUpParams = { topic: string; question: string };
@@ -12,9 +13,12 @@ type SendReportParams = {
   recipient: string;
   topic: string;
   summary?: string;
+  narrative?: string;
   keyFindings?: KeyFinding[];
   sections?: ResearchSection[];
   sources?: Source[];
+  images?: ResearchImage[];
+  videos?: ResearchVideo[];
 };
 
 // ── Shared data types ──
@@ -90,6 +94,7 @@ interface ResearchVideo {
 interface CachedResearch {
   topic: string;
   summary: string;
+  narrative: string;
   keyFindings: KeyFinding[];
   sections: ResearchSection[];
   sources: Source[];
@@ -101,6 +106,31 @@ interface CachedResearch {
 // ── Module-level research cache ──
 
 const researchCache = new Map<string, CachedResearch>();
+
+// ── Persistent research history ──
+
+interface ResearchHistoryMeta extends DocMeta {
+  topic: string;
+  depth: string;
+  sourceCount: number;
+  summaryPreview: string;
+}
+
+const researchHistory = getDocCollection<CachedResearch, ResearchHistoryMeta>(
+  "researcher",
+  "topics",
+  { maxEntries: 50 },
+);
+
+function topicSlug(topic: string): string {
+  return topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+}
+
+// Hydrate in-memory cache from disk on module load
+for (const entry of researchHistory.list()) {
+  const data = researchHistory.load(entry.id);
+  if (data) researchCache.set(data.topic.toLowerCase(), data);
+}
 
 // ── Helpers ──
 
@@ -117,12 +147,49 @@ function getBraveApiKey(): string | undefined {
 }
 
 async function getGeminiApiKey(): Promise<string | undefined> {
+  // 1. From active account (accounts.ts resolves config → env → key file)
   try {
     const { getActiveAccount } = await import("./server.js");
-    return getActiveAccount()?.geminiApiKey;
-  } catch {
-    return process.env.GEMINI_API_KEY;
-  }
+    const fromAccount = getActiveAccount()?.geminiApiKey;
+    if (fromAccount) return fromAccount;
+  } catch { /* server not ready yet */ }
+
+  // 2. From environment variable (set by .env loader or system)
+  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
+
+  // 3. Direct file read via import.meta.url
+  try {
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const keyPath = join(dirname(fileURLToPath(import.meta.url)), "..", "gemini.key");
+    const key = readFileSync(keyPath, "utf-8").trim();
+    if (key) return key;
+  } catch { /* path resolution failed */ }
+
+  // 4. Fallback: locate key file via OpenClaw config
+  try {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const home = process.env.USERPROFILE || process.env.HOME || "";
+    const config = JSON.parse(readFileSync(join(home, ".openclaw", "openclaw.json"), "utf-8"));
+    const installPath = config?.plugins?.installs?.enso?.installPath;
+    if (installPath) {
+      const key = readFileSync(join(installPath, "gemini.key"), "utf-8").trim();
+      if (key) return key;
+    }
+    const paths = config?.plugins?.load?.paths;
+    if (Array.isArray(paths)) {
+      for (const p of paths) {
+        try {
+          const key = readFileSync(join(p, "gemini.key"), "utf-8").trim();
+          if (key) return key;
+        } catch { /* skip */ }
+      }
+    }
+  } catch { /* config not available */ }
+
+  return undefined;
 }
 
 function cleanJson(raw: string): string {
@@ -385,6 +452,7 @@ ${snippetText}
 Return valid JSON (no markdown fences) with this exact structure:
 {
   "summary": "Executive summary paragraph (3-5 sentences covering the most important findings)",
+  "narrative": "A 4-8 paragraph comprehensive article. Engaging magazine-feature style. Flowing prose only — NO bullet points, NO numbered lists, NO section headers. Separate paragraphs with double newlines.",
   "keyFindings": [
     {
       "text": "Clear, specific finding statement",
@@ -404,6 +472,9 @@ Return valid JSON (no markdown fences) with this exact structure:
 }
 
 Rules:
+- The "narrative" is the PRIMARY output users will read — it must be comprehensive, engaging, and cover ALL important material
+- Write the narrative like a well-crafted magazine feature or intelligence briefing: strong opening that hooks the reader and establishes why this topic matters now, body paragraphs each exploring a distinct angle or theme, closing with forward-looking perspective or implications
+- Each narrative paragraph should be 3-5 sentences of flowing, connected prose
 - Generate 5-8 key findings covering the most important discoveries
 - Generate 3-6 thematic sections organized by subtopic
 - sourceRefs are 0-indexed positions in the SEARCH RESULTS list above
@@ -524,6 +595,7 @@ async function llmOnlyResearch(
 Return valid JSON (no markdown fences):
 {
   "summary": "Executive summary (3-5 sentences)",
+  "narrative": "A 4-8 paragraph comprehensive article. Engaging magazine-feature style. Flowing prose only — NO bullet points, NO lists, NO headers. Separate paragraphs with double newlines.",
   "keyFindings": [
     { "text": "Finding", "type": "fact|trend|insight|warning", "confidence": "high|medium|low", "sourceRefs": [] }
   ],
@@ -533,6 +605,7 @@ Return valid JSON (no markdown fences):
 }
 
 Rules:
+- The "narrative" is the primary output — write it like a well-crafted magazine feature: strong opening, body paragraphs each exploring a distinct angle, closing with forward-looking perspective
 - 5-8 key findings
 - ${sectionCount} thematic sections
 - Be specific, factual, and substantive
@@ -543,6 +616,7 @@ Rules:
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const parsed = JSON.parse(cleanJson(raw)) as {
       summary: string;
+      narrative: string;
       keyFindings: KeyFinding[];
       sections: ResearchSection[];
     };
@@ -552,6 +626,7 @@ Rules:
       topic,
       depth,
       summary: parsed.summary ?? "",
+      narrative: parsed.narrative ?? "",
       keyFindings: (parsed.keyFindings ?? []).slice(0, 8),
       sections: (parsed.sections ?? []).slice(0, sectionCount),
       sources: [] as Source[],
@@ -566,15 +641,23 @@ Rules:
       },
     };
 
-    researchCache.set(topic.toLowerCase(), {
+    const cachedLlm: CachedResearch = {
       topic,
       summary: result.summary,
+      narrative: result.narrative,
       keyFindings: result.keyFindings,
       sections: result.sections,
       sources: [],
       images: [],
       videos: [],
       timestamp: Date.now(),
+    };
+    researchCache.set(topic.toLowerCase(), cachedLlm);
+    researchHistory.save(topicSlug(topic), cachedLlm, {
+      topic,
+      depth,
+      sourceCount: 0,
+      summaryPreview: (result.summary ?? "").slice(0, 150),
     });
 
     return jsonResult(result);
@@ -592,6 +675,7 @@ function generateSampleResearch(topic: string, depth: string): AgentToolResult {
     topic,
     depth,
     summary: `This is sample research data for "${topic}". Configure BRAVE_API_KEY for live web research and a Gemini API key for AI synthesis.`,
+    narrative: "",
     keyFindings: [
       { text: `${topic} is a rapidly evolving field with significant recent developments.`, type: "trend", confidence: "medium", sourceRefs: [] },
       { text: `Research shows growing interest and investment in ${topic}.`, type: "fact", confidence: "medium", sourceRefs: [] },
@@ -625,7 +709,9 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       tool: "enso_researcher_search",
       topic: "",
       category: "welcome",
+      recentTopics: researchHistory.list().slice(0, 12),
       summary: "",
+      narrative: "",
       keyFindings: [],
       sections: [],
       sources: [],
@@ -635,6 +721,35 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   }
 
   const depth = params.depth ?? "standard";
+
+  // Return cached result unless force-refresh requested
+  if (!params.force) {
+    const cached = researchCache.get(topic.toLowerCase());
+    if (cached) {
+      console.log(`[enso:researcher] returning cached research for "${topic}"`);
+      return jsonResult({
+        tool: "enso_researcher_search",
+        topic: cached.topic,
+        depth,
+        summary: cached.summary,
+        narrative: cached.narrative,
+        keyFindings: cached.keyFindings,
+        sections: cached.sections,
+        sources: cached.sources,
+        images: cached.images,
+        videos: cached.videos,
+        metadata: {
+          queriesRun: 0,
+          sourcesFound: cached.sources.length,
+          sectionsGenerated: cached.sections.length,
+          timestamp: cached.timestamp,
+          note: "Loaded from research library",
+        },
+        fromHistory: true,
+      });
+    }
+  }
+
   const queries = generateSearchAngles(topic, depth);
 
   // Fallback: no Brave key
@@ -686,6 +801,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const parsed = JSON.parse(cleanJson(raw)) as {
       summary: string;
+      narrative: string;
       keyFindings: KeyFinding[];
       sections: ResearchSection[];
     };
@@ -718,6 +834,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       topic,
       depth,
       summary: parsed.summary ?? "",
+      narrative: parsed.narrative ?? "",
       keyFindings,
       sections,
       sources: sources.slice(0, 25),
@@ -732,15 +849,23 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     };
 
     // Cache for follow-up context
-    researchCache.set(topic.toLowerCase(), {
+    const cachedEntry: CachedResearch = {
       topic,
       summary: result.summary,
+      narrative: result.narrative,
       keyFindings: result.keyFindings,
       sections: result.sections,
       sources: result.sources,
       images: result.images,
       videos: result.videos,
       timestamp: Date.now(),
+    };
+    researchCache.set(topic.toLowerCase(), cachedEntry);
+    researchHistory.save(topicSlug(topic), cachedEntry, {
+      topic,
+      depth,
+      sourceCount: result.sources?.length ?? 0,
+      summaryPreview: (result.summary ?? "").slice(0, 150),
     });
 
     console.log(`[enso:researcher] research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos`);
@@ -760,11 +885,34 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[]): A
       sourceRefs: sources.slice(0, 10).map((_, i) => i),
     },
   ];
+  const summary = `Found ${sources.length} sources about "${topic}". AI synthesis unavailable — showing raw results.`;
+
+  // Persist fallback results to history + cache
+  const cachedFallback: CachedResearch = {
+    topic,
+    summary,
+    narrative: "",
+    keyFindings: [],
+    sections,
+    sources: sources.slice(0, 25),
+    images: [],
+    videos: [],
+    timestamp: Date.now(),
+  };
+  researchCache.set(topic.toLowerCase(), cachedFallback);
+  researchHistory.save(topicSlug(topic), cachedFallback, {
+    topic,
+    depth,
+    sourceCount: sources.length,
+    summaryPreview: summary.slice(0, 150),
+  });
+
   return jsonResult({
     tool: "enso_researcher_search",
     topic,
     depth,
-    summary: `Found ${sources.length} sources about "${topic}". AI synthesis unavailable — showing raw results.`,
+    summary,
+    narrative: "",
     keyFindings: [],
     sections,
     sources: sources.slice(0, 25),
@@ -1007,11 +1155,14 @@ async function researcherSendReport(params: SendReportParams): Promise<AgentTool
   if (!recipient) return errorResult("recipient email is required");
   const topic = params.topic?.trim() || "Research Report";
   const summary = params.summary ?? "";
+  const narrative = params.narrative ?? "";
   const keyFindings = params.keyFindings ?? [];
   const sections = params.sections ?? [];
   const sources = params.sources ?? [];
+  const images = params.images ?? [];
+  const videos = params.videos ?? [];
 
-  const html = buildReportHtml(topic, summary, keyFindings, sections, sources);
+  const html = buildReportHtml(topic, summary, narrative, keyFindings, sections, sources, images, videos);
 
   const resendKey = process.env.RESEND_API_KEY;
   if (resendKey) {
@@ -1075,17 +1226,95 @@ function escapeHtml(str: string): string {
 function buildReportHtml(
   topic: string,
   summary: string,
+  narrative: string,
   keyFindings: KeyFinding[],
   sections: ResearchSection[],
   sources: Source[],
+  images: ResearchImage[],
+  videos: ResearchVideo[],
 ): string {
-  const findingTypeColors: Record<string, string> = {
-    fact: "#10b981",
-    trend: "#3b82f6",
-    insight: "#a855f7",
-    warning: "#f59e0b",
-  };
+  const sourcesHtml = sources.length > 0
+    ? `<tr><td style="padding:20px 0 8px;">
+        <div style="color:#94a3b8;font-size:16px;font-weight:600;margin-bottom:8px;border-top:1px solid #334155;padding-top:16px;">Sources</div>
+        ${sources.slice(0, 15).map((s, i) => `
+          <div style="padding:3px 0;font-size:12px;">
+            <span style="color:#64748b;">[${i + 1}]</span>
+            <a href="${escapeHtml(s.url)}" style="color:#60a5fa;text-decoration:none;">${escapeHtml(s.title)}</a>
+            <span style="color:#475569;"> — ${escapeHtml(s.domain)}</span>
+          </div>
+        `).join("")}
+      </td></tr>`
+    : "";
 
+  // ── Narrative-first layout (primary) ──
+  if (narrative && narrative.trim()) {
+    const paragraphs = narrative.split(/\n\n+/).filter((p) => p.trim());
+    const topImages = images.filter((img) => img.url).slice(0, 2);
+    const featuredVideo = videos.length > 0 ? videos[0] : null;
+    const insertImageAfter = Math.min(2, Math.floor(paragraphs.length / 3));
+    const insertVideoAfter = Math.min(4, Math.floor((paragraphs.length * 2) / 3));
+
+    let bodyHtml = "";
+    for (let i = 0; i < paragraphs.length; i++) {
+      bodyHtml += `<tr><td style="padding:8px 0;">
+        <div style="color:#cbd5e1;font-size:15px;line-height:1.7;">${escapeHtml(paragraphs[i])}</div>
+      </td></tr>`;
+
+      if (i === insertImageAfter && topImages.length > 0) {
+        const imgCells = topImages.map((img) =>
+          `<td style="width:${topImages.length === 1 ? "100" : "49"}%;padding:4px;">
+            <a href="${escapeHtml(img.pageUrl || img.url)}" style="display:block;">
+              <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.title)}"
+                style="width:100%;height:auto;max-height:200px;object-fit:cover;border-radius:8px;display:block;" />
+            </a>
+            <div style="color:#64748b;font-size:11px;margin-top:4px;">${escapeHtml(img.title)}</div>
+          </td>`
+        ).join("");
+        bodyHtml += `<tr><td style="padding:12px 0;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>${imgCells}</tr></table>
+        </td></tr>`;
+      }
+
+      if (i === insertVideoAfter && featuredVideo) {
+        bodyHtml += `<tr><td style="padding:12px 0;">
+          <a href="${escapeHtml(featuredVideo.url)}" style="display:block;text-decoration:none;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1e2e;border-radius:8px;">
+              <tr>
+                ${featuredVideo.thumbnail ? `<td style="width:160px;padding:12px;">
+                  <img src="${escapeHtml(featuredVideo.thumbnail)}" alt="${escapeHtml(featuredVideo.title)}"
+                    style="width:140px;height:90px;object-fit:cover;border-radius:6px;display:block;" />
+                </td>` : ""}
+                <td style="padding:12px;">
+                  <div style="color:#f87171;font-size:11px;text-transform:uppercase;margin-bottom:4px;">▶ Video</div>
+                  <div style="color:#e2e8f0;font-size:14px;font-weight:600;">${escapeHtml(featuredVideo.title)}</div>
+                  ${featuredVideo.duration ? `<div style="color:#64748b;font-size:12px;margin-top:4px;">${escapeHtml(featuredVideo.duration)}</div>` : ""}
+                </td>
+              </tr>
+            </table>
+          </a>
+        </td></tr>`;
+      }
+    }
+
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background:#0f0f1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto;padding:20px;">
+  <tr><td style="padding:20px 0;">
+    <div style="color:#e2e8f0;font-size:24px;font-weight:700;">${escapeHtml(topic)}</div>
+    <div style="color:#64748b;font-size:13px;margin-top:6px;">Research Report — Generated by Enso</div>
+  </td></tr>
+  ${bodyHtml}
+  ${sourcesHtml}
+  <tr><td style="padding:16px 0;text-align:center;color:#64748b;font-size:12px;">
+    Generated by Enso Research
+  </td></tr>
+</table>
+</body></html>`;
+  }
+
+  // ── Fallback: structured layout (for old cached data without narrative) ──
+  const findingTypeColors: Record<string, string> = { fact: "#10b981", trend: "#3b82f6", insight: "#a855f7", warning: "#f59e0b" };
   const findingsHtml = keyFindings.length > 0
     ? `<tr><td style="padding:16px 0;">
         <div style="color:#e2e8f0;font-size:18px;font-weight:600;margin-bottom:12px;">Key Findings</div>
@@ -1095,9 +1324,7 @@ function buildReportHtml(
             <div style="color:#e2e8f0;font-size:14px;margin-top:2px;">${escapeHtml(f.text)}</div>
           </div>
         `).join("")}
-      </td></tr>`
-    : "";
-
+      </td></tr>` : "";
   const sectionsHtml = sections.map((s) => `
     <tr><td style="padding:8px 0;">
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1e2e;border-radius:8px;">
@@ -1109,21 +1336,7 @@ function buildReportHtml(
           </ul>
         </td></tr>
       </table>
-    </td></tr>
-  `).join("");
-
-  const sourcesHtml = sources.length > 0
-    ? `<tr><td style="padding:16px 0;">
-        <div style="color:#e2e8f0;font-size:18px;font-weight:600;margin-bottom:8px;">Sources</div>
-        ${sources.slice(0, 15).map((s, i) => `
-          <div style="padding:4px 0;font-size:12px;">
-            <span style="color:#64748b;">[${i + 1}]</span>
-            <a href="${escapeHtml(s.url)}" style="color:#60a5fa;text-decoration:none;">${escapeHtml(s.title)}</a>
-            <span style="color:#475569;"> — ${escapeHtml(s.domain)}</span>
-          </div>
-        `).join("")}
-      </td></tr>`
-    : "";
+    </td></tr>`).join("");
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/></head>
@@ -1143,6 +1356,21 @@ function buildReportHtml(
 </body></html>`;
 }
 
+// ── Delete history ──
+
+async function researcherDeleteHistory(params: { topic: string }): Promise<AgentToolResult> {
+  const topic = params.topic?.trim();
+  if (!topic) return errorResult("No topic specified");
+
+  const slug = topicSlug(topic);
+  researchCache.delete(topic.toLowerCase());
+  researchHistory.remove(slug);
+  console.log(`[enso:researcher] deleted history for "${topic}" (slug: ${slug})`);
+
+  // Return updated welcome view
+  return researcherSearch({ topic: "" } as SearchParams);
+}
+
 // ── Tool registration ──
 
 export function createResearcherTools(): AnyAgentTool[] {
@@ -1157,6 +1385,7 @@ export function createResearcherTools(): AnyAgentTool[] {
         properties: {
           topic: { type: "string", description: "Research topic (any subject)" },
           depth: { type: "string", enum: ["quick", "standard", "deep"], description: "Research depth: quick (3 queries), standard (6), deep (8)" },
+          force: { type: "boolean", description: "Force fresh research, ignoring cached results" },
         },
         required: ["topic"],
       },
@@ -1223,6 +1452,7 @@ export function createResearcherTools(): AnyAgentTool[] {
           recipient: { type: "string", description: "Email address to send to" },
           topic: { type: "string", description: "Research topic for the report title" },
           summary: { type: "string", description: "Executive summary text" },
+          narrative: { type: "string", description: "Narrative article text (paragraphs separated by double newlines)" },
           keyFindings: {
             type: "array",
             description: "Key findings to include",
@@ -1268,11 +1498,46 @@ export function createResearcherTools(): AnyAgentTool[] {
               required: ["url", "title"],
             },
           },
+          images: {
+            type: "array",
+            description: "Research images for inline display",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: { url: { type: "string" }, title: { type: "string" }, pageUrl: { type: "string" } },
+              required: ["url", "title"],
+            },
+          },
+          videos: {
+            type: "array",
+            description: "Research videos for featured display",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: { url: { type: "string" }, thumbnail: { type: "string" }, title: { type: "string" }, duration: { type: "string" } },
+              required: ["url", "title"],
+            },
+          },
         },
         required: ["recipient", "topic"],
       },
       execute: async (_callId: string, params: Record<string, unknown>) =>
         researcherSendReport(params as SendReportParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_researcher_delete_history",
+      label: "Delete Research History Entry",
+      description: "Remove a topic from the research history library.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          topic: { type: "string", description: "Topic to remove from history" },
+        },
+        required: ["topic"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) =>
+        researcherDeleteHistory(params as { topic: string }),
     } as AnyAgentTool,
   ];
 }

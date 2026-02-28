@@ -34,6 +34,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const keyFindings = Array.isArray(data?.keyFindings) ? data.keyFindings : [];
   const sections = Array.isArray(data?.sections) ? data.sections : [];
   const summary = String(data?.summary ?? "");
+  const narrative = String(data?.narrative ?? "");
+  const narrativeParagraphs = narrative ? narrative.split(/\\n\\n+/).filter((p) => p.trim()) : [];
   const metadata = data?.metadata || {};
   const images = Array.isArray(data?.images) ? data.images : [];
   const videos = Array.isArray(data?.videos) ? data.videos : [];
@@ -44,6 +46,29 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     const img = images.find((i) => i.sectionIdx === sIdx);
     return img && !imgErrors[img.url] ? img : null;
   };
+
+  // ── Research history ──
+  const recentTopics = Array.isArray(data?.recentTopics) ? data.recentTopics : [];
+  const timeAgo = (ts) => {
+    if (!ts) return "";
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return mins + "m ago";
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + "h ago";
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return days + "d ago";
+    return Math.floor(days / 30) + "mo ago";
+  };
+
+  // ── YouTube embed helper ──
+  const getYouTubeId = (url) => {
+    if (!url) return null;
+    const m = url.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+  };
+  const [playingVideos, setPlayingVideos] = useState({});
+  const togglePlay = (url) => setPlayingVideos((prev) => ({ ...prev, [url]: !prev[url] }));
 
   // ── Finding type styling ──
   const findingVariant = { fact: "success", trend: "info", insight: "default", warning: "warning" };
@@ -72,11 +97,13 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       const t = topicInput.trim();
       if (t) onAction("search", { topic: t, depth: depthInput });
     };
-    const suggestions = [
+    const allSuggestions = [
       "AI in healthcare", "Remote work trends 2026", "Quantum computing applications",
       "Mediterranean diet benefits", "Electric vehicles vs hydrogen fuel",
       "SaaS pricing strategies", "Ocean plastic cleanup technology", "Space tourism industry",
     ];
+    const recentTopicNames = new Set(recentTopics.map((r) => (r.meta?.topic || "").toLowerCase()));
+    const suggestions = allSuggestions.filter((s) => !recentTopicNames.has(s.toLowerCase()));
     return (
       <div className="space-y-4 py-2">
         <div className="text-center space-y-1">
@@ -108,16 +135,55 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           />
           <Button variant="primary" onClick={handleSearch}>Research</Button>
         </div>
-        <div className="space-y-1.5">
-          <div className="text-[11px] text-gray-500 uppercase tracking-wide">Suggested topics</div>
-          <div className="flex flex-wrap gap-1.5">
-            {suggestions.map((s) => (
-              <Button key={s} variant="outline" onClick={() => onAction("search", { topic: s, depth: "standard" })}>
-                {s}
-              </Button>
-            ))}
+
+        {recentTopics.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <LucideReact.BookOpen className="w-3 h-3" /> Your Research Library
+            </div>
+            <div className="space-y-1">
+              {recentTopics.map((entry) => {
+                const entryTopic = entry.meta?.topic || entry.id || "";
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-800/40 hover:bg-gray-700/50 cursor-pointer transition-colors group"
+                    onClick={() => onAction("search", { topic: entryTopic })}
+                  >
+                    <LucideReact.FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-gray-100 truncate">{entryTopic}</div>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                        {entry.meta?.sourceCount > 0 && <span>{entry.meta.sourceCount} sources</span>}
+                        {entry.meta?.depth && <span>{entry.meta.depth}</span>}
+                        {entry.timestamp && <span>{timeAgo(entry.timestamp)}</span>}
+                      </div>
+                    </div>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-600/50"
+                      onClick={(e) => { e.stopPropagation(); onAction("delete_history", { topic: entryTopic }); }}
+                    >
+                      <LucideReact.X className="w-3.5 h-3.5 text-gray-500" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
+
+        {suggestions.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[11px] text-gray-500 uppercase tracking-wide">Suggested topics</div>
+            <div className="flex flex-wrap gap-1.5">
+              {suggestions.map((s) => (
+                <Button key={s} variant="outline" onClick={() => onAction("search", { topic: s, depth: "standard" })}>
+                  {s}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -400,8 +466,16 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   }
 
   // ═══════════════════════════════════════════
-  // VIEW 2: Research Overview (default)
+  // VIEW 2: Research Overview — narrative-first
   // ═══════════════════════════════════════════
+  const hasNarrative = narrativeParagraphs.length > 0;
+  const inlineImages = galleryImages.slice(0, 3);
+  const inlineVideos = videos.slice(0, 2);
+  const remainingImages = galleryImages.slice(inlineImages.length);
+  const remainingVideos = videos.slice(inlineVideos.length);
+  const remainingMediaCount = remainingImages.length + remainingVideos.length;
+  const imgInsertIdx = Math.max(1, Math.floor(narrativeParagraphs.length / 3));
+  const vidInsertIdx = Math.max(2, Math.floor((narrativeParagraphs.length * 2) / 3));
   const filteredSources = sourceFilter
     ? sources.filter((s) =>
         String(s.title).toLowerCase().includes(sourceFilter.toLowerCase()) ||
@@ -409,13 +483,14 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       )
     : sources;
 
-  const mediaCount = galleryImages.length + videos.length;
-
   return (
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <Stat label="Research" value={topic} accent="blue" change={sources.length + " sources, " + sections.length + " sections"} />
+        <div className="flex items-center gap-2.5">
+          <Stat label="Research" value={topic} accent="blue" />
+          <Badge variant="info">{sources.length} sources</Badge>
+        </div>
         <div className="flex gap-1.5">
           <Button variant="ghost" onClick={() => onAction("search", { topic: "" })}>
             <LucideReact.Plus className="w-3.5 h-3.5" /> New
@@ -426,9 +501,20 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       </div>
 
+      {/* From library indicator */}
+      {data?.fromHistory && (
+        <div className="flex items-center gap-2 px-1">
+          <LucideReact.BookOpen className="w-3 h-3 text-gray-500" />
+          <span className="text-[11px] text-gray-500">From library</span>
+          <Button variant="ghost" onClick={() => onAction("search", { topic, depth: data?.depth || "standard", force: true })}>
+            <LucideReact.RefreshCw className="w-3 h-3" /> Refresh
+          </Button>
+        </div>
+      )}
+
       {/* Hero image */}
       {heroImage && !imgErrors[heroImage.url] && (
-        <div className="w-full h-40 overflow-hidden rounded-lg cursor-pointer" onClick={() => onAction("open_url", { url: heroImage.pageUrl || heroImage.url })}>
+        <div className="w-full h-44 overflow-hidden rounded-lg cursor-pointer" onClick={() => onAction("open_url", { url: heroImage.pageUrl || heroImage.url })}>
           <img
             src={heroImage.url}
             alt={heroImage.title}
@@ -439,66 +525,115 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       )}
 
-      {/* Executive Summary */}
-      {summary && (
-        <UICard accent="blue">
-          <div className="text-sm text-gray-200 leading-relaxed">{summary}</div>
-        </UICard>
-      )}
-
       {/* Metadata note */}
       {metadata?.note && (
         <div className="text-[11px] text-amber-400/70 px-1">{String(metadata.note)}</div>
       )}
 
-      {/* Main content tabs */}
-      <Tabs
-        tabs={[
-          { value: "findings", label: "Findings (" + keyFindings.length + ")" },
-          { value: "sections", label: "Sections (" + sections.length + ")" },
-          { value: "media", label: "Media (" + mediaCount + ")" },
-          { value: "sources", label: "Sources (" + sources.length + ")" },
-        ]}
-        defaultValue="findings"
-        variant="pills"
-      >
-        {(tab) => {
-          // ── Findings tab ──
-          if (tab === "findings") {
-            if (keyFindings.length === 0) {
-              return <EmptyState icon={<LucideReact.Lightbulb className="w-5 h-5" />} title="No findings" description="No key findings were extracted" />;
-            }
-            return (
-              <div className="space-y-2">
-                {keyFindings.map((f, i) => (
-                  <UICard key={i} accent={findingAccent[f.type] || "blue"}>
-                    <div className="flex items-start gap-2">
-                      <div className="flex gap-1 shrink-0 mt-0.5">
-                        <Badge variant={findingVariant[f.type] || "default"}>
-                          {String(f.type)}
-                        </Badge>
-                        <Badge variant={confidenceVariant[f.confidence] || "outline"}>
-                          {String(f.confidence)}
-                        </Badge>
+      <Separator />
+
+      {/* ── Narrative (primary content) or summary fallback ── */}
+      {hasNarrative ? (
+        <div className="space-y-4">
+          {narrativeParagraphs.map((p, pi) => (
+            <Fragment key={pi}>
+              <div className="text-sm text-gray-200 leading-relaxed">{p}</div>
+
+              {/* Inline images after ~1/3 of paragraphs */}
+              {pi === imgInsertIdx - 1 && inlineImages.length > 0 && (
+                <div className={"grid gap-2 rounded-lg overflow-hidden " + (inlineImages.length === 1 ? "grid-cols-1" : inlineImages.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+                  {inlineImages.map((img, ii) => (
+                    <div key={ii} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
+                      <img
+                        src={img.url}
+                        alt={img.title}
+                        className="w-full h-28 object-cover"
+                        onError={() => handleImgError(img.url)}
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
+                        <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
                       </div>
-                      <div className="text-sm text-gray-200 flex-1">
-                        {String(f.text)}
-                        <SourceRefs refs={f.sourceRefs} />
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-0.5">
+                        <LucideReact.ExternalLink className="w-3 h-3 text-white" />
                       </div>
                     </div>
-                  </UICard>
-                ))}
-              </div>
-            );
-          }
+                  ))}
+                </div>
+              )}
 
-          // ── Sections tab ──
-          if (tab === "sections") {
-            if (sections.length === 0) {
-              return <EmptyState icon={<LucideReact.BookOpen className="w-5 h-5" />} title="No sections" description="No research sections generated" />;
-            }
-            return (
-              <div className="space-y-2">
+              {/* Featured video after ~2/3 of paragraphs */}
+              {pi === vidInsertIdx - 1 && inlineVideos.length > 0 && (
+                <div className="space-y-3">
+                  {inlineVideos.map((v, vi) => {
+                    const ytId = getYouTubeId(v.url);
+                    const isPlaying = playingVideos[v.url];
+                    return (
+                      <div key={vi} className="rounded-lg overflow-hidden bg-gray-800/50">
+                        {isPlaying && ytId ? (
+                          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
+                            <iframe
+                              src={"https://www.youtube.com/embed/" + ytId + "?autoplay=1&rel=0"}
+                              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
+                              allow="autoplay; encrypted-media"
+                              allowFullScreen
+                            />
+                          </div>
+                        ) : (
+                          <div className="relative cursor-pointer" onClick={() => ytId ? togglePlay(v.url) : onAction("open_url", { url: v.url })}>
+                            {v.thumbnail && (
+                              <img
+                                src={v.thumbnail}
+                                alt={v.title}
+                                className="w-full h-auto max-h-64 object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                              <div className="w-14 h-14 rounded-full bg-red-600/90 flex items-center justify-center shadow-lg hover:bg-red-500 transition-colors">
+                                <LucideReact.Play className="w-7 h-7 text-white ml-1" />
+                              </div>
+                            </div>
+                            {v.duration && (
+                              <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] text-white font-mono">
+                                {v.duration}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="px-3 py-2">
+                          <div className="text-xs font-semibold text-gray-100 line-clamp-2">{v.title}</div>
+                          <div className="flex gap-1.5 mt-1 flex-wrap items-center">
+                            {v.publisher && <Badge variant="info">{v.publisher}</Badge>}
+                            {v.creator && <span className="text-[10px] text-gray-400">{v.creator}</span>}
+                            {v.age && <span className="text-[10px] text-gray-500">{v.age}</span>}
+                            {!ytId && <span className="text-[10px] text-gray-500 italic">Opens in browser</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Fragment>
+          ))}
+        </div>
+      ) : summary ? (
+        <UICard accent="blue">
+          <div className="text-sm text-gray-200 leading-relaxed">{summary}</div>
+        </UICard>
+      ) : null}
+
+      <Separator />
+
+      {/* ── Collapsible bottom sections ── */}
+      <Accordion
+        items={[
+          ...(sections.length > 0 ? [{
+            value: "explore",
+            title: "Explore Further (" + sections.length + " topics)",
+            content: (
+              <div className="space-y-3">
                 <Accordion
                   items={sections.map((s, i) => ({
                     value: "sec-" + i,
@@ -541,28 +676,64 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                     ),
                   }))}
                   type="multiple"
-                  defaultOpen={["sec-0"]}
                 />
+                <div className="space-y-2 pt-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ask a follow-up question..."
+                      value={followUpInput}
+                      onChange={(val) => setFollowUpInput(val)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && followUpInput.trim()) {
+                          onAction("follow_up", { topic, question: followUpInput.trim() });
+                          setFollowUpInput("");
+                        }
+                      }}
+                      icon={<LucideReact.MessageCircle className="w-3.5 h-3.5" />}
+                    />
+                    <Button variant="primary" onClick={() => {
+                      if (followUpInput.trim()) {
+                        onAction("follow_up", { topic, question: followUpInput.trim() });
+                        setFollowUpInput("");
+                      }
+                    }}>Ask</Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder={"Compare " + topic + " with..."}
+                      value={compareInput}
+                      onChange={(val) => setCompareInput(val)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && compareInput.trim()) {
+                          onAction("compare", { topicA: topic, topicB: compareInput.trim() });
+                          setCompareInput("");
+                        }
+                      }}
+                      icon={<LucideReact.GitCompare className="w-3.5 h-3.5" />}
+                    />
+                    <Button variant="outline" onClick={() => {
+                      if (compareInput.trim()) {
+                        onAction("compare", { topicA: topic, topicB: compareInput.trim() });
+                        setCompareInput("");
+                      }
+                    }}>Compare</Button>
+                  </div>
+                </div>
               </div>
-            );
-          }
-
-          // ── Media tab ──
-          if (tab === "media") {
-            const hasImages = galleryImages.length > 0;
-            const hasVideos = videos.length > 0;
-            if (!hasImages && !hasVideos) {
-              return <EmptyState icon={<LucideReact.Image className="w-5 h-5" />} title="No media" description="No images or videos found for this topic" />;
-            }
-            return (
+            ),
+          }] : []),
+          ...(remainingMediaCount > 0 ? [{
+            value: "media",
+            title: "Media Gallery (" + remainingMediaCount + ")",
+            content: (
               <div className="space-y-3">
-                {hasImages && (
+                {remainingImages.length > 0 && (
                   <div className="space-y-2">
                     <div className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                      <LucideReact.Image className="w-3 h-3" /> Images ({galleryImages.length})
+                      <LucideReact.Image className="w-3 h-3" /> Images ({remainingImages.length})
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
-                      {galleryImages.slice(0, 9).map((img, i) => (
+                      {remainingImages.slice(0, 9).map((img, i) => (
                         <div key={i} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
                           <img
                             src={img.url}
@@ -582,133 +753,121 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                     </div>
                   </div>
                 )}
-                {hasVideos && (
+                {remainingVideos.length > 0 && (
                   <div className="space-y-2">
                     <div className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                      <LucideReact.Play className="w-3 h-3" /> Videos ({videos.length})
+                      <LucideReact.Play className="w-3 h-3" /> Videos ({remainingVideos.length})
                     </div>
                     <div className="space-y-2">
-                      {videos.slice(0, 6).map((v, i) => (
-                        <UICard key={i} accent="rose">
-                          <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: v.url })}>
-                            {v.thumbnail && (
-                              <div className="w-28 h-20 rounded overflow-hidden shrink-0 relative bg-gray-800">
-                                <img
-                                  src={v.thumbnail}
-                                  alt={v.title}
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
+                      {remainingVideos.map((v, i) => {
+                        const ytId = getYouTubeId(v.url);
+                        const isPlaying = playingVideos[v.url];
+                        return (
+                          <div key={i} className="rounded-lg overflow-hidden bg-gray-800/50">
+                            {isPlaying && ytId ? (
+                              <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
+                                <iframe
+                                  src={"https://www.youtube.com/embed/" + ytId + "?autoplay=1&rel=0"}
+                                  style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
+                                  allow="autoplay; encrypted-media"
+                                  allowFullScreen
                                 />
+                              </div>
+                            ) : (
+                              <div className="relative cursor-pointer" onClick={() => ytId ? togglePlay(v.url) : onAction("open_url", { url: v.url })}>
+                                {v.thumbnail && (
+                                  <img
+                                    src={v.thumbnail}
+                                    alt={v.title}
+                                    className="w-full h-auto max-h-48 object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                )}
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                  <div className="w-12 h-12 rounded-full bg-red-600/90 flex items-center justify-center shadow-lg">
+                                    <LucideReact.Play className="w-6 h-6 text-white ml-0.5" />
+                                  </div>
+                                </div>
                                 {v.duration && (
-                                  <div className="absolute bottom-0.5 right-0.5 bg-black/80 px-1 py-0.5 rounded text-[9px] text-white font-mono">
+                                  <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] text-white font-mono">
                                     {v.duration}
                                   </div>
                                 )}
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center">
-                                    <LucideReact.Play className="w-4 h-4 text-white ml-0.5" />
-                                  </div>
-                                </div>
                               </div>
                             )}
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs font-semibold text-gray-100 line-clamp-2">{v.title}</div>
+                            <div className="px-3 py-2">
+                              <div className="text-xs font-semibold text-gray-100 line-clamp-1">{v.title}</div>
                               <div className="flex gap-1.5 mt-1 flex-wrap items-center">
                                 {v.publisher && <Badge variant="info">{v.publisher}</Badge>}
                                 {v.creator && <span className="text-[10px] text-gray-400">{v.creator}</span>}
-                                {v.age && <span className="text-[10px] text-gray-500">{v.age}</span>}
                               </div>
-                              {v.description && (
-                                <div className="text-[10px] text-gray-400 mt-1 line-clamp-2">{v.description}</div>
-                              )}
                             </div>
                           </div>
-                        </UICard>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </div>
-            );
-          }
-
-          // ── Sources tab ──
-          if (sources.length === 0) {
-            return <EmptyState icon={<LucideReact.ExternalLink className="w-5 h-5" />} title="No sources" description="No web sources found (check API key)" />;
-          }
-          return (
-            <div className="space-y-2">
-              <Input
-                placeholder="Filter sources..."
-                value={sourceFilter}
-                onChange={(val) => setSourceFilter(val)}
-                icon={<LucideReact.Filter className="w-3.5 h-3.5" />}
-              />
-              <div className="space-y-1">
-                {filteredSources.slice(0, 20).map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 py-1 px-2 rounded bg-gray-800/30 cursor-pointer hover:bg-gray-700/40 transition-colors" onClick={() => s.url && onAction("open_url", { url: s.url })}>
-                    <span className="text-[10px] text-gray-500 font-mono w-5 text-right">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
-                      <div className="text-[10px] text-gray-500">{String(s.domain)}</div>
+            ),
+          }] : []),
+          ...(sources.length > 0 ? [{
+            value: "sources",
+            title: "Sources (" + sources.length + ")",
+            content: (
+              <div className="space-y-2">
+                <Input
+                  placeholder="Filter sources..."
+                  value={sourceFilter}
+                  onChange={(val) => setSourceFilter(val)}
+                  icon={<LucideReact.Filter className="w-3.5 h-3.5" />}
+                />
+                <div className="space-y-1">
+                  {filteredSources.slice(0, 20).map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 py-1 px-2 rounded bg-gray-800/30 cursor-pointer hover:bg-gray-700/40 transition-colors" onClick={() => s.url && onAction("open_url", { url: s.url })}>
+                      <span className="text-[10px] text-gray-500 font-mono w-5 text-right">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
+                        <div className="text-[10px] text-gray-500">{String(s.domain)}</div>
+                      </div>
+                      <div className="w-16 shrink-0">
+                        <Progress value={s.relevance || 0} max={100} variant="blue" />
+                      </div>
                     </div>
-                    <div className="w-16 shrink-0">
-                      <Progress value={s.relevance || 0} max={100} variant="blue" />
+                  ))}
+                </div>
+              </div>
+            ),
+          }] : []),
+          ...(keyFindings.length > 0 ? [{
+            value: "findings",
+            title: "Research Data (" + keyFindings.length + " findings)",
+            content: (
+              <div className="space-y-2">
+                {keyFindings.map((f, i) => (
+                  <UICard key={i} accent={findingAccent[f.type] || "blue"}>
+                    <div className="flex items-start gap-2">
+                      <div className="flex gap-1 shrink-0 mt-0.5">
+                        <Badge variant={findingVariant[f.type] || "default"}>
+                          {String(f.type)}
+                        </Badge>
+                        <Badge variant={confidenceVariant[f.confidence] || "outline"}>
+                          {String(f.confidence)}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-gray-200 flex-1">
+                        {String(f.text)}
+                        <SourceRefs refs={f.sourceRefs} />
+                      </div>
                     </div>
-                  </div>
+                  </UICard>
                 ))}
               </div>
-            </div>
-          );
-        }}
-      </Tabs>
-
-      {/* Action bar */}
-      <Separator />
-      <div className="space-y-2">
-        {/* Follow-up */}
-        <div className="flex gap-2">
-          <Input
-            placeholder="Ask a follow-up question..."
-            value={followUpInput}
-            onChange={(val) => setFollowUpInput(val)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && followUpInput.trim()) {
-                onAction("follow_up", { topic, question: followUpInput.trim() });
-                setFollowUpInput("");
-              }
-            }}
-            icon={<LucideReact.MessageCircle className="w-3.5 h-3.5" />}
-          />
-          <Button variant="primary" onClick={() => {
-            if (followUpInput.trim()) {
-              onAction("follow_up", { topic, question: followUpInput.trim() });
-              setFollowUpInput("");
-            }
-          }}>Ask</Button>
-        </div>
-        {/* Compare */}
-        <div className="flex gap-2">
-          <Input
-            placeholder={"Compare " + topic + " with..."}
-            value={compareInput}
-            onChange={(val) => setCompareInput(val)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && compareInput.trim()) {
-                onAction("compare", { topicA: topic, topicB: compareInput.trim() });
-                setCompareInput("");
-              }
-            }}
-            icon={<LucideReact.GitCompare className="w-3.5 h-3.5" />}
-          />
-          <Button variant="outline" onClick={() => {
-            if (compareInput.trim()) {
-              onAction("compare", { topicA: topic, topicB: compareInput.trim() });
-              setCompareInput("");
-            }
-          }}>Compare</Button>
-        </div>
-      </div>
+            ),
+          }] : []),
+        ]}
+        type="multiple"
+      />
 
       {/* Email dialog */}
       <Dialog open={emailOpen} onClose={() => setEmailOpen(false)} title={"Email Research: " + topic} footer={
@@ -716,7 +875,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           <Button variant="ghost" onClick={() => setEmailOpen(false)}>Cancel</Button>
           <Button variant="primary" onClick={() => {
             setEmailOpen(false);
-            onAction("send_report", { recipient: emailAddr, topic, summary, keyFindings, sections, sources });
+            onAction("send_report", { recipient: emailAddr, topic, summary, narrative, keyFindings, sections, sources, images, videos });
           }}>Send Report</Button>
         </div>
       }>

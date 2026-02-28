@@ -17,6 +17,7 @@ import {
   type ToolTemplate,
 } from "./native-tools/registry.js";
 import { addCapability, removeCapability } from "./tool-families/catalog.js";
+import { getDocCollection } from "./persistence.js";
 
 // ── Codebase Apps Directory ──
 
@@ -323,6 +324,21 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
         delete data[key];
         saveStoreForFamily(toolFamily, data);
         return true;
+      },
+      docs<T = unknown>(collection: string, opts?: { maxEntries?: number }) {
+        if (!toolFamily) throw new Error("No tool family for docs");
+        const coll = getDocCollection<T>(toolFamily, collection, opts);
+        return {
+          async list() { return coll.list(); },
+          async save(id: string, data: T, meta?: Record<string, string | number | boolean>) {
+            coll.save(id, data, meta ?? ({} as Record<string, string | number | boolean>));
+          },
+          async load(id: string) { return coll.load(id); },
+          async has(id: string) { return coll.has(id); },
+          async remove(id: string) { return coll.remove(id); },
+          async clear() { coll.clear(); },
+          async count() { return coll.count(); },
+        };
       },
     },
   };
