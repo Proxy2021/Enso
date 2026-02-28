@@ -18,6 +18,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const [emailAddr, setEmailAddr] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [deepDiveInput, setDeepDiveInput] = useState("");
+  const [imgErrors, setImgErrors] = useState({});
 
   // ── View detection ──
   const topic = String(data?.topic ?? "");
@@ -34,6 +35,15 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const sections = Array.isArray(data?.sections) ? data.sections : [];
   const summary = String(data?.summary ?? "");
   const metadata = data?.metadata || {};
+  const images = Array.isArray(data?.images) ? data.images : [];
+  const videos = Array.isArray(data?.videos) ? data.videos : [];
+  const heroImage = images.find((img) => img.sectionIdx === 0) || images[0];
+  const galleryImages = images.filter((img) => !imgErrors[img.url]);
+  const handleImgError = (url) => setImgErrors((prev) => ({ ...prev, [url]: true }));
+  const getSectionImage = (sIdx) => {
+    const img = images.find((i) => i.sectionIdx === sIdx);
+    return img && !imgErrors[img.url] ? img : null;
+  };
 
   // ── Finding type styling ──
   const findingVariant = { fact: "success", trend: "info", insight: "default", warning: "warning" };
@@ -74,7 +84,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             <LucideReact.Search className="w-5 h-5 text-blue-400" />
             <div className="text-lg font-semibold text-gray-100">Research Assistant</div>
           </div>
-          <div className="text-xs text-gray-400">Deep multi-angle web research on any topic with AI synthesis</div>
+          <div className="text-xs text-gray-400">Deep multi-angle web research with images, videos & AI synthesis</div>
         </div>
         <div className="flex gap-2">
           <div className="flex-1">
@@ -158,6 +168,21 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           </Button>
           <Badge variant="default">{topic}</Badge>
         </div>
+        {images.length > 0 && (
+          <div className="grid grid-cols-3 gap-1.5 rounded-lg overflow-hidden">
+            {images.filter((img) => !imgErrors[img.url]).slice(0, 3).map((img, i) => (
+              <div key={i} className="h-24 overflow-hidden bg-gray-800">
+                <img
+                  src={img.url}
+                  alt={img.title}
+                  className="w-full h-full object-cover"
+                  onError={() => handleImgError(img.url)}
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ))}
+          </div>
+        )}
         <Stat label="Deep Dive" value={subtopic} accent="purple" />
         <UICard accent="purple">
           <div className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{content}</div>
@@ -384,6 +409,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       )
     : sources;
 
+  const mediaCount = galleryImages.length + videos.length;
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -398,6 +425,19 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           </Button>
         </div>
       </div>
+
+      {/* Hero image */}
+      {heroImage && !imgErrors[heroImage.url] && (
+        <div className="w-full h-40 overflow-hidden rounded-lg">
+          <img
+            src={heroImage.url}
+            alt={heroImage.title}
+            className="w-full h-full object-cover"
+            onError={() => handleImgError(heroImage.url)}
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      )}
 
       {/* Executive Summary */}
       {summary && (
@@ -416,6 +456,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         tabs={[
           { value: "findings", label: "Findings (" + keyFindings.length + ")" },
           { value: "sections", label: "Sections (" + sections.length + ")" },
+          { value: "media", label: "Media (" + mediaCount + ")" },
           { value: "sources", label: "Sources (" + sources.length + ")" },
         ]}
         defaultValue="findings"
@@ -464,6 +505,20 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                     title: String(s.title),
                     content: (
                       <div className="space-y-2">
+                        {(() => {
+                          const secImg = getSectionImage(i);
+                          return secImg ? (
+                            <div className="w-full h-28 overflow-hidden rounded-lg">
+                              <img
+                                src={secImg.url}
+                                alt={secImg.title}
+                                className="w-full h-full object-cover"
+                                onError={() => handleImgError(secImg.url)}
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                          ) : null;
+                        })()}
                         {s.summary && <div className="text-xs text-gray-400 italic">{String(s.summary)}</div>}
                         {Array.isArray(s.bullets) && s.bullets.length > 0 && (
                           <div className="space-y-1">
@@ -488,6 +543,88 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                   type="multiple"
                   defaultOpen={["sec-0"]}
                 />
+              </div>
+            );
+          }
+
+          // ── Media tab ──
+          if (tab === "media") {
+            const hasImages = galleryImages.length > 0;
+            const hasVideos = videos.length > 0;
+            if (!hasImages && !hasVideos) {
+              return <EmptyState icon="Image" title="No media" description="No images or videos found for this topic" />;
+            }
+            return (
+              <div className="space-y-3">
+                {hasImages && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                      <LucideReact.Image className="w-3 h-3" /> Images ({galleryImages.length})
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {galleryImages.slice(0, 9).map((img, i) => (
+                        <div key={i} className="relative group overflow-hidden rounded-lg bg-gray-800">
+                          <img
+                            src={img.url}
+                            alt={img.title}
+                            className="w-full h-24 object-cover"
+                            onError={() => handleImgError(img.url)}
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
+                            <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {hasVideos && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                      <LucideReact.Play className="w-3 h-3" /> Videos ({videos.length})
+                    </div>
+                    <div className="space-y-2">
+                      {videos.slice(0, 6).map((v, i) => (
+                        <UICard key={i} accent="rose">
+                          <div className="flex gap-3">
+                            {v.thumbnail && (
+                              <div className="w-28 h-20 rounded overflow-hidden shrink-0 relative bg-gray-800">
+                                <img
+                                  src={v.thumbnail}
+                                  alt={v.title}
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                                {v.duration && (
+                                  <div className="absolute bottom-0.5 right-0.5 bg-black/80 px-1 py-0.5 rounded text-[9px] text-white font-mono">
+                                    {v.duration}
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center">
+                                    <LucideReact.Play className="w-4 h-4 text-white ml-0.5" />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold text-gray-100 line-clamp-2">{v.title}</div>
+                              <div className="flex gap-1.5 mt-1 flex-wrap items-center">
+                                {v.publisher && <Badge variant="info">{v.publisher}</Badge>}
+                                {v.creator && <span className="text-[10px] text-gray-400">{v.creator}</span>}
+                                {v.age && <span className="text-[10px] text-gray-500">{v.age}</span>}
+                              </div>
+                              {v.description && (
+                                <div className="text-[10px] text-gray-400 mt-1 line-clamp-2">{v.description}</div>
+                              )}
+                            </div>
+                          </div>
+                        </UICard>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           }

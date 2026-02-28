@@ -52,12 +52,49 @@ interface BraveWebResult {
   description: string;
 }
 
+interface BraveImageResult {
+  title: string;
+  url: string;       // page URL
+  thumbnail: string; // image src
+}
+
+interface BraveVideoResult {
+  title: string;
+  url: string;         // video page URL
+  thumbnail: string;   // thumbnail src
+  description: string;
+  duration?: string;
+  creator?: string;
+  publisher?: string;
+  age?: string;
+}
+
+interface ResearchImage {
+  url: string;         // thumbnail/image src
+  title: string;
+  pageUrl: string;     // source page
+  sectionIdx?: number; // matched section (-1 = unmatched/gallery)
+}
+
+interface ResearchVideo {
+  url: string;         // video page URL (clickable)
+  thumbnail: string;
+  title: string;
+  description: string;
+  duration?: string;
+  creator?: string;
+  publisher?: string;
+  age?: string;
+}
+
 interface CachedResearch {
   topic: string;
   summary: string;
   keyFindings: KeyFinding[];
   sections: ResearchSection[];
   sources: Source[];
+  images: ResearchImage[];
+  videos: ResearchVideo[];
   timestamp: number;
 }
 
@@ -155,6 +192,130 @@ async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function braveImageSearch(query: string, count = 8): Promise<BraveImageResult[]> {
+  const apiKey = getBraveApiKey();
+  if (!apiKey) return [];
+
+  const url = new URL("https://api.search.brave.com/res/v1/images/search");
+  url.searchParams.set("q", query);
+  url.searchParams.set("count", String(Math.min(Math.max(count, 1), 10)));
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 10_000);
+  try {
+    const resp = await globalThis.fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json", "X-Subscription-Token": apiKey },
+      signal: ac.signal,
+    });
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as {
+      results?: Array<{ title: string; url: string; thumbnail?: { src: string } }>;
+    };
+    return (body.results ?? []).map((r) => ({
+      title: r.title ?? "",
+      url: r.url ?? "",
+      thumbnail: r.thumbnail?.src ?? "",
+    })).filter((r) => r.thumbnail);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function braveVideoSearch(query: string, count = 6): Promise<BraveVideoResult[]> {
+  const apiKey = getBraveApiKey();
+  if (!apiKey) return [];
+
+  const url = new URL("https://api.search.brave.com/res/v1/videos/search");
+  url.searchParams.set("q", query);
+  url.searchParams.set("count", String(Math.min(Math.max(count, 1), 10)));
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 10_000);
+  try {
+    const resp = await globalThis.fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json", "X-Subscription-Token": apiKey },
+      signal: ac.signal,
+    });
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as {
+      results?: Array<{
+        title: string;
+        url: string;
+        description?: string;
+        age?: string;
+        video?: { duration?: string; creator?: string; publisher?: string };
+        thumbnail?: { src: string };
+      }>;
+    };
+    return (body.results ?? []).map((r) => ({
+      title: r.title ?? "",
+      url: r.url ?? "",
+      thumbnail: r.thumbnail?.src ?? "",
+      description: r.description ?? "",
+      duration: r.video?.duration,
+      creator: r.video?.creator,
+      publisher: r.video?.publisher,
+      age: r.age,
+    }));
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ── Image-to-section matching ──
+
+function matchImagesToSections(
+  sections: ResearchSection[],
+  rawImages: BraveImageResult[],
+): ResearchImage[] {
+  const result: ResearchImage[] = [];
+  const usedImages = new Set<number>();
+
+  // First pass: fuzzy-match images to sections by title word overlap
+  for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+    const sectionWords = sections[sIdx].title.toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
+    let bestIdx = -1;
+    let bestScore = 0;
+    for (let i = 0; i < rawImages.length; i++) {
+      if (usedImages.has(i)) continue;
+      const imgTitle = rawImages[i].title.toLowerCase();
+      const score = sectionWords.filter((w) => imgTitle.includes(w)).length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0 && bestScore > 0) {
+      usedImages.add(bestIdx);
+      result.push({
+        url: rawImages[bestIdx].thumbnail,
+        title: rawImages[bestIdx].title,
+        pageUrl: rawImages[bestIdx].url,
+        sectionIdx: sIdx,
+      });
+    }
+  }
+
+  // Second pass: remaining images become gallery items
+  for (let i = 0; i < rawImages.length; i++) {
+    if (usedImages.has(i) || !rawImages[i].thumbnail) continue;
+    result.push({
+      url: rawImages[i].thumbnail,
+      title: rawImages[i].title,
+      pageUrl: rawImages[i].url,
+      sectionIdx: -1,
+    });
+  }
+
+  return result;
 }
 
 // ── Search angle generation (deterministic) ──
@@ -394,6 +555,8 @@ Rules:
       keyFindings: (parsed.keyFindings ?? []).slice(0, 8),
       sections: (parsed.sections ?? []).slice(0, sectionCount),
       sources: [] as Source[],
+      images: [] as ResearchImage[],
+      videos: [] as ResearchVideo[],
       metadata: {
         queriesRun: 0,
         sourcesFound: 0,
@@ -409,6 +572,8 @@ Rules:
       keyFindings: result.keyFindings,
       sections: result.sections,
       sources: [],
+      images: [],
+      videos: [],
       timestamp: Date.now(),
     });
 
@@ -439,6 +604,8 @@ function generateSampleResearch(topic: string, depth: string): AgentToolResult {
       { title: "Practical Applications", summary: "Real-world use cases and impact.", bullets: ["Several industries are applying these concepts.", "Consumer-facing applications are becoming available.", "Cost-effectiveness is improving over time."], sourceRefs: [] },
     ],
     sources: [],
+    images: [],
+    videos: [],
     metadata: {
       queriesRun: 0,
       sourcesFound: 0,
@@ -462,6 +629,8 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       keyFindings: [],
       sections: [],
       sources: [],
+      images: [],
+      videos: [],
     });
   }
 
@@ -482,9 +651,13 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     return generateSampleResearch(topic, depth);
   }
 
-  // Parallel Brave searches
-  console.log(`[enso:researcher] searching "${topic}" (${depth}): ${queries.length} queries`);
-  const allBatches = await Promise.all(queries.map((q) => braveWebSearch(q, 6)));
+  // Parallel Brave searches + image/video searches (zero extra latency)
+  console.log(`[enso:researcher] searching "${topic}" (${depth}): ${queries.length} queries + media`);
+  const [allBatches, rawImages, rawVideos] = await Promise.all([
+    Promise.all(queries.map((q) => braveWebSearch(q, 6))),
+    braveImageSearch(`${topic} photos images`, 10),
+    braveVideoSearch(`${topic} video explanation`, 6),
+  ]);
   const sources = deduplicateAndScore(allBatches);
 
   if (sources.length === 0) {
@@ -536,6 +709,10 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       sourceRefs: clampRefs(s.sourceRefs),
     }));
 
+    // Match images to sections + build video list
+    const images = matchImagesToSections(sections, rawImages);
+    const videos: ResearchVideo[] = rawVideos.slice(0, 6);
+
     const result = {
       tool: "enso_researcher_search",
       topic,
@@ -544,6 +721,8 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       keyFindings,
       sections,
       sources: sources.slice(0, 25),
+      images,
+      videos,
       metadata: {
         queriesRun: queries.length,
         sourcesFound: sources.length,
@@ -559,10 +738,12 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       keyFindings: result.keyFindings,
       sections: result.sections,
       sources: result.sources,
+      images: result.images,
+      videos: result.videos,
       timestamp: Date.now(),
     });
 
-    console.log(`[enso:researcher] research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources`);
+    console.log(`[enso:researcher] research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos`);
     return jsonResult(result);
   } catch (err) {
     console.log(`[enso:researcher] LLM synthesis error: ${err}`);
@@ -587,6 +768,8 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[]): A
     keyFindings: [],
     sections,
     sources: sources.slice(0, 25),
+    images: [],
+    videos: [],
     metadata: {
       queriesRun: 0,
       sourcesFound: sources.length,
@@ -612,8 +795,17 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
     `${subtopic} examples applications`,
   ];
 
-  const batches = await Promise.all(queries.map((q) => braveWebSearch(q, 5)));
+  // Parallel: web searches + image search
+  const [batches, rawImages] = await Promise.all([
+    Promise.all(queries.map((q) => braveWebSearch(q, 5))),
+    braveImageSearch(`${subtopic} ${topic} images`, 6),
+  ]);
   const sources = deduplicateAndScore(batches);
+  const deepDiveImages: ResearchImage[] = rawImages.slice(0, 6).map((img) => ({
+    url: img.thumbnail,
+    title: img.title,
+    pageUrl: img.url,
+  }));
 
   const geminiKey = await getGeminiApiKey();
   if (!geminiKey || sources.length === 0) {
@@ -627,6 +819,7 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
       bullets: sources.slice(0, 5).map((s) => s.title),
       relatedSubtopics: [],
       sources: sources.slice(0, 10),
+      images: deepDiveImages,
     });
   }
 
@@ -652,6 +845,7 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
       bullets: Array.isArray(parsed.bullets) ? parsed.bullets : [],
       relatedSubtopics: Array.isArray(parsed.relatedSubtopics) ? parsed.relatedSubtopics : [],
       sources: sources.slice(0, 10),
+      images: deepDiveImages,
     });
   } catch (err) {
     console.log(`[enso:researcher] deep dive LLM error: ${err}`);
@@ -663,6 +857,7 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
       bullets: sources.slice(0, 5).map((s) => s.title),
       relatedSubtopics: [],
       sources: sources.slice(0, 10),
+      images: deepDiveImages,
     });
   }
 }
