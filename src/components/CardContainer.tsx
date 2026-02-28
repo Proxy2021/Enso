@@ -632,6 +632,10 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
 
   function handleAction(action: string, payload?: unknown) {
     if (isLoading) return;
+    if (action === "open_url" && typeof (payload as Record<string,unknown>)?.url === "string") {
+      window.open((payload as Record<string,unknown>).url as string, "_blank", "noopener");
+      return;
+    }
     sendCardAction(card.id, action, payload);
   }
 

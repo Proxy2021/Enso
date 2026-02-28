@@ -428,7 +428,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
       {/* Hero image */}
       {heroImage && !imgErrors[heroImage.url] && (
-        <div className="w-full h-40 overflow-hidden rounded-lg">
+        <div className="w-full h-40 overflow-hidden rounded-lg cursor-pointer" onClick={() => onAction("open_url", { url: heroImage.pageUrl || heroImage.url })}>
           <img
             src={heroImage.url}
             alt={heroImage.title}
@@ -563,7 +563,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {galleryImages.slice(0, 9).map((img, i) => (
-                        <div key={i} className="relative group overflow-hidden rounded-lg bg-gray-800">
+                        <div key={i} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
                           <img
                             src={img.url}
                             alt={img.title}
@@ -573,6 +573,9 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                           />
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
                             <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
+                          </div>
+                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-0.5">
+                            <LucideReact.ExternalLink className="w-3 h-3 text-white" />
                           </div>
                         </div>
                       ))}
@@ -587,7 +590,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                     <div className="space-y-2">
                       {videos.slice(0, 6).map((v, i) => (
                         <UICard key={i} accent="rose">
-                          <div className="flex gap-3">
+                          <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: v.url })}>
                             {v.thumbnail && (
                               <div className="w-28 h-20 rounded overflow-hidden shrink-0 relative bg-gray-800">
                                 <img
@@ -643,7 +646,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
               />
               <div className="space-y-1">
                 {filteredSources.slice(0, 20).map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 py-1 px-2 rounded bg-gray-800/30">
+                  <div key={i} className="flex items-center gap-2 py-1 px-2 rounded bg-gray-800/30 cursor-pointer hover:bg-gray-700/40 transition-colors" onClick={() => s.url && onAction("open_url", { url: s.url })}>
                     <span className="text-[10px] text-gray-500 font-mono w-5 text-right">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
