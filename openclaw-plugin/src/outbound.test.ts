@@ -77,12 +77,6 @@ vi.mock("./native-tools/registry.js", () => ({
     if (toolFamily === "multimedia") {
       return { toolName: "enso_media_scan_library", handlerPrefix: "enso_media_" };
     }
-    if (toolFamily === "travel_planner") {
-      return { toolName: "enso_travel_plan_trip", handlerPrefix: "enso_travel_" };
-    }
-    if (toolFamily === "meal_planner") {
-      return { toolName: "enso_meal_plan_week", handlerPrefix: "enso_meal_" };
-    }
     return undefined;
   }),
   isToolActionCovered: vi.fn(() => false),

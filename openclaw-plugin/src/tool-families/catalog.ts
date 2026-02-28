@@ -47,20 +47,6 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
     description: "Photo gallery: browse photos with thumbnails, EXIF metadata, AI-powered descriptions and search, favorites, collections, ratings",
   },
   {
-    toolFamily: "travel_planner",
-    fallbackToolName: "enso_travel_plan_trip",
-    actionSuffixes: ["plan_trip", "optimize_day", "budget_breakdown"],
-    signatureId: "itinerary_board",
-    description: "Travel planning: trip itineraries, day-by-day plans, destinations, activities, budget breakdowns",
-  },
-  {
-    toolFamily: "meal_planner",
-    fallbackToolName: "enso_meal_plan_week",
-    actionSuffixes: ["plan_week", "grocery_list", "swap_meal"],
-    signatureId: "weekly_meal_plan",
-    description: "Meal planning: weekly meal plans, dietary preferences, grocery lists, recipe suggestions, nutrition",
-  },
-  {
     toolFamily: "city_planner",
     fallbackToolName: "enso_city_explore",
     actionSuffixes: ["explore", "restaurants", "photo_spots", "landmarks", "send_email"],
@@ -104,7 +90,7 @@ export function removeCapability(toolFamily: string): boolean {
 }
 
 /** List all dynamically added tool families (not the built-in ones). */
-const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "travel_planner", "meal_planner", "city_planner", "web_browser", "researcher"]);
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "city_planner", "web_browser", "researcher"]);
 
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));

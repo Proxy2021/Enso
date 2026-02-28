@@ -529,6 +529,105 @@ export async function callGeminiLLMWithRetry(prompt: string, apiKey: string, mod
 }
 
 /**
+ * Call Gemini with image + text (multimodal). Used for AI photo description/tagging.
+ * Reads the image file, encodes as base64, sends as inlineData alongside the text prompt.
+ * Retries on transient errors (429, 5xx) up to 3 times.
+ */
+export async function callGeminiVision(params: {
+  imagePath: string;
+  prompt: string;
+  apiKey: string;
+  model?: string;
+  maxOutputTokens?: number;
+}): Promise<string> {
+  const { readFileSync } = await import("fs");
+  const { extname } = await import("path");
+
+  const ext = extname(params.imagePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".gif": "image/gif",
+    ".webp": "image/webp", ".bmp": "image/bmp",
+  };
+  const mimeType = mimeMap[ext] ?? "image/jpeg";
+
+  // Read image — limit to 10 MB
+  const imageBuffer = readFileSync(params.imagePath);
+  if (imageBuffer.length > 10 * 1024 * 1024) {
+    throw new Error("Image too large for vision API (max 10 MB)");
+  }
+  const imageBase64 = imageBuffer.toString("base64");
+  const model = params.model ?? GEMINI_MODEL_FAST;
+  const maxAttempts = 3;
+
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${params.apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inlineData: { mimeType, data: imageBase64 } },
+                { text: params.prompt },
+              ],
+            }],
+            generationConfig: {
+              maxOutputTokens: params.maxOutputTokens ?? 1024,
+              temperature: 0.2,
+            },
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        const err = new Error(`Gemini API error: ${response.status} ${errText.slice(0, 200)}`);
+        if (isRetryableGeminiError(err) && attempt < maxAttempts) {
+          lastError = err;
+          const delayMs = 500 * 2 ** (attempt - 1);
+          console.warn(`[enso:vision] retrying (${attempt}/${maxAttempts}) in ${delayMs}ms`);
+          await sleep(delayMs);
+          continue;
+        }
+        throw err;
+      }
+
+      const result = (await response.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("Empty Gemini Vision response");
+
+      return text
+        .replace(/^```(?:json|jsx?|tsx?)?\n?/m, "")
+        .replace(/\n?```$/m, "")
+        .trim();
+    } catch (err) {
+      lastError = err;
+      if ((err as Error).name === "AbortError") {
+        lastError = new Error("Gemini Vision timeout after 30s");
+      }
+      if (!isRetryableGeminiError(lastError) || attempt === maxAttempts) {
+        throw lastError instanceof Error ? lastError : new Error(String(lastError));
+      }
+      const delayMs = 500 * 2 ** (attempt - 1);
+      console.warn(`[enso:vision] retrying (${attempt}/${maxAttempts}) in ${delayMs}ms`);
+      await sleep(delayMs);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Gemini Vision call failed");
+}
+
+/**
  * Generate UI from pre-extracted structured data (JSON blocks in response).
  */
 export async function serverGenerateUI(params: {

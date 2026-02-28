@@ -3,8 +3,6 @@ import { getAlphaRankTemplateCode, isAlphaRankSignature } from "./templates/alph
 import { getFilesystemTemplateCode, isFilesystemSignature } from "./templates/filesystem.js";
 import { getWorkspaceTemplateCode, isWorkspaceSignature } from "./templates/workspace.js";
 import { getMediaTemplateCode, isMediaSignature } from "./templates/media.js";
-import { getTravelTemplateCode, isTravelSignature } from "./templates/travel.js";
-import { getMealTemplateCode, isMealSignature } from "./templates/meal.js";
 import { getToolingTemplateCode, isToolingSignature } from "./templates/tooling.js";
 import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/system.js";
 import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
@@ -337,24 +335,10 @@ function registerDefaultSignatures(): void {
       coverageStatus: "covered",
     },
     {
-      toolFamily: "travel_planner",
-      signatureId: "itinerary_board",
-      templateId: "travel-itinerary-v1",
-      supportedActions: ["refresh", "plan_trip", "optimize_day", "budget_breakdown"],
-      coverageStatus: "covered",
-    },
-    {
       toolFamily: "city_planner",
       signatureId: "city_research_board",
       templateId: "city-research-v1",
       supportedActions: ["refresh", "explore", "restaurants", "photo_spots", "landmarks", "send_email"],
-      coverageStatus: "covered",
-    },
-    {
-      toolFamily: "meal_planner",
-      signatureId: "weekly_meal_plan",
-      templateId: "meal-weekly-v1",
-      supportedActions: ["refresh", "plan_week", "grocery_list", "swap_meal"],
       coverageStatus: "covered",
     },
     {
@@ -486,12 +470,6 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
   if (lower.startsWith("enso_fs_")) {
     return getToolTemplate("filesystem", "directory_listing");
   }
-  if (lower.startsWith("enso_travel_")) {
-    return getToolTemplate("travel_planner", "itinerary_board");
-  }
-  if (lower.startsWith("enso_meal_")) {
-    return getToolTemplate("meal_planner", "weekly_meal_plan");
-  }
   if (lower.startsWith("enso_researcher_")) {
     return getToolTemplate("researcher", "research_board");
   }
@@ -576,12 +554,6 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_researcher_")) || (Array.isArray(record.keyFindings) && Array.isArray(record.sections) && "topic" in record)) {
     return getToolTemplate("researcher", "research_board");
   }
-  if (Array.isArray(record.itinerary) || "destination" in record || Array.isArray(record.categories)) {
-    return getToolTemplate("travel_planner", "itinerary_board");
-  }
-  if (Array.isArray(record.mealPlan) || Array.isArray(record.groceryGroups) || "weeklyBudget" in record) {
-    return getToolTemplate("meal_planner", "weekly_meal_plan");
-  }
   if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_browser_")) || ("screenshotUrl" in record && "viewportWidth" in record)) {
     return getToolTemplate("web_browser", "remote_browser");
   }
@@ -632,12 +604,6 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isMediaSignature(signature.signatureId)) {
     return getMediaTemplateCode(signature);
-  }
-  if (isTravelSignature(signature.signatureId)) {
-    return getTravelTemplateCode(signature);
-  }
-  if (isMealSignature(signature.signatureId)) {
-    return getMealTemplateCode(signature);
   }
   if (isBrowserSignature(signature.signatureId)) {
     return getBrowserTemplateCode(signature);
@@ -842,26 +808,6 @@ export function normalizeDataForToolTemplate(signature: ToolTemplate, data: unkn
         bookmarks,
       };
     }
-    case "itinerary_board": {
-      const itinerary = Array.isArray(source.itinerary) ? source.itinerary : [];
-      const categories = Array.isArray(source.categories) ? source.categories : [];
-      return {
-        ...source,
-        title: source.title ?? "Travel itinerary",
-        rows: itinerary,
-        categories,
-      };
-    }
-    case "weekly_meal_plan": {
-      const mealPlan = Array.isArray(source.mealPlan) ? source.mealPlan : [];
-      const groceryGroups = Array.isArray(source.groceryGroups) ? source.groceryGroups : [];
-      return {
-        ...source,
-        title: source.title ?? "Weekly meal plan",
-        rows: mealPlan,
-        groceryGroups,
-      };
-    }
     default: {
       if (isSystemAutoSignature(signature.signatureId)) {
         if (Array.isArray(data)) {
@@ -935,8 +881,6 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
     "enso_fs_",
     "enso_ws_",
     "enso_media_",
-    "enso_travel_",
-    "enso_meal_",
     "enso_city_",
     "enso_researcher_",
   ];

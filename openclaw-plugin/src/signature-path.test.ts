@@ -100,17 +100,6 @@ describe("tool-driven follow-up path", () => {
     expect(mediaCode).toContain("Media Library Explorer");
   });
 
-  it("maps travel and meal tools to dedicated templates", () => {
-    const travel = detectToolTemplateForToolName("enso_travel_plan_trip");
-    const meal = detectToolTemplateForToolName("enso_meal_plan_week");
-    expect(travel?.toolFamily).toBe("travel_planner");
-    expect(meal?.toolFamily).toBe("meal_planner");
-
-    const travelCode = getToolTemplateCode(travel!);
-    const mealCode = getToolTemplateCode(meal!);
-    expect(travelCode).toContain("Travel Planner Studio");
-    expect(mealCode).toContain("Meal Planning Lab");
-  });
 
   it("auto-registers generic templates for unknown runtime tool families", () => {
     const key = Symbol.for("openclaw.pluginRegistryState");

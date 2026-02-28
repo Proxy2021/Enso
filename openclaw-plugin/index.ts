@@ -7,8 +7,6 @@ import { recordToolCall } from "./src/native-tools/tool-call-store.js";
 import { registerFilesystemTools } from "./src/filesystem-tools.js";
 import { registerWorkspaceTools } from "./src/workspace-tools.js";
 import { registerMediaTools } from "./src/media-tools.js";
-import { registerTravelTools } from "./src/travel-tools.js";
-import { registerMealTools } from "./src/meal-tools.js";
 import { registerBrowserTools } from "./src/browser-tools.js";
 import { registerCityTools } from "./src/city-tools.js";
 import { registerResearcherTools } from "./src/researcher-tools.js";
@@ -59,18 +57,6 @@ const plugin = {
       fallbackPrefix: "enso_media_",
       actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "multimedia")?.actionSuffixes ?? [],
       register: () => registerMediaTools(api),
-    });
-    maybeRegisterFallbackToolFamily({
-      familyLabel: "travel",
-      fallbackPrefix: "enso_travel_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "travel_planner")?.actionSuffixes ?? [],
-      register: () => registerTravelTools(api),
-    });
-    maybeRegisterFallbackToolFamily({
-      familyLabel: "meal",
-      fallbackPrefix: "enso_meal_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "meal_planner")?.actionSuffixes ?? [],
-      register: () => registerMealTools(api),
     });
     maybeRegisterFallbackToolFamily({
       familyLabel: "city",

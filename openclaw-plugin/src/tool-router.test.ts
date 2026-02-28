@@ -74,28 +74,6 @@ function familyTools(): ToolDetail[] {
       "enso_media",
     ),
     tool(
-      "enso_travel_plan_trip",
-      "Plan a trip itinerary with constraints.",
-      {
-        type: "object",
-        properties: {
-          destination: { type: "string", description: "Trip destination city or country." },
-        },
-      },
-      "enso_travel",
-    ),
-    tool(
-      "enso_meal_plan_week",
-      "Plan weekly meals and grocery list.",
-      {
-        type: "object",
-        properties: {
-          dietaryPreferences: { type: "string", description: "Dietary preference notes." },
-        },
-      },
-      "enso_meal",
-    ),
-    tool(
       "alpharank_latest_predictions",
       "Fetch latest AlphaRank predictions and confidence.",
       {
@@ -325,8 +303,6 @@ describe("tryRouteWithLLM", () => {
     ["filesystem", "show files on desktop map test", "enso_fs_list_directory", { path: "~/Desktop" }],
     ["workspace", "give project overview map test", "enso_ws_project_overview", { repoPath: "." }],
     ["media", "scan media library map test", "enso_media_scan_library", { rootPath: "~/Pictures" }],
-    ["travel", "plan a trip to tokyo map test", "enso_travel_plan_trip", { destination: "Tokyo" }],
-    ["meal", "plan meals for this week map test", "enso_meal_plan_week", { dietaryPreferences: "high-protein" }],
     ["alpharank", "show latest market predictions map test", "alpharank_latest_predictions", { market: "us_equities" }],
   ])(
     "maps %s family tool correctly",
