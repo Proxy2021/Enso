@@ -120,7 +120,7 @@ export default function ChatInput() {
   }
 
   return (
-    <div className="border-t border-gray-800 p-4">
+    <div className="border-t border-gray-800 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div className="max-w-3xl mx-auto relative">
         {attachedFiles.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
@@ -153,7 +153,7 @@ export default function ChatInput() {
                 key={cmd.command}
                 onClick={() => selectCommand(cmd)}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                className={`w-full text-left px-3 py-2 flex items-center gap-3 transition-colors ${
+                className={`w-full text-left px-3 py-3 sm:py-2 flex items-center gap-3 transition-colors ${
                   idx === selectedIndex
                     ? "bg-indigo-600/30 text-gray-100"
                     : "text-gray-300 hover:bg-gray-700/50"
@@ -208,7 +208,7 @@ export default function ChatInput() {
             placeholder={disabled ? "Disconnected..." : "Type a message... (/ for commands)"}
             disabled={disabled}
             rows={1}
-            className="flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500 disabled:opacity-50"
+            className="flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500 disabled:opacity-50"
           />
           <button
             onClick={handleSend}
