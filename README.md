@@ -41,9 +41,6 @@ A full web browser inside a chat card. Navigate to URLs, click on the page scree
 ### 📂 File Manager
 Desktop-grade file browser with breadcrumb navigation, sorting, search, inline previews (text, images, video, audio), and full CRUD operations — create folders, rename, delete, all with confirmation dialogs.
 
-### 📈 AlphaRank
-Stock market analysis dashboard showing ranked predictions with model scores, market regime detection (bull/bear/sideways), portfolio management, and daily pipeline execution with progress tracking.
-
 ### 🛒 ClawHub Store
 Browse, search, and install OpenClaw skills from the ClawHub marketplace. View skill details, requirements, and README — then install or uninstall with one click.
 
