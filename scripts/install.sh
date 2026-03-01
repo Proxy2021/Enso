@@ -58,23 +58,26 @@ cd "$REPO_DIR"
 npm install --no-audit --no-fund 2>&1 | tail -1
 echo "  ✓ Dependencies installed"
 
-# ── 4. Gemini API key (optional) ─────────────────────────────────────
-GEMINI_KEY=""
+# ── 4. OpenClaw Onboarding ─────────────────────────────────────────
 echo
-echo "▸ Gemini API key (optional)"
-echo "  This enables AI-generated interactive apps. You can add it later."
-read -rp "  Enter Gemini API key (or press Enter to skip): " GEMINI_KEY
-if [ -n "$GEMINI_KEY" ]; then
-  # Write to .env (create or update)
-  if grep -q "^GEMINI_API_KEY=" "$REPO_DIR/.env" 2>/dev/null; then
-    sed -i.bak "s/^GEMINI_API_KEY=.*/GEMINI_API_KEY=$GEMINI_KEY/" "$REPO_DIR/.env"
-    rm -f "$REPO_DIR/.env.bak"
-  else
-    echo "GEMINI_API_KEY=$GEMINI_KEY" >> "$REPO_DIR/.env"
-  fi
-  echo "  ✓ API key saved to .env"
+ONBOARDED=$(node -e "
+  const fs = require('fs');
+  try {
+    const cfg = JSON.parse(fs.readFileSync('$OPENCLAW_JSON', 'utf-8'));
+    console.log(cfg.wizard && cfg.wizard.lastRunAt ? 'yes' : 'no');
+  } catch { console.log('no'); }
+")
+
+if [ "$ONBOARDED" = "no" ]; then
+  echo "▸ Running OpenClaw first-time setup..."
+  echo "  This will guide you through picking an AI model, entering your API key,"
+  echo "  and configuring the gateway."
+  echo
+  openclaw onboard
+  echo
+  echo "  ✓ OpenClaw onboarding complete"
 else
-  echo "  ○ Skipped"
+  echo "▸ OpenClaw already configured — skipping onboarding"
 fi
 
 # ── 5. Generate openclaw.json ────────────────────────────────────────

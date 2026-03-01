@@ -67,26 +67,30 @@ Push-Location $RepoDir
 npm install --no-audit --no-fund 2>&1 | Select-Object -Last 1
 Write-Host "  OK Dependencies installed" -ForegroundColor Green
 
-# ── 4. Gemini API key (optional) ─────────────────────────────────────
+# ── 4. OpenClaw Onboarding ─────────────────────────────────────────
 Write-Host ""
-Write-Host "# Gemini API key (optional)" -ForegroundColor Yellow
-Write-Host "  This enables AI-generated interactive apps. You can add it later."
-$GeminiKey = Read-Host "  Enter Gemini API key (or press Enter to skip)"
-if ($GeminiKey) {
-    $envFile = Join-Path $RepoDir ".env"
-    $envContent = ""
-    if (Test-Path $envFile) {
-        $envContent = Get-Content $envFile -Raw
-    }
-    if ($envContent -match "^GEMINI_API_KEY=") {
-        $envContent = $envContent -replace "GEMINI_API_KEY=.*", "GEMINI_API_KEY=$GeminiKey"
-    } else {
-        $envContent += "`nGEMINI_API_KEY=$GeminiKey"
-    }
-    Set-Content -Path $envFile -Value $envContent.Trim()
-    Write-Host "  OK API key saved to .env" -ForegroundColor Green
+
+# Escape backslashes for JSON/Node (needed early for onboarding check)
+$OpenClawJsonEscaped = $OpenClawJson -replace '\\', '\\\\'
+
+$Onboarded = node -e @"
+const fs = require('fs');
+try {
+  const cfg = JSON.parse(fs.readFileSync('$OpenClawJsonEscaped', 'utf-8'));
+  console.log(cfg.wizard && cfg.wizard.lastRunAt ? 'yes' : 'no');
+} catch { console.log('no'); }
+"@
+
+if ($Onboarded.Trim() -ne "yes") {
+    Write-Host "# Running OpenClaw first-time setup..." -ForegroundColor Yellow
+    Write-Host "  This will guide you through picking an AI model, entering your API key,"
+    Write-Host "  and configuring the gateway."
+    Write-Host ""
+    openclaw onboard
+    Write-Host ""
+    Write-Host "  OK OpenClaw onboarding complete" -ForegroundColor Green
 } else {
-    Write-Host "  o Skipped" -ForegroundColor DarkGray
+    Write-Host "# OpenClaw already configured - skipping onboarding" -ForegroundColor Yellow
 }
 
 # ── 5. Generate openclaw.json ────────────────────────────────────────
@@ -99,9 +103,8 @@ if (-not (Test-Path $OpenClawDir)) {
 $AccessToken = [guid]::NewGuid().ToString()
 $MachineName = $env:COMPUTERNAME
 
-# Escape backslashes for JSON/Node
+# Escape backslashes for JSON/Node (OpenClawJsonEscaped already set in step 4)
 $PluginDirEscaped = $PluginDir -replace '\\', '\\\\'
-$OpenClawJsonEscaped = $OpenClawJson -replace '\\', '\\\\'
 $SetupJsonEscaped = $SetupJson -replace '\\', '\\\\'
 $RepoDirEscaped = $RepoDir -replace '\\', '\\\\'
 
