@@ -89,7 +89,7 @@ let ffmpegAvailable: boolean | null = null;
 function hasFfmpeg(): boolean {
   if (ffmpegAvailable !== null) return ffmpegAvailable;
   try {
-    execFileSync("ffmpeg", ["-version"], { stdio: "ignore", timeout: 3000, windowsHide: true, shell: true });
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore", timeout: 3000, windowsHide: true });
     ffmpegAvailable = true;
   } catch {
     ffmpegAvailable = false;
@@ -116,7 +116,7 @@ function getVideoThumbnail(videoPath: string): string | undefined {
       "-frames:v", "1", "-q:v", "6",
       "-vf", "scale=320:-2",
       thumbPath,
-    ], { timeout: 10_000, windowsHide: true, stdio: "ignore", shell: true });
+    ], { timeout: 10_000, windowsHide: true, stdio: "ignore" });
     if (existsSync(thumbPath)) return thumbPath;
   } catch { /* ignore — thumbnail generation is best-effort */ }
   return undefined;
