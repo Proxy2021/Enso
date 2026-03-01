@@ -175,6 +175,14 @@ export async function startEnsoServer(opts: {
     });
   });
 
+  // ── Serve built frontend (unauthenticated — for remote access via tunnel) ──
+  const pluginDir = dirname(fileURLToPath(import.meta.url));
+  const distDir = join(pluginDir, "..", "..", "dist");
+  if (existsSync(distDir) && existsSync(join(distDir, "index.html"))) {
+    app.use(express.static(distDir));
+    runtime.log?.(`[enso] serving frontend from ${distDir}`);
+  }
+
   // ── Token auth middleware — skip if no token configured (local-only mode) ──
   if (accessToken) {
     app.use((req, res, next) => {
@@ -373,17 +381,11 @@ export async function startEnsoServer(opts: {
     res.json({ mediaUrl, filePath });
   });
 
-  // ── Serve built frontend (for remote access via tunnel) ──
-  // Look for dist/ in the Enso repo root (one level above openclaw-plugin/)
-  const pluginDir = dirname(fileURLToPath(import.meta.url));
-  const distDir = join(pluginDir, "..", "..", "dist");
+  // ── SPA fallback (must be after all API routes) ──
   if (existsSync(distDir) && existsSync(join(distDir, "index.html"))) {
-    app.use(express.static(distDir));
-    // SPA fallback: serve index.html for any unmatched GET (but not /ws, /media/, /upload, /health)
     app.get("*", (_req, res) => {
       res.sendFile(join(distDir, "index.html"));
     });
-    runtime.log?.(`[enso] serving frontend from ${distDir}`);
   }
 
   const server: Server = createServer(app);
