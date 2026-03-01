@@ -1,7 +1,7 @@
 {
   "name": "@openclaw/enso",
   "version": "2026.2.15",
-  "description": "OpenClaw Enso plugin — React-based AI channel with dynamic UI generation",
+  "description": "OpenClaw channel plugin — every AI answer becomes an interactive React app",
   "type": "module",
   "openclaw": {
     "extensions": [

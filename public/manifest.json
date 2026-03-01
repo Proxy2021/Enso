@@ -1,7 +1,7 @@
 {
   "name": "Enso",
   "short_name": "Enso",
-  "description": "OpenClaw, but every answer is an app.",
+  "description": "Every AI answer is an interactive app.",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#030712",
