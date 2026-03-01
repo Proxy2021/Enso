@@ -183,40 +183,7 @@ export async function startEnsoServer(opts: {
     runtime.log?.(`[enso] serving frontend from ${distDir}`);
   }
 
-  // ── Token auth middleware — skip if no token configured (local-only mode) ──
-  if (accessToken) {
-    app.use((req, res, next) => {
-      if (req.method === "OPTIONS") return next();
-      const token = req.headers.authorization?.replace("Bearer ", "")
-        || (req.query.token as string | undefined);
-      if (token !== accessToken) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-      next();
-    });
-    runtime.log?.(`[enso] access token required for remote connections`);
-  }
-
-  // Inspect domain-evolution queue/state for newly discovered uncaptured domains.
-  app.get("/domain-evolution/jobs", (_req, res) => {
-    const jobs = getDomainEvolutionJobs();
-    res.json({
-      total: jobs.length,
-      jobs,
-    });
-  });
-
-  app.get("/domain-evolution/jobs/:id", (req, res) => {
-    const job = getDomainEvolutionJob(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
-      return;
-    }
-    res.json(job);
-  });
-
-  // Serve local media files referenced in agent responses
+  // ── Media serving (before auth — URLs use non-guessable base64url paths) ──
   app.get("/media/:encodedPath", (req, res) => {
     let filePath = Buffer.from(req.params.encodedPath, "base64url").toString("utf-8");
 
@@ -358,6 +325,39 @@ export async function startEnsoServer(opts: {
       res.setHeader("Content-Length", fileSize);
       createReadStream(filePath).pipe(res);
     }
+  });
+
+  // ── Token auth middleware — skip if no token configured (local-only mode) ──
+  if (accessToken) {
+    app.use((req, res, next) => {
+      if (req.method === "OPTIONS") return next();
+      const token = req.headers.authorization?.replace("Bearer ", "")
+        || (req.query.token as string | undefined);
+      if (token !== accessToken) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      next();
+    });
+    runtime.log?.(`[enso] access token required for remote connections`);
+  }
+
+  // Inspect domain-evolution queue/state for newly discovered uncaptured domains.
+  app.get("/domain-evolution/jobs", (_req, res) => {
+    const jobs = getDomainEvolutionJobs();
+    res.json({
+      total: jobs.length,
+      jobs,
+    });
+  });
+
+  app.get("/domain-evolution/jobs/:id", (req, res) => {
+    const job = getDomainEvolutionJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    res.json(job);
   });
 
   // Accept image uploads from the browser client
