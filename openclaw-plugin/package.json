@@ -1,7 +1,7 @@
 {
   "name": "@openclaw/enso",
   "version": "2026.2.15",
-  "description": "OpenClaw channel plugin — every AI answer becomes an interactive React app",
+  "description": "OpenClaw channel plugin — a self-evolving AI app platform where every answer is an interactive app",
   "keywords": ["openclaw", "openclaw-plugin", "channel", "react", "interactive-ui", "ai"],
   "repository": {
     "type": "git",

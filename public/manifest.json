@@ -1,7 +1,7 @@
 {
   "name": "Enso",
   "short_name": "Enso",
-  "description": "Every AI answer is an interactive app.",
+  "description": "A self-evolving AI app platform — every answer is an interactive app.",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#030712",

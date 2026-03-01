@@ -1,8 +1,8 @@
 # Enso
 
-**Every AI answer is an interactive app.**
+**A self-evolving AI app platform — every answer is an interactive app, and the app builds itself.**
 
-Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that turns conversational AI into on-demand interactive experiences. Ask a question and get a clean text response — then tap a button to transform it into a live React application with charts, tables, controls, and actions.
+Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that turns conversational AI into on-demand interactive experiences. Ask a question, get a response, then transform it into a live React application — or use the built-in coding agent to build entirely new features without leaving the app. The platform, its tools, and its apps all evolve organically from within.
 
 ## How It Works
 

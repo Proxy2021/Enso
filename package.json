@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.2.0",
   "versionCode": 2,
-  "description": "Every AI answer is an interactive app — OpenClaw channel plugin with on-demand React UI generation",
+  "description": "A self-evolving AI app platform — every answer is an interactive app, and the app builds itself",
   "type": "module",
   "scripts": {
     "dev": "vite",
