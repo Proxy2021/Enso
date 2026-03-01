@@ -53,10 +53,11 @@ const execFileAsync = promisify(execFile);
 
 async function runClawHub(args: string[], timeoutMs = 15_000): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
-    const { stdout, stderr } = await execFileAsync("clawhub", args, {
+    const { stdout, stderr } = await execFileAsync("clawhub", [...args, "--no-input"], {
       timeout: timeoutMs,
       maxBuffer: 1024 * 1024,
       windowsHide: true,
+      shell: true,
     });
     return { stdout: stdout.trim(), stderr: stderr.trim(), code: 0 };
   } catch (err: unknown) {
@@ -85,95 +86,91 @@ function errorResult(message: string): AgentToolResult {
   return { content: [{ type: "text", text: `[ERROR] ${message}` }] };
 }
 
-/** Parse `clawhub list` output into InstalledSkill entries. */
+function cliNotFoundResult(tool: string, extra?: Record<string, unknown>): AgentToolResult {
+  return jsonResult({
+    tool,
+    error: true,
+    message: "clawhub CLI not found. Install with: npm install -g clawhub",
+    skills: [],
+    installedSlugs: [],
+    ...extra,
+  });
+}
+
+// ── Parsers ──
+
+/**
+ * Parse `clawhub list` text output.
+ * Format: `slug  version` per line (2+ spaces between columns).
+ */
 function parseListOutput(stdout: string): InstalledSkill[] {
   const skills: InstalledSkill[] = [];
-  // clawhub list outputs lines like:
-  //   skill-name  v1.0.0  Description text  /path/to/skill
-  // or JSON if --json flag is supported
-  try {
-    const parsed = JSON.parse(stdout);
-    if (Array.isArray(parsed)) {
-      return parsed.map((s: Record<string, unknown>) => ({
-        slug: String(s.slug ?? s.name ?? ""),
-        name: String(s.name ?? s.slug ?? ""),
-        description: String(s.description ?? ""),
-        emoji: String(s.emoji ?? ""),
-        version: String(s.version ?? ""),
-        path: String(s.path ?? s.installPath ?? ""),
-      }));
-    }
-  } catch {
-    // Not JSON — parse text output
-  }
-
   for (const line of stdout.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("─") || trimmed.startsWith("=") || trimmed.toLowerCase().startsWith("name")) continue;
-    // Try tab/multi-space splitting
-    const parts = trimmed.split(/\t+|\s{2,}/);
-    if (parts.length >= 2) {
+    if (!trimmed || trimmed.startsWith("─") || trimmed.startsWith("=")) continue;
+    const parts = trimmed.split(/\s{2,}/);
+    if (parts.length >= 1 && /^[a-z0-9][a-z0-9._-]*$/i.test(parts[0])) {
+      const slug = parts[0].trim();
       skills.push({
-        slug: parts[0].trim(),
-        name: parts[0].trim(),
-        description: parts.length >= 3 ? parts.slice(1, -1).join(" ").trim() : "",
+        slug,
+        name: slug,
+        description: "",
         emoji: "",
-        version: parts.length >= 2 ? (parts.find((p) => /^v?\d+\.\d+/.test(p)) ?? "") : "",
-        path: parts[parts.length - 1]?.startsWith("/") || parts[parts.length - 1]?.includes("\\") ? parts[parts.length - 1].trim() : "",
+        version: parts[1]?.trim() ?? "",
+        path: "",
       });
     }
   }
   return skills;
 }
 
-/** Parse `clawhub search` output into SkillSummary entries. */
-function parseSearchOutput(stdout: string, installedSlugs: Set<string>): SkillSummary[] {
-  try {
-    const parsed = JSON.parse(stdout);
-    if (Array.isArray(parsed)) {
-      return parsed.map((s: Record<string, unknown>) => ({
-        slug: String(s.slug ?? s.name ?? ""),
-        name: String(s.name ?? s.slug ?? ""),
-        description: String(s.description ?? ""),
-        emoji: String(s.emoji ?? ""),
-        version: String(s.version ?? ""),
-        author: String(s.author ?? s.publisher ?? ""),
-        downloads: typeof s.downloads === "number" ? s.downloads : undefined,
-        installed: installedSlugs.has(String(s.slug ?? s.name ?? "")),
-      }));
-    }
-  } catch {
-    // Not JSON — parse text output
-  }
+/**
+ * Parse `clawhub explore --json` output.
+ * Returns `{ items: [ { slug, displayName, summary, tags: {latest}, stats: {downloads, ...}, latestVersion: {version}, ... } ] }`
+ */
+function parseExploreJson(stdout: string, installedSlugs: Set<string>): SkillSummary[] {
+  const parsed = JSON.parse(stdout) as { items?: unknown[] };
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+  return items.map((raw) => {
+    const s = raw as Record<string, unknown>;
+    const tags = (s.tags as Record<string, string>) ?? {};
+    const stats = (s.stats as Record<string, number>) ?? {};
+    const lv = (s.latestVersion as Record<string, unknown>) ?? {};
+    const slug = String(s.slug ?? "");
+    return {
+      slug,
+      name: String(s.displayName ?? slug),
+      description: String(s.summary ?? ""),
+      emoji: "",
+      version: String(lv.version ?? tags.latest ?? ""),
+      author: "",
+      downloads: typeof stats.downloads === "number" ? stats.downloads : undefined,
+      installed: installedSlugs.has(slug),
+    };
+  });
+}
 
+/**
+ * Parse `clawhub search` text output.
+ * Format: `slug  description text  (score)` per line (2+ spaces between columns).
+ */
+function parseSearchText(stdout: string, installedSlugs: Set<string>): SkillSummary[] {
   const skills: SkillSummary[] = [];
   for (const line of stdout.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("─") || trimmed.startsWith("=") || trimmed.toLowerCase().startsWith("search")) continue;
-    // Try to extract slug and description from formatted lines
-    // Common patterns: "  slug-name  Description text  by author  v1.0.0"
-    //                  "slug-name — Description text"
-    const dashMatch = trimmed.match(/^([a-z0-9][a-z0-9-]*)\s+[—–-]\s+(.+)/i);
-    if (dashMatch) {
-      const slug = dashMatch[1];
+    if (!trimmed || trimmed.startsWith("─") || trimmed.startsWith("=") || trimmed.startsWith("-")) continue;
+    const parts = trimmed.split(/\s{2,}/);
+    if (parts.length >= 1 && /^[a-z0-9][a-z0-9._-]*$/i.test(parts[0])) {
+      const slug = parts[0].trim();
+      // Last part might be score like "(3.599)" — strip it
+      let desc = parts.slice(1).join(" ").trim();
+      desc = desc.replace(/\s*\(\d+\.\d+\)\s*$/, "").trim();
+      // If description is the same as slug, it's a placeholder
+      if (desc.toLowerCase() === slug.toLowerCase()) desc = "";
       skills.push({
         slug,
         name: slug,
-        description: dashMatch[2].trim(),
-        emoji: "",
-        version: "",
-        author: "",
-        installed: installedSlugs.has(slug),
-      });
-      continue;
-    }
-    const parts = trimmed.split(/\t+|\s{2,}/);
-    if (parts.length >= 1 && /^[a-z0-9][a-z0-9-]*$/.test(parts[0])) {
-      const slug = parts[0];
-      skills.push({
-        slug,
-        name: slug,
-        description: parts.slice(1).join(" ").trim(),
+        description: desc,
         emoji: "",
         version: "",
         author: "",
@@ -184,145 +181,145 @@ function parseSearchOutput(stdout: string, installedSlugs: Set<string>): SkillSu
   return skills;
 }
 
-/** Parse `clawhub inspect` output into SkillDetail. */
-function parseInspectOutput(stdout: string, slug: string, isInstalled: boolean): SkillDetail {
-  try {
-    const parsed = JSON.parse(stdout) as Record<string, unknown>;
-    const meta = (parsed.metadata as Record<string, unknown>) ?? {};
-    const ocMeta = (meta.openclaw as Record<string, unknown>) ?? {};
-    const requires = (ocMeta.requires as Record<string, unknown>) ?? {};
-    return {
-      slug: String(parsed.slug ?? parsed.name ?? slug),
-      name: String(parsed.name ?? parsed.slug ?? slug),
-      description: String(parsed.description ?? ""),
-      emoji: String(ocMeta.emoji ?? parsed.emoji ?? ""),
-      version: String(parsed.version ?? ""),
-      author: String(parsed.author ?? parsed.publisher ?? ""),
-      readme: String(parsed.readme ?? parsed.content ?? parsed.body ?? ""),
-      requires: {
-        env: Array.isArray(requires.env) ? requires.env.map(String) : [],
-        bins: Array.isArray(requires.bins) ? requires.bins.map(String) : [],
-      },
-      installed: isInstalled,
-    };
-  } catch {
-    // Parse text output — best-effort
-    return {
-      slug,
-      name: slug,
-      description: stdout.split("\n").find((l) => l.trim() && !l.startsWith("#"))?.trim() ?? "",
-      emoji: "",
-      version: "",
-      author: "",
-      readme: stdout,
-      requires: { env: [], bins: [] },
-      installed: isInstalled,
-    };
-  }
+/**
+ * Parse `clawhub inspect --json` output.
+ * Returns `{ skill: { slug, displayName, summary, ... }, latestVersion: { version, changelog }, owner: { handle, displayName } }`
+ */
+function parseInspectJson(stdout: string, slug: string, isInstalled: boolean): SkillDetail {
+  const parsed = JSON.parse(stdout) as Record<string, unknown>;
+  const skill = (parsed.skill as Record<string, unknown>) ?? {};
+  const owner = (parsed.owner as Record<string, unknown>) ?? {};
+  const lv = (parsed.latestVersion as Record<string, unknown>) ?? {};
+  const tags = (skill.tags as Record<string, string>) ?? {};
+  return {
+    slug: String(skill.slug ?? slug),
+    name: String(skill.displayName ?? skill.slug ?? slug),
+    description: String(skill.summary ?? ""),
+    emoji: "",
+    version: String(lv.version ?? tags.latest ?? ""),
+    author: String(owner.handle ?? owner.displayName ?? ""),
+    readme: String(lv.changelog ?? ""),
+    requires: { env: [], bins: [] },
+    installed: isInstalled,
+  };
 }
 
-/** Get set of installed skill slugs (cached per invocation). */
-async function getInstalledSlugs(): Promise<Set<string>> {
-  const result = await runClawHub(["list", "--json"]);
-  if (result.code === 127) return new Set();
-  if (result.code !== 0) {
-    // Try without --json flag
-    const fallback = await runClawHub(["list"]);
-    if (fallback.code !== 0) return new Set();
-    return new Set(parseListOutput(fallback.stdout).map((s) => s.slug));
+/**
+ * Parse `clawhub inspect` text output (fallback).
+ * Multi-line key-value format:
+ *   slug  Display Name
+ *   Summary: ...
+ *   Owner: ...
+ *   Latest: version
+ */
+function parseInspectText(stdout: string, slug: string, isInstalled: boolean): SkillDetail {
+  const lines = stdout.split(/\r?\n/);
+  let name = slug;
+  let description = "";
+  let version = "";
+  let author = "";
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("Summary:")) description = trimmed.slice(8).trim();
+    else if (trimmed.startsWith("Owner:")) author = trimmed.slice(6).trim();
+    else if (trimmed.startsWith("Latest:")) version = trimmed.slice(7).trim();
+    else if (!name && trimmed && !trimmed.includes(":")) {
+      // First non-empty, non-key line is probably "slug  Display Name"
+      const parts = trimmed.split(/\s{2,}/);
+      if (parts.length >= 2) name = parts[1];
+    }
   }
+  // Extract name from first line: "slug  Display Name"
+  if (lines.length > 0) {
+    const firstParts = lines[0].trim().split(/\s{2,}/);
+    if (firstParts.length >= 2) name = firstParts[1];
+  }
+
+  return {
+    slug,
+    name,
+    description,
+    emoji: "",
+    version,
+    author,
+    readme: stdout,
+    requires: { env: [], bins: [] },
+    installed: isInstalled,
+  };
+}
+
+/** Get set of installed skill slugs. */
+async function getInstalledSlugs(): Promise<Set<string>> {
+  const result = await runClawHub(["list"]);
+  if (result.code === 127 || result.code !== 0) return new Set();
   return new Set(parseListOutput(result.stdout).map((s) => s.slug));
 }
 
 // ── Tool implementations ──
 
-async function clawHubBrowse(params: BrowseParams): Promise<AgentToolResult> {
-  const category = params.category?.trim() || "";
-  const queries: string[] = category
-    ? [category]
-    : ["popular AI agent skills", "productivity automation", "developer tools", "data analysis"];
-
+async function clawHubBrowse(_params: BrowseParams): Promise<AgentToolResult> {
   const installedSlugs = await getInstalledSlugs();
 
-  // Search with multiple queries to get a diverse set
-  const allSkills: SkillSummary[] = [];
-  const seenSlugs = new Set<string>();
+  // Use `explore --json` for browse — returns latest/popular skills
+  const result = await runClawHub(["explore", "--json"]);
+  if (result.code === 127) return cliNotFoundResult("enso_clawhub_browse");
 
-  for (const query of queries) {
-    const result = await runClawHub(["search", query, "--json"]);
-    if (result.code === 127) {
-      return jsonResult({
-        tool: "enso_clawhub_browse",
-        error: true,
-        message: "clawhub CLI not found. Install with: npm install -g clawhub",
-        skills: [],
-        installedSlugs: [],
-      });
-    }
-    let skills: SkillSummary[];
-    if (result.code !== 0) {
-      // Try without --json
-      const fallback = await runClawHub(["search", query]);
-      if (fallback.code !== 0) continue;
-      skills = parseSearchOutput(fallback.stdout, installedSlugs);
-    } else {
-      skills = parseSearchOutput(result.stdout, installedSlugs);
-    }
-    for (const skill of skills) {
-      if (!seenSlugs.has(skill.slug)) {
-        seenSlugs.add(skill.slug);
-        allSkills.push(skill);
-      }
-    }
+  if (result.code !== 0) {
+    return jsonResult({
+      tool: "enso_clawhub_browse",
+      skills: [],
+      installedSlugs: [...installedSlugs],
+      totalFound: 0,
+      error: true,
+      message: result.stderr || "Failed to browse skills",
+    });
+  }
+
+  let skills: SkillSummary[];
+  try {
+    skills = parseExploreJson(result.stdout, installedSlugs);
+  } catch {
+    return jsonResult({
+      tool: "enso_clawhub_browse",
+      skills: [],
+      installedSlugs: [...installedSlugs],
+      totalFound: 0,
+      error: true,
+      message: "Failed to parse explore output",
+    });
   }
 
   return jsonResult({
     tool: "enso_clawhub_browse",
-    category: category || "popular",
-    skills: allSkills,
+    skills,
     installedSlugs: [...installedSlugs],
-    totalFound: allSkills.length,
+    totalFound: skills.length,
   });
 }
 
 async function clawHubSearch(params: SearchParams): Promise<AgentToolResult> {
   const query = params.query?.trim();
-  if (!query) {
-    return errorResult("Search query is required");
-  }
+  if (!query) return errorResult("Search query is required");
 
   const installedSlugs = await getInstalledSlugs();
-  const result = await runClawHub(["search", query, "--json"]);
+  const result = await runClawHub(["search", query]);
 
-  if (result.code === 127) {
+  if (result.code === 127) return cliNotFoundResult("enso_clawhub_search", { query });
+
+  if (result.code !== 0) {
     return jsonResult({
       tool: "enso_clawhub_search",
-      error: true,
-      message: "clawhub CLI not found. Install with: npm install -g clawhub",
       query,
       skills: [],
-      installedSlugs: [],
+      installedSlugs: [...installedSlugs],
+      totalFound: 0,
+      error: true,
+      message: result.stderr || "Search failed",
     });
   }
 
-  let skills: SkillSummary[];
-  if (result.code !== 0) {
-    const fallback = await runClawHub(["search", query]);
-    if (fallback.code !== 0) {
-      return jsonResult({
-        tool: "enso_clawhub_search",
-        query,
-        skills: [],
-        installedSlugs: [...installedSlugs],
-        totalFound: 0,
-        error: true,
-        message: result.stderr || fallback.stderr || "Search failed",
-      });
-    }
-    skills = parseSearchOutput(fallback.stdout, installedSlugs);
-  } else {
-    skills = parseSearchOutput(result.stdout, installedSlugs);
-  }
+  const skills = parseSearchText(result.stdout, installedSlugs);
 
   return jsonResult({
     tool: "enso_clawhub_search",
@@ -335,24 +332,16 @@ async function clawHubSearch(params: SearchParams): Promise<AgentToolResult> {
 
 async function clawHubInspect(params: InspectParams): Promise<AgentToolResult> {
   const slug = params.slug?.trim();
-  if (!slug) {
-    return errorResult("Skill slug is required");
-  }
+  if (!slug) return errorResult("Skill slug is required");
 
   const installedSlugs = await getInstalledSlugs();
+  // inspect supports --json
   const result = await runClawHub(["inspect", slug, "--json"]);
 
-  if (result.code === 127) {
-    return jsonResult({
-      tool: "enso_clawhub_inspect",
-      error: true,
-      message: "clawhub CLI not found. Install with: npm install -g clawhub",
-      slug,
-    });
-  }
+  if (result.code === 127) return cliNotFoundResult("enso_clawhub_inspect", { slug });
 
   if (result.code !== 0) {
-    // Try without --json
+    // Fallback to text output
     const fallback = await runClawHub(["inspect", slug]);
     if (fallback.code !== 0) {
       return jsonResult({
@@ -362,42 +351,36 @@ async function clawHubInspect(params: InspectParams): Promise<AgentToolResult> {
         message: result.stderr || fallback.stderr || `Failed to inspect skill "${slug}"`,
       });
     }
-    const detail = parseInspectOutput(fallback.stdout, slug, installedSlugs.has(slug));
+    const detail = parseInspectText(fallback.stdout, slug, installedSlugs.has(slug));
     return jsonResult({ tool: "enso_clawhub_inspect", ...detail });
   }
 
-  const detail = parseInspectOutput(result.stdout, slug, installedSlugs.has(slug));
+  let detail: SkillDetail;
+  try {
+    detail = parseInspectJson(result.stdout, slug, installedSlugs.has(slug));
+  } catch {
+    // JSON parse failed — try text fallback
+    const fallback = await runClawHub(["inspect", slug]);
+    detail = parseInspectText(fallback.stdout, slug, installedSlugs.has(slug));
+  }
   return jsonResult({ tool: "enso_clawhub_inspect", ...detail });
 }
 
 async function clawHubInstalled(): Promise<AgentToolResult> {
-  const result = await runClawHub(["list", "--json"]);
+  const result = await runClawHub(["list"]);
 
-  if (result.code === 127) {
+  if (result.code === 127) return cliNotFoundResult("enso_clawhub_installed");
+
+  if (result.code !== 0) {
     return jsonResult({
       tool: "enso_clawhub_installed",
-      error: true,
-      message: "clawhub CLI not found. Install with: npm install -g clawhub",
       skills: [],
+      error: true,
+      message: result.stderr || "Failed to list installed skills",
     });
   }
 
-  let skills: InstalledSkill[];
-  if (result.code !== 0) {
-    const fallback = await runClawHub(["list"]);
-    if (fallback.code !== 0) {
-      return jsonResult({
-        tool: "enso_clawhub_installed",
-        skills: [],
-        error: true,
-        message: result.stderr || fallback.stderr || "Failed to list installed skills",
-      });
-    }
-    skills = parseListOutput(fallback.stdout);
-  } else {
-    skills = parseListOutput(result.stdout);
-  }
-
+  const skills = parseListOutput(result.stdout);
   return jsonResult({
     tool: "enso_clawhub_installed",
     skills,
@@ -407,30 +390,17 @@ async function clawHubInstalled(): Promise<AgentToolResult> {
 
 async function clawHubInstall(params: InstallParams): Promise<AgentToolResult> {
   const slug = params.slug?.trim();
-  if (!slug) {
-    return errorResult("Skill slug is required");
-  }
+  if (!slug) return errorResult("Skill slug is required");
 
   console.log(`[enso:clawhub] Installing skill "${slug}"...`);
   const result = await runClawHub(["install", slug], 30_000);
 
   if (result.code === 127) {
-    return jsonResult({
-      tool: "enso_clawhub_install",
-      slug,
-      success: false,
-      message: "clawhub CLI not found. Install with: npm install -g clawhub",
-    });
+    return jsonResult({ tool: "enso_clawhub_install", slug, success: false, message: "clawhub CLI not found. Install with: npm install -g clawhub" });
   }
-
   if (result.code !== 0) {
     console.log(`[enso:clawhub] Install failed for "${slug}": ${result.stderr}`);
-    return jsonResult({
-      tool: "enso_clawhub_install",
-      slug,
-      success: false,
-      message: result.stderr || `Failed to install "${slug}"`,
-    });
+    return jsonResult({ tool: "enso_clawhub_install", slug, success: false, message: result.stderr || `Failed to install "${slug}"` });
   }
 
   console.log(`[enso:clawhub] Successfully installed "${slug}"`);
@@ -445,30 +415,17 @@ async function clawHubInstall(params: InstallParams): Promise<AgentToolResult> {
 
 async function clawHubUninstall(params: UninstallParams): Promise<AgentToolResult> {
   const slug = params.slug?.trim();
-  if (!slug) {
-    return errorResult("Skill slug is required");
-  }
+  if (!slug) return errorResult("Skill slug is required");
 
   console.log(`[enso:clawhub] Uninstalling skill "${slug}"...`);
   const result = await runClawHub(["uninstall", slug], 15_000);
 
   if (result.code === 127) {
-    return jsonResult({
-      tool: "enso_clawhub_uninstall",
-      slug,
-      success: false,
-      message: "clawhub CLI not found. Install with: npm install -g clawhub",
-    });
+    return jsonResult({ tool: "enso_clawhub_uninstall", slug, success: false, message: "clawhub CLI not found. Install with: npm install -g clawhub" });
   }
-
   if (result.code !== 0) {
     console.log(`[enso:clawhub] Uninstall failed for "${slug}": ${result.stderr}`);
-    return jsonResult({
-      tool: "enso_clawhub_uninstall",
-      slug,
-      success: false,
-      message: result.stderr || `Failed to uninstall "${slug}"`,
-    });
+    return jsonResult({ tool: "enso_clawhub_uninstall", slug, success: false, message: result.stderr || `Failed to uninstall "${slug}"` });
   }
 
   console.log(`[enso:clawhub] Successfully uninstalled "${slug}"`);
