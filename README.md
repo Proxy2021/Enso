@@ -22,6 +22,37 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 - **Mobile-first** — Android app (Capacitor), PWA support, QR code pairing from phone to PC
 - **Dark theme** — Designed for comfortable extended use
 
+## Built-in Apps
+
+Enso ships with production-ready interactive apps that showcase the platform's range. Every app is generated from tool results — the same pipeline you use to build your own.
+
+### 🔍 Web Researcher
+Ask any question and get a structured research board with key findings, confidence levels, source attribution, embedded videos, and images. Drill into subtopics, compare two topics side-by-side, ask follow-up questions in context, or email the full report.
+
+### 🏙️ City Planner
+Say "plan a trip to Tokyo" and get an interactive travel board — restaurants with ratings and cuisine filters, photo spots, landmarks, and YouTube video guides. Click any place for a detailed modal. Send the full itinerary as an HTML email.
+
+### 📸 Photo Gallery
+Browse your local photo library with AI-powered descriptions, EXIF metadata, search, favorites, star ratings, and batch tagging. Full lightbox viewer with keyboard navigation. Organize photos into collections.
+
+### 🌐 Remote Browser
+A full web browser inside a chat card. Navigate to URLs, click on the page screenshot to interact, type into forms, scroll, and manage bookmarks — all through the agent.
+
+### 📂 File Manager
+Desktop-grade file browser with breadcrumb navigation, sorting, search, inline previews (text, images, video, audio), and full CRUD operations — create folders, rename, delete, all with confirmation dialogs.
+
+### 📈 AlphaRank
+Stock market analysis dashboard showing ranked predictions with model scores, market regime detection (bull/bear/sideways), portfolio management, and daily pipeline execution with progress tracking.
+
+### 🛒 ClawHub Store
+Browse, search, and install OpenClaw skills from the ClawHub marketplace. View skill details, requirements, and README — then install or uninstall with one click.
+
+### 💻 Workspace Studio
+Scan your development environment — detect git repositories, discover installed dev tools (Node, Python, Docker, etc.), and get project structure overviews with file type statistics.
+
+### ➕ Build Your Own
+Any of these can be built from scratch. Describe what you want in natural language, and Enso's build pipeline creates a full app (executors + template) that persists and can be reused. Or use the Refine flow to iterate on any existing app with a single instruction.
+
 ## Quick Start
 
 ### Windows
