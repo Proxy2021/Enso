@@ -50,7 +50,7 @@ export default function CardTimeline() {
         <div className="text-center border border-gray-800/80 bg-gray-900/60 backdrop-blur rounded-2xl px-6 py-5 shadow-[0_10px_40px_rgba(0,0,0,0.45)]">
           <p className="text-lg font-medium text-gray-200">Enso</p>
           <p className="text-sm mt-1 text-gray-400">
-            OpenClaw, but every answer is an app.
+            Every answer is an app.
           </p>
         </div>
       </div>
