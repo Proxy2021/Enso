@@ -10,6 +10,7 @@ import { registerMediaTools } from "./src/media-tools.js";
 import { registerBrowserTools } from "./src/browser-tools.js";
 import { registerCityTools } from "./src/city-tools.js";
 import { registerResearcherTools } from "./src/researcher-tools.js";
+import { registerClawHubTools } from "./src/clawhub-tools.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./src/tool-families/catalog.js";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -110,6 +111,12 @@ const plugin = {
       fallbackPrefix: "enso_researcher_",
       actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "researcher")?.actionSuffixes ?? [],
       register: () => registerResearcherTools(api),
+    });
+    maybeRegisterFallbackToolFamily({
+      familyLabel: "clawhub",
+      fallbackPrefix: "enso_clawhub_",
+      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "clawhub")?.actionSuffixes ?? [],
+      register: () => registerClawHubTools(api),
     });
 
     // ── Native Tool Bridge: capture agent tool usage ──

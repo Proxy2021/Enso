@@ -9,6 +9,7 @@ import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.
 import { getBrowserTemplateCode, isBrowserSignature } from "./templates/browser.js";
 import { getCityTemplateCode, isCitySignature } from "./templates/city.js";
 import { getResearcherTemplateCode, isResearcherSignature } from "./templates/researcher.js";
+import { getClawHubTemplateCode, isClawHubSignature } from "./templates/clawhub.js";
 import { TOOL_FAMILY_CAPABILITIES, getCapabilityForFamily } from "../tool-families/catalog.js";
 
 // ── Types ──
@@ -356,6 +357,13 @@ function registerDefaultSignatures(): void {
       coverageStatus: "covered",
     },
     {
+      toolFamily: "clawhub",
+      signatureId: "clawhub_store",
+      templateId: "clawhub-store-v1",
+      supportedActions: ["browse", "search", "inspect", "installed", "install", "uninstall"],
+      coverageStatus: "covered",
+    },
+    {
       toolFamily: "enso_tooling",
       signatureId: "tool_console",
       templateId: "tool-console-v1",
@@ -473,6 +481,9 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
   if (lower.startsWith("enso_researcher_")) {
     return getToolTemplate("researcher", "research_board");
   }
+  if (lower.startsWith("enso_clawhub_")) {
+    return getToolTemplate("clawhub", "clawhub_store");
+  }
   if (lower.includes("plugin") || lower.includes("clawhub")) {
     return getToolTemplate("plugin_discovery", "plugin_catalog_list");
   }
@@ -554,6 +565,9 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_researcher_")) || (Array.isArray(record.keyFindings) && Array.isArray(record.sections) && "topic" in record)) {
     return getToolTemplate("researcher", "research_board");
   }
+  if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_clawhub_")) || ("installedSlugs" in record && Array.isArray(record.skills))) {
+    return getToolTemplate("clawhub", "clawhub_store");
+  }
   if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_browser_")) || ("screenshotUrl" in record && "viewportWidth" in record)) {
     return getToolTemplate("web_browser", "remote_browser");
   }
@@ -613,6 +627,9 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isResearcherSignature(signature.signatureId)) {
     return getResearcherTemplateCode(signature);
+  }
+  if (isClawHubSignature(signature.signatureId)) {
+    return getClawHubTemplateCode(signature);
   }
   if (isToolingSignature(signature.signatureId)) {
     return getToolingTemplateCode(signature);
@@ -883,6 +900,7 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
     "enso_media_",
     "enso_city_",
     "enso_researcher_",
+    "enso_clawhub_",
   ];
   if (knownPrefixes.includes(input.prefix)) return;
   if (dynamicPrefixSignatureMap.has(input.prefix)) return;

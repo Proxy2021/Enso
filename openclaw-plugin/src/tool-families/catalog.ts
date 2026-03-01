@@ -67,6 +67,13 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
     signatureId: "research_board",
     description: "Web researcher: deep multi-angle research on any topic with source attribution, comparisons, follow-up Q&A, and email reports",
   },
+  {
+    toolFamily: "clawhub",
+    fallbackToolName: "enso_clawhub_browse",
+    actionSuffixes: ["browse", "search", "inspect", "installed", "install", "uninstall"],
+    signatureId: "clawhub_store",
+    description: "ClawHub skill store: browse, search, install and manage OpenClaw skills",
+  },
 ];
 
 export function getCapabilityForFamily(toolFamily: string): ToolFamilyCapability | undefined {
@@ -90,7 +97,7 @@ export function removeCapability(toolFamily: string): boolean {
 }
 
 /** List all dynamically added tool families (not the built-in ones). */
-const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "city_planner", "web_browser", "researcher"]);
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "city_planner", "web_browser", "researcher", "clawhub"]);
 
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));
