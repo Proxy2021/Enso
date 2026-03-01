@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { randomUUID } from "crypto";
 import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk";
 import type { CoreConfig, EnsoAccountConfig } from "./types.js";
 
@@ -16,6 +17,8 @@ export type ResolvedEnsoAccount = {
   host: string;
   geminiApiKey: string;
   mode: "im" | "ui" | "full";
+  accessToken?: string;
+  machineName?: string;
   config: EnsoAccountConfig;
 };
 
@@ -38,6 +41,13 @@ export function resolveEnsoAccount(params: {
   const configured = true;
   const mode = section.mode ?? "full";
 
+  // Access token: from config, env, or auto-generate
+  let accessToken = section.accessToken ?? process.env.ENSO_ACCESS_TOKEN ?? undefined;
+  if (!accessToken) {
+    accessToken = randomUUID();
+    console.log(`[enso] Auto-generated access token: ${accessToken}`);
+  }
+
   return {
     accountId,
     enabled: section.enabled !== false,
@@ -47,6 +57,8 @@ export function resolveEnsoAccount(params: {
     host,
     geminiApiKey,
     mode,
+    accessToken,
+    machineName: section.machineName ?? process.env.ENSO_MACHINE_NAME ?? undefined,
     config: section,
   };
 }

@@ -19,6 +19,8 @@ export type EnsoAccountConfig = {
   blockStreamingCoalesce?: { minChars?: number; idleMs?: number };
   textChunkLimit?: number;
   mode?: "im" | "ui" | "full";
+  accessToken?: string;
+  machineName?: string;
 };
 
 export type ChannelMode = "im" | "ui" | "full";

@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { existsSync, statSync, createReadStream, createWriteStream, readdirSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import { extname, dirname, basename, join } from "path";
 import { fileURLToPath } from "url";
-import { tmpdir, homedir } from "os";
+import { tmpdir, homedir, hostname, platform, arch, totalmem } from "os";
 import { spawn } from "child_process";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
@@ -146,15 +146,49 @@ export async function startEnsoServer(opts: {
   const app = express();
   app.use(express.json());
 
+  // ── CORS — allow cross-origin requests (auth via token, not cookies) ──
+  app.use((_req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    if (_req.method === "OPTIONS") { res.status(204).end(); return; }
+    next();
+  });
+
+  // ── Health endpoint (unauthenticated — used for connection testing) ──
+  const accessToken = account.accessToken;
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
       channel: "enso",
-      accountId: account.accountId,
+      authRequired: !!accessToken,
+      version: 1,
       clients: clients.size,
       timestamp: Date.now(),
+      machine: {
+        name: account.machineName ?? hostname(),
+        hostname: hostname(),
+        platform: platform(),
+        arch: arch(),
+        memoryGB: Math.round(totalmem() / (1024 ** 3)),
+      },
     });
   });
+
+  // ── Token auth middleware — skip if no token configured (local-only mode) ──
+  if (accessToken) {
+    app.use((req, res, next) => {
+      if (req.method === "OPTIONS") return next();
+      const token = req.headers.authorization?.replace("Bearer ", "")
+        || (req.query.token as string | undefined);
+      if (token !== accessToken) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      next();
+    });
+    runtime.log?.(`[enso] access token required for remote connections`);
+  }
 
   // Inspect domain-evolution queue/state for newly discovered uncaptured domains.
   app.get("/domain-evolution/jobs", (_req, res) => {
@@ -339,10 +373,32 @@ export async function startEnsoServer(opts: {
     res.json({ mediaUrl, filePath });
   });
 
+  // ── Serve built frontend (for remote access via tunnel) ──
+  // Look for dist/ in the Enso repo root (one level above openclaw-plugin/)
+  const pluginDir = dirname(fileURLToPath(import.meta.url));
+  const distDir = join(pluginDir, "..", "..", "dist");
+  if (existsSync(distDir) && existsSync(join(distDir, "index.html"))) {
+    app.use(express.static(distDir));
+    // SPA fallback: serve index.html for any unmatched GET (but not /ws, /media/, /upload, /health)
+    app.get("*", (_req, res) => {
+      res.sendFile(join(distDir, "index.html"));
+    });
+    runtime.log?.(`[enso] serving frontend from ${distDir}`);
+  }
+
   const server: Server = createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws" });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    // ── WebSocket token auth ──
+    if (accessToken) {
+      const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
+      if (wsUrl.searchParams.get("token") !== accessToken) {
+        ws.close(4001, "Unauthorized");
+        return;
+      }
+    }
+
     const connectionId = randomUUID().slice(0, 8);
     const sessionKey = `enso_${connectionId}`;
     runtime.log?.(`[enso] client connected: ${connectionId}`);

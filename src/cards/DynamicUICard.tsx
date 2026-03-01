@@ -2,7 +2,20 @@ import React, { useMemo, useState, useEffect } from "react";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
+import { resolveMediaUrl } from "../lib/connection";
 import type { CardRendererProps } from "./types";
+
+/** Recursively resolve all `/media/...` strings in data to absolute URLs for remote backends. */
+function resolveMediaUrlsInData(data: unknown): unknown {
+  if (typeof data === "string" && data.startsWith("/media/")) return resolveMediaUrl(data);
+  if (Array.isArray(data)) return data.map(resolveMediaUrlsInData);
+  if (data && typeof data === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data as Record<string, unknown>)) result[k] = resolveMediaUrlsInData(v);
+    return result;
+  }
+  return data;
+}
 
 // ── Fix Buttons ──
 
@@ -187,9 +200,9 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
           </div>
         )}
         <UIErrorBoundary onAction={onAction} autoHealStatus={card.autoHealStatus}>
-          <Comp data={card.data ?? {}} sendMessage={sendMessageAsAction} onAction={onAction} theme="dark" />
+          <Comp data={resolveMediaUrlsInData(card.data ?? {})} sendMessage={sendMessageAsAction} onAction={onAction} theme="dark" />
         </UIErrorBoundary>
-        {hasMedia && <MediaGallery urls={card.mediaUrls!} />}
+        {hasMedia && <MediaGallery urls={card.mediaUrls!.map(u => resolveMediaUrl(u))} />}
         {card.text && (
           <div className="mt-1 px-1">
             <button

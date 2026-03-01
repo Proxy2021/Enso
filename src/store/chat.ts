@@ -4,6 +4,14 @@ import type { AppInfo, ClientMessage, ServerMessage, ToolRouting } from "@shared
 import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
 import { createWSClient, type ConnectionState } from "../lib/ws-client";
+import {
+  getActiveBackend,
+  buildWsUrl,
+  getBackendBaseUrl,
+  authHeaders,
+  setActiveBackend,
+  type BackendConfig,
+} from "../lib/connection";
 
 export interface ProjectInfo {
   name: string;
@@ -18,6 +26,7 @@ interface CardStore {
   // Connection & session
   connectionState: ConnectionState;
   isWaiting: boolean;
+  showConnectionPicker: boolean;
   _wsClient: ReturnType<typeof createWSClient> | null;
 
   // Apps
@@ -55,6 +64,8 @@ interface CardStore {
   launchEnsoCode: () => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
+  setShowConnectionPicker: (show: boolean) => void;
+  connectToBackend: (config: BackendConfig) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -64,6 +75,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   cards: {},
   connectionState: "disconnected",
   isWaiting: false,
+  showConnectionPicker: false,
   _wsClient: null,
   apps: [],
   toolFamilies: [],
@@ -77,10 +89,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const existing = get()._wsClient;
     if (existing) return;
 
-    const wsUrl =
-      location.protocol === "https:"
-        ? `wss://${location.host}/ws`
-        : `ws://${location.host}/ws`;
+    const backend = getActiveBackend();
+    const wsUrl = buildWsUrl(backend);
 
     const client = createWSClient({
       url: wsUrl,
@@ -223,9 +233,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const previewUrls: string[] = [];
 
     for (const file of mediaFiles) {
-      const res = await fetch("/upload", {
+      const res = await fetch(`${getBackendBaseUrl()}/upload`, {
         method: "POST",
-        headers: { "Content-Type": file.type },
+        headers: authHeaders({ "Content-Type": file.type }),
         body: file,
       });
       if (res.ok) {
@@ -486,6 +496,29 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   setCodeSessionCwd: (cwd: string) => {
     set({ codeSessionCwd: cwd });
+  },
+
+  setShowConnectionPicker: (show: boolean) => {
+    set({ showConnectionPicker: show });
+  },
+
+  connectToBackend: (config: BackendConfig) => {
+    // Disconnect existing connection
+    get()._wsClient?.disconnect();
+    set({ _wsClient: null, connectionState: "disconnected" });
+
+    // Set as active and connect
+    setActiveBackend(config.id);
+    set({ showConnectionPicker: false });
+
+    const wsUrl = buildWsUrl(config);
+    const client = createWSClient({
+      url: wsUrl,
+      onMessage: (msg) => get()._handleServerMessage(msg),
+      onStateChange: (state) => set({ connectionState: state }),
+    });
+    set({ _wsClient: client });
+    client.connect();
   },
 
   _handleServerMessage: (msg: ServerMessage) => {

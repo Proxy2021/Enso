@@ -3,11 +3,15 @@ import { useChatStore } from "./store/chat";
 import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
 import AppsMenu from "./components/AppsMenu";
+import ConnectionPicker from "./components/ConnectionPicker";
+import { parseDeepLink, setActiveBackend, getActiveBackend } from "./lib/connection";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
 
 function ConnectionDot() {
   const state = useChatStore((s) => s.connectionState);
+  const setShowPicker = useChatStore((s) => s.setShowConnectionPicker);
+  const active = getActiveBackend();
   const color =
     state === "connected"
       ? "bg-emerald-400"
@@ -16,21 +20,36 @@ function ConnectionDot() {
         : "bg-red-400";
 
   return (
-    <div className="flex items-center gap-2 text-sm text-gray-400">
+    <button
+      onClick={() => setShowPicker(true)}
+      className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+      title="Connection settings"
+    >
       <div className={`w-2 h-2 rounded-full ${color}`} />
-      {state}
-    </div>
+      {active ? active.name : state}
+    </button>
   );
 }
 
 export default function App() {
   const connect = useChatStore((s) => s.connect);
   const disconnect = useChatStore((s) => s.disconnect);
+  const connectToBackend = useChatStore((s) => s.connectToBackend);
 
   useEffect(() => {
+    // Handle deep-link: ?backend=https://...&token=xxx
+    const deepLink = parseDeepLink();
+    if (deepLink) {
+      setActiveBackend(deepLink.id);
+      connectToBackend(deepLink);
+      // Clean URL params
+      window.history.replaceState({}, "", window.location.pathname);
+      return () => disconnect();
+    }
+    // Normal startup: connect to last-used or same-origin
     connect();
     return () => disconnect();
-  }, [connect, disconnect]);
+  }, [connect, disconnect, connectToBackend]);
 
   return (
     <div className="flex flex-col h-screen text-gray-100">
@@ -46,6 +65,7 @@ export default function App() {
       </header>
       <CardTimeline />
       <ChatInput />
+      <ConnectionPicker />
     </div>
   );
 }

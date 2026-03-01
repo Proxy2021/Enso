@@ -55,8 +55,12 @@ In the same `openclaw.json`, add an `enso` section under `channels`:
 | `enabled`      | boolean | `true`      | Enable/disable the channel                               |
 | `dmPolicy`     | string  | `open`      | DM access policy: `"open"`, `"pairing"`, or `"disabled"` |
 | `geminiApiKey` | string  | env var     | API key for Gemini UI generation (optional)              |
+| `accessToken`  | string  | auto-gen    | Shared secret for remote access authentication           |
+| `machineName`  | string  | OS hostname | Friendly name shown in the Connection Picker             |
 
 The `geminiApiKey` can also be set via the `GEMINI_API_KEY` environment variable or a `gemini.key` file in the plugin directory. If not set, structured data will render as formatted JSON instead of generated React components.
+
+The `accessToken` can also be set via `ENSO_ACCESS_TOKEN` env var. If omitted, a random UUID is auto-generated on startup and printed to the console. The `machineName` can also be set via `ENSO_MACHINE_NAME` env var.
 
 ## 3. Restart the Gateway
 
@@ -114,10 +118,25 @@ curl http://localhost:3001/health
 Expected response:
 
 ```json
-{"status":"ok","channel":"enso","accountId":"default","clients":0}
+{
+  "status": "ok",
+  "channel": "enso",
+  "authRequired": true,
+  "version": 1,
+  "clients": 0,
+  "machine": {
+    "name": "DESKTOP-ABC123",
+    "hostname": "DESKTOP-ABC123",
+    "platform": "win32",
+    "arch": "x64",
+    "memoryGB": 32
+  }
+}
 ```
 
 ## 5. Connect the React App
+
+### Local Development
 
 The Enso React app connects to the WebSocket server via Vite's dev proxy. The default `vite.config.ts` already proxies `/ws` to `localhost:3001`:
 
@@ -140,13 +159,143 @@ npm run dev:client
 
 Open the app in a browser and send a message. It will route through OpenClaw's agent pipeline and return a response.
 
+### Remote Access
+
+Enso supports connecting to backends over the internet. The frontend includes a **Connection Picker** (click the connection dot in the header) that lets you add, test, and switch between multiple remote servers.
+
+#### Authentication
+
+All remote connections are protected by a shared access token:
+
+- **HTTP requests**: `Authorization: Bearer <token>` header
+- **WebSocket**: `?token=<token>` query parameter
+- **Media URLs**: `?token=<token>` appended automatically by the frontend
+
+The `/health` endpoint is unauthenticated so the Connection Picker's **Test** button works before you enter a token.
+
+#### Exposing via Cloudflare Tunnel (Recommended)
+
+Each machine gets a fixed subdomain. Example setup for `app.enso.net`:
+
+```bash
+# 1. Install cloudflared
+winget install cloudflare.cloudflared
+
+# 2. Login (opens browser — select your domain)
+cloudflared tunnel login
+
+# 3. Create a named tunnel
+cloudflared tunnel create enso
+
+# 4. Route a subdomain to the tunnel
+cloudflared tunnel route dns enso app.yourdomain.com
+
+# 5. Write config (~/.cloudflared/config.yml)
+cat > ~/.cloudflared/config.yml <<EOF
+tunnel: <tunnel-id>
+credentials-file: ~/.cloudflared/<tunnel-id>.json
+
+ingress:
+  - hostname: app.yourdomain.com
+    service: http://localhost:3001
+    originRequest:
+      noTLSVerify: true
+  - service: http_status:404
+EOF
+
+# 6. Test it
+cloudflared tunnel run enso
+
+# 7. Install as a system service (auto-start on boot)
+cloudflared service install
+```
+
+HTTPS is automatic via Cloudflare. No port forwarding or firewall rules needed.
+
+### Multi-Machine Setup
+
+When you have multiple OpenClaw machines, each one gets its own subdomain and identity:
+
+| Machine        | Subdomain              | Config                           |
+|----------------|------------------------|----------------------------------|
+| Home Desktop   | `app.yourdomain.com`   | `machineName: "Home Desktop"`    |
+| Office Server  | `office.yourdomain.com`| `machineName: "Office Server"`   |
+| Media PC       | `media.yourdomain.com` | `machineName: "Media PC"`        |
+
+On each additional machine, run:
+
+```bash
+cloudflared tunnel create <name>
+cloudflared tunnel route dns <name> <subdomain>.yourdomain.com
+```
+
+Then update `~/.cloudflared/config.yml` with the new tunnel ID and hostname, and install the service.
+
+#### Machine Identity
+
+Each machine reports its identity via the `/health` endpoint:
+
+```json
+{
+  "status": "ok",
+  "machine": {
+    "name": "Home Desktop",
+    "hostname": "DESKTOP-ABC123",
+    "platform": "win32",
+    "arch": "x64",
+    "memoryGB": 32
+  }
+}
+```
+
+Set a friendly name in `openclaw.json`:
+
+```json
+{
+  "channels": {
+    "enso": {
+      "machineName": "Home Desktop",
+      "accessToken": "your-secret-token"
+    }
+  }
+}
+```
+
+Or via environment variable: `ENSO_MACHINE_NAME="Home Desktop"`
+
+The Connection Picker's **Test** button displays this info and auto-fills the server name field.
+
+#### Deep Links
+
+Share a one-click connection link:
+
+```
+https://your-enso-frontend/?backend=https://app.yourdomain.com&token=your-token
+```
+
+The frontend auto-creates the backend entry and connects immediately.
+
+### PWA (Mobile)
+
+Enso is a Progressive Web App. On your phone:
+
+1. Open the Enso frontend URL in Chrome
+2. Tap the three-dot menu → **Add to Home Screen**
+3. It installs as a standalone app (no browser chrome)
+4. Use the Connection Picker to add your remote server(s)
+
 ## Architecture
 
 ```
-Browser (React App on :5173)
-    |  Vite proxy /ws
+Browser (React App)
+    |  Local: Vite proxy /ws → localhost:3001
+    |  Remote: wss://app.yourdomain.com/ws?token=xxx
+    v
+Cloudflare Tunnel (remote only)
+    |  HTTPS termination, fixed subdomain
     v
 Enso WS Server (:3001)
+    |  CORS + token auth middleware
     |  Started by gateway.startAccount()
     v
 OpenClaw Gateway (:18789)
@@ -163,10 +312,11 @@ Enso deliver callback
 Browser via WebSocket
     |  User clicks card button
     v
-Three-path action dispatch:
-    1. Mechanical (built-in data mutations)
-    2. Native tool (prefix + action → direct tool execution via registry)
-    3. Agent fallback (re-route through OpenClaw agent)
+Four-path action dispatch:
+    1. Refine (regenerate template only — 1 LLM call)
+    2. Mechanical (built-in data mutations)
+    3. Native tool (prefix + action → direct tool execution via registry)
+    4. Agent fallback (re-route through OpenClaw agent)
 ```
 
 ### Native Tool Bridge

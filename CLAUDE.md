@@ -24,9 +24,9 @@ Enso has two layers:
 src/                          # React frontend (Vite entry)
 ├── App.tsx                   # Root layout
 ├── cards/                    # Card renderers (DynamicUICard, TerminalCard, etc.)
-├── components/               # CardTimeline, CardContainer, ChatInput, MarkdownText
+├── components/               # CardTimeline, CardContainer, ChatInput, MarkdownText, ConnectionPicker
 ├── store/chat.ts             # Zustand state
-├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components)
+├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components), connection manager
 └── types.ts
 
 openclaw-plugin/              # OpenClaw channel plugin (the backend)
@@ -134,6 +134,41 @@ npm run build        # Production build
 Requires a running OpenClaw gateway with Enso plugin enabled. Plugin starts Express + WS on port 3001. Vite proxies `/ws`, `/media`, `/upload` to localhost:3001.
 
 Dev commands: `/delete-apps` — clear all dynamically created apps.
+
+## Remote Access & Multi-Machine
+
+Enso supports connecting to remote backends over the internet. The frontend includes a **Connection Picker** for managing multiple servers.
+
+### Key Components
+
+- **`src/lib/connection.ts`** — Backend config CRUD (localStorage), URL resolution with token auth, deep-link support
+- **`src/components/ConnectionPicker.tsx`** — Modal UI for adding/testing/switching backends
+- **Server auth** (`server.ts`) — CORS middleware, token auth (Bearer header or `?token=` query param), WS token validation
+
+### Configuration
+
+| Config Key     | Env Var                | Purpose                                     |
+|----------------|------------------------|---------------------------------------------|
+| `accessToken`  | `ENSO_ACCESS_TOKEN`    | Shared secret for auth (auto-generated if unset) |
+| `machineName`  | `ENSO_MACHINE_NAME`    | Friendly name shown in Connection Picker    |
+
+### Connection Modes
+
+- **Same-origin** (default): No active backend config → relative URLs via Vite proxy
+- **Remote**: Active backend set → absolute URLs with token auth appended
+- **Deep-link**: `?backend=https://...&token=xxx` in URL auto-creates + connects
+
+### Media URL Resolution
+
+Backend returns relative `/media/...` URLs. `DynamicUICard` recursively resolves these to absolute URLs with tokens for remote backends via `resolveMediaUrlsInData()`.
+
+### Exposing to Internet
+
+Recommended: **Cloudflare Tunnel** — each machine gets a fixed subdomain (e.g., `app.yourdomain.com`). See `openclaw-plugin/SETUP.md` for full setup instructions.
+
+### PWA
+
+Enso is installable as a Progressive Web App — `public/manifest.json`, `public/sw.js` (app shell caching), and PWA meta tags in `index.html`.
 
 ## OpenClaw Integration
 

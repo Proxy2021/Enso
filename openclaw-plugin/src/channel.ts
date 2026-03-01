@@ -44,6 +44,8 @@ export const ensoPlugin: ChannelPlugin<ResolvedEnsoAccount> = {
         blockStreaming: { type: "boolean" },
         textChunkLimit: { type: "integer", minimum: 1 },
         mode: { type: "string", enum: ["im", "ui", "full"] },
+        accessToken: { type: "string" },
+        machineName: { type: "string" },
       },
     },
   },
@@ -65,7 +67,7 @@ export const ensoPlugin: ChannelPlugin<ResolvedEnsoAccount> = {
         cfg: cfg as CoreConfig,
         sectionKey: "enso",
         accountId,
-        clearBaseFields: ["name", "port", "host", "geminiApiKey", "mode"],
+        clearBaseFields: ["name", "port", "host", "geminiApiKey", "mode", "accessToken"],
       }),
     isConfigured: (account) => account.configured,
     describeAccount: (account) => ({
