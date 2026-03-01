@@ -14,6 +14,7 @@ type TestStatus = "idle" | "testing" | "ok" | "fail";
 export default function ConnectionPicker() {
   const show = useChatStore((s) => s.showConnectionPicker);
   const setShow = useChatStore((s) => s.setShowConnectionPicker);
+  const setShowWizard = useChatStore((s) => s.setShowSetupWizard);
   const connectToBackend = useChatStore((s) => s.connectToBackend);
   const connectionState = useChatStore((s) => s.connectionState);
   const connect = useChatStore((s) => s.connect);
@@ -227,6 +228,20 @@ export default function ConnectionPicker() {
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>
               Add Remote Server
+            </button>
+          )}
+
+          {/* Setup wizard link — shown on native when no backends exist */}
+          {isNative && backends.length === 0 && (
+            <button
+              onClick={() => { setShow(false); setShowWizard(true); }}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-blue-400 hover:text-blue-300 transition-colors text-sm"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 7V4h3" /><path d="M17 4h3v3" /><path d="M20 17v3h-3" /><path d="M7 20H4v-3" />
+                <rect x="7" y="7" width="10" height="10" rx="1" />
+              </svg>
+              Set up a new server
             </button>
           )}
         </div>

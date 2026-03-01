@@ -4,8 +4,10 @@ import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
 import AppsMenu from "./components/AppsMenu";
 import ConnectionPicker from "./components/ConnectionPicker";
-import { parseDeepLink, setActiveBackend, getActiveBackend } from "./lib/connection";
+import SetupWizard from "./components/SetupWizard";
+import { parseDeepLink, setActiveBackend, getActiveBackend, loadBackends } from "./lib/connection";
 import { isNative } from "./lib/platform";
+import { initDeepLinkListener } from "./lib/deep-link-handler";
 import UpdateBanner from "./components/UpdateBanner";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
@@ -48,9 +50,15 @@ export default function App() {
       window.history.replaceState({}, "", window.location.pathname);
       return () => disconnect();
     }
-    // Native: no backend configured → show connection picker
+
+    // Native: no backends saved at all → show setup wizard (first launch)
     if (isNative && !getActiveBackend()) {
-      useChatStore.getState().setShowConnectionPicker(true);
+      const savedBackends = loadBackends();
+      if (savedBackends.length === 0) {
+        useChatStore.getState().setShowSetupWizard(true);
+      } else {
+        useChatStore.getState().setShowConnectionPicker(true);
+      }
       return () => disconnect();
     }
 
@@ -58,6 +66,17 @@ export default function App() {
     connect();
     return () => disconnect();
   }, [connect, disconnect, connectToBackend]);
+
+  // Initialize deep link listener for enso://connect QR codes
+  useEffect(() => {
+    initDeepLinkListener(
+      (config) => connectToBackend(config),
+      () => {
+        useChatStore.getState().setShowSetupWizard(false);
+        useChatStore.getState().setShowConnectionPicker(false);
+      },
+    );
+  }, [connectToBackend]);
 
   return (
     <div className="flex flex-col h-dvh text-gray-100">
@@ -75,6 +94,7 @@ export default function App() {
       <CardTimeline />
       <ChatInput />
       <ConnectionPicker />
+      <SetupWizard />
     </div>
   );
 }

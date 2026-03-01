@@ -3,6 +3,8 @@ import { isNative } from "./platform";
 /**
  * Initialize Capacitor native plugins (status bar, back button).
  * No-op on web — safe to call unconditionally.
+ *
+ * Deep link handling is initialized separately in App.tsx via initDeepLinkListener.
  */
 export async function initNativePlugins(): Promise<void> {
   if (!isNative) return;

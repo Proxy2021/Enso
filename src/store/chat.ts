@@ -27,6 +27,7 @@ interface CardStore {
   connectionState: ConnectionState;
   isWaiting: boolean;
   showConnectionPicker: boolean;
+  showSetupWizard: boolean;
   _wsClient: ReturnType<typeof createWSClient> | null;
 
   // Apps
@@ -65,6 +66,7 @@ interface CardStore {
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   setShowConnectionPicker: (show: boolean) => void;
+  setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
@@ -76,6 +78,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   connectionState: "disconnected",
   isWaiting: false,
   showConnectionPicker: false,
+  showSetupWizard: false,
   _wsClient: null,
   apps: [],
   toolFamilies: [],
@@ -506,6 +509,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   setShowConnectionPicker: (show: boolean) => {
     set({ showConnectionPicker: show });
+  },
+
+  setShowSetupWizard: (show: boolean) => {
+    set({ showSetupWizard: show });
   },
 
   connectToBackend: (config: BackendConfig) => {

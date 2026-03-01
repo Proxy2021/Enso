@@ -6,7 +6,8 @@ dist
 tsconfig.tsbuildinfo
 .DS_Store
 openclaw-plugin/ui-cache/
-scripts/
+# Track install scripts but ignore any generated files in scripts/
+scripts/*.log
 
 # Android (Capacitor)
 android/app/build/
