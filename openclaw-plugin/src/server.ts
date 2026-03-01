@@ -2,10 +2,11 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
-import { existsSync, statSync, createReadStream, readdirSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, statSync, createReadStream, createWriteStream, readdirSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import { extname, dirname, basename, join } from "path";
 import { fileURLToPath } from "url";
-import { tmpdir } from "os";
+import { tmpdir, homedir } from "os";
+import { spawn } from "child_process";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
@@ -188,6 +189,72 @@ export async function startEnsoServer(opts: {
     }
 
     const ext = extname(filePath).toLowerCase();
+
+    // ── On-demand video transcoding (MPEG-4 Part 2 → H.264) ──
+    if (req.query.transcode === "1" && STREAMABLE_EXTS.has(ext)) {
+      const TRANSCODE_DIR = join(homedir(), ".openclaw", "enso-apps", "multimedia", "transcode");
+      mkdirSync(TRANSCODE_DIR, { recursive: true });
+      const cacheKey = Buffer.from(filePath, "utf-8").toString("base64url");
+      const cachePath = join(TRANSCODE_DIR, cacheKey + ".mp4");
+
+      // Serve cached transcoded file with Range support
+      if (existsSync(cachePath)) {
+        const cachedSize = statSync(cachePath).size;
+        res.setHeader("Content-Type", "video/mp4");
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.setHeader("Accept-Ranges", "bytes");
+        const range = req.headers.range;
+        if (range) {
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : cachedSize - 1;
+          res.writeHead(206, {
+            "Content-Range": `bytes ${start}-${end}/${cachedSize}`,
+            "Content-Length": end - start + 1,
+          });
+          createReadStream(cachePath, { start, end }).pipe(res);
+        } else {
+          res.setHeader("Content-Length", cachedSize);
+          createReadStream(cachePath).pipe(res);
+        }
+        return;
+      }
+
+      // Stream-transcode: pipe fragmented MP4 to client AND write to cache
+      res.setHeader("Content-Type", "video/mp4");
+      const tmpPath = cachePath + ".tmp";
+      const ff = spawn("ffmpeg", [
+        "-i", filePath,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+        "-f", "mp4", "pipe:1",
+      ], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+
+      let clientOpen = true;
+      const cacheStream = createWriteStream(tmpPath);
+
+      ff.stdout.on("data", (chunk: Buffer) => {
+        cacheStream.write(chunk);
+        if (clientOpen) {
+          try { res.write(chunk); } catch { clientOpen = false; }
+        }
+      });
+
+      ff.on("close", (code) => {
+        cacheStream.end(() => {
+          if (code === 0 && existsSync(tmpPath)) {
+            try { renameSync(tmpPath, cachePath); } catch {}
+          } else {
+            try { unlinkSync(tmpPath); } catch {}
+          }
+        });
+        if (clientOpen) res.end();
+      });
+
+      req.on("close", () => { clientOpen = false; });
+      return;
+    }
 
     // Enforce file size limit — skip for streamable video/audio (Range requests serve small chunks)
     if (!STREAMABLE_EXTS.has(ext)) {

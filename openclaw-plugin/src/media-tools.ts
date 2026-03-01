@@ -30,6 +30,10 @@ const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
 const DEFAULT_MEDIA_LIMIT = 120;
 const THUMB_DIR = join(homedir(), ".openclaw", "enso-apps", "multimedia", "thumbs");
+const TRANSCODE_DIR = join(homedir(), ".openclaw", "enso-apps", "multimedia", "transcode");
+
+/** Video codecs that browsers can natively decode */
+const WEB_CODECS = new Set(["h264", "vp8", "vp9", "av1"]);
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -122,6 +126,32 @@ function getVideoThumbnail(videoPath: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Get the cached video codec for a file, probing with ffprobe if not yet cached.
+ * Returns the codec name (e.g. "h264", "mpeg4") or undefined.
+ */
+function getVideoCodec(videoPath: string): string | undefined {
+  if (!hasFfmpeg()) return undefined;
+  const key = Buffer.from(videoPath, "utf-8").toString("base64url");
+  const codecFile = join(THUMB_DIR, key + ".codec");
+  if (existsSync(codecFile)) {
+    try { return readFileSync(codecFile, "utf-8").trim() || undefined; } catch {}
+  }
+  try {
+    mkdirSync(THUMB_DIR, { recursive: true });
+    const result = execFileSync("ffprobe", [
+      "-v", "quiet", "-select_streams", "v:0",
+      "-show_entries", "stream=codec_name", "-of", "csv=p=0",
+      videoPath,
+    ], { timeout: 5000, windowsHide: true, encoding: "utf-8" });
+    const codec = result.trim().split("\n")[0]?.trim();
+    if (codec) {
+      try { writeFileSync(codecFile, codec, "utf-8"); } catch {}
+    }
+    return codec || undefined;
+  } catch { return undefined; }
+}
+
 function buildMediaItem(fullPath: string, stat: ReturnType<typeof lstatSync>): MediaItem {
   const ext = extname(fullPath).toLowerCase();
   const isImage = IMAGE_EXTS.has(ext);
@@ -138,10 +168,21 @@ function buildMediaItem(fullPath: string, stat: ReturnType<typeof lstatSync>): M
   if (isImage) {
     try { item.exif = parseImageMeta(fullPath) ?? undefined; } catch { /* ignore */ }
   }
-  // Generate thumbnail for videos
+  // Generate thumbnail for videos + check codec for browser compatibility
   if (VIDEO_EXTS.has(ext)) {
     const thumbPath = getVideoThumbnail(fullPath);
     if (thumbPath) item.thumbnailUrl = toMediaUrl(thumbPath);
+    // Check if video needs transcoding for browser playback
+    const cacheKey = Buffer.from(fullPath, "utf-8").toString("base64url");
+    const cachedTranscode = join(TRANSCODE_DIR, cacheKey + ".mp4");
+    if (existsSync(cachedTranscode)) {
+      item.mediaUrl = toMediaUrl(cachedTranscode);
+    } else {
+      const codec = getVideoCodec(fullPath);
+      if (codec && !WEB_CODECS.has(codec)) {
+        item.mediaUrl += "&transcode=1";
+      }
+    }
   }
   // Attach persisted metadata
   const stored = storeGet(`ai:${fullPath}`) as { description?: string; tags?: string[] } | null;
