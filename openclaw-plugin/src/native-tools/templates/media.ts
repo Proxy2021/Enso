@@ -186,7 +186,11 @@ export default function GeneratedUI({ data, onAction }) {
         </div>
 
         <div className="rounded-lg overflow-hidden bg-black/40 flex items-center justify-center" style={{ maxHeight: "400px" }}>
-          <img src={data.mediaUrl} alt={data.name} style={{ maxWidth: "100%", maxHeight: "400px", objectFit: "contain" }} />
+          {data.type === "video" ? (
+            <EnsoUI.VideoPlayer src={data.mediaUrl} style={{ maxWidth: "100%", maxHeight: "400px" }} />
+          ) : (
+            <img src={data.mediaUrl} alt={data.name} style={{ maxWidth: "100%", maxHeight: "400px", objectFit: "contain" }} />
+          )}
         </div>
 
         {/* Rating */}
@@ -584,16 +588,27 @@ export default function GeneratedUI({ data, onAction }) {
         <div className="grid grid-cols-3 gap-1.5 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
           {filtered.map(function(item, idx) {
             var isImage = item.type === "image";
+            var isVideo = item.type === "video";
+            var hasThumb = isImage || (isVideo && item.thumbnailUrl);
             return (
-              <button key={item.path || idx} onClick={function() { if (isImage) setLightboxIdx(idx); else onAction("view_photo", { path: item.path }); }}
+              <button key={item.path || idx} onClick={function() { if (hasThumb) setLightboxIdx(idx); else onAction("view_photo", { path: item.path }); }}
                 className="relative group bg-gray-800 rounded-md overflow-hidden border border-gray-600/50 hover:border-blue-500/60 cursor-pointer text-left">
-                {isImage ? (
-                  <img src={item.mediaUrl} alt={item.name} loading="lazy"
-                    style={{ width: "100%", height: "110px", objectFit: "cover" }}
-                    onError={function(e) { e.target.style.display = "none"; }} />
+                {hasThumb ? (
+                  <div style={{ position: "relative", width: "100%", height: "110px" }}>
+                    <img src={isVideo ? item.thumbnailUrl : item.mediaUrl} alt={item.name} loading="lazy"
+                      style={{ width: "100%", height: "110px", objectFit: "cover" }}
+                      onError={function(e) { e.target.style.display = "none"; }} />
+                    {isVideo && (
+                      <div style={{ position: "absolute", inset: 0 }} className="flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center">
+                          <LucideReact.Play className="w-4 h-4 text-white ml-0.5" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div style={{ width: "100%", height: "110px" }} className="flex items-center justify-center bg-gray-700/40">
-                    {item.type === "video" ? <LucideReact.Video className="w-6 h-6 text-purple-400" /> : <LucideReact.FileText className="w-6 h-6 text-amber-400" />}
+                    {isVideo ? <LucideReact.Video className="w-6 h-6 text-purple-400" /> : <LucideReact.FileText className="w-6 h-6 text-amber-400" />}
                   </div>
                 )}
                 {/* Overlay indicators */}
@@ -621,15 +636,24 @@ export default function GeneratedUI({ data, onAction }) {
         <div className="space-y-1 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
           {filtered.map(function(item, idx) {
             var isImage = item.type === "image";
+            var isVideo = item.type === "video";
+            var hasThumb = isImage || (isVideo && item.thumbnailUrl);
             return (
-              <button key={item.path || idx} onClick={function() { if (isImage) setLightboxIdx(idx); else onAction("view_photo", { path: item.path }); }}
+              <button key={item.path || idx} onClick={function() { if (hasThumb) setLightboxIdx(idx); else onAction("view_photo", { path: item.path }); }}
                 className="flex items-center gap-2 w-full px-2 py-1.5 bg-gray-800 rounded-md border border-gray-600/50 hover:bg-gray-700/60 cursor-pointer text-left">
-                {isImage ? (
-                  <img src={item.mediaUrl} alt={item.name} loading="lazy"
-                    style={{ width: "48px", height: "36px", objectFit: "cover", borderRadius: "4px" }} />
+                {hasThumb ? (
+                  <div style={{ position: "relative", width: "48px", height: "36px", borderRadius: "4px", overflow: "hidden" }} className="shrink-0">
+                    <img src={isVideo ? item.thumbnailUrl : item.mediaUrl} alt={item.name} loading="lazy"
+                      style={{ width: "48px", height: "36px", objectFit: "cover" }} />
+                    {isVideo && (
+                      <div style={{ position: "absolute", inset: 0 }} className="flex items-center justify-center bg-black/30">
+                        <LucideReact.Play className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div style={{ width: "48px", height: "36px", borderRadius: "4px" }} className="bg-gray-700/40 flex items-center justify-center shrink-0">
-                    {item.type === "video" ? <LucideReact.Video className="w-4 h-4 text-purple-400" /> : <LucideReact.FileText className="w-4 h-4 text-amber-400" />}
+                    {isVideo ? <LucideReact.Video className="w-4 h-4 text-purple-400" /> : <LucideReact.FileText className="w-4 h-4 text-amber-400" />}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
@@ -689,9 +713,13 @@ export default function GeneratedUI({ data, onAction }) {
               </button>
             )}
 
-            {/* Image */}
-            <img src={photo.mediaUrl} alt={photo.name}
-              style={{ maxWidth: "90vw", maxHeight: "78vh", objectFit: "contain", borderRadius: "4px" }} />
+            {/* Media */}
+            {photo.type === "video" ? (
+              <EnsoUI.VideoPlayer src={photo.mediaUrl} style={{ maxWidth: "90vw", maxHeight: "78vh", borderRadius: "4px" }} />
+            ) : (
+              <img src={photo.mediaUrl} alt={photo.name}
+                style={{ maxWidth: "90vw", maxHeight: "78vh", objectFit: "contain", borderRadius: "4px" }} />
+            )}
 
             {/* Next */}
             {lightboxIdx < filtered.length - 1 && (

@@ -2,7 +2,7 @@ import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { existsSync, lstatSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve } from "path";
 import { homedir, platform } from "os";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { toMediaUrl } from "./server.js";
 import { parseImageMeta, type ExifData } from "./exif-parser.js";
 
@@ -27,7 +27,9 @@ type RatePhotoParams = { path: string; rating: number };
 
 const MEDIA_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".m4v", ".pdf"]);
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
 const DEFAULT_MEDIA_LIMIT = 120;
+const THUMB_DIR = join(homedir(), ".openclaw", "enso-apps", "multimedia", "thumbs");
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -65,6 +67,7 @@ interface MediaItem {
   type: "image" | "video" | "document" | "other";
   size: number;
   mediaUrl: string;
+  thumbnailUrl?: string;
   modifiedAt: string;
   exif?: ExifData | null;
   isFavorite?: boolean;
@@ -77,6 +80,46 @@ interface DirEntry {
   name: string;
   path: string;
   itemCount: number;
+}
+
+// ── Video Thumbnail Generation ───────────────────────────────────────────
+
+let ffmpegAvailable: boolean | null = null;
+
+function hasFfmpeg(): boolean {
+  if (ffmpegAvailable !== null) return ffmpegAvailable;
+  try {
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore", timeout: 3000, windowsHide: true, shell: true });
+    ffmpegAvailable = true;
+  } catch {
+    ffmpegAvailable = false;
+  }
+  return ffmpegAvailable;
+}
+
+/**
+ * Generate a JPEG thumbnail for a video file. Returns the thumbnail path if
+ * successful, or undefined. Thumbnails are cached in THUMB_DIR with a
+ * filename based on the video path hash.
+ */
+function getVideoThumbnail(videoPath: string): string | undefined {
+  if (!hasFfmpeg()) return undefined;
+  try {
+    mkdirSync(THUMB_DIR, { recursive: true });
+    // Use base64url of the path as a unique, filesystem-safe key
+    const key = Buffer.from(videoPath, "utf-8").toString("base64url");
+    const thumbPath = join(THUMB_DIR, key + ".jpg");
+    if (existsSync(thumbPath)) return thumbPath;
+    // Extract a frame at 1 second (or the first frame for very short clips)
+    execFileSync("ffmpeg", [
+      "-y", "-ss", "1", "-i", videoPath,
+      "-frames:v", "1", "-q:v", "6",
+      "-vf", "scale=320:-2",
+      thumbPath,
+    ], { timeout: 10_000, windowsHide: true, stdio: "ignore", shell: true });
+    if (existsSync(thumbPath)) return thumbPath;
+  } catch { /* ignore — thumbnail generation is best-effort */ }
+  return undefined;
 }
 
 function buildMediaItem(fullPath: string, stat: ReturnType<typeof lstatSync>): MediaItem {
@@ -94,6 +137,11 @@ function buildMediaItem(fullPath: string, stat: ReturnType<typeof lstatSync>): M
   // Only parse EXIF for images
   if (isImage) {
     try { item.exif = parseImageMeta(fullPath) ?? undefined; } catch { /* ignore */ }
+  }
+  // Generate thumbnail for videos
+  if (VIDEO_EXTS.has(ext)) {
+    const thumbPath = getVideoThumbnail(fullPath);
+    if (thumbPath) item.thumbnailUrl = toMediaUrl(thumbPath);
   }
   // Attach persisted metadata
   const stored = storeGet(`ai:${fullPath}`) as { description?: string; tags?: string[] } | null;
