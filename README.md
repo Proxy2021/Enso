@@ -50,6 +50,29 @@ Scan your development environment — detect git repositories, discover installe
 ### ➕ Build Your Own
 Any of these can be built from scratch. Describe what you want in natural language, and Enso's build pipeline creates a full app (executors + template) that persists and can be reused. Or use the Refine flow to iterate on any existing app with a single instruction.
 
+## The Self-Evolving Loop
+
+Enso includes a built-in coding environment that closes the loop — the app can build and modify itself from within.
+
+**`/code`** opens a full [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) terminal session directly inside Enso. You get streaming output, file editing, and interactive yes/no questions — all rendered as chat cards without leaving the app.
+
+This creates an organic evolution cycle:
+
+```
+Use Enso → notice a missing feature → /code "add a weather app"
+→ Claude Code edits the codebase → new app appears → use it → refine it → repeat
+```
+
+Three paths to build, from easiest to most powerful:
+
+| Method | What happens | Best for |
+|--------|-------------|----------|
+| **Enhance** | One-click React UI from any response | Quick visualizations |
+| **Build App** | Describe in natural language → LLM builds executors + template | New tool families |
+| **`/code`** | Full coding agent edits the actual source code | Deep changes, new integrations, evolving the platform itself |
+
+The server, the apps, and the platform itself all grow from within — no separate IDE or deployment pipeline needed.
+
 ## Quick Start
 
 ### Windows
