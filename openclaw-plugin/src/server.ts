@@ -333,7 +333,21 @@ export async function startEnsoServer(opts: {
       ".flac": "audio/flac",
       ".m4a": "audio/mp4",
       ".aac": "audio/aac",
+      // Documents
       ".pdf": "application/pdf",
+      ".doc": "application/msword",
+      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ".xls": "application/vnd.ms-excel",
+      ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ".ppt": "application/vnd.ms-powerpoint",
+      ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      ".txt": "text/plain",
+      ".csv": "text/csv",
+      ".md": "text/plain",
+      ".json": "application/json",
+      ".xml": "application/xml",
+      ".rtf": "application/rtf",
+      ".zip": "application/zip",
     };
     const contentType = mimeTypes[ext] ?? "application/octet-stream";
 
@@ -341,6 +355,15 @@ export async function startEnsoServer(opts: {
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.setHeader("Accept-Ranges", "bytes");
+
+    // Trigger browser download for document types
+    const isDownloadable = !contentType.startsWith("image/") &&
+      !contentType.startsWith("video/") &&
+      !contentType.startsWith("audio/") &&
+      contentType !== "application/pdf";
+    if (isDownloadable) {
+      res.setHeader("Content-Disposition", `attachment; filename="${basename(filePath)}"`);
+    }
 
     // Range request support — required for <video> and <audio> playback
     const range = req.headers.range;
@@ -406,19 +429,50 @@ export async function startEnsoServer(opts: {
     res.json(job);
   });
 
-  // Accept image uploads from the browser client
+  // Accept file uploads from the browser client
   const uploadDir = join(tmpdir(), "enso-uploads");
   mkdirSync(uploadDir, { recursive: true });
 
-  app.post("/upload", express.raw({ type: "image/*", limit: "20mb" }), (req, res) => {
-    const contentType = req.headers["content-type"] ?? "image/png";
+  app.post("/upload", express.raw({ type: () => true, limit: "50mb" }), (req, res) => {
+    const contentType = req.headers["content-type"] ?? "application/octet-stream";
     const extMap: Record<string, string> = {
+      // Images
       "image/png": ".png",
       "image/jpeg": ".jpg",
       "image/gif": ".gif",
       "image/webp": ".webp",
+      "image/svg+xml": ".svg",
+      "image/bmp": ".bmp",
+      // Video
+      "video/mp4": ".mp4",
+      "video/webm": ".webm",
+      "video/quicktime": ".mov",
+      "video/x-msvideo": ".avi",
+      // Audio
+      "audio/mpeg": ".mp3",
+      "audio/wav": ".wav",
+      "audio/ogg": ".ogg",
+      "audio/flac": ".flac",
+      "audio/mp4": ".m4a",
+      "audio/aac": ".aac",
+      // Documents
+      "application/pdf": ".pdf",
+      "application/msword": ".doc",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+      "application/vnd.ms-excel": ".xls",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+      "application/vnd.ms-powerpoint": ".ppt",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+      "text/plain": ".txt",
+      "text/csv": ".csv",
+      "text/markdown": ".md",
+      "application/json": ".json",
+      "application/xml": ".xml",
+      "text/xml": ".xml",
+      "application/rtf": ".rtf",
+      "application/zip": ".zip",
     };
-    const ext = extMap[contentType] ?? ".png";
+    const ext = extMap[contentType] ?? ".bin";
     const filename = `${randomUUID()}${ext}`;
     const filePath = join(uploadDir, filename);
 
