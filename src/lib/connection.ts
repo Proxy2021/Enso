@@ -6,6 +6,8 @@
  * When set → all URLs become absolute with token auth.
  */
 
+import { isNative } from "./platform";
+
 export interface BackendConfig {
   id: string;
   name: string;
@@ -84,6 +86,7 @@ export function clearActiveBackend(): void {
 /** Build the WebSocket URL for a backend config. */
 export function buildWsUrl(config: BackendConfig | null): string {
   if (!config || !config.url) {
+    if (isNative) return ""; // no local server on Android
     // Same-origin mode
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${location.host}/ws`;

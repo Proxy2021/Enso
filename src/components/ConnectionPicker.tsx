@@ -7,6 +7,7 @@ import {
   clearActiveBackend,
   type BackendConfig,
 } from "../lib/connection";
+import { isNative } from "../lib/platform";
 
 type TestStatus = "idle" | "testing" | "ok" | "fail";
 
@@ -102,7 +103,7 @@ export default function ConnectionPicker() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShow(false)}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { if (!isNative || backends.length > 0) setShow(false); }}>
       <div className="bg-gray-900 border border-gray-700/60 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
@@ -118,24 +119,26 @@ export default function ConnectionPicker() {
         </div>
 
         <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
-          {/* Local mode button */}
-          <button
-            onClick={handleLocalMode}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-800/40 hover:bg-gray-800/80 transition-colors text-left group"
-          >
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-              <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-200">Local Server</div>
-              <div className="text-xs text-gray-500">Same-origin (default dev mode)</div>
-            </div>
-            {connectionState === "connected" && !loadBackends().find(() => false) && (
-              <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
-            )}
-          </button>
+          {/* Local mode button (hidden on native — no local server) */}
+          {!isNative && (
+            <button
+              onClick={handleLocalMode}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-800/40 hover:bg-gray-800/80 transition-colors text-left group"
+            >
+              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-200">Local Server</div>
+                <div className="text-xs text-gray-500">Same-origin (default dev mode)</div>
+              </div>
+              {connectionState === "connected" && !loadBackends().find(() => false) && (
+                <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+              )}
+            </button>
+          )}
 
           {/* Saved backends */}
           {backends.map((b) => (

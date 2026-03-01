@@ -92,6 +92,12 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const backend = getActiveBackend();
     const wsUrl = buildWsUrl(backend);
 
+    // On native with no backend configured, wsUrl is empty — don't connect
+    if (!wsUrl) {
+      set({ connectionState: "disconnected" });
+      return;
+    }
+
     const client = createWSClient({
       url: wsUrl,
       onMessage: (msg) => get()._handleServerMessage(msg),

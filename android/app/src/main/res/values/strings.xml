@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Enso</string>
+    <string name="title_activity_main">Enso</string>
+    <string name="package_name">com.enso.app</string>
+    <string name="custom_url_scheme">com.enso.app</string>
+</resources>

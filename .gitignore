@@ -7,3 +7,9 @@ tsconfig.tsbuildinfo
 .DS_Store
 openclaw-plugin/ui-cache/
 scripts/
+
+# Android (Capacitor)
+android/app/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/

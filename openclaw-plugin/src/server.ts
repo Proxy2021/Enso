@@ -2,7 +2,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
-import { existsSync, statSync, createReadStream, createWriteStream, readdirSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
+import { existsSync, statSync, createReadStream, createWriteStream, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import { extname, dirname, basename, join } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir, homedir, hostname, platform, arch, totalmem } from "os";
@@ -155,14 +155,36 @@ export async function startEnsoServer(opts: {
     next();
   });
 
+  // ── Shared paths ──
+  const pluginDir = dirname(fileURLToPath(import.meta.url));
+  const projectRoot = join(pluginDir, "..", "..");
+
+  /** Read version info from package.json (cached after first call). */
+  let _pkgCache: { version: string; versionCode: number } | null = null;
+  function readPkgVersion() {
+    if (_pkgCache) return _pkgCache;
+    try {
+      const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf-8"));
+      _pkgCache = { version: pkg.version ?? "0.1.0", versionCode: pkg.versionCode ?? 1 };
+    } catch {
+      _pkgCache = { version: "0.1.0", versionCode: 1 };
+    }
+    return _pkgCache;
+  }
+
+  const apkPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+
   // ── Health endpoint (unauthenticated — used for connection testing) ──
   const accessToken = account.accessToken;
   app.get("/health", (_req, res) => {
+    const pkg = readPkgVersion();
     res.json({
       status: "ok",
       channel: "enso",
       authRequired: !!accessToken,
-      version: 1,
+      version: pkg.versionCode,
+      versionName: pkg.version,
+      versionCode: pkg.versionCode,
       clients: clients.size,
       timestamp: Date.now(),
       machine: {
@@ -175,9 +197,20 @@ export async function startEnsoServer(opts: {
     });
   });
 
+  // ── App version endpoint (unauthenticated — for Android upgrade checks) ──
+  app.get("/api/version", (_req, res) => {
+    const pkg = readPkgVersion();
+    const apkExists = existsSync(apkPath);
+    res.json({
+      versionCode: pkg.versionCode,
+      versionName: pkg.version,
+      apkAvailable: apkExists,
+      apkSizeBytes: apkExists ? statSync(apkPath).size : 0,
+    });
+  });
+
   // ── Serve built frontend (unauthenticated — for remote access via tunnel) ──
-  const pluginDir = dirname(fileURLToPath(import.meta.url));
-  const distDir = join(pluginDir, "..", "..", "dist");
+  const distDir = join(projectRoot, "dist");
   if (existsSync(distDir) && existsSync(join(distDir, "index.html"))) {
     app.use(express.static(distDir));
     runtime.log?.(`[enso] serving frontend from ${distDir}`);
@@ -341,6 +374,19 @@ export async function startEnsoServer(opts: {
     });
     runtime.log?.(`[enso] access token required for remote connections`);
   }
+
+  // ── APK download endpoint (authenticated — serves built APK for app upgrades) ──
+  app.get("/api/apk", (_req, res) => {
+    if (!existsSync(apkPath)) {
+      res.status(404).json({ error: "APK not found. Run: npm run android:build-apk" });
+      return;
+    }
+    const stat = statSync(apkPath);
+    res.setHeader("Content-Type", "application/vnd.android.package-archive");
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Disposition", 'attachment; filename="enso.apk"');
+    createReadStream(apkPath).pipe(res);
+  });
 
   // Inspect domain-evolution queue/state for newly discovered uncaptured domains.
   app.get("/domain-evolution/jobs", (_req, res) => {

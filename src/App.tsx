@@ -5,6 +5,8 @@ import ChatInput from "./components/ChatInput";
 import AppsMenu from "./components/AppsMenu";
 import ConnectionPicker from "./components/ConnectionPicker";
 import { parseDeepLink, setActiveBackend, getActiveBackend } from "./lib/connection";
+import { isNative } from "./lib/platform";
+import UpdateBanner from "./components/UpdateBanner";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
 
@@ -46,6 +48,12 @@ export default function App() {
       window.history.replaceState({}, "", window.location.pathname);
       return () => disconnect();
     }
+    // Native: no backend configured → show connection picker
+    if (isNative && !getActiveBackend()) {
+      useChatStore.getState().setShowConnectionPicker(true);
+      return () => disconnect();
+    }
+
     // Normal startup: connect to last-used or same-origin
     connect();
     return () => disconnect();
@@ -63,6 +71,7 @@ export default function App() {
           <ConnectionDot />
         </div>
       </header>
+      <UpdateBanner />
       <CardTimeline />
       <ChatInput />
       <ConnectionPicker />
