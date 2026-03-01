@@ -395,7 +395,9 @@ export async function startEnsoServer(opts: {
     // ── WebSocket token auth ──
     if (accessToken) {
       const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
-      if (wsUrl.searchParams.get("token") !== accessToken) {
+      const origin = req.headers.origin ?? "";
+      const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`;
+      if (!isSameOrigin && wsUrl.searchParams.get("token") !== accessToken) {
         ws.close(4001, "Unauthorized");
         return;
       }
