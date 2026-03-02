@@ -52,6 +52,17 @@ const ATTACH_CATEGORIES = [
     ),
   },
   {
+    id: "camera",
+    label: "Camera",
+    accept: "image/*",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+        <circle cx="12" cy="13" r="4" />
+      </svg>
+    ),
+  },
+  {
     id: "location",
     label: "Location",
     accept: null,
@@ -86,6 +97,7 @@ export default function ChatInput() {
   const connectionState = useChatStore((s) => s.connectionState);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
 
   const disabled = connectionState !== "connected";
@@ -213,6 +225,10 @@ export default function ChatInput() {
       handleLocationShare();
       return;
     }
+    if (cat.id === "camera") {
+      cameraInputRef.current?.click();
+      return;
+    }
     if (fileInputRef.current && cat.accept) {
       fileInputRef.current.accept = cat.accept;
       fileInputRef.current.click();
@@ -328,6 +344,14 @@ export default function ChatInput() {
             ref={fileInputRef}
             type="file"
             multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             className="hidden"
             onChange={handleFileSelect}
           />

@@ -387,6 +387,10 @@ export async function startEnsoServer(opts: {
   if (accessToken) {
     app.use((req, res, next) => {
       if (req.method === "OPTIONS") return next();
+      // Same-origin bypass (matches WebSocket auth behavior)
+      const origin = req.headers.origin ?? "";
+      const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`;
+      if (isSameOrigin) return next();
       const token = req.headers.authorization?.replace("Bearer ", "")
         || (req.query.token as string | undefined);
       if (token !== accessToken) {

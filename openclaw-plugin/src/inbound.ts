@@ -10,6 +10,7 @@ import { getEnsoRuntime } from "./runtime.js";
 import { deliverEnsoReply } from "./outbound.js";
 import { selectToolForContent } from "./ui-generator.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
+import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { randomUUID } from "crypto";
 
 // ── Background app compatibility check ──
@@ -63,10 +64,30 @@ export async function handleEnsoInbound(params: {
   const { message, account, config, runtime, client, routing, targetCardId, statusSink } = params;
   const core = getEnsoRuntime();
 
-  const rawBody = message.text?.trim() ?? "";
+  let rawBody = message.text?.trim() ?? "";
   const mediaUrls = message.mediaUrls ?? [];
   if (!rawBody && mediaUrls.length === 0) {
     return;
+  }
+
+  // Transcribe audio attachments and prepend transcripts to the message body
+  if (account.geminiApiKey && mediaUrls.length > 0) {
+    const audioFiles = mediaUrls.filter(isAudioFile);
+    if (audioFiles.length > 0) {
+      const transcripts = await Promise.all(
+        audioFiles.map((filePath) =>
+          transcribeAudio({ filePath, geminiApiKey: account.geminiApiKey! }).catch(() => null),
+        ),
+      );
+      const validTranscripts = transcripts.filter((t): t is string => t !== null);
+      if (validTranscripts.length > 0) {
+        const transcriptBlock = validTranscripts
+          .map((t, i) => audioFiles.length > 1 ? `[Audio Transcript ${i + 1}]: ${t}` : `[Audio Transcript]: ${t}`)
+          .join("\n\n");
+        rawBody = rawBody ? `${transcriptBlock}\n\n${rawBody}` : transcriptBlock;
+        console.log(`[enso:inbound] transcribed ${validTranscripts.length}/${audioFiles.length} audio files`);
+      }
+    }
   }
 
   statusSink?.({ lastInboundAt: message.timestamp });
