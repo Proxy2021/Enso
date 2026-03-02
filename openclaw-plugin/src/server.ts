@@ -402,6 +402,11 @@ export async function startEnsoServer(opts: {
     runtime.log?.(`[enso] access token required for remote connections`);
   }
 
+  // ── Share token endpoint — returns access token for embedding in live exports ──
+  app.get("/api/share-token", (_req, res) => {
+    res.json({ token: accessToken || "" });
+  });
+
   // ── APK download endpoint (authenticated — serves built APK for app upgrades) ──
   app.get("/api/apk", (_req, res) => {
     if (!existsSync(apkPath)) {

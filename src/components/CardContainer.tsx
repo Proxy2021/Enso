@@ -447,17 +447,28 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
 
   const backend = getActiveBackend();
   const serverUrl = backend?.url || window.location.origin;
-  const serverToken = backend?.token || "";
 
   const handleExport = async (mode: "live" | "offline") => {
     if (exporting) return;
     setExporting(true);
     try {
+      let token = backend?.token || "";
+      // In same-origin mode, fetch the access token from the server
+      if (mode === "live" && !token) {
+        try {
+          const baseUrl = backend?.url || "";
+          const res = await fetch(`${baseUrl}/api/share-token`);
+          if (res.ok) {
+            const data = await res.json();
+            token = data.token || "";
+          }
+        } catch { /* proceed without token */ }
+      }
       const { exportCardAsHtml } = await import("../lib/exportApp");
       await exportCardAsHtml(
         card,
         mode,
-        mode === "live" ? { serverUrl, token: serverToken } : undefined,
+        mode === "live" ? { serverUrl, token } : undefined,
       );
       onClose();
     } finally {
