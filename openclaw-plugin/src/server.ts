@@ -11,7 +11,7 @@ import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
 import { handleEnsoInbound } from "./inbound.js";
-import { handleCardEnhance, handlePluginCardAction } from "./outbound.js";
+import { handleCardEnhance, handlePluginCardAction, createScopedShareContext } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
@@ -407,6 +407,25 @@ export async function startEnsoServer(opts: {
   // ── Share token endpoint — returns access token for embedding in live exports ──
   app.get("/api/share-token", (_req, res) => {
     res.json({ token: accessToken || "" });
+  });
+
+  // ── Scoped share endpoint — creates a path-restricted card context for sharing ──
+  app.post("/api/create-share", express.json(), (req, res) => {
+    const { cardId, allowedRoot } = req.body as { cardId?: string; allowedRoot?: string };
+    if (!cardId || !allowedRoot) {
+      res.status(400).json({ error: "cardId and allowedRoot are required" });
+      return;
+    }
+    const result = createScopedShareContext(cardId, allowedRoot);
+    if (!result.ok) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json({
+      shareCardId: result.shareCardId,
+      token: accessToken || "",
+      allowedRoot: result.normalizedRoot,
+    });
   });
 
   // ── APK download endpoint (authenticated — serves built APK for app upgrades) ──

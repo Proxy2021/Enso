@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { existsSync, statSync } from "fs";
-import { extname, join } from "path";
+import { extname, join, normalize, resolve, sep } from "path";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ConnectedClient } from "./server.js";
@@ -74,6 +74,8 @@ interface CardContext {
   toolFamily?: string;
   signatureId?: string;
   coverageStatus?: ToolTemplateCoverageStatus;
+  /** When set, restricts all path-based tool actions to this directory and its children. */
+  allowedRoot?: string;
 }
 
 const cardContexts = new Map<string, CardContext>();
@@ -93,8 +95,72 @@ export function registerCardContext(cardId: string, ctx: {
   toolFamily?: string;
   signatureId?: string;
   coverageStatus?: "covered" | "partial";
+  allowedRoot?: string;
 }): void {
   cardContexts.set(cardId, ctx as CardContext);
+}
+
+// ── Path-scoped sharing helpers ──
+
+/** Check whether `candidatePath` is equal to or a subdirectory of `allowedRoot`. */
+function isPathWithinRoot(candidatePath: string, allowedRoot: string): boolean {
+  const normCandidate = normalize(resolve(candidatePath)).replace(/[/\\]+$/, "");
+  const normRoot = normalize(resolve(allowedRoot)).replace(/[/\\]+$/, "");
+  const isWin = sep === "\\";
+  const a = isWin ? normCandidate.toLowerCase() : normCandidate;
+  const b = isWin ? normRoot.toLowerCase() : normRoot;
+  return a === b || a.startsWith(b + sep);
+}
+
+const SCOPED_SHARE_BLOCKED_ACTIONS = new Set(["bookmark_folder"]);
+
+/** Validate action payload paths against the card's allowedRoot. Returns error string or null. */
+function validateScopedAction(
+  ctx: CardContext,
+  action: string,
+  payload: unknown,
+): string | null {
+  if (!ctx.allowedRoot) return null;
+  if (SCOPED_SHARE_BLOCKED_ACTIONS.has(action)) {
+    return `Action "${action}" is not available for shared galleries.`;
+  }
+  const p = (payload ?? {}) as Record<string, unknown>;
+  if (typeof p.path === "string" && p.path.trim()) {
+    if (!isPathWithinRoot(p.path, ctx.allowedRoot)) {
+      return `Path is outside the shared folder.`;
+    }
+  }
+  if (typeof p.photoPath === "string" && p.photoPath.trim()) {
+    if (!isPathWithinRoot(p.photoPath, ctx.allowedRoot)) {
+      return `Photo path is outside the shared folder.`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Create a scoped copy of a card context for sharing.
+ * Returns a new card ID that restricts actions to the given root path.
+ */
+export function createScopedShareContext(
+  sourceCardId: string,
+  allowedRoot: string,
+): { ok: true; shareCardId: string; normalizedRoot: string } | { ok: false; error: string } {
+  const sourceCtx = cardContexts.get(sourceCardId);
+  if (!sourceCtx) return { ok: false, error: "Source card context not found" };
+
+  const normalizedRoot = normalize(resolve(allowedRoot)).replace(/[/\\]+$/, "");
+  const shareCardId = randomUUID();
+  cardContexts.set(shareCardId, {
+    ...sourceCtx,
+    cardId: shareCardId,
+    actionHistory: [],
+    currentData: structuredClone(sourceCtx.currentData),
+    allowedRoot: normalizedRoot,
+  });
+
+  console.log(`[enso:share] scoped context: shareCardId=${shareCardId}, root="${normalizedRoot}", source=${sourceCardId}`);
+  return { ok: true, shareCardId, normalizedRoot };
 }
 
 /**
@@ -828,7 +894,8 @@ export async function handlePluginCardAction(params: {
   runtime: RuntimeEnv;
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }): Promise<void> {
-  const { cardId, action, payload, mode, client, config, runtime, statusSink } = params;
+  const { cardId, mode, client, config, runtime, statusSink } = params;
+  let { action, payload } = params;
   const operationId = randomUUID();
   const sendOperation = (stage: OperationStage, label: string, message?: string) => {
     client.send({
@@ -903,8 +970,56 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Scoped share enforcement ──
+  if (ctx.allowedRoot) {
+    // Redirect list_drives → browse_folder at allowed root
+    if (action === "list_drives") {
+      console.log(`[enso:action] scoped share: redirecting list_drives → browse_folder at root="${ctx.allowedRoot}"`);
+      action = "browse_folder";
+      payload = { path: ctx.allowedRoot };
+    }
+    // Default browse_folder with no path → allowed root
+    const bp = (payload ?? {}) as Record<string, unknown>;
+    if (action === "browse_folder" && (!bp.path || (typeof bp.path === "string" && !bp.path.trim()))) {
+      (payload as Record<string, unknown>).path = ctx.allowedRoot;
+    }
+    // Validate paths against allowed root
+    const scopeError = validateScopedAction(ctx, action, payload);
+    if (scopeError) {
+      console.log(`[enso:action] scoped share blocked: ${scopeError}`);
+      client.send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "error",
+        targetCardId: cardId,
+        text: scopeError,
+        operation: { operationId, stage: "error", label: "Access restricted", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+  }
+
   // Record action in history
   ctx.actionHistory.push({ action, payload, timestamp: Date.now() });
+
+  // Block auto-heal/refine/fix_with_code for scoped shares
+  if (ctx.allowedRoot && (action === "auto_heal_template" || action === "refine" || action === "fix_with_code")) {
+    client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "error",
+      targetCardId: cardId,
+      text: "This action is not available for shared galleries.",
+      operation: { operationId, stage: "error", label: "Action not allowed", cancellable: false },
+      timestamp: Date.now(),
+    });
+    return;
+  }
 
   // ── Auto-heal template: fix compile/runtime errors via refine ──
   if (action === "auto_heal_template" && ctx.signatureId && ctx.geminiApiKey) {
@@ -1460,6 +1575,14 @@ export async function handlePluginCardAction(params: {
           });
           ctx.currentData = structuredClone(followup.renderData);
 
+          // Clamp parentPath for scoped shares — hides "Up" button at share root
+          if (ctx.allowedRoot && followup.renderData && typeof followup.renderData === "object") {
+            const rd = followup.renderData as Record<string, unknown>;
+            if (typeof rd.parentPath === "string" && !isPathWithinRoot(rd.parentPath, ctx.allowedRoot)) {
+              rd.parentPath = undefined;
+            }
+          }
+
           console.log(`[enso:action] path=native: complete, delivering result mode=${effectiveMode}`);
 
           sendActionResult(followup.renderData, followup.generatedUI);
@@ -1567,6 +1690,23 @@ export async function handlePluginCardAction(params: {
   }
 
   // ── Path 3: Agent round-trip fallback ──
+  // Block agent fallback for scoped shares — no LLM access
+  if (ctx.allowedRoot) {
+    console.log(`[enso:action] scoped share: blocking agent fallback for action="${action}"`);
+    client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "error",
+      targetCardId: cardId,
+      text: "This action is not available for shared galleries.",
+      operation: { operationId, stage: "error", label: "Action not allowed", cancellable: false },
+      timestamp: Date.now(),
+    });
+    return;
+  }
+
   // No mechanical handler matched — route through OpenClaw agent.
   const p = (payload ?? {}) as Record<string, unknown>;
   let actionMessage: string;
