@@ -4,7 +4,8 @@ interface Template {
   icon: string;
   title: string;
   description: string;
-  prompt: string;
+  toolFamily?: string; // Direct app invocation
+  prompt?: string;     // Fallback: send as chat message
 }
 
 const TEMPLATES: Template[] = [
@@ -12,13 +13,13 @@ const TEMPLATES: Template[] = [
     icon: "\uD83D\uDCC1",
     title: "Browse Files",
     description: "Explore your filesystem",
-    prompt: "Show me what's in my home directory",
+    toolFamily: "filesystem",
   },
   {
     icon: "\u2708\uFE0F",
     title: "Plan a Trip",
-    description: "Get a travel itinerary",
-    prompt: "Help me plan a weekend trip to a nearby city",
+    description: "Research a city",
+    toolFamily: "city_planner",
   },
   {
     icon: "\uD83C\uDF7D\uFE0F",
@@ -36,25 +37,29 @@ const TEMPLATES: Template[] = [
     icon: "\uD83C\uDFB5",
     title: "Media Library",
     description: "Browse your media files",
-    prompt: "Show me my recent photos and videos",
+    toolFamily: "multimedia",
   },
   {
     icon: "\uD83D\uDCAC",
     title: "Just Chat",
     description: "Ask me anything",
-    prompt: "",
   },
 ];
 
 export default function WelcomeCard() {
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const runApp = useChatStore((s) => s.runApp);
   const connectionState = useChatStore((s) => s.connectionState);
   const disabled = connectionState !== "connected";
 
   function handleClick(template: Template) {
     if (disabled) return;
-    if (!template.prompt) return; // "Just Chat" — user types their own
-    sendMessage(template.prompt);
+    if (template.toolFamily) {
+      runApp(template.toolFamily);
+    } else if (template.prompt) {
+      sendMessage(template.prompt);
+    }
+    // "Just Chat" — no action, user types their own
   }
 
   return (
