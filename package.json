@@ -15,6 +15,7 @@
     "android:build-apk": "npm run build && npx cap sync android && cd android && gradlew.bat assembleDebug"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
     "@capacitor/android": "^8.1.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/cli": "^8.1.0",

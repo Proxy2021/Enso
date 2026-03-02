@@ -1,38 +1,83 @@
-import { spawn } from "child_process";
-import { createInterface } from "readline";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "crypto";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage, ToolQuestion } from "./types.js";
 
-type ActiveClaudeRun = {
-  child: ReturnType<typeof spawn>;
-  client: ConnectedClient;
-  runId: string;
-};
-
-const activeClaudeRuns = new Map<string, ActiveClaudeRun>();
+const activeAbortControllers = new Map<string, AbortController>();
+const activeTasks = new Map<string, string>(); // taskId → description
 
 export function cancelClaudeCodeRun(runId: string): boolean {
-  const activeRun = activeClaudeRuns.get(runId);
-  if (!activeRun) return false;
-  try {
-    activeRun.child.kill("SIGTERM");
-  } catch {
-    // ignore kill errors; process cleanup is handled by close/error hooks
-  }
+  const ac = activeAbortControllers.get(runId);
+  if (!ac) return false;
+  ac.abort();
   return true;
 }
 
+// ── Tool label helpers ──
+
+const TOOL_LABELS: Record<string, string> = {
+  Read: "Reading",
+  Edit: "Editing",
+  Write: "Writing",
+  Bash: "Running command",
+  Grep: "Searching",
+  Glob: "Finding files",
+  Agent: "Running agent",
+  WebSearch: "Searching web",
+  WebFetch: "Fetching page",
+  NotebookEdit: "Editing notebook",
+  TodoWrite: "Writing todos",
+  AskUserQuestion: "Asking question",
+};
+
+function humanToolLabel(name: string): string {
+  return TOOL_LABELS[name] ?? name;
+}
+
 /**
- * Directly invoke the Claude Code CLI, streaming results back to the
- * browser client via WebSocket. Bypasses OpenClaw entirely — no agent
- * pipeline, no middleware, just CLI → WS.
+ * Best-effort extraction of a short detail string from partial JSON.
+ * We look for common parameter names (file_path, command, pattern, query, url).
+ */
+function extractToolDetail(name: string, partialJson: string): string | null {
+  // Try file_path first (Read, Edit, Write, Glob)
+  const fpMatch = partialJson.match(/"file_path"\s*:\s*"([^"]+)"/);
+  if (fpMatch) {
+    // Return just the filename, not the full path
+    const parts = fpMatch[1].replace(/\\/g, "/").split("/");
+    return parts[parts.length - 1];
+  }
+
+  // command (Bash)
+  const cmdMatch = partialJson.match(/"command"\s*:\s*"([^"]{1,60})/);
+  if (cmdMatch) return cmdMatch[1].length >= 60 ? cmdMatch[1] + "..." : cmdMatch[1];
+
+  // pattern (Grep, Glob)
+  const patMatch = partialJson.match(/"pattern"\s*:\s*"([^"]{1,40})/);
+  if (patMatch) return patMatch[1];
+
+  // query (WebSearch)
+  const qMatch = partialJson.match(/"query"\s*:\s*"([^"]{1,40})/);
+  if (qMatch) return qMatch[1];
+
+  // url (WebFetch)
+  const urlMatch = partialJson.match(/"url"\s*:\s*"([^"]{1,60})/);
+  if (urlMatch) return urlMatch[1];
+
+  // description (Agent)
+  const descMatch = partialJson.match(/"description"\s*:\s*"([^"]{1,40})/);
+  if (descMatch) return descMatch[1];
+
+  return null;
+}
+
+/**
+ * Directly invoke the Claude Code CLI via the Agent SDK, streaming results
+ * back to the browser client via WebSocket. Bypasses OpenClaw entirely —
+ * no agent pipeline, no middleware, just SDK → WS.
  *
- * Uses `--output-format stream-json` for structured streaming output:
- *   - system init  → capture session ID
- *   - content_block_delta / stream_event → text deltas
- *   - assistant     → fallback full-text (if no deltas received)
- *   - result        → final / error
+ * Emits inline markers for tool activity and cost:
+ *   \u200B[tool:Read:server.ts]     — tool completed
+ *   \u200B[cost:$0.0234|3 turns|12.5s] — session cost summary
  */
 export async function runClaudeCode(params: {
   prompt: string;
@@ -47,47 +92,19 @@ export async function runClaudeCode(params: {
     return { sessionId: toolSessionId ?? "" };
   }
 
-  const args = [
-    "-p", prompt,
-    "--output-format", "stream-json",
-    "--verbose",
-    "--include-partial-messages",
-    "--dangerously-skip-permissions",
-  ];
-
-  if (toolSessionId) args.push("--resume", toolSessionId);
-
-  // Resolve full path to claude executable.
-  // Use forward slashes — Windows spawn handles them fine and avoids
-  // edge cases with backslash-sensitive path handling in some Node loaders.
-  const home = (process.env.USERPROFILE || process.env.HOME || "").replace(/\\/g, "/");
-  const claudePath = process.platform === "win32" && home
-    ? `${home}/.local/bin/claude.exe`
-    : "claude";
-
-  // Unset Claude Code env vars to avoid "nested session" detection
-  const env = { ...process.env };
-  delete env.CLAUDECODE;
-  delete env.CLAUDE_CODE_ENTRYPOINT;
-
-  const spawnCwd = cwd ? cwd.replace(/\\/g, "/") : undefined;
-
-  console.log(`[claude-code] spawning: ${claudePath} (cwd=${spawnCwd ?? "default"}, resume=${toolSessionId ?? "none"})`);
-
-  const child = spawn(claudePath, args, {
-    env,
-    cwd: spawnCwd,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
+  const abortController = new AbortController();
+  activeAbortControllers.set(runId, abortController);
 
   let sessionId = toolSessionId ?? "";
   let seq = 0;
   let totalTextSent = 0;
   let lastCharNewline = true;
   let resultSent = false;
-  let wasCancelled = false;
-  let stderrBuf = "";
+  let startTime = Date.now();
+
+  // Tool activity tracking
+  let activeToolName: string | null = null;
+  let toolInputBuf = "";
 
   const toolMeta = (): ServerMessage["toolMeta"] => ({
     toolId: "claude-code",
@@ -116,19 +133,9 @@ export async function runClaudeCode(params: {
     send({ state: "delta", ...(text ? { text } : {}), ...extra });
   };
 
-  sendDelta(undefined, {
-    operation: {
-      operationId: runId,
-      stage: "processing",
-      label: "Starting Claude Code",
-      cancellable: true,
-    },
-  });
-
   const sendFinal = () => {
     if (resultSent) return;
     resultSent = true;
-    // Ensure output ends with newline so next prompt starts on fresh line
     if (totalTextSent > 0 && !lastCharNewline) {
       sendDelta("\n");
     }
@@ -143,7 +150,7 @@ export async function runClaudeCode(params: {
     });
   };
 
-  const sendError = (text: string) => {
+  const sendError = (text: string, cancelled = false) => {
     if (resultSent) return;
     resultSent = true;
     send({
@@ -151,40 +158,100 @@ export async function runClaudeCode(params: {
       text,
       operation: {
         operationId: runId,
-        stage: wasCancelled ? "cancelled" : "error",
-        label: wasCancelled ? "Cancelled" : "Failed",
+        stage: cancelled ? "cancelled" : "error",
+        label: cancelled ? "Cancelled" : "Failed",
         cancellable: false,
       },
     });
   };
 
-  const rl = createInterface({ input: child.stdout! });
+  // Initial operation status
+  sendDelta(undefined, {
+    operation: {
+      operationId: runId,
+      stage: "processing",
+      label: "Starting Claude Code",
+      cancellable: true,
+    },
+  });
 
-  return new Promise<{ sessionId: string }>((resolve) => {
-    activeClaudeRuns.set(runId, { child, client, runId });
+  const spawnCwd = cwd ? cwd.replace(/\\/g, "/") : undefined;
+  console.log(`[claude-code] SDK query (cwd=${spawnCwd ?? "default"}, resume=${toolSessionId ?? "none"})`);
 
-    rl.on("line", (line) => {
-      if (!line.trim()) return;
+  try {
+    const q = query({
+      prompt,
+      options: {
+        cwd: spawnCwd,
+        resume: toolSessionId || undefined,
+        includePartialMessages: true,
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        promptSuggestions: true,
+        abortController,
+      },
+    });
 
-      let event: Record<string, unknown>;
-      try {
-        event = JSON.parse(line);
-      } catch {
-        return; // skip unparseable lines
+    for await (const message of q) {
+      // Capture session ID from any message that has it
+      if ("session_id" in message && message.session_id) {
+        sessionId = message.session_id as string;
       }
 
-      // ── Session init ──
-      if (event.type === "system" && event.session_id) {
-        sessionId = event.session_id as string;
+      // ── System messages (init, tasks) ──
+      if (message.type === "system") {
+        const msg = message as Record<string, unknown>;
+        const subtype = msg.subtype as string | undefined;
+
+        if (subtype === "task_started") {
+          const taskId = msg.task_id as string;
+          const desc = ((msg.description as string) ?? "").replace(/[\]\n\r]/g, " ").trim().slice(0, 80);
+          activeTasks.set(taskId, desc);
+          sendDelta(`\u200B[task:start:${desc}]\n`);
+          continue;
+        }
+
+        if (subtype === "task_notification") {
+          const taskId = msg.task_id as string;
+          const status = msg.status as string; // completed | failed | stopped
+          const summary = ((msg.summary as string) ?? activeTasks.get(taskId) ?? "").replace(/[\]\n\r]/g, " ").trim().slice(0, 80);
+          activeTasks.delete(taskId);
+          sendDelta(`\u200B[task:${status}:${summary}]\n`);
+          continue;
+        }
+
+        // Init or other system messages
         console.log(`[claude-code] session: ${sessionId}`);
-        return;
+        continue;
       }
 
-      // ── Streaming text deltas (wrapped in stream_event) ──
-      if (event.type === "stream_event") {
-        const inner = event.event as Record<string, unknown> | undefined;
-        if (inner?.type === "content_block_delta") {
-          const delta = inner.delta as Record<string, unknown> | undefined;
+      // ── Streaming events (partial messages) ──
+      if (message.type === "stream_event") {
+        const event = message.event as Record<string, unknown>;
+
+        // content_block_start → detect tool_use or text block
+        if (event.type === "content_block_start") {
+          const block = event.content_block as Record<string, unknown> | undefined;
+          if (block?.type === "tool_use") {
+            activeToolName = (block.name as string) ?? null;
+            toolInputBuf = "";
+            // Update operation label
+            if (activeToolName && activeToolName !== "AskUserQuestion") {
+              sendDelta(undefined, {
+                operation: {
+                  operationId: runId,
+                  stage: "calling_tool",
+                  label: `${humanToolLabel(activeToolName)}...`,
+                  cancellable: true,
+                },
+              });
+            }
+          }
+        }
+
+        // content_block_delta → text or tool input
+        if (event.type === "content_block_delta") {
+          const delta = event.delta as Record<string, unknown> | undefined;
           if (delta?.type === "text_delta" && typeof delta.text === "string") {
             sendDelta(delta.text, {
               operation: {
@@ -194,33 +261,102 @@ export async function runClaudeCode(params: {
                 cancellable: true,
               },
             });
+          } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
+            toolInputBuf += delta.partial_json;
           }
         }
-        return;
+
+        // content_block_stop → emit tool marker if we were tracking a tool
+        if (event.type === "content_block_stop") {
+          if (activeToolName && activeToolName !== "AskUserQuestion") {
+            if (activeToolName === "Bash") {
+              // Emit specialized bash marker with command text
+              const cmdMatch = toolInputBuf.match(/"command"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+              const cmd = cmdMatch
+                ? cmdMatch[1].replace(/\\n/g, " ").replace(/\\"/g, '"').replace(/\\/g, "\\").replace(/]/g, "").trim().slice(0, 120)
+                : "";
+              sendDelta(cmd ? `\u200B[bash:${cmd}]\n` : `\u200B[tool:Bash]\n`);
+            } else {
+              const detail = extractToolDetail(activeToolName, toolInputBuf);
+              const marker = detail
+                ? `\u200B[tool:${activeToolName}:${detail}]\n`
+                : `\u200B[tool:${activeToolName}]\n`;
+              sendDelta(marker);
+            }
+          }
+          activeToolName = null;
+          toolInputBuf = "";
+        }
+
+        continue;
       }
 
-      // ── Streaming text deltas (top-level, alternate format) ──
-      if (event.type === "content_block_delta") {
-        const delta = event.delta as Record<string, unknown> | undefined;
-        if (delta?.type === "text_delta" && typeof delta.text === "string") {
-          sendDelta(delta.text, {
+      // ── Tool output summary ──
+      if (message.type === "tool_use_summary") {
+        const msg = message as Record<string, unknown>;
+        const summary = msg.summary as string | undefined;
+        if (summary?.trim()) {
+          const display = summary.length > 1500 ? summary.slice(0, 1500) + "\n...(truncated)" : summary;
+          sendDelta("```\n" + display + "\n```\n");
+        }
+        continue;
+      }
+
+      // ── Tool progress (update operation label with elapsed time) ──
+      if (message.type === "tool_progress") {
+        const msg = message as Record<string, unknown>;
+        const toolName = msg.tool_name as string | undefined;
+        const elapsed = msg.elapsed_time_seconds as number | undefined;
+        if (toolName) {
+          const label = elapsed != null
+            ? `${humanToolLabel(toolName)}... (${Math.round(elapsed)}s)`
+            : `${humanToolLabel(toolName)}...`;
+          sendDelta(undefined, {
             operation: {
               operationId: runId,
-              stage: "streaming",
-              label: "Streaming output",
+              stage: "calling_tool",
+              label,
               cancellable: true,
             },
           });
         }
-        return;
+        continue;
       }
 
-      // ── Assistant turn (full text per turn + tool_use blocks) ──
-      if (event.type === "assistant") {
-        const msg = event.message as Record<string, unknown> | undefined;
-        const content = msg?.content as Array<Record<string, unknown>> | undefined;
+      // ── Rate limit events ──
+      if (message.type === "rate_limit_event") {
+        const msg = message as Record<string, unknown>;
+        const info = msg.rate_limit_info as Record<string, unknown> | undefined;
+        if (info) {
+          const status = info.status as string;
+          if (status === "rejected" || status === "allowed_warning") {
+            const resetsAt = info.resetsAt as number | undefined;
+            const waitLabel = resetsAt
+              ? ` (resets in ${Math.max(1, Math.round((resetsAt - Date.now() / 1000)))}s)`
+              : "";
+            const markerStatus = status === "rejected" ? "rejected" : "warning";
+            sendDelta(`\u200B[ratelimit:${markerStatus}${waitLabel}]\n`);
+            sendDelta(undefined, {
+              operation: {
+                operationId: runId,
+                stage: "calling_tool",
+                label: `Rate limited${waitLabel}`,
+                cancellable: true,
+              },
+            });
+          }
+        }
+        continue;
+      }
+
+      // ── Assistant turn (full message) ──
+      if (message.type === "assistant") {
+        const msg = message as Record<string, unknown>;
+        const betaMessage = msg.message as Record<string, unknown> | undefined;
+        const content = betaMessage?.content as Array<Record<string, unknown>> | undefined;
+
         if (Array.isArray(content)) {
-          // Fallback: send full text if no streaming deltas arrived
+          // Fallback: send full text if no streaming deltas arrived yet
           const textParts = content
             .filter((c) => c.type === "text" && typeof c.text === "string")
             .map((c) => c.text as string);
@@ -252,66 +388,70 @@ export async function runClaudeCode(params: {
             }
           }
         }
-        return;
+        continue;
       }
 
       // ── Final result ──
-      if (event.type === "result") {
-        if (event.subtype === "error") {
-          sendError(typeof event.error === "string" ? event.error : "Claude Code encountered an error.");
-        } else {
+      if (message.type === "result") {
+        const result = message as Record<string, unknown>;
+        if (result.subtype === "success") {
           // If nothing was streamed, send the result text
-          if (totalTextSent === 0 && typeof event.result === "string" && event.result) {
-            sendDelta(event.result);
+          if (totalTextSent === 0 && typeof result.result === "string" && result.result) {
+            sendDelta(result.result);
           }
+
+          // Emit cost marker
+          const cost = result.total_cost_usd as number | undefined;
+          const turns = result.num_turns as number | undefined;
+          const durationS = ((Date.now() - startTime) / 1000).toFixed(1);
+          if (cost != null || turns != null) {
+            const costStr = cost != null ? `$${cost.toFixed(4)}` : "$?";
+            const turnsStr = turns != null ? `${turns} turn${turns === 1 ? "" : "s"}` : "";
+            const parts = [costStr, turnsStr, `${durationS}s`].filter(Boolean);
+            sendDelta(`\u200B[cost:${parts.join("|")}]\n`);
+            console.log(`[claude-code] done — cost=${costStr}, turns=${turnsStr}, duration=${durationS}s`);
+          }
+
           sendFinal();
-        }
-
-        const cost = event.total_cost_usd;
-        const turns = event.num_turns;
-        if (cost != null || turns != null) {
-          console.log(`[claude-code] done — cost=$${cost ?? "?"}, turns=${turns ?? "?"}`);
-        }
-        return;
-      }
-    });
-
-    child.stderr?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString().trim();
-      if (text) {
-        stderrBuf += text + "\n";
-        console.error(`[claude-code] stderr: ${text}`);
-      }
-    });
-
-    child.on("close", (code) => {
-      activeClaudeRuns.delete(runId);
-      if (!resultSent) {
-        if (wasCancelled) {
-          sendError("Claude Code run cancelled.");
-          resolve({ sessionId });
-          return;
-        }
-        if (code !== 0) {
-          const detail = stderrBuf.trim();
-          sendError(`Claude Code exited with code ${code}${detail ? `: ${detail}` : ""}`);
         } else {
-          sendFinal();
+          // Error subtypes: error_max_turns, error_during_execution, etc.
+          const errMsg = typeof result.error === "string"
+            ? result.error
+            : typeof result.result === "string"
+              ? result.result
+              : "Claude Code encountered an error.";
+          sendError(errMsg);
         }
+        continue;
       }
-      resolve({ sessionId });
-    });
 
-    child.on("error", (err) => {
-      activeClaudeRuns.delete(runId);
-      sendError(`Failed to start Claude Code: ${err.message}`);
-      resolve({ sessionId: "" });
-    });
-
-    child.on("exit", (_code, signal) => {
-      if (signal === "SIGTERM") {
-        wasCancelled = true;
+      // ── Prompt suggestion (arrives after result) ──
+      if (message.type === "prompt_suggestion") {
+        const msg = message as Record<string, unknown>;
+        const suggestion = ((msg.suggestion as string) ?? "").replace(/[\]\n\r]/g, " ").trim();
+        if (suggestion) {
+          sendDelta(`\u200B[suggest:${suggestion}]\n`);
+        }
+        continue;
       }
-    });
-  });
+    }
+
+    // If the generator completed without a result message, send final
+    if (!resultSent) sendFinal();
+  } catch (err: unknown) {
+    if (!resultSent) {
+      const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
+      if (isAbort) {
+        sendError("Claude Code run cancelled.", true);
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[claude-code] error:`, msg);
+        sendError(`Claude Code error: ${msg}`);
+      }
+    }
+  } finally {
+    activeAbortControllers.delete(runId);
+  }
+
+  return { sessionId };
 }
