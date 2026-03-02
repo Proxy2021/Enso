@@ -388,8 +388,10 @@ export async function startEnsoServer(opts: {
     app.use((req, res, next) => {
       if (req.method === "OPTIONS") return next();
       // Same-origin bypass (matches WebSocket auth behavior)
+      // Note: browsers omit Origin header on same-origin GET requests, so also check Sec-Fetch-Site
       const origin = req.headers.origin ?? "";
-      const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`;
+      const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`
+        || req.headers["sec-fetch-site"] === "same-origin";
       if (isSameOrigin) return next();
       const token = req.headers.authorization?.replace("Bearer ", "")
         || (req.query.token as string | undefined);
