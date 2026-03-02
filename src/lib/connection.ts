@@ -135,13 +135,14 @@ export function resolveMediaUrl(url: string): string {
 
 // ── Deep-link support ─────────────────────────────────────────────────────
 
-/** Parse ?backend=...&token=... from URL params and create/connect a backend. */
-export function parseDeepLink(): BackendConfig | null {
+/** Parse ?backend=...&token=...&share=... from URL params and create/connect a backend. */
+export function parseDeepLink(): (BackendConfig & { shareCardId?: string }) | null {
   const params = new URLSearchParams(window.location.search);
   const backendUrl = params.get("backend");
   if (!backendUrl) return null;
 
   const token = params.get("token") ?? "";
+  const shareCardId = params.get("share") ?? undefined;
   const name = new URL(backendUrl).hostname;
 
   // Check if we already have this backend saved
@@ -151,9 +152,9 @@ export function parseDeepLink(): BackendConfig | null {
     if (token && existing.token !== token) {
       updateBackend(existing.id, { token });
     }
-    return { ...existing, token: token || existing.token };
+    return { ...existing, token: token || existing.token, shareCardId };
   }
 
   // Create new backend entry
-  return addBackend({ name, url: backendUrl, token });
+  return { ...addBackend({ name, url: backendUrl, token }), shareCardId };
 }

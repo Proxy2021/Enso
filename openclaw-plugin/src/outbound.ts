@@ -100,6 +100,41 @@ export function registerCardContext(cardId: string, ctx: {
   cardContexts.set(cardId, ctx as CardContext);
 }
 
+/**
+ * Return the public state of a card context (data, template, metadata).
+ * Used by the /api/card/:cardId/state endpoint for share-link loading.
+ */
+export function getCardState(cardId: string): {
+  data: unknown;
+  generatedUI?: string;
+  toolFamily?: string;
+  signatureId?: string;
+  coverageStatus?: string;
+  toolMeta?: { toolId?: string };
+} | null {
+  const ctx = cardContexts.get(cardId);
+  if (!ctx) return null;
+
+  // Resolve the template JSX
+  let generatedUI: string | undefined;
+  if (ctx.signatureId) {
+    generatedUI = getGeneratedTemplateCodeBySignature(ctx.signatureId) ?? undefined;
+    if (!generatedUI) {
+      const template = getToolTemplate(ctx.toolFamily ?? "", ctx.signatureId);
+      if (template) generatedUI = getToolTemplateCode(template) ?? undefined;
+    }
+  }
+
+  return {
+    data: ctx.currentData,
+    generatedUI,
+    toolFamily: ctx.toolFamily,
+    signatureId: ctx.signatureId,
+    coverageStatus: ctx.coverageStatus,
+    toolMeta: ctx.nativeToolHint ? { toolId: ctx.nativeToolHint.toolName } : undefined,
+  };
+}
+
 // ── Path-scoped sharing helpers ──
 
 /** Check whether `candidatePath` is equal to or a subdirectory of `allowedRoot`. */

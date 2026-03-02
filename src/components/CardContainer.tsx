@@ -490,11 +490,12 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
     return { token, shareCardId };
   };
 
-  /** Build a deep-link URL for the share. */
-  const buildShareUrl = (token: string): string => {
+  /** Build a deep-link URL for the share (includes cardId so recipients see the shared app). */
+  const buildShareUrl = (token: string, shareCardId?: string): string => {
     const url = new URL(serverUrl);
     url.searchParams.set("backend", serverUrl);
     if (token) url.searchParams.set("token", token);
+    if (shareCardId) url.searchParams.set("share", shareCardId);
     return url.toString();
   };
 
@@ -503,8 +504,8 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
     if (busy) return;
     setBusy(true);
     try {
-      const { token } = await resolveShareToken();
-      const shareUrl = buildShareUrl(token);
+      const { token, shareCardId } = await resolveShareToken();
+      const shareUrl = buildShareUrl(token, shareCardId ?? card.id);
       const title = `Enso — ${familyLabel}`;
       const description = isMultimedia
         ? `Shared folder from Enso`

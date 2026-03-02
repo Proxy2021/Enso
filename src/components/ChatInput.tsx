@@ -1,6 +1,8 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { useSpeechRecognition } from "../lib/use-speech-recognition";
+import { useVoiceRecorder } from "../lib/use-voice-recorder";
+import { isNative } from "../lib/platform";
 
 interface SlashCommand {
   command: string;
@@ -102,15 +104,22 @@ export default function ChatInput() {
 
   const disabled = connectionState !== "connected";
 
-  // Speech-to-text
+  // Speech-to-text — native uses MediaRecorder + server transcription, web uses Web Speech API
   const handleTranscript = useCallback((transcript: string) => {
     setText((prev) => {
       const separator = prev.length > 0 && !prev.endsWith(" ") ? " " : "";
       return prev + separator + transcript;
     });
   }, []);
-  const { isSupported: speechSupported, isListening, interimTranscript, toggleListening } =
-    useSpeechRecognition(handleTranscript);
+  const speech = useSpeechRecognition(handleTranscript);
+  const recorder = useVoiceRecorder(handleTranscript);
+  const voice = isNative ? recorder : speech;
+  const speechSupported = voice.isSupported;
+  const isListening = voice.isListening;
+  const toggleListening = voice.toggleListening;
+  const interimTranscript = isNative
+    ? (recorder.isTranscribing ? "Transcribing..." : (recorder.isListening ? "Recording..." : ""))
+    : speech.interimTranscript;
 
   // Close attach menu on click outside
   useEffect(() => {

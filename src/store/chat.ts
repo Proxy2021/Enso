@@ -72,6 +72,7 @@ interface CardStore {
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
+  loadSharedCard: (cardId: string) => Promise<void>;
   pinCard: (cardId: string) => void;
   unpinCard: (cardId: string) => void;
   toggleSidebar: () => void;
@@ -541,6 +542,44 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
     set({ _wsClient: client });
     client.connect();
+  },
+
+  loadSharedCard: async (cardId: string) => {
+    try {
+      const baseUrl = getBackendBaseUrl();
+      const res = await fetch(`${baseUrl}/api/card/${encodeURIComponent(cardId)}/state`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) return;
+      const state = await res.json();
+      if (!state.data && !state.generatedUI) return;
+
+      const now = Date.now();
+      const card: Card = {
+        id: cardId,
+        runId: cardId,
+        type: state.generatedUI ? "dynamic-ui" : "chat",
+        role: "assistant",
+        status: "complete",
+        display: "expanded",
+        text: "",
+        data: state.data,
+        generatedUI: state.generatedUI,
+        toolMeta: state.toolMeta,
+        cardMode: state.toolFamily ? {
+          interactionMode: "tool" as const,
+          toolFamily: state.toolFamily,
+          signatureId: state.signatureId,
+          coverageStatus: state.coverageStatus,
+        } : undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, cardId],
+        cards: { ...s.cards, [cardId]: card },
+      }));
+    } catch { /* shared card load failed — show home page */ }
   },
 
   pinCard: (cardId: string) => {

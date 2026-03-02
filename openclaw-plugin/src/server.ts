@@ -11,9 +11,10 @@ import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
 import { handleEnsoInbound } from "./inbound.js";
-import { handleCardEnhance, handlePluginCardAction, createScopedShareContext } from "./outbound.js";
+import { handleCardEnhance, handlePluginCardAction, createScopedShareContext, getCardState } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
+import { transcribeAudio } from "./transcribe.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
 
 export type ConnectedClient = {
@@ -428,6 +429,16 @@ export async function startEnsoServer(opts: {
     });
   });
 
+  // ── Card state endpoint — returns card data + template for share-link loading ──
+  app.get("/api/card/:cardId/state", (req, res) => {
+    const state = getCardState(req.params.cardId);
+    if (!state) {
+      res.status(404).json({ error: "Card not found" });
+      return;
+    }
+    res.json(state);
+  });
+
   // ── APK download endpoint (authenticated — serves built APK for app upgrades) ──
   app.get("/api/apk", (_req, res) => {
     if (!existsSync(apkPath)) {
@@ -509,6 +520,39 @@ export async function startEnsoServer(opts: {
     writeFileSync(filePath, req.body);
     const mediaUrl = toMediaUrl(filePath);
     res.json({ mediaUrl, filePath });
+  });
+
+  // Transcribe audio from the browser (voice input on native)
+  app.post("/transcribe", express.raw({ type: () => true, limit: "20mb" }), async (req, res) => {
+    const account = getActiveAccount();
+    if (!account?.geminiApiKey) {
+      res.status(500).json({ error: "No Gemini API key configured" });
+      return;
+    }
+    const contentType = req.headers["content-type"] ?? "audio/webm";
+    const extMap: Record<string, string> = {
+      "audio/webm": ".webm",
+      "audio/ogg": ".ogg",
+      "audio/mp4": ".m4a",
+      "audio/mpeg": ".mp3",
+      "audio/wav": ".wav",
+    };
+    const ext = extMap[contentType] ?? ".webm";
+    const filename = `${randomUUID()}${ext}`;
+    const filePath = join(uploadDir, filename);
+    writeFileSync(filePath, req.body);
+    try {
+      const transcript = await transcribeAudio({ filePath, geminiApiKey: account.geminiApiKey });
+      unlinkSync(filePath);
+      if (transcript) {
+        res.json({ transcript });
+      } else {
+        res.status(422).json({ error: "Could not transcribe audio" });
+      }
+    } catch (err) {
+      try { unlinkSync(filePath); } catch {}
+      res.status(500).json({ error: "Transcription failed" });
+    }
   });
 
   // ── SPA fallback (must be after all API routes) ──

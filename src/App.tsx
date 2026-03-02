@@ -59,13 +59,22 @@ export default function App() {
   const connect = useChatStore((s) => s.connect);
   const disconnect = useChatStore((s) => s.disconnect);
   const connectToBackend = useChatStore((s) => s.connectToBackend);
+  const loadSharedCard = useChatStore((s) => s.loadSharedCard);
 
   useEffect(() => {
-    // Handle deep-link: ?backend=https://...&token=xxx
+    // Handle deep-link: ?backend=https://...&token=xxx&share=cardId
     const deepLink = parseDeepLink();
     if (deepLink) {
       setActiveBackend(deepLink.id);
       connectToBackend(deepLink);
+      // If a shared card ID is present, load it once connected
+      if (deepLink.shareCardId) {
+        const shareId = deepLink.shareCardId;
+        // Small delay to let WebSocket connect before fetching card state
+        const timer = setTimeout(() => loadSharedCard(shareId), 1500);
+        window.history.replaceState({}, "", window.location.pathname);
+        return () => { clearTimeout(timer); disconnect(); };
+      }
       // Clean URL params
       window.history.replaceState({}, "", window.location.pathname);
       return () => disconnect();
@@ -85,7 +94,7 @@ export default function App() {
     // Normal startup: connect to last-used or same-origin
     connect();
     return () => disconnect();
-  }, [connect, disconnect, connectToBackend]);
+  }, [connect, disconnect, connectToBackend, loadSharedCard]);
 
   // Initialize deep link listener for enso://connect QR codes
   useEffect(() => {
