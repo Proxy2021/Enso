@@ -43,6 +43,10 @@ interface CardStore {
   // Internal: active terminal card
   _activeTerminalCardId: string | null;
 
+  // Pinning
+  pinnedCards: string[];
+  showSidebar: boolean;
+
   // Actions
   connect: () => void;
   disconnect: () => void;
@@ -68,6 +72,9 @@ interface CardStore {
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
+  pinCard: (cardId: string) => void;
+  unpinCard: (cardId: string) => void;
+  toggleSidebar: () => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -87,6 +94,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   codeSessionCwd: null,
   codeSessionId: null,
   _activeTerminalCardId: null,
+  pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
+  showSidebar: false,
 
   connect: () => {
     const existing = get()._wsClient;
@@ -533,6 +542,25 @@ export const useChatStore = create<CardStore>((set, get) => ({
     set({ _wsClient: client });
     client.connect();
   },
+
+  pinCard: (cardId: string) => {
+    set((s) => {
+      if (s.pinnedCards.includes(cardId)) return s;
+      const pins = [...s.pinnedCards, cardId];
+      localStorage.setItem("enso_pinned_cards", JSON.stringify(pins));
+      return { pinnedCards: pins, showSidebar: true };
+    });
+  },
+
+  unpinCard: (cardId: string) => {
+    set((s) => {
+      const pins = s.pinnedCards.filter((id) => id !== cardId);
+      localStorage.setItem("enso_pinned_cards", JSON.stringify(pins));
+      return { pinnedCards: pins };
+    });
+  },
+
+  toggleSidebar: () => set((s) => ({ showSidebar: !s.showSidebar })),
 
   _handleServerMessage: (msg: ServerMessage) => {
     // Handle settings messages (mode + tool families)

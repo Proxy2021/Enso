@@ -4,6 +4,7 @@ import type { Card } from "../cards/types";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
+import { getActiveBackend } from "../lib/connection";
 
 const FAMILY_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
@@ -418,6 +419,119 @@ function AgentSteps({ steps }: { steps: AgentStep[] }) {
   );
 }
 
+function PinButton({ cardId }: { cardId: string }) {
+  const isPinned = useChatStore((s) => s.pinnedCards.includes(cardId));
+  const pinCard = useChatStore((s) => s.pinCard);
+  const unpinCard = useChatStore((s) => s.unpinCard);
+
+  return (
+    <button
+      onClick={() => isPinned ? unpinCard(cardId) : pinCard(cardId)}
+      className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+        isPinned
+          ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+          : "border-gray-600/50 bg-transparent text-gray-500 hover:text-gray-300"
+      }`}
+      title={isPinned ? "Unpin" : "Pin to sidebar"}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 17v5" />
+        <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1h.5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5H8a1 1 0 0 1 1 1z" />
+      </svg>
+    </button>
+  );
+}
+
+function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
+  const [exporting, setExporting] = useState(false);
+
+  const backend = getActiveBackend();
+  const serverUrl = backend?.url || window.location.origin;
+  const serverToken = backend?.token || "";
+
+  const handleExport = async (mode: "live" | "offline") => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { exportCardAsHtml } = await import("../lib/exportApp");
+      await exportCardAsHtml(
+        card,
+        mode,
+        mode === "live" ? { serverUrl, token: serverToken } : undefined,
+      );
+      onClose();
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative z-10 w-full max-w-sm mx-4 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 pt-4 pb-2">
+          <h3 className="text-sm font-semibold text-gray-100">Share this app</h3>
+        </div>
+        <div className="px-4 py-2 text-xs text-gray-300 space-y-2">
+          <p>
+            <strong className="text-amber-400">Warning:</strong> Anyone with the live file gets direct access
+            to your Enso server. They can interact with this app and trigger actions on your machine.
+          </p>
+          <p className="text-[10px] text-gray-500 font-mono truncate" title={serverUrl}>
+            {serverUrl}
+          </p>
+        </div>
+        <div className="px-4 py-3 border-t border-gray-700/50 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs rounded-lg border border-gray-600 text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => handleExport("offline")}
+            disabled={exporting}
+            className="px-3 py-1.5 text-xs rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            Save Offline
+          </button>
+          <button
+            onClick={() => handleExport("live")}
+            disabled={exporting}
+            className="px-3 py-1.5 text-xs rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {exporting ? "Exporting…" : "Share Live"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExportButton({ card }: { card: Card }) {
+  const [showDialog, setShowDialog] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setShowDialog(true)}
+        className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-500 hover:text-gray-300 transition-colors"
+        title="Share / Export app"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+          <polyline points="16 6 12 2 8 6" />
+          <line x1="12" y1="2" x2="12" y2="15" />
+        </svg>
+      </button>
+      {showDialog && <ShareDialog card={card} onClose={() => setShowDialog(false)} />}
+    </>
+  );
+}
+
 function ViewToggle({ card }: { card: Card }) {
   const toggleCardView = useChatStore((s) => s.toggleCardView);
   const viewMode = card.viewMode ?? "original";
@@ -672,6 +786,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
             </div>
             <div className="flex items-center gap-1.5">
+              {isAppView && card.status === "complete" && <ExportButton card={card} />}
+              {isAppView && card.status === "complete" && <PinButton cardId={card.id} />}
               {card.enhanceStatus === "ready" && <ViewToggle card={card} />}
               {canEnhance && <EnhanceButton card={card} />}
               {statusLabel !== "ready" && (
