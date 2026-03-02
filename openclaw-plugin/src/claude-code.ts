@@ -178,6 +178,10 @@ export async function runClaudeCode(params: {
   const spawnCwd = cwd ? cwd.replace(/\\/g, "/") : undefined;
   console.log(`[claude-code] SDK query (cwd=${spawnCwd ?? "default"}, resume=${toolSessionId ?? "none"})`);
 
+  // Clear CLAUDECODE env var to prevent the spawned CLI from rejecting
+  // as a "nested session" (e.g. when the gateway was started from Claude Code)
+  delete process.env.CLAUDECODE;
+
   try {
     const q = query({
       prompt,

@@ -726,9 +726,14 @@ export function normalizeDataForToolTemplate(signature: ToolTemplate, data: unkn
       };
     }
     case "market_regime_snapshot": {
+      // regime may arrive as an object (e.g. { state: "...", label: "..." }) — extract a string
+      const rawRegime = source.regime ?? source.state ?? source.market_regime ?? "Unknown";
+      const regimeStr = (typeof rawRegime === "object" && rawRegime !== null)
+        ? (rawRegime as Record<string, unknown>).label ?? (rawRegime as Record<string, unknown>).state ?? (rawRegime as Record<string, unknown>).name ?? JSON.stringify(rawRegime)
+        : rawRegime;
       return {
         ...source,
-        regime: source.regime ?? source.state ?? source.market_regime ?? "Unknown",
+        regime: regimeStr,
         confidence: source.confidence ?? source.regimeConfidence ?? source.regime_confidence ?? 0,
         guidance: Array.isArray(source.guidance) ? source.guidance : [],
       };

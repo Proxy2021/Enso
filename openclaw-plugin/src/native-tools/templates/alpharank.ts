@@ -91,7 +91,8 @@ function predictionsTemplate(): string {
 
 function regimeTemplate(): string {
   return `export default function GeneratedUI({ data, onAction }) {
-  const regime = String(data?.regime ?? data?.state ?? "Unknown");
+  var raw = data?.regime ?? data?.state ?? "Unknown";
+  const regime = (typeof raw === "object" && raw !== null) ? (raw.label || raw.state || raw.name || JSON.stringify(raw)) : String(raw);
   const confidence = Number(data?.confidence ?? data?.regimeConfidence ?? 0);
   const guidance = Array.isArray(data?.guidance) ? data.guidance : [];
   const isRiskOn = /risk\\s*on|bull/i.test(regime);

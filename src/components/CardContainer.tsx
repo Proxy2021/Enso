@@ -877,7 +877,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700/60">
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <span>{icon}</span>
-              <span className="capitalize">{effectiveType.replace("-", " ")}</span>
+              <span className="capitalize">{effectiveType === "dynamic-ui" ? "Enso" : effectiveType.replace("-", " ")}</span>
               {modeDetail && (
                 <span className="text-[10px] text-gray-500 truncate max-w-[200px]" title={modeDetail}>
                   {modeDetail}

@@ -67,6 +67,7 @@ interface CardStore {
   saveAppToCodebase: (toolFamily: string) => void;
   restartServer: () => void;
   launchEnsoCode: () => void;
+  sendDebugReport: (description: string, screenshotPath: string | null) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   setShowConnectionPicker: (show: boolean) => void;
@@ -514,6 +515,83 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cards: { ...s.cards, [id]: card },
       _activeTerminalCardId: id,
     }));
+  },
+
+  sendDebugReport: (description: string, screenshotPath: string | null) => {
+    const ensoPath = get().ensoProjectPath;
+    if (!ensoPath) return;
+
+    // Force CWD to Enso project, fresh session each time
+    localStorage.setItem("enso_code_session_cwd", ensoPath);
+    localStorage.removeItem("enso_code_session_id");
+    set({ codeSessionCwd: ensoPath, codeSessionId: null });
+
+    // Build the prompt
+    const lines: string[] = ["A user reported a bug in the Enso app via the in-app debug reporter.", ""];
+    if (screenshotPath) {
+      lines.push(`A screenshot of the current app state has been saved to: ${screenshotPath}`);
+      lines.push("Read this image file to understand the visual state of the bug.");
+      lines.push("");
+    }
+    if (description) {
+      lines.push(`Bug description: "${description}"`);
+      lines.push("");
+    }
+    lines.push(
+      "Instructions:",
+      "1. Analyze the bug based on the description and/or screenshot",
+      "2. Search the Enso codebase to find the root cause",
+      "3. Implement the fix",
+      "4. Run `npm run build` to verify the fix compiles",
+      "5. After fixing, check which files you modified:",
+      "   - If ANY files in `src/` were changed (frontend code): run the FULL RELEASE procedure:",
+      "     a. Commit the fix and push",
+      "     b. Bump `versionCode` by 1 and bump patch `version` in package.json",
+      "     c. Commit version bump and push",
+      "     d. Run `npm run android:build-apk` (use a 5 minute timeout)",
+      "     e. Run `powershell -ExecutionPolicy Bypass -File D:\\Github\\Enso\\restart.ps1`",
+      "   - If ONLY backend files changed (`openclaw-plugin/`):",
+      "     a. Commit the fix and push",
+      "     b. Run `powershell -ExecutionPolicy Bypass -File D:\\Github\\Enso\\restart.ps1`",
+      "",
+      "Work autonomously. Fix the bug and deploy without asking for confirmation.",
+    );
+    const prompt = lines.join("\n");
+
+    // Create terminal card and send
+    const id = uuidv4();
+    const now = Date.now();
+    const displayText = description
+      ? `[Bug Report] ${description.slice(0, 100)}${description.length > 100 ? "..." : ""}`
+      : "[Bug Report] Screenshot attached";
+
+    const card: Card = {
+      id,
+      runId: id,
+      type: "terminal",
+      role: "assistant",
+      status: "streaming",
+      display: "expanded",
+      text: `>>> ${displayText}\n`,
+      toolMeta: { toolId: "claude-code" },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    set((s) => ({
+      cardOrder: [...s.cardOrder, id],
+      cards: { ...s.cards, [id]: card },
+      _activeTerminalCardId: id,
+      isWaiting: true,
+    }));
+
+    const routing: ToolRouting = {
+      mode: "direct_tool",
+      toolId: "claude-code",
+      cwd: ensoPath,
+    };
+
+    get()._wsClient?.send({ type: "chat.send", text: prompt, routing });
   },
 
   fetchProjects: () => {

@@ -10,6 +10,7 @@ import { parseDeepLink, setActiveBackend, getActiveBackend, loadBackends } from 
 import { isNative } from "./lib/platform";
 import { initDeepLinkListener } from "./lib/deep-link-handler";
 import UpdateBanner from "./components/UpdateBanner";
+import DebugReporter from "./components/DebugReporter";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
 
@@ -110,11 +111,9 @@ export default function App() {
   return (
     <div className="flex flex-col h-dvh text-gray-100">
       <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Enso</h1>
-          <p className="text-[11px] text-gray-500 leading-none mt-0.5">Every answer is an app.</p>
-        </div>
+        <h1 className="text-lg font-semibold tracking-tight">Enso</h1>
         <div className="flex items-center gap-3">
+          <DebugReporter />
           <AppsMenu />
           <SidebarToggle />
           <ConnectionDot />
