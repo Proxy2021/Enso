@@ -523,13 +523,13 @@ export async function startEnsoServer(opts: {
   });
 
   // Transcribe audio from the browser (voice input on native)
-  app.post("/transcribe", express.raw({ type: () => true, limit: "20mb" }), async (req, res) => {
+  // Accepts either raw audio body or JSON { audio: base64, mimeType: string }
+  app.post("/transcribe", express.json({ limit: "20mb" }), express.raw({ type: () => true, limit: "20mb" }), async (req, res) => {
     const account = getActiveAccount();
     if (!account?.geminiApiKey) {
       res.status(500).json({ error: "No Gemini API key configured" });
       return;
     }
-    const contentType = req.headers["content-type"] ?? "audio/webm";
     const extMap: Record<string, string> = {
       "audio/webm": ".webm",
       "audio/ogg": ".ogg",
@@ -537,10 +537,21 @@ export async function startEnsoServer(opts: {
       "audio/mpeg": ".mp3",
       "audio/wav": ".wav",
     };
-    const ext = extMap[contentType] ?? ".webm";
+    let audioBuffer: Buffer;
+    let audioMimeType: string;
+    if (req.body?.audio && typeof req.body.audio === "string") {
+      // Base64 JSON body (from Capacitor native)
+      audioBuffer = Buffer.from(req.body.audio, "base64");
+      audioMimeType = req.body.mimeType ?? "audio/webm";
+    } else {
+      // Raw audio body (from desktop browser)
+      audioBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body);
+      audioMimeType = req.headers["content-type"] ?? "audio/webm";
+    }
+    const ext = extMap[audioMimeType] ?? ".webm";
     const filename = `${randomUUID()}${ext}`;
     const filePath = join(uploadDir, filename);
-    writeFileSync(filePath, req.body);
+    writeFileSync(filePath, audioBuffer);
     try {
       const transcript = await transcribeAudio({ filePath, geminiApiKey: account.geminiApiKey });
       unlinkSync(filePath);
