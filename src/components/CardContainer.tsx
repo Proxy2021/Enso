@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
 import { getActiveBackend } from "../lib/connection";
+import { isNative } from "../lib/platform";
+import { nativeShare } from "../lib/native-share";
 
 const FAMILY_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
@@ -443,7 +445,7 @@ function PinButton({ cardId }: { cardId: string }) {
 }
 
 function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
-  const [exporting, setExporting] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const backend = getActiveBackend();
   const serverUrl = backend?.url || window.location.origin;
@@ -453,40 +455,74 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
   const currentPath = typeof cardData.path === "string" ? cardData.path : null;
   const toolFamily = card.appCardMode?.toolFamily ?? card.cardMode?.toolFamily;
   const isMultimedia = toolFamily === "multimedia" && !!currentPath;
+  const familyLabel = toolFamily ? toolFamily.replace(/_/g, " ") : "app";
 
-  const handleExport = async (mode: "live" | "offline") => {
-    if (exporting) return;
-    setExporting(true);
-    try {
-      let token = backend?.token || "";
-      let exportCard = card;
+  /** Resolve token (creating scoped context if needed). */
+  const resolveShareToken = async (): Promise<{ token: string; shareCardId?: string }> => {
+    let token = backend?.token || "";
+    let shareCardId: string | undefined;
 
-      if (mode === "live" && isMultimedia) {
-        // Create a scoped share context on the server
+    if (isMultimedia) {
+      const baseUrl = backend?.url || "";
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${baseUrl}/api/create-share`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ cardId: card.id, allowedRoot: currentPath }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        token = data.token || token;
+        shareCardId = data.shareCardId;
+      }
+    } else if (!token) {
+      try {
         const baseUrl = backend?.url || "";
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch(`${baseUrl}/api/create-share`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ cardId: card.id, allowedRoot: currentPath }),
-        });
+        const res = await fetch(`${baseUrl}/api/share-token`);
         if (res.ok) {
           const data = await res.json();
-          token = data.token || token;
-          exportCard = { ...card, id: data.shareCardId };
+          token = data.token || "";
         }
-      } else if (mode === "live" && !token) {
-        // In same-origin mode, fetch the access token from the server
-        try {
-          const baseUrl = backend?.url || "";
-          const res = await fetch(`${baseUrl}/api/share-token`);
-          if (res.ok) {
-            const data = await res.json();
-            token = data.token || "";
-          }
-        } catch { /* proceed without token */ }
-      }
+      } catch { /* proceed without token */ }
+    }
+
+    return { token, shareCardId };
+  };
+
+  /** Build a deep-link URL for the share. */
+  const buildShareUrl = (token: string): string => {
+    const url = new URL(serverUrl);
+    url.searchParams.set("backend", serverUrl);
+    if (token) url.searchParams.set("token", token);
+    return url.toString();
+  };
+
+  /** Android native: open system share sheet with link + description. */
+  const handleNativeShare = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { token } = await resolveShareToken();
+      const shareUrl = buildShareUrl(token);
+      const title = `Enso — ${familyLabel}`;
+      const description = isMultimedia
+        ? `Shared folder from Enso`
+        : `Check out this ${familyLabel} on Enso`;
+      await nativeShare({ title, text: description, url: shareUrl });
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Web/PWA: export as HTML file. */
+  const handleExport = async (mode: "live" | "offline") => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { token, shareCardId } = await resolveShareToken();
+      const exportCard = shareCardId ? { ...card, id: shareCardId } : card;
 
       const { exportCardAsHtml } = await import("../lib/exportApp");
       await exportCardAsHtml(
@@ -496,7 +532,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
       );
       onClose();
     } finally {
-      setExporting(false);
+      setBusy(false);
     }
   };
 
@@ -523,7 +559,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
             </>
           ) : (
             <p>
-              <strong className="text-amber-400">Warning:</strong> Anyone with the live file gets direct access
+              <strong className="text-amber-400">Warning:</strong> Anyone with the link gets direct access
               to your Enso server. They can interact with this app and trigger actions on your machine.
             </p>
           )}
@@ -538,20 +574,32 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
           >
             Cancel
           </button>
-          <button
-            onClick={() => handleExport("offline")}
-            disabled={exporting}
-            className="px-3 py-1.5 text-xs rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            Save Offline
-          </button>
-          <button
-            onClick={() => handleExport("live")}
-            disabled={exporting}
-            className="px-3 py-1.5 text-xs rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {exporting ? "Exporting…" : "Share Live"}
-          </button>
+          {isNative ? (
+            <button
+              onClick={handleNativeShare}
+              disabled={busy}
+              className="px-3 py-1.5 text-xs rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {busy ? "Preparing…" : "Share"}
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => handleExport("offline")}
+                disabled={busy}
+                className="px-3 py-1.5 text-xs rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Save Offline
+              </button>
+              <button
+                onClick={() => handleExport("live")}
+                disabled={busy}
+                className="px-3 py-1.5 text-xs rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {busy ? "Exporting…" : "Share Live"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
