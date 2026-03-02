@@ -31,7 +31,7 @@ const TEMPLATES: Template[] = [
     icon: "\uD83D\uDD0D",
     title: "Researcher",
     description: "Deep dive into any topic",
-    prompt: "Research the following topic in depth:",
+    toolFamily: "researcher",
   },
   {
     icon: "\uD83D\uDCBB",

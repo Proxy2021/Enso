@@ -94,6 +94,7 @@ export default function ChatInput() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const sendMessageWithMedia = useChatStore((s) => s.sendMessageWithMedia);
   const connectionState = useChatStore((s) => s.connectionState);
@@ -245,7 +246,11 @@ export default function ChatInput() {
   }
 
   async function handleLocationShare() {
-    if (!navigator.geolocation) return;
+    setLocationError(null);
+    if (!navigator.geolocation) {
+      setLocationError("Location not available on this device.");
+      return;
+    }
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -256,14 +261,28 @@ export default function ChatInput() {
       const { latitude, longitude } = position.coords;
       const locationText = `My Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}\nhttps://www.google.com/maps?q=${latitude},${longitude}`;
       sendMessage(locationText);
-    } catch {
-      // Permission denied or timeout — silently ignore
+    } catch (err) {
+      const code = (err as GeolocationPositionError)?.code;
+      if (code === 1 /* PERMISSION_DENIED */) {
+        setLocationError("Location permission denied. Please allow location access in your device settings.");
+      } else if (code === 3 /* TIMEOUT */) {
+        setLocationError("Could not get location — timed out. Try again.");
+      } else {
+        setLocationError("Could not get location.");
+      }
     }
   }
 
   return (
     <div className="border-t border-gray-800 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div className="max-w-3xl mx-auto relative">
+        {/* Location error banner */}
+        {locationError && (
+          <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-red-900/50 border border-red-700 text-red-300 text-sm">
+            <span>{locationError}</span>
+            <button onClick={() => setLocationError(null)} className="shrink-0 text-red-400 hover:text-red-200">✕</button>
+          </div>
+        )}
         {/* Attached file previews */}
         {attachedFiles.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
