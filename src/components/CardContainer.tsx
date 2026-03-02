@@ -448,13 +448,36 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
   const backend = getActiveBackend();
   const serverUrl = backend?.url || window.location.origin;
 
+  // Extract current path and toolFamily for scoped sharing
+  const cardData = (card.appData ?? card.data ?? {}) as Record<string, unknown>;
+  const currentPath = typeof cardData.path === "string" ? cardData.path : null;
+  const toolFamily = card.appCardMode?.toolFamily ?? card.cardMode?.toolFamily;
+  const isMultimedia = toolFamily === "multimedia" && !!currentPath;
+
   const handleExport = async (mode: "live" | "offline") => {
     if (exporting) return;
     setExporting(true);
     try {
       let token = backend?.token || "";
-      // In same-origin mode, fetch the access token from the server
-      if (mode === "live" && !token) {
+      let exportCard = card;
+
+      if (mode === "live" && isMultimedia) {
+        // Create a scoped share context on the server
+        const baseUrl = backend?.url || "";
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(`${baseUrl}/api/create-share`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ cardId: card.id, allowedRoot: currentPath }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          token = data.token || token;
+          exportCard = { ...card, id: data.shareCardId };
+        }
+      } else if (mode === "live" && !token) {
+        // In same-origin mode, fetch the access token from the server
         try {
           const baseUrl = backend?.url || "";
           const res = await fetch(`${baseUrl}/api/share-token`);
@@ -464,9 +487,10 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
           }
         } catch { /* proceed without token */ }
       }
+
       const { exportCardAsHtml } = await import("../lib/exportApp");
       await exportCardAsHtml(
-        card,
+        exportCard,
         mode,
         mode === "live" ? { serverUrl, token } : undefined,
       );
@@ -487,10 +511,22 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
           <h3 className="text-sm font-semibold text-gray-100">Share this app</h3>
         </div>
         <div className="px-4 py-2 text-xs text-gray-300 space-y-2">
-          <p>
-            <strong className="text-amber-400">Warning:</strong> Anyone with the live file gets direct access
-            to your Enso server. They can interact with this app and trigger actions on your machine.
-          </p>
+          {isMultimedia ? (
+            <>
+              <p>
+                <strong className="text-blue-400">Scoped share:</strong> The recipient will have access
+                <strong> only</strong> to this folder and its subfolders:
+              </p>
+              <p className="text-[10px] text-blue-300/80 font-mono truncate bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1" title={currentPath}>
+                {currentPath}
+              </p>
+            </>
+          ) : (
+            <p>
+              <strong className="text-amber-400">Warning:</strong> Anyone with the live file gets direct access
+              to your Enso server. They can interact with this app and trigger actions on your machine.
+            </p>
+          )}
           <p className="text-[10px] text-gray-500 font-mono truncate" title={serverUrl}>
             {serverUrl}
           </p>
