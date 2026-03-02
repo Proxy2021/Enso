@@ -689,6 +689,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
 
   const isCollapsed = card.display === "collapsed";
   const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI;
+  const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
+  const isShareable = isAppView || isDynamicCard;
   const isGeneralSmartCard = card.type === "dynamic-ui" && card.cardMode?.toolFamily === "general";
   const canEnhance = card.role === "assistant" && card.status === "complete"
     && (card.type === "chat" || isGeneralSmartCard);
@@ -787,8 +789,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              {isAppView && card.status === "complete" && <ExportButton card={card} />}
-              {isAppView && card.status === "complete" && <PinButton cardId={card.id} />}
+              {isShareable && card.status === "complete" && <ExportButton card={card} />}
+              {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
               {card.enhanceStatus === "ready" && <ViewToggle card={card} />}
               {canEnhance && <EnhanceButton card={card} />}
               {statusLabel !== "ready" && (
