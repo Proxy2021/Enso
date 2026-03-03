@@ -150,6 +150,7 @@ export async function runClaudeCode(params: {
   };
 
   const sendDelta = (text?: string, extra?: Partial<ServerMessage>) => {
+    if (resultSent) return; // Never send a delta after final (would reset card to "streaming")
     if (text) {
       totalTextSent += text.length;
       lastCharNewline = text.endsWith("\n");
