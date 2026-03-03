@@ -109,11 +109,9 @@ export async function runClaudeCode(params: {
   let pendingFinalCostDelta: string | null = null;
   let pendingFinalReady = false;
   const pendingSuggestions: string[] = [];
-  let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Idempotent flush: send buffered cost + suggestions, then final. */
   const flushPendingFinal = () => {
-    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     if (!pendingFinalReady || resultSent) return;
     if (pendingFinalCostDelta) sendDelta(pendingFinalCostDelta);
     pendingFinalCostDelta = null;
@@ -557,9 +555,9 @@ export async function runClaudeCode(params: {
 
           // Don't call sendFinal() yet — prompt_suggestion messages may still
           // arrive after this result message.  Flush after the loop instead.
-          // Safety: if the SDK stream doesn't close within 2s, flush anyway.
+          // Note: no safety timer — a delayed flush races with follow-up
+          // sessions on the same terminal card, causing stuck "Completed" state.
           pendingFinalReady = true;
-          flushTimer = setTimeout(flushPendingFinal, 2000);
         } else {
           // Error subtypes: error_max_turns, error_during_execution, etc.
           const errMsg = typeof result.error === "string"
@@ -588,13 +586,12 @@ export async function runClaudeCode(params: {
       }
     }
 
-    // Flush buffered final (idempotent — may have already fired via timeout)
+    // Flush buffered final (idempotent)
     flushPendingFinal();
 
     // If the generator completed without a result message, send final
     if (!resultSent) sendFinal();
   } catch (err: unknown) {
-    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     if (!resultSent) {
       const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
       if (isAbort) {
