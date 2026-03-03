@@ -274,16 +274,13 @@ function ToolActivityChips({ tools }: { tools: ToolActivity[] }) {
   if (tools.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-1 mb-1.5 pl-5">
+    <div className="space-y-px mb-1.5 pl-5">
       {tools.map((t, i) => (
-        <span
-          key={i}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-gray-800/80 border border-gray-700/50 text-gray-500 rounded"
-        >
-          <span>{TOOL_ICONS[t.toolName] ?? "\u2699\uFE0F"}</span>
-          <span>{t.toolName}</span>
-          {t.detail && <span className="text-gray-600 truncate max-w-[120px]">{t.detail}</span>}
-        </span>
+        <div key={i} className="flex items-center gap-1.5 text-[11px] text-gray-500 py-px">
+          <span className="shrink-0">{TOOL_ICONS[t.toolName] ?? "\u2699\uFE0F"}</span>
+          <span className="text-gray-400">{t.toolName}</span>
+          {t.detail && <span className="text-gray-600 truncate font-mono">{t.detail}</span>}
+        </div>
       ))}
     </div>
   );
@@ -486,13 +483,13 @@ function CompactBanner({ events }: { events: CompactEvent[] }) {
 
 function ActivityIndicator({ label }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2 py-2 pl-5 text-gray-400 text-xs">
+    <div className="flex items-center gap-2 py-2 pl-5 text-xs">
       <span className="flex gap-0.5">
-        <span className="w-1 h-1 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_infinite]" />
-        <span className="w-1 h-1 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
-        <span className="w-1 h-1 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_infinite]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
       </span>
-      <span className="text-gray-500">{label || "Working..."}</span>
+      <span className="text-gray-400 font-mono truncate">{label || "Working..."}</span>
     </div>
   );
 }

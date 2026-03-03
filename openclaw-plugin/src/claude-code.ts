@@ -109,10 +109,26 @@ export async function runClaudeCode(params: {
   let pendingFinalCostDelta: string | null = null;
   let pendingFinalReady = false;
   const pendingSuggestions: string[] = [];
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Idempotent flush: send buffered cost + suggestions, then final. */
+  const flushPendingFinal = () => {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    if (!pendingFinalReady || resultSent) return;
+    if (pendingFinalCostDelta) sendDelta(pendingFinalCostDelta);
+    pendingFinalCostDelta = null;
+    for (const s of pendingSuggestions) {
+      sendDelta(`\u200B[suggest:${s}]\n`);
+    }
+    pendingSuggestions.length = 0;
+    sendFinal();
+  };
 
   // Tool activity tracking
   let activeToolName: string | null = null;
   let toolInputBuf = "";
+  let lastEmittedDetail: string | null = null;
+  let lastCompletedToolName: string | null = null;
 
   const toolMeta = (): ServerMessage["toolMeta"] => ({
     toolId: "claude-code",
@@ -349,12 +365,28 @@ export async function runClaudeCode(params: {
             });
           } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
             toolInputBuf += delta.partial_json;
+            // Progressive detail extraction — update label as soon as key param is known
+            if (activeToolName && activeToolName !== "AskUserQuestion") {
+              const detail = extractToolDetail(activeToolName, toolInputBuf);
+              if (detail && detail !== lastEmittedDetail) {
+                lastEmittedDetail = detail;
+                sendDelta(undefined, {
+                  operation: {
+                    operationId: runId,
+                    stage: "calling_tool",
+                    label: `${humanToolLabel(activeToolName)} ${detail}`,
+                    cancellable: true,
+                  },
+                });
+              }
+            }
           }
         }
 
         // content_block_stop → emit tool marker if we were tracking a tool
         if (event.type === "content_block_stop") {
           if (activeToolName && activeToolName !== "AskUserQuestion") {
+            lastCompletedToolName = activeToolName;
             if (activeToolName === "Bash") {
               // Emit specialized bash marker with command text
               const cmdMatch = toolInputBuf.match(/"command"\s*:\s*"((?:[^"\\]|\\.)*)"/);
@@ -372,6 +404,7 @@ export async function runClaudeCode(params: {
           }
           activeToolName = null;
           toolInputBuf = "";
+          lastEmittedDetail = null;
         }
 
         continue;
@@ -380,6 +413,13 @@ export async function runClaudeCode(params: {
       // ── Tool output summary ──
       if (message.type === "tool_use_summary") {
         const msg = message as Record<string, unknown>;
+        // Suppress noisy file-content dumps from read-only tools
+        const suppressTools = new Set(["Read", "Glob", "Grep", "WebFetch"]);
+        if (lastCompletedToolName && suppressTools.has(lastCompletedToolName)) {
+          lastCompletedToolName = null;
+          continue;
+        }
+        lastCompletedToolName = null;
         const summary = msg.summary as string | undefined;
         if (summary?.trim()) {
           const display = summary.length > 1500 ? summary.slice(0, 1500) + "\n...(truncated)" : summary;
@@ -394,9 +434,10 @@ export async function runClaudeCode(params: {
         const toolName = msg.tool_name as string | undefined;
         const elapsed = msg.elapsed_time_seconds as number | undefined;
         if (toolName) {
+          const detail = (toolName === activeToolName && lastEmittedDetail) ? ` ${lastEmittedDetail}` : "";
           const label = elapsed != null
-            ? `${humanToolLabel(toolName)}... (${Math.round(elapsed)}s)`
-            : `${humanToolLabel(toolName)}...`;
+            ? `${humanToolLabel(toolName)}${detail} (${Math.round(elapsed)}s)`
+            : `${humanToolLabel(toolName)}${detail}`;
           sendDelta(undefined, {
             operation: {
               operationId: runId,
@@ -515,7 +556,9 @@ export async function runClaudeCode(params: {
 
           // Don't call sendFinal() yet — prompt_suggestion messages may still
           // arrive after this result message.  Flush after the loop instead.
+          // Safety: if the SDK stream doesn't close within 2s, flush anyway.
           pendingFinalReady = true;
+          flushTimer = setTimeout(flushPendingFinal, 2000);
         } else {
           // Error subtypes: error_max_turns, error_during_execution, etc.
           const errMsg = typeof result.error === "string"
@@ -544,18 +587,13 @@ export async function runClaudeCode(params: {
       }
     }
 
-    // Flush buffered final: send cost delta + any collected suggestions, then final
-    if (pendingFinalReady && !resultSent) {
-      if (pendingFinalCostDelta) sendDelta(pendingFinalCostDelta);
-      for (const s of pendingSuggestions) {
-        sendDelta(`\u200B[suggest:${s}]\n`);
-      }
-      sendFinal();
-    }
+    // Flush buffered final (idempotent — may have already fired via timeout)
+    flushPendingFinal();
 
     // If the generator completed without a result message, send final
     if (!resultSent) sendFinal();
   } catch (err: unknown) {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
     if (!resultSent) {
       const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
       if (isAbort) {
