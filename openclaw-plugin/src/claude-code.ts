@@ -1,5 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "crypto";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage, ToolQuestion } from "./types.js";
 
@@ -86,10 +88,25 @@ export async function runClaudeCode(params: {
   client: ConnectedClient;
   runId: string;
 }): Promise<{ sessionId: string }> {
-  const { prompt, cwd, toolSessionId, client, runId } = params;
+  const { prompt: rawPrompt, cwd, toolSessionId, client, runId } = params;
 
-  if (!prompt.trim()) {
+  if (!rawPrompt.trim()) {
     return { sessionId: toolSessionId ?? "" };
+  }
+
+  // Expand slash commands: /name [args] → read .claude/commands/name.md
+  let prompt = rawPrompt;
+  const slashMatch = rawPrompt.match(/^\/(\S+)(?:\s+(.*))?$/s);
+  if (slashMatch) {
+    const cmdName = slashMatch[1];
+    const cmdArgs = (slashMatch[2] ?? "").trim();
+    const cmdDir = cwd ?? process.cwd();
+    const cmdPath = join(cmdDir, ".claude", "commands", `${cmdName}.md`);
+    if (existsSync(cmdPath)) {
+      const content = readFileSync(cmdPath, "utf-8");
+      prompt = cmdArgs ? `${content}\n\n${cmdArgs}` : content;
+      console.log(`[claude-code] expanded /${cmdName} → ${cmdPath} (${content.length} chars)`);
+    }
   }
 
   const abortController = new AbortController();
