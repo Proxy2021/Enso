@@ -5,30 +5,28 @@ import { useChatStore } from "../store/chat";
 interface AppBuilderDialogProps {
   cardId: string;
   cardText: string;
-  initialProposal: string;
-  conversationContext?: string;
   onClose: () => void;
 }
 
-export function AppBuilderDialog({ cardId, cardText, initialProposal, conversationContext, onClose }: AppBuilderDialogProps) {
-  const [definition, setDefinition] = useState(initialProposal);
+export function AppBuilderDialog({ cardId, cardText, onClose }: AppBuilderDialogProps) {
+  const [instruction, setInstruction] = useState("");
   const buildApp = useChatStore((s) => s.buildApp);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus textarea on mount
+  // Focus input on mount
   useEffect(() => {
-    setTimeout(() => textareaRef.current?.focus(), 50);
+    setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
   const handleSubmit = () => {
-    const trimmed = definition.trim();
+    const trimmed = instruction.trim();
     if (!trimmed) return;
-    buildApp(cardId, cardText, trimmed, conversationContext);
+    buildApp(cardId, cardText, trimmed);
     onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter") {
       handleSubmit();
     }
     if (e.key === "Escape") {
@@ -43,25 +41,20 @@ export function AppBuilderDialog({ cardId, cardText, initialProposal, conversati
     >
       <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)]">
         <div className="px-4 py-3 border-b border-gray-700/70">
-          <h3 className="text-sm font-semibold text-gray-100">Build New App</h3>
+          <h3 className="text-sm font-semibold text-gray-100">Build App with Claude Code</h3>
           <p className="text-xs text-gray-400 mt-1">
-            Review and refine the app proposal below. This will become the app's skill definition.
+            Describe what app you want. Claude Code will design and build it in a live terminal session.
           </p>
         </div>
-        <div className="px-4 py-3 space-y-2">
-          <label className="text-xs text-gray-400 block">App proposal</label>
-          <textarea
-            ref={textareaRef}
-            value={definition}
-            onChange={(e) => setDefinition(e.target.value)}
+        <div className="px-4 py-3">
+          <input
+            ref={inputRef}
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe the app, its tools, and what scenarios it supports..."
-            rows={12}
-            className="w-full bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500/50 resize-none font-mono leading-relaxed"
+            placeholder="e.g., a weather dashboard with forecast charts, or a recipe browser with filters..."
+            className="w-full bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500/50"
           />
-          <div className="text-[10px] text-gray-500">
-            Cmd+Enter to submit
-          </div>
         </div>
         <div className="px-4 py-3 border-t border-gray-700/70 flex justify-end gap-2">
           <button
@@ -72,7 +65,7 @@ export function AppBuilderDialog({ cardId, cardText, initialProposal, conversati
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!definition.trim()}
+            disabled={!instruction.trim()}
             className="px-3 py-1.5 text-xs rounded-md border border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Build App

@@ -56,8 +56,7 @@ interface CardStore {
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
   enhanceCard: (cardId: string) => void;
   enhanceCardWithFamily: (cardId: string, family: string) => void;
-  buildApp: (cardId: string, cardText: string, definition: string, conversationContext?: string) => void;
-  proposeApp: (cardId: string, cardText: string, context: string) => void;
+  buildApp: (cardId: string, cardText: string, definition: string) => void;
   toggleCardView: (cardId: string, viewMode: "original" | "app") => void;
   cancelOperation: (operationId: string) => void;
   collapseCard: (cardId: string) => void;
@@ -467,11 +466,18 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
-  buildApp: (cardId: string, cardText: string, definition: string, conversationContext?: string) => {
+  buildApp: (cardId: string, cardText: string, definition: string) => {
     const card = get().cards[cardId];
     if (!card) return;
 
-    // Fire-and-forget: no loading state on the card — build runs in background
+    // Gather recent conversation context for the build prompt
+    const { cardOrder, cards } = get();
+    const recent = cardOrder.slice(-6).map((id) => cards[id]).filter(Boolean);
+    const conversationContext = recent
+      .map((c) => `[${c.role}] ${(c.text ?? "").slice(0, 400)}`)
+      .join("\n\n");
+
+    // Fire-and-forget: build runs as Claude Code session in a terminal card
     get()._wsClient?.send({
       type: "card.build_app",
       cardId,
@@ -481,14 +487,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
-  proposeApp: (cardId: string, cardText: string, context: string) => {
-    get()._wsClient?.send({
-      type: "card.propose_app",
-      cardId,
-      cardText,
-      conversationContext: context,
-    });
-  },
+  // proposeApp removed — Build App now goes directly through Claude Code
 
   toggleCardView: (cardId: string, viewMode: "original" | "app") => {
     set((s) => {
@@ -908,25 +907,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       return;
     }
 
-    // Handle app proposal (auto-generated app description) — no targetCardId
-    if (msg.appProposal && msg.appProposal.cardId) {
-      set((state) => {
-        const proposalCardId = msg.appProposal!.cardId;
-        const proposalCard = state.cards[proposalCardId];
-        if (!proposalCard) return state;
-        return {
-          cards: {
-            ...state.cards,
-            [proposalCardId]: {
-              ...proposalCard,
-              pendingProposal: msg.appProposal!.proposal,
-              updatedAt: Date.now(),
-            },
-          },
-        };
-      });
-      return;
-    }
+    // appProposal handler removed — Build App now goes directly through Claude Code
 
     // Handle build completion (async build pipeline notification)
     if (msg.buildComplete) {
@@ -984,7 +965,31 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
       // ── Route card updates by targetCardId ──
       if (msg.targetCardId) {
-        const card = state.cards[msg.targetCardId];
+        let card = state.cards[msg.targetCardId];
+
+        // Auto-create terminal card if it doesn't exist yet (e.g. build-via-claude)
+        if (!card && msg.toolMeta?.toolId === "claude-code" && msg.state === "delta") {
+          card = {
+            id: msg.targetCardId,
+            runId: msg.runId,
+            type: "terminal",
+            role: "assistant",
+            status: "streaming",
+            display: "expanded",
+            text: msg.text ?? "",
+            toolMeta: msg.toolMeta,
+            operation: msg.operation,
+            createdAt: now,
+            updatedAt: now,
+          };
+          return {
+            cardOrder: [...state.cardOrder, msg.targetCardId],
+            cards: { ...state.cards, [msg.targetCardId]: card },
+            _activeTerminalCardId: msg.targetCardId,
+            isWaiting: true,
+          };
+        }
+
         if (!card) return state;
 
         // ── Terminal card (claude-code): append text, per-card session ──

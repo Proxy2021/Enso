@@ -134,32 +134,16 @@ function BuildSummaryBanner({ summary, onDismiss }: { summary: ToolBuildSummary;
   );
 }
 
-/** Gather recent conversation context from the store for proposal generation. */
-function getConversationContext(): string {
-  const { cardOrder, cards } = useChatStore.getState();
-  const recent = cardOrder.slice(-6).map((id) => cards[id]).filter(Boolean);
-  return recent
-    .map((c) => `[${c.role}] ${(c.text ?? "").slice(0, 400)}`)
-    .join("\n\n");
-}
 
 function EnhanceButton({ card }: { card: Card }) {
   const enhanceCard = useChatStore((s) => s.enhanceCard);
   const enhanceCardWithFamily = useChatStore((s) => s.enhanceCardWithFamily);
-  const proposeApp = useChatStore((s) => s.proposeApp);
   const toolFamilies = useChatStore((s) => s.toolFamilies);
   const [showMenu, setShowMenu] = useState(false);
   const [showFactory, setShowFactory] = useState(false);
-  const [isProposing, setIsProposing] = useState(false);
-  const [cachedContext, setCachedContext] = useState("");
-  const pendingProposal = useChatStore((s) => s.cards[card.id]?.pendingProposal);
   const suggestedFamily = useChatStore((s) => s.cards[card.id]?.suggestedFamily);
   const status = card.enhanceStatus;
   const menuRef = useRef<HTMLDivElement>(null);
-
-  // Cleanup subscription on unmount
-  const unsubRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => { unsubRef.current?.(); }, []);
 
   // Close menu on click outside
   useEffect(() => {
@@ -174,37 +158,9 @@ function EnhanceButton({ card }: { card: Card }) {
   }, [showMenu]);
 
   const handleBuildAppClick = useCallback(() => {
-    if (isProposing) return;
     setShowMenu(false);
-    const currentProposal = useChatStore.getState().cards[card.id]?.pendingProposal;
-    setIsProposing(true);
-    const context = getConversationContext();
-    setCachedContext(context);
-    proposeApp(card.id, card.text ?? "", context);
-
-    // Subscribe to store: when pendingProposal changes, open dialog
-    unsubRef.current?.(); // clean up any prior subscription
-    const unsub = useChatStore.subscribe((state) => {
-      const proposal = state.cards[card.id]?.pendingProposal;
-      if (proposal && proposal !== currentProposal) {
-        unsub();
-        unsubRef.current = null;
-        setIsProposing(false);
-        setShowFactory(true);
-      }
-    });
-    unsubRef.current = unsub;
-
-    // Safety timeout: if proposal doesn't arrive in 45s, open dialog anyway
-    setTimeout(() => {
-      if (unsubRef.current === unsub) {
-        unsub();
-        unsubRef.current = null;
-        setIsProposing(false);
-        setShowFactory(true);
-      }
-    }, 45_000);
-  }, [card.id, card.text, proposeApp, isProposing]);
+    setShowFactory(true);
+  }, []);
 
   const handleFamilyClick = useCallback((family: string) => {
     setShowMenu(false);
@@ -226,32 +182,20 @@ function EnhanceButton({ card }: { card: Card }) {
   if (status === "unavailable") {
     return (
       <>
-        {isProposing ? (
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300">
-            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="text-[10px]">Proposing app</span>
-          </div>
-        ) : (
-          <button
-            onClick={handleBuildAppClick}
-            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors"
-            title="Build a new app for this content"
-          >
-            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Build App
-          </button>
-        )}
+        <button
+          onClick={handleBuildAppClick}
+          className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors"
+          title="Build a new app for this content"
+        >
+          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Build App
+        </button>
         {showFactory && (
           <AppBuilderDialog
             cardId={card.id}
             cardText={card.text ?? ""}
-            initialProposal={pendingProposal ?? ""}
-            conversationContext={cachedContext}
             onClose={() => setShowFactory(false)}
           />
         )}
@@ -360,8 +304,6 @@ function EnhanceButton({ card }: { card: Card }) {
         <AppBuilderDialog
           cardId={card.id}
           cardText={card.text ?? ""}
-          initialProposal={pendingProposal ?? ""}
-          conversationContext={cachedContext}
           onClose={() => setShowFactory(false)}
         />
       )}

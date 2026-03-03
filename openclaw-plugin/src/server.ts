@@ -759,52 +759,19 @@ export async function startEnsoServer(opts: {
             break;
           case "card.build_app":
             if (msg.cardId && msg.cardText && msg.buildAppDefinition) {
-              runtime.log?.(`[enso] card build-app (async): ${msg.cardId}`);
-              const { handleBuildTool } = await import("./tool-factory.js");
-              // Fire-and-forget: build runs in background, sends buildComplete when done
-              handleBuildTool({
+              runtime.log?.(`[enso] card build-app via Claude Code: ${msg.cardId}`);
+              const { handleBuildAppViaClaude } = await import("./build-via-claude.js");
+              // Fire-and-forget: build runs as Claude Code session, sends buildComplete when done
+              handleBuildAppViaClaude({
                 cardId: msg.cardId,
                 cardText: msg.cardText,
-                toolDefinition: msg.buildAppDefinition,
+                buildAppDefinition: msg.buildAppDefinition,
                 conversationContext: msg.conversationContext,
                 client,
                 account,
               }).catch((err) => {
-                runtime.error?.(`[enso] build-app unhandled error: ${err instanceof Error ? err.message : String(err)}`);
+                runtime.error?.(`[enso] build-via-claude unhandled error: ${err instanceof Error ? err.message : String(err)}`);
               });
-            }
-            break;
-          case "card.propose_app":
-            if (msg.cardId && msg.cardText) {
-              runtime.log?.(`[enso] card propose-app: ${msg.cardId}`);
-              try {
-                const { generateAppProposal } = await import("./tool-factory.js");
-                const proposal = await generateAppProposal({
-                  cardText: msg.cardText,
-                  conversationContext: msg.conversationContext ?? "",
-                  apiKey: account.geminiApiKey,
-                });
-                send({
-                  id: randomUUID(),
-                  runId: randomUUID(),
-                  sessionKey,
-                  seq: 0,
-                  state: "final",
-                  appProposal: { cardId: msg.cardId, proposal },
-                  timestamp: Date.now(),
-                });
-              } catch (err) {
-                runtime.error?.(`[enso] propose-app failed: ${err instanceof Error ? err.message : String(err)}`);
-                send({
-                  id: randomUUID(),
-                  runId: randomUUID(),
-                  sessionKey,
-                  seq: 0,
-                  state: "final",
-                  appProposal: { cardId: msg.cardId, proposal: "" },
-                  timestamp: Date.now(),
-                });
-              }
             }
             break;
           case "apps.list": {
