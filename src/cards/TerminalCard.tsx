@@ -933,9 +933,6 @@ export default function TerminalCard({ card }: CardRendererProps) {
             <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
           </div>
           <span className="text-gray-400 ml-1">Claude Code</span>
-          {card.operation?.label && (
-            <span className="text-gray-500 ml-2 truncate max-w-[30%]">{card.operation.label}</span>
-          )}
           {ctxPercent != null && (
             <span
               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
