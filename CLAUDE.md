@@ -39,7 +39,8 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── inbound.ts            # Browser msg → OpenClaw dispatch
     ├── outbound.ts           # Agent reply delivery, enhance, card action dispatch
     ├── ui-generator.ts       # Gemini-based tool selection for enhance
-    ├── tool-factory.ts       # Build pipeline: spec → executors → template → persist
+    ├── tool-factory.ts       # Validation, auto-heal, and refine utilities
+    ├── build-via-claude.ts   # Build App via Claude Code session
     ├── app-persistence.ts    # Save/load dynamic apps from disk
     ├── claude-code.ts        # Claude Code CLI integration
     ├── *-tools.ts            # Tool family implementations (filesystem, workspace, media, travel, meal)
@@ -55,7 +56,7 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 
 ### WebSocket Protocol
 
-- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `card.propose_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`
+- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`
 - **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `questions`
 - `chat.send` with `routing.toolId: "claude-code"` bypasses OpenClaw agent, spawns CLI directly
 - `card.action` carries `cardId`, `cardAction`, `cardPayload` — dispatched via four-path resolution
@@ -70,7 +71,7 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 ### App Enhancement (Three Flows)
 
 - **Fast Enhance**: User clicks App button → family selected from dropdown (or auto-detect) → deterministic tool execution → template rendering → app view with Original/App toggle
-- **Build App**: User clicks "Build custom app..." → LLM proposal → async build pipeline (spec → executors ∥ template → validation → registration) → `buildComplete` notification
+- **Build App**: User clicks "Build custom app..." → single-line instruction → Claude Code session in terminal card → writes app files → post-build auto-registration → `buildComplete` notification
 - **Refine**: User types instruction in app view → single LLM call regenerates template JSX only → in-place update (cheapest iteration path)
 
 ### ExecutorContext (`ctx`)

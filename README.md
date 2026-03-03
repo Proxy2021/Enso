@@ -68,7 +68,7 @@ Three paths to build, from easiest to most powerful:
 | Method | What happens | Best for |
 |--------|-------------|----------|
 | **Enhance** | One-click React UI from any response | Quick visualizations |
-| **Build App** | Describe in natural language → LLM builds executors + template | New tool families |
+| **Build App** | Describe in natural language → Claude Code builds the full app in a live terminal | New tool families |
 | **`/code`** | Full coding agent edits the actual source code | Deep changes, new integrations, evolving the platform itself |
 
 The server, the apps, and the platform itself all grow from within — no separate IDE or deployment pipeline needed.
