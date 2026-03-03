@@ -236,6 +236,16 @@ export function registerToolTemplate(signature: ToolTemplate): void {
   signatureRegistry.set(signatureKey(signature.toolFamily, signature.signatureId), signature);
 }
 
+/**
+ * Register a tool prefix → family/signature mapping so that
+ * detectToolTemplateForToolName can match dynamic app tools
+ * (e.g. enso_media_gallery_browse → media_gallery/media_gallery_view)
+ * before the shorter built-in prefixes (e.g. enso_media_ → multimedia).
+ */
+export function registerDynamicAppPrefix(prefix: string, toolFamily: string, signatureId: string): void {
+  dynamicPrefixSignatureMap.set(prefix.toLowerCase(), { toolFamily, signatureId });
+}
+
 export function registerToolTemplateDataHint(input: {
   toolFamily: string;
   signatureId: string;

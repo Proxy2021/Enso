@@ -9,6 +9,7 @@ import {
   registerGeneratedTemplateCode,
   registerToolTemplate,
   registerToolTemplateDataHint,
+  registerDynamicAppPrefix,
   unregisterGeneratedTool,
   unregisterGeneratedTemplateCode,
   unregisterToolTemplate,
@@ -523,6 +524,10 @@ export function registerLoadedApp(app: LoadedApp): void {
     coverageStatus: "covered",
   };
   registerToolTemplate(template);
+
+  // Register prefix so detectToolTemplateForToolName resolves dynamic app
+  // tools before shorter built-in prefixes (e.g. enso_media_gallery_ before enso_media_)
+  registerDynamicAppPrefix(spec.toolPrefix, spec.toolFamily, spec.signatureId);
 
   // Register data hint
   const primaryDef = spec.tools.find((t) => t.isPrimary) ?? spec.tools[0];
