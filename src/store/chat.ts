@@ -117,7 +117,30 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const client = createWSClient({
       url: wsUrl,
       onMessage: (msg) => get()._handleServerMessage(msg),
-      onStateChange: (state) => set({ connectionState: state }),
+      onStateChange: (state) => {
+        const prev = get().connectionState;
+        set({ connectionState: state });
+
+        // When connection drops, finalize any streaming cards
+        if (state === "disconnected" && prev === "connected") {
+          const { cards } = get();
+          const updates: Record<string, Card> = {};
+          for (const [id, card] of Object.entries(cards)) {
+            if (card.status === "streaming") {
+              updates[id] = {
+                ...card,
+                status: "complete",
+                text: (card.text ?? "") + "\n\u200B[connection:lost]\n",
+                operation: undefined,
+                updatedAt: Date.now(),
+              };
+            }
+          }
+          if (Object.keys(updates).length > 0) {
+            set((s) => ({ cards: { ...s.cards, ...updates }, isWaiting: false }));
+          }
+        }
+      },
     });
 
     set({ _wsClient: client });
@@ -664,7 +687,22 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const client = createWSClient({
       url: wsUrl,
       onMessage: (msg) => get()._handleServerMessage(msg),
-      onStateChange: (state) => set({ connectionState: state }),
+      onStateChange: (state) => {
+        const prev = get().connectionState;
+        set({ connectionState: state });
+        if (state === "disconnected" && prev === "connected") {
+          const { cards } = get();
+          const updates: Record<string, Card> = {};
+          for (const [id, card] of Object.entries(cards)) {
+            if (card.status === "streaming") {
+              updates[id] = { ...card, status: "complete", text: (card.text ?? "") + "\n\u200B[connection:lost]\n", operation: undefined, updatedAt: Date.now() };
+            }
+          }
+          if (Object.keys(updates).length > 0) {
+            set((s) => ({ cards: { ...s.cards, ...updates }, isWaiting: false }));
+          }
+        }
+      },
     });
     set({ _wsClient: client });
     client.connect();

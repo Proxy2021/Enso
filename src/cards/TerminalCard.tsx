@@ -14,6 +14,7 @@ const SUGGEST_MARKER_RE = /\u200B\[suggest:([^\]]*)\]\n?/g;
 const INIT_MARKER_RE = /\u200B\[init:([^\]]*)\]\n?/g;
 const FILES_MARKER_RE = /\u200B\[files:([^\]]*)\]\n?/g;
 const COMPACT_MARKER_RE = /\u200B\[compact:(start|done)(?::([^:]*):([^\]]*))?\]\n?/g;
+const CONNECTION_MARKER_RE = /\u200B\[connection:lost\]\n?/g;
 
 interface SessionInit {
   model: string;
@@ -142,7 +143,13 @@ function stripMarkers(text: string) {
     return "";
   });
 
-  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost };
+  let connectionLost = false;
+  clean = clean.replace(CONNECTION_MARKER_RE, () => {
+    connectionLost = true;
+    return "";
+  });
+
+  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost };
 }
 
 // ── Project Picker ──
@@ -518,6 +525,7 @@ interface TerminalEntry {
   filesChanged: FilesChanged[];
   compactEvents: CompactEvent[];
   cost: string | null;
+  connectionLost: boolean;
   status: Card["status"];
 }
 
@@ -558,6 +566,12 @@ function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFi
         )}
       </div>
       {entry.cost && <CostFooter cost={entry.cost} />}
+      {entry.connectionLost && (
+        <div className="flex items-center gap-1.5 text-amber-400 text-xs mt-2 pl-5">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+          Connection lost — server may have restarted. Reconnecting...
+        </div>
+      )}
       {entry.status === "error" && (
         <div className="text-red-400 text-xs mt-1 pl-5">
           Command failed
@@ -593,7 +607,7 @@ function parseEntries(card: Card): TerminalEntry[] {
 
   // First segment: response text without a preceding prompt
   if (segments[0].trim()) {
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost } = stripMarkers(segments[0].trim());
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost } = stripMarkers(segments[0].trim());
     entries.push({
       text: clean,
       toolActivities: tools,
@@ -605,6 +619,7 @@ function parseEntries(card: Card): TerminalEntry[] {
       filesChanged,
       compactEvents,
       cost,
+      connectionLost,
       status: segments.length <= 1 ? card.status : "complete",
     });
   }
@@ -614,7 +629,7 @@ function parseEntries(card: Card): TerminalEntry[] {
     const userPrompt = segments[i];
     const responseText = (segments[i + 1] ?? "").trim();
     const isLast = i + 2 >= segments.length;
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost } = stripMarkers(responseText);
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost } = stripMarkers(responseText);
 
     entries.push({
       userPrompt,
@@ -628,6 +643,7 @@ function parseEntries(card: Card): TerminalEntry[] {
       filesChanged,
       compactEvents,
       cost,
+      connectionLost,
       status: isLast ? card.status : "complete",
     });
   }
