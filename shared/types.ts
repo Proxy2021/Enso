@@ -120,6 +120,13 @@ export interface ServerMessage {
     toolName: string;
     error?: string;
   };
+  sessionsList?: Array<{
+    sessionId: string;
+    summary: string;
+    lastModified: number;
+    cwd?: string;
+    gitBranch?: string;
+  }>;
   timestamp: number;
 }
 
@@ -139,7 +146,8 @@ export interface ClientMessage {
     | "app.save_to_codebase"
     | "server.restart"
     | "settings.set_mode"
-    | "operation.cancel";
+    | "operation.cancel"
+    | "sessions.list";
   mode?: ChannelMode;
   text?: string;
   mediaUrls?: string[];

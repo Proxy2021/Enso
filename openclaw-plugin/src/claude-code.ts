@@ -95,8 +95,18 @@ export async function runClaudeCode(params: {
     return { sessionId: toolSessionId ?? "" };
   }
 
-  // Expand slash commands: /name [args] → read .claude/commands/name.md
+  // Parse effort prefix: "!!" at start → max effort, "!" → high
+  let effort: "low" | "medium" | "high" | "max" | undefined;
   let prompt = rawPrompt;
+  if (prompt.startsWith("!!")) {
+    effort = "max";
+    prompt = prompt.slice(2).trim();
+  } else if (prompt.startsWith("!") && !prompt.startsWith("!/")) {
+    effort = "high";
+    prompt = prompt.slice(1).trim();
+  }
+
+  // Expand slash commands: /name [args] → read .claude/commands/name.md
   const slashMatch = rawPrompt.match(/^\/(\S+)(?:\s+(.*))?$/s);
   if (slashMatch) {
     const cmdName = slashMatch[1];
@@ -111,26 +121,16 @@ export async function runClaudeCode(params: {
   }
 
   // Built-in terminal commands
+  let useContinue = false; // SDK `continue` option — auto-resume most recent session in cwd
   const trimmedLower = prompt.trim().toLowerCase();
   if (trimmedLower === "/resume" || trimmedLower === "/continue") {
     if (!toolSessionId) {
-      // No session to resume — early exit with clear error
-      client.send({
-        id: randomUUID(),
-        runId,
-        sessionKey: client.sessionKey,
-        seq: 0,
-        timestamp: Date.now(),
-        state: "error",
-        text: "No active session to resume. Type a prompt to start a new session.\n",
-        toolMeta: { toolId: "claude-code" },
-        ...(targetCardId ? { targetCardId } : {}),
-        operation: { operationId: runId, stage: "error", label: "No session", cancellable: false },
-      } as ServerMessage);
-      return { sessionId: "" };
+      // No explicit session — use SDK's `continue` to auto-resume the most
+      // recent session in this project directory (if one exists).
+      useContinue = true;
     }
     prompt = "Continue where you left off.";
-    console.log(`[claude-code] ${trimmedLower} → resume session ${toolSessionId}`);
+    console.log(`[claude-code] ${trimmedLower} → ${toolSessionId ? `resume session ${toolSessionId}` : "continue latest in cwd"}`);
   }
 
   if (trimmedLower === "/compact") {
@@ -161,6 +161,7 @@ export async function runClaudeCode(params: {
   let retried = false;
   let seq = 0;
   let totalTextSent = 0;
+  let modelTextStreamed = 0; // Only actual model text (text_delta), NOT injected markers
   let lastCharNewline = true;
   let resultSent = false;
   let startTime = Date.now();
@@ -269,6 +270,12 @@ export async function runClaudeCode(params: {
   // as a "nested session" (e.g. when the gateway was started from Claude Code)
   delete process.env.CLAUDECODE;
 
+  // Set stream-close timeout BEFORE creating the Query (constructor reads
+  // it synchronously).  The SDK default is very short (5s) and Agent/Task
+  // tools easily exceed that, causing premature stream termination.
+  const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
+  process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = "300000"; // 5 minutes
+
   /** Run the SDK query and process all streamed messages. */
   const runQuery = async () => {
     const q = query({
@@ -276,15 +283,39 @@ export async function runClaudeCode(params: {
       options: {
         cwd: spawnCwd,
         resume: resumeId || undefined,
+        ...(useContinue && !resumeId ? { continue: true } : {}),
         includePartialMessages: true,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         promptSuggestions: true,
         abortController,
-        // Trigger compaction at ~72% instead of default ~83% for more headroom
+        // Append Enso-specific context to Claude Code's default system prompt
+        // (only on new sessions — resumed sessions inherit theirs)
+        ...(!resumeId ? {
+          systemPrompt: {
+            type: "preset" as const,
+            preset: "claude_code" as const,
+            append: [
+              "You are running inside Enso, a chat-based app platform.",
+              "The user is interacting via a mobile or desktop chat UI, not a terminal.",
+              "Keep responses concise and mobile-friendly.",
+              "When the user asks you to deploy or restart, use the /deploy slash command if available.",
+            ].join(" "),
+          },
+        } : {}),
+        // Effort level: "!!" prefix → max, "!" → high (default is SDK's own default)
+        ...(effort ? { effort } : {}),
+        // Trigger compaction at ~80% instead of default ~83% for more headroom
         env: { ...process.env, CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80" },
       },
     });
+
+    // Restore immediately — Query constructor already captured the value
+    if (prevStreamTimeout !== undefined) {
+      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = prevStreamTimeout;
+    } else {
+      delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
+    }
 
     for await (const message of q) {
       // Capture session ID from any message that has it
@@ -421,6 +452,7 @@ export async function runClaudeCode(params: {
         if (event.type === "content_block_delta") {
           const delta = event.delta as Record<string, unknown> | undefined;
           if (delta?.type === "text_delta" && typeof delta.text === "string") {
+            modelTextStreamed += delta.text.length;
             sendDelta(delta.text, {
               operation: {
                 operationId: runId,
@@ -549,13 +581,15 @@ export async function runClaudeCode(params: {
         const content = betaMessage?.content as Array<Record<string, unknown>> | undefined;
 
         if (Array.isArray(content)) {
-          // Fallback: send full text if no streaming deltas arrived yet
+          // Fallback: send full text if no model text was streamed yet
+          // (tool markers don't count — they inflate totalTextSent but aren't real output)
           const textParts = content
             .filter((c) => c.type === "text" && typeof c.text === "string")
             .map((c) => c.text as string);
           const fullText = textParts.join("");
-          if (fullText && totalTextSent === 0) {
+          if (fullText && modelTextStreamed === 0) {
             sendDelta(fullText);
+            modelTextStreamed += fullText.length;
           }
 
           // Detect AskUserQuestion tool_use blocks
@@ -588,8 +622,9 @@ export async function runClaudeCode(params: {
       if (message.type === "result") {
         const result = message as Record<string, unknown>;
         if (result.subtype === "success") {
-          // If nothing was streamed, send the result text
-          if (totalTextSent === 0 && typeof result.result === "string" && result.result) {
+          // If no model text was streamed, send the result text
+          // (tool markers inflate totalTextSent but don't count as model output)
+          if (modelTextStreamed === 0 && typeof result.result === "string" && result.result) {
             sendDelta(result.result);
           }
 
@@ -630,13 +665,37 @@ export async function runClaudeCode(params: {
           // sessions on the same terminal card, causing stuck "Completed" state.
           pendingFinalReady = true;
         } else {
-          // Error subtypes: error_max_turns, error_during_execution, etc.
-          const errMsg = typeof result.error === "string"
+          // Differentiate error subtypes for better user feedback
+          const subtype = result.subtype as string;
+          const baseMsg = typeof result.error === "string"
             ? result.error
             : typeof result.result === "string"
               ? result.result
-              : "Claude Code encountered an error.";
-          sendError(errMsg);
+              : "";
+
+          let errMsg: string;
+          if (subtype === "error_max_turns") {
+            errMsg = baseMsg || "Reached the maximum number of conversation turns.";
+            // Offer resume so user can continue
+            if (sessionId) pendingSuggestions.push("Continue where you left off");
+          } else if (subtype === "error_max_budget_usd") {
+            errMsg = baseMsg || "Session cost budget exceeded.";
+          } else if (subtype === "error_during_execution") {
+            errMsg = baseMsg || "Claude Code encountered an error during execution.";
+            if (sessionId) pendingSuggestions.push("Continue where you left off");
+          } else {
+            errMsg = baseMsg || "Claude Code encountered an error.";
+          }
+
+          // For max_turns and execution errors, send as final (not error)
+          // so suggestions render and the card doesn't show harsh red
+          if ((subtype === "error_max_turns" || subtype === "error_during_execution") && sessionId) {
+            sendDelta(`\n*${errMsg}*\n`);
+            pendingFinalReady = true;
+            flushPendingFinal();
+          } else {
+            sendError(errMsg);
+          }
         }
         continue;
       }
@@ -660,8 +719,16 @@ export async function runClaudeCode(params: {
     // Flush buffered final (idempotent)
     flushPendingFinal();
 
-    // If the generator completed without a result message, send final
-    if (!resultSent) sendFinal();
+    // If the generator completed without a result message, the session
+    // ended abnormally.  Tell the user and suggest resume.
+    if (!resultSent) {
+      console.log(`[claude-code] stream ended without result message (session=${sessionId})`);
+      if (sessionId) {
+        sendDelta("\n\n*Session ended unexpectedly. You can type /resume to continue.*\n");
+        sendDelta(`\u200B[suggest:Continue where you left off]\n`);
+      }
+      sendFinal();
+    }
   };
 
   try {

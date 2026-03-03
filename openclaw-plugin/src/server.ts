@@ -1157,6 +1157,40 @@ export async function startEnsoServer(opts: {
             });
             break;
           }
+          case "sessions.list": {
+            try {
+              const { listSessions } = await import("@anthropic-ai/claude-agent-sdk");
+              const dir = msg.routing?.cwd;
+              const sessions = await listSessions({ dir, limit: 20 });
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                sessionsList: sessions.map((s) => ({
+                  sessionId: s.sessionId,
+                  summary: s.customTitle || s.summary || s.firstPrompt || "Untitled session",
+                  lastModified: s.lastModified,
+                  cwd: s.cwd,
+                  gitBranch: s.gitBranch,
+                })),
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.(`[enso] sessions.list failed: ${err instanceof Error ? err.message : String(err)}`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                sessionsList: [],
+                timestamp: Date.now(),
+              });
+            }
+            break;
+          }
           case "settings.set_mode": {
             const validModes = ["im", "ui", "full"] as const;
             if (msg.mode && validModes.includes(msg.mode as typeof validModes[number])) {
