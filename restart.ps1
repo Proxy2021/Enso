@@ -7,6 +7,7 @@
     2. Rebuilds AlphaRank plugin (if source is newer than dist)
     3. Starts OpenClaw gateway (which auto-starts the Enso WS server on :3001)
     4. Starts the Enso Vite dev server on :5173
+    5. Restarts the Cloudflare tunnel (kills dupes, starts single instance)
 
 .NOTES
     Run from any PowerShell terminal:
@@ -222,6 +223,38 @@ if ($NoDev) {
 }
 
 # ==========================================================================
+#  STEP 5 -- Restart Cloudflare tunnel
+# ==========================================================================
+Write-Step "Restarting Cloudflare tunnel..."
+
+$cfProcs = Get-Process -Name cloudflared -ErrorAction SilentlyContinue
+if ($cfProcs) {
+    Stop-Process -Name cloudflared -Force
+    Write-Ok "Killed $($cfProcs.Count) cloudflared process(es)"
+    Start-Sleep -Seconds 1
+} else {
+    Write-Skip "No existing cloudflared processes"
+}
+
+$cloudflaredExe = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+if (Test-Path $cloudflaredExe) {
+    Start-Process -FilePath $cloudflaredExe `
+        -ArgumentList "tunnel", "run", "enso" `
+        -WindowStyle Hidden
+
+    # Quick check that the process started
+    Start-Sleep -Seconds 2
+    $cfCheck = Get-Process -Name cloudflared -ErrorAction SilentlyContinue
+    if ($cfCheck) {
+        Write-Ok "Cloudflare tunnel running (PID $($cfCheck[0].Id))"
+    } else {
+        Write-Err "Cloudflare tunnel failed to start"
+    }
+} else {
+    Write-Skip "cloudflared not found at $cloudflaredExe"
+}
+
+# ==========================================================================
 #  Summary
 # ==========================================================================
 Write-Host "`n" -NoNewline
@@ -232,6 +265,7 @@ Write-Host "    Enso WS   -> http://localhost:$EnsoPort" -ForegroundColor Gray
 if (-not $NoDev) {
     Write-Host "    Vite      -> http://localhost:$VitePort" -ForegroundColor Gray
 }
+Write-Host "    Tunnel    -> https://app.enso.net" -ForegroundColor Gray
 Write-Host "  Logs:" -ForegroundColor White
 Write-Host "    Gateway   -> $gatewayLog" -ForegroundColor Gray
 if (-not $NoDev) {
