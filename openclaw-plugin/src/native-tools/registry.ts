@@ -2,7 +2,6 @@ import { randomUUID } from "crypto";
 import { getAlphaRankTemplateCode, isAlphaRankSignature } from "./templates/alpharank.js";
 import { getFilesystemTemplateCode, isFilesystemSignature } from "./templates/filesystem.js";
 import { getWorkspaceTemplateCode, isWorkspaceSignature } from "./templates/workspace.js";
-import { getMediaTemplateCode, isMediaSignature } from "./templates/media.js";
 import { getToolingTemplateCode, isToolingSignature } from "./templates/tooling.js";
 import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/system.js";
 import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
@@ -327,18 +326,6 @@ function registerDefaultSignatures(): void {
       coverageStatus: "covered",
     },
     {
-      toolFamily: "multimedia",
-      signatureId: "media_gallery",
-      templateId: "media-gallery-v2",
-      supportedActions: [
-        "refresh", "list_drives", "scan_library", "inspect_file", "group_by_type",
-        "browse_folder", "view_photo", "bookmark_folder",
-        "describe_photo", "search_photos", "batch_tag",
-        "toggle_favorite", "manage_collection", "rate_photo",
-      ],
-      coverageStatus: "covered",
-    },
-    {
       toolFamily: "code_workspace",
       signatureId: "workspace_inventory",
       templateId: "code-workspace-v1",
@@ -493,9 +480,6 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
   if (lower.startsWith("enso_ws_")) {
     return getToolTemplate("code_workspace", "workspace_inventory");
   }
-  if (lower.startsWith("enso_media_")) {
-    return getToolTemplate("multimedia", "media_gallery");
-  }
   if (lower.startsWith("enso_fs_")) {
     return getToolTemplate("filesystem", "directory_listing");
   }
@@ -567,9 +551,6 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if (Array.isArray(record.steps) && ("logs" in record || "failure" in record)) {
     return getToolTemplate("tool_inspector", "tool_run_summary");
   }
-  if (Array.isArray(record.media) || Array.isArray(record.images) || Array.isArray(record.videos) || (Array.isArray(record.drives) && "quickAccess" in record)) {
-    return getToolTemplate("multimedia", "media_gallery");
-  }
   if (Array.isArray(record.developmentTools) || "workspace" in record || "projectDirectories" in record) {
     return getToolTemplate("code_workspace", "workspace_inventory");
   }
@@ -629,9 +610,6 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isWorkspaceSignature(signature.signatureId)) {
     return getWorkspaceTemplateCode(signature);
-  }
-  if (isMediaSignature(signature.signatureId)) {
-    return getMediaTemplateCode(signature);
   }
   if (isBrowserSignature(signature.signatureId)) {
     return getBrowserTemplateCode(signature);
@@ -917,7 +895,6 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
     "enso_",
     "enso_fs_",
     "enso_ws_",
-    "enso_media_",
     "enso_city_",
     "enso_browser_",
     "enso_researcher_",

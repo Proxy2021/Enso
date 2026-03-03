@@ -5,7 +5,7 @@ const FAMILY_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
   filesystem: "\uD83D\uDCC1",
   code_workspace: "\uD83D\uDCBB",
-  multimedia: "\uD83C\uDFA5",
+  media_gallery: "\uD83D\uDDBC\uFE0F",
   travel_planner: "\u2708\uFE0F",
   meal_planner: "\uD83C\uDF7D\uFE0F",
 };

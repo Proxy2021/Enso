@@ -88,12 +88,9 @@ const plugin = {
       actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "code_workspace")?.actionSuffixes ?? [],
       register: () => registerWorkspaceTools(api),
     });
-    maybeRegisterFallbackToolFamily({
-      familyLabel: "media",
-      fallbackPrefix: "enso_media_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "multimedia")?.actionSuffixes ?? [],
-      register: () => registerMediaTools(api),
-    });
+    // Media tools are registered directly (no catalog entry) — they serve as
+    // the backend for the dynamic media_gallery app via ctx.callTool().
+    registerMediaTools(api);
     maybeRegisterFallbackToolFamily({
       familyLabel: "city",
       fallbackPrefix: "enso_city_",

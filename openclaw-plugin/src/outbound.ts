@@ -429,21 +429,6 @@ function attachSyntheticNativeToolHint(ctx: CardContext, data: unknown, prompt: 
     };
     return;
   }
-  if (ctx.toolFamily === "multimedia") {
-    const provider = getPreferredToolProviderForFamily("multimedia");
-    if (!provider) return;
-    const pathCandidate =
-      (typeof hydrated.path === "string" && hydrated.path.trim())
-      || (typeof hydrated.scannedPath === "string" && hydrated.scannedPath.trim())
-      || inferDesktopLikePathFromPrompt(prompt)
-      || "~/Desktop";
-    ctx.nativeToolHint = {
-      toolName: provider.toolName,
-      params: { path: pathCandidate },
-      handlerPrefix: provider.handlerPrefix,
-    };
-    return;
-  }
   if (ctx.toolFamily === "travel_planner") {
     const provider = getPreferredToolProviderForFamily("travel_planner");
     if (!provider) return;
@@ -764,7 +749,7 @@ export async function handleCardEnhance(params: {
     return p;
   };
 
-  if (selection.toolFamily === "filesystem" || selection.toolFamily === "multimedia") {
+  if (selection.toolFamily === "filesystem") {
     execParams.path = resolvePathParam(execParams.path);
   } else if (selection.toolFamily === "code_workspace") {
     execParams.path = resolvePathParam(execParams.path ?? execParams.root);

@@ -35,18 +35,6 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
     description: "Software projects and repositories: listing repos, project structure, language/framework detection, dev tools",
   },
   {
-    toolFamily: "multimedia",
-    fallbackToolName: "enso_media_list_drives",
-    actionSuffixes: [
-      "list_drives", "scan_library", "inspect_file", "group_by_type",
-      "browse_folder", "view_photo", "bookmark_folder",
-      "describe_photo", "search_photos", "batch_tag",
-      "toggle_favorite", "manage_collection", "rate_photo",
-    ],
-    signatureId: "media_gallery",
-    description: "Photo gallery: browse photos with thumbnails, EXIF metadata, AI-powered descriptions and search, favorites, collections, ratings",
-  },
-  {
     toolFamily: "city_planner",
     fallbackToolName: "enso_city_explore",
     actionSuffixes: ["explore", "restaurants", "photo_spots", "landmarks", "send_email", "delete_history"],
@@ -97,7 +85,7 @@ export function removeCapability(toolFamily: string): boolean {
 }
 
 /** List all dynamically added tool families (not the built-in ones). */
-const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "multimedia", "city_planner", "web_browser", "researcher", "clawhub"]);
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "city_planner", "web_browser", "researcher", "clawhub"]);
 
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));

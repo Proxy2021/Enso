@@ -89,15 +89,11 @@ describe("tool-driven follow-up path", () => {
     expect(code).toContain("ticker_detail");
   });
 
-  it("renders dedicated workspace and media templates", () => {
+  it("renders dedicated workspace template", () => {
     const workspaceSig = getToolTemplate("code_workspace", "workspace_inventory");
-    const mediaSig = getToolTemplate("multimedia", "media_gallery");
     expect(workspaceSig).toBeDefined();
-    expect(mediaSig).toBeDefined();
     const workspaceCode = getToolTemplateCode(workspaceSig!);
-    const mediaCode = getToolTemplateCode(mediaSig!);
     expect(workspaceCode).toContain("Workspace Studio");
-    expect(mediaCode).toContain("Media Library Explorer");
   });
 
 

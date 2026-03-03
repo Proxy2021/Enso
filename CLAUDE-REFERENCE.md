@@ -221,7 +221,7 @@ Enso ships multiple deterministic "app experience" tool families:
 - `alpharank` (predictions, regime, portfolio, routine, ticker detail)
 - `filesystem` (`enso_fs_*`)
 - `code_workspace` (`enso_ws_*`)
-- `multimedia` (`enso_media_*`)
+- `media_gallery` (dynamic app, uses `enso_media_*` tools as backend)
 - `travel_planner` (`enso_travel_*`)
 - `meal_planner` (`enso_meal_*`)
 - `enso_tooling` (the `/tool enso` console)

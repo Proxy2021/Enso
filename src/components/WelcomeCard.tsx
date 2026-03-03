@@ -16,10 +16,10 @@ const TEMPLATES: Template[] = [
     toolFamily: "filesystem",
   },
   {
-    icon: "\uD83C\uDFB5",
-    title: "Media Library",
+    icon: "\uD83D\uDDBC\uFE0F",
+    title: "Photo Gallery",
     description: "Browse your media files",
-    toolFamily: "multimedia",
+    toolFamily: "media_gallery",
   },
   {
     icon: "\uD83C\uDFD9\uFE0F",

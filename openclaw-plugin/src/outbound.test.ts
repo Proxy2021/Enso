@@ -74,9 +74,6 @@ vi.mock("./native-tools/registry.js", () => ({
     if (toolFamily === "code_workspace") {
       return { toolName: "enso_ws_list_repos", handlerPrefix: "enso_ws_" };
     }
-    if (toolFamily === "multimedia") {
-      return { toolName: "enso_media_scan_library", handlerPrefix: "enso_media_" };
-    }
     return undefined;
   }),
   isToolActionCovered: vi.fn(() => false),
@@ -944,74 +941,6 @@ describe("handlePluginCardAction", () => {
     expect(finals[0].targetCardId).toBe(cardId);
     expect(finals[0].generatedUI).toBe("<div>tool-template</div>");
     expect(executeToolDirect).toHaveBeenCalledWith("enso_ws_project_overview", { path: "/Users/demo/Github/Enso" });
-  });
-
-  it("Media E2E: tool action maps to enso_media_* and uses tool template", async () => {
-    const client = mockClient();
-    const account = mockAccount("full");
-
-    const toolTemplate = {
-      toolFamily: "multimedia",
-      signatureId: "media_gallery",
-      templateId: "media-gallery-v1",
-      supportedActions: ["refresh", "scan_library", "inspect_file", "group_by_type"],
-      coverageStatus: "covered",
-    };
-
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce({
-      toolName: "enso_media_scan_library",
-      params: { path: "/Users/demo/Pictures" },
-      timestamp: Date.now(),
-    });
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, scan_library, inspect_file, group_by_type");
-    vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
-
-    const { getToolPluginId, getPluginToolPrefix, isToolActionCovered } = await import(
-      "./native-tools/registry.js"
-    );
-    vi.mocked(getToolPluginId).mockReturnValue("enso");
-    vi.mocked(getPluginToolPrefix).mockReturnValue("enso_media_");
-    vi.mocked(isToolActionCovered).mockReturnValue(true);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"path":"/Users/demo/Pictures","items":[{"name":"photo.jpg","path":"/Users/demo/Pictures/photo.jpg","type":"image"}]}\n```',
-      },
-      client,
-      runId: "run-media-tool-mode",
-      seq: 0,
-      account,
-      userMessage: "scan media library",
-    });
-
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0;
-    vi.clearAllMocks();
-
-    vi.mocked(executeToolDirect).mockResolvedValueOnce({
-      success: true,
-      data: { path: "/Users/demo/Pictures/photo.jpg", type: "image", size: 12345 },
-    });
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, scan_library, inspect_file, group_by_type");
-    vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(isToolActionCovered).mockReturnValue(true);
-
-    await handlePluginCardAction({
-      cardId,
-      action: "inspect_file",
-      payload: { path: "/Users/demo/Pictures/photo.jpg" },
-      client,
-      config: {} as any,
-      runtime: mockRuntime(),
-    });
-
-    const finals = finalMessages(client.messages);
-    expect(finals).toHaveLength(1);
-    expect(finals[0].targetCardId).toBe(cardId);
-    expect(finals[0].generatedUI).toBe("<div>tool-template</div>");
-    expect(executeToolDirect).toHaveBeenCalledWith("enso_media_inspect_file", { path: "/Users/demo/Pictures/photo.jpg" });
   });
 
   it("Tool Console E2E: add action updates card in tool mode", async () => {

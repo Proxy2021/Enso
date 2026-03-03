@@ -12,7 +12,7 @@ const FAMILY_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
   filesystem: "\uD83D\uDCC1",
   code_workspace: "\uD83D\uDCBB",
-  multimedia: "\uD83C\uDFA5",
+  media_gallery: "\uD83D\uDDBC\uFE0F",
   travel_planner: "\u2708\uFE0F",
   meal_planner: "\uD83C\uDF7D\uFE0F",
 };
@@ -396,7 +396,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
   const cardData = (card.appData ?? card.data ?? {}) as Record<string, unknown>;
   const currentPath = typeof cardData.path === "string" ? cardData.path : null;
   const toolFamily = card.appCardMode?.toolFamily ?? card.cardMode?.toolFamily;
-  const isMultimedia = toolFamily === "multimedia" && !!currentPath;
+  const isMediaGallery = (toolFamily === "media_gallery") && !!currentPath;
   const familyLabel = toolFamily ? toolFamily.replace(/_/g, " ") : "app";
 
   /** Resolve token (creating scoped context if needed). */
@@ -404,7 +404,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
     let token = backend?.token || "";
     let shareCardId: string | undefined;
 
-    if (isMultimedia) {
+    if (isMediaGallery) {
       const baseUrl = backend?.url || "";
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -449,7 +449,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
       const { token, shareCardId } = await resolveShareToken();
       const shareUrl = buildShareUrl(token, shareCardId ?? card.id);
       const title = `Enso — ${familyLabel}`;
-      const description = isMultimedia
+      const description = isMediaGallery
         ? `Shared folder from Enso`
         : `Check out this ${familyLabel} on Enso`;
       await nativeShare({ title, text: description, url: shareUrl });
@@ -490,7 +490,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
           <h3 className="text-sm font-semibold text-gray-100">Share this app</h3>
         </div>
         <div className="px-4 py-2 text-xs text-gray-300 space-y-2">
-          {isMultimedia ? (
+          {isMediaGallery ? (
             <>
               <p>
                 <strong className="text-blue-400">Scoped share:</strong> The recipient will have access
