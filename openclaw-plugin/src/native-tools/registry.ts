@@ -458,7 +458,18 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
   ensureDynamicSystemTemplatesFromRegistry();
   const lower = toolName.toLowerCase();
 
-  // Specific prefix handlers first — they distinguish sub-signatures within
+  // Dynamic app prefixes first — they are always more specific (longer) than
+  // built-in prefixes (e.g. "enso_media_gallery_" vs "enso_media_"), so
+  // dynamic apps should take priority over the built-in template families.
+  const matchedDynamicPrefix = Array.from(dynamicPrefixSignatureMap.keys())
+    .filter((prefix) => lower.startsWith(prefix))
+    .sort((a, b) => b.length - a.length)[0];
+  if (matchedDynamicPrefix) {
+    const mapped = dynamicPrefixSignatureMap.get(matchedDynamicPrefix);
+    if (mapped) return getToolTemplate(mapped.toolFamily, mapped.signatureId);
+  }
+
+  // Built-in prefix handlers — distinguish sub-signatures within
   // the same family (e.g. alpharank regime vs predictions).
   if (lower.startsWith("alpharank_")) {
     if (lower.includes("market_regime") || lower.includes("regime")) {
@@ -497,13 +508,6 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
     }
   }
 
-  const matchedDynamicPrefix = Array.from(dynamicPrefixSignatureMap.keys())
-    .filter((prefix) => lower.startsWith(prefix))
-    .sort((a, b) => b.length - a.length)[0];
-  if (matchedDynamicPrefix) {
-    const mapped = dynamicPrefixSignatureMap.get(matchedDynamicPrefix);
-    if (mapped) return getToolTemplate(mapped.toolFamily, mapped.signatureId);
-  }
   return undefined;
 }
 

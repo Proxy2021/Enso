@@ -33,7 +33,7 @@
           },
           "required": []
         },
-        "sampleParams": { "path": "~/Pictures" },
+        "sampleParams": {},
         "sampleData": {
           "tool": "enso_media_gallery_browse",
           "path": "C:/Users/Photos/Vacation",
