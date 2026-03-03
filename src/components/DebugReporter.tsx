@@ -10,6 +10,35 @@ interface CapturedImage {
   isScreenshot: boolean; // true for the auto-captured screenshot
 }
 
+/** Downscale and JPEG-compress an image blob to reduce context token usage in Claude Code. */
+async function compressImage(blob: Blob, maxDim = 1200, quality = 0.80): Promise<Blob> {
+  const img = new Image();
+  const url = URL.createObjectURL(blob);
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = reject;
+    img.src = url;
+  });
+  URL.revokeObjectURL(url);
+
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    const scale = maxDim / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, 0, 0, width, height);
+
+  return new Promise((resolve) => {
+    canvas.toBlob((b) => resolve(b!), "image/jpeg", quality);
+  });
+}
+
 export default function DebugReporter() {
   const [isOpen, setIsOpen] = useState(false);
   const [images, setImages] = useState<CapturedImage[]>([]);
@@ -132,14 +161,15 @@ export default function DebugReporter() {
     if (images.length === 0 && !description.trim()) return;
     setIsSubmitting(true);
 
-    // Upload all images
+    // Compress and upload all images
     const paths: string[] = [];
     for (const img of images) {
       try {
+        const compressed = await compressImage(img.blob);
         const res = await fetch(`${getBackendBaseUrl()}/upload`, {
           method: "POST",
-          headers: authHeaders({ "Content-Type": "image/png" }),
-          body: img.blob,
+          headers: authHeaders({ "Content-Type": "image/jpeg" }),
+          body: compressed,
         });
         if (res.ok) {
           const data = await res.json();

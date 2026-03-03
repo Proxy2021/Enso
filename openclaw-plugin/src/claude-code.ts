@@ -109,10 +109,34 @@ export async function runClaudeCode(params: {
     }
   }
 
+  // Built-in terminal commands
+  const trimmedLower = prompt.trim().toLowerCase();
+  if (trimmedLower === "/resume" || trimmedLower === "/continue") {
+    if (!toolSessionId) {
+      // No session to resume — early exit with clear error
+      client.send({
+        id: randomUUID(),
+        runId,
+        sessionKey: client.sessionKey,
+        seq: 0,
+        timestamp: Date.now(),
+        state: "error",
+        text: "No active session to resume. Type a prompt to start a new session.\n",
+        toolMeta: { toolId: "claude-code" },
+        operation: { operationId: runId, stage: "error", label: "No session", cancellable: false },
+      } as ServerMessage);
+      return { sessionId: "" };
+    }
+    prompt = "Continue where you left off.";
+    console.log(`[claude-code] ${trimmedLower} → resume session ${toolSessionId}`);
+  }
+
   const abortController = new AbortController();
   activeAbortControllers.set(runId, abortController);
 
   let sessionId = toolSessionId ?? "";
+  let resumeId: string | undefined = toolSessionId;
+  let retried = false;
   let seq = 0;
   let totalTextSent = 0;
   let lastCharNewline = true;
@@ -222,12 +246,13 @@ export async function runClaudeCode(params: {
   // as a "nested session" (e.g. when the gateway was started from Claude Code)
   delete process.env.CLAUDECODE;
 
-  try {
+  /** Run the SDK query and process all streamed messages. */
+  const runQuery = async () => {
     const q = query({
       prompt,
       options: {
         cwd: spawnCwd,
-        resume: toolSessionId || undefined,
+        resume: resumeId || undefined,
         includePartialMessages: true,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
@@ -608,11 +633,32 @@ export async function runClaudeCode(params: {
 
     // If the generator completed without a result message, send final
     if (!resultSent) sendFinal();
+  };
+
+  try {
+    await runQuery();
   } catch (err: unknown) {
     if (!resultSent) {
       const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
       if (isAbort) {
         sendError("Claude Code run cancelled.", true);
+      } else if (resumeId && totalTextSent === 0 && !retried) {
+        // Resume failed before any output — likely stale/crashed session.
+        // Retry once with a fresh session so the user isn't stuck.
+        retried = true;
+        resumeId = undefined;
+        sessionId = "";
+        console.log(`[claude-code] session resume failed (no output), retrying with fresh session`);
+        sendDelta("Session expired — starting fresh...\n");
+        try {
+          await runQuery();
+        } catch (retryErr: unknown) {
+          if (!resultSent) {
+            const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            console.error(`[claude-code] retry error:`, msg);
+            sendError(`Claude Code error: ${msg}`);
+          }
+        }
       } else {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[claude-code] error:`, msg);

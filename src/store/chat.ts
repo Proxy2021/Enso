@@ -1092,6 +1092,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
 
         if (msg.state === "error") {
+          // Clear stale session ID so next prompt starts fresh
+          if (card.toolMeta?.toolId === "claude-code" || msg.toolMeta?.toolId === "claude-code") {
+            storeUpdates.codeSessionId = null;
+            localStorage.removeItem("enso_code_session_id");
+          }
           return {
             ...storeUpdates,
             cards: {
