@@ -290,7 +290,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
           ))}
         </div>
       )}
-      <div className="flex items-center gap-2 pt-2 border-t border-gray-800/50 mt-2">
+      <div className="flex items-center gap-1.5 pt-1.5 border-t border-gray-800/50 mt-1">
         <span className="text-green-400 font-bold shrink-0">{"\u276F"}</span>
         <input
           ref={inputRef}
@@ -330,8 +330,8 @@ function QuestionOptions({
     <div className="mt-3 mb-1 space-y-4">
       {questions.map((q, qi) => (
         <div key={qi}>
-          <div className="text-gray-300 text-sm mb-2 pl-5">{q.question}</div>
-          <div className="flex flex-wrap gap-2 pl-5">
+          <div className="text-gray-300 text-sm mb-2 pl-3">{q.question}</div>
+          <div className="flex flex-wrap gap-2 pl-3">
             {q.options.map((opt, oi) => (
               <button
                 key={oi}
@@ -355,13 +355,13 @@ function ToolActivityChips({ tools }: { tools: ToolActivity[] }) {
   if (tools.length === 0) return null;
 
   return (
-    <div className="space-y-px mb-1.5 pl-5">
+    <div className="flex flex-wrap gap-1 mb-1 pl-3">
       {tools.map((t, i) => (
-        <div key={i} className="flex items-center gap-1.5 text-[11px] text-gray-500 py-px">
-          <span className="shrink-0">{TOOL_ICONS[t.toolName] ?? "\u2699\uFE0F"}</span>
+        <span key={i} className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+          <span className="shrink-0 text-[9px]">{TOOL_ICONS[t.toolName] ?? "\u2699\uFE0F"}</span>
           <span className="text-gray-400">{t.toolName}</span>
-          {t.detail && <span className="text-gray-600 truncate font-mono">{t.detail}</span>}
-        </div>
+          {t.detail && <span className="text-gray-600 truncate max-w-[100px] font-mono">{t.detail}</span>}
+        </span>
       ))}
     </div>
   );
@@ -388,12 +388,10 @@ function CostFooter({ cost }: { cost: string }) {
     else if (p.endsWith("cache")) tokenParts.push(formatTokens(p.slice(0, -5)) + " cached");
     else if (p.startsWith("ctx:")) tokenParts.push(p.slice(4) + " context");
   }
+  const allParts = tokenParts.length > 0 ? `${primary} \u00B7 ${tokenParts.join(" \u00B7 ")}` : primary;
   return (
-    <div className="font-mono mt-1 pl-5">
-      <div className="text-[10px] text-gray-600">{primary}</div>
-      {tokenParts.length > 0 && (
-        <div className="text-[10px] text-gray-700">{tokenParts.join(" \u00B7 ")}</div>
-      )}
+    <div className="font-mono mt-0.5 pl-3">
+      <div className="text-[9px] text-gray-600">{allParts}</div>
     </div>
   );
 }
@@ -403,11 +401,11 @@ function CostFooter({ cost }: { cost: string }) {
 function BashCommandBlock({ commands }: { commands: BashCommand[] }) {
   if (commands.length === 0) return null;
   return (
-    <div className="space-y-0.5 mb-1.5 pl-5">
+    <div className="space-y-px mb-1 pl-3">
       {commands.map((c, i) => (
-        <div key={i} className="bg-gray-900/80 border border-gray-800/60 rounded px-2 py-1 font-mono text-[11px]">
+        <div key={i} className="bg-gray-900/80 rounded px-1.5 py-0.5 font-mono text-[10px] truncate">
           <span className="text-green-500">$</span>{" "}
-          <span className="text-gray-300">{c.command}</span>
+          <span className="text-gray-400">{c.command}</span>
         </div>
       ))}
     </div>
@@ -419,7 +417,7 @@ function BashCommandBlock({ commands }: { commands: BashCommand[] }) {
 function RateLimitBanner({ limits }: { limits: RateLimitWarning[] }) {
   if (limits.length === 0) return null;
   return (
-    <div className="space-y-1 mb-1.5 pl-5">
+    <div className="space-y-1 mb-1.5 pl-3">
       {limits.map((rl, i) => (
         <div
           key={i}
@@ -457,14 +455,14 @@ function TaskChips({ tasks }: { tasks: TaskEvent[] }) {
     stopped: "\u274C",
   };
   return (
-    <div className="flex flex-wrap gap-1 mb-1.5 pl-5">
+    <div className="flex flex-wrap gap-1 mb-1 pl-3">
       {tasks.map((t, i) => (
         <span
           key={i}
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] border rounded ${colors[t.type] ?? "bg-gray-800 border-gray-700 text-gray-400"}`}
+          className={`inline-flex items-center gap-0.5 px-1 py-px text-[9px] border rounded ${colors[t.type] ?? "bg-gray-800 border-gray-700 text-gray-400"}`}
         >
           <span>{icons[t.type] ?? "\u2699\uFE0F"}</span>
-          <span className="truncate max-w-[200px]">{t.description}</span>
+          <span className="truncate max-w-[160px]">{t.description}</span>
         </span>
       ))}
     </div>
@@ -475,14 +473,14 @@ function TaskChips({ tasks }: { tasks: TaskEvent[] }) {
 
 function SessionInitBar({ init }: { init: SessionInit }) {
   const parts: string[] = [];
-  if (init.version) parts.push(`Claude Code v${init.version}`);
-  if (init.model) parts.push(init.model);
+  if (init.version) parts.push(`v${init.version}`);
+  // Shorten model name: "claude-opus-4-6" → "opus-4-6"
+  if (init.model) parts.push(init.model.replace(/^claude-/, ""));
   if (init.toolCount) parts.push(`${init.toolCount} tools`);
-  if (init.mcpCount) parts.push(`${init.mcpCount} MCP servers`);
-  if (init.mode) parts.push(init.mode);
+  if (init.mcpCount) parts.push(`${init.mcpCount} MCP`);
   if (parts.length === 0) return null;
   return (
-    <div className="text-[10px] text-gray-500 font-mono bg-gray-900/60 rounded px-2 py-0.5 mb-1.5 ml-5 w-fit">
+    <div className="text-[9px] text-gray-600 font-mono bg-gray-900/60 rounded px-1.5 py-px mb-1 ml-3 w-fit">
       {parts.join(" \u00B7 ")}
     </div>
   );
@@ -495,23 +493,23 @@ function FilesChangedChips({ files }: { files: FilesChanged[] }) {
   const allFailed = files.flatMap(f => f.failed);
   if (allSaved.length === 0 && allFailed.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1 mb-1.5 pl-5">
+    <div className="flex flex-wrap gap-1 mb-1 pl-3">
       {allSaved.map((name, i) => (
         <span
           key={`s-${i}`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-green-900/30 border border-green-700/40 text-green-400 rounded"
+          className="inline-flex items-center gap-0.5 px-1 py-px text-[9px] bg-green-900/30 border border-green-700/40 text-green-400 rounded"
         >
           <span>{"\uD83D\uDCC4"}</span>
-          <span className="truncate max-w-[140px]">{name}</span>
+          <span className="truncate max-w-[120px]">{name}</span>
         </span>
       ))}
       {allFailed.map((name, i) => (
         <span
           key={`f-${i}`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-red-900/30 border border-red-700/40 text-red-400 rounded"
+          className="inline-flex items-center gap-0.5 px-1 py-px text-[9px] bg-red-900/30 border border-red-700/40 text-red-400 rounded"
         >
           <span>{"\u26A0\uFE0F"}</span>
-          <span className="truncate max-w-[140px]">{name}</span>
+          <span className="truncate max-w-[120px]">{name}</span>
         </span>
       ))}
     </div>
@@ -523,7 +521,7 @@ function FilesChangedChips({ files }: { files: FilesChanged[] }) {
 function CompactBanner({ events }: { events: CompactEvent[] }) {
   if (events.length === 0) return null;
   return (
-    <div className="space-y-1 mb-1.5 pl-5">
+    <div className="space-y-1 mb-1.5 pl-3">
       {events.map((ev, i) => (
         <div
           key={i}
@@ -587,7 +585,7 @@ function ContextWarningBanner({ percent }: { percent: number }) {
 
 function ActivityIndicator({ label }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2 py-2 pl-5 text-xs">
+    <div className="flex items-center gap-2 py-2 pl-3 text-xs">
       <span className="flex gap-0.5">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_infinite]" />
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
@@ -604,10 +602,9 @@ function PromptSuggestion({ suggestion, onSelect }: { suggestion: string; onSele
   return (
     <button
       onClick={() => onSelect(suggestion)}
-      className="w-full text-left px-3 py-1.5 mt-1 rounded border border-gray-700/50 bg-gray-900/40 hover:bg-gray-800/60 hover:border-gray-600 transition-colors cursor-pointer group"
+      className="text-left px-2 py-1 mt-0.5 rounded border border-gray-700/50 bg-gray-900/40 hover:bg-gray-800/60 hover:border-gray-600 transition-colors cursor-pointer group"
     >
-      <span className="text-gray-600 text-xs mr-1.5">{">"}</span>
-      <span className="text-gray-500 text-xs italic group-hover:text-gray-300 transition-colors">{suggestion}</span>
+      <span className="text-gray-500 text-[11px] italic group-hover:text-gray-300 transition-colors">{suggestion}</span>
     </button>
   );
 }
@@ -660,7 +657,7 @@ function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFi
       {entry.rateLimits.length > 0 && (
         <RateLimitBanner limits={entry.rateLimits} />
       )}
-      <div className="text-sm text-gray-300 leading-relaxed pl-5">
+      <div className="text-sm text-gray-300 leading-snug pl-3">
         <MarkdownText text={entry.text} />
         {entry.status === "streaming" && (
           <span className="inline-block w-1.5 h-4 bg-green-400 animate-pulse ml-0.5 align-text-bottom rounded-sm" />
@@ -668,18 +665,18 @@ function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFi
       </div>
       {entry.cost && <CostFooter cost={entry.cost} />}
       {entry.connectionLost && (
-        <div className="flex items-center gap-1.5 text-amber-400 text-xs mt-2 pl-5">
+        <div className="flex items-center gap-1.5 text-amber-400 text-xs mt-2 pl-3">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
           Connection lost — server may have restarted. Reconnecting...
         </div>
       )}
       {entry.status === "error" && (
-        <div className="text-red-400 text-xs mt-1 pl-5">
+        <div className="text-red-400 text-xs mt-1 pl-3">
           Command failed
         </div>
       )}
       {entry.status === "complete" && entry.suggestions.length > 0 && onInput && (
-        <div className="pl-5 mt-1">
+        <div className="pl-3 mt-1">
           {entry.suggestions.map((s, i) => (
             <PromptSuggestion key={i} suggestion={s} onSelect={onInput} />
           ))}
@@ -926,13 +923,13 @@ export default function TerminalCard({ card }: CardRendererProps) {
     <div className="mb-3">
       <div className="bg-[#0d1117] border border-gray-800 rounded-lg overflow-hidden font-mono">
         {/* Header */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-900/80 border-b border-gray-800 text-xs">
-          <div className="flex gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
-            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/80 border-b border-gray-800 text-xs">
+          <div className="flex gap-1">
+            <span className="w-2 h-2 rounded-full bg-red-500/70" />
+            <span className="w-2 h-2 rounded-full bg-yellow-500/70" />
+            <span className="w-2 h-2 rounded-full bg-green-500/70" />
           </div>
-          <span className="text-gray-400 ml-1">Claude Code</span>
+          <span className="text-gray-400 text-[11px]">Claude Code</span>
           {ctxPercent != null && (
             <span
               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
@@ -963,7 +960,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
         </div>
 
         {/* Content */}
-        <div className="px-4 py-3 max-h-[600px] overflow-y-auto">
+        <div className="px-3 py-2 max-h-[70vh] overflow-y-auto">
           {needsProject ? (
             showSessionPicker ? (
               <SessionPicker cardId={card.id} onDismiss={() => setShowSessionPicker(false)} />
@@ -995,7 +992,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
 
         {/* Input — outside scroll container so autocomplete menu isn't clipped */}
         {!needsProject && !isStreaming && (
-          <div className="px-4 pb-3">
+          <div className="px-3 pb-2">
             <TerminalInput onSubmit={handleInput} cwd={cardCwd} />
           </div>
         )}
