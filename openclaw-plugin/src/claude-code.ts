@@ -281,6 +281,7 @@ export async function runClaudeCode(params: {
     const q = query({
       prompt,
       options: {
+        model: "claude-opus-4-6",
         cwd: spawnCwd,
         resume: resumeId || undefined,
         ...(useContinue && !resumeId ? { continue: true } : {}),
