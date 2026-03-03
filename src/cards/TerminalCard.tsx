@@ -15,6 +15,7 @@ const SUGGEST_MARKER_RE = /\u200B\[suggest:([^\]]*)\]\n?/g;
 const INIT_MARKER_RE = /\u200B\[init:([^\]]*)\]\n?/g;
 const FILES_MARKER_RE = /\u200B\[files:([^\]]*)\]\n?/g;
 const COMPACT_MARKER_RE = /\u200B\[compact:(start|done)(?::([^:]*):([^\]]*))?\]\n?/g;
+const CTX_MARKER_RE = /\u200B\[ctx:(\d+)%?\]\n?/g;
 const CONNECTION_MARKER_RE = /\u200B\[connection:lost\]\n?/g;
 
 interface SessionInit {
@@ -144,13 +145,19 @@ function stripMarkers(text: string) {
     return "";
   });
 
+  let ctxPercent: number | null = null;
+  clean = clean.replace(CTX_MARKER_RE, (_match, pct) => {
+    ctxPercent = parseInt(pct, 10);
+    return "";
+  });
+
   let connectionLost = false;
   clean = clean.replace(CONNECTION_MARKER_RE, () => {
     connectionLost = true;
     return "";
   });
 
-  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost };
+  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, ctxPercent };
 }
 
 // ── Project Picker ──
@@ -549,6 +556,29 @@ function CompactBanner({ events }: { events: CompactEvent[] }) {
   );
 }
 
+// ── Context Warning ──
+
+function ContextWarningBanner({ percent }: { percent: number }) {
+  if (percent < 85) return null;
+  const isCritical = percent >= 95;
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] mb-1.5 ml-5 ${
+        isCritical
+          ? "bg-red-900/30 border border-red-800/50 text-red-300"
+          : "bg-yellow-900/30 border border-yellow-800/50 text-yellow-300"
+      }`}
+    >
+      <span>{isCritical ? "\u26A0\uFE0F" : "\u23F3"}</span>
+      <span>
+        {isCritical
+          ? `Context critically full (${percent}%) \u2014 responses may be cut short`
+          : `Context ${percent}% full \u2014 compaction will trigger soon`}
+      </span>
+    </div>
+  );
+}
+
 // ── Activity Indicator ──
 
 function ActivityIndicator({ label }: { label?: string }) {
@@ -663,18 +693,20 @@ function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFi
  * User prompts are prefixed with ">>> " markers injected by the store.
  * Tool activity markers (\u200B[tool:...]) and cost markers (\u200B[cost:...]) are stripped and collected.
  */
-function parseEntries(card: Card): TerminalEntry[] {
+function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: number | null } {
   const text = card.text ?? "";
-  if (!text) return [];
+  if (!text) return { entries: [], ctxPercent: null };
 
   // Split on user prompt markers
   const segments = text.split(/^>>> (.+)$/m);
 
   const entries: TerminalEntry[] = [];
+  let latestCtxPercent: number | null = null;
 
   // First segment: response text without a preceding prompt
   if (segments[0].trim()) {
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost } = stripMarkers(segments[0].trim());
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, ctxPercent } = stripMarkers(segments[0].trim());
+    if (ctxPercent != null) latestCtxPercent = ctxPercent;
     entries.push({
       text: clean,
       toolActivities: tools,
@@ -696,7 +728,8 @@ function parseEntries(card: Card): TerminalEntry[] {
     const userPrompt = segments[i];
     const responseText = (segments[i + 1] ?? "").trim();
     const isLast = i + 2 >= segments.length;
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost } = stripMarkers(responseText);
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, ctxPercent } = stripMarkers(responseText);
+    if (ctxPercent != null) latestCtxPercent = ctxPercent;
 
     entries.push({
       userPrompt,
@@ -715,7 +748,7 @@ function parseEntries(card: Card): TerminalEntry[] {
     });
   }
 
-  return entries;
+  return { entries, ctxPercent: latestCtxPercent };
 }
 
 export default function TerminalCard({ card }: CardRendererProps) {
@@ -728,7 +761,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const needsProject = !codeSessionCwd;
-  const entries = parseEntries(card);
+  const { entries, ctxPercent } = parseEntries(card);
   const isStreaming = card.status === "streaming";
 
   useEffect(() => {
@@ -759,6 +792,19 @@ export default function TerminalCard({ card }: CardRendererProps) {
           {card.operation?.label && (
             <span className="text-gray-500 ml-2 truncate max-w-[30%]">{card.operation.label}</span>
           )}
+          {ctxPercent != null && (
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                ctxPercent > 80
+                  ? "bg-red-900/50 text-red-300"
+                  : ctxPercent > 60
+                    ? "bg-yellow-900/50 text-yellow-300"
+                    : "bg-green-900/50 text-green-300"
+              }`}
+            >
+              ctx {ctxPercent}%
+            </span>
+          )}
           {card.operation?.cancellable && card.operation.operationId && (
             <button
               onClick={() => cancelOperation(card.operation!.operationId)}
@@ -781,6 +827,9 @@ export default function TerminalCard({ card }: CardRendererProps) {
             <ProjectPicker projects={projects} />
           ) : (
             <>
+              {ctxPercent != null && ctxPercent >= 85 && (
+                <ContextWarningBanner percent={ctxPercent} />
+              )}
               {entries.map((entry, i) => (
                 <TerminalBlock key={i} entry={entry} isFirst={i === 0} onInput={handleInput} />
               ))}

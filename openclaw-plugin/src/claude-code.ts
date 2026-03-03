@@ -131,6 +131,25 @@ export async function runClaudeCode(params: {
     console.log(`[claude-code] ${trimmedLower} → resume session ${toolSessionId}`);
   }
 
+  if (trimmedLower === "/compact") {
+    if (!toolSessionId) {
+      client.send({
+        id: randomUUID(),
+        runId,
+        sessionKey: client.sessionKey,
+        seq: 0,
+        timestamp: Date.now(),
+        state: "error",
+        text: "No active session to compact. Start a session first.\n",
+        toolMeta: { toolId: "claude-code" },
+        operation: { operationId: runId, stage: "error", label: "No session", cancellable: false },
+      } as ServerMessage);
+      return { sessionId: "" };
+    }
+    prompt = "Please provide a brief summary of the current state of our work so far, including what we've accomplished, any pending tasks, and key decisions made. Then continue with the next step.";
+    console.log(`[claude-code] /compact → triggering context summary for session ${toolSessionId}`);
+  }
+
   const abortController = new AbortController();
   activeAbortControllers.set(runId, abortController);
 
@@ -258,6 +277,8 @@ export async function runClaudeCode(params: {
         allowDangerouslySkipPermissions: true,
         promptSuggestions: true,
         abortController,
+        // Trigger compaction at ~72% instead of default ~83% for more headroom
+        env: { ...process.env, CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80" },
       },
     });
 
@@ -586,6 +607,10 @@ export async function runClaudeCode(params: {
               ctxPct = `${Math.round((inputTok / first.contextWindow) * 100)}%`;
             }
           }
+
+          // Emit standalone context percentage for real-time header badge
+          // (fires immediately, unlike cost marker which is deferred for suggestions)
+          if (ctxPct) sendDelta(`\u200B[ctx:${ctxPct}]\n`);
 
           if (cost != null || turns != null) {
             const costStr = cost != null ? `$${cost.toFixed(4)}` : "$?";
