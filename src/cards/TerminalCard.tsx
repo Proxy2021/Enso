@@ -162,8 +162,9 @@ function stripMarkers(text: string) {
 
 // ── Project Picker ──
 
-function ProjectPicker({ projects }: { projects: ProjectInfo[] }) {
+function ProjectPicker({ projects, cardId }: { projects: ProjectInfo[]; cardId?: string }) {
   const setCodeSessionCwd = useChatStore((s) => s.setCodeSessionCwd);
+  const switchTerminalProject = useChatStore((s) => s.switchTerminalProject);
   const fetchProjects = useChatStore((s) => s.fetchProjects);
 
   useEffect(() => {
@@ -185,7 +186,10 @@ function ProjectPicker({ projects }: { projects: ProjectInfo[] }) {
         {projects.map((p) => (
           <button
             key={p.path}
-            onClick={() => setCodeSessionCwd(p.path)}
+            onClick={() => {
+              if (cardId) switchTerminalProject(cardId, p.path);
+              else setCodeSessionCwd(p.path);
+            }}
             className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-800 transition-colors group"
           >
             <span className="text-green-400 font-medium text-sm">{p.name}</span>
@@ -751,16 +755,146 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
   return { entries, ctxPercent: latestCtxPercent };
 }
 
+// ── Project Switch Button ──
+
+function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCwd: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const projects = useChatStore((s) => s.projects);
+  const fetchProjects = useChatStore((s) => s.fetchProjects);
+  const switchTerminalProject = useChatStore((s) => s.switchTerminalProject);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && projects.length === 0) fetchProjects();
+  }, [isOpen, projects.length, fetchProjects]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isOpen]);
+
+  const projectName = currentCwd.replace(/\\/g, "/").split("/").pop() ?? currentCwd;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 text-gray-500 hover:text-gray-300 transition-colors truncate max-w-[180px]"
+        title={`Project: ${currentCwd}\nClick to switch`}
+      >
+        <span className="text-[10px]">📁</span>
+        <span className="truncate">{projectName}</span>
+        <span className="text-[8px] opacity-60">▼</span>
+      </button>
+      {isOpen && (
+        <div className="absolute top-full right-0 mt-1 w-72 max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1">
+          {projects.length === 0 ? (
+            <div className="px-3 py-2 text-gray-500 text-xs">Scanning...</div>
+          ) : (
+            projects.map((p) => (
+              <button
+                key={p.path}
+                onClick={() => {
+                  if (p.path !== currentCwd) switchTerminalProject(cardId, p.path);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700/60 transition-colors ${
+                  p.path === currentCwd ? "text-green-400" : "text-gray-300"
+                }`}
+              >
+                <span className="font-medium">{p.name}</span>
+                <span className="text-gray-600 ml-1.5 text-[10px]">{p.path}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Session Picker (for /resume) ──
+
+function SessionPicker({ cardId, onDismiss }: { cardId: string; onDismiss: () => void }) {
+  const cards = useChatStore((s) => s.cards);
+  const resumeSessionOnCard = useChatStore((s) => s.resumeSessionOnCard);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+
+  // Collect all terminal cards with active sessions (excluding this card)
+  const sessions = Object.values(cards).filter(
+    (c): c is Card & { toolMeta: { toolSessionId: string; cwd: string } } =>
+      c.type === "terminal" &&
+      c.id !== cardId &&
+      !!c.toolMeta?.toolSessionId &&
+      !!c.toolMeta?.cwd,
+  );
+
+  if (sessions.length === 0) {
+    return (
+      <div className="py-3 text-center">
+        <div className="text-gray-500 text-sm mb-2">No active sessions to resume.</div>
+        <div className="text-gray-600 text-xs">Type a prompt to start a new session.</div>
+        <button onClick={onDismiss} className="mt-2 text-xs text-gray-400 hover:text-gray-300">Dismiss</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="py-2">
+      <div className="text-gray-400 text-xs mb-2 px-1">Resume an existing session:</div>
+      <div className="space-y-1">
+        {sessions.map((c) => {
+          const projectName = c.toolMeta.cwd.replace(/\\/g, "/").split("/").pop() ?? c.toolMeta.cwd;
+          return (
+            <button
+              key={c.id}
+              onClick={() => {
+                resumeSessionOnCard(cardId, c.toolMeta.toolSessionId, c.toolMeta.cwd);
+                onDismiss();
+                // Send /resume to actually resume the CLI session
+                const routing = {
+                  mode: "direct_tool" as const,
+                  toolId: "claude-code",
+                  toolSessionId: c.toolMeta.toolSessionId,
+                  cwd: c.toolMeta.cwd,
+                };
+                sendMessage("/resume", routing, cardId);
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-800/80 transition-colors group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-green-400 font-medium text-sm">{projectName}</span>
+                <span className="text-gray-600 text-[10px]">{c.toolMeta.toolSessionId.slice(0, 8)}...</span>
+              </div>
+              <div className="text-gray-600 text-[10px] mt-0.5">{c.toolMeta.cwd}</div>
+            </button>
+          );
+        })}
+      </div>
+      <button onClick={onDismiss} className="mt-2 text-xs text-gray-400 hover:text-gray-300 px-1">Cancel</button>
+    </div>
+  );
+}
+
+// ── Main Terminal Card ──
+
 export default function TerminalCard({ card }: CardRendererProps) {
   const projects = useChatStore((s) => s.projects);
-  const codeSessionCwd = useChatStore((s) => s.codeSessionCwd);
-  const codeSessionId = useChatStore((s) => s.codeSessionId);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const cancelOperation = useChatStore((s) => s.cancelOperation);
-  const activeTerminalCardId = useChatStore((s) => s._activeTerminalCardId);
+  const fetchProjects = useChatStore((s) => s.fetchProjects);
+  const setCodeSessionCwd = useChatStore((s) => s.setCodeSessionCwd);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [showSessionPicker, setShowSessionPicker] = useState(false);
 
-  const needsProject = !codeSessionCwd;
+  // Per-card session state — derived from the card's own toolMeta
+  const cardCwd = card.toolMeta?.cwd ?? null;
+  const cardSessionId = card.toolMeta?.toolSessionId ?? null;
+  const needsProject = !cardCwd;
   const { entries, ctxPercent } = parseEntries(card);
   const isStreaming = card.status === "streaming";
 
@@ -768,14 +902,24 @@ export default function TerminalCard({ card }: CardRendererProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [card.text, isStreaming]);
 
+  // Fetch projects when this card needs one
+  useEffect(() => {
+    if (needsProject && projects.length === 0) fetchProjects();
+  }, [needsProject, projects.length, fetchProjects]);
+
   function handleInput(text: string) {
+    // /resume with no session → show session picker
+    if (text.trim().toLowerCase() === "/resume" && !cardSessionId) {
+      setShowSessionPicker(true);
+      return;
+    }
     const routing = {
       mode: "direct_tool" as const,
       toolId: "claude-code",
-      ...(codeSessionId ? { toolSessionId: codeSessionId } : {}),
-      ...(codeSessionCwd ? { cwd: codeSessionCwd } : {}),
+      ...(cardSessionId ? { toolSessionId: cardSessionId } : {}),
+      ...(cardCwd ? { cwd: cardCwd } : {}),
     };
-    sendMessage(text, routing);
+    sendMessage(text, routing, card.id);
   }
 
   return (
@@ -814,9 +958,9 @@ export default function TerminalCard({ card }: CardRendererProps) {
               Cancel
             </button>
           )}
-          {codeSessionCwd && (
-            <span className={`text-gray-600 truncate ${card.operation?.cancellable ? "max-w-[30%]" : "ml-auto max-w-[60%]"}`}>
-              {codeSessionCwd}
+          {cardCwd && (
+            <span className={card.operation?.cancellable ? "" : "ml-auto"}>
+              <ProjectSwitchButton cardId={card.id} currentCwd={cardCwd} />
             </span>
           )}
         </div>
@@ -824,7 +968,13 @@ export default function TerminalCard({ card }: CardRendererProps) {
         {/* Content */}
         <div className="px-4 py-3 max-h-[600px] overflow-y-auto">
           {needsProject ? (
-            <ProjectPicker projects={projects} />
+            showSessionPicker ? (
+              <SessionPicker cardId={card.id} onDismiss={() => setShowSessionPicker(false)} />
+            ) : (
+              <ProjectPicker projects={projects} cardId={card.id} />
+            )
+          ) : showSessionPicker ? (
+            <SessionPicker cardId={card.id} onDismiss={() => setShowSessionPicker(false)} />
           ) : (
             <>
               {ctxPercent != null && ctxPercent >= 85 && (
@@ -847,9 +997,9 @@ export default function TerminalCard({ card }: CardRendererProps) {
         </div>
 
         {/* Input — outside scroll container so autocomplete menu isn't clipped */}
-        {activeTerminalCardId === card.id && !needsProject && !isStreaming && (
+        {!needsProject && !isStreaming && (
           <div className="px-4 pb-3">
-            <TerminalInput onSubmit={handleInput} cwd={codeSessionCwd} />
+            <TerminalInput onSubmit={handleInput} cwd={cardCwd} />
           </div>
         )}
       </div>

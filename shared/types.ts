@@ -94,7 +94,7 @@ export interface ServerMessage {
   data?: unknown;
   generatedUI?: string;
   mediaUrls?: string[];
-  toolMeta?: { toolId: string; toolSessionId?: string };
+  toolMeta?: { toolId: string; toolSessionId?: string; cwd?: string };
   cardType?: string;
   cardMode?: CardModeDetail;
   targetCardId?: string;
@@ -150,6 +150,8 @@ export interface ClientMessage {
     payload?: unknown;
   };
   routing?: ToolRouting;
+  // Terminal card routing
+  sourceCardId?: string;
   // card.action fields
   cardId?: string;
   cardAction?: string;

@@ -51,7 +51,7 @@ interface CardStore {
   // Actions
   connect: () => void;
   disconnect: () => void;
-  sendMessage: (text: string, routing?: ToolRouting) => void;
+  sendMessage: (text: string, routing?: ToolRouting, sourceCardId?: string) => void;
   sendMessageWithMedia: (text: string, mediaFiles: File[]) => Promise<void>;
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
   enhanceCard: (cardId: string) => void;
@@ -71,6 +71,8 @@ interface CardStore {
   sendDebugReport: (description: string, imagePaths: string[]) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
+  switchTerminalProject: (cardId: string, cwd: string) => void;
+  resumeSessionOnCard: (cardId: string, sessionId: string, cwd: string) => void;
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
@@ -152,7 +154,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     set({ _wsClient: null, connectionState: "disconnected" });
   },
 
-  sendMessage: (text: string, routing?: ToolRouting) => {
+  sendMessage: (text: string, routing?: ToolRouting, sourceCardId?: string) => {
     let displayText = text;
     let finalRouting = routing;
 
@@ -222,23 +224,28 @@ export const useChatStore = create<CardStore>((set, get) => ({
       // /code prefix auto-routes to claude-code tool
       if (text.startsWith("/code ")) {
         displayText = text.slice(6);
-        const cwd = get().codeSessionCwd;
-        const toolSessionId = get().codeSessionId;
+        // Read session from active terminal card's own state, fall back to global
+        const termId = get()._activeTerminalCardId;
+        const termCard = termId ? get().cards[termId] : null;
+        const cwd = termCard?.toolMeta?.cwd ?? get().codeSessionCwd;
+        const toolSessionId = termCard?.toolMeta?.toolSessionId ?? get().codeSessionId;
         finalRouting = {
           mode: "direct_tool",
           toolId: "claude-code",
           ...(toolSessionId ? { toolSessionId } : {}),
           ...(cwd ? { cwd } : {}),
         };
+        // Route to the active terminal card if available
+        if (termId) sourceCardId = termId;
       }
     }
 
-    // Terminal routing: append to active terminal card
+    // Terminal routing: append to specific or active terminal card
     if (finalRouting?.toolId === "claude-code") {
       const now = Date.now();
-      let termCardId = get()._activeTerminalCardId;
+      let termCardId = sourceCardId ?? get()._activeTerminalCardId;
 
-      if (!termCardId) {
+      if (!termCardId || !get().cards[termCardId]) {
         // Create a terminal card if none exists
         termCardId = uuidv4();
         const card: Card = {
@@ -249,7 +256,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           status: "streaming",
           display: "expanded",
           text: `>>> ${displayText}\n`,
-          toolMeta: { toolId: "claude-code" },
+          toolMeta: { toolId: "claude-code", ...(finalRouting.cwd ? { cwd: finalRouting.cwd } : {}) },
           createdAt: now,
           updatedAt: now,
         };
@@ -280,7 +287,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         });
       }
 
-      get()._wsClient?.send({ type: "chat.send", text: displayText, routing: finalRouting });
+      get()._wsClient?.send({ type: "chat.send", text: displayText, routing: finalRouting, sourceCardId: termCardId });
       return;
     }
 
@@ -546,12 +553,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const ensoPath = get().ensoProjectPath;
     if (!ensoPath) return;
 
-    // Set CWD to Enso project, start fresh session
+    // Update global convenience state
     localStorage.setItem("enso_code_session_cwd", ensoPath);
     localStorage.removeItem("enso_code_session_id");
-    set({ codeSessionCwd: ensoPath, codeSessionId: null });
 
-    // Create terminal card (same as bare "/code" but skips project picker)
+    // Create terminal card with CWD on the card itself
     const id = uuidv4();
     const now = Date.now();
     const card: Card = {
@@ -561,7 +567,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       role: "assistant",
       status: "complete",
       display: "expanded",
-      toolMeta: { toolId: "claude-code" },
+      toolMeta: { toolId: "claude-code", cwd: ensoPath },
       createdAt: now,
       updatedAt: now,
     };
@@ -569,6 +575,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cardOrder: [...s.cardOrder, id],
       cards: { ...s.cards, [id]: card },
       _activeTerminalCardId: id,
+      codeSessionCwd: ensoPath,
+      codeSessionId: null,
     }));
   },
 
@@ -576,10 +584,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const ensoPath = get().ensoProjectPath;
     if (!ensoPath) return;
 
-    // Force CWD to Enso project, fresh session each time
+    // Update global convenience state
     localStorage.setItem("enso_code_session_cwd", ensoPath);
     localStorage.removeItem("enso_code_session_id");
-    set({ codeSessionCwd: ensoPath, codeSessionId: null });
 
     // Build the prompt
     const lines: string[] = ["A user reported a bug in the Enso app via the in-app debug reporter.", ""];
@@ -629,7 +636,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "streaming",
       display: "expanded",
       text: `>>> ${displayText}\n`,
-      toolMeta: { toolId: "claude-code" },
+      toolMeta: { toolId: "claude-code", cwd: ensoPath },
       createdAt: now,
       updatedAt: now,
     };
@@ -638,6 +645,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cardOrder: [...s.cardOrder, id],
       cards: { ...s.cards, [id]: card },
       _activeTerminalCardId: id,
+      codeSessionCwd: ensoPath,
+      codeSessionId: null,
       isWaiting: true,
     }));
 
@@ -647,7 +656,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cwd: ensoPath,
     };
 
-    get()._wsClient?.send({ type: "chat.send", text: prompt, routing });
+    get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
   },
 
   fetchProjects: () => {
@@ -657,13 +666,65 @@ export const useChatStore = create<CardStore>((set, get) => ({
   setCodeSessionCwd: (cwd: string) => {
     const prev = get().codeSessionCwd;
     localStorage.setItem("enso_code_session_cwd", cwd);
-    // Clear session when switching projects
+    const termId = get()._activeTerminalCardId;
+
+    // Update global state + active terminal card's toolMeta
+    const updates: Record<string, unknown> = { codeSessionCwd: cwd };
     if (prev && prev !== cwd) {
       localStorage.removeItem("enso_code_session_id");
-      set({ codeSessionCwd: cwd, codeSessionId: null });
-    } else {
-      set({ codeSessionCwd: cwd });
+      updates.codeSessionId = null;
     }
+
+    if (termId) {
+      const card = get().cards[termId];
+      if (card) {
+        updates.cards = {
+          ...get().cards,
+          [termId]: {
+            ...card,
+            toolMeta: { ...card.toolMeta, toolId: "claude-code", cwd, toolSessionId: undefined },
+            updatedAt: Date.now(),
+          },
+        };
+      }
+    }
+
+    set(updates as Partial<CardStore>);
+  },
+
+  switchTerminalProject: (cardId: string, cwd: string) => {
+    const card = get().cards[cardId];
+    if (!card) return;
+    set((s) => ({
+      cards: {
+        ...s.cards,
+        [cardId]: {
+          ...card,
+          toolMeta: { toolId: "claude-code", cwd },
+          updatedAt: Date.now(),
+        },
+      },
+      // Also update global convenience state
+      codeSessionCwd: cwd,
+      codeSessionId: null,
+    }));
+    localStorage.setItem("enso_code_session_cwd", cwd);
+    localStorage.removeItem("enso_code_session_id");
+  },
+
+  resumeSessionOnCard: (cardId: string, sessionId: string, cwd: string) => {
+    const card = get().cards[cardId];
+    if (!card) return;
+    set((s) => ({
+      cards: {
+        ...s.cards,
+        [cardId]: {
+          ...card,
+          toolMeta: { toolId: "claude-code", cwd, toolSessionId: sessionId },
+          updatedAt: Date.now(),
+        },
+      },
+    }));
   },
 
   setShowConnectionPicker: (show: boolean) => {
@@ -921,6 +982,83 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (msg.targetCardId) {
         const card = state.cards[msg.targetCardId];
         if (!card) return state;
+
+        // ── Terminal card (claude-code): append text, per-card session ──
+        if (card.type === "terminal" && msg.toolMeta?.toolId === "claude-code") {
+          if (msg.state === "delta") {
+            const hasQuestions = msg.questions && msg.questions.length > 0;
+            return {
+              ...(hasQuestions ? { isWaiting: false } : {}),
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  text: (card.text ?? "") + (msg.text ?? ""),
+                  status: hasQuestions ? "complete" : "streaming",
+                  toolMeta: { ...card.toolMeta, ...msg.toolMeta, cwd: card.toolMeta?.cwd },
+                  operation: msg.operation ?? card.operation,
+                  cardMode: msg.cardMode ?? card.cardMode,
+                  ...(hasQuestions ? { pendingQuestions: msg.questions } : {}),
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+
+          const storeUpdates: Partial<CardStore> = { isWaiting: false };
+
+          if (msg.state === "final") {
+            // Capture session ID on the card's own toolMeta
+            const newToolMeta = {
+              ...card.toolMeta,
+              toolId: "claude-code" as const,
+              ...(msg.toolMeta?.toolSessionId ? { toolSessionId: msg.toolMeta.toolSessionId } : {}),
+            };
+            // Also update global convenience state
+            if (msg.toolMeta?.toolSessionId) {
+              storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
+              localStorage.setItem("enso_code_session_id", msg.toolMeta.toolSessionId);
+            }
+            return {
+              ...storeUpdates,
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  status: "complete",
+                  toolMeta: newToolMeta,
+                  operation: msg.operation,
+                  cardMode: msg.cardMode ?? card.cardMode,
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+
+          if (msg.state === "error") {
+            // Clear session on the card
+            const newToolMeta = { ...card.toolMeta, toolId: "claude-code" as const, toolSessionId: undefined };
+            storeUpdates.codeSessionId = null;
+            localStorage.removeItem("enso_code_session_id");
+            return {
+              ...storeUpdates,
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  text: (card.text ?? "") + (msg.text ?? "Error occurred."),
+                  status: "error",
+                  toolMeta: newToolMeta,
+                  operation: msg.operation,
+                  cardMode: msg.cardMode ?? card.cardMode,
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+
+          return state;
+        }
 
         // Handle enhance result (user-triggered app enhancement)
         if (msg.enhanceResult !== undefined) {

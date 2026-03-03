@@ -87,8 +87,9 @@ export async function runClaudeCode(params: {
   toolSessionId?: string;
   client: ConnectedClient;
   runId: string;
+  targetCardId?: string;
 }): Promise<{ sessionId: string }> {
-  const { prompt: rawPrompt, cwd, toolSessionId, client, runId } = params;
+  const { prompt: rawPrompt, cwd, toolSessionId, client, runId, targetCardId } = params;
 
   if (!rawPrompt.trim()) {
     return { sessionId: toolSessionId ?? "" };
@@ -123,6 +124,7 @@ export async function runClaudeCode(params: {
         state: "error",
         text: "No active session to resume. Type a prompt to start a new session.\n",
         toolMeta: { toolId: "claude-code" },
+        ...(targetCardId ? { targetCardId } : {}),
         operation: { operationId: runId, stage: "error", label: "No session", cancellable: false },
       } as ServerMessage);
       return { sessionId: "" };
@@ -142,6 +144,7 @@ export async function runClaudeCode(params: {
         state: "error",
         text: "No active session to compact. Start a session first.\n",
         toolMeta: { toolId: "claude-code" },
+        ...(targetCardId ? { targetCardId } : {}),
         operation: { operationId: runId, stage: "error", label: "No session", cancellable: false },
       } as ServerMessage);
       return { sessionId: "" };
@@ -203,6 +206,7 @@ export async function runClaudeCode(params: {
       seq: seq++,
       timestamp: Date.now(),
       toolMeta: toolMeta(),
+      ...(targetCardId ? { targetCardId } : {}),
       ...partial,
     } as ServerMessage);
   };

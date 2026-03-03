@@ -656,6 +656,7 @@ export async function startEnsoServer(opts: {
                 toolSessionId: msg.routing.toolSessionId,
                 client,
                 runId,
+                targetCardId: msg.sourceCardId,
               });
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
               await handleEnsoInbound({

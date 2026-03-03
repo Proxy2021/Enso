@@ -19,7 +19,7 @@ export interface Card {
   mediaUrls?: string[];
 
   // Tool/routing context
-  toolMeta?: { toolId: string; toolSessionId?: string };
+  toolMeta?: { toolId: string; toolSessionId?: string; cwd?: string };
 
   // Interactive questions (from Claude Code AskUserQuestion)
   pendingQuestions?: ToolQuestion[];
