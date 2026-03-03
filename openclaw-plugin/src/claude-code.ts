@@ -102,6 +102,14 @@ export async function runClaudeCode(params: {
   let resultSent = false;
   let startTime = Date.now();
 
+  // Buffered final — prompt_suggestion messages arrive after result in the SDK
+  // stream, so we defer sendFinal() until the loop ends to avoid sending a
+  // delta (suggestion) after the final message (which resets card status back
+  // to "streaming" on the client, causing a stuck blinking cursor).
+  let pendingFinalCostDelta: string | null = null;
+  let pendingFinalReady = false;
+  const pendingSuggestions: string[] = [];
+
   // Tool activity tracking
   let activeToolName: string | null = null;
   let toolInputBuf = "";
@@ -501,11 +509,13 @@ export async function runClaudeCode(params: {
             const costStr = cost != null ? `$${cost.toFixed(4)}` : "$?";
             const turnsStr = turns != null ? `${turns} turn${turns === 1 ? "" : "s"}` : "";
             const parts = [costStr, turnsStr, `${durationS}s`, inputTok ? `${inputTok}in` : "", outputTok ? `${outputTok}out` : "", cacheTok ? `${cacheTok}cache` : "", ctxPct ? `ctx:${ctxPct}` : ""].filter(Boolean);
-            sendDelta(`\u200B[cost:${parts.join("|")}]\n`);
+            pendingFinalCostDelta = `\u200B[cost:${parts.join("|")}]\n`;
             console.log(`[claude-code] done — cost=${costStr}, turns=${turnsStr}, duration=${durationS}s`);
           }
 
-          sendFinal();
+          // Don't call sendFinal() yet — prompt_suggestion messages may still
+          // arrive after this result message.  Flush after the loop instead.
+          pendingFinalReady = true;
         } else {
           // Error subtypes: error_max_turns, error_during_execution, etc.
           const errMsg = typeof result.error === "string"
@@ -523,10 +533,24 @@ export async function runClaudeCode(params: {
         const msg = message as Record<string, unknown>;
         const suggestion = ((msg.suggestion as string) ?? "").replace(/[\]\n\r]/g, " ").trim();
         if (suggestion) {
-          sendDelta(`\u200B[suggest:${suggestion}]\n`);
+          if (pendingFinalReady) {
+            // Buffer suggestion — will be flushed before the final message
+            pendingSuggestions.push(suggestion);
+          } else {
+            sendDelta(`\u200B[suggest:${suggestion}]\n`);
+          }
         }
         continue;
       }
+    }
+
+    // Flush buffered final: send cost delta + any collected suggestions, then final
+    if (pendingFinalReady && !resultSent) {
+      if (pendingFinalCostDelta) sendDelta(pendingFinalCostDelta);
+      for (const s of pendingSuggestions) {
+        sendDelta(`\u200B[suggest:${s}]\n`);
+      }
+      sendFinal();
     }
 
     // If the generator completed without a result message, send final

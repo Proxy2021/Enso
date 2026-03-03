@@ -65,8 +65,7 @@ export default function WelcomeCard() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4">
       <div className="text-center mb-6">
-        <p className="text-lg font-semibold text-gray-200">Enso</p>
-        <p className="text-sm text-gray-400 mt-1">
+        <p className="text-sm text-gray-400">
           Every answer is an app. Try one of these:
         </p>
       </div>
