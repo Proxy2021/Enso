@@ -555,21 +555,15 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   launchEnsoCode: () => {
-    const ensoPath = get().ensoProjectPath;
-    if (!ensoPath) return;
+    get().fetchProjects();
 
     // Reuse existing active terminal card if one exists
     const existingTermId = get()._activeTerminalCardId;
     if (existingTermId && get().cards[existingTermId]) {
-      localStorage.setItem("enso_code_session_cwd", ensoPath);
       return;
     }
 
-    // Update global convenience state
-    localStorage.setItem("enso_code_session_cwd", ensoPath);
-    localStorage.removeItem("enso_code_session_id");
-
-    // Create terminal card with CWD on the card itself
+    // Create terminal card without CWD so the project picker is shown
     const id = uuidv4();
     const now = Date.now();
     const card: Card = {
@@ -579,7 +573,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       role: "assistant",
       status: "complete",
       display: "expanded",
-      toolMeta: { toolId: "claude-code", cwd: ensoPath },
+      toolMeta: { toolId: "claude-code" },
       createdAt: now,
       updatedAt: now,
     };
@@ -587,8 +581,6 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cardOrder: [...s.cardOrder, id],
       cards: { ...s.cards, [id]: card },
       _activeTerminalCardId: id,
-      codeSessionCwd: ensoPath,
-      codeSessionId: null,
     }));
   },
 
