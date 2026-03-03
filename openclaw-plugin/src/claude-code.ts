@@ -667,7 +667,14 @@ export async function runClaudeCode(params: {
   try {
     await runQuery();
   } catch (err: unknown) {
-    if (!resultSent) {
+    // If we already received a success result but the process exited with
+    // a non-zero code (e.g. exit code 1 after cleanup), flush the pending
+    // final instead of treating it as an error — the work completed fine.
+    if (pendingFinalReady && !resultSent) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`[claude-code] process threw after success result, flushing final (${msg})`);
+      flushPendingFinal();
+    } else if (!resultSent) {
       const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
       if (isAbort) {
         sendError("Claude Code run cancelled.", true);
@@ -682,7 +689,10 @@ export async function runClaudeCode(params: {
         try {
           await runQuery();
         } catch (retryErr: unknown) {
-          if (!resultSent) {
+          // Same pattern: flush pending final if we got a success before the throw
+          if (pendingFinalReady && !resultSent) {
+            flushPendingFinal();
+          } else if (!resultSent) {
             const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
             console.error(`[claude-code] retry error:`, msg);
             sendError(`Claude Code error: ${msg}`);
