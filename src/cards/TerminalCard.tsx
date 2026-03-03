@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatStore, type ProjectInfo } from "../store/chat";
+import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import MarkdownText from "../components/MarkdownText";
 import type { Card, CardRendererProps } from "./types";
 
@@ -189,11 +190,37 @@ function ProjectPicker({ projects }: { projects: ProjectInfo[] }) {
   );
 }
 
+// ── Slash Command Types ──
+
+type SlashCommand = { name: string; description: string };
+
 // ── Terminal Input ──
 
-function TerminalInput({ onSubmit }: { onSubmit: (text: string) => void }) {
+function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cwd?: string }) {
   const [text, setText] = useState("");
+  const [commands, setCommands] = useState<SlashCommand[]>([]);
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch available slash commands when cwd is set
+  useEffect(() => {
+    if (!cwd) return;
+    const url = `${getBackendBaseUrl()}/api/claude-commands?cwd=${encodeURIComponent(cwd)}`;
+    fetch(url, { headers: authHeaders() })
+      .then(r => r.json())
+      .then((cmds: SlashCommand[]) => setCommands(cmds))
+      .catch(() => {});
+  }, [cwd]);
+
+  // Compute filtered matches
+  const slashPrefix = text.startsWith("/") ? text.slice(1).toLowerCase() : null;
+  const matches = slashPrefix != null
+    ? commands.filter(c => c.name.toLowerCase().startsWith(slashPrefix))
+    : [];
+  const showMenu = matches.length > 0 && text.startsWith("/") && !text.includes(" ");
+
+  // Reset selection when matches change
+  useEffect(() => { setSelectedIdx(0); }, [matches.length]);
 
   function handleSubmit() {
     const trimmed = text.trim();
@@ -202,7 +229,34 @@ function TerminalInput({ onSubmit }: { onSubmit: (text: string) => void }) {
     setText("");
   }
 
+  const selectCommand = useCallback((cmd: SlashCommand) => {
+    setText(`/${cmd.name} `);
+    inputRef.current?.focus();
+  }, []);
+
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (showMenu) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIdx(i => Math.min(i + 1, matches.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIdx(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && matches.length > 0)) {
+        e.preventDefault();
+        selectCommand(matches[selectedIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setText("");
+        return;
+      }
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       handleSubmit();
@@ -210,28 +264,44 @@ function TerminalInput({ onSubmit }: { onSubmit: (text: string) => void }) {
   }
 
   return (
-    <div className="flex items-center gap-2 pt-2 border-t border-gray-800/50 mt-2">
-      <span className="text-green-400 font-bold shrink-0">{"\u276F"}</span>
-      <input
-        ref={inputRef}
-        type="text"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Ask Claude Code..."
-        className="flex-1 bg-transparent text-gray-100 text-sm outline-none placeholder-gray-600 font-mono"
-      />
-      <button
-        onClick={handleSubmit}
-        disabled={!text.trim()}
-        className="shrink-0 p-1 rounded text-gray-500 hover:text-green-400 disabled:text-gray-700 disabled:cursor-default transition-colors"
-        title="Send (Enter)"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13" />
-          <polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </svg>
-      </button>
+    <div>
+      {showMenu && (
+        <div className="mb-1 ml-5 border border-gray-700 rounded-md overflow-hidden">
+          {matches.map((cmd, i) => (
+            <button
+              key={cmd.name}
+              onMouseDown={(e) => { e.preventDefault(); selectCommand(cmd); }}
+              className={`w-full text-left px-3 py-1.5 text-xs flex items-baseline gap-2 ${i === selectedIdx ? "bg-gray-800 text-green-400" : "text-gray-300 hover:bg-gray-800/60"}`}
+            >
+              <span className="font-mono font-semibold shrink-0">/{cmd.name}</span>
+              <span className="text-gray-500 truncate text-[11px]">{cmd.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2 pt-2 border-t border-gray-800/50 mt-2">
+        <span className="text-green-400 font-bold shrink-0">{"\u276F"}</span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask Claude Code..."
+          className="flex-1 bg-transparent text-gray-100 text-sm outline-none placeholder-gray-600 font-mono"
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={!text.trim()}
+          className="shrink-0 p-1 rounded text-gray-500 hover:text-green-400 disabled:text-gray-700 disabled:cursor-default transition-colors"
+          title="Send (Enter)"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
@@ -724,12 +794,15 @@ export default function TerminalCard({ card }: CardRendererProps) {
               )}
             </>
           )}
-
-          {activeTerminalCardId === card.id && !needsProject && !isStreaming && (
-            <TerminalInput onSubmit={handleInput} />
-          )}
           <div ref={bottomRef} />
         </div>
+
+        {/* Input — outside scroll container so autocomplete menu isn't clipped */}
+        {activeTerminalCardId === card.id && !needsProject && !isStreaming && (
+          <div className="px-4 pb-3">
+            <TerminalInput onSubmit={handleInput} cwd={codeSessionCwd} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -471,6 +471,24 @@ export async function startEnsoServer(opts: {
     res.json(job);
   });
 
+  // List available slash commands for a project directory
+  app.get("/api/claude-commands", (req, res) => {
+    const cwd = req.query.cwd as string | undefined;
+    if (!cwd) { res.json([]); return; }
+    const cmdDir = join(cwd, ".claude", "commands");
+    if (!existsSync(cmdDir)) { res.json([]); return; }
+    try {
+      const files = readdirSync(cmdDir).filter(f => f.endsWith(".md"));
+      const commands = files.map(f => {
+        const name = f.replace(/\.md$/, "");
+        const content = readFileSync(join(cmdDir, f), "utf-8");
+        const firstLine = content.split("\n").find(l => l.trim())?.trim() ?? "";
+        return { name, description: firstLine };
+      });
+      res.json(commands);
+    } catch { res.json([]); }
+  });
+
   // Accept file uploads from the browser client
   const uploadDir = join(tmpdir(), "enso-uploads");
   mkdirSync(uploadDir, { recursive: true });
