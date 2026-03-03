@@ -13,6 +13,7 @@ import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
 import { handleEnsoInbound } from "./inbound.js";
 import { handleCardEnhance, handlePluginCardAction, createScopedShareContext, getCardState } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
+import { runRemoteControl, cancelRemoteControl } from "./claude-remote-control.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { transcribeAudio } from "./transcribe.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
@@ -624,7 +625,11 @@ export async function startEnsoServer(opts: {
         switch (msg.type) {
           case "chat.send":
             // Direct tool invocation — bypass OpenClaw pipeline entirely
-            if (msg.routing?.toolId === "claude-code" && msg.text) {
+            if (msg.routing?.toolId === "claude-remote-control") {
+              runtime.log?.(`[enso] starting remote-control session`);
+              const runId = randomUUID();
+              runRemoteControl({ client, runId });
+            } else if (msg.routing?.toolId === "claude-code" && msg.text) {
               runtime.log?.(`[enso] direct claude-code: "${msg.text.slice(0, 60)}"`);
               const runId = randomUUID();
               await runClaudeCode({
@@ -655,7 +660,7 @@ export async function startEnsoServer(opts: {
             break;
           case "operation.cancel":
             if (msg.operationId) {
-              const cancelled = cancelClaudeCodeRun(msg.operationId);
+              const cancelled = cancelClaudeCodeRun(msg.operationId) || cancelRemoteControl(msg.operationId);
               if (!cancelled) {
                 send({
                   id: randomUUID(),

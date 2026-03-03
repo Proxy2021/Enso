@@ -11,6 +11,28 @@ const BASH_MARKER_RE = /\u200B\[bash:([^\]]*)\]\n?/g;
 const RATELIMIT_MARKER_RE = /\u200B\[ratelimit:([^\]]*)\]\n?/g;
 const TASK_MARKER_RE = /\u200B\[task:(start|completed|failed|stopped):([^\]]*)\]\n?/g;
 const SUGGEST_MARKER_RE = /\u200B\[suggest:([^\]]*)\]\n?/g;
+const INIT_MARKER_RE = /\u200B\[init:([^\]]*)\]\n?/g;
+const FILES_MARKER_RE = /\u200B\[files:([^\]]*)\]\n?/g;
+const COMPACT_MARKER_RE = /\u200B\[compact:(start|done)(?::([^:]*):([^\]]*))?\]\n?/g;
+
+interface SessionInit {
+  model: string;
+  version: string;
+  toolCount: number;
+  mcpCount: number;
+  mode: string;
+}
+
+interface FilesChanged {
+  saved: string[];
+  failed: string[];
+}
+
+interface CompactEvent {
+  phase: "start" | "done";
+  trigger?: string;
+  preTokens?: string;
+}
 
 interface ToolActivity {
   toolName: string;
@@ -50,6 +72,9 @@ function stripMarkers(text: string) {
   const rateLimits: RateLimitWarning[] = [];
   const tasks: TaskEvent[] = [];
   const suggestions: string[] = [];
+  const filesChanged: FilesChanged[] = [];
+  const compactEvents: CompactEvent[] = [];
+  let sessionInit: SessionInit | null = null;
   let cost: string | null = null;
 
   let clean = text.replace(TOOL_MARKER_RE, (_match, toolName, detail) => {
@@ -86,7 +111,38 @@ function stripMarkers(text: string) {
     return "";
   });
 
-  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, cost };
+  clean = clean.replace(INIT_MARKER_RE, (_match, payload) => {
+    const [model, version, toolCountStr, mcpCountStr, mode] = payload.split("|");
+    sessionInit = {
+      model: model ?? "",
+      version: version ?? "",
+      toolCount: parseInt(toolCountStr ?? "0", 10) || 0,
+      mcpCount: parseInt(mcpCountStr ?? "0", 10) || 0,
+      mode: mode ?? "",
+    };
+    return "";
+  });
+
+  clean = clean.replace(FILES_MARKER_RE, (_match, payload) => {
+    const [okPart, failPart] = payload.split("|");
+    const saved = (okPart ?? "").split(",").filter(Boolean);
+    const failed = (failPart ?? "").split(",").filter(Boolean);
+    if (saved.length > 0 || failed.length > 0) {
+      filesChanged.push({ saved, failed });
+    }
+    return "";
+  });
+
+  clean = clean.replace(COMPACT_MARKER_RE, (_match, phase, trigger, preTokens) => {
+    compactEvents.push({
+      phase: phase as "start" | "done",
+      trigger: trigger || undefined,
+      preTokens: preTokens || undefined,
+    });
+    return "";
+  });
+
+  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost };
 }
 
 // ── Project Picker ──
@@ -158,6 +214,17 @@ function TerminalInput({ onSubmit }: { onSubmit: (text: string) => void }) {
         placeholder="Ask Claude Code..."
         className="flex-1 bg-transparent text-gray-100 text-sm outline-none placeholder-gray-600 font-mono"
       />
+      <button
+        onClick={handleSubmit}
+        disabled={!text.trim()}
+        className="shrink-0 p-1 rounded text-gray-500 hover:text-green-400 disabled:text-gray-700 disabled:cursor-default transition-colors"
+        title="Send (Enter)"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13" />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -217,11 +284,31 @@ function ToolActivityChips({ tools }: { tools: ToolActivity[] }) {
 
 // ── Cost Footer ──
 
+function formatTokens(raw: string): string {
+  const num = parseInt(raw, 10);
+  if (isNaN(num)) return raw;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
+  return String(num);
+}
+
 function CostFooter({ cost }: { cost: string }) {
   const parts = cost.split("|").map((s) => s.trim());
+  // parts[0] = $cost, [1] = turns, [2] = duration, [3+] = token stats
+  const primary = parts.slice(0, 3).filter(Boolean).join(" \u00B7 ");
+  const tokenParts: string[] = [];
+  for (const p of parts.slice(3)) {
+    if (p.endsWith("in")) tokenParts.push(formatTokens(p.slice(0, -2)) + " in");
+    else if (p.endsWith("out")) tokenParts.push(formatTokens(p.slice(0, -3)) + " out");
+    else if (p.endsWith("cache")) tokenParts.push(formatTokens(p.slice(0, -5)) + " cached");
+    else if (p.startsWith("ctx:")) tokenParts.push(p.slice(4) + " context");
+  }
   return (
-    <div className="text-[10px] text-gray-600 font-mono mt-1 pl-5">
-      {parts.join(" \u00B7 ")}
+    <div className="font-mono mt-1 pl-5">
+      <div className="text-[10px] text-gray-600">{primary}</div>
+      {tokenParts.length > 0 && (
+        <div className="text-[10px] text-gray-700">{tokenParts.join(" \u00B7 ")}</div>
+      )}
     </div>
   );
 }
@@ -299,6 +386,110 @@ function TaskChips({ tasks }: { tasks: TaskEvent[] }) {
   );
 }
 
+// ── Session Init Bar ──
+
+function SessionInitBar({ init }: { init: SessionInit }) {
+  const parts: string[] = [];
+  if (init.version) parts.push(`Claude Code v${init.version}`);
+  if (init.model) parts.push(init.model);
+  if (init.toolCount) parts.push(`${init.toolCount} tools`);
+  if (init.mcpCount) parts.push(`${init.mcpCount} MCP servers`);
+  if (init.mode) parts.push(init.mode);
+  if (parts.length === 0) return null;
+  return (
+    <div className="text-[10px] text-gray-500 font-mono bg-gray-900/60 rounded px-2 py-0.5 mb-1.5 ml-5 w-fit">
+      {parts.join(" \u00B7 ")}
+    </div>
+  );
+}
+
+// ── Files Changed Chips ──
+
+function FilesChangedChips({ files }: { files: FilesChanged[] }) {
+  const allSaved = files.flatMap(f => f.saved);
+  const allFailed = files.flatMap(f => f.failed);
+  if (allSaved.length === 0 && allFailed.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mb-1.5 pl-5">
+      {allSaved.map((name, i) => (
+        <span
+          key={`s-${i}`}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-green-900/30 border border-green-700/40 text-green-400 rounded"
+        >
+          <span>{"\uD83D\uDCC4"}</span>
+          <span className="truncate max-w-[140px]">{name}</span>
+        </span>
+      ))}
+      {allFailed.map((name, i) => (
+        <span
+          key={`f-${i}`}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-red-900/30 border border-red-700/40 text-red-400 rounded"
+        >
+          <span>{"\u26A0\uFE0F"}</span>
+          <span className="truncate max-w-[140px]">{name}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Compact Banner ──
+
+function CompactBanner({ events }: { events: CompactEvent[] }) {
+  if (events.length === 0) return null;
+  return (
+    <div className="space-y-1 mb-1.5 pl-5">
+      {events.map((ev, i) => (
+        <div
+          key={i}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] ${
+            ev.phase === "start"
+              ? "bg-blue-900/30 border border-blue-800/50 text-blue-300"
+              : "bg-green-900/30 border border-green-800/50 text-green-300"
+          }`}
+        >
+          {ev.phase === "start" ? (
+            <>
+              <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              <span>Compacting context...</span>
+            </>
+          ) : (
+            <>
+              <span>{"\u2705"}</span>
+              <span>
+                Context compacted
+                {(ev.trigger || ev.preTokens) && (
+                  <span className="text-green-400/70">
+                    {" ("}
+                    {ev.trigger ?? "auto"}
+                    {ev.preTokens ? `, ${ev.preTokens} tokens freed` : ""}
+                    {")"}
+                  </span>
+                )}
+              </span>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Activity Indicator ──
+
+function ActivityIndicator({ label }: { label?: string }) {
+  return (
+    <div className="flex items-center gap-2 py-2 pl-5 text-gray-400 text-xs">
+      <span className="flex gap-0.5">
+        <span className="w-1 h-1 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_infinite]" />
+        <span className="w-1 h-1 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
+        <span className="w-1 h-1 rounded-full bg-green-400 animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
+      </span>
+      <span className="text-gray-500">{label || "Working..."}</span>
+    </div>
+  );
+}
+
 // ── Prompt Suggestion ──
 
 function PromptSuggestion({ suggestion, onSelect }: { suggestion: string; onSelect: (text: string) => void }) {
@@ -323,11 +514,14 @@ interface TerminalEntry {
   rateLimits: RateLimitWarning[];
   tasks: TaskEvent[];
   suggestions: string[];
+  sessionInit: SessionInit | null;
+  filesChanged: FilesChanged[];
+  compactEvents: CompactEvent[];
   cost: string | null;
   status: Card["status"];
 }
 
-function TerminalBlock({ entry, onInput }: { entry: TerminalEntry; onInput?: (text: string) => void }) {
+function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFirst?: boolean; onInput?: (text: string) => void }) {
   return (
     <div className="mb-1">
       {entry.userPrompt && (
@@ -335,6 +529,9 @@ function TerminalBlock({ entry, onInput }: { entry: TerminalEntry; onInput?: (te
           <span className="text-green-400 font-bold shrink-0">{"\u276F"}</span>
           <span className="text-gray-100 text-sm">{entry.userPrompt}</span>
         </div>
+      )}
+      {isFirst && entry.sessionInit && (
+        <SessionInitBar init={entry.sessionInit} />
       )}
       {entry.toolActivities.length > 0 && (
         <ToolActivityChips tools={entry.toolActivities} />
@@ -344,6 +541,12 @@ function TerminalBlock({ entry, onInput }: { entry: TerminalEntry; onInput?: (te
       )}
       {entry.tasks.length > 0 && (
         <TaskChips tasks={entry.tasks} />
+      )}
+      {entry.filesChanged.length > 0 && (
+        <FilesChangedChips files={entry.filesChanged} />
+      )}
+      {entry.compactEvents.length > 0 && (
+        <CompactBanner events={entry.compactEvents} />
       )}
       {entry.rateLimits.length > 0 && (
         <RateLimitBanner limits={entry.rateLimits} />
@@ -390,7 +593,7 @@ function parseEntries(card: Card): TerminalEntry[] {
 
   // First segment: response text without a preceding prompt
   if (segments[0].trim()) {
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, cost } = stripMarkers(segments[0].trim());
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost } = stripMarkers(segments[0].trim());
     entries.push({
       text: clean,
       toolActivities: tools,
@@ -398,6 +601,9 @@ function parseEntries(card: Card): TerminalEntry[] {
       rateLimits,
       tasks,
       suggestions,
+      sessionInit,
+      filesChanged,
+      compactEvents,
       cost,
       status: segments.length <= 1 ? card.status : "complete",
     });
@@ -408,7 +614,7 @@ function parseEntries(card: Card): TerminalEntry[] {
     const userPrompt = segments[i];
     const responseText = (segments[i + 1] ?? "").trim();
     const isLast = i + 2 >= segments.length;
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, cost } = stripMarkers(responseText);
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost } = stripMarkers(responseText);
 
     entries.push({
       userPrompt,
@@ -418,6 +624,9 @@ function parseEntries(card: Card): TerminalEntry[] {
       rateLimits,
       tasks,
       suggestions,
+      sessionInit,
+      filesChanged,
+      compactEvents,
       cost,
       status: isLast ? card.status : "complete",
     });
@@ -490,8 +699,12 @@ export default function TerminalCard({ card }: CardRendererProps) {
           ) : (
             <>
               {entries.map((entry, i) => (
-                <TerminalBlock key={i} entry={entry} onInput={handleInput} />
+                <TerminalBlock key={i} entry={entry} isFirst={i === 0} onInput={handleInput} />
               ))}
+
+              {isStreaming && card.operation && card.operation.stage !== "streaming" && card.operation.stage !== "complete" && (
+                <ActivityIndicator label={card.operation.label} />
+              )}
 
               {card.pendingQuestions && card.pendingQuestions.length > 0 && !isStreaming && (
                 <QuestionOptions questions={card.pendingQuestions} onSelect={handleInput} />

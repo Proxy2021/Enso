@@ -224,8 +224,82 @@ export async function runClaudeCode(params: {
           continue;
         }
 
-        // Init or other system messages
-        console.log(`[claude-code] session: ${sessionId}`);
+        // Task progress — enrich operation label with live stats
+        if (subtype === "task_progress") {
+          const usage = msg.usage as { total_tokens?: number; tool_uses?: number; duration_ms?: number } | undefined;
+          const lastTool = (msg.last_tool_name as string) ?? "";
+          if (usage) {
+            const tools = usage.tool_uses ?? 0;
+            const durS = Math.round((usage.duration_ms ?? 0) / 1000);
+            const taskId = msg.task_id as string;
+            const desc = (activeTasks.get(taskId) ?? "").slice(0, 40);
+            sendDelta(undefined, {
+              operation: {
+                operationId: runId,
+                stage: "calling_tool",
+                label: `Agent: ${lastTool || desc} (${tools} tools, ${durS}s)`,
+                cancellable: true,
+              },
+            });
+          }
+          continue;
+        }
+
+        // Session init — emit model/version/tool count marker
+        if (subtype === "init") {
+          const model = (msg.model as string) ?? "";
+          const version = (msg.claude_code_version as string) ?? "";
+          const toolCount = Array.isArray(msg.tools) ? msg.tools.length : 0;
+          const mcpCount = Array.isArray(msg.mcp_servers) ? msg.mcp_servers.length : 0;
+          const mode = (msg.permissionMode as string) ?? "";
+          sendDelta(`\u200B[init:${model}|${version}|${toolCount}|${mcpCount}|${mode}]\n`);
+          console.log(`[claude-code] session: ${sessionId}, model=${model}, v=${version}`);
+          continue;
+        }
+
+        // Files persisted — emit file names as chips
+        if (subtype === "files_persisted") {
+          const files = (msg.files as Array<{ filename: string }>) ?? [];
+          const failed = (msg.failed as Array<{ filename: string }>) ?? [];
+          const names = files.map(f => f.filename.replace(/\\/g, "/").split("/").pop() ?? f.filename);
+          const failedNames = failed.map(f => f.filename.replace(/\\/g, "/").split("/").pop() ?? f.filename);
+          if (names.length > 0 || failedNames.length > 0) {
+            const okPart = names.join(",");
+            const failPart = failedNames.join(",");
+            sendDelta(`\u200B[files:${okPart}|${failPart}]\n`);
+          }
+          continue;
+        }
+
+        // Compaction status
+        if (subtype === "status") {
+          const status = msg.status as string | null;
+          if (status === "compacting") {
+            sendDelta(`\u200B[compact:start]\n`);
+            sendDelta(undefined, {
+              operation: {
+                operationId: runId,
+                stage: "processing",
+                label: "Compacting context...",
+                cancellable: true,
+              },
+            });
+          }
+          continue;
+        }
+
+        // Compaction boundary — context was compacted
+        if (subtype === "compact_boundary") {
+          const meta = msg.compact_metadata as { trigger?: string; pre_tokens?: number } | undefined;
+          const trigger = meta?.trigger ?? "auto";
+          const preTokens = meta?.pre_tokens ?? 0;
+          const tokensK = preTokens > 0 ? `${Math.round(preTokens / 1000)}k` : "";
+          sendDelta(`\u200B[compact:done:${trigger}:${tokensK}]\n`);
+          continue;
+        }
+
+        // Other system messages
+        console.log(`[claude-code] system: ${sessionId}, subtype=${subtype ?? "unknown"}`);
         continue;
       }
 
@@ -404,14 +478,29 @@ export async function runClaudeCode(params: {
             sendDelta(result.result);
           }
 
-          // Emit cost marker
+          // Emit enriched cost marker with token breakdown
           const cost = result.total_cost_usd as number | undefined;
           const turns = result.num_turns as number | undefined;
           const durationS = ((Date.now() - startTime) / 1000).toFixed(1);
+
+          const usage = result.usage as Record<string, number> | undefined;
+          const modelUsage = result.modelUsage as Record<string, { contextWindow?: number; inputTokens?: number; outputTokens?: number }> | undefined;
+          const inputTok = usage?.inputTokens ?? 0;
+          const outputTok = usage?.outputTokens ?? 0;
+          const cacheTok = usage?.cacheReadInputTokens ?? 0;
+
+          let ctxPct = "";
+          if (modelUsage) {
+            const first = Object.values(modelUsage)[0];
+            if (first?.contextWindow && inputTok) {
+              ctxPct = `${Math.round((inputTok / first.contextWindow) * 100)}%`;
+            }
+          }
+
           if (cost != null || turns != null) {
             const costStr = cost != null ? `$${cost.toFixed(4)}` : "$?";
             const turnsStr = turns != null ? `${turns} turn${turns === 1 ? "" : "s"}` : "";
-            const parts = [costStr, turnsStr, `${durationS}s`].filter(Boolean);
+            const parts = [costStr, turnsStr, `${durationS}s`, inputTok ? `${inputTok}in` : "", outputTok ? `${outputTok}out` : "", cacheTok ? `${cacheTok}cache` : "", ctxPct ? `ctx:${ctxPct}` : ""].filter(Boolean);
             sendDelta(`\u200B[cost:${parts.join("|")}]\n`);
             console.log(`[claude-code] done — cost=${costStr}, turns=${turnsStr}, duration=${durationS}s`);
           }
