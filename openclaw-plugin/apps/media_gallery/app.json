@@ -1,0 +1,435 @@
+{
+  "version": 1,
+  "createdAt": 1709400000000,
+  "spec": {
+    "toolFamily": "media_gallery",
+    "toolPrefix": "enso_media_gallery_",
+    "description": "Comprehensive media gallery for browsing, viewing, organizing, and searching photos and videos",
+    "signatureId": "media_gallery_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "description": "Browse a folder for photos and videos with sorting, filtering, and subfolder navigation",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory path to browse (defaults to ~/Pictures)"
+            },
+            "filter": {
+              "type": "string",
+              "description": "Media type filter: all, image, or video (default: all)"
+            },
+            "sortBy": {
+              "type": "string",
+              "description": "Sort field: name, date, or size (default: name)"
+            },
+            "sortDir": {
+              "type": "string",
+              "description": "Sort direction: asc or desc (default: asc)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "path": "~/Pictures" },
+        "sampleData": {
+          "tool": "enso_media_gallery_browse",
+          "path": "C:/Users/Photos/Vacation",
+          "parentPath": "C:/Users/Photos",
+          "total": 6,
+          "items": [
+            {
+              "name": "sunset_beach.jpg",
+              "path": "C:/Users/Photos/Vacation/sunset_beach.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 3245678,
+              "mediaUrl": "/media/sunset_beach.jpg",
+              "modifiedAt": "2024-08-15T18:30:00Z",
+              "isFavorite": true,
+              "rating": 5,
+              "aiTags": ["sunset", "beach", "ocean", "golden hour"],
+              "aiDescription": "A breathtaking sunset over a tropical beach with golden reflections on calm water",
+              "exif": {
+                "cameraMake": "Canon",
+                "cameraModel": "EOS R5",
+                "dateTaken": "2024-08-15T18:30:00",
+                "width": 8192,
+                "height": 5464,
+                "iso": 100,
+                "aperture": "f/8",
+                "focalLength": "24mm"
+              }
+            },
+            {
+              "name": "mountain_trail.jpg",
+              "path": "C:/Users/Photos/Vacation/mountain_trail.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 2876543,
+              "mediaUrl": "/media/mountain_trail.jpg",
+              "modifiedAt": "2024-08-14T10:15:00Z",
+              "isFavorite": false,
+              "rating": 4,
+              "aiTags": ["mountain", "hiking", "trail", "nature"],
+              "aiDescription": "A winding hiking trail through lush green mountains under blue skies",
+              "exif": {
+                "cameraMake": "Sony",
+                "cameraModel": "A7 IV",
+                "dateTaken": "2024-08-14T10:15:00",
+                "width": 7008,
+                "height": 4672,
+                "iso": 200,
+                "aperture": "f/11",
+                "focalLength": "35mm"
+              }
+            },
+            {
+              "name": "city_night.jpg",
+              "path": "C:/Users/Photos/Vacation/city_night.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 4123456,
+              "mediaUrl": "/media/city_night.jpg",
+              "modifiedAt": "2024-08-16T22:00:00Z",
+              "isFavorite": false,
+              "rating": 3,
+              "aiTags": ["city", "night", "lights", "urban"],
+              "aiDescription": "A vibrant cityscape at night with colorful neon lights reflecting on wet streets",
+              "exif": {
+                "cameraMake": "Canon",
+                "cameraModel": "EOS R5",
+                "dateTaken": "2024-08-16T22:00:00",
+                "width": 8192,
+                "height": 5464,
+                "iso": 3200,
+                "aperture": "f/2.8",
+                "focalLength": "50mm"
+              }
+            },
+            {
+              "name": "drone_coastline.mp4",
+              "path": "C:/Users/Photos/Vacation/drone_coastline.mp4",
+              "ext": ".mp4",
+              "type": "video",
+              "size": 52345678,
+              "mediaUrl": "/media/drone_coastline.mp4",
+              "thumbnailUrl": "/media/thumb_drone_coastline.jpg",
+              "modifiedAt": "2024-08-15T12:00:00Z",
+              "isFavorite": true,
+              "rating": 5,
+              "aiTags": [],
+              "exif": null
+            },
+            {
+              "name": "food_market.jpg",
+              "path": "C:/Users/Photos/Vacation/food_market.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 1987654,
+              "mediaUrl": "/media/food_market.jpg",
+              "modifiedAt": "2024-08-13T13:45:00Z",
+              "isFavorite": false,
+              "rating": 0,
+              "aiTags": ["food", "market", "street"],
+              "aiDescription": "Colorful street food market with exotic fruits and local delicacies",
+              "exif": {
+                "cameraMake": "iPhone",
+                "cameraModel": "15 Pro",
+                "dateTaken": "2024-08-13T13:45:00",
+                "width": 4032,
+                "height": 3024,
+                "iso": 50,
+                "aperture": "f/1.8",
+                "focalLength": "24mm"
+              }
+            },
+            {
+              "name": "waterfall.jpg",
+              "path": "C:/Users/Photos/Vacation/waterfall.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 5678901,
+              "mediaUrl": "/media/waterfall.jpg",
+              "modifiedAt": "2024-08-17T09:20:00Z",
+              "isFavorite": false,
+              "rating": 0,
+              "aiTags": [],
+              "exif": {
+                "cameraMake": "Sony",
+                "cameraModel": "A7 IV",
+                "dateTaken": "2024-08-17T09:20:00",
+                "width": 7008,
+                "height": 4672,
+                "iso": 100,
+                "aperture": "f/16",
+                "focalLength": "16mm",
+                "exposureTime": "1/4s"
+              }
+            }
+          ],
+          "directories": [
+            { "name": "Beach Days", "path": "C:/Users/Photos/Vacation/Beach Days", "itemCount": 24 },
+            { "name": "City Tour", "path": "C:/Users/Photos/Vacation/City Tour", "itemCount": 18 },
+            { "name": "Nature Hikes", "path": "C:/Users/Photos/Vacation/Nature Hikes", "itemCount": 31 }
+          ],
+          "filter": "all",
+          "sortBy": "name",
+          "sortDir": "asc"
+        },
+        "requiredDataKeys": ["tool", "path"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "view",
+        "description": "View a single photo or video with full EXIF metadata, AI description, and rating",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Full path to the photo or video file"
+            }
+          },
+          "required": ["path"]
+        },
+        "sampleParams": { "path": "C:/Users/Photos/Vacation/sunset_beach.jpg" },
+        "sampleData": {
+          "tool": "enso_media_gallery_view",
+          "name": "sunset_beach.jpg",
+          "path": "C:/Users/Photos/Vacation/sunset_beach.jpg",
+          "ext": ".jpg",
+          "type": "image",
+          "size": 3245678,
+          "mediaUrl": "/media/sunset_beach.jpg",
+          "modifiedAt": "2024-08-15T18:30:00Z",
+          "isFavorite": true,
+          "rating": 5,
+          "aiTags": ["sunset", "beach", "ocean", "golden hour", "tropical"],
+          "aiDescription": "A breathtaking sunset over a tropical beach with golden reflections on calm water. Palm trees silhouetted against the vibrant orange and purple sky.",
+          "exif": {
+            "cameraMake": "Canon",
+            "cameraModel": "EOS R5",
+            "dateTaken": "2024-08-15T18:30:00",
+            "width": 8192,
+            "height": 5464,
+            "iso": 100,
+            "aperture": "f/8",
+            "exposureTime": "1/125s",
+            "focalLength": "24mm",
+            "gps": { "lat": 20.7984, "lng": -156.3319 }
+          }
+        },
+        "requiredDataKeys": ["tool", "name", "path", "mediaUrl"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "favorite",
+        "description": "Toggle the favorite status of a photo",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path to the photo file"
+            },
+            "favorite": {
+              "type": "boolean",
+              "description": "Set true or false, or omit to toggle"
+            }
+          },
+          "required": ["path"]
+        },
+        "sampleParams": { "path": "C:/Users/Photos/Vacation/sunset_beach.jpg" },
+        "sampleData": {
+          "tool": "enso_media_gallery_favorite",
+          "name": "sunset_beach.jpg",
+          "path": "C:/Users/Photos/Vacation/sunset_beach.jpg",
+          "type": "image",
+          "mediaUrl": "/media/sunset_beach.jpg",
+          "isFavorite": true,
+          "rating": 5
+        },
+        "requiredDataKeys": ["tool", "path", "isFavorite"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "rate",
+        "description": "Set a 1-5 star rating on a photo (0 to clear the rating)",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path to the photo file"
+            },
+            "rating": {
+              "type": "number",
+              "description": "Star rating from 0 to 5 (0 clears the rating)"
+            }
+          },
+          "required": ["path", "rating"]
+        },
+        "sampleParams": { "path": "C:/Users/Photos/Vacation/sunset_beach.jpg", "rating": 5 },
+        "sampleData": {
+          "tool": "enso_media_gallery_rate",
+          "name": "sunset_beach.jpg",
+          "path": "C:/Users/Photos/Vacation/sunset_beach.jpg",
+          "type": "image",
+          "mediaUrl": "/media/sunset_beach.jpg",
+          "isFavorite": true,
+          "rating": 5
+        },
+        "requiredDataKeys": ["tool", "path", "rating"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "collection",
+        "description": "Manage photo collections: create, view, add/remove photos, rename, delete, or list all collections",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: create, add, remove, list, view, rename, or delete"
+            },
+            "collectionName": {
+              "type": "string",
+              "description": "Name of the collection"
+            },
+            "photoPath": {
+              "type": "string",
+              "description": "Photo path for add/remove operations"
+            },
+            "newName": {
+              "type": "string",
+              "description": "New name for rename operation"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "list" },
+        "sampleData": {
+          "tool": "enso_media_gallery_collection",
+          "action": "list",
+          "collections": [
+            { "name": "Vacation Favorites", "count": 12, "createdAt": 1709312000000, "coverUrl": "/media/sunset_beach.jpg" },
+            { "name": "Nature Shots", "count": 8, "createdAt": 1709398400000, "coverUrl": "/media/mountain_trail.jpg" },
+            { "name": "City Photography", "count": 15, "createdAt": 1709484800000, "coverUrl": "/media/city_night.jpg" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "search",
+        "description": "Search photos by natural language query against AI descriptions and tags",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory to search within"
+            },
+            "query": {
+              "type": "string",
+              "description": "Natural language search query"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of results (default: 30)"
+            }
+          },
+          "required": ["path", "query"]
+        },
+        "sampleParams": { "path": "C:/Users/Photos/Vacation", "query": "sunset ocean" },
+        "sampleData": {
+          "tool": "enso_media_gallery_search",
+          "path": "C:/Users/Photos/Vacation",
+          "query": "sunset ocean",
+          "total": 2,
+          "totalScanned": 6,
+          "totalWithAI": 5,
+          "results": [
+            {
+              "name": "sunset_beach.jpg",
+              "path": "C:/Users/Photos/Vacation/sunset_beach.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 3245678,
+              "mediaUrl": "/media/sunset_beach.jpg",
+              "isFavorite": true,
+              "rating": 5,
+              "matchReason": "description: sunset, ocean"
+            },
+            {
+              "name": "drone_coastline.mp4",
+              "path": "C:/Users/Photos/Vacation/drone_coastline.mp4",
+              "ext": ".mp4",
+              "type": "video",
+              "size": 52345678,
+              "mediaUrl": "/media/drone_coastline.mp4",
+              "thumbnailUrl": "/media/thumb_drone_coastline.jpg",
+              "isFavorite": true,
+              "rating": 5,
+              "matchReason": "filename: coastline"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "query", "results"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "inspect",
+        "description": "Inspect detailed file metadata including EXIF data for a media file",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path to the file to inspect"
+            }
+          },
+          "required": ["path"]
+        },
+        "sampleParams": { "path": "C:/Users/Photos/Vacation/sunset_beach.jpg" },
+        "sampleData": {
+          "tool": "enso_media_gallery_inspect",
+          "name": "sunset_beach.jpg",
+          "path": "C:/Users/Photos/Vacation/sunset_beach.jpg",
+          "ext": ".jpg",
+          "type": "image",
+          "size": 3245678,
+          "mediaUrl": "/media/sunset_beach.jpg",
+          "modifiedAt": "2024-08-15T18:30:00Z",
+          "isFavorite": true,
+          "rating": 5,
+          "aiTags": ["sunset", "beach", "ocean", "golden hour"],
+          "aiDescription": "A breathtaking sunset over a tropical beach with golden reflections on calm water",
+          "exif": {
+            "cameraMake": "Canon",
+            "cameraModel": "EOS R5",
+            "dateTaken": "2024-08-15T18:30:00",
+            "width": 8192,
+            "height": 5464,
+            "iso": 100,
+            "aperture": "f/8",
+            "exposureTime": "1/125s",
+            "focalLength": "24mm",
+            "gps": { "lat": 20.7984, "lng": -156.3319 }
+          }
+        },
+        "requiredDataKeys": ["tool", "name", "path"],
+        "isPrimary": false
+      }
+    ]
+  }
+}
