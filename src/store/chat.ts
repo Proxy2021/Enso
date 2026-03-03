@@ -200,6 +200,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
       // Bare "/code" opens project picker
       if (text.trim() === "/code") {
         get().fetchProjects();
+        // Reuse existing active terminal card if one exists
+        const existingTermId = get()._activeTerminalCardId;
+        if (existingTermId && get().cards[existingTermId]) {
+          return;
+        }
         const id = uuidv4();
         const now = Date.now();
         const card: Card = {
@@ -552,6 +557,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
   launchEnsoCode: () => {
     const ensoPath = get().ensoProjectPath;
     if (!ensoPath) return;
+
+    // Reuse existing active terminal card if one exists
+    const existingTermId = get()._activeTerminalCardId;
+    if (existingTermId && get().cards[existingTermId]) {
+      localStorage.setItem("enso_code_session_cwd", ensoPath);
+      return;
+    }
 
     // Update global convenience state
     localStorage.setItem("enso_code_session_cwd", ensoPath);
