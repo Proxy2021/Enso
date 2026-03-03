@@ -1,8 +1,8 @@
 {
   "name": "enso",
   "private": true,
-  "version": "0.2.17",
-  "versionCode": 19,
+  "version": "0.2.18",
+  "versionCode": 20,
   "description": "A self-evolving AI app platform — every answer is an interactive app, and the app builds itself",
   "type": "module",
   "scripts": {
