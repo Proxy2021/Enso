@@ -9,7 +9,7 @@ import DynamicUICard from "./DynamicUICard";
 cardRegistry.register({
   type: "terminal",
   renderer: TerminalCard,
-  match: (msg) => msg.toolMeta?.toolId === "claude-code",
+  match: (msg) => msg.toolMeta?.toolId === "claude-code" || msg.toolMeta?.toolId === "claude-remote-control",
 });
 
 cardRegistry.register({
