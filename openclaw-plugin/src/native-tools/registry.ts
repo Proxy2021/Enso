@@ -904,10 +904,12 @@ function supportedActionsForPrefix(prefix: string): string[] {
 function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: string }): void {
   const knownPrefixes = [
     "alpharank_",
+    "enso_",
     "enso_fs_",
     "enso_ws_",
     "enso_media_",
     "enso_city_",
+    "enso_browser_",
     "enso_researcher_",
     "enso_clawhub_",
   ];
