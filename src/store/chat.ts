@@ -1036,10 +1036,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
           }
 
           if (msg.state === "error") {
-            // Clear session on the card
-            const newToolMeta = { ...card.toolMeta, toolId: "claude-code" as const, toolSessionId: undefined };
-            storeUpdates.codeSessionId = null;
-            localStorage.removeItem("enso_code_session_id");
+            // Keep session ID — the session is likely still resumable via /resume.
+            // Only append error text; preserve cwd and toolSessionId on the card.
             return {
               ...storeUpdates,
               cards: {
@@ -1048,7 +1046,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                   ...card,
                   text: (card.text ?? "") + (msg.text ?? "Error occurred."),
                   status: "error",
-                  toolMeta: newToolMeta,
+                  toolMeta: card.toolMeta, // preserve existing session + cwd
                   operation: msg.operation,
                   cardMode: msg.cardMode ?? card.cardMode,
                   updatedAt: now,
@@ -1230,11 +1228,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
 
         if (msg.state === "error") {
-          // Clear stale session ID so next prompt starts fresh
-          if (card.toolMeta?.toolId === "claude-code" || msg.toolMeta?.toolId === "claude-code") {
-            storeUpdates.codeSessionId = null;
-            localStorage.removeItem("enso_code_session_id");
-          }
+          // Keep session ID for claude-code — session is still resumable.
+          // For other tool types, use msg.toolMeta as before.
+          const isClaudeCode = card.toolMeta?.toolId === "claude-code" || msg.toolMeta?.toolId === "claude-code";
+          const errorToolMeta = isClaudeCode ? card.toolMeta : (msg.toolMeta ?? card.toolMeta);
           return {
             ...storeUpdates,
             cards: {
@@ -1243,7 +1240,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 ...card,
                 text: (card.text ?? "") + (msg.text ?? "Error occurred."),
                 status: "error",
-                toolMeta: msg.toolMeta ?? card.toolMeta,
+                toolMeta: errorToolMeta,
                 operation: msg.operation,
                 cardMode: msg.cardMode ?? card.cardMode,
                 updatedAt: now,
