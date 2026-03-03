@@ -1,24 +1,18 @@
-import { spawn, type ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
 
 const CLAUDE_EXE = "C:\\Users\\Administrator\\.local\\bin\\claude.exe";
 
-/** Active remote-control processes, keyed by runId. */
-const activeProcesses = new Map<string, ChildProcess>();
-
-export function cancelRemoteControl(runId: string): boolean {
-  const proc = activeProcesses.get(runId);
-  if (!proc) return false;
-  proc.kill();
-  activeProcesses.delete(runId);
-  return true;
+/** No active processes — remote-control now launches a standalone terminal window. */
+export function cancelRemoteControl(_runId: string): boolean {
+  return false;
 }
 
 /**
- * Spawn `claude remote-control` and stream its output back to the browser
- * via WebSocket, rendered in a terminal card.
+ * Launch `claude remote-control` in a new native terminal window on the remote
+ * machine, instead of streaming its output into an Enso terminal card.
  */
 export function runRemoteControl(params: {
   client: ConnectedClient;
@@ -47,21 +41,22 @@ export function runRemoteControl(params: {
     send({ state: "delta", text, ...extra });
   };
 
-  const sendFinal = () => {
+  const sendFinal = (text?: string) => {
     if (resultSent) return;
     resultSent = true;
+    if (text) sendDelta(text);
     send({
       state: "final",
       operation: {
         operationId: runId,
         stage: "complete",
-        label: "Session ended",
+        label: "Terminal launched",
         cancellable: false,
       },
     });
   };
 
-  const sendError = (text: string, cancelled = false) => {
+  const sendError = (text: string) => {
     if (resultSent) return;
     resultSent = true;
     send({
@@ -69,61 +64,38 @@ export function runRemoteControl(params: {
       text,
       operation: {
         operationId: runId,
-        stage: cancelled ? "cancelled" : "error",
-        label: cancelled ? "Cancelled" : "Failed",
+        stage: "error",
+        label: "Failed",
         cancellable: false,
       },
     });
   };
 
-  // Initial status
-  sendDelta("Starting Claude remote-control session...\n", {
-    operation: {
-      operationId: runId,
-      stage: "processing",
-      label: "Starting remote-control",
-      cancellable: true,
+  console.log(`[remote-control] launching claude remote-control in new terminal window (runId=${runId})`);
+
+  // Open a new visible cmd window on the remote machine running claude remote-control.
+  // "cmd /c start <title> cmd /k <exe> remote-control" spawns an independent window
+  // that is fully detached from the Enso process — no output is streamed into Enso.
+  const proc = spawn(
+    "cmd",
+    ["/c", "start", "Claude Remote-Control", "cmd", "/k", CLAUDE_EXE, "remote-control"],
+    {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
     },
-  });
-
-  console.log(`[remote-control] spawning claude remote-control (runId=${runId})`);
-
-  const proc = spawn(CLAUDE_EXE, ["remote-control"], {
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-
-  activeProcesses.set(runId, proc);
-
-  const onData = (chunk: Buffer) => {
-    const text = chunk.toString("utf-8");
-    sendDelta(text, {
-      operation: {
-        operationId: runId,
-        stage: "streaming",
-        label: "Remote-control active",
-        cancellable: true,
-      },
-    });
-  };
-
-  proc.stdout?.on("data", onData);
-  proc.stderr?.on("data", onData);
-
-  proc.on("close", (code) => {
-    activeProcesses.delete(runId);
-    console.log(`[remote-control] process exited with code ${code}`);
-    if (code === 0 || code === null) {
-      sendDelta("Remote-control session ended.\n");
-      sendFinal();
-    } else {
-      sendError(`Remote-control exited with code ${code}`);
-    }
-  });
+  );
 
   proc.on("error", (err) => {
-    activeProcesses.delete(runId);
-    console.error(`[remote-control] spawn error:`, err.message);
-    sendError(`Failed to start remote-control: ${err.message}`);
+    console.error(`[remote-control] failed to launch terminal window:`, err.message);
+    sendError(`Failed to launch remote-control terminal: ${err.message}`);
   });
+
+  proc.unref();
+
+  // Report success after a brief moment to let the window open.
+  // The launched terminal is fully independent — errors will appear there, not here.
+  setTimeout(() => {
+    sendFinal("Claude remote-control launched in a new terminal window on the remote machine.\n");
+  }, 300);
 }
