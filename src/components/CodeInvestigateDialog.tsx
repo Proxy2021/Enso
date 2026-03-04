@@ -41,9 +41,9 @@ export function CodeInvestigateDialog({ cardId, onClose }: CodeInvestigateDialog
     >
       <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)]">
         <div className="px-4 py-3 border-b border-gray-700/70">
-          <h3 className="text-sm font-semibold text-gray-100">Code with Claude</h3>
+          <h3 className="text-sm font-semibold text-gray-100">Enhance App</h3>
           <p className="text-xs text-gray-400 mt-1">
-            What would you like Claude Code to do with this card's context?
+            How would you like to improve or extend this app?
           </p>
         </div>
         <div className="px-4 py-3">
@@ -53,7 +53,7 @@ export function CodeInvestigateDialog({ cardId, onClose }: CodeInvestigateDialog
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="e.g., fix the template layout, add a chart for trends, refactor the executor..."
+              placeholder="e.g., add interactive charts, improve the layout, add new data views, make it mobile-friendly..."
               className="flex-1 bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500/50"
             />
             <VoiceMic />

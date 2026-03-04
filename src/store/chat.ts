@@ -717,10 +717,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
     localStorage.removeItem("enso_code_session_id");
 
     const promptParts: string[] = [
-      `## User Request`,
+      `## Enhancement Request`,
       instruction,
       "",
-      "Use the following context to carry out the request.",
+      "You are enhancing an Enso app. Focus on improving the user experience — adding features, better visuals, richer interactivity, new data views, or improved layouts. Use the context below to understand the current app.",
       "",
     ];
 
@@ -737,7 +737,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     // Include card text if available
     if (card.text) {
-      promptParts.push("## AI Response", card.text.slice(0, 4000), "");
+      promptParts.push("## Current Content", card.text.slice(0, 4000), "");
     }
 
     // Include app data summary if available
@@ -757,7 +757,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       role: "assistant",
       status: "streaming",
       display: "expanded",
-      text: `>>> Investigating response...\n`,
+      text: `>>> Enhancing app...\n`,
       toolMeta: { toolId: "claude-code", cwd: ensoPath },
       createdAt: now,
       updatedAt: now,

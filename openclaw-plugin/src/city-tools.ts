@@ -30,6 +30,9 @@ interface Place {
   sourceUrl?: string;
   highlights?: string[];
   location?: string;
+  priceLevel?: string;    // "$" to "$$$$"
+  mapUrl?: string;        // Google Maps link
+  bestTime?: string;      // best time to visit
 }
 
 interface CityVideo {
@@ -57,6 +60,12 @@ interface BraveImageResult {
 
 // ── Persistent exploration cache ──
 
+interface TravelTip {
+  icon: string;           // Lucide icon name (e.g. "Sun", "Wallet", "Bus")
+  title: string;
+  text: string;
+}
+
 interface CachedCityExploration {
   city: string;
   sections: Array<{ label: string; category: string; places: Place[] }>;
@@ -64,6 +73,11 @@ interface CachedCityExploration {
   summary: string;
   searchSources: string[];
   videos: CityVideo[];
+  travelTips: TravelTip[];
+  country?: string;
+  currency?: string;
+  language?: string;
+  bestSeason?: string;
   timestamp: number;
 }
 
@@ -259,7 +273,9 @@ Return valid JSON (no markdown fences) with this exact structure:
       "rating": "rating if mentioned or empty string",
       "highlights": ["highlight 1", "highlight 2"],
       "location": "neighborhood or area if known",
-      "sourceUrl": "source URL from the search results"
+      "sourceUrl": "source URL from the search results",
+      "priceLevel": "$ to $$$$ for restaurants, or empty string for non-restaurants",
+      "bestTime": "best time of day or season to visit (e.g. 'Golden hour', 'Morning', 'Spring')"
     }
   ],
   "summary": "One paragraph overview of ${category} in ${city}"
@@ -269,7 +285,9 @@ Rules:
 - Return exactly ${limit} places (or fewer if not enough data)
 - Each place must be a real, specific venue/location (not generic descriptions)
 - Description should be informative and enticing
-- Category should be a specific subcategory relevant to the place type`;
+- Category should be a specific subcategory relevant to the place type
+- priceLevel: use "$" (budget), "$$" (moderate), "$$$" (upscale), "$$$$" (luxury) for restaurants; empty for others
+- bestTime: a brief note on the ideal time to visit this place`;
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
@@ -331,6 +349,57 @@ function matchImagesToPlaces(places: Place[], images: BraveImageResult[]): Place
     }
     return place;
   });
+}
+
+// ── Map URL + travel tips helpers ──
+
+function addMapUrls(places: Place[], city: string): Place[] {
+  return places.map((p) => ({
+    ...p,
+    mapUrl: p.mapUrl || `https://www.google.com/maps/search/${encodeURIComponent(p.name + ", " + city)}`,
+  }));
+}
+
+async function generateTravelTips(
+  city: string,
+  geminiKey: string | undefined,
+): Promise<{ tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string }> {
+  if (!geminiKey) return { tips: [] };
+  const prompt = `You are a travel expert. For the city "${city}", provide practical travel tips.
+
+Return valid JSON (no markdown fences):
+{
+  "country": "Country name",
+  "currency": "Local currency (e.g. EUR, JPY, USD)",
+  "language": "Primary language spoken",
+  "bestSeason": "Best season to visit (e.g. Spring, Sep-Nov)",
+  "tips": [
+    { "icon": "LucideIconName", "title": "Short Title", "text": "1-2 sentence practical tip" }
+  ]
+}
+
+Rules:
+- Provide exactly 5 tips covering: best time to visit, budget/money, getting around, local customs/etiquette, safety or health
+- Icon must be a valid Lucide icon name: Sun, Wallet, Bus, Heart, Shield, Coffee, Camera, Globe, Clock, Utensils, Thermometer, Map
+- Keep tips concise and actionable
+- Focus on practical, non-obvious information`;
+
+  try {
+    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
+    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const parsed = JSON.parse(cleaned) as { tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string };
+    return {
+      tips: (parsed.tips ?? []).slice(0, 5),
+      country: parsed.country,
+      currency: parsed.currency,
+      language: parsed.language,
+      bestSeason: parsed.bestSeason,
+    };
+  } catch (err) {
+    console.log(`[enso:city] generateTravelTips error: ${err}`);
+    return { tips: [] };
+  }
 }
 
 // ── Sample data for demo/no-API-key mode ──
@@ -417,9 +486,10 @@ async function researchCategory(
   ]);
 
   const { places, summary } = await synthesizePlaces(webResults, imageResults, city, categoryLabel, limit);
+  const placesWithMaps = addMapUrls(places, city);
   const searchSources = webResults.map((r) => r.url).filter(Boolean);
 
-  return { places, summary, searchSources };
+  return { places: placesWithMaps, summary, searchSources };
 }
 
 async function llmOnlyResearch(
@@ -448,7 +518,9 @@ Return valid JSON (no markdown fences) with this exact structure:
       "category": "Subcategory",
       "rating": "rating out of 5 if applicable, or empty string",
       "highlights": ["highlight 1", "highlight 2"],
-      "location": "neighborhood or area"
+      "location": "neighborhood or area",
+      "priceLevel": "$ to $$$$ for restaurants, or empty string for non-restaurants",
+      "bestTime": "best time of day or season to visit"
     }
   ],
   "summary": "One paragraph overview of ${categoryLabel} in ${city}"
@@ -457,14 +529,15 @@ Return valid JSON (no markdown fences) with this exact structure:
 Rules:
 - Only recommend real, well-known places
 - Be specific with names and descriptions
-- Return exactly ${limit} places`;
+- Return exactly ${limit} places
+- priceLevel: "$" (budget), "$$" (moderate), "$$$" (upscale), "$$$$" (luxury) for restaurants; empty for others`;
 
   const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
   const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
   const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
   const parsed = JSON.parse(cleaned) as { places: Place[]; summary: string };
   return {
-    places: (parsed.places ?? []).slice(0, limit),
+    places: addMapUrls((parsed.places ?? []).slice(0, limit), city),
     summary: parsed.summary ?? "",
     searchSources: [],
   };
@@ -510,16 +583,23 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       summary: cached.summary,
       searchSources: cached.searchSources,
       videos: cached.videos,
+      travelTips: cached.travelTips ?? [],
+      country: cached.country,
+      currency: cached.currency,
+      language: cached.language,
+      bestSeason: cached.bestSeason,
       fromHistory: true,
     });
   }
 
-  // Research all 3 categories + videos in parallel
-  const [restaurants, photoSpots, landmarks, videos] = await Promise.all([
+  // Research all 3 categories + videos + travel tips in parallel
+  const geminiKey = await getGeminiApiKey();
+  const [restaurants, photoSpots, landmarks, videos, travelData] = await Promise.all([
     researchCategory(city, "restaurants", { limit: 4 }),
     researchCategory(city, "photo_spots", { limit: 4 }),
     researchCategory(city, "landmarks", { limit: 4 }),
     braveVideoSearch(`${city} travel guide things to do`, 6),
+    generateTravelTips(city, geminiKey),
   ]);
 
   const allSources = [
@@ -545,6 +625,11 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     summary: summaryText,
     searchSources: sourcesDeduped,
     videos,
+    travelTips: travelData.tips,
+    country: travelData.country,
+    currency: travelData.currency,
+    language: travelData.language,
+    bestSeason: travelData.bestSeason,
     timestamp: Date.now(),
   };
   cityCache.set(cacheKey, cacheEntry);
@@ -555,7 +640,7 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       videoCount: videos.length,
       summaryPreview: summaryText.slice(0, 120),
     });
-    console.log(`[enso:city] saved exploration for "${city}" (${allPlaces.length} places, ${videos.length} videos)`);
+    console.log(`[enso:city] saved exploration for "${city}" (${allPlaces.length} places, ${videos.length} videos, ${travelData.tips.length} tips)`);
   } catch (err) {
     console.log(`[enso:city] failed to persist exploration: ${err}`);
   }
@@ -569,6 +654,11 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     summary: summaryText,
     searchSources: sourcesDeduped,
     videos,
+    travelTips: travelData.tips,
+    country: travelData.country,
+    currency: travelData.currency,
+    language: travelData.language,
+    bestSeason: travelData.bestSeason,
   });
 }
 
@@ -638,18 +728,29 @@ async function citySendEmail(params: SendEmailParams): Promise<AgentToolResult> 
     return errorResult(`No exploration data found for "${city}". Run enso_city_explore first.`);
   }
 
-  const html = buildEmailHtml(city, sections, places, summary, videos, sources);
+  const travelTips = cached?.travelTips ?? [];
+  const cityMeta = { country: cached?.country, currency: cached?.currency, language: cached?.language, bestSeason: cached?.bestSeason };
+  const html = buildEmailHtml(city, sections, places, summary, videos, sources, travelTips, cityMeta);
   const subject = `🏙️ ${city} — City Travel Guide`;
 
   // Build plain-text fallback
   const textLines = [`${city} — City Travel Guide`, "", summary, ""];
+  if (cityMeta.country || cityMeta.currency) {
+    const meta = [cityMeta.country, cityMeta.currency ? `Currency: ${cityMeta.currency}` : "", cityMeta.language ? `Language: ${cityMeta.language}` : "", cityMeta.bestSeason ? `Best: ${cityMeta.bestSeason}` : ""].filter(Boolean);
+    textLines.push(meta.join(" · "), "");
+  }
   for (const section of sections) {
     textLines.push(`── ${section.label} ──`);
     for (const p of section.places) {
-      textLines.push(`  • ${p.name}${p.rating ? ` (${p.rating})` : ""}`);
+      textLines.push(`  • ${p.name}${p.rating ? ` (${p.rating})` : ""}${p.priceLevel ? ` ${p.priceLevel}` : ""}`);
       textLines.push(`    ${p.description}`);
       if (p.highlights?.length) textLines.push(`    ✦ ${p.highlights.join(" · ")}`);
     }
+    textLines.push("");
+  }
+  if (travelTips.length > 0) {
+    textLines.push("── Travel Tips ──");
+    for (const tip of travelTips) textLines.push(`  💡 ${tip.title}: ${tip.text}`);
     textLines.push("");
   }
   if (videos.length > 0) {
@@ -657,7 +758,7 @@ async function citySendEmail(params: SendEmailParams): Promise<AgentToolResult> 
     for (const v of videos) textLines.push(`  ▶ ${v.title} — ${v.url}`);
     textLines.push("");
   }
-  textLines.push("Generated by Enso City Planner");
+  textLines.push("Generated by Enso City Explorer");
 
   // Primary: send via himalaya CLI (local SMTP)
   try {
@@ -750,6 +851,8 @@ function buildEmailHtml(
   summary: string,
   videos: CityVideo[],
   sources: string[],
+  travelTips: TravelTip[] = [],
+  cityMeta: { country?: string; currency?: string; language?: string; bestSeason?: string } = {},
 ): string {
   const esc = escapeHtml;
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -766,18 +869,20 @@ function buildEmailHtml(
         ? `<div style="margin-top:6px;">${highlights.map((h) => `<span style="display:inline-block;background:#2d2b55;color:#c4b5fd;font-size:11px;padding:2px 8px;border-radius:10px;margin:2px 4px 2px 0;">${esc(h)}</span>`).join("")}</div>`
         : "";
       const locationHtml = p.location ? `<div style="color:#64748b;font-size:12px;margin-top:3px;">📍 ${esc(p.location)}</div>` : "";
+      const priceLevelHtml = p.priceLevel ? `<span style="color:#34d399;font-size:12px;font-weight:600;margin-left:8px;">${esc(p.priceLevel)}</span>` : "";
 
       return `<tr><td style="padding:6px 0;">
         <table width="100%" cellpadding="0" cellspacing="0" style="background:#1a1a2e;border-radius:8px;overflow:hidden;border:1px solid #2a2a4a;">
           ${p.imageUrl ? `<tr><td><img src="${esc(p.imageUrl)}" alt="${esc(p.name)}" width="100%" style="display:block;max-height:180px;object-fit:cover;" /></td></tr>` : ""}
           <tr><td style="padding:14px 16px;">
             <table width="100%" cellpadding="0" cellspacing="0"><tr>
-              <td style="color:#f1f5f9;font-size:15px;font-weight:600;">${esc(p.name)}</td>
+              <td style="color:#f1f5f9;font-size:15px;font-weight:600;">${esc(p.name)}${priceLevelHtml}</td>
               ${p.rating ? `<td style="text-align:right;color:#fbbf24;font-size:13px;font-weight:600;white-space:nowrap;">⭐ ${esc(p.rating)}</td>` : ""}
             </tr></table>
             ${locationHtml}
             <div style="color:#cbd5e1;font-size:13px;margin-top:8px;line-height:1.5;">${esc(p.description)}</div>
             ${highlightHtml}
+            ${p.mapUrl ? `<div style="margin-top:8px;"><a href="${esc(p.mapUrl)}" style="color:#93c5fd;font-size:12px;text-decoration:none;">📍 View on Map</a></div>` : ""}
           </td></tr>
         </table>
       </td></tr>`;
@@ -817,16 +922,39 @@ function buildEmailHtml(
       </div>
     </td></tr>` : "";
 
+  // City meta info bar
+  const metaParts = [cityMeta.country, cityMeta.currency ? `💰 ${cityMeta.currency}` : "", cityMeta.language ? `🗣 ${cityMeta.language}` : "", cityMeta.bestSeason ? `☀️ ${cityMeta.bestSeason}` : ""].filter(Boolean);
+  const metaBar = metaParts.length > 0 ? `
+    <tr><td style="padding:16px 20px 0;">
+      <div style="background:#1a1a2e;border-radius:8px;padding:10px 16px;text-align:center;">
+        <span style="color:#94a3b8;font-size:12px;">${metaParts.map(esc).join("  ·  ")}</span>
+      </div>
+    </td></tr>` : "";
+
+  // Travel tips section
+  const tipsSection = travelTips.length > 0 ? `
+    <tr><td style="padding:24px 0 8px;">
+      <div style="color:#e2e8f0;font-size:18px;font-weight:700;border-bottom:2px solid #3b3b5c;padding-bottom:8px;">💡 Travel Tips</div>
+    </td></tr>
+    ${travelTips.map((tip) => `<tr><td style="padding:4px 0;">
+      <div style="background:#1a1a2e;border-radius:8px;padding:12px 16px;border:1px solid #2a2a4a;">
+        <div style="color:#a5b4fc;font-size:13px;font-weight:600;">${esc(tip.title)}</div>
+        <div style="color:#cbd5e1;font-size:12px;margin-top:4px;line-height:1.5;">${esc(tip.text)}</div>
+      </div>
+    </td></tr>`).join("\n")}` : "";
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
 <body style="margin:0;padding:0;background:#0d0d1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto;">
   <!-- Header banner -->
   <tr><td style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:32px 24px;text-align:center;border-radius:0 0 16px 16px;">
-    <div style="font-size:14px;color:#a5b4fc;letter-spacing:2px;text-transform:uppercase;font-weight:600;">City Travel Guide</div>
+    <div style="font-size:14px;color:#a5b4fc;letter-spacing:2px;text-transform:uppercase;font-weight:600;">City Explorer</div>
     <div style="color:#f1f5f9;font-size:28px;font-weight:800;margin-top:8px;line-height:1.2;">${esc(city)}</div>
-    <div style="color:#c7d2fe;font-size:13px;margin-top:10px;">${esc(date)} · ${_allPlaces.length} places${videos.length > 0 ? ` · ${videos.length} videos` : ""}</div>
+    <div style="color:#c7d2fe;font-size:13px;margin-top:10px;">${esc(date)} · ${_allPlaces.length} places${videos.length > 0 ? ` · ${videos.length} videos` : ""}${travelTips.length > 0 ? ` · ${travelTips.length} tips` : ""}</div>
   </td></tr>
+
+  ${metaBar}
 
   <!-- Summary -->
   <tr><td style="padding:24px 20px 0;">
@@ -839,6 +967,7 @@ function buildEmailHtml(
   <tr><td style="padding:0 20px;">
     <table width="100%" cellpadding="0" cellspacing="0">
       ${sectionBlocks}
+      ${tipsSection}
       ${videoSection}
     </table>
   </td></tr>
@@ -853,7 +982,7 @@ function buildEmailHtml(
   <!-- Footer -->
   <tr><td style="padding:24px 20px;text-align:center;">
     <div style="border-top:1px solid #1e1e3a;padding-top:16px;">
-      <div style="color:#4b5563;font-size:11px;">Generated by <span style="color:#6366f1;">Enso City Planner</span></div>
+      <div style="color:#4b5563;font-size:11px;">Generated by <span style="color:#6366f1;">Enso City Explorer</span></div>
     </div>
   </td></tr>
 </table>

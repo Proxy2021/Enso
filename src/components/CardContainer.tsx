@@ -834,7 +834,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                 <button
                   onClick={() => setShowCodeDialog(true)}
                   className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 transition-colors"
-                  title="Investigate with Claude Code"
+                  title="Enhance with Claude Code"
                 >
                   &lt;/&gt; Code
                 </button>
