@@ -1640,6 +1640,12 @@ export async function handlePluginCardAction(params: {
             try {
               const { runClaudeCode } = await import("./claude-code.js");
               await runClaudeCode({ prompt: fixParts.join("\n"), client, runId: randomUUID() });
+              logFix({
+                description: `Auto-fixed executor for ${toolCall.toolName}`,
+                error: errorMsg.slice(0, 500),
+                resolution: "Claude Code debugged and fixed the executor",
+                category: ctx.toolFamily ?? "app",
+              });
             } catch (codeErr) {
               logError("action:native", "Claude Code launch for fix failed", codeErr, { cardId });
               console.error(`[enso:action] Claude Code launch failed:`, codeErr);

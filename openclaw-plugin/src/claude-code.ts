@@ -193,6 +193,7 @@ export async function runClaudeCode(params: {
   let toolInputBuf = "";
   let lastEmittedDetail: string | null = null;
   let lastCompletedToolName: string | null = null;
+  const sessionTaskIds = new Set<string>(); // Track tasks for cleanup on abnormal exit
 
   const toolMeta = (): ServerMessage["toolMeta"] => ({
     toolId: "claude-code",
@@ -202,11 +203,12 @@ export async function runClaudeCode(params: {
   const send = (
     partial: Pick<ServerMessage, "state"> & Partial<ServerMessage>,
   ) => {
+    const currentSeq = seq++;
     client.send({
-      id: randomUUID(),
+      id: `${runId}-${currentSeq}`,
       runId,
       sessionKey: client.sessionKey,
-      seq: seq++,
+      seq: currentSeq,
       timestamp: Date.now(),
       toolMeta: toolMeta(),
       ...(targetCardId ? { targetCardId } : {}),
@@ -287,6 +289,21 @@ export async function runClaudeCode(params: {
   const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
   process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = "300000"; // 5 minutes
 
+  // Heartbeat: abort if no message arrives for 3 minutes (hung stream protection)
+  const HEARTBEAT_TIMEOUT_MS = 180_000;
+  let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetHeartbeat = () => {
+    if (heartbeatTimer) clearTimeout(heartbeatTimer);
+    heartbeatTimer = setTimeout(() => {
+      console.log(`[claude-code] heartbeat timeout — no message for ${HEARTBEAT_TIMEOUT_MS / 1000}s, aborting`);
+      logError("claude-code:heartbeat", `Stream heartbeat timeout after ${HEARTBEAT_TIMEOUT_MS / 1000}s`, undefined, { sessionId });
+      abortController.abort();
+    }, HEARTBEAT_TIMEOUT_MS);
+  };
+  const clearHeartbeat = () => {
+    if (heartbeatTimer) { clearTimeout(heartbeatTimer); heartbeatTimer = null; }
+  };
+
   /** Run the SDK query and process all streamed messages. */
   const runQuery = async () => {
     const q = query({
@@ -330,7 +347,9 @@ export async function runClaudeCode(params: {
       delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     }
 
+    resetHeartbeat();
     for await (const message of q) {
+      resetHeartbeat();
       // Capture session ID from any message that has it
       if ("session_id" in message && message.session_id) {
         sessionId = message.session_id as string;
@@ -345,6 +364,7 @@ export async function runClaudeCode(params: {
           const taskId = msg.task_id as string;
           const desc = ((msg.description as string) ?? "").replace(/[\]\n\r]/g, " ").trim().slice(0, 80);
           activeTasks.set(taskId, desc);
+          sessionTaskIds.add(taskId);
           sendDelta(`\u200B[task:start:${desc}]\n`);
           logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:task", message: `Agent task started: ${desc}`, sessionId });
           continue;
@@ -451,9 +471,6 @@ export async function runClaudeCode(params: {
           if (block?.type === "tool_use") {
             activeToolName = (block.name as string) ?? null;
             toolInputBuf = "";
-            if (activeToolName) {
-              logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:tool", message: `Tool start: ${activeToolName}`, sessionId, metadata: { toolName: activeToolName } });
-            }
             // Update operation label
             if (activeToolName && activeToolName !== "AskUserQuestion") {
               sendDelta(undefined, {
@@ -482,11 +499,14 @@ export async function runClaudeCode(params: {
               },
             });
           } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
-            toolInputBuf += delta.partial_json;
+            // Cap buffer at 2KB — enough for detail extraction, avoids unbounded growth
+            if (toolInputBuf.length < 2048) {
+              toolInputBuf += delta.partial_json;
+            }
             // Progressive detail extraction — update label as soon as key param is known
-            if (activeToolName && activeToolName !== "AskUserQuestion") {
+            if (activeToolName && activeToolName !== "AskUserQuestion" && !lastEmittedDetail) {
               const detail = extractToolDetail(activeToolName, toolInputBuf);
-              if (detail && detail !== lastEmittedDetail) {
+              if (detail) {
                 lastEmittedDetail = detail;
                 sendDelta(undefined, {
                   operation: {
@@ -511,16 +531,19 @@ export async function runClaudeCode(params: {
               const cmd = cmdMatch
                 ? cmdMatch[1].replace(/\\n/g, " ").replace(/\\"/g, '"').replace(/\\/g, "\\").replace(/]/g, "").trim().slice(0, 120)
                 : "";
+              lastEmittedDetail = cmd || null;
               sendDelta(cmd ? `\u200B[bash:${cmd}]\n` : `\u200B[tool:Bash]\n`);
             } else {
-              const detail = extractToolDetail(activeToolName, toolInputBuf);
+              // Reuse already-extracted detail instead of re-running regex
+              const detail = lastEmittedDetail ?? extractToolDetail(activeToolName, toolInputBuf);
               const marker = detail
                 ? `\u200B[tool:${activeToolName}:${detail}]\n`
                 : `\u200B[tool:${activeToolName}]\n`;
               sendDelta(marker);
             }
           }
-          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:tool", message: `Tool: ${activeToolName} ${extractToolDetail(activeToolName!, toolInputBuf) ?? ""}`.trim(), sessionId, metadata: { toolName: activeToolName, detail: extractToolDetail(activeToolName!, toolInputBuf) } });
+          const toolDetail = lastEmittedDetail;
+          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:tool", message: `Tool: ${activeToolName} ${toolDetail ?? ""}`.trim(), sessionId, metadata: { toolName: activeToolName, detail: toolDetail } });
           activeToolName = null;
           toolInputBuf = "";
           lastEmittedDetail = null;
@@ -742,6 +765,7 @@ export async function runClaudeCode(params: {
       }
     }
 
+    clearHeartbeat();
     // Flush buffered final (idempotent)
     flushPendingFinal();
 
@@ -791,7 +815,10 @@ export async function runClaudeCode(params: {
           } else if (!resultSent) {
             const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
             console.error(`[claude-code] retry error:`, msg);
-            sendError(`Claude Code error: ${msg}`);
+            logError("claude-code:retry", `Retry also failed: ${msg}`, retryErr, { sessionId });
+            sendDelta(`\n*${msg}*\n`);
+            sendDelta(`\u200B[suggest:Try again]\n`);
+            sendFinal();
           }
         }
       } else {
@@ -802,7 +829,12 @@ export async function runClaudeCode(params: {
       }
     }
   } finally {
+    clearHeartbeat();
     activeAbortControllers.delete(runId);
+    // Clean up any lingering task entries from this session
+    for (const taskId of sessionTaskIds) {
+      activeTasks.delete(taskId);
+    }
   }
 
   return { sessionId };

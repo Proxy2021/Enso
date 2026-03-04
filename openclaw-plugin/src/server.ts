@@ -16,7 +16,8 @@ import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { transcribeAudio } from "./transcribe.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
-import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog } from "./action-log.js";
+import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
+import type { FixEntry } from "./action-log.js";
 
 export type ConnectedClient = {
   id: string;
@@ -747,6 +748,16 @@ export async function startEnsoServer(opts: {
                   resolution: "Claude Code analyzed and implemented system improvements",
                   category: "system",
                 });
+              } else if (msg.text.includes("reported a bug") && msg.text.includes("debug reporter")) {
+                // Extract bug description from the prompt
+                const descMatch = msg.text.match(/Bug description:\s*"([^"]+)"/);
+                const desc = descMatch?.[1] || "Bug reported via debug reporter";
+                logFix({
+                  description: desc.slice(0, 200),
+                  error: desc.slice(0, 500),
+                  resolution: "Claude Code investigated and fixed the reported bug",
+                  category: "debug-report",
+                });
               }
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
               await handleEnsoInbound({
@@ -1356,6 +1367,31 @@ export async function startEnsoServer(opts: {
     server.listen(port, () => {
       runtime.log?.(`[enso] server listening on :${port}`);
       logAction({ ts: Date.now(), type: "system", category: "system", message: `Server started on port ${port}`, metadata: { port, hostname: hostname(), platform: platform() } });
+
+      // Broadcast fix notifications to all connected clients in real-time
+      onFixLogged((fix: FixEntry) => {
+        const msg: ServerMessage = {
+          id: randomUUID(),
+          runId: randomUUID(),
+          sessionKey: "",
+          seq: 0,
+          state: "final",
+          resolvedBugs: [{
+            id: fix.id,
+            timestamp: fix.timestamp,
+            description: fix.description,
+            resolution: fix.resolution,
+            category: fix.category,
+          }],
+          timestamp: Date.now(),
+        };
+        for (const client of clients.values()) {
+          try { client.send(msg); } catch { /* client may have disconnected */ }
+        }
+        // Mark as acknowledged since all current clients received it
+        acknowledgeFixes([fix.id]);
+      });
+
       resolve();
     });
   });

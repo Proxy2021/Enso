@@ -234,7 +234,7 @@ async function postBuildRegistration(
     cardId,
     originalPrompt: buildAppDefinition,
     originalResponse: cardText,
-    currentData: structuredClone(data),
+    currentData: data,
     geminiApiKey: account.geminiApiKey,
     account,
     mode: account.mode,

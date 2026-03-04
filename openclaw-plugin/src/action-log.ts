@@ -112,6 +112,14 @@ function writeFixes(fixes: FixEntry[]): void {
   writeFileSync(FIXES_PATH, JSON.stringify(fixes, null, 2));
 }
 
+/** Optional callback fired when a fix is logged — used by server.ts to broadcast in real-time. */
+let _onFix: ((entry: FixEntry) => void) | null = null;
+
+/** Register a callback to be notified when logFix() is called. */
+export function onFixLogged(cb: (entry: FixEntry) => void): void {
+  _onFix = cb;
+}
+
 export function logFix(fix: Omit<FixEntry, "id" | "timestamp" | "acknowledged">): void {
   const entry: FixEntry = {
     id: randomUUID(),
@@ -133,6 +141,9 @@ export function logFix(fix: Omit<FixEntry, "id" | "timestamp" | "acknowledged">)
     message: `Fix: ${entry.description} → ${entry.resolution}`,
     error: entry.error,
   });
+
+  // Notify listener for real-time broadcasting
+  _onFix?.(entry);
 }
 
 export function getUnacknowledgedFixes(): FixEntry[] {

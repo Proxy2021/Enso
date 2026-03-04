@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useChatStore, type ProjectInfo } from "../store/chat";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { useVoiceInput } from "../components/VoiceMicButton";
@@ -213,6 +213,9 @@ function ProjectPicker({ projects, cardId }: { projects: ProjectInfo[]; cardId?:
 
 type SlashCommand = { name: string; description: string };
 
+// Module-level cache to avoid re-fetching on every TerminalInput mount
+const slashCommandCache = new Map<string, SlashCommand[]>();
+
 // ── Terminal Input ──
 
 function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cwd?: string }) {
@@ -222,13 +225,15 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
   const inputRef = useRef<HTMLInputElement>(null);
   const { VoiceMic } = useVoiceInput(setText);
 
-  // Fetch available slash commands when cwd is set
+  // Fetch available slash commands when cwd is set (cached per cwd)
   useEffect(() => {
     if (!cwd) return;
+    const cached = slashCommandCache.get(cwd);
+    if (cached) { setCommands(cached); return; }
     const url = `${getBackendBaseUrl()}/api/claude-commands?cwd=${encodeURIComponent(cwd)}`;
     fetch(url, { headers: authHeaders() })
       .then(r => r.json())
-      .then((cmds: SlashCommand[]) => setCommands(cmds))
+      .then((cmds: SlashCommand[]) => { slashCommandCache.set(cwd, cmds); setCommands(cmds); })
       .catch(() => {});
   }, [cwd]);
 
@@ -910,7 +915,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
   const cardCwd = card.toolMeta?.cwd ?? null;
   const cardSessionId = card.toolMeta?.toolSessionId ?? null;
   const needsProject = !cardCwd;
-  const { entries, ctxPercent } = parseEntries(card);
+  const { entries, ctxPercent } = useMemo(() => parseEntries(card), [card.text, card.status]);
   const isStreaming = card.status === "streaming";
 
   useEffect(() => {
