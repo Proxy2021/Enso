@@ -480,11 +480,10 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
       )}
 
       {/* Column header */}
-      <div className="grid grid-cols-[1fr_70px_80px_auto] gap-2 px-2 text-[10px] text-gray-500 uppercase tracking-wide border-b border-gray-700/50 pb-1">
+      <div className="grid grid-cols-[1fr_60px_70px] gap-2 px-2 text-[10px] text-gray-500 uppercase tracking-wide border-b border-gray-700/50 pb-1">
         <button onClick={() => toggleSort("name")} className="text-left hover:text-gray-300">Name{sortArrow("name")}</button>
         <button onClick={() => toggleSort("size")} className="text-right hover:text-gray-300">Size{sortArrow("size")}</button>
         <button onClick={() => toggleSort("type")} className="text-left hover:text-gray-300">Type{sortArrow("type")}</button>
-        <span>Actions</span>
       </div>
 
       {/* File list */}
@@ -495,7 +494,7 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
           const itemPath = String(item?.path ?? "");
           const isRenaming = renamingIdx === idx;
           return (
-            <div key={itemPath || idx} className="group grid grid-cols-[1fr_70px_80px_auto] gap-2 items-center px-2 py-1.5 rounded-md hover:bg-gray-800/60 transition-colors">
+            <div key={itemPath || idx} className="group relative grid grid-cols-[1fr_60px_70px] gap-2 items-center px-2 py-1.5 rounded-md hover:bg-gray-800/60 transition-colors">
               {/* Name */}
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-sm shrink-0">{fileIcon(type, name)}</span>
@@ -526,7 +525,7 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
               {/* Type */}
               <div className="text-[10px] text-gray-500">{type}{item.extension ? " ." + item.extension : ""}</div>
               {/* Actions */}
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="hidden group-hover:flex gap-1 absolute right-1 top-1/2 -translate-y-1/2 bg-gray-800 rounded-md px-1 py-0.5 shadow-lg border border-gray-700/60 z-10">
                 {!isDir(type) && (
                   <button onClick={() => onAction("open_file", { path: itemPath })} className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-700/30 border border-emerald-500/40 hover:bg-emerald-700/50 text-emerald-300" title="Open file">\u{1F4D6}</button>
                 )}
