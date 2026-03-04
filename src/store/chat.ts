@@ -42,7 +42,6 @@ interface CardStore {
 
   // Internal: active terminal card
   _activeTerminalCardId: string | null;
-  _activeRemoteControlCardId: string | null;
 
   // Pinning
   pinnedCards: string[];
@@ -98,7 +97,6 @@ export const useChatStore = create<CardStore>((set, get) => ({
   codeSessionCwd: localStorage.getItem("enso_code_session_cwd") || null,
   codeSessionId: localStorage.getItem("enso_code_session_id") || null,
   _activeTerminalCardId: null,
-  _activeRemoteControlCardId: null,
   pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
   showSidebar: false,
 
@@ -164,35 +162,6 @@ export const useChatStore = create<CardStore>((set, get) => ({
       // "/delete-apps" command — delete all dynamically created apps
       if (text.trim() === "/delete-apps") {
         get().deleteAllApps();
-        return;
-      }
-
-      // "/remote-control" — start a Claude remote-control session
-      if (text.trim() === "/remote-control") {
-        const id = uuidv4();
-        const now = Date.now();
-        const card: Card = {
-          id,
-          runId: id,
-          type: "terminal",
-          role: "assistant",
-          status: "streaming",
-          display: "expanded",
-          text: "Starting remote-control session...\n",
-          toolMeta: { toolId: "claude-remote-control" },
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-          _activeRemoteControlCardId: id,
-          isWaiting: true,
-        }));
-        get()._wsClient?.send({
-          type: "chat.send",
-          routing: { mode: "direct_tool", toolId: "claude-remote-control" },
-        });
         return;
       }
 
@@ -1252,63 +1221,6 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 toolMeta: errorToolMeta,
                 operation: msg.operation,
                 cardMode: msg.cardMode ?? card.cardMode,
-                updatedAt: now,
-              },
-            },
-          };
-        }
-
-        return state;
-      }
-
-      // ── Route claude-remote-control messages to active remote-control card ──
-      if (msg.toolMeta?.toolId === "claude-remote-control" && state._activeRemoteControlCardId) {
-        const cardId = state._activeRemoteControlCardId;
-        const card = state.cards[cardId];
-        if (!card) return { isWaiting: false };
-
-        if (msg.state === "delta") {
-          return {
-            cards: {
-              ...state.cards,
-              [cardId]: {
-                ...card,
-                text: (card.text ?? "") + (msg.text ?? ""),
-                status: "streaming",
-                operation: msg.operation ?? card.operation,
-                updatedAt: now,
-              },
-            },
-          };
-        }
-
-        if (msg.state === "final") {
-          return {
-            isWaiting: false,
-            _activeRemoteControlCardId: null,
-            cards: {
-              ...state.cards,
-              [cardId]: {
-                ...card,
-                status: "complete",
-                operation: msg.operation,
-                updatedAt: now,
-              },
-            },
-          };
-        }
-
-        if (msg.state === "error") {
-          return {
-            isWaiting: false,
-            _activeRemoteControlCardId: null,
-            cards: {
-              ...state.cards,
-              [cardId]: {
-                ...card,
-                text: (card.text ?? "") + (msg.text ?? "Error occurred."),
-                status: "error",
-                operation: msg.operation,
                 updatedAt: now,
               },
             },

@@ -14,7 +14,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { command: "/code", label: "/code", description: "Open Claude Code project picker" },
   { command: "/code ", label: "/code <prompt>", description: "Send a prompt to Claude Code" },
   { command: "/tool enso", label: "/tool enso", description: "Open the tool console" },
-  { command: "/remote-control", label: "/remote-control", description: "Start a Claude remote-control session" },
   { command: "/delete-apps", label: "/delete-apps", description: "Delete all dynamically created apps" },
 ];
 

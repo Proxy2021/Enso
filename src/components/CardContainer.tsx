@@ -30,7 +30,7 @@ const FAMILY_LABELS: Record<string, string> = {
 };
 
 function getCardLabel(card: Card, effectiveType: string): string {
-  if (card.type === "terminal") return "Claude Code";
+  if (card.type === "terminal") return "Terminal";
   if (effectiveType === "dynamic-ui") {
     const mode = card.viewMode === "app" ? card.appCardMode : card.cardMode;
     const family = mode?.toolFamily;

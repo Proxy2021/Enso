@@ -15,8 +15,7 @@ class CardRegistry {
   /** Resolve the card type for a given server message and role. */
   resolve(msg: ServerMessage, role: string): string {
     if (role === "user") {
-      // User messages with claude-code/remote-control meta render inside terminal cards
-      if (msg.toolMeta?.toolId === "claude-code" || msg.toolMeta?.toolId === "claude-remote-control") return "terminal";
+      if (msg.toolMeta?.toolId === "claude-code") return "terminal";
       return "user-bubble";
     }
 
