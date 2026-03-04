@@ -599,13 +599,13 @@ export default function GeneratedUI({ data, onAction }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
           <button onClick={() => onAction("browse", {})}
-            className="p-1 rounded hover:bg-gray-700 cursor-pointer text-gray-400 hover:text-gray-200 shrink-0 transition-colors"
-            title="Home">
+            className="p-1.5 rounded-lg bg-gray-700/60 hover:bg-indigo-500/30 cursor-pointer text-gray-300 hover:text-indigo-300 shrink-0 transition-colors border border-gray-600/50 hover:border-indigo-500/40"
+            title="Home — back to drives">
             <LucideReact.Home className="w-4 h-4" />
           </button>
           {parentPath && (
             <button onClick={() => onAction("browse", { path: parentPath })}
-              className="p-1 rounded hover:bg-gray-700 cursor-pointer text-gray-400 hover:text-gray-200 shrink-0 transition-colors"
+              className="p-1.5 rounded-lg bg-gray-700/60 hover:bg-gray-600/80 cursor-pointer text-gray-300 hover:text-gray-100 shrink-0 transition-colors border border-gray-600/50 hover:border-gray-500/60"
               title="Up one level">
               <LucideReact.ArrowUp className="w-4 h-4" />
             </button>

@@ -17,6 +17,34 @@ const FAMILY_ICONS: Record<string, string> = {
   meal_planner: "\uD83C\uDF7D\uFE0F",
 };
 
+/** Human-friendly names for card headers. Falls back to prettified toolFamily. */
+const FAMILY_LABELS: Record<string, string> = {
+  alpharank: "AlphaRank",
+  filesystem: "File Browser",
+  code_workspace: "Workspace",
+  media_gallery: "Photo Gallery",
+  city_planner: "City Planner",
+  web_browser: "Browser",
+  researcher: "Researcher",
+  clawhub: "ClawHub",
+};
+
+function getCardLabel(card: Card, effectiveType: string): string {
+  if (card.type === "terminal") return "Claude Code";
+  if (effectiveType === "dynamic-ui") {
+    const mode = card.viewMode === "app" ? card.appCardMode : card.cardMode;
+    const family = mode?.toolFamily;
+    if (family) {
+      if (FAMILY_LABELS[family]) return FAMILY_LABELS[family];
+      // Prettify unknown families: "media_gallery" → "Media Gallery"
+      return family.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return "Enso";
+  }
+  if (effectiveType === "chat") return "Chat";
+  return effectiveType.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 interface CardContainerProps {
   card: Card;
   isActive: boolean;
@@ -819,7 +847,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700/60">
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <span>{icon}</span>
-              <span className="capitalize">{effectiveType === "dynamic-ui" ? "Enso" : effectiveType.replace("-", " ")}</span>
+              <span>{getCardLabel(card, effectiveType)}</span>
               {modeDetail && (
                 <span className="text-[10px] text-gray-500 truncate max-w-[200px]" title={modeDetail}>
                   {modeDetail}
