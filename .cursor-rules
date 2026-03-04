@@ -19,7 +19,6 @@
 
 - `alpharank`
 - `filesystem` (`enso_fs_*`)
-- `code_workspace` (`enso_ws_*`)
 - `multimedia` (`enso_media_*`)
 - `travel_planner` (`enso_travel_*`)
 - `meal_planner` (`enso_meal_*`)

@@ -220,7 +220,6 @@ Enso ships multiple deterministic "app experience" tool families:
 
 - `alpharank` (predictions, regime, portfolio, routine, ticker detail)
 - `filesystem` (`enso_fs_*`)
-- `code_workspace` (`enso_ws_*`)
 - `media_gallery` (dynamic app, uses `enso_media_*` tools as backend)
 - `travel_planner` (`enso_travel_*`)
 - `meal_planner` (`enso_meal_*`)
@@ -452,7 +451,7 @@ git add + git commit                         (shipped with project)
 
 ### Built-in Apps (Advanced — Hardcoded TypeScript)
 
-For deeply integrated tool families that need TypeScript, direct access to Node.js APIs, or complex multi-file logic, use the built-in 5-file pattern. This is the original approach used by filesystem, workspace, media, travel, and meal families.
+For deeply integrated tool families that need TypeScript, direct access to Node.js APIs, or complex multi-file logic, use the built-in 5-file pattern. This is the original approach used by filesystem, media, travel, and meal families.
 
 #### Quick Reference — 5 Files to Create/Modify
 

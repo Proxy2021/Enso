@@ -5,7 +5,7 @@ import { setEnsoRuntime } from "./src/runtime.js";
 import { findExistingProviderForActionSuffixes, isToolRegistered } from "./src/native-tools/registry.js";
 import { recordToolCall } from "./src/native-tools/tool-call-store.js";
 import { registerFilesystemTools } from "./src/filesystem-tools.js";
-import { registerWorkspaceTools } from "./src/workspace-tools.js";
+
 import { registerMediaTools } from "./src/media-tools.js";
 import { registerBrowserTools } from "./src/browser-tools.js";
 import { registerCityTools } from "./src/city-tools.js";
@@ -81,12 +81,6 @@ const plugin = {
       fallbackPrefix: "enso_fs_",
       actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "filesystem")?.actionSuffixes ?? [],
       register: () => registerFilesystemTools(api),
-    });
-    maybeRegisterFallbackToolFamily({
-      familyLabel: "workspace",
-      fallbackPrefix: "enso_ws_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "code_workspace")?.actionSuffixes ?? [],
-      register: () => registerWorkspaceTools(api),
     });
     // Media tools are registered directly (no catalog entry) — they serve as
     // the backend for the dynamic media_gallery app via ctx.callTool().

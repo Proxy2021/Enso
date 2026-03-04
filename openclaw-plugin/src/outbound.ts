@@ -347,12 +347,7 @@ function inferDesktopLikePathFromPrompt(prompt: string): string | undefined {
   return undefined;
 }
 
-function inferWorkspaceLikePathFromPrompt(prompt: string): string | undefined {
-  const lower = prompt.toLowerCase();
-  if (lower.includes("github")) return "~/Desktop/Github";
-  if (lower.includes("project")) return "~/Desktop/Github";
-  return undefined;
-}
+
 
 
 function hydrateFilesystemLikeData(data: unknown, prompt: string): unknown {
@@ -410,22 +405,6 @@ function attachSyntheticNativeToolHint(ctx: CardContext, data: unknown, prompt: 
     ctx.nativeToolHint = {
       toolName: provider.toolName,
       params: { path },
-      handlerPrefix: provider.handlerPrefix,
-    };
-    return;
-  }
-  if (ctx.toolFamily === "code_workspace") {
-    const provider = getPreferredToolProviderForFamily("code_workspace");
-    if (!provider) return;
-    const pathCandidate =
-      (typeof hydrated.path === "string" && hydrated.path.trim())
-      || (typeof hydrated.parentPath === "string" && hydrated.parentPath.trim())
-      || (typeof hydrated.basePath === "string" && hydrated.basePath.trim())
-      || inferWorkspaceLikePathFromPrompt(prompt)
-      || "~/Desktop/Github";
-    ctx.nativeToolHint = {
-      toolName: provider.toolName,
-      params: { path: pathCandidate },
       handlerPrefix: provider.handlerPrefix,
     };
     return;
@@ -753,8 +732,6 @@ export async function handleCardEnhance(params: {
 
   if (selection.toolFamily === "filesystem") {
     execParams.path = resolvePathParam(execParams.path);
-  } else if (selection.toolFamily === "code_workspace") {
-    execParams.path = resolvePathParam(execParams.path ?? execParams.root);
   } else if (selection.toolFamily === "city_planner" && !execParams.city) {
     // Extract city name from card text when using suggestedFamily shortcut
     // Simple heuristic: look for capitalized words after common prepositions

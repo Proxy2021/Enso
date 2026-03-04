@@ -28,13 +28,6 @@ export const TOOL_FAMILY_CAPABILITIES: ToolFamilyCapability[] = [
     description: "File manager: browse directories, read files, search, create/rename/delete/move files and folders",
   },
   {
-    toolFamily: "code_workspace",
-    fallbackToolName: "enso_ws_list_repos",
-    actionSuffixes: ["list_repos", "detect_dev_tools", "project_overview"],
-    signatureId: "workspace_inventory",
-    description: "Software projects and repositories: listing repos, project structure, language/framework detection, dev tools",
-  },
-  {
     toolFamily: "city_planner",
     fallbackToolName: "enso_city_explore",
     actionSuffixes: ["explore", "restaurants", "photo_spots", "landmarks", "send_email", "delete_history"],
@@ -85,7 +78,7 @@ export function removeCapability(toolFamily: string): boolean {
 }
 
 /** List all dynamically added tool families (not the built-in ones). */
-const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "code_workspace", "city_planner", "web_browser", "researcher", "clawhub"]);
+const BUILTIN_FAMILIES = new Set(["alpharank", "filesystem", "city_planner", "web_browser", "researcher", "clawhub"]);
 
 export function getDynamicCapabilities(): ToolFamilyCapability[] {
   return TOOL_FAMILY_CAPABILITIES.filter((c) => !BUILTIN_FAMILIES.has(c.toolFamily));

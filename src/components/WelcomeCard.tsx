@@ -45,11 +45,6 @@ const TEMPLATES: Template[] = [
     description: "Open a remote shell",
     prompt: "/shell",
   },
-  {
-    icon: "\uD83D\uDCAC",
-    title: "Just Chat",
-    description: "Ask me anything",
-  },
 ];
 
 export default function WelcomeCard() {
@@ -65,7 +60,6 @@ export default function WelcomeCard() {
     } else if (template.prompt) {
       sendMessage(template.prompt);
     }
-    // "Just Chat" — no action, user types their own
   }
 
   return (

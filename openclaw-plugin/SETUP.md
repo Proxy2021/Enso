@@ -338,7 +338,6 @@ This bridge requires no tool-specific code in Enso. Any OpenClaw plugin that reg
 Enso currently includes first-party tool families with deterministic app-mode templates:
 
 - Filesystem: `enso_fs_*`
-- Workspace: `enso_ws_*`
 - Media: `enso_media_*`
 - Travel planner: `enso_travel_*`
 - Meal planner: `enso_meal_*`

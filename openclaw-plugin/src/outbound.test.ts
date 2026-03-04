@@ -71,9 +71,6 @@ vi.mock("./native-tools/registry.js", () => ({
     if (toolFamily === "filesystem") {
       return { toolName: "enso_fs_list_directory", handlerPrefix: "enso_fs_" };
     }
-    if (toolFamily === "code_workspace") {
-      return { toolName: "enso_ws_list_repos", handlerPrefix: "enso_ws_" };
-    }
     return undefined;
   }),
   isToolActionCovered: vi.fn(() => false),
@@ -873,74 +870,6 @@ describe("handlePluginCardAction", () => {
     expect(executeToolDirect).toHaveBeenCalledWith("enso_fs_list_directory", { path: "/Users/demo/Desktop/Github" });
     expect(serverGenerateUI).not.toHaveBeenCalled();
     expect(serverGenerateConstrainedFollowupUI).not.toHaveBeenCalled();
-  });
-
-  it("Workspace E2E: tool action maps to enso_ws_* and uses tool template", async () => {
-    const client = mockClient();
-    const account = mockAccount("full");
-
-    const toolTemplate = {
-      toolFamily: "code_workspace",
-      signatureId: "workspace_inventory",
-      templateId: "code-workspace-v1",
-      supportedActions: ["refresh", "list_repos", "detect_dev_tools", "project_overview"],
-      coverageStatus: "covered",
-    };
-
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce({
-      toolName: "enso_ws_list_repos",
-      params: { path: "/Users/demo/Github" },
-      timestamp: Date.now(),
-    });
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, list_repos, detect_dev_tools, project_overview");
-    vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
-
-    const { getToolPluginId, getPluginToolPrefix, isToolActionCovered } = await import(
-      "./native-tools/registry.js"
-    );
-    vi.mocked(getToolPluginId).mockReturnValue("enso");
-    vi.mocked(getPluginToolPrefix).mockReturnValue("enso_ws_");
-    vi.mocked(isToolActionCovered).mockReturnValue(true);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"path":"/Users/demo/Github","repos":[{"name":"Enso","path":"/Users/demo/Github/Enso"}]}\n```',
-      },
-      client,
-      runId: "run-workspace-tool-mode",
-      seq: 0,
-      account,
-      userMessage: "scan workspace repos",
-    });
-
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0;
-    vi.clearAllMocks();
-
-    vi.mocked(executeToolDirect).mockResolvedValueOnce({
-      success: true,
-      data: { path: "/Users/demo/Github/Enso", extensionStats: [{ ext: ".ts", count: 120 }] },
-    });
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, list_repos, detect_dev_tools, project_overview");
-    vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(isToolActionCovered).mockReturnValue(true);
-
-    await handlePluginCardAction({
-      cardId,
-      action: "project_overview",
-      payload: { path: "/Users/demo/Github/Enso" },
-      client,
-      config: {} as any,
-      runtime: mockRuntime(),
-    });
-
-    const finals = finalMessages(client.messages);
-    expect(finals).toHaveLength(1);
-    expect(finals[0].targetCardId).toBe(cardId);
-    expect(finals[0].generatedUI).toBe("<div>tool-template</div>");
-    expect(executeToolDirect).toHaveBeenCalledWith("enso_ws_project_overview", { path: "/Users/demo/Github/Enso" });
   });
 
   it("Tool Console E2E: add action updates card in tool mode", async () => {

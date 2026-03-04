@@ -13,7 +13,6 @@ import { nativeShare } from "../lib/native-share";
 const FAMILY_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
   filesystem: "\uD83D\uDCC1",
-  code_workspace: "\uD83D\uDCBB",
   media_gallery: "\uD83D\uDDBC\uFE0F",
   travel_planner: "\u2708\uFE0F",
   meal_planner: "\uD83C\uDF7D\uFE0F",
@@ -23,7 +22,6 @@ const FAMILY_ICONS: Record<string, string> = {
 const FAMILY_LABELS: Record<string, string> = {
   alpharank: "AlphaRank",
   filesystem: "File Browser",
-  code_workspace: "Workspace",
   media_gallery: "Photo Gallery",
   city_planner: "City Planner",
   web_browser: "Browser",

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { getAlphaRankTemplateCode, isAlphaRankSignature } from "./templates/alpharank.js";
 import { getFilesystemTemplateCode, isFilesystemSignature } from "./templates/filesystem.js";
-import { getWorkspaceTemplateCode, isWorkspaceSignature } from "./templates/workspace.js";
+
 import { getToolingTemplateCode, isToolingSignature } from "./templates/tooling.js";
 import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/system.js";
 import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
@@ -326,13 +326,6 @@ function registerDefaultSignatures(): void {
       coverageStatus: "covered",
     },
     {
-      toolFamily: "code_workspace",
-      signatureId: "workspace_inventory",
-      templateId: "code-workspace-v1",
-      supportedActions: ["refresh", "list_repos", "detect_dev_tools", "project_overview"],
-      coverageStatus: "covered",
-    },
-    {
       toolFamily: "city_planner",
       signatureId: "city_research_board",
       templateId: "city-research-v1",
@@ -477,9 +470,6 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
     }
     return getToolTemplate("alpharank", "ranked_predictions_table");
   }
-  if (lower.startsWith("enso_ws_")) {
-    return getToolTemplate("code_workspace", "workspace_inventory");
-  }
   if (lower.startsWith("enso_fs_")) {
     return getToolTemplate("filesystem", "directory_listing");
   }
@@ -551,9 +541,6 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if (Array.isArray(record.steps) && ("logs" in record || "failure" in record)) {
     return getToolTemplate("tool_inspector", "tool_run_summary");
   }
-  if (Array.isArray(record.developmentTools) || "workspace" in record || "projectDirectories" in record) {
-    return getToolTemplate("code_workspace", "workspace_inventory");
-  }
   if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_city_")) || (Array.isArray(record.places) && "city" in record && ("category" in record || Array.isArray(record.sections)))) {
     return getToolTemplate("city_planner", "city_research_board");
   }
@@ -607,9 +594,6 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isFilesystemSignature(signature.signatureId)) {
     return getFilesystemTemplateCode(signature);
-  }
-  if (isWorkspaceSignature(signature.signatureId)) {
-    return getWorkspaceTemplateCode(signature);
   }
   if (isBrowserSignature(signature.signatureId)) {
     return getBrowserTemplateCode(signature);
@@ -786,15 +770,6 @@ export function normalizeDataForToolTemplate(signature: ToolTemplate, data: unkn
         columns: Array.isArray(source.columns) ? source.columns : [],
       };
     }
-    case "workspace_inventory": {
-      const repos = Array.isArray(source.repos) ? source.repos : Array.isArray(source.repositories) ? source.repositories : [];
-      const found = Array.isArray(source.found) ? source.found : [];
-      return {
-        ...source,
-        title: source.title ?? "Workspace inventory",
-        rows: repos.length > 0 ? repos : found,
-      };
-    }
     case "media_gallery": {
       const items = Array.isArray(source.items) ? source.items : [];
       const groups = Array.isArray(source.groups)
@@ -894,7 +869,6 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
     "alpharank_",
     "enso_",
     "enso_fs_",
-    "enso_ws_",
     "enso_city_",
     "enso_browser_",
     "enso_researcher_",

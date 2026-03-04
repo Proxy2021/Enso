@@ -89,14 +89,6 @@ describe("tool-driven follow-up path", () => {
     expect(code).toContain("ticker_detail");
   });
 
-  it("renders dedicated workspace template", () => {
-    const workspaceSig = getToolTemplate("code_workspace", "workspace_inventory");
-    expect(workspaceSig).toBeDefined();
-    const workspaceCode = getToolTemplateCode(workspaceSig!);
-    expect(workspaceCode).toContain("Workspace Studio");
-  });
-
-
   it("auto-registers generic templates for unknown runtime tool families", () => {
     const key = Symbol.for("openclaw.pluginRegistryState");
     const globalRecord = globalThis as Record<symbol, unknown>;

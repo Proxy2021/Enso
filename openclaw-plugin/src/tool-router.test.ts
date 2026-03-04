@@ -52,17 +52,6 @@ function familyTools(): ToolDetail[] {
       "enso_filesystem",
     ),
     tool(
-      "enso_ws_project_overview",
-      "Get project overview for workspace repository.",
-      {
-        type: "object",
-        properties: {
-          repoPath: { type: "string", description: "Repository path." },
-        },
-      },
-      "enso_workspace",
-    ),
-    tool(
       "enso_media_scan_library",
       "Scan a media library and index files.",
       {
@@ -301,7 +290,6 @@ describe("tryRouteWithLLM", () => {
 
   it.each([
     ["filesystem", "show files on desktop map test", "enso_fs_list_directory", { path: "~/Desktop" }],
-    ["workspace", "give project overview map test", "enso_ws_project_overview", { repoPath: "." }],
     ["media", "scan media library map test", "enso_media_scan_library", { rootPath: "~/Pictures" }],
     ["alpharank", "show latest market predictions map test", "alpharank_latest_predictions", { market: "us_equities" }],
   ])(
