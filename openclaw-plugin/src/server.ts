@@ -519,6 +519,8 @@ export async function startEnsoServer(opts: {
 
   app.post("/upload", express.raw({ type: () => true, limit: "50mb" }), (req, res) => {
     const contentType = req.headers["content-type"] ?? "application/octet-stream";
+    const bodyLen = Buffer.isBuffer(req.body) ? req.body.length : 0;
+    console.log(`[enso:upload] Received: contentType=${contentType}, bodyLen=${bodyLen}, isBuffer=${Buffer.isBuffer(req.body)}`);
     const extMap: Record<string, string> = {
       // Images
       "image/png": ".png",
@@ -568,6 +570,7 @@ export async function startEnsoServer(opts: {
         if (json.data && json.mimeType) {
           fileBuffer = Buffer.from(json.data, "base64");
           mimeType = json.mimeType;
+          console.log(`[enso:upload] Decoded base64 JSON: mimeType=${mimeType}, decodedLen=${fileBuffer.length}`);
         } else {
           // Regular JSON file upload
           fileBuffer = req.body;
@@ -592,6 +595,8 @@ export async function startEnsoServer(opts: {
 
     writeFileSync(filePath, fileBuffer);
     const mediaUrl = toMediaUrl(filePath);
+    console.log(`[enso:upload] Saved: ${filename} (${fileBuffer.length} bytes, ${mimeType})`);
+    logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload: ${filename} (${fileBuffer.length} bytes, ${mimeType})` });
     res.json({ mediaUrl, filePath });
   });
 
