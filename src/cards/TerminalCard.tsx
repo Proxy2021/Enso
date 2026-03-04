@@ -359,7 +359,6 @@ function ToolActivityChips({ tools }: { tools: ToolActivity[] }) {
       {tools.map((t, i) => (
         <span key={i} className="inline-flex items-center gap-1 text-[10px] text-gray-500">
           <span className="shrink-0 text-[9px]">{TOOL_ICONS[t.toolName] ?? "\u2699\uFE0F"}</span>
-          <span className="text-gray-400">{t.toolName}</span>
           {t.detail && <span className="text-gray-600 truncate max-w-[100px] font-mono">{t.detail}</span>}
         </span>
       ))}

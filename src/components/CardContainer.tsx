@@ -789,11 +789,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         ? "text-rose-300 border-rose-500/35 bg-rose-500/10"
         : "text-emerald-300 border-emerald-500/35 bg-emerald-500/10";
 
-  const activeCardMode = isAppView ? card.appCardMode : card.cardMode;
-  const modeDetail = activeCardMode?.interactionMode === "tool"
-    ? [activeCardMode.toolFamily, activeCardMode.signatureId].filter(Boolean).join("/")
-    : undefined;
-
   function handleAction(action: string, payload?: unknown) {
     if (isLoading) return;
     if (action === "open_url" && typeof (payload as Record<string,unknown>)?.url === "string") {
@@ -829,11 +824,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             <div className="flex items-center gap-2 text-xs text-gray-400">
               <span>{icon}</span>
               <span>{getCardLabel(card, effectiveType)}</span>
-              {modeDetail && (
-                <span className="text-[10px] text-gray-500 truncate max-w-[200px]" title={modeDetail}>
-                  {modeDetail}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-1.5">
               {card.role === "assistant" && card.status === "complete" && (
