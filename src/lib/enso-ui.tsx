@@ -780,7 +780,7 @@ function DataTable({
 
   return (
     <div className={`w-full overflow-x-auto ${className}`}>
-      <table className="w-full text-xs text-left">
+      <table className="min-w-full text-xs text-left">
         <thead>
           <tr className="border-b border-gray-700">
             {columns.map((col) => (
