@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useChatStore } from "../store/chat";
+import { SystemEnhanceDialog } from "./SystemEnhanceDialog";
 
 const FAMILY_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
@@ -20,6 +21,7 @@ export default function AppsMenu() {
   const ensoProjectPath = useChatStore((s) => s.ensoProjectPath);
   const connectionState = useChatStore((s) => s.connectionState);
   const [open, setOpen] = useState(false);
+  const [showEnhance, setShowEnhance] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const disabled = connectionState !== "connected";
@@ -162,6 +164,17 @@ export default function AppsMenu() {
                 Code
               </button>
             )}
+            {ensoProjectPath && (
+              <button
+                onClick={() => { setShowEnhance(true); setOpen(false); }}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 transition-colors border-r border-gray-700/50"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Enhance
+              </button>
+            )}
             <button
               onClick={handleRestart}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 transition-colors"
@@ -174,6 +187,7 @@ export default function AppsMenu() {
           </div>
         </div>
       )}
+      {showEnhance && <SystemEnhanceDialog onClose={() => setShowEnhance(false)} />}
     </div>
   );
 }

@@ -836,7 +836,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              {card.type === "chat" && card.role === "assistant" && card.status === "complete" && (
+              {card.role === "assistant" && card.status === "complete" && (
                 <button
                   onClick={() => codeInvestigate(card.id)}
                   className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 transition-colors"

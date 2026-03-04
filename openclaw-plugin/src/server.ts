@@ -16,7 +16,7 @@ import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { transcribeAudio } from "./transcribe.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
-import { logAction, logError, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog } from "./action-log.js";
+import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog } from "./action-log.js";
 
 export type ConnectedClient = {
   id: string;
@@ -739,6 +739,14 @@ export async function startEnsoServer(opts: {
                 runId,
                 targetCardId: msg.sourceCardId,
               });
+              if (msg.text.startsWith("The user wants to enhance the Enso system")) {
+                logFix({
+                  description: `System enhancement: ${msg.text.slice(0, 150)}`,
+                  error: "",
+                  resolution: "Claude Code analyzed and implemented system improvements",
+                  category: "system",
+                });
+              }
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
               await handleEnsoInbound({
                 message: {

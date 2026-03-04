@@ -70,6 +70,7 @@ interface CardStore {
   launchShell: () => void;
   sendDebugReport: (description: string, imagePaths: string[]) => void;
   codeInvestigate: (cardId: string) => void;
+  launchSystemEnhance: (instruction: string) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   switchTerminalProject: (cardId: string, cwd: string) => void;
@@ -671,7 +672,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   codeInvestigate: (cardId: string) => {
     const card = get().cards[cardId];
-    if (!card?.text) return;
+    if (!card) return;
 
     const ensoPath = get().ensoProjectPath;
     if (!ensoPath) return;
@@ -679,13 +680,35 @@ export const useChatStore = create<CardStore>((set, get) => ({
     localStorage.setItem("enso_code_session_cwd", ensoPath);
     localStorage.removeItem("enso_code_session_id");
 
-    const prompt = [
-      "The user wants you to investigate or implement something based on the following AI response.",
-      "Read the response, then ask the user what they'd like you to do with it.",
+    const promptParts: string[] = [
+      "The user wants you to investigate or implement something based on the following.",
+      "Read the context, then ask the user what they'd like you to do.",
       "",
-      "## AI Response",
-      card.text.slice(0, 4000),
-    ].join("\n");
+    ];
+
+    // For dynamic-ui / app cards — include app context
+    const activeMode = card.appCardMode ?? card.cardMode;
+    if (activeMode?.toolFamily) {
+      promptParts.push(
+        `## App: ${activeMode.toolFamily}`,
+        `Location: Look in ~/.openclaw/enso-apps/${activeMode.toolFamily}/ or openclaw-plugin/apps/${activeMode.toolFamily}/`,
+        `Read CLAUDE-REFERENCE.md for the app structure reference.`,
+        "",
+      );
+    }
+
+    // Include card text if available
+    if (card.text) {
+      promptParts.push("## AI Response", card.text.slice(0, 4000), "");
+    }
+
+    // Include app data summary if available
+    const appData = card.appData ?? card.data;
+    if (appData) {
+      promptParts.push("## Current App Data (sample)", "```json", JSON.stringify(appData, null, 2).slice(0, 2000), "```", "");
+    }
+
+    const prompt = promptParts.join("\n");
 
     const id = uuidv4();
     const now = Date.now();
@@ -697,6 +720,58 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "streaming",
       display: "expanded",
       text: `>>> Investigating response...\n`,
+      toolMeta: { toolId: "claude-code", cwd: ensoPath },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    set((s) => ({
+      cardOrder: [...s.cardOrder, id],
+      cards: { ...s.cards, [id]: termCard },
+      _activeTerminalCardId: id,
+      codeSessionCwd: ensoPath,
+      codeSessionId: null,
+      isWaiting: true,
+    }));
+
+    const routing: ToolRouting = {
+      mode: "direct_tool",
+      toolId: "claude-code",
+      cwd: ensoPath,
+    };
+
+    get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
+  },
+
+  launchSystemEnhance: (instruction: string) => {
+    const ensoPath = get().ensoProjectPath;
+    if (!ensoPath) return;
+
+    localStorage.setItem("enso_code_session_cwd", ensoPath);
+    localStorage.removeItem("enso_code_session_id");
+
+    const prompt = [
+      "The user wants to enhance the Enso system.",
+      "",
+      "## Enhancement Request",
+      instruction,
+      "",
+      "## Instructions",
+      "Analyze the codebase deeply across both the frontend (src/) and backend (openclaw-plugin/src/).",
+      "Read CLAUDE.md and CLAUDE-REFERENCE.md for architecture context.",
+      "Suggest the most impactful improvements for this area, then ask which ones to implement.",
+    ].join("\n");
+
+    const id = uuidv4();
+    const now = Date.now();
+    const termCard: Card = {
+      id,
+      runId: id,
+      type: "terminal",
+      role: "assistant",
+      status: "streaming",
+      display: "expanded",
+      text: `>>> System enhance: ${instruction.slice(0, 80)}...\n`,
       toolMeta: { toolId: "claude-code", cwd: ensoPath },
       createdAt: now,
       updatedAt: now,

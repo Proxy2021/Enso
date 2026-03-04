@@ -1112,6 +1112,12 @@ export async function handlePluginCardAction(params: {
         client,
         runId,
       });
+      logFix({
+        description: `Fixed error in ${toolName}`,
+        error: errorStr.slice(0, 500),
+        resolution: "Claude Code debugged and fixed the issue",
+        category: ctx.toolFamily ?? "app",
+      });
     } catch (err) {
       console.error(`[enso:action] fix_with_code failed:`, err);
       logError("action:fix_with_code", "fix_with_code failed", err, { cardId, toolFamily: ctx.toolFamily });
@@ -1195,6 +1201,12 @@ export async function handlePluginCardAction(params: {
     try {
       const { runClaudeCode } = await import("./claude-code.js");
       await runClaudeCode({ prompt: improveParts.join("\n"), client, runId: randomUUID() });
+      logFix({
+        description: `Improved app: ${instruction.slice(0, 100)}`,
+        error: "",
+        resolution: "Claude Code implemented the improvement",
+        category: ctx.toolFamily ?? "app",
+      });
     } catch (err) {
       console.error(`[enso:action] improve_with_code failed:`, err);
       logError("action:improve_with_code", "improve_with_code failed", err, { cardId, toolFamily: ctx.toolFamily });
