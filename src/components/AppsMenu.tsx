@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { SystemEnhanceDialog } from "./SystemEnhanceDialog";
+import { EnsoCodeDialog } from "./EnsoCodeDialog";
 
 const FAMILY_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
@@ -22,6 +23,7 @@ export default function AppsMenu() {
   const connectionState = useChatStore((s) => s.connectionState);
   const [open, setOpen] = useState(false);
   const [showEnhance, setShowEnhance] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const disabled = connectionState !== "connected";
@@ -60,7 +62,7 @@ export default function AppsMenu() {
   }
 
   function handleCode() {
-    launchEnsoCode();
+    setShowCode(true);
     setOpen(false);
   }
 
@@ -188,6 +190,7 @@ export default function AppsMenu() {
         </div>
       )}
       {showEnhance && <SystemEnhanceDialog onClose={() => setShowEnhance(false)} />}
+      {showCode && <EnsoCodeDialog onClose={() => setShowCode(false)} />}
     </div>
   );
 }

@@ -66,7 +66,7 @@ interface CardStore {
   runApp: (toolFamily: string) => void;
   saveAppToCodebase: (toolFamily: string) => void;
   restartServer: () => void;
-  launchEnsoCode: () => void;
+  launchEnsoCode: (instruction?: string) => void;
   launchShell: () => void;
   sendDebugReport: (description: string, imagePaths: string[]) => void;
   codeInvestigate: (cardId: string, instruction: string) => void;
@@ -538,16 +538,52 @@ export const useChatStore = create<CardStore>((set, get) => ({
     get()._wsClient?.send({ type: "server.restart" });
   },
 
-  launchEnsoCode: () => {
+  launchEnsoCode: (instruction?: string) => {
     get().fetchProjects();
 
-    // Reuse existing active terminal card if one exists
-    const existingTermId = get()._activeTerminalCardId;
-    if (existingTermId && get().cards[existingTermId]) {
+    // Reuse existing active terminal card if one exists (only when no instruction)
+    if (!instruction) {
+      const existingTermId = get()._activeTerminalCardId;
+      if (existingTermId && get().cards[existingTermId]) {
+        return;
+      }
+    }
+
+    const ensoPath = get().ensoProjectPath;
+
+    // If instruction + known project path, launch directly with prompt
+    if (instruction && ensoPath) {
+      localStorage.setItem("enso_code_session_cwd", ensoPath);
+      localStorage.removeItem("enso_code_session_id");
+
+      const id = uuidv4();
+      const now = Date.now();
+      const card: Card = {
+        id,
+        runId: id,
+        type: "terminal",
+        role: "assistant",
+        status: "streaming",
+        display: "expanded",
+        text: `>>> ${instruction}\n`,
+        toolMeta: { toolId: "claude-code", cwd: ensoPath },
+        createdAt: now,
+        updatedAt: now,
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, id],
+        cards: { ...s.cards, [id]: card },
+        _activeTerminalCardId: id,
+        codeSessionCwd: ensoPath,
+        codeSessionId: null,
+        isWaiting: true,
+      }));
+      const routing: ToolRouting = { mode: "direct_tool", toolId: "claude-code", cwd: ensoPath };
+      get()._wsClient?.send({ type: "chat.send", text: instruction, routing, sourceCardId: id });
       return;
     }
 
-    // Create terminal card without CWD so the project picker is shown
+    // No instruction — create terminal card without CWD so the project picker is shown
     const id = uuidv4();
     const now = Date.now();
     const card: Card = {

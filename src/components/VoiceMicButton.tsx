@@ -34,8 +34,8 @@ export function VoiceMicButton({ onTranscript, size = "sm", className = "" }: Vo
       className={`relative rounded-md transition-colors ${
         isListening
           ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-          : "text-gray-500 hover:text-gray-300"
-      } ${size === "sm" ? "p-1" : "px-3 py-2.5 rounded-xl"} ${className}`}
+          : "text-gray-400 hover:text-gray-200"
+      } ${size === "sm" ? "p-1.5" : "px-3 py-2.5 rounded-xl"} ${className}`}
       title={isListening ? "Stop recording" : "Voice input"}
     >
       {isListening && (
