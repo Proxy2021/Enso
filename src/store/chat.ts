@@ -88,6 +88,79 @@ interface CardStore {
 }
 
 
+// Helper: handle reconnection — replace connection:lost markers and auto-resume sessions
+function _handleReconnection(
+  get: () => CardStore,
+  set: (fn: Partial<CardStore> | ((s: CardStore) => Partial<CardStore>)) => void,
+) {
+  const { cards } = get();
+  const updates: Record<string, Card> = {};
+  const resumeTargets: Array<{ id: string; sessionId: string; cwd: string }> = [];
+
+  for (const [id, card] of Object.entries(cards)) {
+    if (card.text?.includes("\u200B[connection:lost]")) {
+      // Replace connection:lost with connection:restored
+      updates[id] = {
+        ...card,
+        text: card.text.replace(/\u200B\[connection:lost\]\n?/g, "\u200B[connection:restored]\n"),
+        updatedAt: Date.now(),
+      };
+      // Collect terminal cards with valid sessions for auto-resume
+      if (card.type === "terminal" && card.toolMeta?.toolSessionId && card.toolMeta?.cwd) {
+        resumeTargets.push({
+          id,
+          sessionId: card.toolMeta.toolSessionId,
+          cwd: card.toolMeta.cwd,
+        });
+      }
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    set((s) => ({ cards: { ...s.cards, ...updates } }));
+  }
+
+  // Auto-resume Claude Code sessions after a brief delay (let settings message arrive first)
+  if (resumeTargets.length > 0) {
+    setTimeout(() => {
+      for (const target of resumeTargets) {
+        const wsClient = get()._wsClient;
+        if (!wsClient) continue;
+
+        // Mark card as streaming
+        set((s) => {
+          const card = s.cards[target.id];
+          if (!card) return {};
+          return {
+            cards: {
+              ...s.cards,
+              [target.id]: {
+                ...card,
+                status: "streaming",
+                updatedAt: Date.now(),
+              },
+            },
+            isWaiting: true,
+          };
+        });
+
+        // Send resume command directly (no ">>> /resume" in card text)
+        wsClient.send({
+          type: "chat.send",
+          text: "/resume",
+          routing: {
+            mode: "direct_tool",
+            toolId: "claude-code",
+            toolSessionId: target.sessionId,
+            cwd: target.cwd,
+          },
+          sourceCardId: target.id,
+        });
+      }
+    }, 500);
+  }
+}
+
 export const useChatStore = create<CardStore>((set, get) => ({
   cardOrder: [],
   cards: {},
@@ -122,9 +195,14 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const client = createWSClient({
       url: wsUrl,
       onMessage: (msg) => get()._handleServerMessage(msg),
-      onStateChange: (state) => {
+      onStateChange: (state, isReconnect) => {
         const prev = get().connectionState;
         set({ connectionState: state });
+
+        // Handle successful reconnection — restore lost cards and auto-resume sessions
+        if (state === "connected" && isReconnect) {
+          _handleReconnection(get, set);
+        }
 
         // When connection drops, finalize any streaming cards
         if (state === "disconnected" && prev === "connected") {
@@ -945,16 +1023,21 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const client = createWSClient({
       url: wsUrl,
       onMessage: (msg) => get()._handleServerMessage(msg),
-      onStateChange: (state) => {
+      onStateChange: (state, isReconnect) => {
         const prev = get().connectionState;
         set({ connectionState: state });
+
+        // Handle successful reconnection
+        if (state === "connected" && isReconnect) {
+          _handleReconnection(get, set);
+        }
+
         if (state === "disconnected" && prev === "connected") {
           const { cards } = get();
           const updates: Record<string, Card> = {};
           for (const [id, card] of Object.entries(cards)) {
             if (card.status === "streaming") {
               if (card.type === "shell") {
-                // Shell cards: write disconnect message to xterm, mark complete
                 const writer = shellWriters.get(id);
                 if (writer) writer("\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
                 updates[id] = { ...card, status: "complete", updatedAt: Date.now() };

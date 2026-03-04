@@ -5,7 +5,7 @@ export type ConnectionState = "connecting" | "connected" | "disconnected";
 interface WSClientOptions {
   url: string;
   onMessage: (msg: ServerMessage) => void;
-  onStateChange: (state: ConnectionState) => void;
+  onStateChange: (state: ConnectionState, isReconnect: boolean) => void;
 }
 
 interface WSClient {
@@ -19,16 +19,19 @@ export function createWSClient(options: WSClientOptions): WSClient {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectDelay = 1000;
   let intentionalClose = false;
+  let hasConnectedBefore = false;
 
   function connect() {
     intentionalClose = false;
-    options.onStateChange("connecting");
+    options.onStateChange("connecting", false);
 
     ws = new WebSocket(options.url);
 
     ws.onopen = () => {
+      const isReconnect = hasConnectedBefore;
+      hasConnectedBefore = true;
       reconnectDelay = 1000;
-      options.onStateChange("connected");
+      options.onStateChange("connected", isReconnect);
     };
 
     ws.onmessage = (event) => {
@@ -41,7 +44,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
     };
 
     ws.onclose = () => {
-      options.onStateChange("disconnected");
+      options.onStateChange("disconnected", false);
       if (!intentionalClose) {
         reconnectTimer = setTimeout(() => {
           reconnectDelay = Math.min(reconnectDelay * 2, 30000);

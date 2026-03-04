@@ -18,6 +18,7 @@ const FILES_MARKER_RE = /\u200B\[files:([^\]]*)\]\n?/g;
 const COMPACT_MARKER_RE = /\u200B\[compact:(start|done)(?::([^:]*):([^\]]*))?\]\n?/g;
 const CTX_MARKER_RE = /\u200B\[ctx:(\d+)%?\]\n?/g;
 const CONNECTION_MARKER_RE = /\u200B\[connection:lost\]\n?/g;
+const CONNECTION_RESTORED_RE = /\u200B\[connection:restored\]\n?/g;
 
 interface SessionInit {
   model: string;
@@ -158,7 +159,13 @@ function stripMarkers(text: string) {
     return "";
   });
 
-  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, ctxPercent };
+  let connectionRestored = false;
+  clean = clean.replace(CONNECTION_RESTORED_RE, () => {
+    connectionRestored = true;
+    return "";
+  });
+
+  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent };
 }
 
 // ── Project Picker ──
@@ -626,6 +633,7 @@ interface TerminalEntry {
   compactEvents: CompactEvent[];
   cost: string | null;
   connectionLost: boolean;
+  connectionRestored: boolean;
   status: Card["status"];
 }
 
@@ -668,8 +676,14 @@ function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFi
       {entry.cost && <CostFooter cost={entry.cost} />}
       {entry.connectionLost && (
         <div className="flex items-center gap-1.5 text-amber-400 text-xs mt-2 pl-3">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
-          Connection lost — server may have restarted. Reconnecting...
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          Connection lost — reconnecting...
+        </div>
+      )}
+      {entry.connectionRestored && (
+        <div className="flex items-center gap-1.5 text-green-400 text-xs mt-2 pl-3">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400" />
+          Reconnected — session resumed
         </div>
       )}
       {entry.status === "error" && (
@@ -708,7 +722,7 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
 
   // First segment: response text without a preceding prompt
   if (segments[0].trim()) {
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, ctxPercent } = stripMarkers(segments[0].trim());
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent } = stripMarkers(segments[0].trim());
     if (ctxPercent != null) latestCtxPercent = ctxPercent;
     entries.push({
       text: clean,
@@ -722,6 +736,7 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
       compactEvents,
       cost,
       connectionLost,
+      connectionRestored,
       status: segments.length <= 1 ? card.status : "complete",
     });
   }
@@ -731,7 +746,7 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
     const userPrompt = segments[i];
     const responseText = (segments[i + 1] ?? "").trim();
     const isLast = i + 2 >= segments.length;
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, ctxPercent } = stripMarkers(responseText);
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent } = stripMarkers(responseText);
     if (ctxPercent != null) latestCtxPercent = ctxPercent;
 
     entries.push({
@@ -747,6 +762,7 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
       compactEvents,
       cost,
       connectionLost,
+      connectionRestored,
       status: isLast ? card.status : "complete",
     });
   }
