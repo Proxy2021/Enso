@@ -14,6 +14,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const [emailAddr, setEmailAddr] = useState("");
   const [filter, setFilter] = useState("");
   const [imgErrors, setImgErrors] = useState({});
+  const [imgLoaded, setImgLoaded] = useState({});
   const [cityInput, setCityInput] = useState("");
   const [playingVideo, setPlayingVideo] = useState(null);
 
@@ -36,6 +37,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const accent = accentMap[category] || "blue";
 
   const handleImgError = (name) => setImgErrors((prev) => ({ ...prev, [name]: true }));
+  const handleImgLoad = (name) => setImgLoaded((prev) => ({ ...prev, [name]: true }));
 
   const timeAgo = (ts) => {
     if (!ts) return "";
@@ -75,11 +77,12 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
 
   const PlaceCard = ({ place, idx }) => {
     const hasImg = place.imageUrl && !imgErrors[place.name];
+    const imgReady = hasImg && imgLoaded[place.name];
     return (
       <UICard key={idx} accent={accentMap[place.category] || accent}>
         {hasImg && (
-          <div className="w-full h-32 overflow-hidden rounded-t-lg -mt-3 -mx-3 mb-2" style={{ width: "calc(100% + 1.5rem)" }}>
-            <img src={place.imageUrl} alt={place.name} className="w-full h-full object-cover" onError={() => handleImgError(place.name)} referrerPolicy="no-referrer" />
+          <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 " + (imgReady ? "h-32 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
+            <img src={place.imageUrl} alt={place.name} className="w-full h-full object-cover" onLoad={() => handleImgLoad(place.name)} onError={() => handleImgError(place.name)} referrerPolicy="no-referrer" />
           </div>
         )}
         <div className="flex items-start justify-between gap-2">
@@ -163,8 +166,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             <UICard key={idx} accent="rose">
               <div className="cursor-pointer" onClick={() => setPlayingVideo(vid)}>
                 {vid.thumbnail && !imgErrors["vid_" + idx] && (
-                  <div className="w-full h-24 overflow-hidden rounded-t-lg -mt-3 -mx-3 mb-2 relative" style={{ width: "calc(100% + 1.5rem)" }}>
-                    <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" onError={() => handleImgError("vid_" + idx)} referrerPolicy="no-referrer" />
+                  <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 relative " + (imgLoaded["vid_" + idx] ? "h-24 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
+                    <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" onLoad={() => handleImgLoad("vid_" + idx)} onError={() => handleImgError("vid_" + idx)} referrerPolicy="no-referrer" />
                     {vid.duration && (
                       <div className="absolute bottom-1 right-1 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded">{vid.duration}</div>
                     )}
@@ -386,7 +389,9 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
           {selectedPlace && (
             <div className="space-y-2">
               {selectedPlace.imageUrl && !imgErrors[selectedPlace.name] && (
-                <img src={selectedPlace.imageUrl} alt={selectedPlace.name} className="w-full h-40 object-cover rounded-lg" onError={() => handleImgError(selectedPlace.name)} referrerPolicy="no-referrer" />
+                <div className={"w-full overflow-hidden rounded-lg " + (imgLoaded[selectedPlace.name] ? "h-40" : "h-0")}>
+                  <img src={selectedPlace.imageUrl} alt={selectedPlace.name} className="w-full h-full object-cover" onLoad={() => handleImgLoad(selectedPlace.name)} onError={() => handleImgError(selectedPlace.name)} referrerPolicy="no-referrer" />
+                </div>
               )}
               <div className="flex gap-1 flex-wrap">
                 {selectedPlace.category && <Badge variant="info">{selectedPlace.category}</Badge>}
