@@ -115,6 +115,13 @@ export interface ServerMessage {
     summary?: ToolBuildSummary;
     error?: string;
   };
+  resolvedBugs?: Array<{
+    id: string;
+    timestamp: number;
+    description: string;
+    resolution: string;
+    category: string;
+  }>;
   autoHeal?: {
     stage: "fixing" | "fixed" | "failed";
     toolName: string;

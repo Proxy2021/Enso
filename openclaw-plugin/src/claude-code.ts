@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage, ToolQuestion } from "./types.js";
+import { logAction, logError } from "./action-log.js";
 
 const activeAbortControllers = new Map<string, AbortController>();
 const activeTasks = new Map<string, string>(); // taskId → description
@@ -117,6 +118,7 @@ export async function runClaudeCode(params: {
       const content = readFileSync(cmdPath, "utf-8");
       prompt = cmdArgs ? `${content}\n\n${cmdArgs}` : content;
       console.log(`[claude-code] expanded /${cmdName} → ${cmdPath} (${content.length} chars)`);
+      logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:command", message: `Slash command expanded: /${cmdName}`, metadata: { cmdPath, contentLength: content.length } });
     }
   }
 
@@ -266,6 +268,15 @@ export async function runClaudeCode(params: {
   const spawnCwd = cwd ? cwd.replace(/\\/g, "/") : undefined;
   console.log(`[claude-code] SDK query (cwd=${spawnCwd ?? "default"}, resume=${toolSessionId ?? "none"})`);
 
+  logAction({
+    ts: Date.now(),
+    type: "claude-code",
+    category: "claude-code:session",
+    message: `Session start: ${prompt.slice(0, 200)}`,
+    sessionId: toolSessionId,
+    metadata: { cwd: spawnCwd, resumeId: toolSessionId, effort, promptLength: prompt.length },
+  });
+
   // Clear CLAUDECODE env var to prevent the spawned CLI from rejecting
   // as a "nested session" (e.g. when the gateway was started from Claude Code)
   delete process.env.CLAUDECODE;
@@ -335,6 +346,7 @@ export async function runClaudeCode(params: {
           const desc = ((msg.description as string) ?? "").replace(/[\]\n\r]/g, " ").trim().slice(0, 80);
           activeTasks.set(taskId, desc);
           sendDelta(`\u200B[task:start:${desc}]\n`);
+          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:task", message: `Agent task started: ${desc}`, sessionId });
           continue;
         }
 
@@ -344,6 +356,7 @@ export async function runClaudeCode(params: {
           const summary = ((msg.summary as string) ?? activeTasks.get(taskId) ?? "").replace(/[\]\n\r]/g, " ").trim().slice(0, 80);
           activeTasks.delete(taskId);
           sendDelta(`\u200B[task:${status}:${summary}]\n`);
+          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:task", message: `Agent task ${status}: ${summary}`, sessionId });
           continue;
         }
 
@@ -377,6 +390,7 @@ export async function runClaudeCode(params: {
           const mode = (msg.permissionMode as string) ?? "";
           sendDelta(`\u200B[init:${model}|${version}|${toolCount}|${mcpCount}|${mode}]\n`);
           console.log(`[claude-code] session: ${sessionId}, model=${model}, v=${version}`);
+          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:init", message: `Session init: model=${model}, v=${version}, tools=${toolCount}, mcp=${mcpCount}`, sessionId, metadata: { model, version, toolCount, mcpCount } });
           continue;
         }
 
@@ -418,6 +432,7 @@ export async function runClaudeCode(params: {
           const preTokens = meta?.pre_tokens ?? 0;
           const tokensK = preTokens > 0 ? `${Math.round(preTokens / 1000)}k` : "";
           sendDelta(`\u200B[compact:done:${trigger}:${tokensK}]\n`);
+          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:compact", message: `Compaction done: trigger=${trigger}, pre-tokens=${tokensK}`, sessionId, metadata: { trigger, preTokens } });
           continue;
         }
 
@@ -436,6 +451,9 @@ export async function runClaudeCode(params: {
           if (block?.type === "tool_use") {
             activeToolName = (block.name as string) ?? null;
             toolInputBuf = "";
+            if (activeToolName) {
+              logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:tool", message: `Tool start: ${activeToolName}`, sessionId, metadata: { toolName: activeToolName } });
+            }
             // Update operation label
             if (activeToolName && activeToolName !== "AskUserQuestion") {
               sendDelta(undefined, {
@@ -502,6 +520,7 @@ export async function runClaudeCode(params: {
               sendDelta(marker);
             }
           }
+          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:tool", message: `Tool: ${activeToolName} ${extractToolDetail(activeToolName!, toolInputBuf) ?? ""}`.trim(), sessionId, metadata: { toolName: activeToolName, detail: extractToolDetail(activeToolName!, toolInputBuf) } });
           activeToolName = null;
           toolInputBuf = "";
           lastEmittedDetail = null;
@@ -562,6 +581,7 @@ export async function runClaudeCode(params: {
               ? ` (resets in ${Math.max(1, Math.round((resetsAt - Date.now() / 1000)))}s)`
               : "";
             const markerStatus = status === "rejected" ? "rejected" : "warning";
+            logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:ratelimit", message: `Rate limit ${markerStatus}${waitLabel}`, sessionId, metadata: { status: markerStatus, resetsAt } });
             sendDelta(`\u200B[ratelimit:${markerStatus}${waitLabel}]\n`);
             sendDelta(undefined, {
               operation: {
@@ -612,6 +632,7 @@ export async function runClaudeCode(params: {
                   })),
                 }));
                 console.log(`[claude-code] AskUserQuestion: ${questions.length} question(s)`);
+                logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:question", message: `AskUserQuestion: ${questions.length} question(s)`, sessionId });
                 sendDelta(undefined, { questions });
               }
             }
@@ -659,6 +680,7 @@ export async function runClaudeCode(params: {
             const parts = [costStr, turnsStr, `${durationS}s`, inputTok ? `${inputTok}in` : "", outputTok ? `${outputTok}out` : "", cacheTok ? `${cacheTok}cache` : "", ctxPct ? `ctx:${ctxPct}` : ""].filter(Boolean);
             pendingFinalCostDelta = `\u200B[cost:${parts.join("|")}]\n`;
             console.log(`[claude-code] done — cost=${costStr}, turns=${turnsStr}, duration=${durationS}s`);
+            logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:success", message: `Session success: ${costStr}, ${turnsStr}, ${durationS}s`, sessionId, metadata: { cost, turns, durationS: parseFloat(durationS), inputTokens: inputTok, outputTokens: outputTok, cacheTokens: cacheTok, contextPct: ctxPct } });
           }
 
           // Don't call sendFinal() yet — prompt_suggestion messages may still
@@ -688,6 +710,8 @@ export async function runClaudeCode(params: {
           } else {
             errMsg = baseMsg || "Claude Code encountered an error.";
           }
+
+          logError("claude-code:error", `Session error (${subtype}): ${errMsg}`, undefined, { sessionId });
 
           // For max_turns and execution errors, send as final (not error)
           // so suggestions render and the card doesn't show harsh red
@@ -742,10 +766,12 @@ export async function runClaudeCode(params: {
     if (pendingFinalReady && !resultSent) {
       const msg = err instanceof Error ? err.message : String(err);
       console.log(`[claude-code] process threw after success result, flushing final (${msg})`);
+      logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:session", message: "Process threw after success, flushing final", sessionId, metadata: { error: msg } });
       flushPendingFinal();
     } else if (!resultSent) {
       const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
       if (isAbort) {
+        logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:session", message: "Session cancelled", sessionId });
         sendError("Claude Code run cancelled.", true);
       } else if (resumeId && totalTextSent === 0 && !retried) {
         // Resume failed before any output — likely stale/crashed session.
@@ -754,6 +780,7 @@ export async function runClaudeCode(params: {
         resumeId = undefined;
         sessionId = "";
         console.log(`[claude-code] session resume failed (no output), retrying with fresh session`);
+        logError("claude-code:resume", "Session resume failed, retrying fresh", undefined, { sessionId: resumeId });
         sendDelta("Session expired — starting fresh...\n");
         try {
           await runQuery();
@@ -770,6 +797,7 @@ export async function runClaudeCode(params: {
       } else {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[claude-code] error:`, msg);
+        logError("claude-code:fatal", `Fatal error: ${msg}`, err, { sessionId });
         sendError(`Claude Code error: ${msg}`);
       }
     }

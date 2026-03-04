@@ -12,6 +12,7 @@ import { selectToolForContent } from "./ui-generator.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
 import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { randomUUID } from "crypto";
+import { logAction, logError } from "./action-log.js";
 
 // ── Background app compatibility check ──
 
@@ -169,6 +170,7 @@ export async function handleEnsoInbound(params: {
   const steps: Array<{ seq: number; text: string }> = [];
 
   console.log(`[enso:inbound] dispatching: runId=${runId}, cardId=${stableCardId}, peer=${peerId}, targetCardId=${targetCardId ?? "none"}, textLen=${rawBody.length}`);
+  logAction({ ts: Date.now(), type: "action", category: "inbound", message: `Chat: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
@@ -199,6 +201,7 @@ export async function handleEnsoInbound(params: {
       },
       onError: (err, info) => {
         runtime.error?.(`enso ${info.kind} reply failed: ${String(err)}`);
+        logError("inbound", `Reply failed (${info.kind})`, err, { cardId: stableCardId });
         client.send({
           id: randomUUID(),
           runId,

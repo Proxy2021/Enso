@@ -25,6 +25,7 @@ import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ServerMessage, ToolBuildSummary, EnhanceResult } from "./types.js";
+import { logAction, logError, logFix } from "./action-log.js";
 
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
@@ -48,6 +49,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
   // 1. Snapshot existing app families before the build starts
   const preExistingFamilies = new Set(TOOL_FAMILY_CAPABILITIES.map((c) => c.toolFamily));
   const buildStartTime = Date.now();
+  logAction({ ts: buildStartTime, type: "build", category: "build-via-claude", message: `Build start: ${buildAppDefinition.slice(0, 100)}`, cardId });
 
   // 2. Create a terminal card on the client
   const send = (msg: Partial<ServerMessage>) => {
@@ -85,6 +87,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
     sessionId = result.sessionId;
   } catch (err) {
     console.error(`[enso:build-via-claude] Claude Code error:`, err);
+    logError("build-via-claude", "Claude Code build error", err, { cardId });
     sendBuildComplete(send, cardId, false, undefined, `Claude Code error: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
@@ -92,6 +95,46 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
   // 5. Post-build: detect new app, register, execute, deliver
   console.log(`[enso:build-via-claude] Claude Code session complete (${sessionId}). Scanning for new app...`);
   await postBuildRegistration(params, send, preExistingFamilies, buildStartTime);
+
+  // 6. Post-build validation: compile-check the template, auto-fix if broken
+  const freshApps = loadAllApps().filter((a) => !preExistingFamilies.has(a.spec.toolFamily));
+  if (freshApps.length > 0 && sessionId) {
+    const app = freshApps[0];
+    try {
+      const { transform } = await import("sucrase");
+      transform(app.templateJSX, { transforms: ["jsx"], jsxRuntime: "classic" });
+      console.log(`[enso:build-via-claude] Template compile check: OK`);
+    } catch (compileErr) {
+      console.log(`[enso:build-via-claude] Template compile error, resuming session to fix`);
+      logError("build-via-claude", "Template compile error, auto-fixing", compileErr, { cardId });
+      const fixPrompt = [
+        "The template.jsx you just created has a compile error:",
+        "```",
+        String(compileErr),
+        "```",
+        "",
+        "Please fix template.jsx to resolve this error.",
+        "Read CLAUDE-REFERENCE.md for the template format rules.",
+        "Common issues: unclosed JSX tags, invalid expressions, missing parentheses.",
+      ].join("\n");
+
+      try {
+        await runClaudeCode({
+          prompt: fixPrompt,
+          cwd: PROJECT_ROOT,
+          toolSessionId: sessionId,
+          client,
+          runId: randomUUID(),
+          targetCardId: buildTerminalCardId,
+        });
+        // Re-scan and re-deliver after fix
+        await postBuildRegistration(params, send, preExistingFamilies, buildStartTime);
+        logFix({ description: "Template compile error in build", error: String(compileErr), resolution: "Auto-fixed via Claude Code session", category: "build-via-claude" });
+      } catch (fixErr) {
+        console.error(`[enso:build-via-claude] Auto-fix session failed:`, fixErr);
+      }
+    }
+  }
 }
 
 // ── Post-Build Registration ──
@@ -245,6 +288,7 @@ async function postBuildRegistration(
   sendBuildComplete(send, cardId, true, buildSummary);
 
   console.log(`[enso:build-via-claude] ✓ App "${spec.toolFamily}" built and registered (${registeredToolNames.length} tools)`);
+  logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `Build success: ${spec.toolFamily} (${registeredToolNames.length} tools)`, cardId, toolFamily: spec.toolFamily });
 }
 
 // ── Helpers ──

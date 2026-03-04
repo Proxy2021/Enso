@@ -69,6 +69,7 @@ interface CardStore {
   launchEnsoCode: () => void;
   launchShell: () => void;
   sendDebugReport: (description: string, imagePaths: string[]) => void;
+  codeInvestigate: (cardId: string) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
   switchTerminalProject: (cardId: string, cwd: string) => void;
@@ -668,6 +669,57 @@ export const useChatStore = create<CardStore>((set, get) => ({
     get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
   },
 
+  codeInvestigate: (cardId: string) => {
+    const card = get().cards[cardId];
+    if (!card?.text) return;
+
+    const ensoPath = get().ensoProjectPath;
+    if (!ensoPath) return;
+
+    localStorage.setItem("enso_code_session_cwd", ensoPath);
+    localStorage.removeItem("enso_code_session_id");
+
+    const prompt = [
+      "The user wants you to investigate or implement something based on the following AI response.",
+      "Read the response, then ask the user what they'd like you to do with it.",
+      "",
+      "## AI Response",
+      card.text.slice(0, 4000),
+    ].join("\n");
+
+    const id = uuidv4();
+    const now = Date.now();
+    const termCard: Card = {
+      id,
+      runId: id,
+      type: "terminal",
+      role: "assistant",
+      status: "streaming",
+      display: "expanded",
+      text: `>>> Investigating response...\n`,
+      toolMeta: { toolId: "claude-code", cwd: ensoPath },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    set((s) => ({
+      cardOrder: [...s.cardOrder, id],
+      cards: { ...s.cards, [id]: termCard },
+      _activeTerminalCardId: id,
+      codeSessionCwd: ensoPath,
+      codeSessionId: null,
+      isWaiting: true,
+    }));
+
+    const routing: ToolRouting = {
+      mode: "direct_tool",
+      toolId: "claude-code",
+      cwd: ensoPath,
+    };
+
+    get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
+  },
+
   fetchProjects: () => {
     get()._wsClient?.send({ type: "tools.list_projects" });
   },
@@ -917,6 +969,32 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }));
       // Refresh apps list to update codebase flags
       get().fetchApps();
+      return;
+    }
+
+    // Handle resolved bugs notification on reconnect
+    if (msg.resolvedBugs && msg.resolvedBugs.length > 0) {
+      const bugs = msg.resolvedBugs;
+      const id = msg.id;
+      const now = Date.now();
+      const count = bugs.length;
+      const lines = bugs.map((b) => `- **${b.category}**: ${b.description} → ${b.resolution}`);
+      const text = `${count} issue${count === 1 ? " was" : "s were"} fixed since your last visit:\n\n${lines.join("\n")}`;
+      const card: Card = {
+        id,
+        runId: msg.runId,
+        type: "chat",
+        role: "assistant",
+        status: "complete",
+        display: "expanded",
+        text,
+        createdAt: now,
+        updatedAt: now,
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, id],
+        cards: { ...s.cards, [id]: card },
+      }));
       return;
     }
 

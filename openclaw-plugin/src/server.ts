@@ -16,6 +16,7 @@ import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { transcribeAudio } from "./transcribe.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
+import { logAction, logError, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog } from "./action-log.js";
 
 export type ConnectedClient = {
   id: string;
@@ -497,6 +498,13 @@ export async function startEnsoServer(opts: {
     } catch { res.json([]); }
   });
 
+  // ── Action Log API (for Claude Code review) ──
+  app.get("/api/action-log", (req, res) => {
+    const count = Math.min(Math.max(parseInt(req.query.count as string) || 100, 1), 500);
+    const typeFilter = (req.query.type as string) || undefined;
+    res.json(getRecentLog(count, typeFilter));
+  });
+
   // Accept file uploads from the browser client
   const uploadDir = join(tmpdir(), "enso-uploads");
   mkdirSync(uploadDir, { recursive: true });
@@ -648,6 +656,7 @@ export async function startEnsoServer(opts: {
     const connectionId = randomUUID().slice(0, 8);
     const sessionKey = `enso_${connectionId}`;
     runtime.log?.(`[enso] client connected: ${connectionId}`);
+    logAction({ ts: Date.now(), type: "system", category: "system:connect", message: `Client connected: ${connectionId}` });
 
     const send = (msg: ServerMessage) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -670,6 +679,31 @@ export async function startEnsoServer(opts: {
       settings: { mode: account.mode ?? "full", toolFamilies, ensoProjectPath },
       timestamp: Date.now(),
     });
+
+    // Send resolved bugs notification on reconnect
+    try {
+      const unackedFixes = getUnacknowledgedFixes();
+      if (unackedFixes.length > 0) {
+        send({
+          id: randomUUID(),
+          runId: randomUUID(),
+          sessionKey,
+          seq: 0,
+          state: "final",
+          resolvedBugs: unackedFixes.map((f) => ({
+            id: f.id,
+            timestamp: f.timestamp,
+            description: f.description,
+            resolution: f.resolution,
+            category: f.category,
+          })),
+          timestamp: Date.now(),
+        });
+        acknowledgeFixes(unackedFixes.map((f) => f.id));
+      }
+    } catch (err) {
+      console.error(`[enso] failed to send resolved bugs:`, err);
+    }
 
     ws.on("message", async (raw) => {
       try {
@@ -1276,6 +1310,7 @@ export async function startEnsoServer(opts: {
       }
       clients.delete(connectionId);
       runtime.log?.(`[enso] client disconnected: ${connectionId}`);
+      logAction({ ts: Date.now(), type: "system", category: "system:disconnect", message: `Client disconnected: ${connectionId}` });
     });
   });
 
@@ -1283,6 +1318,7 @@ export async function startEnsoServer(opts: {
     server.on("error", reject);
     server.listen(port, () => {
       runtime.log?.(`[enso] server listening on :${port}`);
+      logAction({ ts: Date.now(), type: "system", category: "system", message: `Server started on port ${port}`, metadata: { port, hostname: hostname(), platform: platform() } });
       resolve();
     });
   });
