@@ -2,6 +2,32 @@ export default function GeneratedUI({ data, onAction }) {
   const [typeText, setTypeText] = useState("");
   const [mousePos, setMousePos] = useState(null);
   const [lastClickPos, setLastClickPos] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const hideTimerRef = useRef(null);
+
+  // Auto-hide controls in fullscreen after 3s of inactivity
+  var resetHideTimer = function () {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    setShowControls(true);
+    if (isFullscreen) {
+      hideTimerRef.current = setTimeout(function () {
+        setShowControls(false);
+      }, 3000);
+    }
+  };
+
+  useEffect(function () {
+    if (isFullscreen) {
+      resetHideTimer();
+    } else {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      setShowControls(true);
+    }
+    return function () {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [isFullscreen]);
 
   // ── Error view ──
   if (data && data.error) {
@@ -44,15 +70,46 @@ export default function GeneratedUI({ data, onAction }) {
   var screenH = data.height || 1080;
 
   var handleImageClick = function (e) {
+    if (isFullscreen && !showControls) {
+      resetHideTimer();
+      return;
+    }
     var rect = e.currentTarget.getBoundingClientRect();
     var clickX = e.clientX - rect.left;
     var clickY = e.clientY - rect.top;
     var displayW = rect.width;
     var displayH = rect.height;
-    var origX = Math.round((clickX / displayW) * screenW);
-    var origY = Math.round((clickY / displayH) * screenH);
-    setLastClickPos({ x: origX, y: origY });
-    onAction("click", { x: origX, y: origY, button: "left" });
+
+    if (isFullscreen) {
+      // With object-fit: contain, the image may have letterbox bars
+      var imgAspect = screenW / screenH;
+      var containerAspect = displayW / displayH;
+      var renderW, renderH, offsetX, offsetY;
+      if (imgAspect > containerAspect) {
+        renderW = displayW;
+        renderH = displayW / imgAspect;
+        offsetX = 0;
+        offsetY = (displayH - renderH) / 2;
+      } else {
+        renderH = displayH;
+        renderW = displayH * imgAspect;
+        offsetX = (displayW - renderW) / 2;
+        offsetY = 0;
+      }
+      var relX = clickX - offsetX;
+      var relY = clickY - offsetY;
+      if (relX < 0 || relX > renderW || relY < 0 || relY > renderH) return;
+      var origX = Math.round((relX / renderW) * screenW);
+      var origY = Math.round((relY / renderH) * screenH);
+      setLastClickPos({ x: origX, y: origY });
+      onAction("click", { x: origX, y: origY, button: "left" });
+    } else {
+      var origX = Math.round((clickX / displayW) * screenW);
+      var origY = Math.round((clickY / displayH) * screenH);
+      setLastClickPos({ x: origX, y: origY });
+      onAction("click", { x: origX, y: origY, button: "left" });
+    }
+    resetHideTimer();
   };
 
   var handleImageDblClick = function (e) {
@@ -61,10 +118,36 @@ export default function GeneratedUI({ data, onAction }) {
     var clickY = e.clientY - rect.top;
     var displayW = rect.width;
     var displayH = rect.height;
-    var origX = Math.round((clickX / displayW) * screenW);
-    var origY = Math.round((clickY / displayH) * screenH);
-    setLastClickPos({ x: origX, y: origY });
-    onAction("click", { x: origX, y: origY, button: "double" });
+
+    if (isFullscreen) {
+      var imgAspect = screenW / screenH;
+      var containerAspect = displayW / displayH;
+      var renderW, renderH, offsetX, offsetY;
+      if (imgAspect > containerAspect) {
+        renderW = displayW;
+        renderH = displayW / imgAspect;
+        offsetX = 0;
+        offsetY = (displayH - renderH) / 2;
+      } else {
+        renderH = displayH;
+        renderW = displayH * imgAspect;
+        offsetX = (displayW - renderW) / 2;
+        offsetY = 0;
+      }
+      var relX = clickX - offsetX;
+      var relY = clickY - offsetY;
+      if (relX < 0 || relX > renderW || relY < 0 || relY > renderH) return;
+      var origX = Math.round((relX / renderW) * screenW);
+      var origY = Math.round((relY / renderH) * screenH);
+      setLastClickPos({ x: origX, y: origY });
+      onAction("click", { x: origX, y: origY, button: "double" });
+    } else {
+      var origX = Math.round((clickX / displayW) * screenW);
+      var origY = Math.round((clickY / displayH) * screenH);
+      setLastClickPos({ x: origX, y: origY });
+      onAction("click", { x: origX, y: origY, button: "double" });
+    }
+    resetHideTimer();
   };
 
   var handleRightClick = function (e) {
@@ -74,29 +157,86 @@ export default function GeneratedUI({ data, onAction }) {
     var clickY = e.clientY - rect.top;
     var displayW = rect.width;
     var displayH = rect.height;
-    var origX = Math.round((clickX / displayW) * screenW);
-    var origY = Math.round((clickY / displayH) * screenH);
-    setLastClickPos({ x: origX, y: origY });
-    onAction("click", { x: origX, y: origY, button: "right" });
+
+    if (isFullscreen) {
+      var imgAspect = screenW / screenH;
+      var containerAspect = displayW / displayH;
+      var renderW, renderH, offsetX, offsetY;
+      if (imgAspect > containerAspect) {
+        renderW = displayW;
+        renderH = displayW / imgAspect;
+        offsetX = 0;
+        offsetY = (displayH - renderH) / 2;
+      } else {
+        renderH = displayH;
+        renderW = displayH * imgAspect;
+        offsetX = (displayW - renderW) / 2;
+        offsetY = 0;
+      }
+      var relX = clickX - offsetX;
+      var relY = clickY - offsetY;
+      if (relX < 0 || relX > renderW || relY < 0 || relY > renderH) return;
+      var origX = Math.round((relX / renderW) * screenW);
+      var origY = Math.round((relY / renderH) * screenH);
+      setLastClickPos({ x: origX, y: origY });
+      onAction("click", { x: origX, y: origY, button: "right" });
+    } else {
+      var origX = Math.round((clickX / displayW) * screenW);
+      var origY = Math.round((clickY / displayH) * screenH);
+      setLastClickPos({ x: origX, y: origY });
+      onAction("click", { x: origX, y: origY, button: "right" });
+    }
+    resetHideTimer();
   };
 
   var handleMouseMove = function (e) {
     var rect = e.currentTarget.getBoundingClientRect();
-    var x = Math.round(((e.clientX - rect.left) / rect.width) * screenW);
-    var y = Math.round(((e.clientY - rect.top) / rect.height) * screenH);
-    setMousePos({ x: x, y: y });
+    var mx = e.clientX - rect.left;
+    var my = e.clientY - rect.top;
+
+    if (isFullscreen) {
+      var imgAspect = screenW / screenH;
+      var containerAspect = rect.width / rect.height;
+      var renderW, renderH, offsetX, offsetY;
+      if (imgAspect > containerAspect) {
+        renderW = rect.width;
+        renderH = rect.width / imgAspect;
+        offsetX = 0;
+        offsetY = (rect.height - renderH) / 2;
+      } else {
+        renderH = rect.height;
+        renderW = rect.height * imgAspect;
+        offsetX = (rect.width - renderW) / 2;
+        offsetY = 0;
+      }
+      var relX = mx - offsetX;
+      var relY = my - offsetY;
+      if (relX >= 0 && relX <= renderW && relY >= 0 && relY <= renderH) {
+        setMousePos({
+          x: Math.round((relX / renderW) * screenW),
+          y: Math.round((relY / renderH) * screenH),
+        });
+      }
+    } else {
+      var x = Math.round((mx / rect.width) * screenW);
+      var y = Math.round((my / rect.height) * screenH);
+      setMousePos({ x: x, y: y });
+    }
+    resetHideTimer();
   };
 
   var handleScroll = function (direction) {
     var x = mousePos ? mousePos.x : Math.round(screenW / 2);
     var y = mousePos ? mousePos.y : Math.round(screenH / 2);
     onAction("scroll", { x: x, y: y, direction: direction, amount: 3 });
+    resetHideTimer();
   };
 
   var handleType = function () {
     if (!typeText.trim()) return;
     onAction("type", { text: typeText });
     setTypeText("");
+    resetHideTimer();
   };
 
   var handleTypeKeyDown = function (e) {
@@ -121,6 +261,198 @@ export default function GeneratedUI({ data, onAction }) {
     { label: "Win", combo: "meta", icon: null },
   ];
 
+  // ── Fullscreen mode ──
+  if (isFullscreen) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: "#000",
+          display: "flex",
+          flexDirection: "column",
+        }}
+        onMouseMove={resetHideTimer}
+        onTouchStart={resetHideTimer}
+      >
+        {/* Screenshot fills the viewport */}
+        <div
+          style={{
+            flex: 1,
+            position: "relative",
+            overflow: "hidden",
+            cursor: "default",
+          }}
+        >
+          <img
+            src={data.screenshot}
+            alt="Remote Desktop"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: "block",
+              userSelect: "none",
+              pointerEvents: "auto",
+            }}
+            onClick={handleImageClick}
+            onDoubleClick={handleImageDblClick}
+            onContextMenu={handleRightClick}
+            onMouseMove={handleMouseMove}
+            draggable={false}
+          />
+
+          {/* Floating top bar — exit + refresh + coords */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              padding: "8px 12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)",
+              opacity: showControls ? 1 : 0,
+              transition: "opacity 0.3s ease",
+              pointerEvents: showControls ? "auto" : "none",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <button
+                onClick={function () { setIsFullscreen(false); }}
+                className="p-1.5 bg-gray-800/80 rounded-lg border border-gray-600/50 hover:bg-gray-700 cursor-pointer text-gray-200 transition-all active:scale-95"
+                title="Exit Fullscreen"
+              >
+                <LucideReact.Minimize2 className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-semibold text-gray-200">Remote Desktop</span>
+              <span className="text-[10px] text-gray-400 font-mono">{screenW}x{screenH}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {mousePos && (
+                <span className="text-[10px] text-gray-400 font-mono tabular-nums">
+                  {mousePos.x}, {mousePos.y}
+                </span>
+              )}
+              <button
+                onClick={function () { onAction("capture", {}); resetHideTimer(); }}
+                className="p-1.5 bg-gray-800/80 rounded-lg border border-gray-600/50 hover:bg-gray-700 cursor-pointer text-gray-200 transition-all active:scale-95"
+                title="Refresh"
+              >
+                <LucideReact.RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Floating bottom controls — collapsible */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.6) 70%, transparent 100%)",
+              padding: "16px 12px 12px",
+              opacity: showControls ? 1 : 0,
+              transition: "opacity 0.3s ease",
+              pointerEvents: showControls ? "auto" : "none",
+            }}
+          >
+            {/* Type Input */}
+            <div className="flex gap-1.5 mb-2" style={{ maxWidth: "600px", margin: "0 auto 8px" }}>
+              <div className="flex-1">
+                <Input
+                  placeholder="Type text..."
+                  value={typeText}
+                  onChange={setTypeText}
+                  onKeyDown={handleTypeKeyDown}
+                  icon={<LucideReact.Keyboard className="w-3.5 h-3.5" />}
+                  size="sm"
+                />
+              </div>
+              <Button size="sm" variant="primary" onClick={handleType} disabled={!typeText.trim()}>
+                <LucideReact.Send className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+
+            {/* Key Combos + Navigation — compact row */}
+            <div className="flex items-center gap-1 flex-wrap justify-center">
+              {keyCombos.map(function (k, i) {
+                return (
+                  <button
+                    key={i}
+                    onClick={function () { onAction("key", { combo: k.combo }); resetHideTimer(); }}
+                    className="px-2 py-1 text-[10px] bg-gray-800/70 rounded-lg border border-gray-600/40 hover:bg-gray-700/70 hover:border-blue-500/30 cursor-pointer text-gray-300 font-mono transition-all active:scale-95"
+                    title={k.combo}
+                  >
+                    {k.label}
+                  </button>
+                );
+              })}
+
+              <span className="w-px h-5 bg-gray-600/40 mx-1" />
+
+              {/* Arrow keys */}
+              <button
+                onClick={function () { onAction("key", { combo: "up" }); resetHideTimer(); }}
+                className="p-1 bg-gray-800/70 rounded-lg border border-gray-600/40 hover:bg-gray-700/70 cursor-pointer text-gray-400 transition-all active:scale-95"
+                title="Up Arrow"
+              >
+                <LucideReact.ChevronUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={function () { onAction("key", { combo: "down" }); resetHideTimer(); }}
+                className="p-1 bg-gray-800/70 rounded-lg border border-gray-600/40 hover:bg-gray-700/70 cursor-pointer text-gray-400 transition-all active:scale-95"
+                title="Down Arrow"
+              >
+                <LucideReact.ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={function () { onAction("key", { combo: "left" }); resetHideTimer(); }}
+                className="p-1 bg-gray-800/70 rounded-lg border border-gray-600/40 hover:bg-gray-700/70 cursor-pointer text-gray-400 transition-all active:scale-95"
+                title="Left Arrow"
+              >
+                <LucideReact.ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={function () { onAction("key", { combo: "right" }); resetHideTimer(); }}
+                className="p-1 bg-gray-800/70 rounded-lg border border-gray-600/40 hover:bg-gray-700/70 cursor-pointer text-gray-400 transition-all active:scale-95"
+                title="Right Arrow"
+              >
+                <LucideReact.ChevronRight className="w-3.5 h-3.5" />
+              </button>
+
+              <span className="w-px h-5 bg-gray-600/40 mx-1" />
+
+              {/* Scroll */}
+              <button
+                onClick={function () { handleScroll("up"); }}
+                className="p-1 bg-gray-800/70 rounded-lg border border-gray-600/40 hover:bg-gray-700/70 cursor-pointer text-gray-400 transition-all active:scale-95"
+                title="Scroll Up"
+              >
+                <LucideReact.ArrowUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={function () { handleScroll("down"); }}
+                className="p-1 bg-gray-800/70 rounded-lg border border-gray-600/40 hover:bg-gray-700/70 cursor-pointer text-gray-400 transition-all active:scale-95"
+                title="Scroll Down"
+              >
+                <LucideReact.ArrowDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Normal (inline) view ──
   return (
     <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800 space-y-2">
       {/* Header */}
@@ -136,6 +468,9 @@ export default function GeneratedUI({ data, onAction }) {
               {mousePos.x}, {mousePos.y}
             </span>
           )}
+          <Button variant="ghost" size="sm" onClick={function () { setIsFullscreen(true); }} title="Fullscreen">
+            <LucideReact.Maximize2 className="w-3.5 h-3.5" />
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => onAction("capture", {})}>
             <LucideReact.RefreshCw className="w-3.5 h-3.5" />
           </Button>
