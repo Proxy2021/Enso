@@ -1,4 +1,5 @@
 import type { UIGeneratorResult } from "./types.js";
+import { logError } from "./action-log.js";
 
 /**
  * Recursively builds a deterministic shape string from data structure.
@@ -483,6 +484,7 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000, 
     if (!response.ok) {
       const err = await response.text();
       console.error(`[enso:ui-gen] Gemini API error (${model}):`, err);
+      logError("ui-gen", `Gemini API error: ${response.status}`, err);
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
@@ -678,6 +680,7 @@ Remember: output ONLY the component code, starting with "export default function
     cache.set(shapeKey, code);
     return { code, shapeKey, cached: false };
   } catch (err) {
+    logError("ui-gen", "UI generation failed", err);
     console.error("[enso:ui-gen] Generation failed:", err);
     return { code: FALLBACK_COMPONENT, shapeKey: "fallback", cached: false };
   }
@@ -737,6 +740,7 @@ ${params.assistantText}${actionSection}${domainSection}`;
 
     const parsed = parseGeneratorResponse(raw);
     if (!parsed) {
+      logError("ui-gen", "Text UI generation parse failed");
       console.error("[enso:ui-gen] Failed to parse LLM response, raw:", raw.slice(0, 200));
       return null;
     }
@@ -746,6 +750,7 @@ ${params.assistantText}${actionSection}${domainSection}`;
     dataCache.set(cacheKey, parsed.data);
     return { code: parsed.code, data: parsed.data, cacheKey, cached: false };
   } catch (err) {
+    logError("ui-gen", "Text UI generation failed", err);
     console.error("[enso:ui-gen] Text-based generation failed:", err);
     return null;
   }

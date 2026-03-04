@@ -639,6 +639,7 @@ export async function startEnsoServer(opts: {
         res.status(422).json({ error: "Could not transcribe audio" });
       }
     } catch (err) {
+      logError("upload", "Audio transcription failed", err);
       try { unlinkSync(filePath); } catch {}
       res.status(500).json({ error: "Transcription failed" });
     }
@@ -859,6 +860,7 @@ export async function startEnsoServer(opts: {
                 client,
                 account,
               }).catch((err) => {
+                logError("build-via-claude", "Unhandled build error", err);
                 runtime.error?.(`[enso] build-via-claude unhandled error: ${err instanceof Error ? err.message : String(err)}`);
               });
             }
@@ -901,6 +903,7 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
             } catch (err) {
+              logError("apps", "apps.list failed", err);
               runtime.error?.(`[enso] apps.list failed: ${err instanceof Error ? err.message : String(err)}`);
               send({
                 id: randomUUID(),
@@ -1069,6 +1072,7 @@ export async function startEnsoServer(opts: {
                   });
                 }
               } catch (err) {
+                logError("apps", "apps.run failed", err, { toolFamily: msg.toolFamily });
                 runtime.error?.(`[enso:app-runner] apps.run failed: ${err instanceof Error ? err.message : String(err)}`);
                 send({
                   id: randomUUID(),
@@ -1098,6 +1102,7 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
             } catch (err) {
+              logError("apps", "delete_all_apps failed", err);
               runtime.error?.(`[enso] delete all apps failed: ${err instanceof Error ? err.message : String(err)}`);
               send({
                 id: randomUUID(),
@@ -1132,6 +1137,7 @@ export async function startEnsoServer(opts: {
                   timestamp: Date.now(),
                 });
               } catch (err) {
+                logError("apps", "save_to_codebase failed", err, { toolFamily: msg.toolFamily });
                 runtime.error?.(`[enso] save to codebase failed: ${err instanceof Error ? err.message : String(err)}`);
                 send({
                   id: randomUUID(),
@@ -1234,6 +1240,7 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
             } catch (err) {
+              logError("sessions", "sessions.list failed", err);
               runtime.error?.(`[enso] sessions.list failed: ${err instanceof Error ? err.message : String(err)}`);
               send({
                 id: randomUUID(),
@@ -1304,6 +1311,15 @@ export async function startEnsoServer(opts: {
             if (!shellPty || !msg.shellSessionId) break;
             shellPty.destroyShell(msg.shellSessionId);
             runtime.log?.(`[enso:shell] destroyed session ${msg.shellSessionId}`);
+            break;
+          }
+          case "client.error": {
+            const ce = msg.clientError;
+            if (ce) {
+              logError("client", ce.message, ce.stack, {
+                metadata: { source: ce.source, url: ce.url, clientId: connectionId },
+              });
+            }
             break;
           }
           case "chat.history":

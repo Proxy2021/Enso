@@ -1232,6 +1232,7 @@ export async function handlePluginCardAction(params: {
       });
 
       if (!result.valid) {
+        logError("action:refine", "Template validation failed", undefined, { cardId });
         console.log(`[enso:action] path=refine: template validation failed: ${result.errors.join("; ")}`);
         client.send({
           id: randomUUID(),
@@ -1267,6 +1268,7 @@ export async function handlePluginCardAction(params: {
       });
       return;
     } catch (err) {
+      logError("action:refine", "Template refine failed", err, { cardId });
       console.log(`[enso:action] path=refine: error: ${String(err)}`);
       client.send({
         id: randomUUID(),
@@ -1639,6 +1641,7 @@ export async function handlePluginCardAction(params: {
               const { runClaudeCode } = await import("./claude-code.js");
               await runClaudeCode({ prompt: fixParts.join("\n"), client, runId: randomUUID() });
             } catch (codeErr) {
+              logError("action:native", "Claude Code launch for fix failed", codeErr, { cardId });
               console.error(`[enso:action] Claude Code launch failed:`, codeErr);
             }
             return;
@@ -1647,6 +1650,7 @@ export async function handlePluginCardAction(params: {
 
         console.log(`[enso:action] path=native: tool failed (${errorMsg}), falling through to agent`);
       } catch (err) {
+        logError("action:native", "Native tool exception", err, { cardId });
         console.log(`[enso:action] path=native: exception ${String(err)}, falling through to agent`);
       }
     } else {

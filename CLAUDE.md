@@ -57,7 +57,7 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 
 ### WebSocket Protocol
 
-- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`
+- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `client.error`
 - **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `questions`
 - `chat.send` with `routing.toolId: "claude-code"` bypasses OpenClaw agent, spawns CLI directly
 - `shell.*` messages manage PTY sessions — `toolMeta.toolId === "shell"` routes to ShellCard
@@ -200,3 +200,71 @@ Enso is installable as a Progressive Web App — `public/manifest.json`, `public
 - Dark theme UI (Tailwind classes)
 - Plugin and client share types via `shared/types.ts`
 - Server logs use `[enso:inbound/outbound/enhance/action/build]` prefixes
+
+## Logging & Error Tracking
+
+### Centralized Action Log
+
+Enso uses a centralized NDJSON log for all significant operations, errors, and fixes.
+
+**Files:**
+- `~/.openclaw/enso-action.log` — NDJSON, rotates at 1000 lines (keeps 800)
+- `~/.openclaw/enso-fixes.json` — JSON array of bug fix records with acknowledgement tracking
+
+**Implementation:** `openclaw-plugin/src/action-log.ts`
+
+### Log Entry Types
+
+| Type | Usage |
+|------|-------|
+| `action` | Normal operations: chat messages, enhance, card actions, uploads, shell sessions |
+| `error` | Failures in any backend or client-reported error path |
+| `fix` | Auto-heal successes and Claude Code fix resolutions |
+| `build` | Build App via Claude Code lifecycle events |
+| `system` | Server start, client connect/disconnect |
+| `claude-code` | Claude Code session lifecycle (init, tools, rate limits, completion) |
+
+### Usage
+
+```typescript
+import { logAction, logError, logFix } from "./action-log.js";
+
+// Log an operation
+logAction({ ts: Date.now(), type: "action", category: "enhance", message: "Enhance start", cardId });
+
+// Log an error (category, message, error, extra fields)
+logError("ui-gen", "Generation failed", err, { cardId, toolFamily: "filesystem" });
+
+// Log a fix
+logFix({ description: "Fixed broken executor", error: "TypeError", resolution: "Auto-healed", category: "app" });
+```
+
+### Reading Logs
+
+**HTTP API:** `GET /api/action-log?count=100&type=error`
+
+| Param | Description |
+|-------|-------------|
+| `count` | Number of recent entries (default 100, max 500) |
+| `type` | Filter: `action`, `error`, `fix`, `build`, `system`, `claude-code` |
+
+**Programmatic:** `getRecentLog(count, typeFilter)` returns `LogEntry[]` (most recent first).
+
+### Client Error Reporting
+
+Frontend errors are reported to the backend via WebSocket (`client.error` message type) and logged as `type: "error"`, `category: "client"`.
+
+| Source | Trigger |
+|--------|---------|
+| `unhandled` | `window.onerror` global handler |
+| `unhandled_rejection` | `window.onunhandledrejection` |
+| `react_boundary` | Root-level `AppErrorBoundary` in App.tsx |
+| `ws` | WebSocket message parse failures |
+| `sandbox` | JSX component compilation errors |
+| `card_render` | Component runtime render errors (`UIErrorBoundary`) |
+
+**Frontend utility:** `src/lib/error-reporter.ts` — `reportError(message, source, extra?)`. Deduplicates identical messages within 5 seconds. Initialized via `initErrorReporter(sendFn)` when WS connects.
+
+### Category Convention
+
+Use `module:subpath` format: `inbound`, `enhance`, `action:refine`, `action:native`, `action:fix_with_code`, `build-via-claude`, `ui-gen`, `shell`, `tool-factory`, `persistence`, `upload`, `apps`, `sessions`, `system`, `client`.

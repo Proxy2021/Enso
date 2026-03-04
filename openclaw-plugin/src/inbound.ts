@@ -239,6 +239,7 @@ export async function handleEnsoInbound(params: {
         geminiApiKey: account.geminiApiKey,
         client,
       }).catch((err) => {
+        logError("enhance", "Background compat check failed", err);
         console.log(`[enso:enhance] bg compat check failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
       });
     }

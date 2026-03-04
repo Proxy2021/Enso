@@ -131,6 +131,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
         await postBuildRegistration(params, send, preExistingFamilies, buildStartTime);
         logFix({ description: "Template compile error in build", error: String(compileErr), resolution: "Auto-fixed via Claude Code session", category: "build-via-claude" });
       } catch (fixErr) {
+        logError("build-via-claude", "Auto-fix session failed", fixErr, { cardId });
         console.error(`[enso:build-via-claude] Auto-fix session failed:`, fixErr);
       }
     }
@@ -152,6 +153,7 @@ async function postBuildRegistration(
   try {
     allApps = loadAllApps();
   } catch (err) {
+    logError("build-via-claude", "App scan failed after build", err, { cardId });
     console.error(`[enso:build-via-claude] Failed to scan apps:`, err);
     sendBuildComplete(send, cardId, false, undefined, "Failed to scan app directories after build.");
     return;

@@ -10,6 +10,7 @@ import { platform } from "os";
 import { randomUUID } from "crypto";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
+import { logError, logAction } from "./action-log.js";
 
 interface ShellSession {
   id: string;
@@ -39,13 +40,19 @@ export function createShellSession(params: {
   const shell = isWindows ? "powershell.exe" : (process.env.SHELL || "/bin/bash");
   const shellArgs = isWindows ? ["-NoLogo"] : [];
 
-  const ptyProcess = pty.spawn(shell, shellArgs, {
-    name: "xterm-256color",
-    cols,
-    rows,
-    cwd: cwd || process.env.HOME || process.env.USERPROFILE || undefined,
-    env: { ...process.env } as Record<string, string>,
-  });
+  let ptyProcess: pty.IPty;
+  try {
+    ptyProcess = pty.spawn(shell, shellArgs, {
+      name: "xterm-256color",
+      cols,
+      rows,
+      cwd: cwd || process.env.HOME || process.env.USERPROFILE || undefined,
+      env: { ...process.env } as Record<string, string>,
+    });
+  } catch (err) {
+    logError("shell", "Failed to spawn PTY process", err);
+    throw err;
+  }
 
   const session: ShellSession = {
     id: sessionId,
@@ -58,6 +65,7 @@ export function createShellSession(params: {
   };
 
   sessions.set(sessionId, session);
+  logAction({ ts: Date.now(), type: "action", category: "shell", message: `Shell session created: ${sessionId}` });
 
   // Stream PTY output to the browser
   ptyProcess.onData((data: string) => {

@@ -3,6 +3,7 @@ import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
 import { resolveMediaUrl } from "../lib/connection";
+import { reportError } from "../lib/error-reporter";
 import type { CardRendererProps } from "./types";
 
 /** Recursively resolve all `/media/...` strings in data to absolute URLs for remote backends. */
@@ -56,6 +57,13 @@ class UIErrorBoundary extends React.Component<
     return { error: error.message };
   }
 
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    reportError(`Card render error: ${error.message}`, "card_render", {
+      stack: error.stack,
+      componentStack: info.componentStack ?? undefined,
+    });
+  }
+
   render() {
     if (this.state.error) {
       return (
@@ -99,6 +107,7 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
   if (!result) return null;
 
   if (result.error) {
+    reportError(`Card compile error: ${result.error}`, "sandbox");
     return (
       <div className="mb-3">
         <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 text-sm">

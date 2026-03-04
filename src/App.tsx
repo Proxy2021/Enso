@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { useChatStore } from "./store/chat";
 import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
@@ -11,8 +11,45 @@ import { isNative } from "./lib/platform";
 import { initDeepLinkListener } from "./lib/deep-link-handler";
 import UpdateBanner from "./components/UpdateBanner";
 import DebugReporter from "./components/DebugReporter";
+import { reportError } from "./lib/error-reporter";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
+
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    reportError(error.message, "react_boundary", {
+      stack: error.stack,
+      componentStack: info.componentStack ?? undefined,
+    });
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center h-dvh text-gray-100 bg-gray-950 p-8">
+          <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
+          <p className="text-sm text-gray-400 mb-4 text-center max-w-md">{this.state.error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors text-sm"
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function ConnectionDot() {
   const state = useChatStore((s) => s.connectionState);
@@ -109,26 +146,28 @@ export default function App() {
   }, [connectToBackend]);
 
   return (
-    <div className="flex flex-col h-dvh text-gray-100">
-      <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
-        <h1 className="text-lg font-semibold tracking-tight">Enso</h1>
-        <div className="flex items-center gap-3">
-          <DebugReporter />
-          <AppsMenu />
-          <SidebarToggle />
-          <ConnectionDot />
+    <AppErrorBoundary>
+      <div className="flex flex-col h-dvh text-gray-100">
+        <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
+          <h1 className="text-lg font-semibold tracking-tight">Enso</h1>
+          <div className="flex items-center gap-3">
+            <DebugReporter />
+            <AppsMenu />
+            <SidebarToggle />
+            <ConnectionDot />
+          </div>
+        </header>
+        <UpdateBanner />
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <CardTimeline />
+            <ChatInput />
+          </div>
+          <PinnedSidebar />
         </div>
-      </header>
-      <UpdateBanner />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <CardTimeline />
-          <ChatInput />
-        </div>
-        <PinnedSidebar />
+        <ConnectionPicker />
+        <SetupWizard />
       </div>
-      <ConnectionPicker />
-      <SetupWizard />
-    </div>
+    </AppErrorBoundary>
   );
 }

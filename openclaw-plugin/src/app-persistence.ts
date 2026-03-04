@@ -19,6 +19,7 @@ import {
 } from "./native-tools/registry.js";
 import { addCapability, removeCapability } from "./tool-families/catalog.js";
 import { getDocCollection } from "./persistence.js";
+import { logError } from "./action-log.js";
 
 // ── Codebase Apps Directory ──
 
@@ -431,6 +432,7 @@ export function loadAppsFromDir(dir: string): LoadedApp[] {
 
       apps.push({ spec: manifest.spec, executors, templateJSX });
     } catch (err) {
+      logError("persistence", `Failed to load app "${entry.name}"`, err);
       console.log(`[enso:persistence] skipping corrupt app "${entry.name}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -567,6 +569,7 @@ export function loadAndRegisterSavedApps(basePath?: string): number {
       registerLoadedApp(app);
       console.log(`[enso:persistence] loaded ${source} app "${app.spec.toolFamily}"`);
     } catch (err) {
+      logError("persistence", `Failed to register app`, err);
       console.log(`[enso:persistence] failed to register app "${app.spec.toolFamily}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -745,6 +748,7 @@ export function deleteAllApps(basePath?: string): string[] {
       deleteApp(app.spec.toolFamily, basePath);
       deleted.push(app.spec.toolFamily);
     } catch (err) {
+      logError("persistence", "Failed to delete app", err);
       console.log(`[enso:persistence] failed to delete app "${app.spec.toolFamily}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }

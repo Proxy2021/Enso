@@ -158,7 +158,8 @@ export interface ClientMessage {
     | "shell.create"
     | "shell.input"
     | "shell.resize"
-    | "shell.destroy";
+    | "shell.destroy"
+    | "client.error";
   mode?: ChannelMode;
   text?: string;
   mediaUrls?: string[];
@@ -192,4 +193,13 @@ export interface ClientMessage {
   shellInput?: string;
   shellCols?: number;
   shellRows?: number;
+  // client.error fields
+  clientError?: {
+    message: string;
+    source: string;
+    stack?: string;
+    componentStack?: string;
+    url?: string;
+    timestamp: number;
+  };
 }

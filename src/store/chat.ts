@@ -5,6 +5,7 @@ import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
 import { shellWriters } from "../cards/ShellCard";
 import { createWSClient, type ConnectionState } from "../lib/ws-client";
+import { initErrorReporter } from "../lib/error-reporter";
 import {
   getActiveBackend,
   buildWsUrl,
@@ -233,6 +234,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
 
     set({ _wsClient: client });
+    initErrorReporter((msg) => client.send(msg));
     client.connect();
   },
 
@@ -1053,6 +1055,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       },
     });
     set({ _wsClient: client });
+    initErrorReporter((msg) => client.send(msg));
     client.connect();
   },
 

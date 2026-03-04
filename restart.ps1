@@ -27,6 +27,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # -- Paths -----------------------------------------------------------------
+$WatchdogTask = "Enso Watchdog"
 $EnsoDir      = "D:\Github\Enso"
 $AlphaRankDir = "D:\Github\AlphaRank\openclaw-plugin"
 $OpenClawDir  = "D:\Github\openclaw"
@@ -36,6 +37,18 @@ function Write-Step  ($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
 function Write-Ok    ($msg) { Write-Host "   [OK] $msg" -ForegroundColor Green }
 function Write-Skip  ($msg) { Write-Host "   [SKIP] $msg" -ForegroundColor Yellow }
 function Write-Err   ($msg) { Write-Host "   [ERR] $msg" -ForegroundColor Red }
+
+# ==========================================================================
+#  STEP 0 -- Stop watchdog (prevent interference during restart)
+# ==========================================================================
+Write-Step "Stopping watchdog..."
+$wdTask = Get-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
+if ($wdTask -and $wdTask.State -eq "Running") {
+    Stop-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
+    Write-Ok "Watchdog stopped"
+} else {
+    Write-Skip "Watchdog not running"
+}
 
 # ==========================================================================
 #  STEP 1 -- Kill existing processes
@@ -252,6 +265,18 @@ if (Test-Path $cloudflaredExe) {
     }
 } else {
     Write-Skip "cloudflared not found at $cloudflaredExe"
+}
+
+# ==========================================================================
+#  STEP 6 -- Restart watchdog
+# ==========================================================================
+Write-Step "Restarting watchdog..."
+$wdTask = Get-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
+if ($wdTask) {
+    Start-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
+    Write-Ok "Watchdog restarted"
+} else {
+    Write-Skip "Watchdog not installed (run install-watchdog.ps1 to enable)"
 }
 
 # ==========================================================================

@@ -1,4 +1,5 @@
 import type { ClientMessage, ServerMessage } from "@shared/types";
+import { reportError } from "./error-reporter";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -40,6 +41,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
         options.onMessage(msg);
       } catch {
         console.error("[WS] Failed to parse message");
+        reportError("Failed to parse WebSocket message", "ws");
       }
     };
 

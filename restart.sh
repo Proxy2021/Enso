@@ -5,9 +5,14 @@ set -euo pipefail
 ENSO_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLIST="$HOME/Library/LaunchAgents/ai.openclaw.gateway.plist"
 LABEL="ai.openclaw.gateway"
+WATCHDOG_LABEL="ai.openclaw.enso-watchdog"
 UID_NUM="$(id -u)"
 
 echo "=== Restarting Enso services ==="
+
+# ── 0. Stop watchdog (prevent interference during restart) ──
+echo "[watchdog] Stopping watchdog"
+launchctl bootout "gui/$UID_NUM/$WATCHDOG_LABEL" 2>/dev/null || true
 
 # ── 1. Stop Enso Vite dev server ──
 VITE_PIDS=$(pgrep -f "${ENSO_DIR}/node_modules/.bin/vite" 2>/dev/null || true)
@@ -80,6 +85,16 @@ for i in $(seq 1 10); do
 done
 if ! curl -sf http://localhost:5173 &>/dev/null; then
   echo " TIMEOUT (port 5173 not responding)"
+fi
+
+# ── 5. Restart watchdog ──
+WATCHDOG_PLIST="$HOME/Library/LaunchAgents/${WATCHDOG_LABEL}.plist"
+if [ -f "$WATCHDOG_PLIST" ]; then
+  echo "[watchdog] Restarting watchdog"
+  launchctl bootstrap "gui/$UID_NUM" "$WATCHDOG_PLIST" 2>/dev/null || true
+  launchctl kickstart "gui/$UID_NUM/$WATCHDOG_LABEL" 2>/dev/null || true
+else
+  echo "[watchdog] Not installed (run install-watchdog.sh to enable)"
 fi
 
 # ── Summary ──

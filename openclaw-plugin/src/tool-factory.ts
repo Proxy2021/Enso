@@ -9,6 +9,7 @@
 import type { ExecutorContext } from "./types.js";
 import { callGeminiLLMWithRetry, GEMINI_MODEL_PRO, STRUCTURED_DATA_SYSTEM_PROMPT } from "./ui-generator.js";
 import { buildExecutorContext } from "./app-persistence.js";
+import { logError } from "./action-log.js";
 
 // ── Types ──
 
@@ -77,6 +78,7 @@ export async function validateToolExecutor(params: {
       }
     }
   } catch (err) {
+    logError("tool-factory", `Executor validation failed: ${err instanceof Error ? err.message : String(err)}`, err);
     errors.push(`Execute function error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
@@ -135,6 +137,7 @@ export async function autoHealExecutor(params: {
 
     return { success: true, fixedBody };
   } catch (err) {
+    logError("tool-factory", "Auto-heal failed", err);
     return { success: false, error: `Auto-heal error: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
