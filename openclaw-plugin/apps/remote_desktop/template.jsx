@@ -145,7 +145,7 @@ export default function GeneratedUI({ data, onAction }) {
       {/* Screenshot Display */}
       <div
         className="rounded-xl overflow-hidden bg-black/40 border border-gray-700/50 relative"
-        style={{ cursor: "crosshair" }}
+        style={{ cursor: "default" }}
       >
         <img
           src={data.screenshot}
