@@ -45,6 +45,25 @@ async function compressImage(blob: Blob, maxDim = 1200, quality = 0.80): Promise
   return result;
 }
 
+/** Convert a Blob to base64 string using FileReader (most compatible API across all WebViews). */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // Strip the "data:...;base64," prefix
+      const base64 = dataUrl.split(",")[1];
+      if (!base64 || base64.length < 100) {
+        reject(new Error("Base64 conversion produced empty result"));
+        return;
+      }
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function DebugReporter() {
   const [isOpen, setIsOpen] = useState(false);
   const [images, setImages] = useState<CapturedImage[]>([]);
@@ -173,22 +192,45 @@ export default function DebugReporter() {
     const paths: string[] = [];
     for (const img of images) {
       try {
-        const compressed = await compressImage(img.blob);
-        if (!compressed) {
-          console.warn("[debug-reporter] Image compression produced invalid result, skipping");
-          continue;
-        }
-        // Convert Blob to ArrayBuffer for upload — Capacitor's Android WebView
-        // serializes Blob bodies as "{}" (empty JSON) instead of raw bytes
-        const body = await compressed.arrayBuffer();
-        const res = await fetch(`${getBackendBaseUrl()}/upload`, {
-          method: "POST",
-          headers: authHeaders({ "Content-Type": "image/jpeg" }),
-          body,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          paths.push(data.filePath);
+        if (isNative) {
+          // On native (Capacitor Android WebView), Blob and ArrayBuffer bodies in
+          // fetch() are serialized as "{}" (2 bytes). Use base64 JSON instead —
+          // FileReader.readAsDataURL is reliable across all WebView versions.
+          // Skip canvas compression: camera/gallery photos are already JPEG.
+          const mimeType = (img.blob as File).type || "image/jpeg";
+          const base64 = await blobToBase64(img.blob);
+          const res = await fetch(`${getBackendBaseUrl()}/upload`, {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "application/json" }),
+            body: JSON.stringify({ data: base64, mimeType }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            paths.push(data.filePath);
+          } else {
+            console.error("[debug-reporter] Native upload failed:", res.status, await res.text());
+          }
+        } else {
+          // On web browser, compress via canvas and send as raw binary
+          const compressed = await compressImage(img.blob);
+          if (!compressed) {
+            console.warn("[debug-reporter] Image compression produced invalid result, skipping");
+            continue;
+          }
+          const body = await compressed.arrayBuffer();
+          if (body.byteLength < 200) {
+            console.warn("[debug-reporter] ArrayBuffer too small, skipping");
+            continue;
+          }
+          const res = await fetch(`${getBackendBaseUrl()}/upload`, {
+            method: "POST",
+            headers: authHeaders({ "Content-Type": "image/jpeg" }),
+            body,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            paths.push(data.filePath);
+          }
         }
       } catch (err) {
         console.error("[debug-reporter] Image upload failed:", err);

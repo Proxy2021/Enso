@@ -540,11 +540,41 @@ export async function startEnsoServer(opts: {
       "application/rtf": ".rtf",
       "application/zip": ".zip",
     };
-    const ext = extMap[contentType] ?? ".bin";
+
+    let fileBuffer: Buffer;
+    let mimeType = contentType;
+
+    // Handle base64 JSON uploads from Capacitor native (where Blob/ArrayBuffer
+    // fetch bodies are serialized as "{}" by the Android WebView)
+    if (contentType === "application/json") {
+      try {
+        const json = JSON.parse(req.body.toString("utf-8"));
+        if (json.data && json.mimeType) {
+          fileBuffer = Buffer.from(json.data, "base64");
+          mimeType = json.mimeType;
+        } else {
+          // Regular JSON file upload
+          fileBuffer = req.body;
+        }
+      } catch {
+        fileBuffer = req.body;
+      }
+    } else {
+      fileBuffer = req.body;
+    }
+
+    // Reject corrupt uploads (Capacitor Blob serialization produces 2-byte "{}")
+    if (fileBuffer.length < 200 && mimeType.startsWith("image/")) {
+      console.warn(`[enso:upload] Rejecting corrupt image upload: ${fileBuffer.length} bytes`);
+      res.status(400).json({ error: "Upload too small — image appears corrupt. Please try again." });
+      return;
+    }
+
+    const ext = extMap[mimeType] ?? ".bin";
     const filename = `${randomUUID()}${ext}`;
     const filePath = join(uploadDir, filename);
 
-    writeFileSync(filePath, req.body);
+    writeFileSync(filePath, fileBuffer);
     const mediaUrl = toMediaUrl(filePath);
     res.json({ mediaUrl, filePath });
   });
