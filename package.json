@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.2.41",
   "versionCode": 43,
-  "description": "A self-evolving AI app platform — every answer is an interactive app, and the app builds itself",
+  "description": "AI app platform with remote desktop, terminal, file browser, and coding agent — every answer becomes a live interactive app",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -34,6 +34,12 @@ const TEMPLATES: Template[] = [
     toolFamily: "researcher",
   },
   {
+    icon: "\uD83D\uDDA5\uFE0F",
+    title: "Remote Desktop",
+    description: "Control this machine's screen",
+    toolFamily: "remote_desktop",
+  },
+  {
     icon: "\uD83D\uDCBB",
     title: "Code Assistant",
     description: "Open Claude Code",
