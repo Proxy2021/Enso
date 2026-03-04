@@ -155,7 +155,15 @@ export async function startEnsoServer(opts: {
   }
 
   const app = express();
-  app.use(express.json());
+  // Skip JSON body parsing for routes that use express.raw() — otherwise
+  // express.json()'s 100KB default limit rejects large base64 image uploads
+  // from Capacitor native, and pre-parsing prevents express.raw() from
+  // reading the body as a Buffer.
+  const jsonParser = express.json();
+  app.use((req, res, next) => {
+    if (req.path === "/upload" || req.path === "/transcribe") return next();
+    jsonParser(req, res, next);
+  });
 
   // ── CORS — allow cross-origin requests (auth via token, not cookies) ──
   app.use((_req, res, next) => {

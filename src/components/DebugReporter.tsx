@@ -196,9 +196,11 @@ export default function DebugReporter() {
           // On native (Capacitor Android WebView), Blob and ArrayBuffer bodies in
           // fetch() are serialized as "{}" (2 bytes). Use base64 JSON instead —
           // FileReader.readAsDataURL is reliable across all WebView versions.
-          // Skip canvas compression: camera/gallery photos are already JPEG.
-          const mimeType = (img.blob as File).type || "image/jpeg";
-          const base64 = await blobToBase64(img.blob);
+          // Compress via canvas first to reduce upload size (phone photos are 5-12MB).
+          const compressed = await compressImage(img.blob, 1200, 0.75);
+          const uploadBlob = compressed || img.blob;
+          const mimeType = compressed ? "image/jpeg" : ((img.blob as File).type || "image/jpeg");
+          const base64 = await blobToBase64(uploadBlob);
           const res = await fetch(`${getBackendBaseUrl()}/upload`, {
             method: "POST",
             headers: authHeaders({ "Content-Type": "application/json" }),
