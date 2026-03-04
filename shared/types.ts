@@ -147,7 +147,11 @@ export interface ClientMessage {
     | "server.restart"
     | "settings.set_mode"
     | "operation.cancel"
-    | "sessions.list";
+    | "sessions.list"
+    | "shell.create"
+    | "shell.input"
+    | "shell.resize"
+    | "shell.destroy";
   mode?: ChannelMode;
   text?: string;
   mediaUrls?: string[];
@@ -176,4 +180,9 @@ export interface ClientMessage {
   toolFamily?: string;
   // operation.cancel fields
   operationId?: string;
+  // shell.* fields
+  shellSessionId?: string;
+  shellInput?: string;
+  shellCols?: number;
+  shellRows?: number;
 }

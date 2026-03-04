@@ -2,9 +2,16 @@ import { cardRegistry } from "./registry";
 import ChatCard from "./ChatCard";
 import UserBubbleCard from "./UserBubbleCard";
 import TerminalCard from "./TerminalCard";
+import ShellCard from "./ShellCard";
 import DynamicUICard from "./DynamicUICard";
 
 // Register built-in card types (order matters — first match wins in resolve)
+
+cardRegistry.register({
+  type: "shell",
+  renderer: ShellCard,
+  match: (msg) => msg.toolMeta?.toolId === "shell",
+});
 
 cardRegistry.register({
   type: "terminal",

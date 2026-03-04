@@ -40,6 +40,12 @@ const TEMPLATES: Template[] = [
     prompt: "/code",
   },
   {
+    icon: "\uD83D\uDDA5\uFE0F",
+    title: "Terminal",
+    description: "Open a remote shell",
+    prompt: "/shell",
+  },
+  {
     icon: "\uD83D\uDCAC",
     title: "Just Chat",
     description: "Ask me anything",

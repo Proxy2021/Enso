@@ -23,7 +23,7 @@ Enso has two layers:
 ```
 src/                          # React frontend (Vite entry)
 ├── App.tsx                   # Root layout
-├── cards/                    # Card renderers (DynamicUICard, TerminalCard, etc.)
+├── cards/                    # Card renderers (DynamicUICard, TerminalCard, ShellCard, etc.)
 ├── components/               # CardTimeline, CardContainer, ChatInput, MarkdownText, ConnectionPicker
 ├── store/chat.ts             # Zustand state
 ├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components), connection manager
@@ -43,6 +43,7 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── build-via-claude.ts   # Build App via Claude Code session
     ├── app-persistence.ts    # Save/load dynamic apps from disk
     ├── claude-code.ts        # Claude Code CLI integration
+    ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
     ├── *-tools.ts            # Tool family implementations (filesystem, workspace, media, travel, meal)
     ├── tool-families/catalog.ts  # TOOL_FAMILY_CAPABILITIES definitions
     └── native-tools/         # Zero-config native tool bridge
@@ -56,9 +57,10 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 
 ### WebSocket Protocol
 
-- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`
+- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`
 - **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `questions`
 - `chat.send` with `routing.toolId: "claude-code"` bypasses OpenClaw agent, spawns CLI directly
+- `shell.*` messages manage PTY sessions — `toolMeta.toolId === "shell"` routes to ShellCard
 - `card.action` carries `cardId`, `cardAction`, `cardPayload` — dispatched via four-path resolution
 
 ### Multi-Block Response Handling
@@ -87,6 +89,15 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 - Trigger: `/code` opens project picker, then `/code <prompt>` sends prompts
 - Backend spawns `claude.exe --output-format stream-json`, parses NDJSON, streams via WS
 - Session resumption via `--resume <sessionId>`, `AskUserQuestion` tool renders as clickable buttons
+
+### Remote Terminal (Shell)
+
+- Trigger: `/shell` or the "Terminal" tile on the WelcomeCard
+- Backend spawns a real PTY via `node-pty` (PowerShell on Windows, bash/zsh on macOS)
+- Frontend renders with xterm.js (full ANSI color, cursor positioning, alternate screen buffer)
+- Character-level I/O: keystrokes forwarded via `shell.input`, output streamed as `ServerMessage` deltas with `toolMeta.toolId === "shell"`
+- Performance: PTY output written directly to xterm.js via `shellWriters` map, bypassing React state
+- Key files: `shell-pty.ts` (backend), `ShellCard.tsx` (frontend), card type `"shell"`
 
 ### Native Tool Bridge + Action Dispatch
 
@@ -121,7 +132,7 @@ Three creation methods: **(1) Build from Enso UI** (recommended), **(2) Via Code
 
 ## Tech Stack
 
-Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + Vite 6. Backend: Express 4 + ws 8 (started by OpenClaw). Language: TypeScript 5.7 strict, ESM. LLM: Gemini (via API key).
+Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + xterm.js + Vite 6. Backend: Express 4 + ws 8 + node-pty (started by OpenClaw). Language: TypeScript 5.7 strict, ESM. LLM: Gemini (via API key).
 
 ## Development
 

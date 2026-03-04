@@ -18,6 +18,7 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 - **Build custom apps** — Describe what you want, and Enso builds a full app (executors + template) that persists and can be reused
 - **Refine in place** — Type an instruction in app view to regenerate just the template (single LLM call, cheapest iteration)
 - **Claude Code integration** — Run `/code` to open a Claude Code session with streaming terminal output and interactive questions
+- **Remote terminal** — Run `/shell` to open a real interactive shell (PowerShell on Windows, bash on macOS) with full ANSI color support via xterm.js
 - **Multi-machine remote access** — Connect from anywhere via Cloudflare Tunnel with token auth
 - **Mobile-first** — Android app (Capacitor), PWA support, QR code pairing from phone to PC
 - **Dark theme** — Designed for comfortable extended use
@@ -46,6 +47,9 @@ Browse, search, and install OpenClaw skills from the ClawHub marketplace. View s
 
 ### 💻 Workspace Studio
 Scan your development environment — detect git repositories, discover installed dev tools (Node, Python, Docker, etc.), and get project structure overviews with file type statistics.
+
+### 🖥️ Remote Terminal
+Run `/shell` to open a real interactive terminal session in the browser. Full xterm.js rendering with ANSI colors, cursor positioning, and support for interactive programs. Powered by node-pty — spawns PowerShell on Windows or bash/zsh on macOS.
 
 ### ➕ Build Your Own
 Any of these can be built from scratch. Describe what you want in natural language, and Enso's build pipeline creates a full app (executors + template) that persists and can be reused. Or use the Refine flow to iterate on any existing app with a single instruction.

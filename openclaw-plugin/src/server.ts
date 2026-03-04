@@ -144,6 +144,15 @@ export async function startEnsoServer(opts: {
     console.log(`[enso] app re-hydration failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // Conditionally load shell PTY support (requires node-pty native module)
+  let shellPty: typeof import("./shell-pty.js") | null = null;
+  try {
+    shellPty = await import("./shell-pty.js");
+    console.log(`[enso] shell PTY support available`);
+  } catch {
+    console.log(`[enso] node-pty not available — shell feature disabled`);
+  }
+
   const app = express();
   app.use(express.json());
 
@@ -1170,6 +1179,48 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
+          case "shell.create": {
+            if (!shellPty) {
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "error",
+                text: "Shell feature is not available — node-pty is not installed.",
+                targetCardId: msg.sourceCardId,
+                toolMeta: { toolId: "shell" },
+                timestamp: Date.now(),
+              });
+              break;
+            }
+            const shellTargetCardId = msg.sourceCardId ?? randomUUID();
+            const shellSessionId = shellPty.createShellSession({
+              client,
+              targetCardId: shellTargetCardId,
+              cols: msg.shellCols ?? 80,
+              rows: msg.shellRows ?? 24,
+              cwd: msg.routing?.cwd,
+            });
+            runtime.log?.(`[enso:shell] created session ${shellSessionId} for card ${shellTargetCardId}`);
+            break;
+          }
+          case "shell.input": {
+            if (!shellPty || !msg.shellSessionId || msg.shellInput == null) break;
+            shellPty.writeToShell(msg.shellSessionId, msg.shellInput);
+            break;
+          }
+          case "shell.resize": {
+            if (!shellPty || !msg.shellSessionId) break;
+            shellPty.resizeShell(msg.shellSessionId, msg.shellCols ?? 80, msg.shellRows ?? 24);
+            break;
+          }
+          case "shell.destroy": {
+            if (!shellPty || !msg.shellSessionId) break;
+            shellPty.destroyShell(msg.shellSessionId);
+            runtime.log?.(`[enso:shell] destroyed session ${msg.shellSessionId}`);
+            break;
+          }
           case "chat.history":
             break;
         }
@@ -1188,6 +1239,11 @@ export async function startEnsoServer(opts: {
     });
 
     ws.on("close", () => {
+      // Clean up any shell PTY sessions owned by this client
+      if (shellPty) {
+        const killed = shellPty.destroyClientSessions(connectionId);
+        if (killed > 0) runtime.log?.(`[enso:shell] cleaned up ${killed} session(s) for ${connectionId}`);
+      }
       clients.delete(connectionId);
       runtime.log?.(`[enso] client disconnected: ${connectionId}`);
     });

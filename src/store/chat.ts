@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { AppInfo, ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
 import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
+import { shellWriters } from "../cards/ShellCard";
 import { createWSClient, type ConnectionState } from "../lib/ws-client";
 import {
   getActiveBackend,
@@ -66,6 +67,7 @@ interface CardStore {
   saveAppToCodebase: (toolFamily: string) => void;
   restartServer: () => void;
   launchEnsoCode: () => void;
+  launchShell: () => void;
   sendDebugReport: (description: string, imagePaths: string[]) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
@@ -126,13 +128,19 @@ export const useChatStore = create<CardStore>((set, get) => ({
           const updates: Record<string, Card> = {};
           for (const [id, card] of Object.entries(cards)) {
             if (card.status === "streaming") {
-              updates[id] = {
-                ...card,
-                status: "complete",
-                text: (card.text ?? "") + "\n\u200B[connection:lost]\n",
-                operation: undefined,
-                updatedAt: Date.now(),
-              };
+              if (card.type === "shell") {
+                const writer = shellWriters.get(id);
+                if (writer) writer("\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
+                updates[id] = { ...card, status: "complete", updatedAt: Date.now() };
+              } else {
+                updates[id] = {
+                  ...card,
+                  status: "complete",
+                  text: (card.text ?? "") + "\n\u200B[connection:lost]\n",
+                  operation: undefined,
+                  updatedAt: Date.now(),
+                };
+              }
             }
           }
           if (Object.keys(updates).length > 0) {
@@ -162,6 +170,12 @@ export const useChatStore = create<CardStore>((set, get) => ({
       // "/delete-apps" command — delete all dynamically created apps
       if (text.trim() === "/delete-apps") {
         get().deleteAllApps();
+        return;
+      }
+
+      // "/shell" command — launch remote terminal
+      if (text.trim() === "/shell") {
+        get().launchShell();
         return;
       }
 
@@ -552,6 +566,34 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }));
   },
 
+  launchShell: () => {
+    const id = uuidv4();
+    const now = Date.now();
+    const card: Card = {
+      id,
+      runId: id,
+      type: "shell",
+      role: "assistant",
+      status: "streaming",
+      display: "expanded",
+      toolMeta: { toolId: "shell" },
+      createdAt: now,
+      updatedAt: now,
+    };
+    set((s) => ({
+      cardOrder: [...s.cardOrder, id],
+      cards: { ...s.cards, [id]: card },
+    }));
+
+    // Request shell creation from backend
+    get()._wsClient?.send({
+      type: "shell.create",
+      sourceCardId: id,
+      shellCols: 80,
+      shellRows: 24,
+    });
+  },
+
   sendDebugReport: (description: string, imagePaths: string[]) => {
     const ensoPath = get().ensoProjectPath;
     if (!ensoPath) return;
@@ -728,7 +770,14 @@ export const useChatStore = create<CardStore>((set, get) => ({
           const updates: Record<string, Card> = {};
           for (const [id, card] of Object.entries(cards)) {
             if (card.status === "streaming") {
-              updates[id] = { ...card, status: "complete", text: (card.text ?? "") + "\n\u200B[connection:lost]\n", operation: undefined, updatedAt: Date.now() };
+              if (card.type === "shell") {
+                // Shell cards: write disconnect message to xterm, mark complete
+                const writer = shellWriters.get(id);
+                if (writer) writer("\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
+                updates[id] = { ...card, status: "complete", updatedAt: Date.now() };
+              } else {
+                updates[id] = { ...card, status: "complete", text: (card.text ?? "") + "\n\u200B[connection:lost]\n", operation: undefined, updatedAt: Date.now() };
+              }
             }
           }
           if (Object.keys(updates).length > 0) {
@@ -959,6 +1008,28 @@ export const useChatStore = create<CardStore>((set, get) => ({
           };
         }
 
+        // Auto-create shell card if it doesn't exist yet
+        if (!card && msg.toolMeta?.toolId === "shell" && msg.state === "delta") {
+          card = {
+            id: msg.targetCardId,
+            runId: msg.runId,
+            type: "shell",
+            role: "assistant",
+            status: "streaming",
+            display: "expanded",
+            toolMeta: msg.toolMeta,
+            createdAt: now,
+            updatedAt: now,
+          };
+          // Write output to xterm via shellWriters
+          const writer = shellWriters.get(msg.targetCardId);
+          if (writer && msg.text) writer(msg.text);
+          return {
+            cardOrder: [...state.cardOrder, msg.targetCardId],
+            cards: { ...state.cards, [msg.targetCardId]: card },
+          };
+        }
+
         if (!card) return state;
 
         // ── Terminal card (claude-code): append text, per-card session ──
@@ -1027,6 +1098,63 @@ export const useChatStore = create<CardStore>((set, get) => ({
                   toolMeta: card.toolMeta, // preserve existing session + cwd
                   operation: msg.operation,
                   cardMode: msg.cardMode ?? card.cardMode,
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+
+          return state;
+        }
+
+        // ── Shell card: stream output directly to xterm.js, not to card.text ──
+        if (card.type === "shell" && msg.toolMeta?.toolId === "shell") {
+          if (msg.state === "delta") {
+            // Write output directly to xterm.js via shellWriters — no React re-render
+            const writer = shellWriters.get(msg.targetCardId);
+            if (writer && msg.text) writer(msg.text);
+
+            // Only update Zustand state if toolSessionId changed (first delta after shell.create)
+            const newSessionId = msg.toolMeta?.toolSessionId;
+            if (newSessionId && newSessionId !== card.toolMeta?.toolSessionId) {
+              return {
+                cards: {
+                  ...state.cards,
+                  [msg.targetCardId]: {
+                    ...card,
+                    toolMeta: { ...card.toolMeta, toolId: "shell", toolSessionId: newSessionId },
+                    updatedAt: now,
+                  },
+                },
+              };
+            }
+            return state; // No React state change for output
+          }
+
+          if (msg.state === "final") {
+            const writer = shellWriters.get(msg.targetCardId);
+            if (writer && msg.text) writer(msg.text);
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  status: "complete",
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+
+          if (msg.state === "error") {
+            const writer = shellWriters.get(msg.targetCardId);
+            if (writer && msg.text) writer(msg.text);
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  status: "error",
                   updatedAt: now,
                 },
               },
