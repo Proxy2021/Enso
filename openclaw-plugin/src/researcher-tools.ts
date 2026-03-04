@@ -30,6 +30,7 @@ interface Source {
   snippet: string;
   domain: string;
   relevance: number;
+  fullContent?: string; // extracted article text from the source page
 }
 
 interface KeyFinding {
@@ -222,6 +223,136 @@ function scoreDomain(domain: string): number {
   if (TRUSTED_DOMAINS.has(domain)) return 10;
   if (domain.endsWith(".org")) return 5;
   return 0;
+}
+
+// ── Source Content Extraction ──
+
+/** Max chars of extracted article text to keep per source */
+const MAX_CONTENT_LENGTH = 4000;
+/** How many top sources to attempt full-content fetch for */
+const MAX_SOURCES_TO_FETCH = 10;
+/** Timeout per page fetch (ms) */
+const FETCH_TIMEOUT_MS = 8_000;
+
+/** Domains to skip content extraction (paywalled, login-gated, or non-article) */
+const SKIP_CONTENT_DOMAINS = new Set([
+  "youtube.com", "youtu.be", "twitter.com", "x.com", "facebook.com",
+  "instagram.com", "tiktok.com", "reddit.com", "linkedin.com",
+  "pinterest.com", "github.com", "docs.google.com",
+]);
+
+/**
+ * Strip HTML to readable article text.
+ * Lightweight "readability" extraction: removes scripts, styles, nav/header/footer,
+ * then pulls text from content-bearing elements.
+ */
+function extractArticleText(html: string): string {
+  // Remove scripts, styles, SVGs, and comments
+  let clean = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+
+  // Remove nav, header, footer, aside, menu elements (non-content)
+  clean = clean
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<aside[\s\S]*?<\/aside>/gi, " ")
+    .replace(/<menu[\s\S]*?<\/menu>/gi, " ");
+
+  // Try to extract article/main content first (higher quality)
+  const articleMatch = clean.match(/<article[\s\S]*?<\/article>/i)
+    || clean.match(/<main[\s\S]*?<\/main>/i)
+    || clean.match(/<div[^>]*(?:class|id)="[^"]*(?:content|article|post|entry|story|body)[^"]*"[\s\S]*?<\/div>/i);
+
+  const contentHtml = articleMatch ? articleMatch[0] : clean;
+
+  // Convert block elements to newlines, strip all tags, decode entities
+  let text = contentHtml
+    .replace(/<\/?(p|div|br|h[1-6]|li|tr|blockquote|section)[\s>]/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&[a-z]+;/gi, " ");
+
+  // Collapse whitespace, remove blank lines
+  text = text
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 30) // filter out short junk lines (menus, buttons, etc.)
+    .join("\n");
+
+  return text.slice(0, MAX_CONTENT_LENGTH);
+}
+
+/**
+ * Fetch a URL and extract its article text content.
+ * Returns empty string on failure (timeout, error, non-HTML, etc.)
+ */
+async function fetchPageContent(url: string): Promise<string> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const resp = await globalThis.fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; EnsoResearcher/1.0)",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      signal: ac.signal,
+      redirect: "follow",
+    });
+    if (!resp.ok) return "";
+
+    // Only process HTML responses
+    const contentType = resp.headers.get("content-type") || "";
+    if (!contentType.includes("text/html") && !contentType.includes("xhtml")) return "";
+
+    const html = await resp.text();
+    if (!html || html.length < 500) return ""; // too small to be meaningful
+
+    return extractArticleText(html);
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetch full content for the top N sources in parallel.
+ * Attaches `fullContent` to each source that succeeds.
+ * Non-blocking: failures are silently skipped.
+ */
+async function enrichSourcesWithContent(sources: Source[]): Promise<void> {
+  const candidates = sources
+    .slice(0, MAX_SOURCES_TO_FETCH)
+    .filter((s) => !SKIP_CONTENT_DOMAINS.has(s.domain));
+
+  if (candidates.length === 0) return;
+
+  console.log(`[enso:researcher] fetching full content from ${candidates.length} sources...`);
+  const startTime = Date.now();
+
+  const results = await Promise.allSettled(
+    candidates.map(async (source) => {
+      const content = await fetchPageContent(source.url);
+      if (content && content.length > 100) {
+        source.fullContent = content;
+      }
+    }),
+  );
+
+  const succeeded = candidates.filter((s) => s.fullContent).length;
+  const elapsed = Date.now() - startTime;
+  console.log(`[enso:researcher] content extraction: ${succeeded}/${candidates.length} sources in ${elapsed}ms`);
 }
 
 // ── Brave Search ──
@@ -439,16 +570,25 @@ function deduplicateAndScore(batches: BraveWebResult[][]): Source[] {
 
 // ── LLM Synthesis prompts ──
 
-function buildSynthesisPrompt(topic: string, results: BraveWebResult[]): string {
-  const snippetText = results
-    .slice(0, 30)
-    .map((s, i) => `[${i}] ${s.title}\n    ${s.description}\n    URL: ${s.url}`)
-    .join("\n");
+function buildSynthesisPrompt(topic: string, results: BraveWebResult[], sources?: Source[]): string {
+  // Use full article content when available, falling back to snippets
+  const sourceEntries = results.slice(0, 30).map((r, i) => {
+    const fullContent = sources?.[i]?.fullContent;
+    if (fullContent && fullContent.length > 100) {
+      return `[${i}] ${r.title}\n    URL: ${r.url}\n    FULL ARTICLE CONTENT:\n${fullContent}`;
+    }
+    return `[${i}] ${r.title}\n    ${r.description}\n    URL: ${r.url}`;
+  });
+  const snippetText = sourceEntries.join("\n\n");
+
+  const contentNote = sources?.some((s) => s.fullContent)
+    ? "\nNOTE: Some sources include FULL ARTICLE CONTENT extracted from the source pages. Prioritize these for your analysis — they contain far richer information than the short snippets. Use specific facts, statistics, quotes, and details from the full content to produce a deeply informed, evidence-rich synthesis."
+    : "";
 
   return `You are a senior research analyst. Given web search results about "${topic}", synthesize comprehensive research findings.
 
 SEARCH RESULTS:
-${snippetText}
+${snippetText}${contentNote}
 
 Return valid JSON (no markdown fences) with this exact structure:
 {
@@ -486,11 +626,15 @@ Rules:
 - Section titles should be clear topical headings, not generic labels`;
 }
 
-function buildDeepDivePrompt(topic: string, subtopic: string, parentContext: string, results: BraveWebResult[]): string {
-  const snippetText = results
-    .slice(0, 20)
-    .map((s, i) => `[${i}] ${s.title}\n    ${s.description}`)
-    .join("\n");
+function buildDeepDivePrompt(topic: string, subtopic: string, parentContext: string, results: BraveWebResult[], sources?: Source[]): string {
+  const sourceEntries = results.slice(0, 20).map((r, i) => {
+    const fullContent = sources?.[i]?.fullContent;
+    if (fullContent && fullContent.length > 100) {
+      return `[${i}] ${r.title}\n    FULL CONTENT:\n${fullContent}`;
+    }
+    return `[${i}] ${r.title}\n    ${r.description}`;
+  });
+  const snippetText = sourceEntries.join("\n\n");
 
   return `You are a research analyst providing a deep dive into "${subtopic}" within the broader topic of "${topic}".
 
@@ -513,11 +657,15 @@ Rules:
 - sourceRefs reference the NEW SEARCH RESULTS indices`;
 }
 
-function buildComparePrompt(topicA: string, topicB: string, context: string, results: BraveWebResult[]): string {
-  const snippetText = results
-    .slice(0, 25)
-    .map((s, i) => `[${i}] ${s.title}\n    ${s.description}`)
-    .join("\n");
+function buildComparePrompt(topicA: string, topicB: string, context: string, results: BraveWebResult[], sources?: Source[]): string {
+  const sourceEntries = results.slice(0, 25).map((r, i) => {
+    const fullContent = sources?.[i]?.fullContent;
+    if (fullContent && fullContent.length > 100) {
+      return `[${i}] ${r.title}\n    FULL CONTENT:\n${fullContent}`;
+    }
+    return `[${i}] ${r.title}\n    ${r.description}`;
+  });
+  const snippetText = sourceEntries.join("\n\n");
 
   return `You are a research analyst comparing "${topicA}" vs "${topicB}"${context ? ` in the context of: ${context}` : ""}.
 
@@ -545,11 +693,15 @@ Rules:
 - Verdict should be balanced, not favoring one side`;
 }
 
-function buildFollowUpPrompt(topic: string, question: string, parentContext: string, results: BraveWebResult[]): string {
-  const snippetText = results
-    .slice(0, 15)
-    .map((s, i) => `[${i}] ${s.title}\n    ${s.description}`)
-    .join("\n");
+function buildFollowUpPrompt(topic: string, question: string, parentContext: string, results: BraveWebResult[], sources?: Source[]): string {
+  const sourceEntries = results.slice(0, 15).map((r, i) => {
+    const fullContent = sources?.[i]?.fullContent;
+    if (fullContent && fullContent.length > 100) {
+      return `[${i}] ${r.title}\n    FULL CONTENT:\n${fullContent}`;
+    }
+    return `[${i}] ${r.title}\n    ${r.description}`;
+  });
+  const snippetText = sourceEntries.join("\n\n");
 
   return `You are a research analyst answering a follow-up question about "${topic}".
 
@@ -783,7 +935,10 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     return generateSampleResearch(topic, depth);
   }
 
-  // Build snippet list for LLM
+  // Fetch full article content from top sources (parallel, non-blocking on failures)
+  await enrichSourcesWithContent(sources);
+
+  // Build source list for LLM (with full content when available)
   const snippetsForLLM: BraveWebResult[] = sources.slice(0, 30).map((s) => ({
     title: s.title,
     url: s.url,
@@ -798,7 +953,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const prompt = buildSynthesisPrompt(topic, snippetsForLLM);
+    const prompt = buildSynthesisPrompt(topic, snippetsForLLM, sources);
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const parsed = JSON.parse(cleanJson(raw)) as {
       summary: string;
@@ -956,6 +1111,9 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
     pageUrl: img.url,
   }));
 
+  // Fetch full content from top deep-dive sources
+  await enrichSourcesWithContent(sources);
+
   const geminiKey = await getGeminiApiKey();
   if (!geminiKey || sources.length === 0) {
     return jsonResult({
@@ -977,7 +1135,7 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
     const snippetsForLLM: BraveWebResult[] = sources.slice(0, 20).map((s) => ({
       title: s.title, url: s.url, description: s.snippet,
     }));
-    const prompt = buildDeepDivePrompt(topic, subtopic, parentContext, snippetsForLLM);
+    const prompt = buildDeepDivePrompt(topic, subtopic, parentContext, snippetsForLLM, sources);
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const parsed = JSON.parse(cleanJson(raw)) as {
       content: string;
@@ -1030,6 +1188,9 @@ async function researcherCompare(params: CompareParams): Promise<AgentToolResult
   const batches = await Promise.all(queries.map((q) => braveWebSearch(q, 5)));
   const sources = deduplicateAndScore(batches);
 
+  // Fetch full content from top comparison sources
+  await enrichSourcesWithContent(sources);
+
   const geminiKey = await getGeminiApiKey();
   if (!geminiKey || sources.length === 0) {
     return jsonResult({
@@ -1050,7 +1211,7 @@ async function researcherCompare(params: CompareParams): Promise<AgentToolResult
     const snippetsForLLM: BraveWebResult[] = sources.slice(0, 25).map((s) => ({
       title: s.title, url: s.url, description: s.snippet,
     }));
-    const prompt = buildComparePrompt(topicA, topicB, context, snippetsForLLM);
+    const prompt = buildComparePrompt(topicA, topicB, context, snippetsForLLM, sources);
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const parsed = JSON.parse(cleanJson(raw)) as {
       similarities: ComparisonPoint[];
@@ -1103,6 +1264,9 @@ async function researcherFollowUp(params: FollowUpParams): Promise<AgentToolResu
   const batches = await Promise.all(queries.map((q) => braveWebSearch(q, 5)));
   const sources = deduplicateAndScore(batches);
 
+  // Fetch full content from top follow-up sources
+  await enrichSourcesWithContent(sources);
+
   const geminiKey = await getGeminiApiKey();
   if (!geminiKey || sources.length === 0) {
     return jsonResult({
@@ -1122,7 +1286,7 @@ async function researcherFollowUp(params: FollowUpParams): Promise<AgentToolResu
     const snippetsForLLM: BraveWebResult[] = sources.slice(0, 15).map((s) => ({
       title: s.title, url: s.url, description: s.snippet,
     }));
-    const prompt = buildFollowUpPrompt(topic, question, parentContext, snippetsForLLM);
+    const prompt = buildFollowUpPrompt(topic, question, parentContext, snippetsForLLM, sources);
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const parsed = JSON.parse(cleanJson(raw)) as {
       answer: string;
