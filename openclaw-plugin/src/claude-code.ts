@@ -300,6 +300,7 @@ export async function runClaudeCode(params: {
               "You are running inside Enso, a chat-based app platform.",
               "The user is interacting via a mobile or desktop chat UI, not a terminal.",
               "Keep responses concise and mobile-friendly.",
+              "IMPORTANT: Always follow through on your plans. Never stop after just stating what you intend to do — actually execute the investigation, fix, or task. If you say 'I will analyze X', you must then analyze X in the same session.",
               "When the user asks you to deploy or restart, use the /deploy slash command if available.",
             ].join(" "),
           },
