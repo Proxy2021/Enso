@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
+import { useVoiceInput } from "./VoiceMicButton";
 
 interface SystemEnhanceDialogProps {
   onClose: () => void;
@@ -9,6 +10,7 @@ export function SystemEnhanceDialog({ onClose }: SystemEnhanceDialogProps) {
   const [instruction, setInstruction] = useState("");
   const launchSystemEnhance = useChatStore((s) => s.launchSystemEnhance);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const { VoiceMic } = useVoiceInput(setInstruction);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -44,15 +46,18 @@ export function SystemEnhanceDialog({ onClose }: SystemEnhanceDialogProps) {
           </p>
         </div>
         <div className="px-4 py-3">
-          <textarea
-            ref={inputRef}
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={3}
-            placeholder="e.g., improve error handling across all tool families, add better loading states, optimize WebSocket reconnection..."
-            className="w-full bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 resize-none"
-          />
+          <div className="flex items-start gap-1.5">
+            <textarea
+              ref={inputRef}
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={3}
+              placeholder="e.g., improve error handling across all tool families, add better loading states, optimize WebSocket reconnection..."
+              className="flex-1 bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 resize-none"
+            />
+            <VoiceMic />
+          </div>
         </div>
         <div className="px-4 py-3 border-t border-gray-700/70 flex justify-end gap-2">
           <button

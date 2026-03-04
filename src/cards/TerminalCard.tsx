@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatStore, type ProjectInfo } from "../store/chat";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { useVoiceInput } from "../components/VoiceMicButton";
 import MarkdownText from "../components/MarkdownText";
 import type { Card, CardRendererProps } from "./types";
 
@@ -212,6 +213,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
   const [commands, setCommands] = useState<SlashCommand[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { VoiceMic } = useVoiceInput(setText);
 
   // Fetch available slash commands when cwd is set
   useEffect(() => {
@@ -301,6 +303,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
           placeholder="Ask Claude Code..."
           className="flex-1 bg-transparent text-gray-100 text-sm outline-none placeholder-gray-600 font-mono"
         />
+        <VoiceMic />
         <button
           onClick={handleSubmit}
           disabled={!text.trim()}

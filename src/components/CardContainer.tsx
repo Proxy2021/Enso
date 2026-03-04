@@ -4,6 +4,8 @@ import type { Card } from "../cards/types";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
+import { CodeInvestigateDialog } from "./CodeInvestigateDialog";
+import { useVoiceInput } from "./VoiceMicButton";
 import { getActiveBackend } from "../lib/connection";
 import { isNative } from "../lib/platform";
 import { nativeShare } from "../lib/native-share";
@@ -642,6 +644,7 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
   const [showInput, setShowInput] = useState(false);
   const [instruction, setInstruction] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const { VoiceMic } = useVoiceInput(setInstruction);
 
   useEffect(() => {
     if (showInput && inputRef.current) {
@@ -678,6 +681,7 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
               placeholder="e.g. use blue theme, add a chart, make cards bigger..."
               className="flex-1 bg-gray-800 border border-gray-600/60 rounded-md px-2 py-1 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
             />
+            <VoiceMic />
             <button
               onClick={handleSubmit}
               disabled={!instruction.trim()}
@@ -731,7 +735,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const collapseCard = useChatStore((s) => s.collapseCard);
   const expandCard = useChatStore((s) => s.expandCard);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
-  const codeInvestigate = useChatStore((s) => s.codeInvestigate);
+  const [showCodeDialog, setShowCodeDialog] = useState(false);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
 
   const isCollapsed = card.display === "collapsed";
@@ -828,7 +832,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             <div className="flex items-center gap-1.5">
               {card.role === "assistant" && card.status === "complete" && (
                 <button
-                  onClick={() => codeInvestigate(card.id)}
+                  onClick={() => setShowCodeDialog(true)}
                   className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 transition-colors"
                   title="Investigate with Claude Code"
                 >
@@ -871,6 +875,12 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         </div>
       )}
 
+      {showCodeDialog && (
+        <CodeInvestigateDialog
+          cardId={card.id}
+          onClose={() => setShowCodeDialog(false)}
+        />
+      )}
     </div>
   );
 }

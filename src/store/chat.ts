@@ -69,7 +69,7 @@ interface CardStore {
   launchEnsoCode: () => void;
   launchShell: () => void;
   sendDebugReport: (description: string, imagePaths: string[]) => void;
-  codeInvestigate: (cardId: string) => void;
+  codeInvestigate: (cardId: string, instruction: string) => void;
   launchSystemEnhance: (instruction: string) => void;
   fetchProjects: () => void;
   setCodeSessionCwd: (cwd: string) => void;
@@ -670,7 +670,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
   },
 
-  codeInvestigate: (cardId: string) => {
+  codeInvestigate: (cardId: string, instruction: string) => {
     const card = get().cards[cardId];
     if (!card) return;
 
@@ -681,8 +681,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
     localStorage.removeItem("enso_code_session_id");
 
     const promptParts: string[] = [
-      "The user wants you to investigate or implement something based on the following.",
-      "Read the context, then ask the user what they'd like you to do.",
+      `## User Request`,
+      instruction,
+      "",
+      "Use the following context to carry out the request.",
       "",
     ];
 

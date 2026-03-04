@@ -3,19 +3,17 @@ import { useChatStore } from "../store/chat";
 import { useVoiceInput } from "./VoiceMicButton";
 
 
-interface AppBuilderDialogProps {
+interface CodeInvestigateDialogProps {
   cardId: string;
-  cardText: string;
   onClose: () => void;
 }
 
-export function AppBuilderDialog({ cardId, cardText, onClose }: AppBuilderDialogProps) {
+export function CodeInvestigateDialog({ cardId, onClose }: CodeInvestigateDialogProps) {
   const [instruction, setInstruction] = useState("");
-  const buildApp = useChatStore((s) => s.buildApp);
+  const codeInvestigate = useChatStore((s) => s.codeInvestigate);
   const inputRef = useRef<HTMLInputElement>(null);
   const { VoiceMic } = useVoiceInput(setInstruction);
 
-  // Focus input on mount
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
@@ -23,7 +21,7 @@ export function AppBuilderDialog({ cardId, cardText, onClose }: AppBuilderDialog
   const handleSubmit = () => {
     const trimmed = instruction.trim();
     if (!trimmed) return;
-    buildApp(cardId, cardText, trimmed);
+    codeInvestigate(cardId, trimmed);
     onClose();
   };
 
@@ -43,9 +41,9 @@ export function AppBuilderDialog({ cardId, cardText, onClose }: AppBuilderDialog
     >
       <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)]">
         <div className="px-4 py-3 border-b border-gray-700/70">
-          <h3 className="text-sm font-semibold text-gray-100">Build App with Claude Code</h3>
+          <h3 className="text-sm font-semibold text-gray-100">Code with Claude</h3>
           <p className="text-xs text-gray-400 mt-1">
-            Describe what app you want. Claude Code will design and build it in a live terminal session.
+            What would you like Claude Code to do with this card's context?
           </p>
         </div>
         <div className="px-4 py-3">
@@ -55,8 +53,8 @@ export function AppBuilderDialog({ cardId, cardText, onClose }: AppBuilderDialog
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="e.g., a weather dashboard with forecast charts, or a recipe browser with filters..."
-              className="flex-1 bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500/50"
+              placeholder="e.g., fix the template layout, add a chart for trends, refactor the executor..."
+              className="flex-1 bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500/50"
             />
             <VoiceMic />
           </div>
@@ -71,9 +69,9 @@ export function AppBuilderDialog({ cardId, cardText, onClose }: AppBuilderDialog
           <button
             onClick={handleSubmit}
             disabled={!instruction.trim()}
-            className="px-3 py-1.5 text-xs rounded-md border border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs rounded-md border border-indigo-500/60 bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Build App
+            Start
           </button>
         </div>
       </div>
