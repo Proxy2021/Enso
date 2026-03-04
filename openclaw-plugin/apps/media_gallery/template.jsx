@@ -109,11 +109,6 @@ export default function GeneratedUI({ data, onAction }) {
     const bookmarks = data?.bookmarks || [];
     return (
       <div className="bg-gray-900 rounded-xl p-3 border border-gray-700 space-y-3">
-        <div className="flex items-center gap-2">
-          <LucideReact.Images className="w-5 h-5 text-blue-400" />
-          <span className="text-sm font-semibold text-gray-100">Media Gallery</span>
-        </div>
-
         {/* Bookmarked Folders */}
         {bookmarks.length > 0 && (
           <div className="space-y-1.5">
@@ -611,12 +606,8 @@ export default function GeneratedUI({ data, onAction }) {
             </button>
           )}
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-gray-100 flex items-center gap-1.5">
-              <LucideReact.Images className="w-4 h-4 text-blue-400 shrink-0" />
-              Media Gallery
-            </div>
             {/* Breadcrumb path */}
-            <div className="text-[11px] text-gray-500 truncate flex items-center gap-0.5 flex-wrap">
+            <div className="text-xs text-gray-400 truncate flex items-center gap-0.5 flex-wrap">
               {pathSegments(currentPath).slice(-3).map((seg, i, arr) => (
                 <span key={i} className="flex items-center gap-0.5">
                   {i > 0 && <LucideReact.ChevronRight className="w-2.5 h-2.5 text-gray-600" />}
