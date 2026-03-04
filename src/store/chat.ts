@@ -68,6 +68,8 @@ interface CardStore {
   restartServer: () => void;
   launchEnsoCode: (instruction?: string) => void;
   launchShell: () => void;
+  sendShellInput: (text: string) => void;
+  getActiveShellSessionId: () => string | null;
   sendDebugReport: (description: string, imagePaths: string[]) => void;
   codeInvestigate: (cardId: string, instruction: string) => void;
   launchSystemEnhance: (instruction: string) => void;
@@ -625,6 +627,27 @@ export const useChatStore = create<CardStore>((set, get) => ({
     // shell.create is sent by ShellCard after xterm.js measures the actual
     // container width (via FitAddon), so the PTY starts with the correct
     // column count instead of a hardcoded 80 that overflows on mobile.
+  },
+
+  sendShellInput: (text: string) => {
+    const sessionId = get().getActiveShellSessionId();
+    if (!sessionId) return;
+    get()._wsClient?.send({
+      type: "shell.input",
+      shellSessionId: sessionId,
+      shellInput: text + "\r",
+    });
+  },
+
+  getActiveShellSessionId: () => {
+    const { cardOrder, cards } = get();
+    for (let i = cardOrder.length - 1; i >= 0; i--) {
+      const card = cards[cardOrder[i]];
+      if (card?.type === "shell" && card.status === "streaming" && card.toolMeta?.toolSessionId) {
+        return card.toolMeta.toolSessionId;
+      }
+    }
+    return null;
   },
 
   sendDebugReport: (description: string, imagePaths: string[]) => {

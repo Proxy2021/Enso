@@ -98,6 +98,8 @@ export default function ChatInput() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const sendMessageWithMedia = useChatStore((s) => s.sendMessageWithMedia);
+  const sendShellInput = useChatStore((s) => s.sendShellInput);
+  const activeShellSessionId = useChatStore((s) => s.getActiveShellSessionId());
   const connectionState = useChatStore((s) => s.connectionState);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -154,6 +156,16 @@ export default function ChatInput() {
     if ((!trimmed && attachedFiles.length === 0) || disabled) return;
 
     if (isListening) toggleListening();
+
+    // Route to active shell session when one exists (essential for mobile
+    // where xterm.js virtual keyboard doesn't reliably appear in WebView).
+    // Skip for slash commands so /shell, /code etc. still work.
+    if (activeShellSessionId && attachedFiles.length === 0 && !trimmed.startsWith("/")) {
+      sendShellInput(trimmed);
+      setText("");
+      textareaRef.current?.focus();
+      return;
+    }
 
     if (attachedFiles.length > 0) {
       await sendMessageWithMedia(trimmed, attachedFiles);
@@ -430,7 +442,7 @@ export default function ChatInput() {
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : "Message..."}
+            placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : "Message..."}
             disabled={disabled}
             rows={1}
             className="flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500 disabled:opacity-50"
