@@ -890,7 +890,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           {isAppView && !isLoading && (
             <RefineFooter cardId={card.id} onRefine={(instruction) => sendCardAction(card.id, "refine", { instruction })} />
           )}
-          {isLoading && card.type !== "terminal" && <CardLoadingOverlay action={loadingLabel} />}
+          {isLoading && card.type !== "terminal" && card.type !== "shell" && <CardLoadingOverlay action={loadingLabel} />}
         </div>
       )}
 
