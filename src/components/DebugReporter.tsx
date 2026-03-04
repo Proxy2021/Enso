@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Bug, Camera, ImagePlus, X } from "lucide-react";
 import { useChatStore } from "../store/chat";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { isNative } from "../lib/platform";
 
 interface CapturedImage {
   blob: Blob;
@@ -10,8 +11,9 @@ interface CapturedImage {
   isScreenshot: boolean; // true for the auto-captured screenshot
 }
 
-/** Downscale and JPEG-compress an image blob to reduce context token usage in Claude Code. */
-async function compressImage(blob: Blob, maxDim = 1200, quality = 0.80): Promise<Blob> {
+/** Downscale and JPEG-compress an image blob to reduce context token usage in Claude Code.
+ *  Returns null if the resulting image is invalid (< 200 bytes). */
+async function compressImage(blob: Blob, maxDim = 1200, quality = 0.80): Promise<Blob | null> {
   const img = new Image();
   const url = URL.createObjectURL(blob);
   await new Promise<void>((resolve, reject) => {
@@ -22,6 +24,7 @@ async function compressImage(blob: Blob, maxDim = 1200, quality = 0.80): Promise
   URL.revokeObjectURL(url);
 
   let { width, height } = img;
+  if (width <= 0 || height <= 0) return null;
   if (width > maxDim || height > maxDim) {
     const scale = maxDim / Math.max(width, height);
     width = Math.round(width * scale);
@@ -34,9 +37,12 @@ async function compressImage(blob: Blob, maxDim = 1200, quality = 0.80): Promise
   const ctx = canvas.getContext("2d")!;
   ctx.drawImage(img, 0, 0, width, height);
 
-  return new Promise((resolve) => {
-    canvas.toBlob((b) => resolve(b!), "image/jpeg", quality);
+  const result = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => resolve(b), "image/jpeg", quality);
   });
+  // Reject tiny blobs — a valid JPEG is at least a few hundred bytes
+  if (!result || result.size < 200) return null;
+  return result;
 }
 
 export default function DebugReporter() {
@@ -71,13 +77,15 @@ export default function DebugReporter() {
   }, []);
 
   const captureScreenshot = useCallback(async (): Promise<CapturedImage | null> => {
+    // html-to-image doesn't work in Capacitor's Android WebView — skip on native
+    if (isNative) return null;
     try {
       const { toBlob } = await import("html-to-image");
       const blob = await toBlob(document.documentElement, {
         pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
         cacheBust: true,
       });
-      if (blob) {
+      if (blob && blob.size > 200) {
         return { blob, url: URL.createObjectURL(blob), isScreenshot: true };
       }
     } catch (err) {
@@ -166,10 +174,17 @@ export default function DebugReporter() {
     for (const img of images) {
       try {
         const compressed = await compressImage(img.blob);
+        if (!compressed) {
+          console.warn("[debug-reporter] Image compression produced invalid result, skipping");
+          continue;
+        }
+        // Convert Blob to ArrayBuffer for upload — Capacitor's Android WebView
+        // serializes Blob bodies as "{}" (empty JSON) instead of raw bytes
+        const body = await compressed.arrayBuffer();
         const res = await fetch(`${getBackendBaseUrl()}/upload`, {
           method: "POST",
           headers: authHeaders({ "Content-Type": "image/jpeg" }),
-          body: compressed,
+          body,
         });
         if (res.ok) {
           const data = await res.json();
@@ -205,7 +220,7 @@ export default function DebugReporter() {
       {/* Portal: render modal outside header (backdrop-filter breaks fixed positioning) */}
       {isOpen && createPortal(
         <>
-          {/* Hidden file input */}
+          {/* Hidden file input — on native, allow camera capture */}
           <input
             ref={fileInputRef}
             type="file"
@@ -214,6 +229,18 @@ export default function DebugReporter() {
             onChange={handleAddPhotos}
             className="hidden"
           />
+          {/* Separate camera input for native (no auto-screenshot available) */}
+          {isNative && (
+            <input
+              ref={(el) => { if (el) (el as any).__cameraInput = true; }}
+              id="debug-camera-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleAddPhotos}
+              className="hidden"
+            />
+          )}
 
           {/* Overlay */}
           <div className="fixed inset-0 z-40 bg-black/50" />
@@ -234,8 +261,27 @@ export default function DebugReporter() {
               </button>
             </div>
 
-            {/* Image previews — horizontal scroll */}
-            {images.length > 0 && (
+            {/* Image area */}
+            {images.length === 0 && isNative ? (
+              /* On native, no auto-screenshot — show attach prompt */
+              <div className="flex gap-2">
+                <button
+                  onClick={() => document.getElementById("debug-camera-input")?.click()}
+                  className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  <Camera size={20} />
+                  <span className="text-xs">Take Photo</span>
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  <ImagePlus size={20} />
+                  <span className="text-xs">From Gallery</span>
+                </button>
+              </div>
+            ) : images.length > 0 ? (
+              /* Image previews — horizontal scroll */
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                 {images.map((img, idx) => (
                   <div key={img.url} className="relative shrink-0 group">
@@ -276,7 +322,7 @@ export default function DebugReporter() {
                   <span className="text-[10px]">Add</span>
                 </button>
               </div>
-            )}
+            ) : null}
 
             {/* Description input */}
             <textarea

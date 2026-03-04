@@ -76,9 +76,19 @@ export default function ShellCard({ card }: CardRendererProps) {
 
     terminal.open(termRef.current);
 
-    // Small delay to ensure container is sized before fitting
+    // Fit terminal to container, then send shell.create with measured dimensions
+    // (NOT hardcoded 80x24 — that overflows on mobile screens)
     requestAnimationFrame(() => {
       fitAddon.fit();
+      // Send shell.create with the actual measured dimensions
+      const cols = terminal.cols || 80;
+      const rows = terminal.rows || 24;
+      wsClient?.send({
+        type: "shell.create",
+        sourceCardId: card.id,
+        shellCols: cols,
+        shellRows: rows,
+      });
     });
 
     xtermRef.current = terminal;

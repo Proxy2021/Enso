@@ -584,14 +584,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cardOrder: [...s.cardOrder, id],
       cards: { ...s.cards, [id]: card },
     }));
-
-    // Request shell creation from backend
-    get()._wsClient?.send({
-      type: "shell.create",
-      sourceCardId: id,
-      shellCols: 80,
-      shellRows: 24,
-    });
+    // shell.create is sent by ShellCard after xterm.js measures the actual
+    // container width (via FitAddon), so the PTY starts with the correct
+    // column count instead of a hardcoded 80 that overflows on mobile.
   },
 
   sendDebugReport: (description: string, imagePaths: string[]) => {
