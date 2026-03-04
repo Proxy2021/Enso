@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "createdAt": 1709500000000,
+  "spec": {
+    "toolFamily": "remote_desktop",
+    "toolPrefix": "enso_remote_desktop_",
+    "description": "Remote desktop viewer with click, type, scroll, and keyboard control",
+    "signatureId": "remote_desktop_view",
+    "tools": [
+      {
+        "suffix": "capture",
+        "description": "Capture a screenshot of the remote desktop",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "monitor": {
+              "type": "number",
+              "description": "Monitor index (default 0 = primary)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_remote_desktop_capture",
+          "screenshot": "/media/rdp-sample.jpg",
+          "width": 1920,
+          "height": 1080,
+          "timestamp": 1709500000000
+        },
+        "requiredDataKeys": ["tool", "screenshot", "width", "height"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "click",
+        "description": "Click at screen coordinates then capture a new screenshot",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number", "description": "Screen X coordinate" },
+            "y": { "type": "number", "description": "Screen Y coordinate" },
+            "button": { "type": "string", "description": "left, right, or double (default: left)" }
+          },
+          "required": ["x", "y"]
+        },
+        "sampleParams": { "x": 500, "y": 300 },
+        "sampleData": {
+          "tool": "enso_remote_desktop_click",
+          "screenshot": "/media/rdp-sample.jpg",
+          "width": 1920,
+          "height": 1080,
+          "timestamp": 1709500001000
+        },
+        "requiredDataKeys": ["tool", "screenshot"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "type",
+        "description": "Type text on the remote desktop then capture a new screenshot",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": { "type": "string", "description": "Text to type" }
+          },
+          "required": ["text"]
+        },
+        "sampleParams": { "text": "Hello" },
+        "sampleData": {
+          "tool": "enso_remote_desktop_type",
+          "screenshot": "/media/rdp-sample.jpg",
+          "width": 1920,
+          "height": 1080,
+          "timestamp": 1709500002000
+        },
+        "requiredDataKeys": ["tool", "screenshot"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "scroll",
+        "description": "Scroll at screen coordinates then capture a new screenshot",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number", "description": "Screen X coordinate" },
+            "y": { "type": "number", "description": "Screen Y coordinate" },
+            "direction": { "type": "string", "description": "up, down, left, or right" },
+            "amount": { "type": "number", "description": "Scroll amount (default 3)" }
+          },
+          "required": ["x", "y", "direction"]
+        },
+        "sampleParams": { "x": 960, "y": 540, "direction": "down" },
+        "sampleData": {
+          "tool": "enso_remote_desktop_scroll",
+          "screenshot": "/media/rdp-sample.jpg",
+          "width": 1920,
+          "height": 1080,
+          "timestamp": 1709500003000
+        },
+        "requiredDataKeys": ["tool", "screenshot"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "key",
+        "description": "Send a key combination then capture a new screenshot",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "combo": { "type": "string", "description": "Key combo like control+c, alt+tab, enter, escape" }
+          },
+          "required": ["combo"]
+        },
+        "sampleParams": { "combo": "enter" },
+        "sampleData": {
+          "tool": "enso_remote_desktop_key",
+          "screenshot": "/media/rdp-sample.jpg",
+          "width": 1920,
+          "height": 1080,
+          "timestamp": 1709500004000
+        },
+        "requiredDataKeys": ["tool", "screenshot"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

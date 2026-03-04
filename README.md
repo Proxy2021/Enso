@@ -14,6 +14,7 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 
 - **Instant app generation** — Any AI response can become an interactive React app with one click
 - **17 built-in UI components** — Tabs, DataTable, Charts (via Recharts), Accordion, Dialog, Stat cards, and more
+- **Remote desktop** — View and control the host machine's desktop via screenshot capture, mouse click, keyboard, and scroll — all from the browser
 - **Tool integration** — File browser, media player, travel planner, meal planner, and automatic bridge to any co-loaded OpenClaw plugin's tools
 - **Build custom apps** — Describe what you want, and Enso builds a full app (executors + template) that persists and can be reused
 - **Refine in place** — Type an instruction in app view to regenerate just the template (single LLM call, cheapest iteration)
@@ -47,6 +48,9 @@ Browse, search, and install OpenClaw skills from the ClawHub marketplace. View s
 
 ### 💻 Workspace Studio
 Scan your development environment — detect git repositories, discover installed dev tools (Node, Python, Docker, etc.), and get project structure overviews with file type statistics.
+
+### 🖥️ Remote Desktop
+View and control the host machine's desktop from the browser. Click anywhere on the captured screenshot to interact — mouse clicks map back to real screen coordinates. Type text, send key combos (Ctrl+C, Alt+Tab, etc.), and scroll. Built on native screen capture (node-screenshots) and input automation (@nut-tree-fork/nut-js). Works over remote connections with full token auth.
 
 ### 🖥️ Remote Terminal
 Run `/shell` to open a real interactive terminal session in the browser. Full xterm.js rendering with ANSI colors, cursor positioning, and support for interactive programs. Powered by node-pty — spawns PowerShell on Windows or bash/zsh on macOS.

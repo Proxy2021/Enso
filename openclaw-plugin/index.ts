@@ -7,6 +7,7 @@ import { recordToolCall } from "./src/native-tools/tool-call-store.js";
 import { registerFilesystemTools } from "./src/filesystem-tools.js";
 
 import { registerMediaTools } from "./src/media-tools.js";
+import { registerScreenTools } from "./src/screen-tools.js";
 import { registerBrowserTools } from "./src/browser-tools.js";
 import { registerCityTools } from "./src/city-tools.js";
 import { registerResearcherTools } from "./src/researcher-tools.js";
@@ -85,6 +86,7 @@ const plugin = {
     // Media tools are registered directly (no catalog entry) — they serve as
     // the backend for the dynamic media_gallery app via ctx.callTool().
     registerMediaTools(api);
+    registerScreenTools(api);
     maybeRegisterFallbackToolFamily({
       familyLabel: "city",
       fallbackPrefix: "enso_city_",

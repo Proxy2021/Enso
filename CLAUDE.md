@@ -44,7 +44,7 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── app-persistence.ts    # Save/load dynamic apps from disk
     ├── claude-code.ts        # Claude Code CLI integration
     ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
-    ├── *-tools.ts            # Tool family implementations (filesystem, workspace, media, travel, meal)
+    ├── *-tools.ts            # Tool family implementations (filesystem, workspace, media, screen, travel, meal)
     ├── tool-families/catalog.ts  # TOOL_FAMILY_CAPABILITIES definitions
     └── native-tools/         # Zero-config native tool bridge
         ├── registry.ts       # Tool auto-discovery + template registry
