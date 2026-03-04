@@ -48,9 +48,11 @@ function errorResult(message: string): AgentToolResult {
 /** Resolve a user-provided path. Aligned with filesystem-tools.ts — no root restriction. */
 function safeResolvePath(inputPath: string): { ok: true; path: string } | { ok: false; error: string } {
   if (!inputPath || !inputPath.trim()) return { ok: false, error: "path is required" };
-  const expanded = inputPath.startsWith("~")
+  let expanded = inputPath.startsWith("~")
     ? join(homedir(), inputPath.slice(1))
     : inputPath;
+  // Bare Windows drive letters like "F:" aren't recognized as absolute — normalise to "F:\"
+  if (/^[A-Za-z]:$/.test(expanded)) expanded += "\\";
   const candidate = isAbsolute(expanded)
     ? expanded
     : join(process.cwd(), expanded);
