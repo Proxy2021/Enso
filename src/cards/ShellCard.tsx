@@ -41,9 +41,18 @@ export default function ShellCard({ card }: CardRendererProps) {
   useEffect(() => {
     if (!termRef.current || xtermRef.current) return;
 
+    // Dynamic font size: scale down on narrow screens to fit more columns.
+    // Targets 80 cols, clamped between 9px (mobile) and 13px (desktop).
+    const termPadding = 8; // 4px each side
+    const targetCols = 80;
+    const charWidthRatio = 0.6; // monospace char width ≈ fontSize × 0.6
+    const availableWidth = termRef.current.clientWidth - termPadding;
+    const idealFontSize = availableWidth / (targetCols * charWidthRatio);
+    const fontSize = Math.max(9, Math.min(13, Math.round(idealFontSize)));
+
     const terminal = new Terminal({
       cursorBlink: true,
-      fontSize: 13,
+      fontSize,
       fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Menlo, monospace",
       theme: {
         background: "#0d1117",
@@ -77,10 +86,8 @@ export default function ShellCard({ card }: CardRendererProps) {
     terminal.open(termRef.current);
 
     // Fit terminal to container, then send shell.create with measured dimensions
-    // (NOT hardcoded 80x24 — that overflows on mobile screens)
     requestAnimationFrame(() => {
       fitAddon.fit();
-      // Send shell.create with the actual measured dimensions
       const cols = terminal.cols || 80;
       const rows = terminal.rows || 24;
       wsClient?.send({
@@ -100,10 +107,15 @@ export default function ShellCard({ card }: CardRendererProps) {
       pendingOutputRef.current = "";
     }
 
-    // Handle resize
+    // Handle resize — recalculate font size for new container width
     const container = termRef.current;
     const resizeObserver = new ResizeObserver(() => {
       try {
+        const width = container.clientWidth - termPadding;
+        const newSize = Math.max(9, Math.min(13, Math.round(width / (targetCols * charWidthRatio))));
+        if (terminal.options.fontSize !== newSize) {
+          terminal.options.fontSize = newSize;
+        }
         fitAddon.fit();
       } catch {
         // ignore fit errors during unmount
