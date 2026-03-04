@@ -94,7 +94,7 @@ export default function GeneratedUI({ data, onAction }) {
           icon={<LucideReact.AlertCircle className="w-8 h-8 text-rose-400" />}
           title="Something went wrong"
           description={data.error}
-          action={<Button size="sm" onClick={() => onAction("browse", { path: "~" })}>Go Home</Button>}
+          action={<Button size="sm" onClick={() => onAction("browse", {})}>Go Home</Button>}
         />
       </div>
     );
@@ -473,7 +473,7 @@ export default function GeneratedUI({ data, onAction }) {
       <div className="bg-gray-900 rounded-xl p-3 border border-gray-700 space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => onAction("browse", { path: "~" })}>
+            <Button variant="ghost" size="sm" onClick={() => onAction("browse", {})}>
               <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
             </Button>
             <LucideReact.FolderHeart className="w-4 h-4 text-rose-400" />
@@ -559,7 +559,7 @@ export default function GeneratedUI({ data, onAction }) {
             icon={<LucideReact.ImageOff className="w-8 h-8" />}
             title="Empty collection"
             description="Browse your gallery and add photos to this collection."
-            action={<Button size="sm" onClick={() => onAction("browse", { path: "~" })}>Browse Gallery</Button>}
+            action={<Button size="sm" onClick={() => onAction("browse", {})}>Browse Gallery</Button>}
           />
         ) : (
           <div className="grid grid-cols-3 gap-1.5 max-h-80 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
@@ -598,7 +598,7 @@ export default function GeneratedUI({ data, onAction }) {
       {/* ── Header with breadcrumbs ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
-          <button onClick={() => onAction("browse", { path: "~" })}
+          <button onClick={() => onAction("browse", {})}
             className="p-1 rounded hover:bg-gray-700 cursor-pointer text-gray-400 hover:text-gray-200 shrink-0 transition-colors"
             title="Home">
             <LucideReact.Home className="w-4 h-4" />
