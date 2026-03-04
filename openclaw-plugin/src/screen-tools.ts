@@ -20,6 +20,9 @@ type KeyParams = { combo: string };
 const CACHE_DIR = join(homedir(), ".openclaw", "enso-apps", "remote_desktop", "cache");
 const MAX_CACHED = 10;
 
+/** Cached DPI scale factor (physical pixels / logical pixels). */
+let _scaleFactor = 1;
+
 // ── Lazy-loaded modules ──────────────────────────────────────────────────
 
 let _nodeScreenshots: typeof import("node-screenshots") | null = null;
@@ -86,8 +89,12 @@ async function captureScreen(
     throw new Error(`Monitor ${monitorIdx} not found (${monitors.length} available)`);
   }
 
+  // Cache DPI scale factor — Monitor methods need () call, Image has getter props
+  const sf = (monitor as any).scaleFactor();
+  if (sf && sf > 0) _scaleFactor = sf;
+
   const image = monitor.captureImageSync();
-  // node-screenshots exposes width/height as getter properties, not methods
+  // node-screenshots: Image has getter properties, Monitor has methods
   const width: number = typeof image.width === "function" ? (image as any).width() : image.width;
   const height: number = typeof image.height === "function" ? (image as any).height() : image.height;
   const timestamp = Date.now();
@@ -197,8 +204,12 @@ async function toolClick(params: ClickParams): Promise<AgentToolResult> {
       return errorResult("x and y coordinates are required");
     }
 
+    // Convert physical pixel coords (from screenshot) to logical coords (for nut.js)
+    const logicalX = Math.round(x / _scaleFactor);
+    const logicalY = Math.round(y / _scaleFactor);
+
     const nut = await getNutJs();
-    const point = new nut.Point(x, y);
+    const point = new nut.Point(logicalX, logicalY);
     await nut.mouse.setPosition(point);
 
     if (button === "right") {
@@ -241,8 +252,12 @@ async function toolScroll(params: ScrollParams): Promise<AgentToolResult> {
       return errorResult("x and y coordinates are required");
     }
 
+    // Convert physical pixel coords to logical coords
+    const logicalX = Math.round(x / _scaleFactor);
+    const logicalY = Math.round(y / _scaleFactor);
+
     const nut = await getNutJs();
-    await nut.mouse.setPosition(new nut.Point(x, y));
+    await nut.mouse.setPosition(new nut.Point(logicalX, logicalY));
 
     const scrollAmount = amount ?? 3;
     for (let i = 0; i < scrollAmount; i++) {
