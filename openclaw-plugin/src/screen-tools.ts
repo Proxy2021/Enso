@@ -87,8 +87,9 @@ async function captureScreen(
   }
 
   const image = monitor.captureImageSync();
-  const width: number = image.width();
-  const height: number = image.height();
+  // node-screenshots exposes width/height as getter properties, not methods
+  const width: number = typeof image.width === "function" ? (image as any).width() : image.width;
+  const height: number = typeof image.height === "function" ? (image as any).height() : image.height;
   const timestamp = Date.now();
   const filename = `rdp-${timestamp}.jpg`;
   const filepath = join(CACHE_DIR, filename);
