@@ -97,7 +97,10 @@ const cityHistory = getDocCollection<CachedCityExploration, CityHistoryMeta>(
 );
 
 function citySlug(city: string): string {
-  return city.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  // Keep Unicode word characters (\w includes letters/digits/underscore in Unicode mode)
+  const slug = city.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  // Fallback for edge cases where slug is empty
+  return slug || `city-${Buffer.from(city).toString("hex").slice(0, 32)}`;
 }
 
 // Hydrate in-memory cache from disk on module load
@@ -258,7 +261,7 @@ async function synthesizePlaces(
 
   const snippetText = snippets.map((s, i) => `${i + 1}. ${s.title}\n   ${s.description}\n   URL: ${s.url}`).join("\n");
 
-  const prompt = `You are a travel research assistant. Given web search results about ${category} in ${city}, extract the top ${limit} specific places/venues.
+  const prompt = `You are a world-class travel research assistant. Given web search results about ${category} in ${city}, extract the top ${limit} specific places/venues. Prioritize variety — include a mix of iconic must-visits and lesser-known local favorites.
 
 SEARCH RESULTS:
 ${snippetText}
@@ -268,26 +271,28 @@ Return valid JSON (no markdown fences) with this exact structure:
   "places": [
     {
       "name": "Place Name",
-      "description": "2-3 sentence description with what makes it special",
-      "category": "Subcategory (e.g. Fine Dining, Scenic Viewpoint, Historical Monument)",
+      "description": "3-4 vivid sentences: what makes it special, the atmosphere, a standout detail visitors remember, and why it's worth the trip. Write like a passionate local sharing their favorites.",
+      "category": "Specific subcategory (e.g. Rooftop Bar, Sunset Viewpoint, Art Deco Landmark, Family Trattoria)",
       "rating": "rating if mentioned or empty string",
-      "highlights": ["highlight 1", "highlight 2"],
+      "highlights": ["highlight 1", "highlight 2", "highlight 3"],
       "location": "neighborhood or area if known",
       "sourceUrl": "source URL from the search results",
       "priceLevel": "$ to $$$$ for restaurants, or empty string for non-restaurants",
-      "bestTime": "best time of day or season to visit (e.g. 'Golden hour', 'Morning', 'Spring')"
+      "bestTime": "specific practical advice (e.g. 'Weekday mornings to avoid crowds', 'Sunset for golden light', 'Winter for snow-capped views')"
     }
   ],
-  "summary": "One paragraph overview of ${category} in ${city}"
+  "summary": "2-3 sentence overview capturing the character and culinary/visual/historical identity of ${city} for this category. Include a practical tip."
 }
 
 Rules:
 - Return exactly ${limit} places (or fewer if not enough data)
 - Each place must be a real, specific venue/location (not generic descriptions)
-- Description should be informative and enticing
-- Category should be a specific subcategory relevant to the place type
-- priceLevel: use "$" (budget), "$$" (moderate), "$$$" (upscale), "$$$$" (luxury) for restaurants; empty for others
-- bestTime: a brief note on the ideal time to visit this place`;
+- Descriptions should paint a picture — mention textures, flavors, views, or emotions
+- Include 3 highlights per place when possible
+- Category should be highly specific (not just "Restaurant" — say "Michelin Brasserie" or "Hole-in-the-Wall Ramen")
+- priceLevel: "$" (budget), "$$" (moderate), "$$$" (upscale), "$$$$" (luxury) for restaurants; empty for others
+- bestTime: be specific and practical, not generic
+- Prioritize a diverse mix: include both famous landmarks and hidden gems`;
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
@@ -296,6 +301,11 @@ Rules:
     const parsed = JSON.parse(cleaned) as { places: Place[]; summary: string };
     // Match images to places
     const places = matchImagesToPlaces(parsed.places ?? [], images);
+    // If LLM returned valid JSON but empty places, fall back to snippet extraction
+    if (places.length === 0 && snippets.length > 0) {
+      console.log(`[enso:city] synthesizePlaces: LLM returned 0 places, falling back to snippets`);
+      return fallbackFromSnippets(snippets, images, city, limit);
+    }
     return { places: places.slice(0, limit), summary: parsed.summary ?? "" };
   } catch (err) {
     console.log(`[enso:city] synthesizePlaces LLM error: ${err}`);
@@ -365,24 +375,25 @@ async function generateTravelTips(
   geminiKey: string | undefined,
 ): Promise<{ tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string }> {
   if (!geminiKey) return { tips: [] };
-  const prompt = `You are a travel expert. For the city "${city}", provide practical travel tips.
+  const prompt = `You are a seasoned travel expert who has lived in "${city}". Provide insider-level practical tips that go beyond generic travel advice.
 
 Return valid JSON (no markdown fences):
 {
   "country": "Country name",
-  "currency": "Local currency (e.g. EUR, JPY, USD)",
+  "currency": "Local currency code (e.g. EUR, JPY, USD)",
   "language": "Primary language spoken",
-  "bestSeason": "Best season to visit (e.g. Spring, Sep-Nov)",
+  "bestSeason": "Best season to visit with specific months (e.g. 'Late spring (Apr-May)', 'Sep-Nov')",
   "tips": [
-    { "icon": "LucideIconName", "title": "Short Title", "text": "1-2 sentence practical tip" }
+    { "icon": "LucideIconName", "title": "Short Title", "text": "2-3 sentence practical tip with specific actionable advice" }
   ]
 }
 
 Rules:
-- Provide exactly 5 tips covering: best time to visit, budget/money, getting around, local customs/etiquette, safety or health
-- Icon must be a valid Lucide icon name: Sun, Wallet, Bus, Heart, Shield, Coffee, Camera, Globe, Clock, Utensils, Thermometer, Map
-- Keep tips concise and actionable
-- Focus on practical, non-obvious information`;
+- Provide exactly 7 tips covering: best time to visit, budget/money, getting around, local food culture, local customs, safety, and a unique insider tip
+- Icon must be one of: Sun, Wallet, Bus, Heart, Shield, Coffee, Camera, Globe, Clock, Utensils, Thermometer, Map
+- Be specific: mention actual prices, transit card names, neighborhood names, local phrases
+- Include at least one "locals know" tip that typical tourists miss
+- Focus on actionable, non-obvious information — skip generic advice like "be respectful"`;
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
@@ -390,7 +401,7 @@ Rules:
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const parsed = JSON.parse(cleaned) as { tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string };
     return {
-      tips: (parsed.tips ?? []).slice(0, 5),
+      tips: (parsed.tips ?? []).slice(0, 7),
       country: parsed.country,
       currency: parsed.currency,
       language: parsed.language,
@@ -476,18 +487,62 @@ async function researchCategory(
   };
   const categoryLabel = categoryLabels[category] ?? category;
   const cuisineSuffix = options?.cuisine ? ` ${options.cuisine} cuisine` : "";
-  const searchQuery = `best ${categoryLabel}${cuisineSuffix} in ${city}`;
+
+  // Multiple search queries for broader coverage
+  const queries: string[] = [];
+  if (category === "restaurants") {
+    queries.push(`best ${categoryLabel}${cuisineSuffix} in ${city}`);
+    queries.push(`top rated${cuisineSuffix} dining ${city} locals recommend`);
+    queries.push(`hidden gem${cuisineSuffix} restaurants ${city} worth visiting`);
+  } else if (category === "photo_spots") {
+    queries.push(`best ${categoryLabel} in ${city}`);
+    queries.push(`most instagrammable places ${city} photography`);
+    queries.push(`hidden scenic viewpoints ${city} golden hour`);
+  } else {
+    queries.push(`best ${categoryLabel} in ${city}`);
+    queries.push(`must see historical sites monuments ${city}`);
+    queries.push(`top cultural attractions ${city} worth visiting`);
+  }
   const imageQuery = `${city} ${categoryLabel}${cuisineSuffix} photos`;
 
-  // Run web search + image search in parallel
-  const [webResults, imageResults] = await Promise.all([
-    braveWebSearch(searchQuery, limit + 2),
-    braveImageSearch(imageQuery, limit + 2),
+  // Run all web searches + image search in parallel for broader coverage
+  const searchPromises = queries.map((q) => braveWebSearch(q, Math.ceil(limit / 2) + 2));
+  const [imageResults, ...webResultSets] = await Promise.all([
+    braveImageSearch(imageQuery, limit + 4),
+    ...searchPromises,
   ]);
 
-  const { places, summary } = await synthesizePlaces(webResults, imageResults, city, categoryLabel, limit);
-  const placesWithMaps = addMapUrls(places, city);
+  // Merge and deduplicate web results by URL
+  const seenUrls = new Set<string>();
+  const webResults: BraveWebResult[] = [];
+  for (const resultSet of webResultSets) {
+    for (const r of resultSet) {
+      if (!seenUrls.has(r.url)) {
+        seenUrls.add(r.url);
+        webResults.push(r);
+      }
+    }
+  }
+
+  let { places, summary } = await synthesizePlaces(webResults, imageResults, city, categoryLabel, limit);
   const searchSources = webResults.map((r) => r.url).filter(Boolean);
+
+  // If synthesis returned 0 places, try LLM-only research from model knowledge
+  if (places.length === 0) {
+    const geminiKey = await getGeminiApiKey();
+    if (geminiKey) {
+      try {
+        console.log(`[enso:city] synthesis returned 0 places for ${category} in ${city}, trying LLM-only`);
+        const llmResult = await llmOnlyResearch(city, category, limit, geminiKey, options?.cuisine);
+        places = llmResult.places;
+        if (!summary) summary = llmResult.summary;
+      } catch (err) {
+        console.log(`[enso:city] LLM-only fallback also failed: ${err}`);
+      }
+    }
+  }
+
+  const placesWithMaps = addMapUrls(places, city);
 
   return { places: placesWithMaps, summary, searchSources };
 }
@@ -507,28 +562,30 @@ async function llmOnlyResearch(
   const categoryLabel = categoryLabels[category] ?? category;
   const cuisineSuffix = cuisine ? ` (${cuisine} cuisine)` : "";
 
-  const prompt = `You are a knowledgeable city travel guide. Recommend the top ${limit} ${categoryLabel}${cuisineSuffix} in ${city}.
+  const prompt = `You are a passionate local travel guide for ${city}. Recommend the top ${limit} ${categoryLabel}${cuisineSuffix}, mixing iconic must-visits with hidden local favorites.
 
 Return valid JSON (no markdown fences) with this exact structure:
 {
   "places": [
     {
       "name": "Specific Place Name",
-      "description": "2-3 sentence description with what makes it special",
-      "category": "Subcategory",
+      "description": "3-4 vivid sentences capturing what makes it special, the atmosphere, a standout detail, and why it's worth visiting. Write like a local sharing favorites.",
+      "category": "Highly specific subcategory (e.g. 'Michelin Bistro', 'Rooftop Cocktail Bar', 'Gothic Cathedral')",
       "rating": "rating out of 5 if applicable, or empty string",
-      "highlights": ["highlight 1", "highlight 2"],
-      "location": "neighborhood or area",
+      "highlights": ["highlight 1", "highlight 2", "highlight 3"],
+      "location": "specific neighborhood or area",
       "priceLevel": "$ to $$$$ for restaurants, or empty string for non-restaurants",
-      "bestTime": "best time of day or season to visit"
+      "bestTime": "specific practical advice (e.g. 'Weekday mornings for fewer crowds', 'Sunset for best light')"
     }
   ],
-  "summary": "One paragraph overview of ${categoryLabel} in ${city}"
+  "summary": "2-3 sentences capturing the character of ${categoryLabel} in ${city} with a practical insider tip."
 }
 
 Rules:
 - Only recommend real, well-known places
-- Be specific with names and descriptions
+- Include a mix: some famous, some hidden gems locals love
+- Descriptions should be vivid — mention textures, flavors, views, or emotions
+- 3 highlights per place when possible
 - Return exactly ${limit} places
 - priceLevel: "$" (budget), "$$" (moderate), "$$$" (upscale), "$$$$" (luxury) for restaurants; empty for others`;
 
@@ -595,10 +652,10 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
   // Research all 3 categories + videos + travel tips in parallel
   const geminiKey = await getGeminiApiKey();
   const [restaurants, photoSpots, landmarks, videos, travelData] = await Promise.all([
-    researchCategory(city, "restaurants", { limit: 4 }),
-    researchCategory(city, "photo_spots", { limit: 4 }),
-    researchCategory(city, "landmarks", { limit: 4 }),
-    braveVideoSearch(`${city} travel guide things to do`, 6),
+    researchCategory(city, "restaurants", { limit: 6 }),
+    researchCategory(city, "photo_spots", { limit: 6 }),
+    researchCategory(city, "landmarks", { limit: 6 }),
+    braveVideoSearch(`${city} travel guide things to do`, 8),
     generateTravelTips(city, geminiKey),
   ]);
 
@@ -614,7 +671,12 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     { label: "Landmarks", category: "landmarks", places: landmarks.places },
   ];
   const allPlaces = [...restaurants.places, ...photoSpots.places, ...landmarks.places];
-  const summaryText = `Explore ${city}: ${restaurants.places.length} restaurants, ${photoSpots.places.length} photo spots, and ${landmarks.places.length} landmarks discovered.`;
+
+  // Use individual category summaries to build a richer overview
+  const categorySummaries = [restaurants.summary, photoSpots.summary, landmarks.summary].filter(Boolean);
+  const summaryText = categorySummaries.length > 0
+    ? categorySummaries[0] // Lead with the most descriptive summary from research
+    : `Explore ${city}: ${restaurants.places.length} restaurants, ${photoSpots.places.length} photo spots, and ${landmarks.places.length} landmarks discovered.`;
   const sourcesDeduped = [...new Set(allSources)].slice(0, 15);
 
   // Persist to cache + disk
