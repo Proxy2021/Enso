@@ -2,6 +2,19 @@
 
 > For detailed app building guides, API references, template rules, and code examples, see [CLAUDE-REFERENCE.md](CLAUDE-REFERENCE.md).
 
+## ⛔ CRITICAL: Never Restart Services
+
+**You are running INSIDE the Enso gateway process.** Restarting the gateway kills your own session. On reconnect your session resumes and tries to restart again, creating an **infinite restart loop**.
+
+**NEVER do any of the following after making a fix or change:**
+- Run `restart.ps1` or `restart.sh`
+- Run `powershell ... restart.ps1` or any variation
+- Run `/enso-deploy` or `/enso-release`
+- Kill node processes, run `taskkill`, or restart the scheduled task
+- Run `openclaw gateway stop/start`
+
+**After fixing code, just stop.** The user will restart services themselves when ready.
+
 ## Vision
 
 Enso is an OpenClaw channel plugin that combines conversational AI with **on-demand interactive app experiences**. Agent responses arrive as clean text cards, and users can optionally enhance any card into a fully interactive React application. Guiding principle: **"Any answer can become an app."**
