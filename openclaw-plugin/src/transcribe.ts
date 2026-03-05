@@ -7,6 +7,7 @@
 
 import { readFile } from "fs/promises";
 import { extname } from "path";
+import { logAction, logError } from "./action-log.js";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".webm", ".wma"]);
 
@@ -43,14 +44,14 @@ export async function transcribeAudio(params: {
     const ext = extname(filePath).toLowerCase();
     const mimeType = MIME_MAP[ext];
     if (!mimeType) {
-      console.log(`[enso:transcribe] unsupported audio format: ${ext}`);
+      logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `unsupported audio format: ${ext}` });
       return null;
     }
 
     const fileBuffer = await readFile(filePath);
 
     if (fileBuffer.length > MAX_FILE_SIZE) {
-      console.log(`[enso:transcribe] file too large (${(fileBuffer.length / 1024 / 1024).toFixed(1)}MB > 20MB limit): ${filePath}`);
+      logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `file too large (${(fileBuffer.length / 1024 / 1024).toFixed(1)}MB > 20MB limit): ${filePath}` });
       return null;
     }
 
@@ -87,7 +88,7 @@ export async function transcribeAudio(params: {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
-      console.log(`[enso:transcribe] Gemini API error ${response.status}: ${errorText.slice(0, 200)}`);
+      logError("transcribe", `Gemini API error ${response.status}: ${errorText.slice(0, 200)}`);
       return null;
     }
 
@@ -100,14 +101,14 @@ export async function transcribeAudio(params: {
     const transcript = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (!transcript) {
-      console.log(`[enso:transcribe] no transcript in Gemini response`);
+      logError("transcribe", "no transcript in Gemini response");
       return null;
     }
 
-    console.log(`[enso:transcribe] success: ${transcript.length} chars from ${filePath}`);
+    logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `success: ${transcript.length} chars from ${filePath}` });
     return transcript;
   } catch (err) {
-    console.log(`[enso:transcribe] failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    logError("transcribe", "transcription failed (non-fatal)", err);
     return null;
   }
 }

@@ -4,6 +4,7 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import { toMediaUrl } from "./server.js";
+import { logAction } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -105,7 +106,7 @@ async function captureScreen(
   const jpegBuffer = image.toJpegSync();
   await writeFile(filepath, jpegBuffer);
 
-  console.log(`[enso:screen] Captured ${width}x${height} → ${(jpegBuffer.length / 1024).toFixed(0)} KB`);
+  logAction({ ts: Date.now(), type: "action", category: "screen", message: `Captured ${width}x${height} → ${(jpegBuffer.length / 1024).toFixed(0)} KB` });
 
   return {
     screenshot: toMediaUrl(filepath),
@@ -391,5 +392,5 @@ export function registerScreenTools(api: OpenClawPluginApi): void {
   for (const tool of createScreenTools()) {
     api.registerTool(tool);
   }
-  console.log("[enso:screen] Registered 5 screen control tools");
+  logAction({ ts: Date.now(), type: "system", category: "screen", message: "Registered 5 screen control tools" });
 }

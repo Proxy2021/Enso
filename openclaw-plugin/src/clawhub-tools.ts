@@ -1,6 +1,7 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { logAction, logError } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -392,18 +393,18 @@ async function clawHubInstall(params: InstallParams): Promise<AgentToolResult> {
   const slug = params.slug?.trim();
   if (!slug) return errorResult("Skill slug is required");
 
-  console.log(`[enso:clawhub] Installing skill "${slug}"...`);
+  logAction({ ts: Date.now(), type: "action", category: "clawhub", message: `Installing skill "${slug}"...` });
   const result = await runClawHub(["install", slug], 30_000);
 
   if (result.code === 127) {
     return jsonResult({ tool: "enso_clawhub_install", slug, success: false, message: "clawhub CLI not found. Install with: npm install -g clawhub" });
   }
   if (result.code !== 0) {
-    console.log(`[enso:clawhub] Install failed for "${slug}": ${result.stderr}`);
+    logError("clawhub", `Install failed for "${slug}"`, undefined, { stderr: result.stderr });
     return jsonResult({ tool: "enso_clawhub_install", slug, success: false, message: result.stderr || `Failed to install "${slug}"` });
   }
 
-  console.log(`[enso:clawhub] Successfully installed "${slug}"`);
+  logAction({ ts: Date.now(), type: "action", category: "clawhub", message: `Successfully installed "${slug}"` });
   return jsonResult({
     tool: "enso_clawhub_install",
     slug,
@@ -417,18 +418,18 @@ async function clawHubUninstall(params: UninstallParams): Promise<AgentToolResul
   const slug = params.slug?.trim();
   if (!slug) return errorResult("Skill slug is required");
 
-  console.log(`[enso:clawhub] Uninstalling skill "${slug}"...`);
+  logAction({ ts: Date.now(), type: "action", category: "clawhub", message: `Uninstalling skill "${slug}"...` });
   const result = await runClawHub(["uninstall", slug], 15_000);
 
   if (result.code === 127) {
     return jsonResult({ tool: "enso_clawhub_uninstall", slug, success: false, message: "clawhub CLI not found. Install with: npm install -g clawhub" });
   }
   if (result.code !== 0) {
-    console.log(`[enso:clawhub] Uninstall failed for "${slug}": ${result.stderr}`);
+    logError("clawhub", `Uninstall failed for "${slug}"`, undefined, { stderr: result.stderr });
     return jsonResult({ tool: "enso_clawhub_uninstall", slug, success: false, message: result.stderr || `Failed to uninstall "${slug}"` });
   }
 
-  console.log(`[enso:clawhub] Successfully uninstalled "${slug}"`);
+  logAction({ ts: Date.now(), type: "action", category: "clawhub", message: `Successfully uninstalled "${slug}"` });
   return jsonResult({
     tool: "enso_clawhub_uninstall",
     slug,

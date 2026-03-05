@@ -86,14 +86,13 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
     });
     sessionId = result.sessionId;
   } catch (err) {
-    console.error(`[enso:build-via-claude] Claude Code error:`, err);
     logError("build-via-claude", "Claude Code build error", err, { cardId });
     sendBuildComplete(send, cardId, false, undefined, `Claude Code error: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
 
   // 5. Post-build: detect new app, register, execute, deliver
-  console.log(`[enso:build-via-claude] Claude Code session complete (${sessionId}). Scanning for new app...`);
+  logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `Claude Code session complete (${sessionId}). Scanning for new app...`, cardId });
   await postBuildRegistration(params, send, preExistingFamilies, buildStartTime);
 
   // 6. Post-build validation: compile-check the template, auto-fix if broken
@@ -103,9 +102,9 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
     try {
       const { transform } = await import("sucrase");
       transform(app.templateJSX, { transforms: ["jsx"], jsxRuntime: "classic" });
-      console.log(`[enso:build-via-claude] Template compile check: OK`);
+      logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: "Template compile check: OK", cardId });
     } catch (compileErr) {
-      console.log(`[enso:build-via-claude] Template compile error, resuming session to fix`);
+      logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: "Template compile error, resuming session to fix", cardId });
       logError("build-via-claude", "Template compile error, auto-fixing", compileErr, { cardId });
       const fixPrompt = [
         "The template.jsx you just created has a compile error:",
@@ -132,7 +131,6 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
         logFix({ description: "Template compile error in build", error: String(compileErr), resolution: "Auto-fixed via Claude Code session", category: "build-via-claude" });
       } catch (fixErr) {
         logError("build-via-claude", "Auto-fix session failed", fixErr, { cardId });
-        console.error(`[enso:build-via-claude] Auto-fix session failed:`, fixErr);
       }
     }
   }
@@ -154,7 +152,6 @@ async function postBuildRegistration(
     allApps = loadAllApps();
   } catch (err) {
     logError("build-via-claude", "App scan failed after build", err, { cardId });
-    console.error(`[enso:build-via-claude] Failed to scan apps:`, err);
     sendBuildComplete(send, cardId, false, undefined, "Failed to scan app directories after build.");
     return;
   }
@@ -181,7 +178,7 @@ async function postBuildRegistration(
   }
 
   if (freshApps.length === 0) {
-    console.warn(`[enso:build-via-claude] No new or modified app detected after build.`);
+    logError("build-via-claude", "No new or modified app detected after build", undefined, { cardId });
     sendBuildComplete(send, cardId, false, undefined, "Claude Code session completed but no new app was detected. Check the terminal output for details.");
     return;
   }
@@ -189,12 +186,12 @@ async function postBuildRegistration(
   // Register the first new app
   const app = freshApps[0];
   const spec = app.spec;
-  console.log(`[enso:build-via-claude] Found new app: ${spec.toolFamily} (${spec.tools.length} tools)`);
+  logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `Found new app: ${spec.toolFamily} (${spec.tools.length} tools)`, cardId, toolFamily: spec.toolFamily });
 
   try {
     registerLoadedApp(app);
   } catch (err) {
-    console.error(`[enso:build-via-claude] Registration failed:`, err);
+    logError("build-via-claude", "App registration failed", err, { cardId, toolFamily: spec.toolFamily });
     sendBuildComplete(send, cardId, false, undefined, `App registration failed: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
@@ -206,10 +203,10 @@ async function postBuildRegistration(
     if (!existsSync(skillPath)) {
       const skillMd = generateSkillMd(spec, buildAppDefinition);
       writeFileSync(skillPath, skillMd);
-      console.log(`[enso:build-via-claude] Generated SKILL.md for ${spec.toolFamily}`);
+      logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `Generated SKILL.md for ${spec.toolFamily}`, cardId, toolFamily: spec.toolFamily });
     }
   } catch (err) {
-    console.warn(`[enso:build-via-claude] SKILL.md generation warning:`, err);
+    logError("build-via-claude", "SKILL.md generation warning", err, { cardId, toolFamily: spec.toolFamily });
     // Non-fatal
   }
 
@@ -223,10 +220,10 @@ async function postBuildRegistration(
     if (result.success && result.data != null) {
       data = result.data;
     } else {
-      console.warn(`[enso:build-via-claude] Primary tool returned no data, using sampleData. Error: ${result.error}`);
+      logError("build-via-claude", "Primary tool returned no data, using sampleData", result.error, { cardId, toolName: primaryToolName });
     }
   } catch (err) {
-    console.warn(`[enso:build-via-claude] Primary tool execution failed, using sampleData:`, err);
+    logError("build-via-claude", "Primary tool execution failed, using sampleData", err, { cardId, toolName: primaryToolName });
   }
 
   // Register card context for future action dispatch
@@ -289,7 +286,7 @@ async function postBuildRegistration(
   // Send buildComplete notification (creates a notification card)
   sendBuildComplete(send, cardId, true, buildSummary);
 
-  console.log(`[enso:build-via-claude] ✓ App "${spec.toolFamily}" built and registered (${registeredToolNames.length} tools)`);
+  logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `App "${spec.toolFamily}" built and registered (${registeredToolNames.length} tools)`, cardId, toolFamily: spec.toolFamily });
   logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `Build success: ${spec.toolFamily} (${registeredToolNames.length} tools)`, cardId, toolFamily: spec.toolFamily });
 }
 

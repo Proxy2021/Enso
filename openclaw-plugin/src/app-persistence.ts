@@ -432,7 +432,6 @@ export function loadAppsFromDir(dir: string): LoadedApp[] {
       apps.push({ spec: manifest.spec, executors, templateJSX });
     } catch (err) {
       logError("persistence", `Failed to load app "${entry.name}"`, err);
-      console.log(`[enso:persistence] skipping corrupt app "${entry.name}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -464,7 +463,7 @@ export function loadAllApps(basePath?: string): LoadedApp[] {
   }
   for (const app of userApps) {
     if (merged.has(app.spec.toolFamily)) {
-      console.log(`[enso:persistence] user app "${app.spec.toolFamily}" overrides codebase version`);
+      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `user app "${app.spec.toolFamily}" overrides codebase version` });
     }
     merged.set(app.spec.toolFamily, app);
   }
@@ -551,7 +550,7 @@ export function registerLoadedApp(app: LoadedApp): void {
     description: spec.description,
   });
 
-  console.log(`[enso:persistence] registered app "${spec.toolFamily}" (${registeredToolNames.length} tools: ${registeredToolNames.join(", ")})`);
+  logAction({ ts: Date.now(), type: "action", category: "persistence", message: `registered app "${spec.toolFamily}" (${registeredToolNames.length} tools: ${registeredToolNames.join(", ")})` });
 }
 
 // ── Startup convenience ──
@@ -566,10 +565,9 @@ export function loadAndRegisterSavedApps(basePath?: string): number {
     try {
       const source = codebaseFamilies.has(app.spec.toolFamily) ? "codebase" : "user";
       registerLoadedApp(app);
-      console.log(`[enso:persistence] loaded ${source} app "${app.spec.toolFamily}"`);
+      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `loaded ${source} app "${app.spec.toolFamily}"` });
     } catch (err) {
-      logError("persistence", `Failed to register app`, err);
-      console.log(`[enso:persistence] failed to register app "${app.spec.toolFamily}": ${err instanceof Error ? err.message : String(err)}`);
+      logError("persistence", `Failed to register app "${app.spec.toolFamily}"`, err);
     }
   }
 
@@ -578,7 +576,7 @@ export function loadAndRegisterSavedApps(basePath?: string): number {
     try {
       ensureSkillMd(app, basePath);
     } catch (err) {
-      console.log(`[enso:persistence] failed to ensure SKILL.md for "${app.spec.toolFamily}": ${err instanceof Error ? err.message : String(err)}`);
+      logError("persistence", `Failed to ensure SKILL.md for "${app.spec.toolFamily}"`, err);
     }
   }
 
@@ -601,7 +599,7 @@ function ensureSkillMd(app: LoadedApp, basePath?: string): void {
   if (!fs.existsSync(managedSkillPath)) {
     fs.mkdirSync(managedSkillDir, { recursive: true });
     fs.writeFileSync(managedSkillPath, generateSkillMd(app.spec));
-    console.log(`[enso:persistence] generated SKILL.md for "${family}" at ${managedSkillDir}`);
+    logAction({ ts: Date.now(), type: "action", category: "persistence", message: `generated SKILL.md for "${family}" at ${managedSkillDir}` });
   }
 
   // 2. For codebase apps, also ensure plugin-shipped skill exists
@@ -611,7 +609,7 @@ function ensureSkillMd(app: LoadedApp, basePath?: string): void {
     if (!fs.existsSync(pluginSkillPath)) {
       fs.mkdirSync(pluginSkillDir, { recursive: true });
       fs.writeFileSync(pluginSkillPath, generateSkillMd(app.spec));
-      console.log(`[enso:persistence] generated plugin SKILL.md for codebase app "${family}" (consider committing)`);
+      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `generated plugin SKILL.md for codebase app "${family}" (consider committing)` });
     }
   }
 }
@@ -633,7 +631,7 @@ export function deleteApp(toolFamily: string, basePath?: string): boolean {
   }
 
   if (removed) {
-    console.log(`[enso:persistence] deleted app "${toolFamily}"`);
+    logAction({ ts: Date.now(), type: "action", category: "persistence", message: `deleted app "${toolFamily}"` });
   }
   return removed;
 }
@@ -697,7 +695,7 @@ export function saveAppToCodebase(toolFamily: string, basePath?: string): { succ
     // Update tracking
     codebaseFamilies.add(toolFamily);
 
-    console.log(`[enso:persistence] saved app "${toolFamily}" to codebase at ${targetDir}`);
+    logAction({ ts: Date.now(), type: "action", category: "persistence", message: `saved app "${toolFamily}" to codebase at ${targetDir}` });
     return { success: true, path: targetDir };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -727,7 +725,7 @@ export function unregisterApp(spec: PluginSpec): void {
   // Remove from capability catalog
   removeCapability(spec.toolFamily);
 
-  console.log(`[enso:persistence] unregistered app "${spec.toolFamily}" from memory`);
+  logAction({ ts: Date.now(), type: "action", category: "persistence", message: `unregistered app "${spec.toolFamily}" from memory` });
 }
 
 /**
@@ -747,12 +745,11 @@ export function deleteAllApps(basePath?: string): string[] {
       deleteApp(app.spec.toolFamily, basePath);
       deleted.push(app.spec.toolFamily);
     } catch (err) {
-      logError("persistence", "Failed to delete app", err);
-      console.log(`[enso:persistence] failed to delete app "${app.spec.toolFamily}": ${err instanceof Error ? err.message : String(err)}`);
+      logError("persistence", `Failed to delete app "${app.spec.toolFamily}"`, err);
     }
   }
 
-  console.log(`[enso:persistence] deleted all apps: ${deleted.length} removed (${deleted.join(", ") || "none"})`);
+  logAction({ ts: Date.now(), type: "action", category: "persistence", message: `deleted all apps: ${deleted.length} removed (${deleted.join(", ") || "none"})` });
   return deleted;
 }
 

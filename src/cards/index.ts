@@ -4,8 +4,15 @@ import UserBubbleCard from "./UserBubbleCard";
 import TerminalCard from "./TerminalCard";
 import ShellCard from "./ShellCard";
 import DynamicUICard from "./DynamicUICard";
+import MissionCard from "./MissionCard";
 
 // Register built-in card types (order matters — first match wins in resolve)
+
+cardRegistry.register({
+  type: "mission",
+  renderer: MissionCard,
+  match: (msg) => Boolean(msg.missionPlan || msg.missionProgress),
+});
 
 cardRegistry.register({
   type: "shell",

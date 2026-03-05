@@ -32,6 +32,7 @@ const FAMILY_LABELS: Record<string, string> = {
 function getCardLabel(card: Card, effectiveType: string): string {
   if (card.type === "terminal") return "Terminal";
   if (card.type === "shell") return "Shell";
+  if (card.type === "mission") return "Mission Planner";
   if (effectiveType === "dynamic-ui") {
     const mode = card.viewMode === "app" ? card.appCardMode : card.cardMode;
     const family = mode?.toolFamily;
@@ -56,6 +57,7 @@ const TYPE_ICONS: Record<string, string> = {
   terminal: "\uD83D\uDCBB",
   "dynamic-ui": "\u2728",
   "user-bubble": "\uD83D\uDC64",
+  mission: "\uD83C\uDFAF",
 };
 
 function truncate(text: string | undefined, max: number): string {

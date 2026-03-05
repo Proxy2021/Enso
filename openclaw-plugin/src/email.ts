@@ -11,6 +11,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { logAction, logError } from "./action-log.js";
 
 export interface SendHtmlEmailParams {
   to: string;
@@ -91,10 +92,10 @@ export async function sendHtmlEmail(params: SendHtmlEmailParams): Promise<SendEm
       (error, _stdout, stderr) => {
         if (error) {
           const msg = stderr?.trim() || error.message;
-          console.log(`[enso:email] himalaya send failed: ${msg}`);
+          logError("email", `himalaya send failed: ${msg}`);
           resolve({ success: false, message: `Email send failed: ${msg}` });
         } else {
-          console.log(`[enso:email] email sent to ${to} via himalaya`);
+          logAction({ ts: Date.now(), type: "action", category: "email", message: `email sent to ${to} via himalaya` });
           resolve({ success: true, message: `Email sent to ${to}` });
         }
       },

@@ -10,6 +10,7 @@ import { getCityTemplateCode, isCitySignature } from "./templates/city.js";
 import { getResearcherTemplateCode, isResearcherSignature } from "./templates/researcher.js";
 import { getClawHubTemplateCode, isClawHubSignature } from "./templates/clawhub.js";
 import { TOOL_FAMILY_CAPABILITIES, getCapabilityForFamily } from "../tool-families/catalog.js";
+import { logAction, logError } from "../action-log.js";
 
 // ── Types ──
 
@@ -126,7 +127,7 @@ export function registerGeneratedTool(tool: {
   execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }): void {
   generatedToolExecutors.set(tool.name, tool);
-  console.log(`[enso:native-tools] registered generated tool "${tool.name}"`);
+  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered generated tool "${tool.name}"` });
 }
 
 // ── Auto-heal helpers ──
@@ -174,18 +175,18 @@ export function hotSwapExecutor(
     },
   });
 
-  console.log(`[enso:autoheal] hot-swapped executor for "${toolName}" (${newBody.length} chars)`);
+  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `hot-swapped executor for "${toolName}" (${newBody.length} chars)` });
 }
 
 export function registerGeneratedTemplateCode(signatureId: string, code: string): void {
   generatedTemplateCode.set(signatureId, code);
-  console.log(`[enso:native-tools] registered generated template code for signature "${signatureId}"`);
+  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered generated template code for signature "${signatureId}"` });
 }
 
 /** Remove a generated tool executor by name. Returns true if it existed. */
 export function unregisterGeneratedTool(toolName: string): boolean {
   const existed = generatedToolExecutors.delete(toolName);
-  if (existed) console.log(`[enso:native-tools] unregistered generated tool "${toolName}"`);
+  if (existed) logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `unregistered generated tool "${toolName}"` });
   return existed;
 }
 
@@ -197,7 +198,7 @@ export function getGeneratedTemplateCodeBySignature(signatureId: string): string
 /** Remove generated template code by signatureId. Returns true if it existed. */
 export function unregisterGeneratedTemplateCode(signatureId: string): boolean {
   const existed = generatedTemplateCode.delete(signatureId);
-  if (existed) console.log(`[enso:native-tools] unregistered generated template code for signature "${signatureId}"`);
+  if (existed) logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `unregistered generated template code for signature "${signatureId}"` });
   return existed;
 }
 
@@ -205,7 +206,7 @@ export function unregisterGeneratedTemplateCode(signatureId: string): boolean {
 export function unregisterToolTemplate(toolFamily: string, sigId: string): boolean {
   const key = signatureKey(toolFamily, sigId);
   const existed = signatureRegistry.delete(key);
-  if (existed) console.log(`[enso:native-tools] unregistered tool template "${key}"`);
+  if (existed) logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `unregistered tool template "${key}"` });
   return existed;
 }
 
@@ -228,7 +229,7 @@ function signatureKey(toolFamily: string, signatureId: string): string {
  */
 export function registerActionMap(map: NativeToolActionMap): void {
   actionMaps.set(map.prefix, map);
-  console.log(`[enso:native-tools] registered action map "${map.name}" (prefix: ${map.prefix})`);
+  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered action map "${map.name}" (prefix: ${map.prefix})` });
 }
 
 export function registerToolTemplate(signature: ToolTemplate): void {
@@ -825,18 +826,6 @@ export function normalizeDataForToolTemplate(signature: ToolTemplate, data: unkn
   }
 }
 
-// Backward-compatible aliases during migration.
-export type SignatureCoverageStatus = ToolTemplateCoverageStatus;
-export type ToolSignature = ToolTemplate;
-export const registerToolSignature = registerToolTemplate;
-export const getToolSignature = getToolTemplate;
-export const isSignatureActionCovered = isToolActionCovered;
-export const detectSignatureForToolName = detectToolTemplateForToolName;
-export const detectCapabilitySignature = detectToolTemplateFromData;
-export const registerSignatureTemplateCandidate = registerToolTemplateCandidate;
-export const getSignatureTemplateCode = getToolTemplateCode;
-export const normalizeDataForSignature = normalizeDataForToolTemplate;
-export const registerSignatureDataHint = registerToolTemplateDataHint;
 
 function extractToolPrefix(toolName: string): string | undefined {
   const idx = toolName.lastIndexOf("_");
@@ -1068,7 +1057,7 @@ export function getRegisteredToolsDetailed(): RegisteredToolDetail[] {
 function resolveToolByName(toolName: string): { name: string; execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }> } | null {
   const registry = getPluginRegistry();
   if (!registry) {
-    console.log("[enso:native-tools] plugin registry not available");
+    logAction({ ts: Date.now(), type: "action", category: "native-tools", message: "plugin registry not available" });
     return null;
   }
 
@@ -1085,7 +1074,7 @@ function resolveToolByName(toolName: string): { name: string; execute: (callId: 
           return tool as ReturnType<typeof resolveToolByName>;
         }
       } catch (err) {
-        console.log(`[enso:native-tools] failed to resolve tool "${toolName}" from plugin "${entry.pluginId}": ${String(err)}`);
+        logError("native-tools", `failed to resolve tool "${toolName}" from plugin "${entry.pluginId}"`, err);
       }
     }
   }
@@ -1252,7 +1241,7 @@ function resolveToolsByPrefix(prefix: string): ResolvedToolMeta[] {
         });
       }
     } catch (err) {
-      console.log(`[enso:native-tools] failed to resolve tools from plugin "${entry.pluginId}": ${String(err)}`);
+      logError("native-tools", `failed to resolve tools from plugin "${entry.pluginId}"`, err);
     }
   }
 
@@ -1301,7 +1290,7 @@ function toActionName(toolName: string, prefix: string): string {
  */
 function generateActionDescriptionsFromRegistry(prefix: string): string | undefined {
   const tools = resolveToolsByPrefix(prefix);
-  console.log(`[enso:native-tools] auto-generating action descriptions for prefix "${prefix}": found ${tools.length} tools`);
+  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `auto-generating action descriptions for prefix "${prefix}": found ${tools.length} tools` });
   if (tools.length === 0) return undefined;
 
   const lines = tools.map((t) => {

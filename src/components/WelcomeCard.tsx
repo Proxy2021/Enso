@@ -40,6 +40,12 @@ const TEMPLATES: Template[] = [
     toolFamily: "remote_desktop",
   },
   {
+    icon: "\uD83C\uDFAF",
+    title: "Mission Planner",
+    description: "Design apps for your needs",
+    prompt: "/mission",
+  },
+  {
     icon: "\uD83D\uDCBB",
     title: "Code Assistant",
     description: "Open Claude Code",

@@ -23,7 +23,7 @@ async function runBackgroundCompatCheck(params: {
   client: ConnectedClient;
 }): Promise<void> {
   const { cardId, cardText, geminiApiKey, client } = params;
-  console.log(`[enso:enhance] bg compat check: cardId=${cardId}, textLen=${cardText.length}`);
+  logAction({ ts: Date.now(), type: "action", category: "enhance", message: `bg compat check: cardId=${cardId}, textLen=${cardText.length}` });
 
   const result = await selectToolForContent({
     cardText,
@@ -32,11 +32,11 @@ async function runBackgroundCompatCheck(params: {
   });
 
   if (!result) {
-    console.log(`[enso:enhance] bg compat check: no match for cardId=${cardId}`);
+    logAction({ ts: Date.now(), type: "action", category: "enhance", message: `bg compat check: no match for cardId=${cardId}` });
     return;
   }
 
-  console.log(`[enso:enhance] bg compat check: match for cardId=${cardId}, family=${result.toolFamily}`);
+  logAction({ ts: Date.now(), type: "action", category: "enhance", message: `bg compat check: match for cardId=${cardId}, family=${result.toolFamily}` });
 
   client.send({
     id: randomUUID(),
@@ -86,7 +86,7 @@ export async function handleEnsoInbound(params: {
           .map((t, i) => audioFiles.length > 1 ? `[Audio Transcript ${i + 1}]: ${t}` : `[Audio Transcript]: ${t}`)
           .join("\n\n");
         rawBody = rawBody ? `${transcriptBlock}\n\n${rawBody}` : transcriptBlock;
-        console.log(`[enso:inbound] transcribed ${validTranscripts.length}/${audioFiles.length} audio files`);
+        logAction({ ts: Date.now(), type: "action", category: "inbound", message: `Transcribed ${validTranscripts.length}/${audioFiles.length} audio files` });
       }
     }
   }
@@ -169,7 +169,7 @@ export async function handleEnsoInbound(params: {
   let seq = 0;
   const steps: Array<{ seq: number; text: string }> = [];
 
-  console.log(`[enso:inbound] dispatching: runId=${runId}, cardId=${stableCardId}, peer=${peerId}, targetCardId=${targetCardId ?? "none"}, textLen=${rawBody.length}`);
+  logAction({ ts: Date.now(), type: "action", category: "inbound", message: `Dispatching: runId=${runId}, cardId=${stableCardId}, peer=${peerId}, targetCardId=${targetCardId ?? "none"}, textLen=${rawBody.length}` });
   logAction({ ts: Date.now(), type: "action", category: "inbound", message: `Chat: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
@@ -184,7 +184,7 @@ export async function handleEnsoInbound(params: {
         if (blockText.trim()) {
           steps.push({ seq: currentSeq, text: blockText });
         }
-        console.log(`[enso:inbound] block delivered: seq=${currentSeq}, blockLen=${blockText.length}, totalSteps=${steps.length}`);
+        logAction({ ts: Date.now(), type: "action", category: "inbound", message: `Block delivered: seq=${currentSeq}, blockLen=${blockText.length}, totalSteps=${steps.length}`, cardId: stableCardId });
         await deliverEnsoReply({
           payload: payload as { text?: string; mediaUrl?: string; mediaUrls?: string[] },
           client,
@@ -239,8 +239,7 @@ export async function handleEnsoInbound(params: {
         geminiApiKey: account.geminiApiKey,
         client,
       }).catch((err) => {
-        logError("enhance", "Background compat check failed", err);
-        console.log(`[enso:enhance] bg compat check failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+        logError("enhance", "Background compat check failed (non-fatal)", err, { cardId: stableCardId });
       });
     }
   }

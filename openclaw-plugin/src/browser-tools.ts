@@ -3,6 +3,7 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdir
 import { join } from "path";
 import { homedir, tmpdir } from "os";
 import { toMediaUrl } from "./server.js";
+import { logAction } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -133,14 +134,14 @@ async function launchBrowser(): Promise<PuppeteerBrowser> {
       `--window-size=${VIEWPORT_WIDTH},${VIEWPORT_HEIGHT}`,
     ],
   }) as unknown as PuppeteerBrowser;
-  console.log("[enso:browser] Launched headless browser");
+  logAction({ ts: Date.now(), type: "action", category: "browser", message: "Launched headless browser" });
   return browser;
 }
 
 function resetIdleTimer(): void {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = setTimeout(async () => {
-    console.log("[enso:browser] Idle timeout — closing browser");
+    logAction({ ts: Date.now(), type: "action", category: "browser", message: "Idle timeout — closing browser" });
     await closeBrowser();
   }, IDLE_TIMEOUT_MS);
 }
@@ -154,7 +155,7 @@ async function getPage(): Promise<PuppeteerPage> {
   activePage = await b.newPage() as unknown as PuppeteerPage;
   await activePage.setViewport({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
   resetIdleTimer();
-  console.log("[enso:browser] Created new page");
+  logAction({ ts: Date.now(), type: "action", category: "browser", message: "Created new page" });
   return activePage;
 }
 
@@ -167,7 +168,7 @@ async function closeBrowser(): Promise<void> {
   if (browser) {
     try { await browser.close(); } catch { /* ignore */ }
     browser = null;
-    console.log("[enso:browser] Browser closed");
+    logAction({ ts: Date.now(), type: "action", category: "browser", message: "Browser closed" });
   }
 }
 

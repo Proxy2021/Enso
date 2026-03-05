@@ -1,5 +1,5 @@
 import type { UIGeneratorResult } from "./types.js";
-import { logError } from "./action-log.js";
+import { logAction, logError } from "./action-log.js";
 
 /**
  * Recursively builds a deterministic shape string from data structure.
@@ -483,8 +483,7 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000, 
 
     if (!response.ok) {
       const err = await response.text();
-      console.error(`[enso:ui-gen] Gemini API error (${model}):`, err);
-      logError("ui-gen", `Gemini API error: ${response.status}`, err);
+      logError("ui-gen", `Gemini API error (${model}): ${response.status}`, err);
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
@@ -523,7 +522,7 @@ export async function callGeminiLLMWithRetry(prompt: string, apiKey: string, mod
         throw err;
       }
       const delayMs = 500 * 2 ** (attempt - 1);
-      console.warn(`[enso:ui-gen] retrying Gemini call (${attempt}/${maxAttempts}) in ${delayMs}ms — model=${model ?? GEMINI_MODEL_FAST}`);
+      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Retrying Gemini call (${attempt}/${maxAttempts}) in ${delayMs}ms — model=${model ?? GEMINI_MODEL_FAST}` });
       await sleep(delayMs);
     }
   }
@@ -594,7 +593,7 @@ export async function callGeminiVision(params: {
         if (isRetryableGeminiError(err) && attempt < maxAttempts) {
           lastError = err;
           const delayMs = 500 * 2 ** (attempt - 1);
-          console.warn(`[enso:vision] retrying (${attempt}/${maxAttempts}) in ${delayMs}ms`);
+          logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Vision retrying (${attempt}/${maxAttempts}) in ${delayMs}ms` });
           await sleep(delayMs);
           continue;
         }
@@ -620,7 +619,7 @@ export async function callGeminiVision(params: {
         throw lastError instanceof Error ? lastError : new Error(String(lastError));
       }
       const delayMs = 500 * 2 ** (attempt - 1);
-      console.warn(`[enso:vision] retrying (${attempt}/${maxAttempts}) in ${delayMs}ms`);
+      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Vision retrying (${attempt}/${maxAttempts}) in ${delayMs}ms` });
       await sleep(delayMs);
     } finally {
       clearTimeout(timeout);
@@ -642,7 +641,7 @@ export async function serverGenerateUI(params: {
 }): Promise<UIGeneratorResult> {
   const apiKey = params.geminiApiKey;
   if (!apiKey) {
-    console.log("[enso:ui-gen] No GEMINI_API_KEY — using fallback");
+    logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: "No GEMINI_API_KEY — using fallback" });
     return { code: FALLBACK_COMPONENT, shapeKey: "fallback", cached: false };
   }
 
@@ -681,7 +680,6 @@ Remember: output ONLY the component code, starting with "export default function
     return { code, shapeKey, cached: false };
   } catch (err) {
     logError("ui-gen", "UI generation failed", err);
-    console.error("[enso:ui-gen] Generation failed:", err);
     return { code: FALLBACK_COMPONENT, shapeKey: "fallback", cached: false };
   }
 }
@@ -700,7 +698,7 @@ export async function serverGenerateUIFromText(params: {
 }): Promise<{ code: string; data: unknown; cacheKey: string; cached: boolean } | null> {
   const apiKey = params.geminiApiKey;
   if (!apiKey) {
-    console.log("[enso:ui-gen] No GEMINI_API_KEY — skipping UI generation");
+    logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: "No GEMINI_API_KEY — skipping UI generation" });
     return null;
   }
 
@@ -727,31 +725,29 @@ Assistant's response:
 ${params.assistantText}${actionSection}${domainSection}`;
 
   try {
-    console.log("[enso:ui-gen] Requesting UI generation from Gemini...");
+    logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: "Requesting UI generation from Gemini" });
     const raw = await callGeminiLLMWithRetry(
       `${TEXT_ANALYSIS_SYSTEM_PROMPT}\n\n${userPrompt}`,
       apiKey,
     );
 
     if (raw.includes("__NO_UI__")) {
-      console.log("[enso:ui-gen] LLM decided no UI needed");
+      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: "LLM decided no UI needed" });
       return null;
     }
 
     const parsed = parseGeneratorResponse(raw);
     if (!parsed) {
-      logError("ui-gen", "Text UI generation parse failed");
-      console.error("[enso:ui-gen] Failed to parse LLM response, raw:", raw.slice(0, 200));
+      logError("ui-gen", "Failed to parse LLM response", undefined, { metadata: { rawPreview: raw.slice(0, 200) } });
       return null;
     }
 
-    console.log("[enso:ui-gen] UI component generated successfully");
+    logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: "UI component generated successfully" });
     cache.set(cacheKey, parsed.code);
     dataCache.set(cacheKey, parsed.data);
     return { code: parsed.code, data: parsed.data, cacheKey, cached: false };
   } catch (err) {
-    logError("ui-gen", "Text UI generation failed", err);
-    console.error("[enso:ui-gen] Text-based generation failed:", err);
+    logError("ui-gen", "Text-based UI generation failed", err);
     return null;
   }
 }
@@ -931,7 +927,7 @@ ${params.cardText.slice(0, 4000)}`;
         },
       );
       if (!response.ok) {
-        console.log(`[enso:tool-select] Gemini returned HTTP ${response.status}`);
+        logError("ui-gen", `Tool select: Gemini returned HTTP ${response.status}`);
         return null;
       }
 
@@ -945,7 +941,7 @@ ${params.cardText.slice(0, 4000)}`;
       const textPart = parts?.filter((p) => p.text && !p.thought).pop();
       const text = textPart?.text;
       if (!text) {
-        console.log(`[enso:tool-select] Gemini returned no text. parts: ${JSON.stringify(parts?.map((p) => ({ len: p.text?.length, thought: p.thought })))}`);
+        logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: Gemini returned no text. parts: ${JSON.stringify(parts?.map((p) => ({ len: p.text?.length, thought: p.thought })))}` });
         return null;
       }
 
@@ -955,7 +951,7 @@ ${params.cardText.slice(0, 4000)}`;
         .replace(/\s*```$/, "")
         .trim();
 
-      console.log(`[enso:tool-select] response (${text.length} chars)`);
+      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: response (${text.length} chars)` });
 
       let parsed: {
         matched?: boolean;
@@ -969,14 +965,14 @@ ${params.cardText.slice(0, 4000)}`;
         // Gemini 2.5 Flash may return slightly malformed JSON — try extracting object
         const objMatch = cleaned.match(/\{[\s\S]*\}/);
         if (!objMatch) {
-          console.log(`[enso:tool-select] could not extract JSON object from response`);
+          logError("ui-gen", "Tool select: could not extract JSON object from response");
           return null;
         }
         parsed = JSON.parse(objMatch[0]);
       }
 
       if (!parsed.matched || !parsed.toolFamily || !parsed.toolName) {
-        console.log(`[enso:tool-select] no match (matched=${parsed.matched})`);
+        logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: no match (matched=${parsed.matched})` });
         return null;
       }
 
@@ -989,7 +985,7 @@ ${params.cardText.slice(0, 4000)}`;
       clearTimeout(timeout);
     }
   } catch (err) {
-    console.log(`[enso:tool-select] error: ${err instanceof Error ? err.message : String(err)}`);
+    logError("ui-gen", "Tool select failed", err);
     return null;
   }
 }

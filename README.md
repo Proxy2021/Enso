@@ -16,6 +16,7 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 - **17 built-in UI components** — Tabs, DataTable, Charts (via Recharts), Accordion, Dialog, Stat cards, and more
 - **Remote desktop** — View and control the host machine's desktop via screenshot capture, mouse click, keyboard, and scroll — all from the browser
 - **Tool integration** — File browser, media player, travel planner, meal planner, and automatic bridge to any co-loaded OpenClaw plugin's tools
+- **Mission Planner** — Describe your interests and goals, and Enso proposes and builds a suite of custom apps tailored to your needs
 - **Build custom apps** — Describe what you want, and Enso builds a full app (executors + template) that persists and can be reused
 - **Refine in place** — Type an instruction in app view to regenerate just the template (single LLM call, cheapest iteration)
 - **Claude Code integration** — Run `/code` to open a Claude Code session with streaming terminal output and interactive questions
@@ -55,6 +56,9 @@ View and control the host machine's desktop from the browser. Click anywhere on 
 ### 🖥️ Remote Terminal
 Run `/shell` to open a real interactive terminal session in the browser. Full xterm.js rendering with ANSI colors, cursor positioning, and support for interactive programs. Powered by node-pty — spawns PowerShell on Windows or bash/zsh on macOS.
 
+### 🎯 Mission Planner
+Run `/mission` and describe your interests, goals, or workflows. Enso uses Claude Code to analyze your needs, proposes 2–5 custom apps, and lets you approve, edit, or skip each one. Approved apps are built sequentially — each one a full working Enso app with executors and UI. Progress is tracked in real time with per-app status.
+
 ### ➕ Build Your Own
 Any of these can be built from scratch. Describe what you want in natural language, and Enso's build pipeline creates a full app (executors + template) that persists and can be reused. Or use the Refine flow to iterate on any existing app with a single instruction.
 
@@ -77,6 +81,7 @@ Three paths to build, from easiest to most powerful:
 |--------|-------------|----------|
 | **Enhance** | One-click React UI from any response | Quick visualizations |
 | **Build App** | Describe in natural language → Claude Code builds the full app in a live terminal | New tool families |
+| **Mission Planner** | Describe your goals → Enso proposes and builds a suite of apps | Bootstrapping a full workflow |
 | **`/code`** | Full coding agent edits the actual source code | Deep changes, new integrations, evolving the platform itself |
 
 The server, the apps, and the platform itself all grow from within — no separate IDE or deployment pipeline needed.
@@ -135,9 +140,9 @@ src/                          Frontend (React + Vite)
 openclaw-plugin/              Backend (OpenClaw channel plugin)
 ├── src/
 │   ├── server.ts             Express + WS server
-│   ├── outbound.ts           Response delivery + enhance + action dispatch
-│   ├── ui-generator.ts       LLM-based UI generation
-│   ├── tool-factory.ts       App build pipeline
+│   ├── outbound/             Response delivery, enhance, action dispatch
+│   ├── mission-planner.ts    Mission analysis + sequential app building
+│   ├── build-via-claude.ts   Claude Code app build pipeline
 │   └── native-tools/         Auto-bridge for any OpenClaw plugin's tools
 └── apps/                     Built-in app templates
 

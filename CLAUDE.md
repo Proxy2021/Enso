@@ -37,10 +37,12 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── channel.ts            # ChannelPlugin implementation
     ├── server.ts             # Express + WS server
     ├── inbound.ts            # Browser msg → OpenClaw dispatch
-    ├── outbound.ts           # Agent reply delivery, enhance, card action dispatch
+    ├── outbound.ts           # Barrel re-export (delivery, enhance, card actions, context)
+    ├── outbound/             # Outbound submodules (card-actions, card-context, delivery, helpers)
     ├── ui-generator.ts       # Gemini-based tool selection for enhance
     ├── tool-factory.ts       # Validation, auto-heal, and refine utilities
     ├── build-via-claude.ts   # Build App via Claude Code session
+    ├── mission-planner.ts    # Mission analysis + sequential app building
     ├── app-persistence.ts    # Save/load dynamic apps from disk
     ├── claude-code.ts        # Claude Code CLI integration
     ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
@@ -57,8 +59,8 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 
 ### WebSocket Protocol
 
-- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `client.error`
-- **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `questions`
+- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `mission.start`, `mission.approve`, `client.error`
+- **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `missionPlan`, `missionProgress`, `questions`
 - `chat.send` with `routing.toolId: "claude-code"` bypasses OpenClaw agent, spawns CLI directly
 - `shell.*` messages manage PTY sessions — `toolMeta.toolId === "shell"` routes to ShellCard
 - `card.action` carries `cardId`, `cardAction`, `cardPayload` — dispatched via four-path resolution
@@ -83,6 +85,16 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 ### EnsoUI Component Library
 
 17 pre-styled components injected into the sandbox: `Tabs`, `DataTable`, `Stat`, `Badge`, `Button`, `UICard`, `Progress`, `Accordion`, `Dialog`, `Select`, `Input`, `Switch`, `Slider`, `Separator`, `EmptyState`, `EnsoUI.Tooltip`, `EnsoUI.VideoPlayer`. 13 accent colors available. See CLAUDE-REFERENCE.md for props and usage.
+
+### Mission Planner
+
+- Trigger: `/mission` command or "Mission Planner" tile on WelcomeCard
+- User describes interests/goals → Claude Code analyzes and proposes 2–5 apps
+- Plan written to `openclaw-plugin/.mission-plan.json`, parsed, sent as `missionPlan` to client
+- User reviews proposals in MissionCard (approve/skip/edit each app)
+- Approved apps built sequentially via `handleBuildAppViaClaude`
+- Progress tracked via `missionProgress` messages (analyzing → proposing → building → complete)
+- Key files: `mission-planner.ts` (backend), `MissionCard.tsx` (frontend), card type `"mission"`
 
 ### Claude Code Integration
 

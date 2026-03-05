@@ -1,6 +1,7 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { getDocCollection, type DocMeta } from "./persistence.js";
 import { sendHtmlEmail } from "./email.js";
+import { logAction, logError } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -185,7 +186,7 @@ async function braveVideoSearch(query: string, count = 6): Promise<CityVideo[]> 
 async function braveWebSearch(query: string, count = 5): Promise<BraveWebResult[]> {
   const apiKey = getBraveApiKey();
   if (!apiKey) {
-    console.log("[enso:city] braveWebSearch: no BRAVE_API_KEY");
+    logAction({ ts: Date.now(), type: "action", category: "city", message: "braveWebSearch: no BRAVE_API_KEY" });
     return [];
   }
   const url = new URL("https://api.search.brave.com/res/v1/web/search");
@@ -201,7 +202,7 @@ async function braveWebSearch(query: string, count = 5): Promise<BraveWebResult[
       signal: ac.signal,
     });
     if (!resp.ok) {
-      console.log(`[enso:city] braveWebSearch failed: ${resp.status}`);
+      logError("city", "braveWebSearch failed", undefined, { status: resp.status });
       return [];
     }
     const body = (await resp.json()) as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
@@ -211,7 +212,7 @@ async function braveWebSearch(query: string, count = 5): Promise<BraveWebResult[
       description: r.description ?? "",
     }));
   } catch (err) {
-    console.log(`[enso:city] braveWebSearch error: ${err}`);
+    logError("city", "braveWebSearch error", err);
     return [];
   } finally {
     clearTimeout(timer);
@@ -307,12 +308,12 @@ Rules:
     const places = matchImagesToPlaces(parsed.places ?? [], images);
     // If LLM returned valid JSON but empty places, fall back to snippet extraction
     if (places.length === 0 && snippets.length > 0) {
-      console.log(`[enso:city] synthesizePlaces: LLM returned 0 places, falling back to snippets`);
+      logAction({ ts: Date.now(), type: "action", category: "city", message: "synthesizePlaces: LLM returned 0 places, falling back to snippets" });
       return fallbackFromSnippets(snippets, images, city, limit);
     }
     return { places: places.slice(0, limit), summary: parsed.summary ?? "" };
   } catch (err) {
-    console.log(`[enso:city] synthesizePlaces LLM error: ${err}`);
+    logError("city", "synthesizePlaces LLM error", err);
     return fallbackFromSnippets(snippets, images, city, limit);
   }
 }
@@ -448,7 +449,7 @@ Rules:
       bestSeason: parsed.bestSeason,
     };
   } catch (err) {
-    console.log(`[enso:city] generateTravelTips error: ${err}`);
+    logError("city", "generateTravelTips error", err);
     return { tips: [] };
   }
 }
@@ -502,13 +503,13 @@ async function researchCategory(
 
   // If no Brave API key, use LLM-only research or sample data
   if (!getBraveApiKey()) {
-    console.log(`[enso:city] No BRAVE_API_KEY — attempting LLM-only research for ${category} in ${city}`);
+    logAction({ ts: Date.now(), type: "action", category: "city", message: `No BRAVE_API_KEY — attempting LLM-only research for ${category} in ${city}` });
     const geminiKey = await getGeminiApiKey();
     if (geminiKey) {
       try {
         return await llmOnlyResearch(city, category, limit, geminiKey, options?.cuisine);
       } catch (err) {
-        console.log(`[enso:city] LLM-only research failed: ${err}`);
+        logError("city", "LLM-only research failed", err);
       }
     }
     // Final fallback: sample data
@@ -572,12 +573,12 @@ async function researchCategory(
     const geminiKey = await getGeminiApiKey();
     if (geminiKey) {
       try {
-        console.log(`[enso:city] synthesis returned 0 places for ${category} in ${city}, trying LLM-only`);
+        logAction({ ts: Date.now(), type: "action", category: "city", message: `synthesis returned 0 places for ${category} in ${city}, trying LLM-only` });
         const llmResult = await llmOnlyResearch(city, category, limit, geminiKey, options?.cuisine);
         places = llmResult.places;
         if (!summary) summary = llmResult.summary;
       } catch (err) {
-        console.log(`[enso:city] LLM-only fallback also failed: ${err}`);
+        logError("city", "LLM-only fallback also failed", err);
       }
     }
   }
@@ -670,7 +671,7 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
   const cacheKey = city.toLowerCase();
   if (!params.force && cityCache.has(cacheKey)) {
     const cached = cityCache.get(cacheKey)!;
-    console.log(`[enso:city] cache hit for "${city}" (${cached.places.length} places, ${cached.videos.length} videos)`);
+    logAction({ ts: Date.now(), type: "action", category: "city", message: `cache hit for "${city}" (${cached.places.length} places, ${cached.videos.length} videos)` });
     return jsonResult({
       tool: "enso_city_explore",
       city: cached.city,
@@ -747,9 +748,9 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       videoCount: videos.length,
       summaryPreview: summaryText.slice(0, 120),
     });
-    console.log(`[enso:city] saved exploration for "${city}" (${allPlaces.length} places, ${videos.length} videos, ${travelData.tips.length} tips)`);
+    logAction({ ts: Date.now(), type: "action", category: "city", message: `saved exploration for "${city}" (${allPlaces.length} places, ${videos.length} videos, ${travelData.tips.length} tips)` });
   } catch (err) {
-    console.log(`[enso:city] failed to persist exploration: ${err}`);
+    logError("city", "failed to persist exploration", err);
   }
 
   return jsonResult({
@@ -888,9 +889,9 @@ async function citySendEmail(params: SendEmailParams): Promise<AgentToolResult> 
         videoCount: videos.length,
       });
     }
-    console.log(`[enso:city] himalaya send failed: ${result.message}`);
+    logError("city", "himalaya send failed", undefined, { errorMessage: result.message });
   } catch (err) {
-    console.log(`[enso:city] himalaya send error: ${err}`);
+    logError("city", "himalaya send error", err);
   }
 
   // Fallback: return HTML for manual use

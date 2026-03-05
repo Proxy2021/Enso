@@ -1,3 +1,5 @@
+import { logAction } from "../action-log.js";
+
 export interface ToolFamilyCapability {
   toolFamily: string;
   fallbackToolName: string;
@@ -65,7 +67,7 @@ export function getCapabilityForFamily(toolFamily: string): ToolFamilyCapability
 export function addCapability(capability: ToolFamilyCapability): void {
   if (TOOL_FAMILY_CAPABILITIES.some((c) => c.toolFamily === capability.toolFamily)) return;
   TOOL_FAMILY_CAPABILITIES.push(capability);
-  console.log(`[enso:catalog] registered new capability "${capability.toolFamily}"`);
+  logAction({ ts: Date.now(), type: "action", category: "catalog", message: `registered new capability "${capability.toolFamily}"` });
 }
 
 /** Remove a dynamically added capability by toolFamily. Returns true if removed. */
@@ -73,7 +75,7 @@ export function removeCapability(toolFamily: string): boolean {
   const idx = TOOL_FAMILY_CAPABILITIES.findIndex((c) => c.toolFamily === toolFamily);
   if (idx === -1) return false;
   TOOL_FAMILY_CAPABILITIES.splice(idx, 1);
-  console.log(`[enso:catalog] removed capability "${toolFamily}"`);
+  logAction({ ts: Date.now(), type: "action", category: "catalog", message: `removed capability "${toolFamily}"` });
   return true;
 }
 

@@ -143,7 +143,7 @@ export async function startEnsoServer(opts: {
       console.log(`[enso] re-hydrated ${appCount} saved app(s) from disk`);
     }
   } catch (err) {
-    console.log(`[enso] app re-hydration failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+    logError("system", "app re-hydration failed (non-fatal)", err);
   }
 
   // Conditionally load shell PTY support (requires node-pty native module)
@@ -521,7 +521,7 @@ export async function startEnsoServer(opts: {
   app.post("/upload", express.raw({ type: () => true, limit: "50mb" }), (req, res) => {
     const contentType = req.headers["content-type"] ?? "application/octet-stream";
     const bodyLen = Buffer.isBuffer(req.body) ? req.body.length : 0;
-    console.log(`[enso:upload] Received: contentType=${contentType}, bodyLen=${bodyLen}, isBuffer=${Buffer.isBuffer(req.body)}`);
+    logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload received: contentType=${contentType}, bodyLen=${bodyLen}, isBuffer=${Buffer.isBuffer(req.body)}` });
     const extMap: Record<string, string> = {
       // Images
       "image/png": ".png",
@@ -571,7 +571,7 @@ export async function startEnsoServer(opts: {
         if (json.data && json.mimeType) {
           fileBuffer = Buffer.from(json.data, "base64");
           mimeType = json.mimeType;
-          console.log(`[enso:upload] Decoded base64 JSON: mimeType=${mimeType}, decodedLen=${fileBuffer.length}`);
+          logAction({ ts: Date.now(), type: "action", category: "upload", message: `Decoded base64 JSON: mimeType=${mimeType}, decodedLen=${fileBuffer.length}` });
         } else {
           // Regular JSON file upload
           fileBuffer = req.body;
@@ -585,7 +585,7 @@ export async function startEnsoServer(opts: {
 
     // Reject corrupt uploads (Capacitor Blob serialization produces 2-byte "{}")
     if (fileBuffer.length < 200 && mimeType.startsWith("image/")) {
-      console.warn(`[enso:upload] Rejecting corrupt image upload: ${fileBuffer.length} bytes`);
+      logError("upload", `Rejecting corrupt image upload: ${fileBuffer.length} bytes`);
       res.status(400).json({ error: "Upload too small — image appears corrupt. Please try again." });
       return;
     }
@@ -596,8 +596,7 @@ export async function startEnsoServer(opts: {
 
     writeFileSync(filePath, fileBuffer);
     const mediaUrl = toMediaUrl(filePath);
-    console.log(`[enso:upload] Saved: ${filename} (${fileBuffer.length} bytes, ${mimeType})`);
-    logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload: ${filename} (${fileBuffer.length} bytes, ${mimeType})` });
+    logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload saved: ${filename} (${fileBuffer.length} bytes, ${mimeType})` });
     res.json({ mediaUrl, filePath });
   });
 
@@ -717,7 +716,7 @@ export async function startEnsoServer(opts: {
         acknowledgeFixes(unackedFixes.map((f) => f.id));
       }
     } catch (err) {
-      console.error(`[enso] failed to send resolved bugs:`, err);
+      logError("server", "Failed to send resolved bugs", err instanceof Error ? err : undefined);
     }
 
     ws.on("message", async (raw) => {
@@ -876,6 +875,40 @@ export async function startEnsoServer(opts: {
               });
             }
             break;
+          case "mission.start": {
+            if (msg.missionDescription) {
+              runtime.log?.(`[enso] mission start: ${msg.missionDescription.slice(0, 80)}`);
+              const { handleMissionStart } = await import("./mission-planner.js");
+              const missionCardId = msg.cardId || randomUUID();
+              handleMissionStart({
+                description: msg.missionDescription,
+                cardId: missionCardId,
+                client,
+                account,
+              }).catch((err) => {
+                logError("mission-planner", "Unhandled mission start error", err);
+                runtime.error?.(`[enso] mission-planner error: ${err instanceof Error ? err.message : String(err)}`);
+              });
+            }
+            break;
+          }
+          case "mission.approve": {
+            if (msg.missionId && msg.approvedApps) {
+              runtime.log?.(`[enso] mission approve: ${msg.missionId} (${msg.approvedApps.filter((a: any) => a.approved).length} apps)`);
+              const { handleMissionApprove } = await import("./mission-planner.js");
+              handleMissionApprove({
+                missionId: msg.missionId,
+                approvedApps: msg.approvedApps,
+                cardId: msg.cardId || "",
+                client,
+                account,
+              }).catch((err) => {
+                logError("mission-planner", "Unhandled mission approve error", err);
+                runtime.error?.(`[enso] mission-planner approve error: ${err instanceof Error ? err.message : String(err)}`);
+              });
+            }
+            break;
+          }
           case "apps.list": {
             try {
               const { loadAllApps, isCodebaseApp } = await import("./app-persistence.js");

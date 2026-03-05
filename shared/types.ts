@@ -64,6 +64,33 @@ export interface AppInfo {
   codebase?: boolean;
 }
 
+// ── Mission Planner ──
+
+export interface MissionAppProposal {
+  id: string;
+  name: string;
+  family: string;        // snake_case family name
+  description: string;
+  capabilities: string[];
+  approved: boolean;
+}
+
+export interface MissionPlan {
+  missionId: string;
+  description: string;
+  apps: MissionAppProposal[];
+}
+
+export interface MissionProgress {
+  missionId: string;
+  currentIndex: number;
+  totalApps: number;
+  currentApp: string;
+  stage: "analyzing" | "proposing" | "building" | "built" | "failed" | "complete";
+  error?: string;
+  builtApps?: Array<{ family: string; success: boolean; error?: string }>;
+}
+
 // ── Protocol Messages ──
 
 export interface ToolBuildSummary {
@@ -109,6 +136,8 @@ export interface ServerMessage {
   appsDeleted?: { families: string[]; count: number };
   appsList?: AppInfo[];
   appSaved?: { toolFamily: string; success: boolean; path?: string; error?: string };
+  missionPlan?: MissionPlan;
+  missionProgress?: MissionProgress;
   buildComplete?: {
     cardId: string;
     success: boolean;
@@ -159,6 +188,8 @@ export interface ClientMessage {
     | "shell.input"
     | "shell.resize"
     | "shell.destroy"
+    | "mission.start"
+    | "mission.approve"
     | "client.error";
   mode?: ChannelMode;
   text?: string;
@@ -193,6 +224,11 @@ export interface ClientMessage {
   shellInput?: string;
   shellCols?: number;
   shellRows?: number;
+  // mission.start fields
+  missionDescription?: string;
+  // mission.approve fields
+  missionId?: string;
+  approvedApps?: MissionAppProposal[];
   // client.error fields
   clientError?: {
     message: string;

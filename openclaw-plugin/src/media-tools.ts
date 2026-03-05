@@ -5,6 +5,7 @@ import { homedir, platform } from "os";
 import { execSync, execFileSync } from "child_process";
 import { toMediaUrl } from "./server.js";
 import { parseImageMeta, type ExifData } from "./exif-parser.js";
+import { logError } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -224,7 +225,7 @@ function storeSave(): void {
     mkdirSync(STORE_DIR, { recursive: true });
     writeFileSync(STORE_PATH, JSON.stringify(storeCache, null, 2), "utf-8");
   } catch (e) {
-    console.error("[enso:media] store write error:", e);
+    logError("media", "store write error", e);
   }
 }
 
