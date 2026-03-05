@@ -19,7 +19,7 @@ import {
 } from "./native-tools/registry.js";
 import { addCapability, removeCapability } from "./tool-families/catalog.js";
 import { getDocCollection } from "./persistence.js";
-import { logError } from "./action-log.js";
+import { logAction, logError } from "./action-log.js";
 
 // ── Codebase Apps Directory ──
 
@@ -52,11 +52,11 @@ export function persistExecutorFix(toolFamily: string, suffix: string, body: str
     const execPath = path.join(dir, toolFamily, "executors", `${suffix}.js`);
     if (fs.existsSync(execPath)) {
       fs.writeFileSync(execPath, body, "utf-8");
-      console.log(`[enso:autoheal] persisted executor fix for ${toolFamily}/${suffix} at ${execPath}`);
+      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `persisted executor fix for ${toolFamily}/${suffix} at ${execPath}` });
       return;
     }
   }
-  console.log(`[enso:autoheal] could not find executor file on disk for ${toolFamily}/${suffix} — fix is in-memory only`);
+  logAction({ ts: Date.now(), type: "action", category: "persistence", message: `could not find executor file on disk for ${toolFamily}/${suffix} — fix is in-memory only` });
 }
 
 /** Persist a fixed template JSX to disk (user apps first, then codebase). */
@@ -65,11 +65,11 @@ export function persistTemplateFix(toolFamily: string, templateJSX: string): voi
     const templatePath = path.join(dir, toolFamily, "template.jsx");
     if (fs.existsSync(templatePath)) {
       fs.writeFileSync(templatePath, templateJSX, "utf-8");
-      console.log(`[enso:autoheal] persisted template fix for ${toolFamily} at ${templatePath}`);
+      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `persisted template fix for ${toolFamily} at ${templatePath}` });
       return;
     }
   }
-  console.log(`[enso:autoheal] could not find template file on disk for ${toolFamily} — fix is in-memory only`);
+  logAction({ ts: Date.now(), type: "action", category: "persistence", message: `could not find template file on disk for ${toolFamily} — fix is in-memory only` });
 }
 
 // ── Types ──
@@ -168,11 +168,10 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
           ac.signal.addEventListener("abort", () => reject(new Error(`ctx.${label} timed out after ${EXECUTOR_CTX_TIMEOUT_MS}ms`)));
         }),
       ]);
-      console.log(`[enso:executor-ctx] ${tag} → ${label} [${Date.now() - t0}ms]`);
+      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `executor-ctx ${tag} → ${label} [${Date.now() - t0}ms]` });
       return result;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log(`[enso:executor-ctx] ${tag} → ${label} FAILED [${Date.now() - t0}ms] — ${msg}`);
+      logError("persistence", `executor-ctx ${tag} → ${label} FAILED [${Date.now() - t0}ms]`, err);
       throw err;
     } finally {
       callDepth--;
@@ -251,7 +250,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
       return withTimeout(`search("${query}")`, async () => {
         const apiKey = process.env.BRAVE_API_KEY;
         if (!apiKey) {
-          console.log(`[enso:executor-ctx] ${tag} → search: no BRAVE_API_KEY, returning empty`);
+          logAction({ ts: Date.now(), type: "action", category: "persistence", message: `executor-ctx ${tag} → search: no BRAVE_API_KEY, returning empty` });
           return { ok: false as const, results: [] };
         }
 
@@ -388,7 +387,7 @@ export function saveApp(app: SavedApp, basePath?: string): void {
   fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(path.join(skillDir, "SKILL.md"), app.skillMd);
 
-  console.log(`[enso:persistence] saved app "${app.spec.toolFamily}" (${app.executors.size} tools)`);
+  logAction({ ts: Date.now(), type: "action", category: "persistence", message: `saved app "${app.spec.toolFamily}" (${app.executors.size} tools)` });
 }
 
 // ── Load ──
@@ -413,7 +412,7 @@ export function loadAppsFromDir(dir: string): LoadedApp[] {
       const manifest: AppManifest = JSON.parse(manifestRaw);
 
       if (!manifest.spec?.toolFamily || !Array.isArray(manifest.spec.tools)) {
-        console.log(`[enso:persistence] skipping corrupt app "${entry.name}": invalid manifest`);
+        logAction({ ts: Date.now(), type: "action", category: "persistence", message: `skipping corrupt app "${entry.name}": invalid manifest` });
         continue;
       }
 
