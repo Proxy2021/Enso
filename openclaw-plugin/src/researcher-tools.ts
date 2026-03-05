@@ -1,6 +1,7 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { getDocCollection, type DocMeta } from "./persistence.js";
 import { sendHtmlEmail } from "./email.js";
+import { logAction, logError } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -338,7 +339,7 @@ async function enrichSourcesWithContent(sources: Source[]): Promise<void> {
 
   if (candidates.length === 0) return;
 
-  console.log(`[enso:researcher] fetching full content from ${candidates.length} sources...`);
+  logAction({ ts: Date.now(), type: "action", category: "researcher", message: `fetching full content from ${candidates.length} sources...` });
   const startTime = Date.now();
 
   const results = await Promise.allSettled(
@@ -352,7 +353,7 @@ async function enrichSourcesWithContent(sources: Source[]): Promise<void> {
 
   const succeeded = candidates.filter((s) => s.fullContent).length;
   const elapsed = Date.now() - startTime;
-  console.log(`[enso:researcher] content extraction: ${succeeded}/${candidates.length} sources in ${elapsed}ms`);
+  logAction({ ts: Date.now(), type: "action", category: "researcher", message: `content extraction: ${succeeded}/${candidates.length} sources in ${elapsed}ms` });
 }
 
 // ── Brave Search ──
@@ -360,7 +361,7 @@ async function enrichSourcesWithContent(sources: Source[]): Promise<void> {
 async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[]> {
   const apiKey = getBraveApiKey();
   if (!apiKey) {
-    console.log("[enso:researcher] braveWebSearch: no BRAVE_API_KEY");
+    logError("researcher", "braveWebSearch: no BRAVE_API_KEY", undefined, {});
     return [];
   }
   const url = new URL("https://api.search.brave.com/res/v1/web/search");
@@ -376,7 +377,7 @@ async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[
       signal: ac.signal,
     });
     if (!resp.ok) {
-      console.log(`[enso:researcher] braveWebSearch failed: ${resp.status}`);
+      logError("researcher", `braveWebSearch failed: ${resp.status}`, undefined, { status: resp.status });
       return [];
     }
     const body = (await resp.json()) as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
@@ -386,7 +387,7 @@ async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[
       description: r.description ?? "",
     }));
   } catch (err) {
-    console.log(`[enso:researcher] braveWebSearch error: ${err}`);
+    logError("researcher", "braveWebSearch error", err, {});
     return [];
   } finally {
     clearTimeout(timer);
@@ -815,7 +816,7 @@ Rules:
 
     return jsonResult(result);
   } catch (err) {
-    console.log(`[enso:researcher] LLM-only research failed: ${err}`);
+    logError("researcher", "LLM-only research failed", err, { topic, depth });
     return generateSampleResearch(topic, depth);
   }
 }
@@ -879,7 +880,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   if (!params.force) {
     const cached = researchCache.get(topic.toLowerCase());
     if (cached) {
-      console.log(`[enso:researcher] returning cached research for "${topic}"`);
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `returning cached research for "${topic}"` });
       return jsonResult({
         tool: "enso_researcher_search",
         topic: cached.topic,
@@ -907,20 +908,20 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
 
   // Fallback: no Brave key
   if (!getBraveApiKey()) {
-    console.log(`[enso:researcher] No BRAVE_API_KEY — attempting LLM-only research`);
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `No BRAVE_API_KEY — attempting LLM-only research` });
     const geminiKey = await getGeminiApiKey();
     if (geminiKey) {
       try {
         return await llmOnlyResearch(topic, depth, geminiKey);
       } catch (err) {
-        console.log(`[enso:researcher] LLM-only failed: ${err}`);
+        logError("researcher", "LLM-only failed", err, { topic, depth });
       }
     }
     return generateSampleResearch(topic, depth);
   }
 
   // Parallel Brave searches + image/video searches (zero extra latency)
-  console.log(`[enso:researcher] searching "${topic}" (${depth}): ${queries.length} queries + media`);
+  logAction({ ts: Date.now(), type: "action", category: "researcher", message: `searching "${topic}" (${depth}): ${queries.length} queries + media` });
   const [allBatches, rawImages, rawVideos] = await Promise.all([
     Promise.all(queries.map((q) => braveWebSearch(q, 6))),
     braveImageSearch(`${topic} photos images`, 10),
@@ -929,7 +930,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   const sources = deduplicateAndScore(allBatches);
 
   if (sources.length === 0) {
-    console.log(`[enso:researcher] no search results for "${topic}"`);
+    logError("researcher", `no search results for "${topic}"`, undefined, { topic, depth });
     const geminiKey = await getGeminiApiKey();
     if (geminiKey) return llmOnlyResearch(topic, depth, geminiKey);
     return generateSampleResearch(topic, depth);
@@ -1024,10 +1025,10 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       summaryPreview: (result.summary ?? "").slice(0, 150),
     });
 
-    console.log(`[enso:researcher] research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos`);
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos` });
     return jsonResult(result);
   } catch (err) {
-    console.log(`[enso:researcher] LLM synthesis error: ${err}`);
+    logError("researcher", "LLM synthesis error", err, { topic, depth });
     return fallbackFromSources(topic, depth, sources);
   }
 }
@@ -1155,7 +1156,7 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
       images: deepDiveImages,
     });
   } catch (err) {
-    console.log(`[enso:researcher] deep dive LLM error: ${err}`);
+    logError("researcher", "deep dive LLM error", err, { topic, subtopic });
     return jsonResult({
       tool: "enso_researcher_deep_dive",
       topic,
@@ -1233,7 +1234,7 @@ async function researcherCompare(params: CompareParams): Promise<AgentToolResult
       sources: sources.slice(0, 15),
     });
   } catch (err) {
-    console.log(`[enso:researcher] compare LLM error: ${err}`);
+    logError("researcher", "compare LLM error", err, { topicA, topicB, context });
     return jsonResult({
       tool: "enso_researcher_compare",
       topicA,
@@ -1303,7 +1304,7 @@ async function researcherFollowUp(params: FollowUpParams): Promise<AgentToolResu
       suggestedFollowUps: Array.isArray(parsed.suggestedFollowUps) ? parsed.suggestedFollowUps : [],
     });
   } catch (err) {
-    console.log(`[enso:researcher] follow-up LLM error: ${err}`);
+    logError("researcher", "follow-up LLM error", err, { topic, question });
     return jsonResult({
       tool: "enso_researcher_follow_up",
       topic,
@@ -1380,9 +1381,9 @@ async function researcherSendReport(params: SendReportParams): Promise<AgentTool
         findingCount: keyFindings.length,
       });
     }
-    console.log(`[enso:researcher] himalaya send failed: ${result.message}`);
+    logError("researcher", `himalaya send failed: ${result.message}`, undefined, { recipient, topic });
   } catch (err) {
-    console.log(`[enso:researcher] himalaya send error: ${err}`);
+    logError("researcher", "himalaya send error", err, { recipient, topic });
   }
 
   // Fallback: return HTML for manual use
@@ -1638,7 +1639,7 @@ async function researcherDeleteHistory(params: { topic: string }): Promise<Agent
   const slug = topicSlug(topic);
   researchCache.delete(topic.toLowerCase());
   researchHistory.remove(slug);
-  console.log(`[enso:researcher] deleted history for "${topic}" (slug: ${slug})`);
+  logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deleted history for "${topic}" (slug: ${slug})` });
 
   // Return updated welcome view
   return researcherSearch({ topic: "" } as SearchParams);
