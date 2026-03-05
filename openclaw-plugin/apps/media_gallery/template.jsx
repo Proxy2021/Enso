@@ -493,23 +493,23 @@ export default function GeneratedUI({ data, onAction }) {
 
       {/* ── Subdirectories ── */}
       {directories.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="grid grid-cols-2 gap-1.5">
           {directories.slice(0, 10).map((dir, i) => (
             <button key={i} onClick={() => onAction("browse", { path: dir.path })}
-              className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-800/50 rounded-lg border border-gray-700/40 hover:bg-gray-800 hover:border-blue-500/30 cursor-pointer text-gray-300 transition-all">
-              <LucideReact.Folder className="w-3 h-3 text-amber-500" />
-              <span className="truncate" style={{ maxWidth: "100px" }}>{dir.name}</span>
-              {dir.itemCount > 0 && <span className="text-[9px] text-gray-500">{dir.itemCount}</span>}
+              className="flex items-center gap-2 px-3 py-2.5 text-sm bg-gray-800/60 rounded-xl border border-gray-700/50 hover:bg-gray-700/60 hover:border-amber-500/30 cursor-pointer text-gray-200 transition-all">
+              <LucideReact.Folder className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <span className="truncate flex-1">{dir.name}</span>
+              {dir.itemCount > 0 && <span className="text-[10px] text-gray-500 bg-gray-700/50 px-1.5 py-0.5 rounded-full">{dir.itemCount}</span>}
             </button>
           ))}
           {directories.length > 10 && (
-            <span className="text-[10px] text-gray-500 self-center ml-1">+{directories.length - 10} more</span>
+            <span className="text-[10px] text-gray-500 self-center ml-1 col-span-2">+{directories.length - 10} more</span>
           )}
         </div>
       )}
 
       {/* ── Content ── */}
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && (favOnly || searchQuery || directories.length === 0) ? (
         <EmptyState
           icon={<LucideReact.ImageOff className="w-8 h-8" />}
           title={favOnly ? "No favorites" : searchQuery ? "No matches" : "No media files"}
