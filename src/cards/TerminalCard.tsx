@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useChatStore, type ProjectInfo } from "../store/chat";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { useVoiceInput } from "../components/VoiceMicButton";
@@ -782,16 +783,28 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
   const projects = useChatStore((s) => s.projects);
   const fetchProjects = useChatStore((s) => s.fetchProjects);
   const switchTerminalProject = useChatStore((s) => s.switchTerminalProject);
-  const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
 
   useEffect(() => {
     if (isOpen && projects.length === 0) fetchProjects();
   }, [isOpen, projects.length, fetchProjects]);
 
   useEffect(() => {
+    if (isOpen && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setIsOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -800,8 +813,9 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
   const projectName = currentCwd.replace(/\\/g, "/").split("/").pop() ?? currentCwd;
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={btnRef}
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1 text-gray-500 hover:text-gray-300 transition-colors truncate max-w-[180px]"
         title={`Project: ${currentCwd}\nClick to switch`}
@@ -810,8 +824,12 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
         <span className="truncate">{projectName}</span>
         <span className="text-[8px] opacity-60">▼</span>
       </button>
-      {isOpen && (
-        <div className="absolute top-full right-0 mt-1 w-72 max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1">
+      {isOpen && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed w-72 max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1"
+          style={{ top: pos.top, right: pos.right }}
+        >
           {projects.length === 0 ? (
             <div className="px-3 py-2 text-gray-500 text-xs">Scanning...</div>
           ) : (
@@ -831,9 +849,10 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
 
