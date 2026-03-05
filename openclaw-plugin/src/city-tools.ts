@@ -27,11 +27,13 @@ interface Place {
   category: string;
   rating?: string;
   imageUrl?: string;
+  galleryImages?: string[];  // additional images for carousel
   sourceUrl?: string;
   highlights?: string[];
   location?: string;
   priceLevel?: string;    // "$" to "$$$$"
   mapUrl?: string;        // Google Maps link
+  streetViewUrl?: string; // Google Street View link
   bestTime?: string;      // best time to visit
 }
 
@@ -68,6 +70,8 @@ interface TravelTip {
 
 interface CachedCityExploration {
   city: string;
+  heroImageUrl?: string;      // city skyline/panorama hero image
+  heroImageUrls?: string[];   // multiple hero candidates for gallery
   sections: Array<{ label: string; category: string; places: Place[] }>;
   places: Place[];
   summary: string;
@@ -333,40 +337,76 @@ function matchImagesToPlaces(places: Place[], images: BraveImageResult[]): Place
   const usedImages = new Set<number>();
   return places.map((place) => {
     if (place.imageUrl) return place;
-    // Fuzzy match: find image whose title contains any word from the place name (3+ chars)
+    // Fuzzy match: find images whose title contains any word from the place name (3+ chars)
     const nameWords = place.name.toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
-    let bestIdx = -1;
-    let bestScore = 0;
+
+    // Score all images for this place
+    const scored: Array<{ idx: number; score: number }> = [];
     for (let i = 0; i < images.length; i++) {
-      if (usedImages.has(i)) continue;
       const imgTitle = images[i].title.toLowerCase();
       const score = nameWords.filter((w) => imgTitle.includes(w)).length;
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = i;
+      scored.push({ idx: i, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+
+    // Assign primary image (first unused with best score)
+    let primaryIdx = -1;
+    for (const s of scored) {
+      if (!usedImages.has(s.idx) && s.score > 0) {
+        primaryIdx = s.idx;
+        usedImages.add(s.idx);
+        break;
       }
     }
-    if (bestIdx >= 0 && bestScore > 0) {
-      usedImages.add(bestIdx);
-      return { ...place, imageUrl: images[bestIdx].thumbnail };
-    }
-    // Fallback: assign first unused image
-    for (let i = 0; i < images.length; i++) {
-      if (!usedImages.has(i)) {
-        usedImages.add(i);
-        return { ...place, imageUrl: images[i].thumbnail };
+    // Fallback: assign first unused image as primary
+    if (primaryIdx < 0) {
+      for (let i = 0; i < images.length; i++) {
+        if (!usedImages.has(i)) {
+          primaryIdx = i;
+          usedImages.add(i);
+          break;
+        }
       }
     }
-    return place;
+
+    // Collect gallery images — additional unused images with any relevance
+    const galleryImages: string[] = [];
+    for (const s of scored) {
+      if (galleryImages.length >= 3) break;
+      if (s.idx === primaryIdx || usedImages.has(s.idx)) continue;
+      if (s.score > 0 && images[s.idx].thumbnail) {
+        galleryImages.push(images[s.idx].thumbnail);
+      }
+    }
+
+    return {
+      ...place,
+      imageUrl: primaryIdx >= 0 ? images[primaryIdx].thumbnail : undefined,
+      galleryImages: galleryImages.length > 0 ? galleryImages : undefined,
+    };
   });
 }
 
-// ── Map URL + travel tips helpers ──
+// ── Hero image + Map URL + travel tips helpers ──
+
+async function fetchCityHeroImages(city: string): Promise<{ heroImageUrl?: string; heroImageUrls: string[] }> {
+  const apiKey = getBraveApiKey();
+  if (!apiKey) return { heroImageUrls: [] };
+
+  // Search for stunning city images — skyline, panorama, aerial
+  const images = await braveImageSearch(`${city} skyline panorama cityscape beautiful`, 8);
+  const urls = images.map((img) => img.thumbnail).filter(Boolean);
+  return {
+    heroImageUrl: urls[0],
+    heroImageUrls: urls.slice(0, 6),
+  };
+}
 
 function addMapUrls(places: Place[], city: string): Place[] {
   return places.map((p) => ({
     ...p,
     mapUrl: p.mapUrl || `https://www.google.com/maps/search/${encodeURIComponent(p.name + ", " + city)}`,
+    streetViewUrl: p.streetViewUrl || `https://www.google.com/maps/@?api=1&map_action=pano&query=${encodeURIComponent(p.name + ", " + city)}`,
   }));
 }
 
@@ -505,10 +545,10 @@ async function researchCategory(
   }
   const imageQuery = `${city} ${categoryLabel}${cuisineSuffix} photos`;
 
-  // Run all web searches + image search in parallel for broader coverage
+  // Run all web searches + image search in parallel for broader coverage (extra images for gallery)
   const searchPromises = queries.map((q) => braveWebSearch(q, Math.ceil(limit / 2) + 2));
   const [imageResults, ...webResultSets] = await Promise.all([
-    braveImageSearch(imageQuery, limit + 4),
+    braveImageSearch(imageQuery, Math.min(limit * 3, 20)),
     ...searchPromises,
   ]);
 
@@ -635,6 +675,8 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       tool: "enso_city_explore",
       city: cached.city,
       category: "overview",
+      heroImageUrl: cached.heroImageUrl,
+      heroImageUrls: cached.heroImageUrls ?? [],
       sections: cached.sections,
       places: cached.places,
       summary: cached.summary,
@@ -649,14 +691,15 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     });
   }
 
-  // Research all 3 categories + videos + travel tips in parallel
+  // Research all 3 categories + videos + travel tips + hero images in parallel
   const geminiKey = await getGeminiApiKey();
-  const [restaurants, photoSpots, landmarks, videos, travelData] = await Promise.all([
+  const [restaurants, photoSpots, landmarks, videos, travelData, heroData] = await Promise.all([
     researchCategory(city, "restaurants", { limit: 6 }),
     researchCategory(city, "photo_spots", { limit: 6 }),
     researchCategory(city, "landmarks", { limit: 6 }),
     braveVideoSearch(`${city} travel guide things to do`, 8),
     generateTravelTips(city, geminiKey),
+    fetchCityHeroImages(city),
   ]);
 
   const allSources = [
@@ -682,6 +725,8 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
   // Persist to cache + disk
   const cacheEntry: CachedCityExploration = {
     city,
+    heroImageUrl: heroData.heroImageUrl,
+    heroImageUrls: heroData.heroImageUrls,
     sections,
     places: allPlaces,
     summary: summaryText,
@@ -711,6 +756,8 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     tool: "enso_city_explore",
     city,
     category: "overview",
+    heroImageUrl: heroData.heroImageUrl,
+    heroImageUrls: heroData.heroImageUrls,
     sections,
     places: allPlaces,
     summary: summaryText,

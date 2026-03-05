@@ -20,6 +20,12 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const [playingVideo, setPlayingVideo] = useState(null);
   const [favorites, setFavorites] = useState({});
   const [activeTab, setActiveTab] = useState("places");
+  const [lightboxImg, setLightboxImg] = useState(null);
+  const [lightboxList, setLightboxList] = useState([]);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+  const [galleryIdx, setGalleryIdx] = useState({});
+  const [heroLoaded, setHeroLoaded] = useState(false);
+  const [heroError, setHeroError] = useState(false);
 
   const city = String(data?.city ?? "");
   const category = String(data?.category ?? "overview");
@@ -34,6 +40,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const language = data?.language || "";
   const bestSeason = data?.bestSeason || "";
   const fromHistory = !!data?.fromHistory;
+  const heroImageUrl = data?.heroImageUrl || "";
+  const heroImageUrls = Array.isArray(data?.heroImageUrls) ? data.heroImageUrls : [];
   const isWelcome = category === "welcome" || (!city && places.length === 0);
   const isOverview = !isWelcome && (data?.tool === "enso_city_explore" || sections.length > 0);
   const isRestaurants = data?.tool === "enso_city_restaurants" || category === "restaurants";
@@ -47,6 +55,48 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const handleImgError = (name) => setImgErrors((prev) => ({ ...prev, [name]: true }));
   const handleImgLoad = (name) => setImgLoaded((prev) => ({ ...prev, [name]: true }));
   const toggleFav = (name) => setFavorites((prev) => ({ ...prev, [name]: !prev[name] }));
+
+  // Lightbox controls
+  const openLightbox = (images, startIdx) => {
+    setLightboxList(images.filter(Boolean));
+    setLightboxIdx(startIdx || 0);
+    setLightboxImg(images[startIdx || 0]);
+  };
+  const closeLightbox = () => { setLightboxImg(null); setLightboxList([]); };
+  const lightboxNext = () => {
+    if (lightboxList.length === 0) return;
+    const next = (lightboxIdx + 1) % lightboxList.length;
+    setLightboxIdx(next);
+    setLightboxImg(lightboxList[next]);
+  };
+  const lightboxPrev = () => {
+    if (lightboxList.length === 0) return;
+    const prev = (lightboxIdx - 1 + lightboxList.length) % lightboxList.length;
+    setLightboxIdx(prev);
+    setLightboxImg(lightboxList[prev]);
+  };
+
+  // Gallery carousel for place cards
+  const getPlaceImages = (place) => {
+    const imgs = [];
+    if (place.imageUrl) imgs.push(place.imageUrl);
+    if (place.galleryImages) imgs.push(...place.galleryImages);
+    return imgs.filter(Boolean);
+  };
+  const nextGalleryImg = (name, total) => setGalleryIdx((prev) => ({ ...prev, [name]: ((prev[name] || 0) + 1) % total }));
+  const prevGalleryImg = (name, total) => setGalleryIdx((prev) => ({ ...prev, [name]: ((prev[name] || 0) - 1 + total) % total }));
+
+  // Collect all images for the photo gallery tab
+  const allGalleryImages = useMemo(() => {
+    const imgs = [];
+    for (const place of places) {
+      const placeImgs = getPlaceImages(place);
+      for (const img of placeImgs) {
+        imgs.push({ url: img, placeName: place.name, category: place.category });
+      }
+    }
+    return imgs;
+  }, [places]);
 
   const timeAgo = (ts) => {
     if (!ts) return "";
@@ -140,16 +190,75 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
 
   // ── Reusable components ──
 
+  const Lightbox = () => {
+    if (!lightboxImg) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.92)", backdropFilter: "blur(8px)" }} onClick={closeLightbox}>
+        <button onClick={(e) => { e.stopPropagation(); closeLightbox(); }} className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+          <LucideReact.X className="w-5 h-5 text-white" />
+        </button>
+        {lightboxList.length > 1 && (
+          <>
+            <button onClick={(e) => { e.stopPropagation(); lightboxPrev(); }} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+              <LucideReact.ChevronLeft className="w-5 h-5 text-white" />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); lightboxNext(); }} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+              <LucideReact.ChevronRight className="w-5 h-5 text-white" />
+            </button>
+          </>
+        )}
+        <div className="max-w-[90vw] max-h-[85vh] relative" onClick={(e) => e.stopPropagation()}>
+          <img src={lightboxImg} alt="" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" referrerPolicy="no-referrer" />
+          {lightboxList.length > 1 && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5">
+              {lightboxList.map((_, i) => (
+                <button key={i} onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); setLightboxImg(lightboxList[i]); }}
+                  className={"w-2 h-2 rounded-full transition-all " + (i === lightboxIdx ? "bg-white scale-125" : "bg-white/40 hover:bg-white/60")} />
+              ))}
+            </div>
+          )}
+        </div>
+        {lightboxList.length > 1 && (
+          <div className="absolute bottom-3 right-3 text-white/60 text-xs font-medium">{lightboxIdx + 1} / {lightboxList.length}</div>
+        )}
+      </div>
+    );
+  };
+
   const PlaceCard = ({ place, idx }) => {
-    const hasImg = place.imageUrl && !imgErrors[place.name];
+    const placeImgs = getPlaceImages(place);
+    const hasImg = placeImgs.length > 0 && !imgErrors[place.name];
+    const currentGalleryIdx = galleryIdx[place.name] || 0;
+    const currentImg = placeImgs[currentGalleryIdx] || placeImgs[0];
     const imgReady = hasImg && imgLoaded[place.name];
     const isFav = favorites[place.name];
+    const hasMultipleImgs = placeImgs.length > 1;
     return (
       <UICard key={idx} accent={accentMap[place.category] || accent}>
         {hasImg && (
-          <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 relative " + (imgReady ? "h-36 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
-            <img src={place.imageUrl} alt={place.name} className="w-full h-full object-cover" onLoad={() => handleImgLoad(place.name)} onError={() => handleImgError(place.name)} referrerPolicy="no-referrer" />
-            <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
+          <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 relative " + (imgReady ? "h-40 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
+            <img src={currentImg} alt={place.name} className="w-full h-full object-cover cursor-pointer transition-transform" onClick={() => openLightbox(placeImgs, currentGalleryIdx)} onLoad={() => handleImgLoad(place.name)} onError={() => handleImgError(place.name)} referrerPolicy="no-referrer" />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 50%)" }} />
+            {/* Gallery navigation arrows */}
+            {hasMultipleImgs && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); prevGalleryImg(place.name, placeImgs.length); }} className="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-black/70 transition-colors">
+                  <LucideReact.ChevronLeft className="w-3.5 h-3.5 text-white" />
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); nextGalleryImg(place.name, placeImgs.length); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-black/70 transition-colors">
+                  <LucideReact.ChevronRight className="w-3.5 h-3.5 text-white" />
+                </button>
+                <div className="absolute top-2 left-2 flex gap-1">
+                  {placeImgs.map((_, i) => (
+                    <div key={i} className={"w-1.5 h-1.5 rounded-full transition-all " + (i === currentGalleryIdx ? "bg-white" : "bg-white/40")} />
+                  ))}
+                </div>
+              </>
+            )}
+            {/* Expand icon */}
+            <button onClick={(e) => { e.stopPropagation(); openLightbox(placeImgs, currentGalleryIdx); }} className="absolute top-2 left-auto right-10 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center hover:bg-black/60 transition-colors">
+              <LucideReact.Maximize2 className="w-3 h-3 text-white/80" />
+            </button>
             <button onClick={(e) => { e.stopPropagation(); toggleFav(place.name); }} className={"absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center transition-all " + (isFav ? "bg-rose-500 shadow-lg shadow-rose-500/30" : "bg-black/40 backdrop-blur-sm hover:bg-black/60")}>
               <LucideReact.Heart className={"w-4 h-4 " + (isFav ? "text-white fill-white" : "text-white/90")} />
             </button>
@@ -175,6 +284,11 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   <LucideReact.MapPin className="w-2.5 h-2.5" />{place.location}
                 </span>
               )}
+              {hasMultipleImgs && (
+                <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                  <LucideReact.Images className="w-2.5 h-2.5" />{placeImgs.length}
+                </span>
+              )}
             </div>
             {place.rating && <div className="mt-1"><RatingStars rating={place.rating} /></div>}
           </div>
@@ -193,10 +307,17 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
           </div>
         )}
         <div className="flex gap-1.5 mt-2.5">
-          <Button variant="ghost" onClick={() => setSelectedPlace(place)}>Details</Button>
+          <Button variant="ghost" onClick={() => setSelectedPlace(place)}>
+            <LucideReact.Info className="w-3 h-3 mr-1" />Details
+          </Button>
           {place.mapUrl && (
             <a href={place.mapUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-white/5 transition-colors">
               <LucideReact.MapPin className="w-3 h-3" /> Map
+            </a>
+          )}
+          {place.streetViewUrl && (
+            <a href={place.streetViewUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 px-2 py-1 rounded hover:bg-white/5 transition-colors">
+              <LucideReact.Eye className="w-3 h-3" /> Street View
             </a>
           )}
         </div>
@@ -225,71 +346,101 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
 
   const VideoGrid = ({ items }) => {
     if (!items || items.length === 0) return null;
+    const featuredVideo = playingVideo || items[0];
+    const remainingVideos = playingVideo ? items : items.slice(1);
+
     return (
       <div className="space-y-3">
-        {playingVideo && (
-          <UICard accent="rose">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-semibold text-gray-100 line-clamp-1 flex-1 mr-2">{playingVideo.title}</div>
+        {/* Featured / playing video — large embed */}
+        <div className="rounded-xl overflow-hidden border border-white/[0.06]">
+          {playingVideo && toYouTubeEmbedUrl(playingVideo.url) ? (
+            <div className="w-full" style={{ aspectRatio: "16/9" }}>
+              <iframe
+                src={toYouTubeEmbedUrl(playingVideo.url)}
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{ border: "none" }}
+              />
+            </div>
+          ) : (
+            <div className="relative cursor-pointer" onClick={() => setPlayingVideo(featuredVideo)}>
+              {featuredVideo.thumbnail && (
+                <div className="w-full" style={{ aspectRatio: "16/9" }}>
+                  <img src={featuredVideo.thumbnail} alt={featuredVideo.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 40%, transparent 60%)" }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-red-600/90 backdrop-blur-sm flex items-center justify-center shadow-xl shadow-red-600/30 hover:scale-110 transition-transform">
+                      <LucideReact.Play className="w-7 h-7 text-white ml-1" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="p-3 bg-gray-900/50">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-gray-100 line-clamp-2">{featuredVideo.title}</div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  {featuredVideo.creator && (
+                    <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                      <LucideReact.User className="w-3 h-3 shrink-0" />{featuredVideo.creator}
+                    </span>
+                  )}
+                  {featuredVideo.duration && <Badge variant="default">{featuredVideo.duration}</Badge>}
+                  {featuredVideo.age && <span className="text-[10px] text-gray-500">{featuredVideo.age}</span>}
+                </div>
+              </div>
+              {playingVideo && (
                 <Button variant="ghost" onClick={() => setPlayingVideo(null)}>
                   <LucideReact.X className="w-4 h-4" />
                 </Button>
-              </div>
-              {toYouTubeEmbedUrl(playingVideo.url) ? (
-                <div className="w-full rounded-lg overflow-hidden" style={{ aspectRatio: "16/9" }}>
-                  <iframe
-                    src={toYouTubeEmbedUrl(playingVideo.url)}
-                    className="w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    style={{ border: "none" }}
-                  />
-                </div>
-              ) : (
-                <a href={playingVideo.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 underline">
-                  Open video in new tab
-                </a>
               )}
-              <div className="flex items-center gap-2">
-                {playingVideo.creator && <span className="text-[10px] text-gray-400">{playingVideo.creator}</span>}
-                {playingVideo.duration && <Badge variant="default">{playingVideo.duration}</Badge>}
-              </div>
             </div>
-          </UICard>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {items.map((vid, idx) => (
-            <UICard key={idx} accent="rose">
-              <div className="cursor-pointer" onClick={() => setPlayingVideo(vid)}>
-                {vid.thumbnail && !imgErrors["vid_" + idx] && (
-                  <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 relative " + (imgLoaded["vid_" + idx] ? "h-28 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
-                    <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" onLoad={() => handleImgLoad("vid_" + idx)} onError={() => handleImgError("vid_" + idx)} referrerPolicy="no-referrer" />
-                    <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 40%)" }} />
-                    {vid.duration && (
-                      <div className="absolute bottom-1.5 right-1.5 bg-black/80 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium">{vid.duration}</div>
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-11 h-11 rounded-full bg-red-600/90 backdrop-blur-sm flex items-center justify-center shadow-lg shadow-red-600/30">
-                        <LucideReact.Play className="w-5 h-5 text-white ml-0.5" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div className="text-xs font-medium text-gray-100 line-clamp-2 leading-relaxed">{vid.title}</div>
-              </div>
-              <div className="flex items-center gap-2 mt-1.5">
-                {vid.creator && (
-                  <span className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
-                    <LucideReact.User className="w-2.5 h-2.5 shrink-0" />{vid.creator}
-                  </span>
-                )}
-                {vid.age && <span className="text-[10px] text-gray-500">{vid.age}</span>}
-              </div>
-            </UICard>
-          ))}
+          </div>
         </div>
+
+        {/* Remaining videos — horizontal scrollable strip + grid */}
+        {remainingVideos.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[11px] text-gray-500 uppercase tracking-widest font-semibold flex items-center gap-1.5">
+              <LucideReact.Play className="w-3 h-3" /> More Videos
+              <span className="text-gray-600">({remainingVideos.length})</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {remainingVideos.map((vid, idx) => (
+                <UICard key={idx} accent="rose">
+                  <div className="cursor-pointer" onClick={() => setPlayingVideo(vid)}>
+                    {vid.thumbnail && !imgErrors["vid_" + idx] && (
+                      <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 relative " + (imgLoaded["vid_" + idx] ? "h-28 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
+                        <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" onLoad={() => handleImgLoad("vid_" + idx)} onError={() => handleImgError("vid_" + idx)} referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 40%)" }} />
+                        {vid.duration && (
+                          <div className="absolute bottom-1.5 right-1.5 bg-black/80 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium">{vid.duration}</div>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-full bg-red-600/90 backdrop-blur-sm flex items-center justify-center shadow-lg shadow-red-600/30">
+                            <LucideReact.Play className="w-4 h-4 text-white ml-0.5" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="text-xs font-medium text-gray-100 line-clamp-2 leading-relaxed">{vid.title}</div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {vid.creator && (
+                      <span className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
+                        <LucideReact.User className="w-2.5 h-2.5 shrink-0" />{vid.creator}
+                      </span>
+                    )}
+                    {vid.age && <span className="text-[10px] text-gray-500">{vid.age}</span>}
+                  </div>
+                </UICard>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -397,16 +548,56 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
 
   const PlaceDetailDialog = () => {
     if (!selectedPlace) return null;
+    const detailImgs = getPlaceImages(selectedPlace);
+    const detailGalleryIdx = galleryIdx["detail_" + selectedPlace.name] || 0;
+    const detailCurrentImg = detailImgs[detailGalleryIdx] || detailImgs[0];
+    const hasDetailImgs = detailImgs.length > 0 && !imgErrors[selectedPlace.name];
+    const hasMultiDetail = detailImgs.length > 1;
+    const mapEmbedUrl = selectedPlace.mapUrl ? selectedPlace.mapUrl.replace("/maps/search/", "/maps/embed/v1/place?key=&q=").replace("https://www.google.com/maps/embed/v1/place?key=&q=", "") : "";
+
     return (
       <Dialog open={!!selectedPlace} onClose={() => setSelectedPlace(null)} title={selectedPlace.name}>
         <div className="space-y-3">
-          {selectedPlace.imageUrl && !imgErrors[selectedPlace.name] && (
-            <div className={"w-full overflow-hidden rounded-xl relative " + (imgLoaded[selectedPlace.name] ? "h-48" : "h-0")}>
-              <img src={selectedPlace.imageUrl} alt={selectedPlace.name} className="w-full h-full object-cover" onLoad={() => handleImgLoad(selectedPlace.name)} onError={() => handleImgError(selectedPlace.name)} referrerPolicy="no-referrer" />
-              <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 40%)" }} />
+          {/* Image gallery carousel */}
+          {hasDetailImgs && (
+            <div className="w-full overflow-hidden rounded-xl relative h-52">
+              <img src={detailCurrentImg} alt={selectedPlace.name} className="w-full h-full object-cover cursor-pointer" onClick={() => openLightbox(detailImgs, detailGalleryIdx)} onLoad={() => handleImgLoad(selectedPlace.name)} onError={() => handleImgError(selectedPlace.name)} referrerPolicy="no-referrer" />
+              <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 40%)" }} />
               {selectedPlace.priceLevel && (
                 <div className="absolute top-2.5 right-2.5 bg-emerald-500/90 backdrop-blur-sm text-white text-xs font-bold px-2.5 py-1 rounded-full">{selectedPlace.priceLevel}</div>
               )}
+              {/* Gallery navigation */}
+              {hasMultiDetail && (
+                <>
+                  <button onClick={() => prevGalleryImg("detail_" + selectedPlace.name, detailImgs.length)} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-black/70 transition-colors">
+                    <LucideReact.ChevronLeft className="w-4 h-4 text-white" />
+                  </button>
+                  <button onClick={() => nextGalleryImg("detail_" + selectedPlace.name, detailImgs.length)} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-black/70 transition-colors">
+                    <LucideReact.ChevronRight className="w-4 h-4 text-white" />
+                  </button>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 bg-black/50 backdrop-blur-sm rounded-full px-2.5 py-1">
+                    {detailImgs.map((_, i) => (
+                      <button key={i} onClick={() => setGalleryIdx((prev) => ({ ...prev, ["detail_" + selectedPlace.name]: i }))}
+                        className={"w-2 h-2 rounded-full transition-all " + (i === detailGalleryIdx ? "bg-white" : "bg-white/40")} />
+                    ))}
+                  </div>
+                </>
+              )}
+              {/* Fullscreen button */}
+              <button onClick={() => openLightbox(detailImgs, detailGalleryIdx)} className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-black/70 transition-colors">
+                <LucideReact.Maximize2 className="w-3.5 h-3.5 text-white" />
+              </button>
+            </div>
+          )}
+          {/* Image thumbnails strip */}
+          {hasMultiDetail && (
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {detailImgs.map((img, i) => (
+                <button key={i} onClick={() => setGalleryIdx((prev) => ({ ...prev, ["detail_" + selectedPlace.name]: i }))}
+                  className={"w-14 h-10 rounded-lg overflow-hidden shrink-0 border-2 transition-all " + (i === detailGalleryIdx ? "border-blue-400 ring-1 ring-blue-400/30" : "border-transparent opacity-60 hover:opacity-100")}>
+                  <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                </button>
+              ))}
             </div>
           )}
           <div className="flex flex-wrap gap-1.5 items-center">
@@ -443,11 +634,35 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
               </div>
             </div>
           )}
-          <div className="flex gap-2 pt-1">
+          {/* Inline map preview */}
+          {selectedPlace.mapUrl && (
+            <div className="rounded-xl overflow-hidden border border-white/[0.06]">
+              <a href={selectedPlace.mapUrl} target="_blank" rel="noopener noreferrer" className="block relative group">
+                <div className="h-32 bg-gradient-to-br from-blue-900/30 to-indigo-900/30 flex items-center justify-center">
+                  <div className="text-center">
+                    <LucideReact.Map className="w-8 h-8 text-blue-400/60 mx-auto mb-1.5" />
+                    <div className="text-[11px] text-blue-400/80 font-medium">View on Google Maps</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">{selectedPlace.location || selectedPlace.name}</div>
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-blue-500/0 group-hover:bg-blue-500/5 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <LucideReact.ExternalLink className="w-5 h-5 text-blue-400" />
+                </div>
+              </a>
+            </div>
+          )}
+          <div className="flex gap-2 pt-1 flex-wrap">
             {selectedPlace.mapUrl && (
-              <a href={selectedPlace.mapUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+              <a href={selectedPlace.mapUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-[120px]">
                 <Button variant="primary">
-                  <LucideReact.MapPin className="w-3.5 h-3.5 mr-1.5" /> Open in Maps
+                  <LucideReact.MapPin className="w-3.5 h-3.5 mr-1.5" /> Maps
+                </Button>
+              </a>
+            )}
+            {selectedPlace.streetViewUrl && (
+              <a href={selectedPlace.streetViewUrl} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-[120px]">
+                <Button variant="outline">
+                  <LucideReact.Eye className="w-3.5 h-3.5 mr-1.5" /> Street View
                 </Button>
               </a>
             )}
@@ -599,40 +814,100 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
     );
   }
 
+  // ── Photo Gallery component ──
+  const PhotoGallery = () => {
+    if (allGalleryImages.length === 0) {
+      return <EmptyState icon="Camera" title="No photos" description="No images available yet" />;
+    }
+    const categoryColors = { restaurants: "border-amber-500/30", photo_spots: "border-purple-500/30", landmarks: "border-cyan-500/30" };
+    return (
+      <div className="space-y-3">
+        <div className="text-[11px] text-gray-500 font-medium">{allGalleryImages.length} photos from {places.length} places</div>
+        <div className="columns-2 sm:columns-3 gap-2 space-y-2">
+          {allGalleryImages.map((img, i) => (
+            <div key={i} className={"break-inside-avoid rounded-xl overflow-hidden border cursor-pointer group relative " + (categoryColors[img.category] || "border-white/[0.06]")} onClick={() => openLightbox(allGalleryImages.map((g) => g.url), i)}>
+              <img src={img.url} alt={img.placeName} className="w-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { e.target.parentElement.style.display = "none"; }} referrerPolicy="no-referrer" style={{ minHeight: "80px" }} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-2 left-2 right-2">
+                  <div className="text-[10px] text-white font-medium truncate">{img.placeName}</div>
+                </div>
+              </div>
+              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-6 h-6 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                  <LucideReact.Maximize2 className="w-3 h-3 text-white" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // ── Overview view ──
   if (isOverview) {
     const searchSources = Array.isArray(data?.searchSources) ? data.searchSources : [];
     const overviewTabs = [
       { value: "places", label: "Places", icon: "MapPin" },
+      allGalleryImages.length > 0 ? { value: "gallery", label: "Gallery", icon: "Images" } : null,
       videos.length > 0 ? { value: "videos", label: "Videos", icon: "Play" } : null,
       travelTips.length > 0 ? { value: "tips", label: "Tips", icon: "Lightbulb" } : null,
     ].filter(Boolean);
 
+    const hasHeroImg = heroImageUrl && !heroError;
+
     return (
       <div className="space-y-3.5">
-        {/* Hero banner */}
-        <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-600/20 via-blue-600/15 to-purple-600/20 border border-white/[0.06] p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-[10px] text-blue-400/80 uppercase tracking-widest font-semibold mb-1">City Explorer</div>
-              <div className="text-xl font-bold text-gray-50 tracking-tight">{city}</div>
-              {fromHistory && (
-                <div className="flex items-center gap-1 mt-1.5">
-                  <LucideReact.BookOpen className="w-3 h-3 text-blue-400/70" />
-                  <span className="text-[10px] text-blue-400/70">Saved research</span>
+        {/* Hero banner with city image */}
+        <div className="rounded-2xl overflow-hidden relative border border-white/[0.06]">
+          {hasHeroImg && (
+            <div className="absolute inset-0">
+              <img src={heroImageUrl} alt={city} className={"w-full h-full object-cover transition-opacity duration-500 " + (heroLoaded ? "opacity-100" : "opacity-0")} onLoad={() => setHeroLoaded(true)} onError={() => setHeroError(true)} referrerPolicy="no-referrer" />
+              <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 70%, rgba(0,0,0,0.85) 100%)" }} />
+            </div>
+          )}
+          {!hasHeroImg && <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 via-blue-600/15 to-purple-600/20" />}
+          <div className="relative p-5" style={{ minHeight: hasHeroImg ? "160px" : "auto" }}>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-[10px] text-blue-300/90 uppercase tracking-widest font-semibold mb-1.5 flex items-center gap-1.5">
+                  <LucideReact.Globe className="w-3 h-3" />City Explorer
                 </div>
-              )}
-            </div>
-            <div className="flex gap-1.5">
-              {fromHistory && (
-                <Button variant="ghost" onClick={() => onAction("explore", { city, force: true })}>
-                  <LucideReact.RefreshCw className="w-3.5 h-3.5" />
+                <div className={"font-bold tracking-tight " + (hasHeroImg ? "text-2xl text-white drop-shadow-lg" : "text-xl text-gray-50")}>{city}</div>
+                {country && <div className="text-xs text-gray-300/80 mt-1">{country}</div>}
+                {fromHistory && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <LucideReact.BookOpen className="w-3 h-3 text-blue-300/70" />
+                    <span className="text-[10px] text-blue-300/70">Saved research</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-1.5">
+                {fromHistory && (
+                  <Button variant="ghost" onClick={() => onAction("explore", { city, force: true })}>
+                    <LucideReact.RefreshCw className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+                <Button variant="primary" onClick={() => setEmailOpen(true)}>
+                  <LucideReact.Mail className="w-3.5 h-3.5 mr-1" />Email
                 </Button>
-              )}
-              <Button variant="primary" onClick={() => setEmailOpen(true)}>
-                <LucideReact.Mail className="w-3.5 h-3.5 mr-1" />Email
-              </Button>
+              </div>
             </div>
+            {/* Hero image thumbnails strip */}
+            {heroImageUrls.length > 1 && heroLoaded && (
+              <div className="flex gap-1.5 mt-3 overflow-x-auto pb-0.5">
+                {heroImageUrls.slice(0, 5).map((url, i) => (
+                  <button key={i} className="w-12 h-8 rounded-lg overflow-hidden shrink-0 border border-white/20 hover:border-white/50 transition-all opacity-80 hover:opacity-100" onClick={() => openLightbox(heroImageUrls, i)}>
+                    <img src={url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </button>
+                ))}
+                {heroImageUrls.length > 5 && (
+                  <button className="w-12 h-8 rounded-lg shrink-0 bg-white/10 border border-white/20 flex items-center justify-center text-[10px] text-white/70 font-medium" onClick={() => openLightbox(heroImageUrls, 5)}>
+                    +{heroImageUrls.length - 5}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -656,6 +931,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             >
               {tab.label}
               {tab.value === "places" && <span className="text-[9px] opacity-60">{places.length}</span>}
+              {tab.value === "gallery" && <span className="text-[9px] opacity-60">{allGalleryImages.length}</span>}
               {tab.value === "videos" && <span className="text-[9px] opacity-60">{videos.length}</span>}
               {tab.value === "tips" && <span className="text-[9px] opacity-60">{travelTips.length}</span>}
             </button>
@@ -663,6 +939,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         </div>
 
         {/* Tab content */}
+        {activeTab === "gallery" && <PhotoGallery />}
         {activeTab === "videos" && <VideoGrid items={videos} />}
         {activeTab === "tips" && <TravelTips tips={travelTips} />}
         {activeTab === "places" && (
@@ -716,6 +993,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
           </div>
         </Dialog>
         <PlaceDetailDialog />
+        <Lightbox />
       </div>
     );
   }
@@ -812,6 +1090,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         </div>
       </Dialog>
       <PlaceDetailDialog />
+      <Lightbox />
     </div>
   );
 }`;
