@@ -647,7 +647,7 @@ export async function startEnsoServer(opts: {
 
   // ── SPA fallback (must be after all API routes) ──
   if (existsSync(distDir) && existsSync(join(distDir, "index.html"))) {
-    app.get("*", (_req, res) => {
+    app.get("/{*path}", (_req, res) => {
       res.sendFile(join(distDir, "index.html"));
     });
   }
