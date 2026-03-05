@@ -1201,7 +1201,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       const now = Date.now();
       const count = bugs.length;
       const lines = bugs.map((b) => `- **${b.category}**: ${b.description} → ${b.resolution}`);
-      const text = `${count} issue${count === 1 ? " was" : "s were"} fixed since your last visit:\n\n${lines.join("\n")}`;
+      const text = `${count} issue${count === 1 ? " was" : "s were"} fixed:\n\n${lines.join("\n")}`;
       const card: Card = {
         id,
         runId: msg.runId,
@@ -1210,6 +1210,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         status: "complete",
         display: "expanded",
         text,
+        data: { restartPrompt: true },
         createdAt: now,
         updatedAt: now,
       };
