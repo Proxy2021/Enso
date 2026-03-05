@@ -1,6 +1,6 @@
 Merge, build, commit, push, update docs if needed, and restart all Enso services.
 
-> **⛔ This command must ONLY be run by the user (via `/enso-deploy`), NEVER by an automated fix session.** If you are fixing a bug or making a code change as part of an auto-repair, debug reporter, or fix_with_code flow — do NOT run this command. Just fix the code and stop.
+> **⛔ If you are running inside the Enso gateway** (spawned via the Enso mobile/web client for bug fixing, auto-repair, or debug reporter) — do NOT run this command. Restarting the gateway kills your own session. Just fix the code and stop.
 
 ## Steps
 
