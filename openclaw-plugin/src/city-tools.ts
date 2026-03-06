@@ -101,6 +101,7 @@ interface CachedCityExploration {
   bestSeason?: string;
   population?: string;
   famousNickname?: string;
+  englishName?: string;
   timestamp: number;
 }
 
@@ -432,12 +433,13 @@ function addMapUrls(places: Place[], city: string): Place[] {
 async function generateTravelTips(
   city: string,
   geminiKey: string | undefined,
-): Promise<{ tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string }> {
+): Promise<{ tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string; englishName?: string }> {
   if (!geminiKey) return { tips: [] };
   const prompt = `You are a seasoned travel expert who has lived in "${city}". Provide insider-level practical tips that go beyond generic travel advice.
 
 Return valid JSON (no markdown fences):
 {
+  "englishName": "the standard English name for this city/place (e.g. if input is '罗弗敦岛' return 'Lofoten Islands', if input is 'パリ' return 'Paris', if already English return as-is)",
   "country": "Country name",
   "currency": "Local currency code (e.g. EUR, JPY, USD)",
   "language": "Primary language spoken",
@@ -460,7 +462,7 @@ Rules:
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string };
+    const parsed = JSON.parse(cleaned) as { tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string; englishName?: string };
     return {
       tips: (parsed.tips ?? []).slice(0, 7),
       country: parsed.country,
@@ -469,6 +471,7 @@ Rules:
       bestSeason: parsed.bestSeason,
       population: parsed.population,
       famousNickname: parsed.famousNickname,
+      englishName: parsed.englishName,
     };
   } catch (err) {
     logError("city", "generateTravelTips error", err);
@@ -759,6 +762,7 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       bestSeason: cached.bestSeason,
       population: cached.population,
       famousNickname: cached.famousNickname,
+      englishName: cached.englishName,
       fromHistory: true,
     });
   }
@@ -808,9 +812,11 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
   const bestSeason = (travelData as { bestSeason?: string }).bestSeason;
   const population = (travelData as { population?: string }).population;
   const famousNickname = (travelData as { famousNickname?: string }).famousNickname;
+  const englishName = (travelData as { englishName?: string }).englishName;
 
   const cacheEntry: CachedCityExploration = {
     city,
+    englishName,
     heroImageUrl: heroUrl,
     heroImageUrls: heroUrls,
     sections,
@@ -862,6 +868,7 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     bestSeason,
     population,
     famousNickname,
+    englishName,
   });
 }
 

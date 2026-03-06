@@ -43,6 +43,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const bestSeason = String(data?.bestSeason ?? "");
   const population = String(data?.population ?? "");
   const famousNickname = String(data?.famousNickname ?? "");
+  const englishName = String(data?.englishName ?? "");
+  const displayCity = englishName || city;
   const fromHistory = !!data?.fromHistory;
   const heroImageUrl = data?.heroImageUrl || "";
   const heroImageUrls = Array.isArray(data?.heroImageUrls) ? data.heroImageUrls : [];
@@ -592,7 +594,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                 </div>
                 <div>
                   <div className="text-sm font-bold text-indigo-100 tracking-tight">Through the Ages</div>
-                  <div className="text-[10px] text-indigo-400/50 uppercase tracking-[0.15em] font-semibold">The story of {city}</div>
+                  <div className="text-[10px] text-indigo-400/50 uppercase tracking-[0.15em] font-semibold">The story of {displayCity}</div>
                 </div>
               </div>
               <div className="text-[13px] text-gray-300/90 leading-[1.8]">{String(cityHistory.narrative ?? "")}</div>
@@ -947,7 +949,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             }
           </div>
           <div className="text-sm font-semibold text-gray-100">{data?.success ? "Report Sent" : "Send Failed"}</div>
-          <div className="text-xs text-gray-400 mt-1">{city}</div>
+          <div className="text-xs text-gray-400 mt-1">{displayCity}</div>
         </div>
         <UICard accent={data?.success ? "emerald" : "rose"}>
           <div className="text-sm text-gray-200">{String(data?.message ?? "")}</div>
@@ -1050,7 +1052,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         <div className="rounded-2xl overflow-hidden relative border border-white/[0.06] shadow-xl shadow-black/20">
           {hasHeroImg && (
             <div className="absolute inset-0">
-              <img src={heroImageUrl} alt={city} className={"w-full h-full object-cover transition-opacity duration-700 " + (heroLoaded ? "opacity-100" : "opacity-0")} onLoad={() => setHeroLoaded(true)} onError={() => setHeroError(true)} referrerPolicy="no-referrer" />
+              <img src={heroImageUrl} alt={displayCity} className={"w-full h-full object-cover transition-opacity duration-700 " + (heroLoaded ? "opacity-100" : "opacity-0")} onLoad={() => setHeroLoaded(true)} onError={() => setHeroError(true)} referrerPolicy="no-referrer" />
               <div className="absolute inset-0" style={{ background: "linear-gradient(160deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.5) 40%, rgba(0,0,0,0.85) 80%, rgba(15,10,40,0.95) 100%)" }} />
               <div className="absolute inset-0" style={{ background: "linear-gradient(to right, rgba(99,102,241,0.08) 0%, transparent 50%)" }} />
             </div>
@@ -1066,9 +1068,9 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                 <div className="text-[10px] text-blue-300/80 uppercase tracking-[0.2em] font-semibold mb-2 flex items-center gap-1.5">
                   <LucideReact.Compass className="w-3 h-3" />City Explorer
                 </div>
-                <div className={"font-extrabold tracking-tight leading-tight " + (hasHeroImg ? "text-2xl text-white drop-shadow-lg" : "text-xl text-gray-50")}>{city}</div>
-                {famousNickname && <div className="text-xs text-indigo-300/80 mt-1 italic font-medium">"{famousNickname}"</div>}
-                {country && !famousNickname && <div className="text-xs text-gray-300/70 mt-1 font-medium">{country}</div>}
+                <div className={"font-extrabold tracking-tight leading-tight " + (hasHeroImg ? "text-2xl text-white drop-shadow-lg" : "text-xl text-gray-50")}>{displayCity}</div>
+                {country && <div className="text-xs text-gray-300/70 mt-0.5 font-medium">{country}</div>}
+                {famousNickname && <div className="text-xs text-indigo-300/80 mt-0.5 italic font-medium">"{famousNickname}"</div>}
                 {fromHistory && (
                   <div className="flex items-center gap-1 mt-2 bg-white/5 rounded-full px-2 py-0.5 w-fit">
                     <LucideReact.BookOpen className="w-3 h-3 text-blue-300/70" />
@@ -1202,7 +1204,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
           </div>
         }>
           <div className="space-y-3">
-            <div className="text-xs text-gray-400 leading-relaxed">Send a beautifully formatted travel guide for {city} with all places, videos, and tips.</div>
+            <div className="text-xs text-gray-400 leading-relaxed">Send a beautifully formatted travel guide for {displayCity} with all places, videos, and tips.</div>
             <Input placeholder="recipient@example.com" value={emailAddr} onChange={(val) => setEmailAddr(val)} icon="Mail" />
           </div>
         </Dialog>
@@ -1244,7 +1246,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             </div>
             <div>
               <div className="text-base font-extrabold text-gray-100">{categoryLabel}</div>
-              <div className="text-[11px] text-gray-400">{city} \u00B7 {places.length} found</div>
+              <div className="text-[11px] text-gray-400">{displayCity} \u00B7 {places.length} found</div>
             </div>
           </div>
           <div className="flex gap-1.5">
@@ -1313,7 +1315,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         </div>
       }>
         <div className="space-y-3">
-          <div className="text-xs text-gray-400 leading-relaxed">Send a formatted report of {categoryLabel.toLowerCase()} in {city}.</div>
+          <div className="text-xs text-gray-400 leading-relaxed">Send a formatted report of {categoryLabel.toLowerCase()} in {displayCity}.</div>
           <Input placeholder="recipient@example.com" value={emailAddr} onChange={(val) => setEmailAddr(val)} icon="Mail" />
         </div>
       </Dialog>
