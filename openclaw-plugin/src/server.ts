@@ -192,7 +192,7 @@ export async function startEnsoServer(opts: {
     return _pkgCache;
   }
 
-  const apkPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+  const apkPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "release", "app-release.apk");
 
   // ── Health endpoint (unauthenticated — used for connection testing) ──
   const accessToken = account.accessToken;
