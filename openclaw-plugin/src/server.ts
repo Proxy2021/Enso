@@ -236,6 +236,19 @@ export async function startEnsoServer(opts: {
     runtime.log?.(`[enso] serving frontend from ${distDir}`);
   }
 
+  // ── APK download endpoint (unauthenticated — so users can install the app) ──
+  app.get("/api/apk", (_req, res) => {
+    if (!existsSync(apkPath)) {
+      res.status(404).json({ error: "APK not found. Run: npm run android:build-apk" });
+      return;
+    }
+    const stat = statSync(apkPath);
+    res.setHeader("Content-Type", "application/vnd.android.package-archive");
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Disposition", 'attachment; filename="enso.apk"');
+    createReadStream(apkPath).pipe(res);
+  });
+
   // ── Media serving (before auth — URLs use non-guessable base64url paths) ──
   app.get("/media/:encodedPath", (req, res) => {
     let filePath = Buffer.from(req.params.encodedPath, "base64url").toString("utf-8");
@@ -464,18 +477,6 @@ export async function startEnsoServer(opts: {
     res.json(state);
   });
 
-  // ── APK download endpoint (authenticated — serves built APK for app upgrades) ──
-  app.get("/api/apk", (_req, res) => {
-    if (!existsSync(apkPath)) {
-      res.status(404).json({ error: "APK not found. Run: npm run android:build-apk" });
-      return;
-    }
-    const stat = statSync(apkPath);
-    res.setHeader("Content-Type", "application/vnd.android.package-archive");
-    res.setHeader("Content-Length", stat.size);
-    res.setHeader("Content-Disposition", 'attachment; filename="enso.apk"');
-    createReadStream(apkPath).pipe(res);
-  });
 
   // Inspect domain-evolution queue/state for newly discovered uncaptured domains.
   app.get("/domain-evolution/jobs", (_req, res) => {
