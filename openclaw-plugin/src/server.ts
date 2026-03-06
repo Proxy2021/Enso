@@ -179,10 +179,23 @@ export async function startEnsoServer(opts: {
   const pluginDir = dirname(fileURLToPath(import.meta.url));
   const projectRoot = join(pluginDir, "..", "..");
 
-  /** Read version info from package.json (cached after first call). */
+  const apkPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "release", "app-release.apk");
+  const apkMetadataPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "release", "output-metadata.json");
+
+  /** Read version info — prefer APK build metadata so we report the actual built version, not package.json. */
   let _pkgCache: { version: string; versionCode: number } | null = null;
   function readPkgVersion() {
     if (_pkgCache) return _pkgCache;
+    // First try the Gradle output metadata which reflects the actual APK on disk
+    try {
+      const meta = JSON.parse(readFileSync(apkMetadataPath, "utf-8"));
+      const element = meta.elements?.[0];
+      if (element?.versionCode && element?.versionName) {
+        _pkgCache = { version: element.versionName, versionCode: element.versionCode };
+        return _pkgCache;
+      }
+    } catch { /* fall through to package.json */ }
+    // Fallback to package.json
     try {
       const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf-8"));
       _pkgCache = { version: pkg.version ?? "0.1.0", versionCode: pkg.versionCode ?? 1 };
@@ -191,8 +204,6 @@ export async function startEnsoServer(opts: {
     }
     return _pkgCache;
   }
-
-  const apkPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "release", "app-release.apk");
 
   // ── Health endpoint (unauthenticated — used for connection testing) ──
   const accessToken = account.accessToken;
