@@ -47,13 +47,14 @@ Deploy Enso (merge, build, commit, push, restart) then build and publish a new A
 9. **Sync web assets to Android**: `npx cap sync android`
    This copies `dist/` into `android/app/src/main/assets/public/`.
 
-10. **Build debug APK**: From the `android/` directory:
+10. **Build release APK**: From the `android/` directory:
     ```
-    ./gradlew assembleDebug
+    ./gradlew assembleRelease
     ```
-    Expected output: `android/app/build/outputs/apk/debug/app-debug.apk`
+    Expected output: `android/app/build/outputs/apk/release/app-release.apk`
+    Uses the `enso-release.keystore` signing config from `build.gradle`.
 
-11. **Verify APK**: Confirm the file exists and check size (`ls -lh`). Typical size: 4-6 MB.
+11. **Verify APK**: Confirm the file exists and check size (`ls -lh`). Typical size: 3-5 MB.
 
 ### Phase 4 — Publish & Restart
 
