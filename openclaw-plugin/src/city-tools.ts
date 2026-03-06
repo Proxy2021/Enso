@@ -69,6 +69,21 @@ interface TravelTip {
   text: string;
 }
 
+interface CityHistoryEvent {
+  year: string;          // e.g. "3000 BCE", "1453", "1923"
+  title: string;
+  description: string;
+  era: string;           // e.g. "Ancient", "Medieval", "Modern", "Contemporary"
+}
+
+interface CityHistoryData {
+  founding: string;           // 2-3 sentence founding story
+  narrative: string;          // 4-6 sentence rich narrative of the city's historical significance
+  culturalIdentity: string;   // 2-3 sentences on what makes the city culturally unique today
+  famousFor: string[];        // 3-5 things the city is historically famous for
+  timeline: CityHistoryEvent[];  // 6-10 key historical events
+}
+
 interface CachedCityExploration {
   city: string;
   heroImageUrl?: string;      // city skyline/panorama hero image
@@ -79,10 +94,13 @@ interface CachedCityExploration {
   searchSources: string[];
   videos: CityVideo[];
   travelTips: TravelTip[];
+  cityHistory?: CityHistoryData;
   country?: string;
   currency?: string;
   language?: string;
   bestSeason?: string;
+  population?: string;
+  famousNickname?: string;
   timestamp: number;
 }
 
@@ -414,7 +432,7 @@ function addMapUrls(places: Place[], city: string): Place[] {
 async function generateTravelTips(
   city: string,
   geminiKey: string | undefined,
-): Promise<{ tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string }> {
+): Promise<{ tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string }> {
   if (!geminiKey) return { tips: [] };
   const prompt = `You are a seasoned travel expert who has lived in "${city}". Provide insider-level practical tips that go beyond generic travel advice.
 
@@ -424,6 +442,8 @@ Return valid JSON (no markdown fences):
   "currency": "Local currency code (e.g. EUR, JPY, USD)",
   "language": "Primary language spoken",
   "bestSeason": "Best season to visit with specific months (e.g. 'Late spring (Apr-May)', 'Sep-Nov')",
+  "population": "approximate current metro population (e.g. '14.2 million', '850,000')",
+  "famousNickname": "the city's most famous nickname if any (e.g. 'The Eternal City') or empty string",
   "tips": [
     { "icon": "LucideIconName", "title": "Short Title", "text": "2-3 sentence practical tip with specific actionable advice" }
   ]
@@ -440,17 +460,65 @@ Rules:
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string };
+    const parsed = JSON.parse(cleaned) as { tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string };
     return {
       tips: (parsed.tips ?? []).slice(0, 7),
       country: parsed.country,
       currency: parsed.currency,
       language: parsed.language,
       bestSeason: parsed.bestSeason,
+      population: parsed.population,
+      famousNickname: parsed.famousNickname,
     };
   } catch (err) {
     logError("city", "generateTravelTips error", err);
     return { tips: [] };
+  }
+}
+
+async function generateCityHistory(
+  city: string,
+  geminiKey: string | undefined,
+): Promise<CityHistoryData | undefined> {
+  if (!geminiKey) return undefined;
+  const prompt = `You are a world-class historian and storyteller. Write a compelling, rich history of "${city}" that would captivate any traveler.
+
+Return valid JSON (no markdown fences):
+{
+  "founding": "2-3 vivid sentences about how the city was founded. Include specific details — who founded it, why, what the area was like before.",
+  "narrative": "4-6 sentences painting the grand sweep of the city's history. Cover transformative moments, golden ages, conflicts, renaissances. Write like a documentary narrator — dramatic, evocative, but factual. Mention how the city's physical landscape was shaped by its history.",
+  "culturalIdentity": "2-3 sentences about what makes this city culturally unique TODAY — its creative energy, social fabric, artistic legacy, culinary traditions, or philosophical outlook. Connect past to present.",
+  "famousFor": ["historical thing 1", "historical thing 2", "historical thing 3", "historical thing 4", "historical thing 5"],
+  "timeline": [
+    { "year": "year or era (e.g. '3000 BCE', '1453', '1923')", "title": "Short event title", "description": "1-2 vivid sentences about this pivotal moment and its lasting impact", "era": "Ancient|Medieval|Renaissance|Colonial|Modern|Contemporary" }
+  ],
+  "population": "approximate current metro population (e.g. '14.2 million', '850,000')",
+  "famousNickname": "the city's most famous nickname if it has one (e.g. 'The Eternal City', 'City of Light', 'The Big Apple') or empty string"
+}
+
+Rules:
+- Timeline must have 8-10 key events, chronologically ordered
+- Cover the full span from founding/earliest history to a notable 21st century development
+- Be specific with dates, names, and details — avoid vague generalities
+- narrative should read like compelling longform journalism, not a Wikipedia summary
+- famousFor should include a mix of historical achievements, cultural contributions, and architectural/artistic legacy
+- Every piece of text should be engaging enough that a traveler would want to read it while exploring the city`;
+
+  try {
+    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
+    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const parsed = JSON.parse(cleaned) as CityHistoryData & { population?: string; famousNickname?: string };
+    return {
+      founding: parsed.founding ?? "",
+      narrative: parsed.narrative ?? "",
+      culturalIdentity: parsed.culturalIdentity ?? "",
+      famousFor: (parsed.famousFor ?? []).slice(0, 5),
+      timeline: (parsed.timeline ?? []).slice(0, 10),
+    };
+  } catch (err) {
+    logError("city", "generateCityHistory error", err);
+    return undefined;
   }
 }
 
@@ -684,10 +752,13 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       searchSources: cached.searchSources,
       videos: cached.videos,
       travelTips: cached.travelTips ?? [],
+      cityHistory: cached.cityHistory,
       country: cached.country,
       currency: cached.currency,
       language: cached.language,
       bestSeason: cached.bestSeason,
+      population: cached.population,
+      famousNickname: cached.famousNickname,
       fromHistory: true,
     });
   }
@@ -697,13 +768,14 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
   // the others from completing or the result from being persisted.
   const emptyCategory = { places: [] as Place[], summary: "", searchSources: [] as string[] };
   const geminiKey = await getGeminiApiKey();
-  const [restaurants, photoSpots, landmarks, videos, travelData, heroData] = await Promise.all([
+  const [restaurants, photoSpots, landmarks, videos, travelData, heroData, historyData] = await Promise.all([
     researchCategory(city, "restaurants", { limit: 6 }).catch((err) => { logError("city", "restaurants research failed", err); return emptyCategory; }),
     researchCategory(city, "photo_spots", { limit: 6 }).catch((err) => { logError("city", "photo_spots research failed", err); return emptyCategory; }),
     researchCategory(city, "landmarks", { limit: 6 }).catch((err) => { logError("city", "landmarks research failed", err); return emptyCategory; }),
     braveVideoSearch(`${city} travel guide things to do`, 8).catch(() => [] as CityVideo[]),
     generateTravelTips(city, geminiKey).catch(() => ({ tips: [] as TravelTip[] })),
     fetchCityHeroImages(city).catch(() => ({ heroImageUrls: [] as string[] })),
+    generateCityHistory(city, geminiKey).catch(() => undefined as CityHistoryData | undefined),
   ]);
 
   const allSources = [
@@ -734,6 +806,8 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
   const currency = (travelData as { currency?: string }).currency;
   const language = (travelData as { language?: string }).language;
   const bestSeason = (travelData as { bestSeason?: string }).bestSeason;
+  const population = (travelData as { population?: string }).population;
+  const famousNickname = (travelData as { famousNickname?: string }).famousNickname;
 
   const cacheEntry: CachedCityExploration = {
     city,
@@ -745,10 +819,13 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     searchSources: sourcesDeduped,
     videos,
     travelTips: tips,
+    cityHistory: historyData,
     country,
     currency,
     language,
     bestSeason,
+    population,
+    famousNickname,
     timestamp: Date.now(),
   };
   cityCache.set(cacheKey, cacheEntry);
@@ -778,10 +855,13 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     searchSources: sourcesDeduped,
     videos,
     travelTips: tips,
+    cityHistory: historyData,
     country,
     currency,
     language,
     bestSeason,
+    population,
+    famousNickname,
   });
 }
 

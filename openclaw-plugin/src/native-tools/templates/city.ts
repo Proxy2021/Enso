@@ -35,10 +35,13 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const summary = String(data?.summary ?? "");
   const recentCities = Array.isArray(data?.recentCities) ? data.recentCities : [];
   const travelTips = Array.isArray(data?.travelTips) ? data.travelTips : [];
+  const cityHistory = data?.cityHistory || null;
   const country = data?.country || "";
   const currency = data?.currency || "";
   const language = data?.language || "";
   const bestSeason = data?.bestSeason || "";
+  const population = data?.population || "";
+  const famousNickname = data?.famousNickname || "";
   const fromHistory = !!data?.fromHistory;
   const heroImageUrl = data?.heroImageUrl || "";
   const heroImageUrls = Array.isArray(data?.heroImageUrls) ? data.heroImageUrls : [];
@@ -243,9 +246,9 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
     return (
       <UICard key={idx} accent={accentMap[place.category] || accent}>
         {hasImg && (
-          <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 relative " + (imgReady ? "h-40 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
-            <img src={currentImg} alt={place.name} className="w-full h-full object-cover cursor-pointer transition-transform" onClick={() => openLightbox(placeImgs, currentGalleryIdx)} onLoad={() => handleImgLoad(place.name)} onError={() => handleImgError(place.name)} referrerPolicy="no-referrer" />
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 50%)" }} />
+          <div className={"w-full overflow-hidden rounded-t-lg -mt-3 -mx-3 relative group/img " + (imgReady ? "h-44 mb-2" : "h-0")} style={{ width: "calc(100% + 1.5rem)" }}>
+            <img src={currentImg} alt={place.name} className="w-full h-full object-cover cursor-pointer transition-transform duration-500 group-hover/img:scale-105" onClick={() => openLightbox(placeImgs, currentGalleryIdx)} onLoad={() => handleImgLoad(place.name)} onError={() => handleImgError(place.name)} referrerPolicy="no-referrer" />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.15) 40%, transparent 60%)" }} />
             {/* Gallery navigation arrows */}
             {hasMultipleImgs && (
               <>
@@ -305,11 +308,11 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             </button>
           )}
         </div>
-        <div className="text-xs text-gray-400 mt-1.5 line-clamp-3 leading-relaxed">{place.description}</div>
+        <div className="text-xs text-gray-400 mt-1.5 line-clamp-3 leading-[1.6]">{place.description}</div>
         {place.highlights && place.highlights.length > 0 && (
           <div className="flex gap-1 mt-2 flex-wrap">
             {place.highlights.slice(0, 3).map((h, i) => (
-              <span key={i} className="text-[9px] bg-white/5 text-gray-400 px-1.5 py-0.5 rounded-full">{h}</span>
+              <span key={i} className="text-[9px] bg-white/[0.06] text-gray-400 px-2 py-0.5 rounded-full border border-white/[0.04] font-medium">{h}</span>
             ))}
           </div>
         )}
@@ -358,8 +361,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
 
     return (
       <div className="space-y-3">
-        {/* Featured / playing video — large embed */}
-        <div className="rounded-xl overflow-hidden border border-white/[0.06]">
+        {/* Featured / playing video — large cinema-style embed */}
+        <div className="rounded-2xl overflow-hidden border border-white/[0.08] shadow-xl shadow-black/20">
           {playingVideo && toYouTubeEmbedUrl(playingVideo.url) ? (
             <div className="w-full" style={{ aspectRatio: "16/9" }}>
               <iframe
@@ -377,19 +380,20 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   <img src={featuredVideo.thumbnail} alt={featuredVideo.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 40%, transparent 60%)" }} />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-16 h-16 rounded-full bg-red-600/90 backdrop-blur-sm flex items-center justify-center shadow-xl shadow-red-600/30 hover:scale-110 transition-transform">
-                      <LucideReact.Play className="w-7 h-7 text-white ml-1" />
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 to-red-700 backdrop-blur-sm flex items-center justify-center shadow-2xl shadow-red-600/40 hover:scale-110 transition-all duration-300 border border-red-400/30">
+                      <LucideReact.Play className="w-7 h-7 text-white ml-1 drop-shadow-lg" />
                     </div>
                   </div>
                 </div>
               )}
             </div>
           )}
-          <div className="p-3 bg-gray-900/50">
+          <div className="p-3.5 bg-gray-900/60">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-gray-100 line-clamp-2">{featuredVideo.title}</div>
-                <div className="flex items-center gap-2 mt-1.5">
+                <div className="text-sm font-bold text-gray-100 line-clamp-2 leading-snug">{featuredVideo.title}</div>
+                {featuredVideo.description && <div className="text-[11px] text-gray-400 mt-1 line-clamp-2 leading-relaxed">{featuredVideo.description}</div>}
+                <div className="flex items-center gap-2 mt-2">
                   {featuredVideo.creator && (
                     <span className="flex items-center gap-1 text-[11px] text-gray-400">
                       <LucideReact.User className="w-3 h-3 shrink-0" />{featuredVideo.creator}
@@ -477,17 +481,18 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   };
 
   const CityInfoBar = () => {
-    if (!country && !currency && !language && !bestSeason) return null;
+    if (!country && !currency && !language && !bestSeason && !population) return null;
     const items = [
       country && { icon: LucideReact.Globe, label: country, color: "text-blue-400" },
+      population && { icon: LucideReact.Users, label: population, color: "text-teal-400" },
       currency && { icon: LucideReact.Wallet, label: currency, color: "text-emerald-400" },
       language && { icon: LucideReact.MessageCircle, label: language, color: "text-violet-400" },
       bestSeason && { icon: LucideReact.Sun, label: bestSeason, color: "text-amber-400" },
     ].filter(Boolean);
     return (
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.06] rounded-full px-3 py-1.5">
+          <div key={i} className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.06] rounded-full px-2.5 py-1.5 hover:bg-white/[0.06] transition-colors">
             <item.icon className={"w-3 h-3 " + item.color} />
             <span className="text-[11px] text-gray-300 font-medium">{item.label}</span>
           </div>
@@ -508,24 +513,167 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
       "from-fuchsia-500/10 to-pink-500/5 border-fuchsia-500/20",
     ];
     const tipIconColors = ["text-amber-400", "text-emerald-400", "text-blue-400", "text-purple-400", "text-rose-400", "text-cyan-400", "text-fuchsia-400"];
+    const tipIconBgs = ["bg-amber-500/15", "bg-emerald-500/15", "bg-blue-500/15", "bg-purple-500/15", "bg-rose-500/15", "bg-cyan-500/15", "bg-fuchsia-500/15"];
     return (
       <div className="space-y-2">
+        <div className="text-[11px] text-gray-500 uppercase tracking-widest font-semibold flex items-center gap-1.5 mb-1">
+          <LucideReact.Lightbulb className="w-3 h-3" /> Insider Tips
+          <span className="text-gray-600">({tips.length})</span>
+        </div>
         {tips.map((tip, i) => {
           const TipIcon = iconMap[tip.icon] || LucideReact.Info;
           return (
-            <div key={i} className={"rounded-xl p-3 border bg-gradient-to-br " + tipColors[i % tipColors.length]}>
+            <div key={i} className={"rounded-xl p-3.5 border bg-gradient-to-br " + tipColors[i % tipColors.length]}>
               <div className="flex gap-3 items-start">
-                <div className={"w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-white/10"}>
-                  <TipIcon className={"w-4.5 h-4.5 " + tipIconColors[i % tipIconColors.length]} />
+                <div className={"w-10 h-10 rounded-xl flex items-center justify-center shrink-0 " + tipIconBgs[i % tipIconBgs.length]}>
+                  <TipIcon className={"w-5 h-5 " + tipIconColors[i % tipIconColors.length]} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-gray-100">{tip.title}</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{tip.text}</div>
+                  <div className="text-[13px] font-bold text-gray-100">{tip.title}</div>
+                  <div className="text-[11px] text-gray-400 mt-1 leading-[1.6]">{tip.text}</div>
                 </div>
               </div>
             </div>
           );
         })}
+      </div>
+    );
+  };
+
+  // ── City History — Rich Multimedia Timeline ──
+  const CityHistorySection = () => {
+    if (!cityHistory) return <EmptyState icon="BookOpen" title="No history available" description="History data not available for this city" />;
+    const eraColors = {
+      Ancient: { bg: "from-amber-900/25 to-amber-800/10", border: "border-amber-600/25", dot: "bg-amber-400", text: "text-amber-400", glow: "shadow-amber-500/30" },
+      Medieval: { bg: "from-red-900/25 to-red-800/10", border: "border-red-600/25", dot: "bg-red-400", text: "text-red-400", glow: "shadow-red-500/30" },
+      Renaissance: { bg: "from-emerald-900/25 to-emerald-800/10", border: "border-emerald-600/25", dot: "bg-emerald-400", text: "text-emerald-400", glow: "shadow-emerald-500/30" },
+      Colonial: { bg: "from-orange-900/25 to-orange-800/10", border: "border-orange-600/25", dot: "bg-orange-400", text: "text-orange-400", glow: "shadow-orange-500/30" },
+      Modern: { bg: "from-blue-900/25 to-blue-800/10", border: "border-blue-600/25", dot: "bg-blue-400", text: "text-blue-400", glow: "shadow-blue-500/30" },
+      Contemporary: { bg: "from-violet-900/25 to-violet-800/10", border: "border-violet-600/25", dot: "bg-violet-400", text: "text-violet-400", glow: "shadow-violet-500/30" },
+    };
+    const timeline = Array.isArray(cityHistory.timeline) ? cityHistory.timeline : [];
+    const famousFor = Array.isArray(cityHistory.famousFor) ? cityHistory.famousFor : [];
+    return (
+      <div className="space-y-5">
+        {/* Founding story — cinematic card with background icon watermark */}
+        {cityHistory.founding && (
+          <div className="rounded-2xl overflow-hidden border border-amber-500/20 relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-yellow-600/5" />
+            <div className="absolute top-2 right-2 w-28 h-28 opacity-[0.04]">
+              <LucideReact.Scroll className="w-full h-full text-amber-300" />
+            </div>
+            <div className="relative p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-500/20 flex items-center justify-center shadow-lg shadow-amber-500/10 border border-amber-500/20">
+                  <LucideReact.Scroll className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-amber-100 tracking-tight">Origin Story</div>
+                  <div className="text-[10px] text-amber-400/50 uppercase tracking-[0.15em] font-semibold">How it all began</div>
+                </div>
+              </div>
+              <div className="text-[13px] text-gray-200/90 leading-[1.75]">{cityHistory.founding}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Rich narrative — editorial longform style */}
+        {cityHistory.narrative && (
+          <div className="rounded-2xl border border-indigo-500/15 overflow-hidden relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/40 via-blue-950/20 to-slate-950/30" />
+            <div className="absolute bottom-2 left-2 w-32 h-32 opacity-[0.03]">
+              <LucideReact.BookOpen className="w-full h-full text-indigo-300" />
+            </div>
+            <div className="relative p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500/30 to-blue-500/20 flex items-center justify-center shadow-lg shadow-indigo-500/10 border border-indigo-500/20">
+                  <LucideReact.BookOpen className="w-5 h-5 text-indigo-300" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-indigo-100 tracking-tight">Through the Ages</div>
+                  <div className="text-[10px] text-indigo-400/50 uppercase tracking-[0.15em] font-semibold">The story of {city}</div>
+                </div>
+              </div>
+              <div className="text-[13px] text-gray-300/90 leading-[1.8]">{cityHistory.narrative}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Famous for — gradient glass pills */}
+        {famousFor.length > 0 && (
+          <div className="space-y-2.5">
+            <div className="text-[11px] text-gray-500 uppercase tracking-[0.15em] font-semibold flex items-center gap-1.5">
+              <LucideReact.Award className="w-3 h-3" /> Historically Famous For
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {famousFor.map((item, i) => {
+                const tagColors = [
+                  "bg-gradient-to-r from-amber-500/15 to-amber-500/5 text-amber-200 border-amber-500/25",
+                  "bg-gradient-to-r from-emerald-500/15 to-emerald-500/5 text-emerald-200 border-emerald-500/25",
+                  "bg-gradient-to-r from-blue-500/15 to-blue-500/5 text-blue-200 border-blue-500/25",
+                  "bg-gradient-to-r from-purple-500/15 to-purple-500/5 text-purple-200 border-purple-500/25",
+                  "bg-gradient-to-r from-rose-500/15 to-rose-500/5 text-rose-200 border-rose-500/25",
+                ];
+                return (
+                  <span key={i} className={"text-xs px-3.5 py-1.5 rounded-full border font-medium " + tagColors[i % tagColors.length]}>{item}</span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Cultural identity — warm soul card */}
+        {cityHistory.culturalIdentity && (
+          <div className="rounded-2xl border border-rose-500/15 overflow-hidden relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-rose-950/30 via-pink-950/20 to-fuchsia-950/20" />
+            <div className="absolute top-2 right-2 w-24 h-24 opacity-[0.04]">
+              <LucideReact.Heart className="w-full h-full text-rose-300" />
+            </div>
+            <div className="relative p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500/30 to-pink-500/20 flex items-center justify-center shadow-lg shadow-rose-500/10 border border-rose-500/20">
+                  <LucideReact.Palette className="w-5 h-5 text-rose-300" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-rose-100 tracking-tight">Cultural Soul</div>
+                  <div className="text-[10px] text-rose-400/50 uppercase tracking-[0.15em] font-semibold">What makes it unique</div>
+                </div>
+              </div>
+              <div className="text-[13px] text-gray-200/90 leading-[1.75]">{cityHistory.culturalIdentity}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Timeline — vertical with glowing dots and era-colored segments */}
+        {timeline.length > 0 && (
+          <div className="space-y-2.5">
+            <div className="text-[11px] text-gray-500 uppercase tracking-[0.15em] font-semibold flex items-center gap-1.5">
+              <LucideReact.Clock className="w-3 h-3" /> Historical Timeline
+              <span className="text-gray-600 normal-case tracking-normal font-normal">({timeline.length} pivotal moments)</span>
+            </div>
+            <div className="relative">
+              {/* Vertical timeline line with rainbow gradient */}
+              <div className="absolute left-[17px] top-4 bottom-4 w-[2px] rounded-full" style={{ background: "linear-gradient(to bottom, #f59e0b, #ef4444, #10b981, #f97316, #3b82f6, #8b5cf6)" }} />
+              <div className="space-y-1.5">
+                {timeline.map((event, i) => {
+                  const colors = eraColors[event.era] || eraColors.Modern;
+                  return (
+                    <div key={i} className="relative pl-11 py-3 rounded-xl transition-all hover:bg-white/[0.02]">
+                      {/* Timeline dot with glow */}
+                      <div className={"absolute left-[11px] top-[20px] w-[14px] h-[14px] rounded-full border-[3px] border-gray-950/90 " + colors.dot + " shadow-md " + colors.glow} />
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className={"text-xs font-bold tracking-wide " + colors.text}>{event.year}</span>
+                        <span className={"text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-white/[0.04] border border-white/[0.06] " + colors.text}>{event.era}</span>
+                      </div>
+                      <div className="text-[13px] font-semibold text-gray-100 leading-tight">{event.title}</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{event.description}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -543,10 +691,11 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
     return (
       <div className="grid grid-cols-4 gap-2">
         {stats.map((s, i) => (
-          <div key={i} className={"rounded-xl p-2.5 text-center border border-white/[0.04] " + s.bg + (s.onClick ? " cursor-pointer hover:border-white/10 transition-all" : "")} onClick={s.onClick}>
-            <s.icon className={"w-4.5 h-4.5 mx-auto " + s.color} />
-            <div className="text-base font-bold text-gray-100 mt-1">{s.count}</div>
-            <div className="text-[10px] text-gray-500 font-medium">{s.label}</div>
+          <div key={i} className={"rounded-xl p-2.5 text-center border border-white/[0.05] relative overflow-hidden group " + s.bg + (s.onClick ? " cursor-pointer hover:border-white/10 hover:scale-[1.02] transition-all duration-200" : "")} onClick={s.onClick}>
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-white/[0.03] to-transparent" />
+            <s.icon className={"w-4.5 h-4.5 mx-auto relative " + s.color} />
+            <div className="text-lg font-extrabold text-gray-100 mt-1 relative">{s.count}</div>
+            <div className="text-[10px] text-gray-500 font-medium relative">{s.label}</div>
           </div>
         ))}
       </div>
@@ -690,24 +839,27 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
       if (c) onAction("explore", { city: c });
     };
     const suggestions = [
-      { name: "Paris", emoji: "\u{1F1EB}\u{1F1F7}", desc: "City of Light", color: "from-blue-500/15 to-indigo-500/10" },
-      { name: "Tokyo", emoji: "\u{1F1EF}\u{1F1F5}", desc: "Neon & tradition", color: "from-rose-500/15 to-pink-500/10" },
-      { name: "New York", emoji: "\u{1F1FA}\u{1F1F8}", desc: "The Big Apple", color: "from-amber-500/15 to-orange-500/10" },
-      { name: "Rome", emoji: "\u{1F1EE}\u{1F1F9}", desc: "Eternal City", color: "from-emerald-500/15 to-teal-500/10" },
-      { name: "Barcelona", emoji: "\u{1F1EA}\u{1F1F8}", desc: "Gaudi's dream", color: "from-purple-500/15 to-violet-500/10" },
-      { name: "Istanbul", emoji: "\u{1F1F9}\u{1F1F7}", desc: "East meets West", color: "from-cyan-500/15 to-sky-500/10" },
+      { name: "Paris", emoji: "\u{1F1EB}\u{1F1F7}", desc: "City of Light", sub: "Art, cuisine & romance", color: "from-blue-500/15 to-indigo-500/10", border: "border-blue-500/10" },
+      { name: "Tokyo", emoji: "\u{1F1EF}\u{1F1F5}", desc: "Neon & tradition", sub: "Ancient temples meet tech", color: "from-rose-500/15 to-pink-500/10", border: "border-rose-500/10" },
+      { name: "New York", emoji: "\u{1F1FA}\u{1F1F8}", desc: "The Big Apple", sub: "Where dreams take shape", color: "from-amber-500/15 to-orange-500/10", border: "border-amber-500/10" },
+      { name: "Rome", emoji: "\u{1F1EE}\u{1F1F9}", desc: "Eternal City", sub: "2,700 years of history", color: "from-emerald-500/15 to-teal-500/10", border: "border-emerald-500/10" },
+      { name: "Barcelona", emoji: "\u{1F1EA}\u{1F1F8}", desc: "Gaudi's dream", sub: "Mediterranean masterpiece", color: "from-purple-500/15 to-violet-500/10", border: "border-purple-500/10" },
+      { name: "Istanbul", emoji: "\u{1F1F9}\u{1F1F7}", desc: "East meets West", sub: "Crossroads of civilizations", color: "from-cyan-500/15 to-sky-500/10", border: "border-cyan-500/10" },
     ];
     return (
       <div className="space-y-5 py-1">
-        <div className="text-center space-y-3 py-3 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-blue-500/5 to-purple-500/10 border border-white/[0.04]">
-          <div className="flex items-center justify-center">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <LucideReact.Globe className="w-6 h-6 text-white" />
+        <div className="text-center space-y-3 py-5 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-blue-500/5 to-purple-500/10 border border-white/[0.04] relative overflow-hidden">
+          <div className="absolute inset-0 opacity-40" style={{ backgroundImage: "radial-gradient(circle at 20% 80%, rgba(99,102,241,0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139,92,246,0.08) 0%, transparent 40%)" }} />
+          <div className="relative">
+            <div className="flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-500/25">
+                <LucideReact.Compass className="w-7 h-7 text-white" />
+              </div>
             </div>
-          </div>
-          <div>
-            <div className="text-lg font-bold text-gray-100 tracking-tight">City Explorer</div>
-            <div className="text-xs text-gray-400 max-w-[280px] mx-auto mt-1 leading-relaxed">Research restaurants, photo spots, landmarks, video guides & insider travel tips</div>
+            <div className="mt-3">
+              <div className="text-lg font-extrabold text-gray-100 tracking-tight">City Explorer</div>
+              <div className="text-xs text-gray-400 max-w-[300px] mx-auto mt-1.5 leading-relaxed">Discover restaurants, photo spots, landmarks, city history, video guides & insider travel tips</div>
+            </div>
           </div>
         </div>
         <div className="flex gap-2">
@@ -766,12 +918,13 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             <div className="text-[11px] text-gray-500 uppercase tracking-widest font-semibold flex items-center gap-1.5">
               <LucideReact.Compass className="w-3 h-3" /> Popular destinations
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {suggestions.map((s) => (
-                <div key={s.name} className={"rounded-xl p-3 cursor-pointer transition-all border border-white/[0.04] hover:border-white/10 bg-gradient-to-br " + s.color} onClick={() => onAction("explore", { city: s.name })}>
-                  <div className="text-base mb-0.5">{s.emoji}</div>
-                  <div className="text-sm font-semibold text-gray-100">{s.name}</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">{s.desc}</div>
+                <div key={s.name} className={"rounded-xl p-3.5 cursor-pointer transition-all border hover:border-white/15 bg-gradient-to-br hover:scale-[1.02] " + s.color + " " + s.border} onClick={() => onAction("explore", { city: s.name })}>
+                  <div className="text-lg mb-1">{s.emoji}</div>
+                  <div className="text-sm font-bold text-gray-100">{s.name}</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5 font-medium">{s.desc}</div>
+                  <div className="text-[9px] text-gray-500 mt-0.5">{s.sub}</div>
                 </div>
               ))}
             </div>
@@ -827,26 +980,48 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   }
 
   // ── Photo Gallery component ──
+  const [galleryFilter, setGalleryFilter] = useState("all");
   const PhotoGallery = () => {
     if (allGalleryImages.length === 0) {
       return <EmptyState icon="Camera" title="No photos" description="No images available yet" />;
     }
     const categoryColors = { restaurants: "border-amber-500/30", photo_spots: "border-purple-500/30", landmarks: "border-cyan-500/30" };
+    const categoryLabelsMap = { restaurants: "Restaurants", photo_spots: "Photo Spots", landmarks: "Landmarks" };
+    const categoryFilterColors = { all: "bg-white/10 text-gray-100", restaurants: "bg-amber-500/15 text-amber-300 border-amber-500/20", photo_spots: "bg-purple-500/15 text-purple-300 border-purple-500/20", landmarks: "bg-cyan-500/15 text-cyan-300 border-cyan-500/20" };
+    const categories = ["all", ...new Set(allGalleryImages.map((img) => img.category).filter(Boolean))];
+    const filteredImages = galleryFilter === "all" ? allGalleryImages : allGalleryImages.filter((img) => img.category === galleryFilter);
     return (
       <div className="space-y-3">
-        <div className="text-[11px] text-gray-500 font-medium">{allGalleryImages.length} photos from {places.length} places</div>
-        <div className="columns-2 sm:columns-3 gap-2 space-y-2">
-          {allGalleryImages.map((img, i) => (
-            <div key={i} className={"break-inside-avoid rounded-xl overflow-hidden border cursor-pointer group relative " + (categoryColors[img.category] || "border-white/[0.06]")} onClick={() => openLightbox(allGalleryImages.map((g) => g.url), i)}>
-              <img src={img.url} alt={img.placeName} className="w-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { e.target.parentElement.style.display = "none"; }} referrerPolicy="no-referrer" style={{ minHeight: "80px" }} />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="absolute bottom-2 left-2 right-2">
-                  <div className="text-[10px] text-white font-medium truncate">{img.placeName}</div>
+        {/* Category filter pills */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {categories.map((cat) => {
+            const count = cat === "all" ? allGalleryImages.length : allGalleryImages.filter((img) => img.category === cat).length;
+            return (
+              <button key={cat} onClick={() => setGalleryFilter(cat)}
+                className={"text-[11px] px-2.5 py-1.5 rounded-lg transition-all border whitespace-nowrap font-medium " +
+                  (galleryFilter === cat
+                    ? (categoryFilterColors[cat] || "bg-white/10 text-gray-100") + " border-white/10"
+                    : "bg-white/[0.02] text-gray-500 border-transparent hover:bg-white/5"
+                  )}>
+                {cat === "all" ? "All" : (categoryLabelsMap[cat] || cat)} <span className="text-[9px] opacity-60">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-[11px] text-gray-500 font-medium">{filteredImages.length} photos{galleryFilter !== "all" ? " in " + (categoryLabelsMap[galleryFilter] || galleryFilter) : " from " + places.length + " places"}</div>
+        <div className="columns-2 sm:columns-3 gap-2.5 space-y-2.5">
+          {filteredImages.map((img, i) => (
+            <div key={i} className={"break-inside-avoid rounded-xl overflow-hidden border-2 cursor-pointer group relative shadow-md shadow-black/10 hover:shadow-lg hover:shadow-black/20 transition-all duration-300 " + (categoryColors[img.category] || "border-white/[0.06]")} onClick={() => openLightbox(filteredImages.map((g) => g.url), i)}>
+              <img src={img.url} alt={img.placeName} className="w-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out" onError={(e) => { e.target.parentElement.style.display = "none"; }} referrerPolicy="no-referrer" style={{ minHeight: "90px" }} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="absolute bottom-2.5 left-2.5 right-2.5">
+                  <div className="text-[11px] text-white font-semibold truncate drop-shadow-lg">{img.placeName}</div>
+                  <div className="text-[9px] text-white/60 mt-0.5 font-medium">{categoryLabelsMap[img.category] || img.category}</div>
                 </div>
               </div>
-              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-6 h-6 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
-                  <LucideReact.Maximize2 className="w-3 h-3 text-white" />
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                <div className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/10">
+                  <LucideReact.Maximize2 className="w-3.5 h-3.5 text-white" />
                 </div>
               </div>
             </div>
@@ -861,6 +1036,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
     const searchSources = Array.isArray(data?.searchSources) ? data.searchSources : [];
     const overviewTabs = [
       { value: "places", label: "Places", icon: "MapPin" },
+      cityHistory ? { value: "history", label: "History", icon: "BookOpen" } : null,
       allGalleryImages.length > 0 ? { value: "gallery", label: "Gallery", icon: "Images" } : null,
       videos.length > 0 ? { value: "videos", label: "Videos", icon: "Play" } : null,
       travelTips.length > 0 ? { value: "tips", label: "Tips", icon: "Lightbulb" } : null,
@@ -871,26 +1047,32 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
     return (
       <div className="space-y-3.5">
         {/* Hero banner with city image */}
-        <div className="rounded-2xl overflow-hidden relative border border-white/[0.06]">
+        <div className="rounded-2xl overflow-hidden relative border border-white/[0.06] shadow-xl shadow-black/20">
           {hasHeroImg && (
             <div className="absolute inset-0">
-              <img src={heroImageUrl} alt={city} className={"w-full h-full object-cover transition-opacity duration-500 " + (heroLoaded ? "opacity-100" : "opacity-0")} onLoad={() => setHeroLoaded(true)} onError={() => setHeroError(true)} referrerPolicy="no-referrer" />
-              <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 70%, rgba(0,0,0,0.85) 100%)" }} />
+              <img src={heroImageUrl} alt={city} className={"w-full h-full object-cover transition-opacity duration-700 " + (heroLoaded ? "opacity-100" : "opacity-0")} onLoad={() => setHeroLoaded(true)} onError={() => setHeroError(true)} referrerPolicy="no-referrer" />
+              <div className="absolute inset-0" style={{ background: "linear-gradient(160deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.5) 40%, rgba(0,0,0,0.85) 80%, rgba(15,10,40,0.95) 100%)" }} />
+              <div className="absolute inset-0" style={{ background: "linear-gradient(to right, rgba(99,102,241,0.08) 0%, transparent 50%)" }} />
             </div>
           )}
-          {!hasHeroImg && <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 via-blue-600/15 to-purple-600/20" />}
-          <div className="relative p-5" style={{ minHeight: hasHeroImg ? "160px" : "auto" }}>
+          {!hasHeroImg && (
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/40 via-blue-800/25 to-purple-900/30">
+              <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(circle at 30% 50%, rgba(99,102,241,0.15) 0%, transparent 50%), radial-gradient(circle at 70% 80%, rgba(139,92,246,0.1) 0%, transparent 40%)" }} />
+            </div>
+          )}
+          <div className="relative p-5" style={{ minHeight: hasHeroImg ? "180px" : "auto" }}>
             <div className="flex items-start justify-between">
-              <div>
-                <div className="text-[10px] text-blue-300/90 uppercase tracking-widest font-semibold mb-1.5 flex items-center gap-1.5">
-                  <LucideReact.Globe className="w-3 h-3" />City Explorer
+              <div className="max-w-[65%]">
+                <div className="text-[10px] text-blue-300/80 uppercase tracking-[0.2em] font-semibold mb-2 flex items-center gap-1.5">
+                  <LucideReact.Compass className="w-3 h-3" />City Explorer
                 </div>
-                <div className={"font-bold tracking-tight " + (hasHeroImg ? "text-2xl text-white drop-shadow-lg" : "text-xl text-gray-50")}>{city}</div>
-                {country && <div className="text-xs text-gray-300/80 mt-1">{country}</div>}
+                <div className={"font-extrabold tracking-tight leading-tight " + (hasHeroImg ? "text-2xl text-white drop-shadow-lg" : "text-xl text-gray-50")}>{city}</div>
+                {famousNickname && <div className="text-xs text-indigo-300/80 mt-1 italic font-medium">"{famousNickname}"</div>}
+                {country && !famousNickname && <div className="text-xs text-gray-300/70 mt-1 font-medium">{country}</div>}
                 {fromHistory && (
-                  <div className="flex items-center gap-1 mt-2">
+                  <div className="flex items-center gap-1 mt-2 bg-white/5 rounded-full px-2 py-0.5 w-fit">
                     <LucideReact.BookOpen className="w-3 h-3 text-blue-300/70" />
-                    <span className="text-[10px] text-blue-300/70">Saved research</span>
+                    <span className="text-[10px] text-blue-300/70 font-medium">Saved research</span>
                   </div>
                 )}
               </div>
@@ -910,14 +1092,14 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             </div>
             {/* Hero image thumbnails strip */}
             {heroImageUrls.length > 1 && heroLoaded && (
-              <div className="flex gap-1.5 mt-3 overflow-x-auto pb-0.5">
+              <div className="flex gap-1.5 mt-4 overflow-x-auto pb-0.5">
                 {heroImageUrls.slice(0, 5).map((url, i) => (
-                  <button key={i} className="w-12 h-8 rounded-lg overflow-hidden shrink-0 border border-white/20 hover:border-white/50 transition-all opacity-80 hover:opacity-100" onClick={() => openLightbox(heroImageUrls, i)}>
+                  <button key={i} className="w-14 h-9 rounded-lg overflow-hidden shrink-0 border border-white/20 hover:border-white/50 transition-all opacity-75 hover:opacity-100 hover:scale-105" onClick={() => openLightbox(heroImageUrls, i)}>
                     <img src={url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   </button>
                 ))}
                 {heroImageUrls.length > 5 && (
-                  <button className="w-12 h-8 rounded-lg shrink-0 bg-white/10 border border-white/20 flex items-center justify-center text-[10px] text-white/70 font-medium" onClick={() => openLightbox(heroImageUrls, 5)}>
+                  <button className="w-14 h-9 rounded-lg shrink-0 bg-white/10 border border-white/20 flex items-center justify-center text-[10px] text-white/70 font-medium hover:bg-white/15 transition-all" onClick={() => openLightbox(heroImageUrls, 5)}>
                     +{heroImageUrls.length - 5}
                   </button>
                 )}
@@ -930,30 +1112,43 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         <StatsRow />
 
         {summary && (
-          <div className="text-xs text-gray-400 px-0.5 leading-relaxed border-l-2 border-indigo-500/30 pl-3">{summary}</div>
+          <div className="rounded-xl bg-gradient-to-r from-indigo-500/[0.07] via-blue-500/[0.03] to-transparent border border-indigo-500/10 p-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-20 h-20 opacity-[0.03]">
+              <LucideReact.Sparkles className="w-full h-full text-indigo-300" />
+            </div>
+            <div className="flex gap-3 items-start relative">
+              <div className="w-1 self-stretch rounded-full bg-gradient-to-b from-indigo-400 via-blue-400 to-purple-500 shrink-0" />
+              <div className="text-[13px] text-gray-300 leading-[1.7]">{summary}</div>
+            </div>
+          </div>
         )}
 
-        {/* Tab bar */}
-        <div className="flex gap-1 bg-white/[0.03] rounded-xl p-1 border border-white/[0.04]">
-          {overviewTabs.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={"flex-1 flex items-center justify-center gap-1.5 text-[11px] font-medium py-2 rounded-lg transition-all " +
-                (activeTab === tab.value
-                  ? "bg-white/10 text-gray-100 shadow-sm"
-                  : "text-gray-500 hover:text-gray-300 hover:bg-white/[0.03]")}
-            >
-              {tab.label}
-              {tab.value === "places" && <span className="text-[9px] opacity-60">{places.length}</span>}
-              {tab.value === "gallery" && <span className="text-[9px] opacity-60">{allGalleryImages.length}</span>}
-              {tab.value === "videos" && <span className="text-[9px] opacity-60">{videos.length}</span>}
-              {tab.value === "tips" && <span className="text-[9px] opacity-60">{travelTips.length}</span>}
-            </button>
-          ))}
+        {/* Tab bar with icons */}
+        <div className="flex gap-0.5 bg-white/[0.03] rounded-2xl p-1 border border-white/[0.05] shadow-inner shadow-black/10">
+          {overviewTabs.map((tab) => {
+            const tabIconMap = { places: LucideReact.MapPin, history: LucideReact.BookOpen, gallery: LucideReact.Images, videos: LucideReact.Play, tips: LucideReact.Lightbulb };
+            const TabIcon = tabIconMap[tab.value] || LucideReact.Circle;
+            const countMap = { places: places.length, history: cityHistory?.timeline?.length, gallery: allGalleryImages.length, videos: videos.length, tips: travelTips.length };
+            const count = countMap[tab.value];
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={"flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold py-2.5 rounded-xl transition-all duration-200 " +
+                  (activeTab === tab.value
+                    ? "bg-gradient-to-b from-white/[0.1] to-white/[0.05] text-gray-100 shadow-sm border border-white/[0.08]"
+                    : "text-gray-500 hover:text-gray-300 hover:bg-white/[0.03] border border-transparent")}
+              >
+                <TabIcon className={"w-3.5 h-3.5 " + (activeTab === tab.value ? "opacity-90" : "opacity-50")} />
+                <span className="hidden sm:inline">{tab.label}</span>
+                {count > 0 && <span className={"text-[9px] rounded-full px-1.5 py-0.5 " + (activeTab === tab.value ? "bg-white/10 text-gray-300" : "opacity-50")}>{count}</span>}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab content */}
+        {activeTab === "history" && <CityHistorySection />}
         {activeTab === "gallery" && <PhotoGallery />}
         {activeTab === "videos" && <VideoGrid items={videos} />}
         {activeTab === "tips" && <TravelTips tips={travelTips} />}
@@ -969,11 +1164,15 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
               const catBg = catBgs[section.category] || "from-blue-500/10 to-indigo-500/5 border-blue-500/15";
               return (
                 <div key={sIdx} className="space-y-2.5">
-                  <div className={"flex items-center justify-between rounded-xl px-3 py-2 bg-gradient-to-r border " + catBg}>
-                    <div className="flex items-center gap-2">
-                      <CatIcon className={"w-4 h-4 " + catColor} />
-                      <div className="text-sm font-semibold text-gray-200">{section.label}</div>
-                      <span className="text-[10px] text-gray-500 font-medium">{secPlaces.length}</span>
+                  <div className={"flex items-center justify-between rounded-xl px-3.5 py-2.5 bg-gradient-to-r border " + catBg}>
+                    <div className="flex items-center gap-2.5">
+                      <div className={"w-8 h-8 rounded-lg flex items-center justify-center bg-white/[0.06]"}>
+                        <CatIcon className={"w-4 h-4 " + catColor} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-gray-100">{section.label}</div>
+                        <div className="text-[10px] text-gray-500 font-medium">{secPlaces.length} discovered</div>
+                      </div>
                     </div>
                     <Button variant="ghost" onClick={() => {
                       const actionMap = { restaurants: "restaurants", photo_spots: "photo_spots", landmarks: "landmarks" };
@@ -1034,15 +1233,17 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   return (
     <div className="space-y-3.5">
       {/* Category hero header */}
-      <div className={"rounded-2xl overflow-hidden bg-gradient-to-br border p-4 " + (catGradients[category] || "from-blue-600/20 to-indigo-600/10 border-blue-500/15")}>
+      <div className={"rounded-2xl overflow-hidden bg-gradient-to-br border p-4 shadow-lg shadow-black/10 " + (catGradients[category] || "from-blue-600/20 to-indigo-600/10 border-blue-500/15")}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => onAction("explore", { city })}>
               <LucideReact.ArrowLeft className="w-4 h-4" />
             </Button>
-            <CatIcon className={"w-5 h-5 " + (accent === "amber" ? "text-amber-400" : accent === "purple" ? "text-purple-400" : "text-cyan-400")} />
+            <div className={"w-10 h-10 rounded-xl flex items-center justify-center " + (accent === "amber" ? "bg-amber-500/15" : accent === "purple" ? "bg-purple-500/15" : "bg-cyan-500/15")}>
+              <CatIcon className={"w-5 h-5 " + (accent === "amber" ? "text-amber-400" : accent === "purple" ? "text-purple-400" : "text-cyan-400")} />
+            </div>
             <div>
-              <div className="text-base font-bold text-gray-100">{categoryLabel}</div>
+              <div className="text-base font-extrabold text-gray-100">{categoryLabel}</div>
               <div className="text-[11px] text-gray-400">{city} \u00B7 {places.length} found</div>
             </div>
           </div>
@@ -1057,7 +1258,14 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         </div>
       </div>
 
-      {summary && <div className="text-xs text-gray-400 leading-relaxed border-l-2 border-indigo-500/30 pl-3">{summary}</div>}
+      {summary && (
+        <div className="rounded-xl bg-gradient-to-r from-indigo-500/[0.06] to-transparent border border-indigo-500/10 p-3.5">
+          <div className="flex gap-3 items-start">
+            <div className="w-1 self-stretch rounded-full bg-gradient-to-b from-indigo-400 to-purple-500 shrink-0" />
+            <div className="text-[13px] text-gray-300 leading-relaxed">{summary}</div>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <Input placeholder={"Search " + categoryLabel.toLowerCase() + "..."} value={filter} onChange={(val) => setFilter(val)} icon="Search" />
