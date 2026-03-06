@@ -28,6 +28,9 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const [heroError, setHeroError] = useState(false);
   const [galleryFilter, setGalleryFilter] = useState("all");
 
+  // Safe-text helper: coerce any LLM value (could be object) to a renderable string
+  const S = (v) => v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+
   const city = String(data?.city ?? "");
   const category = String(data?.category ?? "overview");
   const places = Array.isArray(data?.places) ? data.places : [];
@@ -196,7 +199,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
     return (
       <div className="flex items-center gap-0.5">
         {stars}
-        <span className="text-[10px] text-amber-300 ml-1 font-medium">{rating}</span>
+        <span className="text-[10px] text-amber-300 ml-1 font-medium">{S(rating)}</span>
       </div>
     );
   };
@@ -277,11 +280,11 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             </button>
             <div className="absolute bottom-2 left-2.5 right-2.5 flex items-end justify-between">
               {place.priceLevel && (
-                <div className="bg-emerald-500/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{place.priceLevel}</div>
+                <div className="bg-emerald-500/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{S(place.priceLevel)}</div>
               )}
               {place.bestTime && (
                 <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-gray-200 text-[9px] px-2 py-0.5 rounded-full">
-                  <LucideReact.Clock className="w-2.5 h-2.5" />{place.bestTime}
+                  <LucideReact.Clock className="w-2.5 h-2.5" />{S(place.bestTime)}
                 </div>
               )}
             </div>
@@ -289,12 +292,12 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         )}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-gray-100 truncate">{place.name}</div>
+            <div className="text-sm font-semibold text-gray-100 truncate">{S(place.name)}</div>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              {place.category && <Badge variant="info">{place.category}</Badge>}
+              {place.category && <Badge variant="info">{S(place.category)}</Badge>}
               {place.location && (
                 <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
-                  <LucideReact.MapPin className="w-2.5 h-2.5" />{place.location}
+                  <LucideReact.MapPin className="w-2.5 h-2.5" />{S(place.location)}
                 </span>
               )}
               {hasMultipleImgs && (
@@ -315,7 +318,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         {place.highlights && place.highlights.length > 0 && (
           <div className="flex gap-1 mt-2 flex-wrap">
             {place.highlights.slice(0, 3).map((h, i) => (
-              <span key={i} className="text-[9px] bg-white/[0.06] text-gray-400 px-2 py-0.5 rounded-full border border-white/[0.04] font-medium">{h}</span>
+              <span key={i} className="text-[9px] bg-white/[0.06] text-gray-400 px-2 py-0.5 rounded-full border border-white/[0.04] font-medium">{S(h)}</span>
             ))}
           </div>
         )}
@@ -394,16 +397,16 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
           <div className="p-3.5 bg-gray-900/60">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-bold text-gray-100 line-clamp-2 leading-snug">{featuredVideo.title}</div>
-                {featuredVideo.description && <div className="text-[11px] text-gray-400 mt-1 line-clamp-2 leading-relaxed">{featuredVideo.description}</div>}
+                <div className="text-sm font-bold text-gray-100 line-clamp-2 leading-snug">{S(featuredVideo.title)}</div>
+                {featuredVideo.description && <div className="text-[11px] text-gray-400 mt-1 line-clamp-2 leading-relaxed">{S(featuredVideo.description)}</div>}
                 <div className="flex items-center gap-2 mt-2">
                   {featuredVideo.creator && (
                     <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                      <LucideReact.User className="w-3 h-3 shrink-0" />{featuredVideo.creator}
+                      <LucideReact.User className="w-3 h-3 shrink-0" />{S(featuredVideo.creator)}
                     </span>
                   )}
-                  {featuredVideo.duration && <Badge variant="default">{featuredVideo.duration}</Badge>}
-                  {featuredVideo.age && <span className="text-[10px] text-gray-500">{featuredVideo.age}</span>}
+                  {featuredVideo.duration && <Badge variant="default">{S(featuredVideo.duration)}</Badge>}
+                  {featuredVideo.age && <span className="text-[10px] text-gray-500">{S(featuredVideo.age)}</span>}
                 </div>
               </div>
               {playingVideo && (
@@ -431,7 +434,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                         <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" onLoad={() => handleImgLoad("vid_" + idx)} onError={() => handleImgError("vid_" + idx)} referrerPolicy="no-referrer" />
                         <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 40%)" }} />
                         {vid.duration && (
-                          <div className="absolute bottom-1.5 right-1.5 bg-black/80 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium">{vid.duration}</div>
+                          <div className="absolute bottom-1.5 right-1.5 bg-black/80 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium">{S(vid.duration)}</div>
                         )}
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="w-10 h-10 rounded-full bg-red-600/90 backdrop-blur-sm flex items-center justify-center shadow-lg shadow-red-600/30">
@@ -440,15 +443,15 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                         </div>
                       </div>
                     )}
-                    <div className="text-xs font-medium text-gray-100 line-clamp-2 leading-relaxed">{vid.title}</div>
+                    <div className="text-xs font-medium text-gray-100 line-clamp-2 leading-relaxed">{S(vid.title)}</div>
                   </div>
                   <div className="flex items-center gap-2 mt-1.5">
                     {vid.creator && (
                       <span className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
-                        <LucideReact.User className="w-2.5 h-2.5 shrink-0" />{vid.creator}
+                        <LucideReact.User className="w-2.5 h-2.5 shrink-0" />{S(vid.creator)}
                       </span>
                     )}
-                    {vid.age && <span className="text-[10px] text-gray-500">{vid.age}</span>}
+                    {vid.age && <span className="text-[10px] text-gray-500">{S(vid.age)}</span>}
                   </div>
                 </UICard>
               ))}
@@ -473,7 +476,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
               try { domain = new URL(url).hostname.replace("www.", ""); } catch(e) { domain = url; }
               return (
                 <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-blue-400 transition-colors">
-                  <LucideReact.ExternalLink className="w-2.5 h-2.5 shrink-0" />{domain}
+                  <LucideReact.ExternalLink className="w-2.5 h-2.5 shrink-0" />{S(domain)}
                 </a>
               );
             })}
@@ -618,7 +621,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   "bg-gradient-to-r from-rose-500/15 to-rose-500/5 text-rose-200 border-rose-500/25",
                 ];
                 return (
-                  <span key={i} className={"text-xs px-3.5 py-1.5 rounded-full border font-medium " + tagColors[i % tagColors.length]}>{item}</span>
+                  <span key={i} className={"text-xs px-3.5 py-1.5 rounded-full border font-medium " + tagColors[i % tagColors.length]}>{S(item)}</span>
                 );
               })}
             </div>
@@ -665,8 +668,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                       {/* Timeline dot with glow */}
                       <div className={"absolute left-[11px] top-[20px] w-[14px] h-[14px] rounded-full border-[3px] border-gray-950/90 " + colors.dot + " shadow-md " + colors.glow} />
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className={"text-xs font-bold tracking-wide " + colors.text}>{event.year}</span>
-                        <span className={"text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-white/[0.04] border border-white/[0.06] " + colors.text}>{event.era}</span>
+                        <span className={"text-xs font-bold tracking-wide " + colors.text}>{S(event.year)}</span>
+                        <span className={"text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-white/[0.04] border border-white/[0.06] " + colors.text}>{S(event.era)}</span>
                       </div>
                       <div className="text-[13px] font-semibold text-gray-100 leading-tight">{String(event.title ?? "")}</div>
                       <div className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{String(event.description ?? "")}</div>
@@ -723,7 +726,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
               <img src={detailCurrentImg} alt={selectedPlace.name} className="w-full h-full object-cover cursor-pointer" onClick={() => openLightbox(detailImgs, detailGalleryIdx)} onLoad={() => handleImgLoad(selectedPlace.name)} onError={() => handleImgError(selectedPlace.name)} referrerPolicy="no-referrer" />
               <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 40%)" }} />
               {selectedPlace.priceLevel && (
-                <div className="absolute top-2.5 right-2.5 bg-emerald-500/90 backdrop-blur-sm text-white text-xs font-bold px-2.5 py-1 rounded-full">{selectedPlace.priceLevel}</div>
+                <div className="absolute top-2.5 right-2.5 bg-emerald-500/90 backdrop-blur-sm text-white text-xs font-bold px-2.5 py-1 rounded-full">{S(selectedPlace.priceLevel)}</div>
               )}
               {/* Gallery navigation */}
               {hasMultiDetail && (
@@ -760,10 +763,10 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             </div>
           )}
           <div className="flex flex-wrap gap-1.5 items-center">
-            {selectedPlace.category && <Badge variant="info">{selectedPlace.category}</Badge>}
+            {selectedPlace.category && <Badge variant="info">{S(selectedPlace.category)}</Badge>}
             {selectedPlace.location && (
               <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                <LucideReact.MapPin className="w-3 h-3" />{selectedPlace.location}
+                <LucideReact.MapPin className="w-3 h-3" />{S(selectedPlace.location)}
               </span>
             )}
           </div>
@@ -774,7 +777,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
               <LucideReact.Clock className="w-4 h-4 text-amber-400 shrink-0" />
               <div>
                 <div className="text-[10px] text-amber-400/80 font-medium uppercase tracking-wide">Best time to visit</div>
-                <div className="text-xs text-gray-200 mt-0.5">{selectedPlace.bestTime}</div>
+                <div className="text-xs text-gray-200 mt-0.5">{S(selectedPlace.bestTime)}</div>
               </div>
             </div>
           )}
@@ -787,7 +790,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                     <div className="w-5 h-5 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
                       <LucideReact.Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
                     </div>
-                    <span className="text-xs text-gray-300 leading-relaxed">{h}</span>
+                    <span className="text-xs text-gray-300 leading-relaxed">{S(h)}</span>
                   </div>
                 ))}
               </div>
@@ -894,10 +897,10 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                         <LucideReact.MapPin className="w-4.5 h-4.5 text-blue-400" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-gray-100 truncate">{rc.city}</div>
+                        <div className="text-sm font-semibold text-gray-100 truncate">{S(rc.city)}</div>
                         <div className="flex gap-2 mt-0.5 items-center">
-                          <span className="text-[10px] text-gray-400 flex items-center gap-0.5"><LucideReact.MapPin className="w-2 h-2" />{rc.placeCount}</span>
-                          {rc.videoCount > 0 && <span className="text-[10px] text-gray-400 flex items-center gap-0.5"><LucideReact.Play className="w-2 h-2" />{rc.videoCount}</span>}
+                          <span className="text-[10px] text-gray-400 flex items-center gap-0.5"><LucideReact.MapPin className="w-2 h-2" />{S(rc.placeCount)}</span>
+                          {rc.videoCount > 0 && <span className="text-[10px] text-gray-400 flex items-center gap-0.5"><LucideReact.Play className="w-2 h-2" />{S(rc.videoCount)}</span>}
                           <span className="text-[10px] text-gray-600">{timeAgo(rc.timestamp)}</span>
                         </div>
                       </div>
@@ -924,10 +927,10 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {suggestions.map((s) => (
                 <div key={s.name} className={"rounded-xl p-3.5 cursor-pointer transition-all border hover:border-white/15 bg-gradient-to-br hover:scale-[1.02] " + s.color + " " + s.border} onClick={() => onAction("explore", { city: s.name })}>
-                  <div className="text-lg mb-1">{s.emoji}</div>
-                  <div className="text-sm font-bold text-gray-100">{s.name}</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5 font-medium">{s.desc}</div>
-                  <div className="text-[9px] text-gray-500 mt-0.5">{s.sub}</div>
+                  <div className="text-lg mb-1">{S(s.emoji)}</div>
+                  <div className="text-sm font-bold text-gray-100">{S(s.name)}</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5 font-medium">{S(s.desc)}</div>
+                  <div className="text-[9px] text-gray-500 mt-0.5">{S(s.sub)}</div>
                 </div>
               ))}
             </div>
@@ -1017,8 +1020,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
               <img src={img.url} alt={img.placeName} className="w-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out" onError={(e) => { e.target.parentElement.style.display = "none"; }} referrerPolicy="no-referrer" style={{ minHeight: "90px" }} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <div className="absolute bottom-2.5 left-2.5 right-2.5">
-                  <div className="text-[11px] text-white font-semibold truncate drop-shadow-lg">{img.placeName}</div>
-                  <div className="text-[9px] text-white/60 mt-0.5 font-medium">{categoryLabelsMap[img.category] || img.category}</div>
+                  <div className="text-[11px] text-white font-semibold truncate drop-shadow-lg">{S(img.placeName)}</div>
+                  <div className="text-[9px] text-white/60 mt-0.5 font-medium">{S(categoryLabelsMap[img.category] || img.category)}</div>
                 </div>
               </div>
               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
@@ -1172,7 +1175,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                         <CatIcon className={"w-4 h-4 " + catColor} />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-gray-100">{section.label}</div>
+                        <div className="text-sm font-bold text-gray-100">{S(section.label)}</div>
                         <div className="text-[10px] text-gray-500 font-medium">{secPlaces.length} discovered</div>
                       </div>
                     </div>
