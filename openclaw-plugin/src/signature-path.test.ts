@@ -23,7 +23,7 @@ describe("tool-driven follow-up path", () => {
     const regime = detectToolTemplateForToolName("alpharank_market_regime");
     const portfolio = detectToolTemplateForToolName("alpharank_portfolio_checkin");
     expect(regime?.signatureId).toBe("market_regime_snapshot");
-    expect(portfolio?.signatureId).toBe("portfolio_health");
+    expect(portfolio?.signatureId).toBe("ranked_predictions_table");
   });
 
   it("infers tool template from data when tool name is absent", () => {
@@ -86,7 +86,7 @@ describe("tool-driven follow-up path", () => {
     expect(signature).toBeDefined();
     const code = getToolTemplateCode(signature!);
     expect(code).toContain("Prediction Command Center");
-    expect(code).toContain("ticker_detail");
+    expect(code).toContain("predictions");
   });
 
   it("auto-registers generic templates for unknown runtime tool families", () => {

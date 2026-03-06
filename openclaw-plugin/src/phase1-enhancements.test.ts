@@ -2,6 +2,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { startEnsoServer } from "./server";
 import type { ClientMessage, ServerMessage } from "../../shared/types";
+
+// Polyfill localStorage for Node.js test environment (useChatStore reads it at module init)
+vi.hoisted(() => {
+  if (typeof globalThis.localStorage === "undefined") {
+    const store: Record<string, string> = {};
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, value: string) => { store[key] = value; },
+      removeItem: (key: string) => { delete store[key]; },
+      clear: () => { for (const k of Object.keys(store)) delete store[k]; },
+      get length() { return Object.keys(store).length; },
+      key: (i: number) => Object.keys(store)[i] ?? null,
+    };
+  }
+});
+
 import { useChatStore } from "../../src/store/chat";
 import type { Card } from "../../src/cards/types";
 

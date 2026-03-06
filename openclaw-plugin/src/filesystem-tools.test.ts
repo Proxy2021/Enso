@@ -25,7 +25,9 @@ describe("filesystem tools", () => {
     const filePath = join(nested, "readme.txt");
     writeFileSync(filePath, "hello filesystem tool", "utf-8");
 
-    const [listTool, readTool] = createFilesystemTools();
+    const allTools = createFilesystemTools();
+    const listTool = allTools.find((t) => t.name === "enso_fs_list_directory")!;
+    const readTool = allTools.find((t) => t.name === "enso_fs_read_text_file")!;
     const listResult = await listTool.execute("call-1", { path: nested });
     const listData = parseToolJsonText(listResult) as Record<string, unknown>;
     expect(listData.tool).toBe("enso_fs_list_directory");

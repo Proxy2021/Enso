@@ -77,6 +77,13 @@ vi.mock("./native-tools/registry.js", () => ({
   getToolTemplateCode: vi.fn(() => "<div>tool-template</div>"),
   normalizeDataForToolTemplate: vi.fn((_, data) => data),
   registerToolTemplateCandidate: vi.fn(),
+  getGeneratedTemplateCodeBySignature: vi.fn(() => undefined),
+  getDataHintForSignature: vi.fn(() => null),
+  getRegisteredToolCatalog: vi.fn(() => []),
+  isDynamicTool: vi.fn(() => false),
+  getExecutorBody: vi.fn(() => null),
+  hotSwapExecutor: vi.fn(),
+  registerGeneratedTemplateCode: vi.fn(),
 }));
 
 vi.mock("./native-tools/tool-call-store.js", () => ({
@@ -108,6 +115,16 @@ vi.mock("./tooling-console.js", () => ({
     status: description.includes("existing") ? "exists" : "registered",
     message: description.includes("existing") ? "already exists" : "registered",
   })),
+}));
+
+vi.mock("./action-log.js", () => ({
+  logAction: vi.fn(),
+  logError: vi.fn(),
+  logFix: vi.fn(),
+}));
+
+vi.mock("./tool-families/catalog.js", () => ({
+  TOOL_FAMILY_CAPABILITIES: [],
 }));
 
 // ── Helpers ──
@@ -158,18 +175,18 @@ import {
   deliverEnsoReply,
   deliverToEnso,
   handlePluginCardAction,
+  registerCardContext,
 } from "./outbound.js";
 
-import { serverGenerateConstrainedFollowupUI, serverGenerateUI, serverGenerateUIFromText } from "./ui-generator.js";
-import { consumeRecentToolCall } from "./native-tools/tool-call-store.js";
+import { serverGenerateConstrainedFollowupUI, serverGenerateUI } from "./ui-generator.js";
 import { executeToolDirect, getActionDescriptions, inferToolTemplate, isToolRegistered } from "./native-tools/registry.js";
 import { resolveEnsoAccount } from "./accounts.js";
 import { getAllClients } from "./server.js";
 import { handleEnsoInbound } from "./inbound.js";
-import { reportDomainGap } from "./domain-evolution.js";
 
 // ═══════════════════════════════════════════════════════
 //  deliverEnsoReply
+//  (Now a pure delivery function — no UI gen, no mode checks, no card contexts)
 // ═══════════════════════════════════════════════════════
 
 describe("deliverEnsoReply", () => {
@@ -177,12 +194,12 @@ describe("deliverEnsoReply", () => {
     vi.clearAllMocks();
   });
 
-  it("IM mode: sends plain text, skips UI generation", async () => {
+  it("sends plain text as a final message", async () => {
     const client = mockClient();
-    const account = mockAccount("im");
+    const account = mockAccount("full");
 
     await deliverEnsoReply({
-      payload: { text: "Hello from the agent with enough text to trigger UI generation if mode allowed it. This is more than 100 chars of content." },
+      payload: { text: "Hello from the agent" },
       client,
       runId: "run-1",
       seq: 0,
@@ -194,70 +211,14 @@ describe("deliverEnsoReply", () => {
     const msg = client.messages[0];
     expect(msg.state).toBe("final");
     expect(msg.text).toContain("Hello from the agent");
+    // deliverEnsoReply no longer generates UI or extracts data
     expect(msg.generatedUI).toBeUndefined();
     expect(msg.data).toBeUndefined();
-
-    // UI generation functions should NOT have been called
-    expect(serverGenerateUI).not.toHaveBeenCalled();
-    expect(serverGenerateUIFromText).not.toHaveBeenCalled();
-    expect(consumeRecentToolCall).not.toHaveBeenCalled();
   });
 
-  it("UI mode: generates UI and registers card context", async () => {
-    const client = mockClient();
-    const account = mockAccount("ui");
-
-    // Set up tool call so UI generation triggers
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce(null);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"items": [{"name": "test"}]}\n```\nHere is some data that is long enough for the text path check as well.',
-      },
-      client,
-      runId: "run-1",
-      seq: 0,
-      account,
-      userMessage: "show me data",
-    });
-
-    expect(client.messages).toHaveLength(1);
-    const msg = client.messages[0];
-    expect(msg.state).toBe("final");
-    expect(msg.generatedUI).toBe("<div>generated</div>");
-    expect(msg.data).toEqual({ items: [{ name: "test" }] });
-
-    expect(serverGenerateUI).toHaveBeenCalled();
-    expect(reportDomainGap).toHaveBeenCalledTimes(1);
-  });
-
-  it("Full mode: generates UI and registers card context", async () => {
+  it("passes toolMeta through for claude-code messages", async () => {
     const client = mockClient();
     const account = mockAccount("full");
-
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce(null);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"dashboard": true}\n```\nMore text to go with it.',
-      },
-      client,
-      runId: "run-2",
-      seq: 0,
-      account,
-      userMessage: "show dashboard",
-    });
-
-    expect(client.messages).toHaveLength(1);
-    const msg = client.messages[0];
-    expect(msg.generatedUI).toBe("<div>generated</div>");
-    expect(msg.data).toEqual({ dashboard: true });
-    expect(reportDomainGap).toHaveBeenCalledTimes(1);
-  });
-
-  it("toolMeta bypasses mode check (Claude Code terminal)", async () => {
-    const client = mockClient();
-    const account = mockAccount("im"); // Even in IM mode
 
     await deliverEnsoReply({
       payload: { text: "Claude Code output" },
@@ -275,31 +236,57 @@ describe("deliverEnsoReply", () => {
     expect(msg.state).toBe("final");
   });
 
-  it("/tool enso command returns tool-console card in tool mode", async () => {
+  it("includes steps when multi-block response", async () => {
     const client = mockClient();
     const account = mockAccount("full");
+    const now = Date.now();
+
+    const steps = [
+      { seq: 0, text: "First I'll check the data", timestamp: now },
+      { seq: 1, text: "Here are the results", timestamp: now + 1 },
+    ];
 
     await deliverEnsoReply({
-      payload: { text: "tool console bootstrap" },
+      payload: { text: "Here are the results" },
       client,
-      runId: "run-tool-console",
-      seq: 0,
+      runId: "run-4",
+      seq: 1,
       account,
-      userMessage: "/tool enso",
+      userMessage: "analyze data",
+      steps,
     });
 
     expect(client.messages).toHaveLength(1);
     const msg = client.messages[0];
-    expect(msg.cardMode?.interactionMode).toBe("tool");
-    expect(msg.cardMode?.toolFamily).toBe("enso_tooling");
-    expect(msg.generatedUI).toBe("<div>tool-template</div>");
-    expect(msg.data).toMatchObject({ view: "home" });
+    expect(msg.state).toBe("final");
+    expect(msg.steps).toEqual(steps);
+    // Uses last step's text as primary content
+    expect(msg.text).toContain("Here are the results");
   });
 
+  it("sends with targetCardId when provided", async () => {
+    const client = mockClient();
+    const account = mockAccount("full");
+
+    await deliverEnsoReply({
+      payload: { text: "Updated content" },
+      client,
+      runId: "run-5",
+      seq: 0,
+      account,
+      userMessage: "update",
+      targetCardId: "existing-card-123",
+    });
+
+    expect(client.messages).toHaveLength(1);
+    const msg = client.messages[0];
+    expect(msg.targetCardId).toBe("existing-card-123");
+  });
 });
 
 // ═══════════════════════════════════════════════════════
 //  deliverToEnso
+//  (Pure delivery — no UI gen, no mode checks)
 // ═══════════════════════════════════════════════════════
 
 describe("deliverToEnso", () => {
@@ -307,14 +294,14 @@ describe("deliverToEnso", () => {
     vi.clearAllMocks();
   });
 
-  it("IM mode: sends plain text, skips UI generation", async () => {
+  it("delivers text to connected clients", async () => {
     const client = mockClient();
-    vi.mocked(resolveEnsoAccount).mockReturnValue(mockAccount("im"));
+    vi.mocked(resolveEnsoAccount).mockReturnValue(mockAccount("full"));
     vi.mocked(getAllClients).mockReturnValue([client]);
 
     const result = await deliverToEnso({
       to: "enso_test",
-      text: "Agent response with enough text to trigger UI generation. This should be more than one hundred characters of text content for the threshold.",
+      text: "Agent response message",
     });
 
     expect(result.channel).toBe("enso");
@@ -322,29 +309,6 @@ describe("deliverToEnso", () => {
     const msg = client.messages[0];
     expect(msg.state).toBe("final");
     expect(msg.text).toContain("Agent response");
-    expect(msg.generatedUI).toBeUndefined();
-    expect(msg.data).toBeUndefined();
-
-    expect(serverGenerateUI).not.toHaveBeenCalled();
-    expect(serverGenerateUIFromText).not.toHaveBeenCalled();
-    expect(consumeRecentToolCall).not.toHaveBeenCalled();
-  });
-
-  it("Full mode: generates UI via text path", async () => {
-    const client = mockClient();
-    vi.mocked(resolveEnsoAccount).mockReturnValue(mockAccount("full"));
-    vi.mocked(getAllClients).mockReturnValue([client]);
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce(null);
-
-    await deliverToEnso({
-      to: "enso_test",
-      text: "A long agent response that should trigger UI generation because it exceeds the 100 character minimum. Here is more content to be sure.",
-    });
-
-    expect(client.messages).toHaveLength(1);
-    const msg = client.messages[0];
-    expect(msg.generatedUI).toBeDefined();
-    expect(serverGenerateUIFromText).toHaveBeenCalled();
   });
 });
 
@@ -357,49 +321,40 @@ describe("handlePluginCardAction", () => {
     vi.clearAllMocks();
   });
 
-  // Helper: create a card with context by delivering a reply first
-  async function createCardWithContext(mode: "im" | "ui" | "full"): Promise<{
+  // Helper: create a card with manually registered context
+  // (deliverEnsoReply no longer creates card contexts — that's now done by handleCardEnhance)
+  function createCardWithContext(mode: "im" | "ui" | "full"): {
     cardId: string;
     client: ConnectedClient & { messages: ServerMessage[] };
-  }> {
+  } {
     const client = mockClient();
     const account = mockAccount(mode);
+    const cardId = `card-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce(null);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"columns": [{"name": "To Do", "tasks": [{"id": 1, "title": "Task 1", "priority": "high", "assignee": "Alice"}]}], "projectName": "Test"}\n```',
+    registerCardContext(cardId, {
+      cardId,
+      originalPrompt: "show tasks",
+      originalResponse: JSON.stringify({
+        columns: [{ name: "To Do", tasks: [{ id: 1, title: "Task 1", priority: "high", assignee: "Alice" }] }],
+        projectName: "Test",
+      }),
+      currentData: {
+        columns: [{ name: "To Do", tasks: [{ id: 1, title: "Task 1", priority: "high", assignee: "Alice" }] }],
+        projectName: "Test",
       },
-      client,
-      runId: "run-card",
-      seq: 0,
+      geminiApiKey: account.geminiApiKey,
       account,
-      userMessage: "show tasks",
+      mode,
+      actionHistory: [],
+      interactionMode: "llm",
     });
 
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0; // Clear previous messages
-    vi.clearAllMocks();
     return { cardId, client };
   }
 
-  // ── IM mode guard ──
+  // ── Missing context error ──
 
-  it("IM mode guard: rejects card actions with error", async () => {
-    // IM mode skips UI gen so no card context is created normally.
-    // But we test the guard in handlePluginCardAction by first creating
-    // a card context in a non-IM mode, then simulating the IM guard.
-    // The server.ts guard would catch this first, but we test the outbound guard too.
-
-    // Create a card in full mode first so context exists
-    const { cardId, client } = await createCardWithContext("full");
-
-    // Now manually we can't change the mode on an existing context,
-    // but the IM guard in handlePluginCardAction checks ctx.mode.
-    // Since we created in "full" mode, the IM guard won't trigger here.
-    // The server.ts guard is the primary defense. Let's verify the error
-    // path when context is missing instead.
+  it("returns error when card context does not exist", async () => {
     const freshClient = mockClient();
     await handlePluginCardAction({
       cardId: "nonexistent-card",
@@ -418,7 +373,7 @@ describe("handlePluginCardAction", () => {
   // ── Full mode: Path 1 (Mechanical action) ──
 
   it("Full mode + mechanical action: in-place update via targetCardId", async () => {
-    const { cardId, client } = await createCardWithContext("full");
+    const { cardId, client } = createCardWithContext("full");
 
     await handlePluginCardAction({
       cardId,
@@ -449,7 +404,7 @@ describe("handlePluginCardAction", () => {
   // ── UI mode: Path 1 (Mechanical action) ──
 
   it("UI mode + mechanical action: restore source card + create new card", async () => {
-    const { cardId, client } = await createCardWithContext("ui");
+    const { cardId, client } = createCardWithContext("ui");
 
     await handlePluginCardAction({
       cardId,
@@ -489,41 +444,29 @@ describe("handlePluginCardAction", () => {
   // ── Full mode: Path 2 (Native tool action) ──
 
   it("Full mode + native tool action: in-place update via targetCardId", async () => {
-    // Create a card that has a native tool hint
     const client = mockClient();
     const account = mockAccount("full");
+    const cardId = `card-native-full-${Date.now()}`;
 
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce({
-      toolName: "test_latest_data",
-      params: { period: "1d" },
-      timestamp: Date.now(),
-    });
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, details");
-
-    // Need to mock getToolPluginId and getPluginToolPrefix for the hint
-    const { getToolPluginId, getPluginToolPrefix } = await import(
-      "./native-tools/registry.js"
-    );
-    vi.mocked(getToolPluginId).mockReturnValue("test-plugin");
-    vi.mocked(getPluginToolPrefix).mockReturnValue("test_");
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"items": [{"name": "item1", "value": 42}]}\n```',
-      },
-      client,
-      runId: "run-native",
-      seq: 0,
+    // Register card context with a native tool hint
+    registerCardContext(cardId, {
+      cardId,
+      originalPrompt: "show data",
+      originalResponse: JSON.stringify({ items: [{ name: "item1", value: 42 }] }),
+      currentData: { items: [{ name: "item1", value: 42 }] },
+      geminiApiKey: account.geminiApiKey,
       account,
-      userMessage: "show data",
+      mode: "full",
+      actionHistory: [],
+      interactionMode: "tool",
+      nativeToolHint: {
+        toolName: "test_latest_data",
+        params: { period: "1d" },
+        handlerPrefix: "test_",
+      },
     });
 
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0;
-    vi.clearAllMocks();
-
-    // Now trigger a native tool action (refresh)
+    // Trigger a native tool action (refresh)
     vi.mocked(executeToolDirect).mockResolvedValueOnce({
       success: true,
       data: { items: [{ name: "refreshed", value: 99 }] },
@@ -554,37 +497,25 @@ describe("handlePluginCardAction", () => {
   it("UI mode + native tool action: restore source card + create new card", async () => {
     const client = mockClient();
     const account = mockAccount("ui");
+    const cardId = `card-native-ui-${Date.now()}`;
 
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce({
-      toolName: "test_latest_data",
-      params: { period: "1d" },
-      timestamp: Date.now(),
-    });
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh");
-
-    const { getToolPluginId, getPluginToolPrefix } = await import(
-      "./native-tools/registry.js"
-    );
-    vi.mocked(getToolPluginId).mockReturnValue("test-plugin");
-    vi.mocked(getPluginToolPrefix).mockReturnValue("test_");
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"items": [{"name": "item1"}]}\n```',
-      },
-      client,
-      runId: "run-native-ui",
-      seq: 0,
+    registerCardContext(cardId, {
+      cardId,
+      originalPrompt: "show data",
+      originalResponse: JSON.stringify({ items: [{ name: "item1" }] }),
+      currentData: { items: [{ name: "item1" }] },
+      geminiApiKey: account.geminiApiKey,
       account,
-      userMessage: "show data",
+      mode: "ui",
+      actionHistory: [],
+      interactionMode: "tool",
+      nativeToolHint: {
+        toolName: "test_latest_data",
+        params: { period: "1d" },
+        handlerPrefix: "test_",
+      },
     });
 
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0;
-    vi.clearAllMocks();
-
-    // Trigger native tool action (refresh)
     vi.mocked(executeToolDirect).mockResolvedValueOnce({
       success: true,
       data: { items: [{ name: "refreshed" }] },
@@ -621,7 +552,7 @@ describe("handlePluginCardAction", () => {
   // ── Full mode: Path 3 (Agent fallback) ──
 
   it("Full mode + agent fallback: routes to agent with targetCardId", async () => {
-    const { cardId, client } = await createCardWithContext("full");
+    const { cardId, client } = createCardWithContext("full");
 
     await handlePluginCardAction({
       cardId,
@@ -646,7 +577,7 @@ describe("handlePluginCardAction", () => {
   // ── UI mode: Path 3 (Agent fallback) ──
 
   it("UI mode + agent fallback: sends restore, then routes to agent WITHOUT targetCardId", async () => {
-    const { cardId, client } = await createCardWithContext("ui");
+    const { cardId, client } = createCardWithContext("ui");
 
     await handlePluginCardAction({
       cardId,
@@ -675,7 +606,7 @@ describe("handlePluginCardAction", () => {
   // ── UI mode: New card gets its own CardContext for chained actions ──
 
   it("UI mode: new card from action can receive further actions", async () => {
-    const { cardId, client } = await createCardWithContext("ui");
+    const { cardId, client } = createCardWithContext("ui");
 
     // First action: mechanical mutation → restore + new card
     await handlePluginCardAction({
@@ -715,7 +646,7 @@ describe("handlePluginCardAction", () => {
   // ── send_message action ──
 
   it("Full mode + send_message action: routes through agent with text", async () => {
-    const { cardId, client } = await createCardWithContext("full");
+    const { cardId, client } = createCardWithContext("full");
 
     await handlePluginCardAction({
       cardId,
@@ -732,9 +663,12 @@ describe("handlePluginCardAction", () => {
     expect(call.targetCardId).toBe(cardId);
   });
 
+  // ── E2E: AlphaRank covered follow-up ──
+
   it("AlphaRank E2E: covered follow-up switches to tool mode template path", async () => {
     const client = mockClient();
     const account = mockAccount("full");
+    const cardId = `card-alpharank-${Date.now()}`;
 
     const toolTemplate = {
       toolFamily: "alpharank",
@@ -744,36 +678,26 @@ describe("handlePluginCardAction", () => {
       coverageStatus: "covered",
     };
 
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce({
-      toolName: "alpharank_latest_predictions",
-      params: { top_n: 10 },
-      timestamp: Date.now(),
-    });
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, predictions");
-    vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
-
-    const { getToolPluginId, getPluginToolPrefix, isToolActionCovered } = await import(
-      "./native-tools/registry.js"
-    );
-    vi.mocked(getToolPluginId).mockReturnValue("alpharank");
-    vi.mocked(getPluginToolPrefix).mockReturnValue("alpharank_");
-    vi.mocked(isToolActionCovered).mockReturnValue(true);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"title":"AlphaRank Predictions","picks":[{"ticker":"NVDA","rank":1}]}\n```',
-      },
-      client,
-      runId: "run-alpharank-tool-mode",
-      seq: 0,
+    // Register card context with AlphaRank native tool hint
+    registerCardContext(cardId, {
+      cardId,
+      originalPrompt: "show latest stock ranking",
+      originalResponse: JSON.stringify({ title: "AlphaRank Predictions", picks: [{ ticker: "NVDA", rank: 1 }] }),
+      currentData: { title: "AlphaRank Predictions", picks: [{ ticker: "NVDA", rank: 1 }] },
+      geminiApiKey: account.geminiApiKey,
       account,
-      userMessage: "show latest stock ranking",
+      mode: "full",
+      actionHistory: [],
+      interactionMode: "tool",
+      toolFamily: "alpharank",
+      signatureId: "ranked_predictions_table",
+      coverageStatus: "covered",
+      nativeToolHint: {
+        toolName: "alpharank_latest_predictions",
+        params: { top_n: 10 },
+        handlerPrefix: "alpharank_",
+      },
     });
-
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0;
-    vi.clearAllMocks();
 
     vi.mocked(executeToolDirect).mockResolvedValueOnce({
       success: true,
@@ -782,6 +706,7 @@ describe("handlePluginCardAction", () => {
     vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, predictions");
     vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
     vi.mocked(isToolRegistered).mockReturnValue(true);
+    const { isToolActionCovered } = await import("./native-tools/registry.js");
     vi.mocked(isToolActionCovered).mockReturnValue(true);
 
     await handlePluginCardAction({
@@ -802,9 +727,12 @@ describe("handlePluginCardAction", () => {
     expect(executeToolDirect).toHaveBeenCalledWith("alpharank_latest_predictions", { top_n: 10 });
   });
 
+  // ── E2E: Filesystem tool action ──
+
   it("Filesystem E2E: tool action maps to enso_fs_* and uses tool template", async () => {
     const client = mockClient();
     const account = mockAccount("full");
+    const cardId = `card-filesystem-${Date.now()}`;
 
     const toolTemplate = {
       toolFamily: "filesystem",
@@ -814,36 +742,26 @@ describe("handlePluginCardAction", () => {
       coverageStatus: "covered",
     };
 
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce({
-      toolName: "enso_fs_list_directory",
-      params: { path: "/Users/demo/Desktop" },
-      timestamp: Date.now(),
-    });
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, list_directory, read_text_file, stat_path, search_paths");
-    vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
-
-    const { getToolPluginId, getPluginToolPrefix, isToolActionCovered } = await import(
-      "./native-tools/registry.js"
-    );
-    vi.mocked(getToolPluginId).mockReturnValue("enso");
-    vi.mocked(getPluginToolPrefix).mockReturnValue("enso_fs_");
-    vi.mocked(isToolActionCovered).mockReturnValue(true);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"path":"/Users/demo/Desktop","items":[{"name":"Github","path":"/Users/demo/Desktop/Github","type":"directory"}]}\n```',
-      },
-      client,
-      runId: "run-filesystem-tool-mode",
-      seq: 0,
+    // Register card context with filesystem native tool hint
+    registerCardContext(cardId, {
+      cardId,
+      originalPrompt: "list files on desktop",
+      originalResponse: JSON.stringify({ path: "/Users/demo/Desktop", items: [{ name: "Github", type: "directory" }] }),
+      currentData: { path: "/Users/demo/Desktop", items: [{ name: "Github", path: "/Users/demo/Desktop/Github", type: "directory" }] },
+      geminiApiKey: account.geminiApiKey,
       account,
-      userMessage: "list files on desktop",
+      mode: "full",
+      actionHistory: [],
+      interactionMode: "tool",
+      toolFamily: "filesystem",
+      signatureId: "directory_listing",
+      coverageStatus: "covered",
+      nativeToolHint: {
+        toolName: "enso_fs_list_directory",
+        params: { path: "/Users/demo/Desktop" },
+        handlerPrefix: "enso_fs_",
+      },
     });
-
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0;
-    vi.clearAllMocks();
 
     vi.mocked(executeToolDirect).mockResolvedValueOnce({
       success: true,
@@ -852,6 +770,7 @@ describe("handlePluginCardAction", () => {
     vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, list_directory, read_text_file, stat_path, search_paths");
     vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
     vi.mocked(isToolRegistered).mockReturnValue(true);
+    const { isToolActionCovered } = await import("./native-tools/registry.js");
     vi.mocked(isToolActionCovered).mockReturnValue(true);
 
     await handlePluginCardAction({
@@ -872,28 +791,34 @@ describe("handlePluginCardAction", () => {
     expect(serverGenerateConstrainedFollowupUI).not.toHaveBeenCalled();
   });
 
+  // ── E2E: Tool Console ──
+
   it("Tool Console E2E: add action updates card in tool mode", async () => {
     const client = mockClient();
     const account = mockAccount("full");
+    const cardId = `card-tooling-${Date.now()}`;
 
-    await deliverEnsoReply({
-      payload: { text: "tool console bootstrap" },
-      client,
-      runId: "run-tooling-actions",
-      seq: 0,
+    // Register card context for tool console
+    registerCardContext(cardId, {
+      cardId,
+      originalPrompt: "/tool enso",
+      originalResponse: "tool console bootstrap",
+      currentData: {
+        view: "home",
+        families: [{ toolFamily: "filesystem", toolCount: 4, templateCount: 1 }],
+      },
+      geminiApiKey: account.geminiApiKey,
       account,
-      userMessage: "/tool enso",
+      mode: "full",
+      actionHistory: [],
+      interactionMode: "tool",
+      toolFamily: "enso_tooling",
+      signatureId: "tool_console",
+      coverageStatus: "covered",
     });
 
-    const initial = finalMessages(client.messages)[0];
-    expect(initial).toBeDefined();
-    expect(initial.cardMode?.toolFamily).toBe("enso_tooling");
-
-    client.messages.length = 0;
-    vi.clearAllMocks();
-
     await handlePluginCardAction({
-      cardId: initial.id,
+      cardId,
       action: "tooling_add_tool",
       payload: { description: "a brand new legal case management tool" },
       mode: "full",
@@ -902,7 +827,7 @@ describe("handlePluginCardAction", () => {
       runtime: mockRuntime(),
     });
 
-    const finals = finalMessages(client.messages).filter((m) => m.targetCardId === initial.id);
+    const finals = finalMessages(client.messages).filter((m) => m.targetCardId === cardId);
     expect(finals.length).toBeGreaterThan(0);
     const updated = finals[finals.length - 1];
     expect(updated.cardMode?.interactionMode).toBe("tool");
@@ -910,9 +835,12 @@ describe("handlePluginCardAction", () => {
     expect(updated.generatedUI).toBe("<div>tool-template</div>");
   });
 
+  // ── E2E: System Tool (generic provider) ──
+
   it("System Tool E2E: generic provider actions use deterministic system template path", async () => {
     const client = mockClient();
     const account = mockAccount("full");
+    const cardId = `card-system-mail-${Date.now()}`;
 
     const toolTemplate = {
       toolFamily: "system_official_mail",
@@ -922,36 +850,26 @@ describe("handlePluginCardAction", () => {
       coverageStatus: "covered",
     };
 
-    vi.mocked(consumeRecentToolCall).mockReturnValueOnce({
-      toolName: "official_mail_list_threads",
-      params: { limit: 20 },
-      timestamp: Date.now(),
-    });
-    vi.mocked(isToolRegistered).mockReturnValue(true);
-    vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, list_threads, read_thread, archive_thread");
-    vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
-
-    const { getToolPluginId, getPluginToolPrefix, isToolActionCovered } = await import(
-      "./native-tools/registry.js"
-    );
-    vi.mocked(getToolPluginId).mockReturnValue("official_mail");
-    vi.mocked(getPluginToolPrefix).mockReturnValue("official_mail_");
-    vi.mocked(isToolActionCovered).mockReturnValue(true);
-
-    await deliverEnsoReply({
-      payload: {
-        text: '```json\n{"rows":[{"id":"th_1","title":"Launch update"}]}\n```',
-      },
-      client,
-      runId: "run-system-tool-mode",
-      seq: 0,
+    // Register card context with system tool hint
+    registerCardContext(cardId, {
+      cardId,
+      originalPrompt: "show latest official mail threads",
+      originalResponse: JSON.stringify({ rows: [{ id: "th_1", title: "Launch update" }] }),
+      currentData: { rows: [{ id: "th_1", title: "Launch update" }] },
+      geminiApiKey: account.geminiApiKey,
       account,
-      userMessage: "show latest official mail threads",
+      mode: "full",
+      actionHistory: [],
+      interactionMode: "tool",
+      toolFamily: "system_official_mail",
+      signatureId: "system_auto_official_mail",
+      coverageStatus: "covered",
+      nativeToolHint: {
+        toolName: "official_mail_list_threads",
+        params: { limit: 20 },
+        handlerPrefix: "official_mail_",
+      },
     });
-
-    const cardId = client.messages[0]?.id;
-    client.messages.length = 0;
-    vi.clearAllMocks();
 
     vi.mocked(executeToolDirect).mockResolvedValueOnce({
       success: true,
@@ -960,6 +878,7 @@ describe("handlePluginCardAction", () => {
     vi.mocked(getActionDescriptions).mockReturnValue("Actions: refresh, list_threads, read_thread, archive_thread");
     vi.mocked(inferToolTemplate).mockReturnValue(toolTemplate);
     vi.mocked(isToolRegistered).mockReturnValue(true);
+    const { isToolActionCovered } = await import("./native-tools/registry.js");
     vi.mocked(isToolActionCovered).mockReturnValue(true);
 
     await handlePluginCardAction({

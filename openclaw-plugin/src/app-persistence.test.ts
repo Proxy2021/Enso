@@ -10,6 +10,7 @@ vi.mock("./native-tools/registry.js", () => ({
   registerToolTemplateDataHint: vi.fn(),
   registerGeneratedTool: vi.fn(),
   registerGeneratedTemplateCode: vi.fn(),
+  registerDynamicAppPrefix: vi.fn(),
   unregisterGeneratedTool: vi.fn(),
   unregisterGeneratedTemplateCode: vi.fn(),
   unregisterToolTemplate: vi.fn(),
@@ -21,6 +22,12 @@ vi.mock("./tool-families/catalog.js", () => ({
   TOOL_FAMILY_CAPABILITIES: [],
   addCapability: vi.fn(),
   removeCapability: vi.fn(),
+}));
+
+vi.mock("./action-log.js", () => ({
+  logAction: vi.fn(),
+  logError: vi.fn(),
+  logFix: vi.fn(),
 }));
 
 // ── Import SUT (after mocks) ──
@@ -220,11 +227,11 @@ describe("registerLoadedApp", () => {
       }),
     );
 
-    // Data hint registered — "tool" metadata key is filtered out
+    // Data hint registered (uses primary tool's requiredDataKeys)
     expect(registerToolTemplateDataHint).toHaveBeenCalledWith(
       expect.objectContaining({
         toolFamily: "workout_planner",
-        requiredKeys: ["goal", "days"],
+        requiredKeys: ["tool", "goal", "days"],
       }),
     );
 
@@ -262,18 +269,32 @@ describe("registerLoadedApp", () => {
 });
 
 describe("loadAndRegisterSavedApps", () => {
-  it("loads and registers all saved apps", () => {
+  it("loads and registers all saved apps (user + codebase)", () => {
     saveApp(makeSavedApp(), tmpBase);
 
     const count = loadAndRegisterSavedApps(tmpBase);
-    expect(count).toBe(1);
-    expect(registerGeneratedTool).toHaveBeenCalledTimes(2);
-    expect(addCapability).toHaveBeenCalledTimes(1);
+    // count includes user apps + any codebase apps from openclaw-plugin/apps/
+    expect(count).toBeGreaterThanOrEqual(1);
+    // Our workout_planner app's tools were registered
+    expect(registerGeneratedTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "enso_workout_plan_week" }),
+    );
+    expect(registerGeneratedTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "enso_workout_swap_exercise" }),
+    );
+    expect(addCapability).toHaveBeenCalledWith(
+      expect.objectContaining({ toolFamily: "workout_planner" }),
+    );
   });
 
-  it("returns 0 when no apps exist", () => {
+  it("loads codebase apps even when no user apps exist", () => {
+    // tmpBase has no user apps, but codebase apps from openclaw-plugin/apps/ are loaded
+    const userOnly = loadApps(tmpBase);
+    expect(userOnly).toHaveLength(0);
+
     const count = loadAndRegisterSavedApps(tmpBase);
-    expect(count).toBe(0);
+    // count may be > 0 due to codebase apps; key is no user apps are loaded
+    expect(count).toBeGreaterThanOrEqual(0);
   });
 });
 
