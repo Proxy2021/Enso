@@ -25,17 +25,14 @@ export default function UpdateBanner() {
     setState("available");
   }, [dismissed]);
 
+  // Track whether we just triggered an install so we can detect failure on resume
+  const installTriggeredRef = useRef(false);
+
   useEffect(() => {
     if (!isNative) return;
     startPeriodicChecks(handleUpdateAvailable);
     return () => stopPeriodicChecks();
   }, [handleUpdateAvailable]);
-
-  // No-op on web or when hidden/dismissed
-  if (!isNative || state === "hidden" || dismissed) return null;
-
-  // Track whether we just triggered an install so we can detect failure on resume
-  const installTriggeredRef = useRef(false);
 
   useEffect(() => {
     if (!isNative) return;
@@ -49,6 +46,9 @@ export default function UpdateBanner() {
     });
     return () => { listener.then(l => l.remove()); };
   }, []);
+
+  // No-op on web or when hidden/dismissed
+  if (!isNative || state === "hidden" || dismissed) return null;
 
   async function handleDownload() {
     setState("downloading");
