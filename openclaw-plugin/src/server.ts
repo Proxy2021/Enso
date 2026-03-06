@@ -407,6 +407,12 @@ export async function startEnsoServer(opts: {
   if (accessToken) {
     app.use((req, res, next) => {
       if (req.method === "OPTIONS") return next();
+      // Browser navigation bypass — sec-fetch-mode:"navigate" is set by browsers for
+      // top-level page loads (typing URL, clicking links, refresh).  These requests only
+      // need the HTML shell served by the SPA fallback; actual data is fetched via
+      // authenticated API calls afterward.  This header is a "forbidden header name" so
+      // it cannot be forged by client-side JavaScript.
+      if (req.headers["sec-fetch-mode"] === "navigate") return next();
       // Same-origin bypass (matches WebSocket auth behavior)
       // Note: browsers omit Origin header on same-origin GET requests, so also check Sec-Fetch-Site
       const origin = req.headers.origin ?? "";
