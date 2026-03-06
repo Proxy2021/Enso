@@ -86,6 +86,13 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const nextGalleryImg = (name, total) => setGalleryIdx((prev) => ({ ...prev, [name]: ((prev[name] || 0) + 1) % total }));
   const prevGalleryImg = (name, total) => setGalleryIdx((prev) => ({ ...prev, [name]: ((prev[name] || 0) - 1 + total) % total }));
 
+  // Auto-refresh welcome data on mount to load recent cities from disk
+  useEffect(() => {
+    if (isWelcome && recentCities.length === 0) {
+      onAction("explore", { city: "" });
+    }
+  }, []);
+
   // Collect all images for the photo gallery tab
   const allGalleryImages = useMemo(() => {
     const imgs = [];
@@ -807,9 +814,14 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             )
           }]} />
         )}
-        <Button variant="primary" onClick={() => onAction("explore", { city })}>
-          <LucideReact.ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back to Overview
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => onAction("explore", { city: "" })}>
+            <LucideReact.Home className="w-3.5 h-3.5 mr-1" />Home
+          </Button>
+          <Button variant="primary" onClick={() => onAction("explore", { city })}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back to Overview
+          </Button>
+        </div>
       </div>
     );
   }
@@ -883,6 +895,9 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                 )}
               </div>
               <div className="flex gap-1.5">
+                <Button variant="ghost" onClick={() => onAction("explore", { city: "" })}>
+                  <LucideReact.Home className="w-3.5 h-3.5" />
+                </Button>
                 {fromHistory && (
                   <Button variant="ghost" onClick={() => onAction("explore", { city, force: true })}>
                     <LucideReact.RefreshCw className="w-3.5 h-3.5" />
@@ -1031,9 +1046,14 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
               <div className="text-[11px] text-gray-400">{city} \u00B7 {places.length} found</div>
             </div>
           </div>
-          <Button variant="primary" onClick={() => setEmailOpen(true)}>
-            <LucideReact.Mail className="w-3.5 h-3.5 mr-1" />Email
-          </Button>
+          <div className="flex gap-1.5">
+            <Button variant="ghost" onClick={() => onAction("explore", { city: "" })}>
+              <LucideReact.Home className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="primary" onClick={() => setEmailOpen(true)}>
+              <LucideReact.Mail className="w-3.5 h-3.5 mr-1" />Email
+            </Button>
+          </div>
         </div>
       </div>
 

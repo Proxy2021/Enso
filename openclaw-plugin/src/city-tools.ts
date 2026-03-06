@@ -692,15 +692,18 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     });
   }
 
-  // Research all 3 categories + videos + travel tips + hero images in parallel
+  // Research all 3 categories + videos + travel tips + hero images in parallel.
+  // Each promise is individually wrapped so a single failure doesn't prevent
+  // the others from completing or the result from being persisted.
+  const emptyCategory = { places: [] as Place[], summary: "", searchSources: [] as string[] };
   const geminiKey = await getGeminiApiKey();
   const [restaurants, photoSpots, landmarks, videos, travelData, heroData] = await Promise.all([
-    researchCategory(city, "restaurants", { limit: 6 }),
-    researchCategory(city, "photo_spots", { limit: 6 }),
-    researchCategory(city, "landmarks", { limit: 6 }),
-    braveVideoSearch(`${city} travel guide things to do`, 8),
-    generateTravelTips(city, geminiKey),
-    fetchCityHeroImages(city),
+    researchCategory(city, "restaurants", { limit: 6 }).catch((err) => { logError("city", "restaurants research failed", err); return emptyCategory; }),
+    researchCategory(city, "photo_spots", { limit: 6 }).catch((err) => { logError("city", "photo_spots research failed", err); return emptyCategory; }),
+    researchCategory(city, "landmarks", { limit: 6 }).catch((err) => { logError("city", "landmarks research failed", err); return emptyCategory; }),
+    braveVideoSearch(`${city} travel guide things to do`, 8).catch(() => [] as CityVideo[]),
+    generateTravelTips(city, geminiKey).catch(() => ({ tips: [] as TravelTip[] })),
+    fetchCityHeroImages(city).catch(() => ({ heroImageUrls: [] as string[] })),
   ]);
 
   const allSources = [
@@ -723,21 +726,29 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     : `Explore ${city}: ${restaurants.places.length} restaurants, ${photoSpots.places.length} photo spots, and ${landmarks.places.length} landmarks discovered.`;
   const sourcesDeduped = [...new Set(allSources)].slice(0, 15);
 
-  // Persist to cache + disk
+  // Persist to cache + disk — always attempt save even with partial results
+  const heroUrl = (heroData as { heroImageUrl?: string }).heroImageUrl;
+  const heroUrls = heroData.heroImageUrls ?? [];
+  const tips = (travelData as { tips: TravelTip[] }).tips ?? [];
+  const country = (travelData as { country?: string }).country;
+  const currency = (travelData as { currency?: string }).currency;
+  const language = (travelData as { language?: string }).language;
+  const bestSeason = (travelData as { bestSeason?: string }).bestSeason;
+
   const cacheEntry: CachedCityExploration = {
     city,
-    heroImageUrl: heroData.heroImageUrl,
-    heroImageUrls: heroData.heroImageUrls,
+    heroImageUrl: heroUrl,
+    heroImageUrls: heroUrls,
     sections,
     places: allPlaces,
     summary: summaryText,
     searchSources: sourcesDeduped,
     videos,
-    travelTips: travelData.tips,
-    country: travelData.country,
-    currency: travelData.currency,
-    language: travelData.language,
-    bestSeason: travelData.bestSeason,
+    travelTips: tips,
+    country,
+    currency,
+    language,
+    bestSeason,
     timestamp: Date.now(),
   };
   cityCache.set(cacheKey, cacheEntry);
@@ -748,8 +759,10 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
       videoCount: videos.length,
       summaryPreview: summaryText.slice(0, 120),
     });
-    logAction({ ts: Date.now(), type: "action", category: "city", message: `saved exploration for "${city}" (${allPlaces.length} places, ${videos.length} videos, ${travelData.tips.length} tips)` });
+    logAction({ ts: Date.now(), type: "action", category: "city", message: `saved exploration for "${city}" (${allPlaces.length} places, ${videos.length} videos, ${tips.length} tips)` });
   } catch (err) {
+    // Surface persistence failures — these are critical for history
+    console.error(`[enso-city] Failed to persist exploration for "${city}":`, err);
     logError("city", "failed to persist exploration", err);
   }
 
@@ -757,19 +770,78 @@ async function cityExplore(params: ExploreParams): Promise<AgentToolResult> {
     tool: "enso_city_explore",
     city,
     category: "overview",
-    heroImageUrl: heroData.heroImageUrl,
-    heroImageUrls: heroData.heroImageUrls,
+    heroImageUrl: heroUrl,
+    heroImageUrls: heroUrls,
     sections,
     places: allPlaces,
     summary: summaryText,
     searchSources: sourcesDeduped,
     videos,
-    travelTips: travelData.tips,
-    country: travelData.country,
-    currency: travelData.currency,
-    language: travelData.language,
-    bestSeason: travelData.bestSeason,
+    travelTips: tips,
+    country,
+    currency,
+    language,
+    bestSeason,
   });
+}
+
+/**
+ * Ensure a city appears in history after any research (category deep-dives included).
+ * If a full exploration already exists, merges updated category data into it.
+ * If not, creates a minimal entry so the city appears in "Recent".
+ */
+function persistCityFromCategory(
+  city: string,
+  category: string,
+  places: Place[],
+  summary: string,
+  searchSources: string[],
+): void {
+  const cacheKey = city.toLowerCase();
+  const slug = citySlug(city);
+
+  // Merge into existing cache entry if available, else create a minimal one
+  const existing = cityCache.get(cacheKey);
+  if (existing) {
+    // Update the matching section with fresh data
+    const sectionIdx = existing.sections.findIndex((s) => s.category === category);
+    if (sectionIdx >= 0) {
+      existing.sections[sectionIdx].places = places;
+    } else {
+      const labels: Record<string, string> = { restaurants: "Top Restaurants", photo_spots: "Photo Spots", landmarks: "Landmarks" };
+      existing.sections.push({ label: labels[category] ?? category, category, places });
+    }
+    existing.places = existing.sections.flatMap((s) => s.places);
+    existing.searchSources = [...new Set([...existing.searchSources, ...searchSources])].slice(0, 15);
+    existing.timestamp = Date.now();
+  } else {
+    const labels: Record<string, string> = { restaurants: "Top Restaurants", photo_spots: "Photo Spots", landmarks: "Landmarks" };
+    const entry: CachedCityExploration = {
+      city,
+      sections: [{ label: labels[category] ?? category, category, places }],
+      places,
+      summary,
+      searchSources,
+      videos: [],
+      travelTips: [],
+      timestamp: Date.now(),
+    };
+    cityCache.set(cacheKey, entry);
+  }
+
+  const cached = cityCache.get(cacheKey)!;
+  try {
+    cityHistory.save(slug, cached, {
+      city,
+      placeCount: cached.places.length,
+      videoCount: cached.videos.length,
+      summaryPreview: (cached.summary || summary).slice(0, 120),
+    });
+    logAction({ ts: Date.now(), type: "action", category: "city", message: `persisted ${category} for "${city}" (${places.length} places)` });
+  } catch (err) {
+    console.error(`[enso-city] Failed to persist ${category} for "${city}":`, err);
+    logError("city", `failed to persist ${category}`, err);
+  }
 }
 
 async function cityRestaurants(params: RestaurantsParams): Promise<AgentToolResult> {
@@ -779,6 +851,8 @@ async function cityRestaurants(params: RestaurantsParams): Promise<AgentToolResu
     cuisine: params.cuisine,
     limit: params.limit,
   });
+
+  persistCityFromCategory(city, "restaurants", result.places, result.summary, result.searchSources);
 
   return jsonResult({
     tool: "enso_city_restaurants",
@@ -796,6 +870,8 @@ async function cityPhotoSpots(params: PhotoSpotsParams): Promise<AgentToolResult
 
   const result = await researchCategory(city, "photo_spots", { limit: params.limit });
 
+  persistCityFromCategory(city, "photo_spots", result.places, result.summary, result.searchSources);
+
   return jsonResult({
     tool: "enso_city_photo_spots",
     city,
@@ -810,6 +886,8 @@ async function cityLandmarks(params: LandmarksParams): Promise<AgentToolResult> 
   const city = params.city?.trim() || "Paris";
 
   const result = await researchCategory(city, "landmarks", { limit: params.limit });
+
+  persistCityFromCategory(city, "landmarks", result.places, result.summary, result.searchSources);
 
   return jsonResult({
     tool: "enso_city_landmarks",
