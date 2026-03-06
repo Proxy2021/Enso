@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# restart.sh — Kill and restart OpenClaw gateway + Enso Vite dev server
+# restart.sh — Kill and restart OpenClaw gateway + Enso Vite dev server + Cloudflare Tunnel
 set -euo pipefail
 
 ENSO_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -13,6 +13,16 @@ echo "=== Restarting Enso services ==="
 # ── 0. Stop watchdog (prevent interference during restart) ──
 echo "[watchdog] Stopping watchdog"
 launchctl bootout "gui/$UID_NUM/$WATCHDOG_LABEL" 2>/dev/null || true
+
+# ── 0b. Stop Cloudflare Tunnel ──
+CF_PIDS=$(pgrep -f 'cloudflared tunnel' 2>/dev/null || true)
+if [ -n "$CF_PIDS" ]; then
+  echo "[tunnel] Stopping (PIDs: $CF_PIDS)"
+  kill $CF_PIDS 2>/dev/null || true
+  sleep 1
+else
+  echo "[tunnel] Not running"
+fi
 
 # ── 1. Stop Enso Vite dev server ──
 VITE_PIDS=$(pgrep -f "${ENSO_DIR}/node_modules/.bin/vite" 2>/dev/null || true)
@@ -87,7 +97,22 @@ if ! curl -sf http://localhost:5173 &>/dev/null; then
   echo " TIMEOUT (port 5173 not responding)"
 fi
 
-# ── 5. Restart watchdog ──
+# ── 5. Start Cloudflare Tunnel ──
+if [ -f "$HOME/.cloudflared/config.yml" ]; then
+  echo "[tunnel] Starting cloudflared"
+  nohup cloudflared tunnel run > /tmp/cloudflared.log 2>&1 &
+  CF_PID=$!
+  sleep 2
+  if kill -0 $CF_PID 2>/dev/null; then
+    echo "[tunnel] Running (PID: $CF_PID)"
+  else
+    echo "[tunnel] Failed to start (check /tmp/cloudflared.log)"
+  fi
+else
+  echo "[tunnel] No config found (~/.cloudflared/config.yml)"
+fi
+
+# ── 6. Restart watchdog ──
 WATCHDOG_PLIST="$HOME/Library/LaunchAgents/${WATCHDOG_LABEL}.plist"
 if [ -f "$WATCHDOG_PLIST" ]; then
   echo "[watchdog] Restarting watchdog"
@@ -104,6 +129,11 @@ echo "  Enso UI:  http://localhost:5173"
 IP=$(ipconfig getifaddr en0 2>/dev/null || echo "unknown")
 echo "  Network:  http://$IP:5173"
 echo "  Plugin:   http://localhost:3001/health"
+# Show tunnel URL if config exists
+if [ -f "$HOME/.cloudflared/config.yml" ]; then
+  TUNNEL_HOST=$(grep 'hostname:' "$HOME/.cloudflared/config.yml" | head -1 | awk '{print $3}')
+  [ -n "$TUNNEL_HOST" ] && echo "  Tunnel:   https://$TUNNEL_HOST"
+fi
 echo "  Vite log: /tmp/enso-vite.log"
 echo ""
 echo "=== TUI Tips ==="
