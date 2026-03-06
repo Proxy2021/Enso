@@ -223,7 +223,6 @@ export async function handlePluginCardAction(params: {
       ``,
       `After identifying the issue, edit the appropriate file(s) to fix the bug.`,
       ``,
-      `CRITICAL: Do NOT restart the gateway, run restart.ps1, or deploy after fixing. You are running inside the gateway — restarting it kills your own session and creates an infinite loop. Just fix the code and stop.`,
     );
 
     const debugPrompt = debugParts.join("\n");
@@ -320,7 +319,6 @@ export async function handlePluginCardAction(params: {
       `Modify template.jsx, executors/*.js, or app.json as needed.`,
       `After making changes, run \`npm run build\` to verify the fix compiles.`,
       ``,
-      `CRITICAL: Do NOT restart the gateway, run restart.ps1, or deploy after fixing. You are running inside the gateway — restarting it kills your own session and creates an infinite loop. Just fix the code and stop.`,
     );
 
     // Restore source card
@@ -781,8 +779,7 @@ export async function handlePluginCardAction(params: {
               `Fix the executor file to resolve this error. Executors are function bodies (no imports/exports), use \`var\` not \`const\`/\`let\`, and receive a \`ctx\` parameter.`,
               `After fixing, run \`npm run build\` to verify.`,
               ``,
-              `CRITICAL: Do NOT restart the gateway, run restart.ps1, or deploy after fixing. You are running inside the gateway — restarting it kills your own session and creates an infinite loop. Just fix the code and stop.`,
-            );
+                    );
 
             // Restore source card, then launch Claude Code
             client.send({
