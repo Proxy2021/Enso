@@ -1,5 +1,7 @@
 Comprehensive live end-to-end test of the Enso platform. Tests infrastructure, backend, and frontend features in the browser with strict pass/fail criteria.
 
+> **Prerequisites**: Chrome MCP (Claude in Chrome) must be connected for Phase 4 browser tests. Enso services must be running (`./restart.sh` if not).
+
 > **Approach**: If any tests fail, list all failures with root causes and recommend specific fixes. The user can then enter plan mode to address issues before re-testing.
 
 ## Phase 1 — Infrastructure Health
