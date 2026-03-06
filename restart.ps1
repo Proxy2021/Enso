@@ -98,7 +98,33 @@ if ($portsInUse) {
 }
 
 # ==========================================================================
-#  STEP 2 -- Rebuild AlphaRank plugin (if needed)
+#  STEP 2 -- Pull latest code for Enso and AlphaRank repos
+# ==========================================================================
+Write-Step "Pulling latest code..."
+
+foreach ($repoDir in @($EnsoDir, $AlphaRankDir, $OpenClawDir)) {
+    $repoName = Split-Path $repoDir -Leaf
+    if (Test-Path (Join-Path $repoDir ".git")) {
+        Push-Location $repoDir
+        try {
+            $pullOutput = git pull --ff-only 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "$repoName -- $($pullOutput | Select-Object -Last 1)"
+            } else {
+                Write-Err "$repoName git pull failed: $pullOutput"
+            }
+        } catch {
+            Write-Err "$repoName git pull failed: $_"
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Write-Skip "$repoName -- not a git repo at $repoDir"
+    }
+}
+
+# ==========================================================================
+#  STEP 3 -- Rebuild AlphaRank plugin (if needed)
 # ==========================================================================
 Write-Step "Checking AlphaRank plugin build..."
 
@@ -144,7 +170,7 @@ if ($SkipBuild) {
 }
 
 # ==========================================================================
-#  STEP 3 -- Start OpenClaw gateway (spawns Enso WS server on :3001)
+#  STEP 4 -- Start OpenClaw gateway (spawns Enso WS server on :3001)
 # ==========================================================================
 Write-Step "Starting OpenClaw gateway on :$GatewayPort ..."
 
@@ -197,7 +223,7 @@ if ($ready) {
 }
 
 # ==========================================================================
-#  STEP 4 -- Start Vite dev server
+#  STEP 5 -- Start Vite dev server
 # ==========================================================================
 if ($NoDev) {
     Write-Skip "Vite dev server skipped (-NoDev)"
@@ -236,7 +262,7 @@ if ($NoDev) {
 }
 
 # ==========================================================================
-#  STEP 5 -- Restart Cloudflare tunnel
+#  STEP 6 -- Restart Cloudflare tunnel
 # ==========================================================================
 Write-Step "Restarting Cloudflare tunnel..."
 
@@ -268,7 +294,7 @@ if (Test-Path $cloudflaredExe) {
 }
 
 # ==========================================================================
-#  STEP 6 -- Restart watchdog
+#  STEP 7 -- Restart watchdog
 # ==========================================================================
 Write-Step "Restarting watchdog..."
 $wdTask = Get-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
