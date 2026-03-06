@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useChatStore } from "../store/chat";
 import type { CardRendererProps } from "./types";
-import type { MissionAppProposal, MissionPlan, MissionProgress } from "@shared/types";
+import type { MissionAppProposal, MissionPlan, MissionProgress, MissionResearch } from "@shared/types";
 
 type Phase = "input" | "analyzing" | "proposal" | "building" | "complete" | "error";
 
@@ -98,10 +98,10 @@ function AnalyzingPhase() {
           <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
           <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
         </svg>
-        Analyzing your mission and designing apps...
+        Analyzing your mission and researching solutions...
       </div>
       <p className="text-[11px] text-gray-500 mt-2">
-        Claude Code is studying your needs and existing apps to propose a custom set.
+        Claude Code is researching top competing solutions and designing apps that leverage Enso's unique edge.
       </p>
     </div>
   );
@@ -138,6 +138,9 @@ function ProposalPhase({ cardId, plan }: { cardId: string; plan: MissionPlan }) 
       <p className="text-xs text-gray-400 mb-3">
         {plan.apps.length} apps proposed. Toggle to approve/skip, or click to edit descriptions.
       </p>
+
+      {/* Competitive Research Summary */}
+      {plan.research && <ResearchSummary research={plan.research} />}
 
       <div className="space-y-2">
         {apps.map((app) => (
@@ -184,6 +187,11 @@ function ProposalPhase({ cardId, plan }: { cardId: string; plan: MissionPlan }) 
                     {app.description}
                   </p>
                 )}
+                {app.inspiredBy && (
+                  <p className="text-[10px] text-purple-400/80 mt-1 italic">
+                    💡 {app.inspiredBy}
+                  </p>
+                )}
                 {app.capabilities.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {app.capabilities.map((cap, i) => (
@@ -214,6 +222,66 @@ function ProposalPhase({ cardId, plan }: { cardId: string; plan: MissionPlan }) 
           Build {approvedCount} App{approvedCount !== 1 ? "s" : ""}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Research Summary (collapsible) ──
+
+function ResearchSummary({ research }: { research: MissionResearch }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="mb-3 border border-purple-500/20 rounded-lg bg-purple-500/5 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-500/10 transition-colors"
+      >
+        <span className="text-xs">🔍</span>
+        <span className="text-[11px] font-medium text-purple-300 flex-1">
+          Competitive Research
+          {research.competitors.length > 0 && (
+            <span className="text-purple-400/60 font-normal ml-1">
+              — {research.competitors.length} solution{research.competitors.length !== 1 ? "s" : ""} analyzed
+            </span>
+          )}
+        </span>
+        <svg
+          className={`w-3 h-3 text-purple-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-2.5 space-y-2">
+          {research.competitors.map((comp, i) => (
+            <div key={i} className="text-[10px]">
+              <span className="font-semibold text-gray-300">{comp.name}</span>
+              <div className="flex gap-3 mt-0.5 ml-2">
+                {comp.strengths.length > 0 && (
+                  <div className="flex-1">
+                    <span className="text-green-400/70">Strengths:</span>
+                    <span className="text-gray-400 ml-1">{comp.strengths.join(", ")}</span>
+                  </div>
+                )}
+                {comp.gaps.length > 0 && (
+                  <div className="flex-1">
+                    <span className="text-amber-400/70">Gaps:</span>
+                    <span className="text-gray-400 ml-1">{comp.gaps.join(", ")}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {research.keyInsights && (
+            <p className="text-[10px] text-purple-300/80 pt-1 border-t border-purple-500/15 italic">
+              {research.keyInsights}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

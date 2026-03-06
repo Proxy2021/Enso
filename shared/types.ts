@@ -72,12 +72,19 @@ export interface MissionAppProposal {
   family: string;        // snake_case family name
   description: string;
   capabilities: string[];
+  inspiredBy?: string;   // competitive edge — what market leaders do + how Enso does it better
   approved: boolean;
+}
+
+export interface MissionResearch {
+  competitors: Array<{ name: string; strengths: string[]; gaps: string[] }>;
+  keyInsights: string;
 }
 
 export interface MissionPlan {
   missionId: string;
   description: string;
+  research?: MissionResearch;  // competitive research findings
   apps: MissionAppProposal[];
 }
 

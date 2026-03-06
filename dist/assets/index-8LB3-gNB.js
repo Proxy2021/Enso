@@ -1,0 +1,1 @@
+import{r as e}from"./index-C2BqevMb.js";var t;(function(r){r.Dark="DARK",r.Light="LIGHT",r.Default="DEFAULT"})(t||(t={}));var a;(function(r){r.None="NONE",r.Slide="SLIDE",r.Fade="FADE"})(a||(a={}));const u=e("StatusBar");export{a as Animation,u as StatusBar,t as Style};
