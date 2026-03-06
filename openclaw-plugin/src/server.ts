@@ -182,27 +182,30 @@ export async function startEnsoServer(opts: {
   const apkPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "release", "app-release.apk");
   const apkMetadataPath = join(projectRoot, "android", "app", "build", "outputs", "apk", "release", "output-metadata.json");
 
-  /** Read version info — prefer APK build metadata so we report the actual built version, not package.json. */
-  let _pkgCache: { version: string; versionCode: number } | null = null;
-  function readPkgVersion() {
-    if (_pkgCache) return _pkgCache;
+  /**
+   * Read version info — prefer APK build metadata so we report the actual built
+   * version, not package.json.  Never cache: a transient read failure (file
+   * locked, not yet flushed) must not permanently pin us to the wrong version.
+   * Returns `metadataVerified: true` when the version came from the Gradle
+   * output-metadata.json (i.e. it definitely matches the APK on disk).
+   */
+  function readPkgVersion(): { version: string; versionCode: number; metadataVerified: boolean } {
     // First try the Gradle output metadata which reflects the actual APK on disk
     try {
       const meta = JSON.parse(readFileSync(apkMetadataPath, "utf-8"));
       const element = meta.elements?.[0];
       if (element?.versionCode && element?.versionName) {
-        _pkgCache = { version: element.versionName, versionCode: element.versionCode };
-        return _pkgCache;
+        return { version: element.versionName, versionCode: element.versionCode, metadataVerified: true };
       }
     } catch { /* fall through to package.json */ }
-    // Fallback to package.json
+    // Fallback to package.json — may not match the APK on disk if version was
+    // bumped without rebuilding, so we flag metadataVerified=false.
     try {
       const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf-8"));
-      _pkgCache = { version: pkg.version ?? "0.1.0", versionCode: pkg.versionCode ?? 1 };
+      return { version: pkg.version ?? "0.1.0", versionCode: pkg.versionCode ?? 1, metadataVerified: false };
     } catch {
-      _pkgCache = { version: "0.1.0", versionCode: 1 };
+      return { version: "0.1.0", versionCode: 1, metadataVerified: false };
     }
-    return _pkgCache;
   }
 
   // ── Health endpoint (unauthenticated — used for connection testing) ──
@@ -232,10 +235,14 @@ export async function startEnsoServer(opts: {
   app.get("/api/version", (_req, res) => {
     const pkg = readPkgVersion();
     const apkExists = existsSync(apkPath);
+    // Only offer the APK for upgrade when we can verify the version from build
+    // metadata.  If we fell back to package.json the reported version may be
+    // ahead of the actual APK on disk, which causes an infinite upgrade loop.
+    const apkAvailable = apkExists && pkg.metadataVerified;
     res.json({
       versionCode: pkg.versionCode,
       versionName: pkg.version,
-      apkAvailable: apkExists,
+      apkAvailable,
       apkSizeBytes: apkExists ? statSync(apkPath).size : 0,
     });
   });
