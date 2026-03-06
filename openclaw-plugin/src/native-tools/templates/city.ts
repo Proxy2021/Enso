@@ -26,6 +26,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const [galleryIdx, setGalleryIdx] = useState({});
   const [heroLoaded, setHeroLoaded] = useState(false);
   const [heroError, setHeroError] = useState(false);
+  const [galleryFilter, setGalleryFilter] = useState("all");
 
   const city = String(data?.city ?? "");
   const category = String(data?.category ?? "overview");
@@ -36,12 +37,12 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const recentCities = Array.isArray(data?.recentCities) ? data.recentCities : [];
   const travelTips = Array.isArray(data?.travelTips) ? data.travelTips : [];
   const cityHistory = data?.cityHistory || null;
-  const country = data?.country || "";
-  const currency = data?.currency || "";
-  const language = data?.language || "";
-  const bestSeason = data?.bestSeason || "";
-  const population = data?.population || "";
-  const famousNickname = data?.famousNickname || "";
+  const country = String(data?.country ?? "");
+  const currency = String(data?.currency ?? "");
+  const language = String(data?.language ?? "");
+  const bestSeason = String(data?.bestSeason ?? "");
+  const population = String(data?.population ?? "");
+  const famousNickname = String(data?.famousNickname ?? "");
   const fromHistory = !!data?.fromHistory;
   const heroImageUrl = data?.heroImageUrl || "";
   const heroImageUrls = Array.isArray(data?.heroImageUrls) ? data.heroImageUrls : [];
@@ -308,7 +309,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             </button>
           )}
         </div>
-        <div className="text-xs text-gray-400 mt-1.5 line-clamp-3 leading-[1.6]">{place.description}</div>
+        <div className="text-xs text-gray-400 mt-1.5 line-clamp-3 leading-[1.6]">{String(place.description ?? "")}</div>
         {place.highlights && place.highlights.length > 0 && (
           <div className="flex gap-1 mt-2 flex-wrap">
             {place.highlights.slice(0, 3).map((h, i) => (
@@ -529,8 +530,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   <TipIcon className={"w-5 h-5 " + tipIconColors[i % tipIconColors.length]} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-bold text-gray-100">{tip.title}</div>
-                  <div className="text-[11px] text-gray-400 mt-1 leading-[1.6]">{tip.text}</div>
+                  <div className="text-[13px] font-bold text-gray-100">{String(tip.title ?? "")}</div>
+                  <div className="text-[11px] text-gray-400 mt-1 leading-[1.6]">{String(tip.text ?? "")}</div>
                 </div>
               </div>
             </div>
@@ -572,7 +573,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   <div className="text-[10px] text-amber-400/50 uppercase tracking-[0.15em] font-semibold">How it all began</div>
                 </div>
               </div>
-              <div className="text-[13px] text-gray-200/90 leading-[1.75]">{cityHistory.founding}</div>
+              <div className="text-[13px] text-gray-200/90 leading-[1.75]">{String(cityHistory.founding ?? "")}</div>
             </div>
           </div>
         )}
@@ -594,7 +595,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   <div className="text-[10px] text-indigo-400/50 uppercase tracking-[0.15em] font-semibold">The story of {city}</div>
                 </div>
               </div>
-              <div className="text-[13px] text-gray-300/90 leading-[1.8]">{cityHistory.narrative}</div>
+              <div className="text-[13px] text-gray-300/90 leading-[1.8]">{String(cityHistory.narrative ?? "")}</div>
             </div>
           </div>
         )}
@@ -639,7 +640,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   <div className="text-[10px] text-rose-400/50 uppercase tracking-[0.15em] font-semibold">What makes it unique</div>
                 </div>
               </div>
-              <div className="text-[13px] text-gray-200/90 leading-[1.75]">{cityHistory.culturalIdentity}</div>
+              <div className="text-[13px] text-gray-200/90 leading-[1.75]">{String(cityHistory.culturalIdentity ?? "")}</div>
             </div>
           </div>
         )}
@@ -665,8 +666,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                         <span className={"text-xs font-bold tracking-wide " + colors.text}>{event.year}</span>
                         <span className={"text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider bg-white/[0.04] border border-white/[0.06] " + colors.text}>{event.era}</span>
                       </div>
-                      <div className="text-[13px] font-semibold text-gray-100 leading-tight">{event.title}</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{event.description}</div>
+                      <div className="text-[13px] font-semibold text-gray-100 leading-tight">{String(event.title ?? "")}</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{String(event.description ?? "")}</div>
                     </div>
                   );
                 })}
@@ -765,7 +766,7 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             )}
           </div>
           {selectedPlace.rating && <RatingStars rating={selectedPlace.rating} />}
-          <div className="text-sm text-gray-200 leading-relaxed">{selectedPlace.description}</div>
+          <div className="text-sm text-gray-200 leading-relaxed">{String(selectedPlace.description ?? "")}</div>
           {selectedPlace.bestTime && (
             <div className="flex items-center gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3.5 py-2.5">
               <LucideReact.Clock className="w-4 h-4 text-amber-400 shrink-0" />
@@ -980,7 +981,6 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   }
 
   // ── Photo Gallery component ──
-  const [galleryFilter, setGalleryFilter] = useState("all");
   const PhotoGallery = () => {
     if (allGalleryImages.length === 0) {
       return <EmptyState icon="Camera" title="No photos" description="No images available yet" />;
