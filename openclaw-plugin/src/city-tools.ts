@@ -147,6 +147,46 @@ function getBraveApiKey(): string | undefined {
   return process.env.BRAVE_API_KEY;
 }
 
+/**
+ * Robustly parse JSON from LLM output, handling common Gemini quirks:
+ *  1. Strip markdown code fences
+ *  2. Try direct parse
+ *  3. Extract first { ... } or [ ... ] block and retry
+ *  4. Fix trailing commas and retry
+ *  Returns null if all attempts fail.
+ */
+function safeParseJson<T>(raw: string): T | null {
+  const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+
+  // Attempt 1: direct parse
+  try { return JSON.parse(cleaned) as T; } catch { /* continue */ }
+
+  // Attempt 2: extract outermost JSON object or array
+  const firstBrace = cleaned.indexOf("{");
+  const firstBracket = cleaned.indexOf("[");
+  let start = -1;
+  let end = -1;
+  if (firstBrace >= 0 && (firstBracket < 0 || firstBrace <= firstBracket)) {
+    start = firstBrace;
+    end = cleaned.lastIndexOf("}");
+  } else if (firstBracket >= 0) {
+    start = firstBracket;
+    end = cleaned.lastIndexOf("]");
+  }
+  if (start >= 0 && end > start) {
+    const extracted = cleaned.slice(start, end + 1);
+    try { return JSON.parse(extracted) as T; } catch { /* continue */ }
+
+    // Attempt 3: fix trailing commas before } or ]
+    const fixed = extracted
+      .replace(/,\s*([}\]])/g, "$1")
+      .replace(/\n/g, "\\n");
+    try { return JSON.parse(fixed) as T; } catch { /* give up */ }
+  }
+
+  return null;
+}
+
 async function getGeminiApiKey(): Promise<string | undefined> {
   try {
     const { getActiveAccount } = await import("./server.js");
@@ -321,8 +361,11 @@ Rules:
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { places: Place[]; summary: string };
+    const parsed = safeParseJson<{ places: Place[]; summary: string }>(raw);
+    if (!parsed) {
+      logError("city", "synthesizePlaces: failed to parse LLM JSON", undefined, { rawLength: raw.length });
+      return fallbackFromSnippets(snippets, images, city, limit);
+    }
     // Match images to places
     const places = matchImagesToPlaces(parsed.places ?? [], images);
     // If LLM returned valid JSON but empty places, fall back to snippet extraction
@@ -461,8 +504,11 @@ Rules:
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string; englishName?: string };
+    const parsed = safeParseJson<{ tips: TravelTip[]; country?: string; currency?: string; language?: string; bestSeason?: string; population?: string; famousNickname?: string; englishName?: string }>(raw);
+    if (!parsed) {
+      logError("city", "generateTravelTips: failed to parse LLM JSON", undefined, { rawLength: raw.length });
+      return { tips: [] };
+    }
     return {
       tips: (parsed.tips ?? []).slice(0, 7),
       country: parsed.country,
@@ -510,8 +556,11 @@ Rules:
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned) as CityHistoryData & { population?: string; famousNickname?: string };
+    const parsed = safeParseJson<CityHistoryData & { population?: string; famousNickname?: string }>(raw);
+    if (!parsed) {
+      logError("city", "generateCityHistory: failed to parse LLM JSON", undefined, { rawLength: raw.length });
+      return undefined;
+    }
     return {
       founding: parsed.founding ?? "",
       narrative: parsed.narrative ?? "",
@@ -703,8 +752,11 @@ Rules:
 
   const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
   const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
-  const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  const parsed = JSON.parse(cleaned) as { places: Place[]; summary: string };
+  const parsed = safeParseJson<{ places: Place[]; summary: string }>(raw);
+  if (!parsed) {
+    logError("city", "llmOnlyResearch: failed to parse LLM JSON", undefined, { city, category, rawLength: raw.length });
+    return { places: [], summary: "", searchSources: [] };
+  }
   return {
     places: addMapUrls((parsed.places ?? []).slice(0, limit), city),
     summary: parsed.summary ?? "",

@@ -62,12 +62,12 @@ const BASE_DIR = join(homedir(), ".openclaw", "enso-data");
 
 // ── ID sanitisation ──
 
-const ID_RE = /^[a-z0-9][a-z0-9_-]{0,120}$/;
+const ID_RE = /^[\p{L}\p{N}][\p{L}\p{N}_-]{0,120}$/u;
 
 function sanitizeId(raw: string): string {
   const slug = raw
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 120);
   if (!slug) throw new Error(`Cannot derive a valid document id from "${raw}"`);
