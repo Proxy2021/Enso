@@ -99,6 +99,16 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
     [onAction],
   );
 
+  const resolvedData = useMemo(
+    () => resolveMediaUrlsInData(card.data ?? {}),
+    [card.data],
+  );
+
+  const resolvedMediaUrls = useMemo(
+    () => card.mediaUrls?.map(u => resolveMediaUrl(u)) ?? [],
+    [card.mediaUrls],
+  );
+
   const result = useMemo(
     () => (card.generatedUI ? compileComponent(card.generatedUI) : null),
     [card.generatedUI],
@@ -143,9 +153,9 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
     <div className="flex justify-start p-2">
       <div className="w-full min-w-0">
         <UIErrorBoundary onAction={onAction}>
-          <Comp data={resolveMediaUrlsInData(card.data ?? {})} sendMessage={sendMessageAsAction} onAction={onAction} theme="dark" />
+          <Comp data={resolvedData} sendMessage={sendMessageAsAction} onAction={onAction} theme="dark" />
         </UIErrorBoundary>
-        {hasMedia && <MediaGallery urls={card.mediaUrls!.map(u => resolveMediaUrl(u))} />}
+        {hasMedia && <MediaGallery urls={resolvedMediaUrls} />}
         {card.text && (
           <div className="mt-1 px-1">
             <button

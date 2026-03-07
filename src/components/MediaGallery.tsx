@@ -122,7 +122,7 @@ export default function MediaGallery({ urls }: { urls: string[] }) {
 
         return (
           <a
-            key={i}
+            key={url}
             href={url}
             target="_blank"
             rel="noopener noreferrer"
