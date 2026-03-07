@@ -1,8 +1,8 @@
 {
   "name": "enso",
   "private": true,
-  "version": "0.2.62",
-  "versionCode": 64,
+  "version": "0.2.63",
+  "versionCode": 65,
   "description": "AI app platform with remote desktop, terminal, file browser, and coding agent — every answer becomes a live interactive app",
   "type": "module",
   "scripts": {
