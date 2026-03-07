@@ -1,46 +1,38 @@
-var photoId = (params.photoId || "").trim();
+var photoPath = (params.photoId || "").trim();
 var style = (params.style || "").trim() || "watercolor";
 var intensity = params.intensity || 75;
 var colorPalette = (params.colorPalette || "").trim();
 
-if (!photoId) {
+if (!photoPath) {
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_apply_style",
-        error: "Photo ID is required"
+        error: "Photo path is required"
       })
     }]
   };
 }
 
-// Load photos
-var stored = await ctx.store.get("photos");
-var photos = [];
-if (stored) {
-  try { photos = JSON.parse(stored); } catch(e) { photos = []; }
-}
-
-var photo = null;
-for (var i = 0; i < photos.length; i++) {
-  if (photos[i].id === photoId) { photo = photos[i]; break; }
-}
-
-if (!photo) {
+// Get photo details from filesystem via native tool
+var viewResult = await ctx.callTool("enso_media_view_photo", { path: photoPath });
+if (!viewResult.success) {
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_apply_style",
-        error: "Photo not found: " + photoId
+        error: "Photo not found: " + photoPath
       })
     }]
   };
 }
+
+var photo = viewResult.data;
 
 // Use AI to describe the styled transformation
-var stylePrompt = "Describe what a " + style.replace(/_/g, " ") + " style transformation at " + intensity + "% intensity would look like applied to a photo. Be concise in 1-2 sentences.";
+var stylePrompt = "Describe what a " + style.replace(/_/g, " ") + " style transformation at " + intensity + "% intensity would look like applied to a photo named '" + photo.name + "'. Be concise in 1-2 sentences.";
 if (colorPalette) {
   stylePrompt += " Use a " + colorPalette + " color palette.";
 }
@@ -50,8 +42,9 @@ try {
   if (aiResult.ok) aiDesc = aiResult.text;
 } catch(e) { /* ignore */ }
 
-// Load or create styled versions store
-var stylesStored = await ctx.store.get("styles_" + photoId);
+// Load or create styled versions for this photo path
+var storeKey = "styles:" + photoPath;
+var stylesStored = await ctx.store.get(storeKey);
 var versions = [];
 if (stylesStored) {
   try { versions = JSON.parse(stylesStored); } catch(e) { versions = []; }
@@ -64,22 +57,13 @@ var styledVersion = {
   style: style,
   intensity: intensity,
   colorPalette: colorPalette || null,
-  url: photo.url,
+  url: photo.mediaUrl,
   description: aiDesc,
   createdAt: new Date().toISOString()
 };
 
 versions.push(styledVersion);
-await ctx.store.set("styles_" + photoId, JSON.stringify(versions));
-
-// Update photo styled count
-for (var j = 0; j < photos.length; j++) {
-  if (photos[j].id === photoId) {
-    photos[j].styledVersions = versions.length;
-    break;
-  }
-}
-await ctx.store.set("photos", JSON.stringify(photos));
+await ctx.store.set(storeKey, JSON.stringify(versions));
 
 return {
   content: [{
@@ -87,9 +71,12 @@ return {
     text: JSON.stringify({
       tool: "enso_photo_studio_apply_style",
       photo: {
-        id: photo.id,
+        id: photoPath,
         name: photo.name,
-        url: photo.url
+        url: photo.mediaUrl,
+        path: photoPath,
+        size: photo.size,
+        dimensions: photo.dimensions || ""
       },
       style: style,
       intensity: intensity,
@@ -97,7 +84,7 @@ return {
       description: aiDesc,
       result: {
         id: styledId,
-        url: photo.url,
+        url: photo.mediaUrl,
         processedAt: styledVersion.createdAt
       }
     })

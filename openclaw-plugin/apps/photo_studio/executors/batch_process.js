@@ -1,49 +1,57 @@
-var collection = (params.collection || "").trim();
-var photoIdsRaw = (params.photoIds || "").trim();
+var folderPath = (params.collection || "").trim();
 var style = (params.style || "").trim() || "watercolor";
 var intensity = params.intensity || 75;
 
-// Load photos
-var stored = await ctx.store.get("photos");
-var photos = [];
-if (stored) {
-  try { photos = JSON.parse(stored); } catch(e) { photos = []; }
+// If a folder path is provided, browse it for photos
+// If not, check if we have a stored current folder
+if (!folderPath) {
+  var lastFolder = await ctx.store.get("lastBrowsedFolder");
+  if (lastFolder) folderPath = lastFolder;
 }
 
-// Determine which photos to process
-var targetIds = [];
-if (collection) {
-  var colStored = await ctx.store.get("collections");
-  var collections = {};
-  if (colStored) {
-    try { collections = JSON.parse(colStored); } catch(e) { collections = {}; }
-  }
-  if (collections[collection] && collections[collection].photoIds) {
-    targetIds = collections[collection].photoIds;
-  }
-} else if (photoIdsRaw) {
-  targetIds = photoIdsRaw.split(",").map(function(id) { return id.trim(); }).filter(function(id) { return id.length > 0; });
-} else {
-  // Process all photos
-  targetIds = photos.map(function(p) { return p.id; });
+if (!folderPath) {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        tool: "enso_photo_studio_batch_process",
+        error: "No folder specified. Browse a folder first, then batch process."
+      })
+    }]
+  };
 }
 
+// Browse the folder to get photos
+var browseResult = await ctx.callTool("enso_media_browse_folder", {
+  path: folderPath,
+  filter: "image",
+  sortBy: "name",
+  sortDir: "asc"
+});
+
+if (!browseResult.success) {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        tool: "enso_photo_studio_batch_process",
+        error: "Could not browse folder: " + (browseResult.error || folderPath)
+      })
+    }]
+  };
+}
+
+var items = browseResult.data.items || [];
 var results = [];
 var completed = 0;
 
-for (var i = 0; i < targetIds.length; i++) {
-  var pid = targetIds[i];
-  var photo = null;
-  for (var j = 0; j < photos.length; j++) {
-    if (photos[j].id === pid) { photo = photos[j]; break; }
-  }
-  if (!photo) {
-    results.push({ id: pid, name: "Unknown", status: "error", error: "Photo not found" });
-    continue;
-  }
+for (var i = 0; i < items.length; i++) {
+  var item = items[i];
+  var photoPath = item.path;
 
-  // Create styled version
-  var stylesStored = await ctx.store.get("styles_" + pid);
+  // Store styled version record
+  var storeKey = "styles:" + photoPath;
+  var stylesStored = await ctx.store.get(storeKey);
   var versions = [];
   if (stylesStored) {
     try { versions = JSON.parse(stylesStored); } catch(e) { versions = []; }
@@ -54,40 +62,30 @@ for (var i = 0; i < targetIds.length; i++) {
     id: styledId,
     style: style,
     intensity: intensity,
-    url: photo.url,
+    url: item.mediaUrl,
     createdAt: new Date().toISOString()
   });
-  await ctx.store.set("styles_" + pid, JSON.stringify(versions));
-
-  // Update photo styled count
-  for (var k = 0; k < photos.length; k++) {
-    if (photos[k].id === pid) {
-      photos[k].styledVersions = versions.length;
-      break;
-    }
-  }
+  await ctx.store.set(storeKey, JSON.stringify(versions));
 
   completed++;
   results.push({
-    id: pid,
-    name: photo.name,
-    originalUrl: photo.url,
-    styledUrl: photo.url,
+    id: photoPath,
+    name: item.name,
+    originalUrl: item.mediaUrl,
+    styledUrl: item.mediaUrl,
     status: "success"
   });
 }
-
-await ctx.store.set("photos", JSON.stringify(photos));
 
 return {
   content: [{
     type: "text",
     text: JSON.stringify({
       tool: "enso_photo_studio_batch_process",
-      collection: collection || null,
+      collection: folderPath,
       style: style,
       intensity: intensity,
-      total: targetIds.length,
+      total: items.length,
       completed: completed,
       status: "complete",
       results: results

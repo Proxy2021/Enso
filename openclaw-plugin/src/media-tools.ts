@@ -412,8 +412,53 @@ function defaultPhotoPath(): string {
 
 function browseFolder(params: BrowseFolderParams): AgentToolResult {
   const inputPath = (params.path ?? "").trim();
-  // No path → show drives as starting point
-  if (!inputPath) return listDrives();
+  // No path → build a virtual root listing using drives + quick-access in the
+  // standard browseFolder response shape so templates get a consistent format.
+  if (!inputPath) {
+    const drives = getSystemDrives();
+    const home = homedir();
+    const quickAccess: Array<{ name: string; path: string }> = [];
+    const tryAdd = (label: string, p: string) => {
+      if (existsSync(p)) quickAccess.push({ name: label, path: p });
+    };
+    tryAdd("Desktop", join(home, "Desktop"));
+    tryAdd("Documents", join(home, "Documents"));
+    tryAdd("Downloads", join(home, "Downloads"));
+    tryAdd("Pictures", join(home, "Pictures"));
+    tryAdd("Photos", join(home, "Photos"));
+
+    // Map drives + quick-access to the standard directories shape
+    const directories: DirEntry[] = [];
+    // Quick access first (most useful)
+    for (const qa of quickAccess) {
+      let itemCount = 0;
+      try {
+        const sub = readdirSync(qa.path, { withFileTypes: true });
+        for (const s of sub) {
+          if (s.isFile() && MEDIA_EXTS.has(extname(s.name).toLowerCase())) itemCount++;
+        }
+      } catch { /* skip */ }
+      directories.push({ name: `⭐ ${qa.name}`, path: qa.path, itemCount });
+    }
+    // Then drives / volumes
+    for (const d of drives) {
+      // Skip home if already shown via quick access parent
+      if (d.path === home) continue;
+      directories.push({ name: d.name, path: d.path, itemCount: 0 });
+    }
+
+    return jsonResult({
+      tool: "enso_media_browse_folder",
+      path: "/",
+      parentPath: undefined,
+      total: 0,
+      items: [] as MediaItem[],
+      directories,
+      filter: params.filter ?? "all",
+      sortBy: params.sortBy ?? "name",
+      sortDir: params.sortDir ?? "asc",
+    });
+  }
   const safe = safeResolvePath(inputPath);
   if (!safe.ok) return errorResult(safe.error);
   if (!existsSync(safe.path)) return errorResult(`path does not exist: ${safe.path}`);

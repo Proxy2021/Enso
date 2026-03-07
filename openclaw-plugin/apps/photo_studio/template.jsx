@@ -1,11 +1,11 @@
 export default function GeneratedUI({ data, onAction }) {
   // ── Hooks (all at top level) ──
-  const [urls, setUrls] = useState("");
   const [selectedStyle, setSelectedStyle] = useState("watercolor");
   const [intensity, setIntensity] = useState(75);
   const [collectionName, setCollectionName] = useState("");
   const [createMode, setCreateMode] = useState(false);
   const [sliderVal, setSliderVal] = useState(null);
+  const [viewMode, setViewMode] = useState("grid"); // grid or list
 
   useEffect(() => {
     if (sliderVal === null && data?.intensity) setSliderVal(data.intensity);
@@ -52,12 +52,24 @@ export default function GeneratedUI({ data, onAction }) {
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // ── Import Photos View ──
+  // ── Import / Browse Photos View ──
   // ════════════════════════════════════════════════════════════════════════
   if (isImport) {
-    var photos = data.photos || [];
+    var currentPath = data.path || "";
+    var parentPath = data.parentPath || "";
+    var directories = data.directories || [];
+    var items = data.items || [];
+    var isRoot = !currentPath || currentPath === "/";
+    var folderName = isRoot ? "Select a Folder" : currentPath.split("/").filter(Boolean).pop() || currentPath;
+    var formatSize = function(bytes) {
+      if (!bytes) return "";
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / 1048576).toFixed(1) + " MB";
+    };
+
     return (
-      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -66,7 +78,7 @@ export default function GeneratedUI({ data, onAction }) {
             </div>
             <div>
               <div className="text-sm font-semibold text-gray-100">Photo Studio</div>
-              <div className="text-[11px] text-gray-500">{photos.length} photo{photos.length !== 1 ? "s" : ""} imported</div>
+              <div className="text-[11px] text-gray-500">Browse & select photos</div>
             </div>
           </div>
           <Button size="sm" variant="ghost" onClick={() => onAction("manage_collection", { action: "list" })}>
@@ -74,75 +86,171 @@ export default function GeneratedUI({ data, onAction }) {
           </Button>
         </div>
 
-        {/* Import form */}
-        <div className="bg-gray-800/40 rounded-xl p-3 border border-gray-700/40 space-y-2">
-          <div className="text-xs text-gray-400 font-medium">Import by URL(s)</div>
-          <Input
-            placeholder="Paste image URLs (one per line or comma-separated)..."
-            value={urls}
-            onChange={(v) => setUrls(v)}
-            icon={<LucideReact.Link className="w-3.5 h-3.5" />}
-            size="sm"
-          />
-          <Button size="sm" variant="primary"
-            onClick={() => {
-              if (urls.trim()) {
-                onAction("import_photos", { urls: urls.trim() });
-                setUrls("");
-              }
-            }}>
-            <LucideReact.Upload className="w-3.5 h-3.5 mr-1" /> Import
-          </Button>
-        </div>
-
-        {/* Photo grid */}
-        {photos.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-[11px] text-gray-500 uppercase tracking-wider font-medium">Imported Photos</div>
-            <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-              {photos.map((photo, idx) => (
-                <div key={idx} className="relative group bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all">
-                  {photo.url ? (
-                    <img src={photo.url} alt={photo.name || "Photo"} loading="lazy"
-                      style={{ width: "100%", height: "100px", objectFit: "cover" }} />
+        {/* Breadcrumb navigation */}
+        {!isRoot && (
+          <div className="flex items-center gap-1 text-[11px] overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+            <button
+              onClick={() => onAction("import_photos", {})}
+              className="text-violet-400 hover:text-violet-300 cursor-pointer shrink-0">
+              <LucideReact.HardDrive className="w-3.5 h-3.5" />
+            </button>
+            {currentPath.split("/").filter(Boolean).map(function(seg, idx, arr) {
+              var segPath = "/" + arr.slice(0, idx + 1).join("/");
+              var isLast = idx === arr.length - 1;
+              return (
+                <span key={idx} className="flex items-center gap-1 shrink-0">
+                  <LucideReact.ChevronRight className="w-3 h-3 text-gray-600" />
+                  {isLast ? (
+                    <span className="text-gray-200 font-medium">{seg}</span>
                   ) : (
-                    <div style={{ width: "100%", height: "100px" }} className="bg-gray-700/30 flex items-center justify-center">
-                      <LucideReact.Image className="w-6 h-6 text-gray-500" />
-                    </div>
+                    <button
+                      onClick={() => onAction("import_photos", { path: segPath })}
+                      className="text-violet-400 hover:text-violet-300 cursor-pointer truncate max-w-[100px]">
+                      {seg}
+                    </button>
                   )}
-                  <div className="p-1.5 space-y-1">
-                    <div className="text-[10px] text-gray-300 truncate">{photo.name || "Untitled"}</div>
-                    {photo.dimensions && (
-                      <div className="text-[9px] text-gray-500">{photo.dimensions}</div>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Up button + folder info */}
+        {!isRoot && parentPath && (
+          <button
+            onClick={() => onAction("import_photos", { path: parentPath })}
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 hover:border-gray-600/50 hover:bg-gray-800/60 cursor-pointer transition-all text-left">
+            <LucideReact.ArrowUp className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-xs text-gray-400">Up to parent</span>
+          </button>
+        )}
+
+        {/* Directories */}
+        {directories.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">
+              {isRoot ? "Locations" : "Folders"}
+            </div>
+            <div className="space-y-1 max-h-48 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+              {directories.map(function(dir, idx) {
+                return (
+                  <button key={idx}
+                    onClick={() => onAction("import_photos", { path: dir.path })}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 hover:border-violet-500/30 hover:bg-gray-800/60 cursor-pointer transition-all text-left group">
+                    {isRoot ? (
+                      <LucideReact.HardDrive className="w-4 h-4 text-violet-400 shrink-0" />
+                    ) : (
+                      <LucideReact.Folder className="w-4 h-4 text-amber-400 shrink-0 group-hover:text-amber-300" />
                     )}
-                  </div>
-                  {/* Action buttons */}
-                  <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => onAction("apply_style", { photoId: photo.id, style: "watercolor", intensity: 75 })}
-                      className="p-1 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
-                      <LucideReact.Paintbrush className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => onAction("compare_versions", { photoId: photo.id })}
-                      className="p-1 rounded-md bg-black/60 text-blue-300 hover:text-blue-200 cursor-pointer backdrop-blur-sm">
-                      <LucideReact.Columns className="w-3 h-3" />
-                    </button>
-                  </div>
-                  {photo.styledVersions > 0 && (
-                    <div className="absolute bottom-8 left-1.5">
-                      <Badge variant="info" className="text-[8px]">{photo.styledVersions} style{photo.styledVersions !== 1 ? "s" : ""}</Badge>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-gray-200 truncate">{dir.name}</div>
+                      {dir.itemCount > 0 && (
+                        <div className="text-[10px] text-gray-500">{dir.itemCount} image{dir.itemCount !== 1 ? "s" : ""}</div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                    <LucideReact.ChevronRight className="w-3.5 h-3.5 text-gray-600 shrink-0 group-hover:text-gray-400" />
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {photos.length === 0 && (
+        {/* Photo thumbnails */}
+        {items.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">
+                {items.length} photo{items.length !== 1 ? "s" : ""}
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setViewMode("grid")}
+                  className={"p-1 rounded cursor-pointer " + (viewMode === "grid" ? "text-violet-400 bg-violet-500/10" : "text-gray-500 hover:text-gray-300")}>
+                  <LucideReact.LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => setViewMode("list")}
+                  className={"p-1 rounded cursor-pointer " + (viewMode === "list" ? "text-violet-400 bg-violet-500/10" : "text-gray-500 hover:text-gray-300")}>
+                  <LucideReact.List className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {viewMode === "grid" ? (
+              <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+                {items.map(function(item, idx) {
+                  return (
+                    <div key={idx} className="relative group bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all">
+                      {item.mediaUrl ? (
+                        <img src={item.mediaUrl} alt={item.name} loading="lazy"
+                          style={{ width: "100%", height: "100px", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ width: "100%", height: "100px" }} className="bg-gray-700/30 flex items-center justify-center">
+                          <LucideReact.Image className="w-6 h-6 text-gray-500" />
+                        </div>
+                      )}
+                      <div className="p-1.5">
+                        <div className="text-[10px] text-gray-300 truncate">{item.name}</div>
+                        <div className="text-[9px] text-gray-500">{formatSize(item.size)}</div>
+                      </div>
+                      {/* Hover action */}
+                      <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => onAction("apply_style", { photoId: item.path, style: "watercolor", intensity: 75 })}
+                          className="p-1 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
+                          <LucideReact.Paintbrush className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+                {items.map(function(item, idx) {
+                  return (
+                    <div key={idx} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-gray-800/40 border border-gray-700/30 hover:border-violet-500/30 transition-all group">
+                      {item.mediaUrl ? (
+                        <img src={item.mediaUrl} alt={item.name} loading="lazy"
+                          className="rounded-md shrink-0"
+                          style={{ width: "40px", height: "40px", objectFit: "cover" }} />
+                      ) : (
+                        <div className="w-10 h-10 rounded-md bg-gray-700/30 flex items-center justify-center shrink-0">
+                          <LucideReact.Image className="w-4 h-4 text-gray-500" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-gray-200 truncate">{item.name}</div>
+                        <div className="text-[10px] text-gray-500">{formatSize(item.size)} · {item.ext}</div>
+                      </div>
+                      <button onClick={() => onAction("apply_style", { photoId: item.path, style: "watercolor", intensity: 75 })}
+                        className="p-1.5 rounded-lg bg-gray-700/40 hover:bg-violet-500/20 cursor-pointer transition-all opacity-0 group-hover:opacity-100">
+                        <LucideReact.Paintbrush className="w-3.5 h-3.5 text-violet-400" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Empty state — no items and no directories */}
+        {items.length === 0 && directories.length === 0 && !isRoot && (
           <EmptyState
-            icon={<LucideReact.Camera className="w-8 h-8 text-gray-500" />}
-            title="No photos yet"
-            description="Import photos by URL to get started with artistic styling."
+            icon={<LucideReact.ImageOff className="w-8 h-8 text-gray-500" />}
+            title="No images found"
+            description="This folder doesn't contain any images. Try navigating to a different folder."
+            action={<Button size="sm" onClick={() => onAction("import_photos", { path: parentPath })}>
+              <LucideReact.ArrowUp className="w-3.5 h-3.5 mr-1" /> Go Back
+            </Button>}
+          />
+        )}
+
+        {/* Root empty state */}
+        {isRoot && directories.length === 0 && (
+          <EmptyState
+            icon={<LucideReact.HardDrive className="w-8 h-8 text-gray-500" />}
+            title="No drives found"
+            description="Could not list drives on this machine."
           />
         )}
       </div>

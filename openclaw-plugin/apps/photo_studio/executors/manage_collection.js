@@ -1,20 +1,13 @@
 var action = (params.action || "").trim() || "list";
 var name = (params.name || "").trim();
 var newName = (params.newName || "").trim();
-var photoId = (params.photoId || "").trim();
+var photoPath = (params.photoId || "").trim();
 
-// Load collections
+// Load collections (store file paths instead of IDs)
 var colStored = await ctx.store.get("collections");
 var collections = {};
 if (colStored) {
   try { collections = JSON.parse(colStored); } catch(e) { collections = {}; }
-}
-
-// Load photos for resolving items
-var photosStored = await ctx.store.get("photos");
-var photos = [];
-if (photosStored) {
-  try { photos = JSON.parse(photosStored); } catch(e) { photos = []; }
 }
 
 var message = "";
@@ -26,7 +19,7 @@ if (action === "create") {
   if (collections[name]) {
     message = "Collection '" + name + "' already exists.";
   } else {
-    collections[name] = { name: name, photoIds: [], createdAt: new Date().toISOString() };
+    collections[name] = { name: name, photoPaths: [], createdAt: new Date().toISOString() };
     await ctx.store.set("collections", JSON.stringify(collections));
     message = "Collection '" + name + "' created.";
   }
@@ -54,9 +47,11 @@ if (action === "delete") {
 }
 
 if (action === "add") {
-  if (collections[name] && photoId) {
-    if (collections[name].photoIds.indexOf(photoId) === -1) {
-      collections[name].photoIds.push(photoId);
+  if (collections[name] && photoPath) {
+    var paths = collections[name].photoPaths || collections[name].photoIds || [];
+    if (paths.indexOf(photoPath) === -1) {
+      paths.push(photoPath);
+      collections[name].photoPaths = paths;
       await ctx.store.set("collections", JSON.stringify(collections));
       message = "Photo added to '" + name + "'.";
     }
@@ -65,10 +60,12 @@ if (action === "add") {
 }
 
 if (action === "remove") {
-  if (collections[name] && photoId) {
-    var idx = collections[name].photoIds.indexOf(photoId);
+  if (collections[name] && photoPath) {
+    var paths = collections[name].photoPaths || collections[name].photoIds || [];
+    var idx = paths.indexOf(photoPath);
     if (idx !== -1) {
-      collections[name].photoIds.splice(idx, 1);
+      paths.splice(idx, 1);
+      collections[name].photoPaths = paths;
       await ctx.store.set("collections", JSON.stringify(collections));
       message = "Photo removed from '" + name + "'.";
     }
@@ -78,14 +75,18 @@ if (action === "remove") {
 
 if (action === "view" && name && collections[name]) {
   var col = collections[name];
+  var photoPaths = col.photoPaths || col.photoIds || [];
   var items = [];
-  for (var i = 0; i < (col.photoIds || []).length; i++) {
-    var pid = col.photoIds[i];
-    for (var j = 0; j < photos.length; j++) {
-      if (photos[j].id === pid) {
-        items.push(photos[j]);
-        break;
-      }
+  for (var i = 0; i < photoPaths.length; i++) {
+    var viewResult = await ctx.callTool("enso_media_view_photo", { path: photoPaths[i] });
+    if (viewResult.success && viewResult.data) {
+      items.push({
+        id: photoPaths[i],
+        name: viewResult.data.name,
+        url: viewResult.data.mediaUrl,
+        path: photoPaths[i],
+        size: viewResult.data.size
+      });
     }
   }
   return {
@@ -106,18 +107,18 @@ var colList = [];
 var colKeys = Object.keys(collections);
 for (var c = 0; c < colKeys.length; c++) {
   var col = collections[colKeys[c]];
+  var photoPaths = col.photoPaths || col.photoIds || [];
   var coverUrl = "";
-  if (col.photoIds && col.photoIds.length > 0) {
-    for (var p = 0; p < photos.length; p++) {
-      if (photos[p].id === col.photoIds[0]) {
-        coverUrl = photos[p].url || "";
-        break;
-      }
+  // Get cover from first photo in collection
+  if (photoPaths.length > 0) {
+    var coverResult = await ctx.callTool("enso_media_view_photo", { path: photoPaths[0] });
+    if (coverResult.success && coverResult.data) {
+      coverUrl = coverResult.data.mediaUrl || "";
     }
   }
   colList.push({
     name: col.name,
-    count: (col.photoIds || []).length,
+    count: photoPaths.length,
     coverUrl: coverUrl,
     createdAt: col.createdAt || ""
   });

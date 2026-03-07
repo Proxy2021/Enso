@@ -9,18 +9,26 @@
     "tools": [
       {
         "suffix": "import_photos",
-        "description": "Import photos by URL or from device. Accepts single or multiple photo URLs, stores metadata including dimensions and import date.",
+        "description": "Browse the filesystem to find and select photos. Shows directories and image files with thumbnails. Navigate into folders to find your photos.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "urls": {
+            "path": {
               "type": "string",
-              "description": "One or more image URLs, comma-separated or newline-separated"
+              "description": "Directory path to browse (empty = show root drives/volumes)"
             },
-            "collection": {
+            "filter": {
               "type": "string",
-              "description": "Optional collection name to add imported photos to"
+              "description": "Filter: all, image, video (default: image)"
+            },
+            "sortBy": {
+              "type": "string",
+              "description": "Sort: name, date, size (default: name)"
+            },
+            "sortDir": {
+              "type": "string",
+              "description": "Direction: asc, desc (default: asc)"
             }
           },
           "required": []
@@ -28,47 +36,57 @@
         "sampleParams": {},
         "sampleData": {
           "tool": "enso_photo_studio_import_photos",
+          "path": "/Users/demo/Pictures/Vacation",
+          "parentPath": "/Users/demo/Pictures",
           "total": 4,
-          "photos": [
+          "items": [
             {
-              "id": "p1",
               "name": "sunset_beach.jpg",
-              "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800",
-              "dimensions": "4032×3024",
-              "importedAt": "2024-11-15T10:30:00Z",
-              "styledVersions": 2,
-              "size": 3245678
+              "path": "/Users/demo/Pictures/Vacation/sunset_beach.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 3245678,
+              "modifiedAt": "2024-11-15T10:30:00Z",
+              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vc3Vuc2V0X2JlYWNoLmpwZw"
             },
             {
-              "id": "p2",
               "name": "mountain_view.jpg",
-              "url": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800",
-              "dimensions": "5472×3648",
-              "importedAt": "2024-11-15T10:31:00Z",
-              "styledVersions": 1,
-              "size": 4567890
+              "path": "/Users/demo/Pictures/Vacation/mountain_view.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 4567890,
+              "modifiedAt": "2024-11-15T10:31:00Z",
+              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vbW91bnRhaW5fdmlldy5qcGc"
             },
             {
-              "id": "p3",
               "name": "city_lights.jpg",
-              "url": "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800",
-              "dimensions": "6000×4000",
-              "importedAt": "2024-11-15T10:32:00Z",
-              "styledVersions": 0,
-              "size": 5123456
+              "path": "/Users/demo/Pictures/Vacation/city_lights.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 5123456,
+              "modifiedAt": "2024-11-15T10:32:00Z",
+              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vY2l0eV9saWdodHMuanBn"
             },
             {
-              "id": "p4",
               "name": "forest_path.jpg",
-              "url": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800",
-              "dimensions": "3840×2560",
-              "importedAt": "2024-11-15T10:33:00Z",
-              "styledVersions": 3,
-              "size": 2987654
+              "path": "/Users/demo/Pictures/Vacation/forest_path.jpg",
+              "ext": ".jpg",
+              "type": "image",
+              "size": 2987654,
+              "modifiedAt": "2024-11-15T10:33:00Z",
+              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vZm9yZXN0X3BhdGguanBn"
             }
-          ]
+          ],
+          "directories": [
+            { "name": "Portraits", "path": "/Users/demo/Pictures/Vacation/Portraits", "itemCount": 8 },
+            { "name": "Landscapes", "path": "/Users/demo/Pictures/Vacation/Landscapes", "itemCount": 15 },
+            { "name": "Night Shots", "path": "/Users/demo/Pictures/Vacation/Night Shots", "itemCount": 5 }
+          ],
+          "filter": "image",
+          "sortBy": "name",
+          "sortDir": "asc"
         },
-        "requiredDataKeys": ["tool", "photos"],
+        "requiredDataKeys": ["tool"],
         "isPrimary": true
       },
       {
@@ -80,7 +98,7 @@
           "properties": {
             "photoId": {
               "type": "string",
-              "description": "ID of the photo to style"
+              "description": "File path of the photo to style"
             },
             "style": {
               "type": "string",
@@ -97,19 +115,21 @@
           },
           "required": ["photoId", "style"]
         },
-        "sampleParams": { "photoId": "p1", "style": "watercolor", "intensity": 75 },
+        "sampleParams": { "photoId": "/Users/demo/Pictures/sunset_beach.jpg", "style": "watercolor", "intensity": 75 },
         "sampleData": {
           "tool": "enso_photo_studio_apply_style",
           "photo": {
-            "id": "p1",
+            "id": "/Users/demo/Pictures/sunset_beach.jpg",
             "name": "sunset_beach.jpg",
-            "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800"
+            "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw",
+            "path": "/Users/demo/Pictures/sunset_beach.jpg"
           },
           "style": "watercolor",
           "intensity": 75,
+          "description": "A soft, translucent watercolor wash softens the edges and colors of the beach scene.",
           "result": {
             "id": "s1",
-            "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&blur=50",
+            "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw",
             "processedAt": "2024-11-15T10:35:00Z"
           }
         },
@@ -125,11 +145,7 @@
           "properties": {
             "collection": {
               "type": "string",
-              "description": "Collection name to process all photos from"
-            },
-            "photoIds": {
-              "type": "string",
-              "description": "Comma-separated photo IDs to process (alternative to collection)"
+              "description": "Folder path containing photos to batch process"
             },
             "style": {
               "type": "string",
@@ -182,7 +198,7 @@
             },
             "photoId": {
               "type": "string",
-              "description": "Photo ID for add/remove actions"
+              "description": "Photo file path for add/remove actions"
             }
           },
           "required": ["action"]
@@ -209,25 +225,25 @@
           "properties": {
             "photoId": {
               "type": "string",
-              "description": "ID of the photo to compare versions for"
+              "description": "File path of the photo to compare versions for"
             }
           },
           "required": ["photoId"]
         },
-        "sampleParams": { "photoId": "p1" },
+        "sampleParams": { "photoId": "/Users/demo/Pictures/sunset_beach.jpg" },
         "sampleData": {
           "tool": "enso_photo_studio_compare_versions",
-          "photoId": "p1",
+          "photoId": "/Users/demo/Pictures/sunset_beach.jpg",
           "original": {
-            "id": "p1",
+            "id": "/Users/demo/Pictures/sunset_beach.jpg",
             "name": "sunset_beach.jpg",
-            "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800",
+            "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw",
+            "path": "/Users/demo/Pictures/sunset_beach.jpg",
             "dimensions": "4032×3024"
           },
           "versions": [
-            { "id": "s1", "style": "watercolor", "intensity": 75, "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&blur=50", "createdAt": "2024-11-15T10:35:00Z" },
-            { "id": "s2", "style": "oil_painting", "intensity": 85, "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&blur=80", "createdAt": "2024-11-15T11:00:00Z" },
-            { "id": "s3", "style": "vintage", "intensity": 60, "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&sat=-50", "createdAt": "2024-11-15T11:15:00Z" }
+            { "id": "s1", "style": "watercolor", "intensity": 75, "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw", "createdAt": "2024-11-15T10:35:00Z" },
+            { "id": "s2", "style": "oil_painting", "intensity": 85, "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw", "createdAt": "2024-11-15T11:00:00Z" }
           ]
         },
         "requiredDataKeys": ["tool", "photoId", "original", "versions"],

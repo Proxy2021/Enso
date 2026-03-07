@@ -1,43 +1,36 @@
-var photoId = (params.photoId || "").trim();
+var photoPath = (params.photoId || "").trim();
 
-if (!photoId) {
+if (!photoPath) {
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_compare_versions",
-        error: "Photo ID is required"
+        error: "Photo path is required"
       })
     }]
   };
 }
 
-// Load photo
-var stored = await ctx.store.get("photos");
-var photos = [];
-if (stored) {
-  try { photos = JSON.parse(stored); } catch(e) { photos = []; }
-}
-
-var photo = null;
-for (var i = 0; i < photos.length; i++) {
-  if (photos[i].id === photoId) { photo = photos[i]; break; }
-}
-
-if (!photo) {
+// Get photo details from filesystem
+var viewResult = await ctx.callTool("enso_media_view_photo", { path: photoPath });
+if (!viewResult.success) {
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_compare_versions",
-        error: "Photo not found: " + photoId
+        error: "Photo not found: " + photoPath
       })
     }]
   };
 }
 
-// Load styled versions
-var stylesStored = await ctx.store.get("styles_" + photoId);
+var photo = viewResult.data;
+
+// Load styled versions for this photo path
+var storeKey = "styles:" + photoPath;
+var stylesStored = await ctx.store.get(storeKey);
 var versions = [];
 if (stylesStored) {
   try { versions = JSON.parse(stylesStored); } catch(e) { versions = []; }
@@ -48,12 +41,14 @@ return {
     type: "text",
     text: JSON.stringify({
       tool: "enso_photo_studio_compare_versions",
-      photoId: photoId,
+      photoId: photoPath,
       original: {
-        id: photo.id,
+        id: photoPath,
         name: photo.name,
-        url: photo.url,
-        dimensions: photo.dimensions || ""
+        url: photo.mediaUrl,
+        path: photoPath,
+        dimensions: photo.dimensions || "",
+        size: photo.size
       },
       versions: versions
     })

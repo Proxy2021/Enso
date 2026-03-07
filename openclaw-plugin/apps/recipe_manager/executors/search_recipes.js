@@ -29,34 +29,38 @@ if (!query && !cuisine && !dietary && !mealType) {
   };
 }
 
-var searchResult = await ctx.search(searchQuery, { limit: limit });
-
-var urls = [];
-if (searchResult.ok && searchResult.results) {
-  urls = searchResult.results.slice(0, limit).map(function(r) {
-    return r.title + " - " + r.url + " - " + (r.description || "");
-  });
-}
-
-var prompt = "Based on these search results for recipes matching '" + searchQuery + "', extract up to " + limit + " recipes as a JSON array. Each recipe object must have: title (string), description (1-2 sentence summary), imageUrl (use a relevant Unsplash food image URL like https://images.unsplash.com/photo-XXXXX?w=400&h=300&fit=crop — pick a real photo ID that matches the dish), prepTime (string like '15 min'), cookTime (string), totalTime (string), servings (number), cuisine (string), dietary (array of strings like 'Vegetarian', 'Gluten-Free'), rating (number 1-5), source (string 'web').\n\nSearch results:\n" + urls.join("\n");
-
-if (maxTime > 0) {
-  prompt += "\n\nOnly include recipes with total time under " + maxTime + " minutes.";
-}
-
-var aiResult = await ctx.ask(prompt);
 var recipes = [];
-if (aiResult.ok && aiResult.text) {
-  try {
-    var parsed = aiResult.text;
-    var jsonMatch = parsed.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      recipes = JSON.parse(jsonMatch[0]);
-    }
-  } catch(e) {
-    recipes = [];
+try {
+  var searchResult = await ctx.search(searchQuery, { limit: limit });
+
+  var snippets = [];
+  if (searchResult.ok && searchResult.results && searchResult.results.length > 0) {
+    snippets = searchResult.results.slice(0, limit).map(function(r) {
+      return r.title + ": " + (r.description || "");
+    });
   }
-}
+
+  var prompt = "Based on these search results for '" + searchQuery + "':\n" + snippets.join("\n") + "\n\nReturn a JSON array of up to " + limit + " recipes. Each object must have: title (string), description (one sentence), prepTime (string like '15 min'), cookTime (string), totalTime (string), servings (number), cuisine (string), dietary (array of strings), rating (number 1-5), source (string 'web').";
+
+  if (maxTime > 0) {
+    prompt += " Only include recipes with total time under " + maxTime + " minutes.";
+  }
+
+  prompt += " Return ONLY valid JSON array, no markdown.";
+
+  var aiResult = await ctx.ask(prompt);
+  if (aiResult.ok && aiResult.text) {
+    var cleaned = aiResult.text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    try { recipes = JSON.parse(cleaned); } catch(e) {
+      var jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        try { recipes = JSON.parse(jsonMatch[0]); } catch(e2) {}
+      }
+    }
+  }
+} catch(e) {}
+
+if (!Array.isArray(recipes)) recipes = [];
 
 return {
   content: [{
