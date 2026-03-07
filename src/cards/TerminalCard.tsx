@@ -418,7 +418,7 @@ function BashCommandBlock({ commands }: { commands: BashCommand[] }) {
   return (
     <div className="space-y-px mb-1 pl-3">
       {commands.map((c, i) => (
-        <div key={i} className="bg-gray-900/80 rounded px-1.5 py-0.5 font-mono text-[10px] truncate">
+        <div key={i} className="bg-gray-900/80 rounded px-1.5 py-0.5 font-mono text-[10px] break-all">
           <span className="text-green-500">$</span>{" "}
           <span className="text-gray-400">{c.command}</span>
         </div>
