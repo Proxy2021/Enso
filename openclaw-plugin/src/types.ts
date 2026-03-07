@@ -116,6 +116,78 @@ export interface MissionProgress {
   builtApps?: Array<{ family: string; success: boolean; error?: string }>;
 }
 
+// ── Orchestration ──
+
+export type AgentRole = "researcher" | "architect" | "builder" | "coder" | "reviewer";
+
+export type OrchestrationTaskStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "awaiting_approval";
+
+export interface OrchestrationTask {
+  taskId: string;
+  title: string;
+  description: string;
+  agentRole: AgentRole;
+  dependsOn: string[];
+  outputType: "app" | "research" | "code" | "document" | "decision" | "review";
+  status: OrchestrationTaskStatus;
+  requiresApproval?: boolean;
+  agentPrompt?: string;
+  terminalCardId?: string;
+  sessionId?: string;
+  resultSummary?: string;
+  error?: string;
+}
+
+export interface OrchestrationAgent {
+  agentId: string;
+  role: AgentRole;
+  status: "idle" | "working" | "completed";
+  currentTaskId?: string;
+}
+
+export type OrchestrationStatus =
+  | "planning"
+  | "reviewing"
+  | "executing"
+  | "paused"
+  | "completed"
+  | "failed";
+
+export interface OrchestrationPlan {
+  orchestrationId: string;
+  goal: string;
+  tasks: OrchestrationTask[];
+  agents: OrchestrationAgent[];
+  status: OrchestrationStatus;
+}
+
+export type OrchestrationEventType =
+  | "plan_ready"
+  | "task_started"
+  | "task_completed"
+  | "task_failed"
+  | "approval_needed"
+  | "paused"
+  | "resumed"
+  | "completed"
+  | "failed"
+  | "dashboard_ready";
+
+export interface OrchestrationProgress {
+  orchestrationId: string;
+  eventType: OrchestrationEventType;
+  plan: OrchestrationPlan;
+  taskId?: string;
+  error?: string;
+  dashboardCardId?: string;
+}
+
 export interface EnhanceResult {
   data: unknown;
   generatedUI: string;
@@ -159,6 +231,8 @@ export interface ServerMessage {
     toolName: string;
     error?: string;
   };
+  orchestrationPlan?: OrchestrationPlan;
+  orchestrationProgress?: OrchestrationProgress;
   timestamp: number;
 }
 
@@ -180,7 +254,14 @@ export interface ClientMessage {
     | "settings.set_mode"
     | "operation.cancel"
     | "mission.start"
-    | "mission.approve";
+    | "mission.approve"
+    | "orchestration.start"
+    | "orchestration.approve"
+    | "orchestration.pause"
+    | "orchestration.resume"
+    | "orchestration.modify"
+    | "orchestration.cancel"
+    | "orchestration.message";
   mode?: ChannelMode;
   text?: string;
   mediaUrls?: string[];
@@ -210,6 +291,13 @@ export interface ClientMessage {
   // mission.approve fields
   missionId?: string;
   approvedApps?: MissionAppProposal[];
+  // orchestration.* fields
+  orchestrationGoal?: string;
+  orchestrationId?: string;
+  orchestrationApprovedTasks?: string[];
+  orchestrationTaskId?: string;
+  orchestrationModification?: string;
+  orchestrationMessage?: string;
 }
 
 /** Executor Context — injected into generated app executors as `ctx` */

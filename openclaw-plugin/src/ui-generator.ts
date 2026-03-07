@@ -459,7 +459,7 @@ function isRetryableGeminiError(err: unknown): boolean {
 }
 
 /** Default fast model for UI generation and tool selection. */
-const GEMINI_MODEL_FAST = "gemini-2.5-flash";
+export const GEMINI_MODEL_FAST = "gemini-2.5-flash";
 
 /** Powerful model for code generation (app spec, executors, templates). */
 export const GEMINI_MODEL_PRO = "gemini-3-pro-preview";

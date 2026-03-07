@@ -170,6 +170,8 @@ export interface ServerMessage {
     cwd?: string;
     gitBranch?: string;
   }>;
+  orchestrationPlan?: OrchestrationPlan;
+  orchestrationProgress?: OrchestrationProgress;
   timestamp: number;
 }
 
@@ -197,6 +199,13 @@ export interface ClientMessage {
     | "shell.destroy"
     | "mission.start"
     | "mission.approve"
+    | "orchestration.start"
+    | "orchestration.approve"
+    | "orchestration.pause"
+    | "orchestration.resume"
+    | "orchestration.modify"
+    | "orchestration.cancel"
+    | "orchestration.message"
     | "client.error";
   mode?: ChannelMode;
   text?: string;
@@ -245,4 +254,83 @@ export interface ClientMessage {
     url?: string;
     timestamp: number;
   };
+  // orchestration.* fields
+  orchestrationGoal?: string;
+  orchestrationId?: string;
+  orchestrationApprovedTasks?: string[];
+  orchestrationTaskId?: string;
+  orchestrationModification?: string;
+  orchestrationMessage?: string;
+}
+
+// ── Orchestration ──
+
+export type AgentRole = "researcher" | "architect" | "builder" | "coder" | "reviewer";
+
+export type OrchestrationTaskStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "awaiting_approval";
+
+export interface OrchestrationTask {
+  taskId: string;
+  title: string;
+  description: string;
+  agentRole: AgentRole;
+  dependsOn: string[];
+  outputType: "app" | "research" | "code" | "document" | "decision" | "review";
+  status: OrchestrationTaskStatus;
+  requiresApproval?: boolean;
+  agentPrompt?: string;
+  terminalCardId?: string;
+  sessionId?: string;
+  resultSummary?: string;
+  error?: string;
+}
+
+export interface OrchestrationAgent {
+  agentId: string;
+  role: AgentRole;
+  status: "idle" | "working" | "completed";
+  currentTaskId?: string;
+}
+
+export type OrchestrationStatus =
+  | "planning"
+  | "reviewing"
+  | "executing"
+  | "paused"
+  | "completed"
+  | "failed";
+
+export interface OrchestrationPlan {
+  orchestrationId: string;
+  goal: string;
+  tasks: OrchestrationTask[];
+  agents: OrchestrationAgent[];
+  status: OrchestrationStatus;
+}
+
+export type OrchestrationEventType =
+  | "plan_ready"
+  | "task_started"
+  | "task_completed"
+  | "task_failed"
+  | "approval_needed"
+  | "paused"
+  | "resumed"
+  | "completed"
+  | "failed"
+  | "dashboard_ready";
+
+export interface OrchestrationProgress {
+  orchestrationId: string;
+  eventType: OrchestrationEventType;
+  plan: OrchestrationPlan;
+  taskId?: string;
+  error?: string;
+  dashboardCardId?: string;
 }

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.2.63",
   "versionCode": 65,
-  "description": "AI app platform with remote desktop, terminal, file browser, and coding agent — every answer becomes a live interactive app",
+  "description": "Agentic AI platform with multi-agent orchestration, remote desktop, terminal, and coding agent — every answer becomes a live interactive app",
   "type": "module",
   "scripts": {
     "dev": "vite",

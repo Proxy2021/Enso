@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { statSync, existsSync } from "fs";
+import { statSync, existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { runClaudeCode } from "./claude-code.js";
@@ -178,9 +178,20 @@ async function postBuildRegistration(
   }
 
   if (freshApps.length === 0) {
-    logError("build-via-claude", "No new or modified app detected after build", undefined, { cardId });
-    sendBuildComplete(send, cardId, false, undefined, "Claude Code session completed but no new app was detected. Check the terminal output for details.");
-    return;
+    // Check for incomplete apps (app.json exists but template.jsx missing)
+    const recovered = await recoverIncompleteApps(preExistingFamilies, buildStartTime);
+    if (recovered) {
+      // Reload after recovery
+      try {
+        allApps = loadAllApps();
+        freshApps = allApps.filter((a) => !preExistingFamilies.has(a.spec.toolFamily));
+      } catch {}
+    }
+    if (freshApps.length === 0) {
+      logError("build-via-claude", "No new or modified app detected after build", undefined, { cardId });
+      sendBuildComplete(send, cardId, false, undefined, "Claude Code session completed but no new app was detected. Check the terminal output for details.");
+      return;
+    }
   }
 
   // Register the first new app
@@ -357,6 +368,13 @@ function buildAppPrompt(
   lines.push(`9. Use EnsoUI.Tooltip (NOT Tooltip which conflicts with Recharts)`);
   lines.push(`10. sampleData must be realistic and match what the executor would actually return`);
   lines.push(``);
+  lines.push(`## File Writing Order (IMPORTANT)`);
+  lines.push(`Write files in this exact order:`);
+  lines.push(`1. template.jsx FIRST — this is the most critical file (the app cannot load without it)`);
+  lines.push(`2. app.json — the manifest`);
+  lines.push(`3. executors/*.js — the backend logic`);
+  lines.push(`If you run out of space, at minimum template.jsx and app.json MUST exist.`);
+  lines.push(``);
   lines.push(`## After Writing Files`);
   lines.push(`DO NOT restart the server. The system automatically detects and registers new apps.`);
   lines.push(`Just confirm the app structure is complete and all files are valid.`);
@@ -370,4 +388,115 @@ function buildAppPrompt(
   lines.push(`5. All parameter schemas have additionalProperties: false`);
 
   return lines.join("\n");
+}
+
+/**
+ * Recover incomplete apps that have app.json but are missing template.jsx.
+ * Generates a basic template from the app's sampleData so the app can load.
+ * Returns true if any apps were recovered.
+ */
+async function recoverIncompleteApps(
+  preExistingFamilies: Set<string>,
+  buildStartTime: number,
+): Promise<boolean> {
+  let recovered = false;
+  const userAppsDir = join(process.env.HOME || process.env.USERPROFILE || "", ".openclaw", "enso-apps");
+
+  for (const dir of [CODEBASE_APPS_DIR, userAppsDir]) {
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      if (preExistingFamilies.has(entry.name)) continue;
+
+      const appDir = join(dir, entry.name);
+      const appJsonPath = join(appDir, "app.json");
+      const templatePath = join(appDir, "template.jsx");
+
+      // Skip if app.json doesn't exist or was created before this build
+      if (!existsSync(appJsonPath)) continue;
+      try {
+        const stat = statSync(appJsonPath);
+        if (stat.mtimeMs < buildStartTime) continue;
+      } catch { continue; }
+
+      // Only recover if template.jsx is missing
+      if (existsSync(templatePath)) continue;
+
+      try {
+        const manifest = JSON.parse(readFileSync(appJsonPath, "utf-8"));
+        const spec = manifest.spec;
+        if (!spec || !spec.tools || !spec.tools.length) continue;
+
+        // Generate a basic template from sampleData
+        const primaryTool = spec.tools.find((t: any) => t.isPrimary) || spec.tools[0];
+        const toolFamily = spec.toolFamily || entry.name;
+        const description = spec.description || toolFamily;
+
+        const basicTemplate = generateBasicTemplate(toolFamily, description, primaryTool, spec.tools);
+        writeFileSync(templatePath, basicTemplate);
+
+        logFix({
+          description: `Recovered missing template.jsx for ${toolFamily}`,
+          error: "template.jsx not created by builder",
+          resolution: "Generated basic template from app.json sampleData",
+          category: "build-via-claude",
+        });
+        recovered = true;
+      } catch (err) {
+        logError("build-via-claude", `Recovery failed for ${entry.name}`, err);
+      }
+    }
+  }
+
+  return recovered;
+}
+
+/**
+ * Generate a basic but functional template.jsx from an app's tool spec.
+ */
+function generateBasicTemplate(
+  toolFamily: string,
+  description: string,
+  primaryTool: any,
+  allTools: any[],
+): string {
+  const prefix = `enso_${toolFamily}_`;
+  const primaryToolName = `${prefix}${primaryTool.suffix}`;
+  const title = toolFamily.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  // Generate action buttons for non-primary tools
+  const actionButtons = allTools
+    .filter((t: any) => !t.isPrimary)
+    .map((t: any) => {
+      const actionName = t.suffix;
+      return `        <Button onClick={() => onAction("${actionName}")} variant="outline" size="sm">${actionName.replace(/_/g, " ")}</Button>`;
+    })
+    .join("\n");
+
+  return `function GeneratedUI({ data, onAction }) {
+  var [activeTab, setActiveTab] = React.useState("overview");
+
+  if (!data) return <EmptyState title="Loading ${title}..." subtitle="Waiting for data" />;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h2 style={{ fontSize: "18px", fontWeight: "bold", margin: 0 }}>${title}</h2>
+          <p style={{ fontSize: "12px", color: "#888", margin: "4px 0 0 0" }}>${description}</p>
+        </div>
+      </div>
+
+${actionButtons ? `      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+${actionButtons}
+      </div>` : ""}
+
+      <UICard>
+        <pre style={{ fontSize: "11px", whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#ddd" }}>
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      </UICard>
+    </div>
+  );
+}`;
 }

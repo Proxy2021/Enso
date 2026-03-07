@@ -41,6 +41,9 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── outbound/             # Outbound submodules (card-actions, card-context, delivery, helpers)
     ├── ui-generator.ts       # Gemini-based tool selection for enhance
     ├── tool-factory.ts       # Validation, auto-heal, and refine utilities
+    ├── task-router.ts        # Smart 3-tier message classifier (simple/one-off/orchestrated)
+    ├── orchestrator.ts       # Multi-agent orchestration planner and lifecycle
+    ├── orchestrator-engine.ts # DAG execution engine with parallel agents
     ├── build-via-claude.ts   # Build App via Claude Code session
     ├── mission-planner.ts    # Mission analysis + sequential app building
     ├── app-persistence.ts    # Save/load dynamic apps from disk
@@ -59,8 +62,8 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 
 ### WebSocket Protocol
 
-- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `mission.start`, `mission.approve`, `client.error`
-- **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `missionPlan`, `missionProgress`, `questions`
+- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `mission.start`, `mission.approve`, `orchestration.approve`, `orchestration.pause`, `orchestration.resume`, `orchestration.cancel`, `client.error`
+- **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `missionPlan`, `missionProgress`, `orchestrationProgress`, `questions`
 - `chat.send` with `routing.toolId: "claude-code"` bypasses OpenClaw agent, spawns CLI directly
 - `shell.*` messages manage PTY sessions — `toolMeta.toolId === "shell"` routes to ShellCard
 - `card.action` carries `cardId`, `cardAction`, `cardPayload` — dispatched via four-path resolution
@@ -85,6 +88,20 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 ### EnsoUI Component Library
 
 17 pre-styled components injected into the sandbox: `Tabs`, `DataTable`, `Stat`, `Badge`, `Button`, `UICard`, `Progress`, `Accordion`, `Dialog`, `Select`, `Input`, `Switch`, `Slider`, `Separator`, `EmptyState`, `EnsoUI.Tooltip`, `EnsoUI.VideoPlayer`. 13 accent colors available. See CLAUDE-REFERENCE.md for props and usage.
+
+### Agentic Task Orchestration
+
+- **Task Router** (`task-router.ts`): Auto-classifies user messages into 3 tiers via Gemini Flash:
+  - `simple` → normal agent chat (questions, information requests)
+  - `one-off` → single Claude Code session (file ops, bug fixes, single app builds)
+  - `orchestrated` → multi-agent orchestration (complex goals, sustained projects)
+- **Orchestrator** (`orchestrator.ts`): Spawns a Claude Code planning session that decomposes the goal into a task DAG with agent roles. Sends plan to frontend for review/approval.
+- **Execution Engine** (`orchestrator-engine.ts`): DAG-based executor with configurable parallelism (default: 2 concurrent agents). Each agent = a Claude Code session with role-specific prompt. Hub-and-spoke communication: completed task results stored in shared context and injected into dependent tasks.
+- **5 agent roles**: `researcher` (web research + analysis), `architect` (design + decision), `builder` (Enso app creation via `handleBuildAppViaClaude`), `coder` (code changes), `reviewer` (quality validation)
+- **Approval gates**: Tasks with `requiresApproval: true` pause execution for user review
+- **Frontend**: `OrchestrationCard.tsx` renders planning → review → executing → complete phases with live task graph, agent status, progress bar
+- **Protocol**: `orchestration.approve`, `orchestration.pause`, `orchestration.resume`, `orchestration.cancel` client messages; `orchestrationProgress` server field
+- Key files: `task-router.ts`, `orchestrator.ts`, `orchestrator-engine.ts` (backend), `OrchestrationCard.tsx` (frontend), card type `"orchestration"`
 
 ### Mission Planner
 

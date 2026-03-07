@@ -9,6 +9,7 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 1. **Chat** — Send a message. Enso routes it through OpenClaw's agent pipeline and streams back a response.
 2. **Enhance** — Tap the App button on any response card. Enso generates a self-contained React component tailored to the data.
 3. **Interact** — The app is live. Click buttons, sort tables, expand sections. Actions dispatch back to real tools — no round-trip to the LLM needed.
+4. **Orchestrate** — State a complex goal. Enso auto-classifies it, assembles a team of specialized agents (researchers, architects, builders), decomposes the goal into a dependency graph, and executes tasks in parallel — building apps along the way.
 
 ## Features
 
@@ -16,6 +17,8 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 - **17 built-in UI components** — Tabs, DataTable, Charts (via Recharts), Accordion, Dialog, Stat cards, and more
 - **Remote desktop** — View and control the host machine's desktop via screenshot capture, mouse click, keyboard, and scroll — all from the browser
 - **Tool integration** — File browser, media player, travel planner, meal planner, and automatic bridge to any co-loaded OpenClaw plugin's tools
+- **Agentic orchestration** — State a complex goal and Enso assembles a multi-agent team (researchers, architects, builders), plans a task dependency graph, and executes with parallel agents, approval gates, and live progress tracking
+- **Smart task routing** — Messages are auto-classified as simple questions, one-off tasks (auto-routed to Claude Code), or complex orchestrated missions — no manual commands needed
 - **Mission Planner** — Describe your interests and goals, and Enso proposes and builds a suite of custom apps tailored to your needs
 - **Build custom apps** — Describe what you want, and Enso builds a full app (executors + template) that persists and can be reused
 - **Refine in place** — Type an instruction in app view to regenerate just the template (single LLM call, cheapest iteration)
@@ -56,6 +59,9 @@ View and control the host machine's desktop from the browser. Click anywhere on 
 ### 🖥️ Remote Terminal
 Run `/shell` to open a real interactive terminal session in the browser. Full xterm.js rendering with ANSI colors, cursor positioning, and support for interactive programs. Powered by node-pty — spawns PowerShell on Windows or bash/zsh on macOS.
 
+### 🤖 Agentic Orchestrator
+Describe a complex goal — "build me a personal finance system" or "plan my Japan trip" — and Enso automatically assembles a team of specialized agents. A researcher gathers information, an architect designs the solution, builders create apps in parallel, and a reviewer validates the result. The orchestration card shows a live task graph with dependency tracking, approval gates for human-in-the-loop control, and progress updates as agents work. Five agent roles (researcher, architect, builder, coder, reviewer) collaborate through a hub-and-spoke model with shared context.
+
 ### 🎯 Mission Planner
 Run `/mission` and describe your interests, goals, or workflows. Enso uses Claude Code to analyze your needs, proposes 2–5 custom apps, and lets you approve, edit, or skip each one. Approved apps are built sequentially — each one a full working Enso app with executors and UI. Progress is tracked in real time with per-app status.
 
@@ -81,6 +87,7 @@ Three paths to build, from easiest to most powerful:
 |--------|-------------|----------|
 | **Enhance** | One-click React UI from any response | Quick visualizations |
 | **Build App** | Describe in natural language → Claude Code builds the full app in a live terminal | New tool families |
+| **Orchestrate** | State a complex goal → multi-agent team researches, designs, and builds | End-to-end projects with research + apps |
 | **Mission Planner** | Describe your goals → Enso proposes and builds a suite of apps | Bootstrapping a full workflow |
 | **`/code`** | Full coding agent edits the actual source code | Deep changes, new integrations, evolving the platform itself |
 
@@ -141,6 +148,9 @@ openclaw-plugin/              Backend (OpenClaw channel plugin)
 ├── src/
 │   ├── server.ts             Express + WS server
 │   ├── outbound/             Response delivery, enhance, action dispatch
+│   ├── task-router.ts        Smart 3-tier message classifier
+│   ├── orchestrator.ts       Multi-agent orchestration planner
+│   ├── orchestrator-engine.ts  DAG execution engine with parallel agents
 │   ├── mission-planner.ts    Mission analysis + sequential app building
 │   ├── build-via-claude.ts   Claude Code app build pipeline
 │   └── native-tools/         Auto-bridge for any OpenClaw plugin's tools

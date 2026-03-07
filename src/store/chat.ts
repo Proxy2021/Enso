@@ -83,6 +83,11 @@ interface CardStore {
   connectToBackend: (config: BackendConfig) => void;
   startMission: (cardId: string, description: string) => void;
   approveMission: (cardId: string, missionId: string, apps: MissionAppProposal[]) => void;
+  startOrchestration: (cardId: string, goal: string) => void;
+  approveOrchestration: (orchestrationId: string, taskIds?: string[]) => void;
+  pauseOrchestration: (orchestrationId: string) => void;
+  resumeOrchestration: (orchestrationId: string) => void;
+  cancelOrchestration: (orchestrationId: string) => void;
   loadSharedCard: (cardId: string) => Promise<void>;
   pinCard: (cardId: string) => void;
   unpinCard: (cardId: string) => void;
@@ -259,7 +264,28 @@ export const useChatStore = create<CardStore>((set, get) => ({
         return;
       }
 
-      // "/mission" command — launch mission planner
+      // "/orchestrate" command — launch orchestrator
+      if (text.trim() === "/orchestrate") {
+        const id = uuidv4();
+        const now = Date.now();
+        const card: Card = {
+          id,
+          runId: id,
+          type: "orchestration",
+          role: "assistant",
+          status: "complete",
+          display: "expanded",
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({
+          cardOrder: [...s.cardOrder, id],
+          cards: { ...s.cards, [id]: card },
+        }));
+        return;
+      }
+
+      // "/mission" command — launch mission planner (keep as alias)
       if (text.trim() === "/mission") {
         const id = uuidv4();
         const now = Date.now();
@@ -629,6 +655,67 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cardId,
       missionId,
       approvedApps: apps,
+    });
+  },
+
+  // ── Orchestration ──
+
+  startOrchestration: (cardId: string, goal: string) => {
+    set((s) => {
+      const card = s.cards[cardId];
+      if (!card) return s;
+      return {
+        cards: {
+          ...s.cards,
+          [cardId]: {
+            ...card,
+            data: {
+              ...((card.data as any) || {}),
+              orchestrationProgress: {
+                orchestrationId: "",
+                eventType: "plan_ready",
+                plan: { orchestrationId: "", goal, tasks: [], agents: [], status: "planning" },
+              },
+            },
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
+
+    get()._wsClient?.send({
+      type: "orchestration.start",
+      cardId,
+      orchestrationGoal: goal,
+    });
+  },
+
+  approveOrchestration: (orchestrationId: string, taskIds?: string[]) => {
+    get()._wsClient?.send({
+      type: "orchestration.approve",
+      orchestrationId,
+      orchestrationApprovedTasks: taskIds,
+    });
+  },
+
+  pauseOrchestration: (orchestrationId: string) => {
+    get()._wsClient?.send({
+      type: "orchestration.pause",
+      orchestrationId,
+    });
+  },
+
+  resumeOrchestration: (orchestrationId: string) => {
+    get()._wsClient?.send({
+      type: "orchestration.resume",
+      orchestrationId,
+    });
+  },
+
+  cancelOrchestration: (orchestrationId: string) => {
+    get()._wsClient?.send({
+      type: "orchestration.cancel",
+      orchestrationId,
     });
   },
 
@@ -1294,6 +1381,41 @@ export const useChatStore = create<CardStore>((set, get) => ({
         cardOrder: [...s.cardOrder, id],
         cards: { ...s.cards, [id]: card },
       }));
+      return;
+    }
+
+    // Handle orchestration plan and progress updates
+    if (msg.orchestrationPlan || msg.orchestrationProgress) {
+      const targetId = msg.targetCardId;
+      if (targetId) {
+        set((s) => {
+          const now = Date.now();
+          const existingCard = s.cards[targetId];
+          const existingData = (existingCard?.data as any) || {};
+          const updatedCard = {
+            ...(existingCard || {
+              id: targetId,
+              runId: msg.runId,
+              role: "assistant" as const,
+              display: "expanded" as const,
+              createdAt: now,
+            }),
+            type: "orchestration" as const,
+            data: {
+              ...existingData,
+              ...(msg.orchestrationPlan ? { orchestrationPlan: msg.orchestrationPlan } : {}),
+              ...(msg.orchestrationProgress ? { orchestrationProgress: msg.orchestrationProgress } : {}),
+            },
+            status: (msg.state === "final" ? "complete" : "streaming") as any,
+            updatedAt: now,
+          };
+          return {
+            // Auto-append to cardOrder if new card
+            cardOrder: existingCard ? s.cardOrder : [...s.cardOrder, targetId],
+            cards: { ...s.cards, [targetId]: updatedCard },
+          };
+        });
+      }
       return;
     }
 

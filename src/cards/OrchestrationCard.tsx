@@ -1,0 +1,480 @@
+import { useState } from "react";
+import { useChatStore } from "../store/chat";
+import type { CardRendererProps } from "./types";
+import type {
+  OrchestrationPlan,
+  OrchestrationProgress,
+  OrchestrationTask,
+  AgentRole,
+} from "@shared/types";
+
+type Phase = "input" | "planning" | "review" | "executing" | "complete" | "error";
+
+const ROLE_EMOJI: Record<AgentRole, string> = {
+  researcher: "\uD83D\uDD0D",
+  architect: "\uD83D\uDCD0",
+  builder: "\uD83D\uDD28",
+  coder: "\uD83D\uDCBB",
+  reviewer: "\u2705",
+};
+
+const ROLE_LABELS: Record<AgentRole, string> = {
+  researcher: "Researcher",
+  architect: "Architect",
+  builder: "Builder",
+  coder: "Coder",
+  reviewer: "Reviewer",
+};
+
+export default function OrchestrationCard({ card }: CardRendererProps) {
+  const plan = (card.data as any)?.orchestrationPlan as OrchestrationPlan | undefined;
+  const progress = (card.data as any)?.orchestrationProgress as OrchestrationProgress | undefined;
+  const phase = derivedPhase(progress, plan);
+  const currentPlan = progress?.plan || plan;
+
+  return (
+    <div className="px-4 py-3">
+      {phase === "input" && <InputPhase cardId={card.id} />}
+      {phase === "planning" && <PlanningPhase goal={currentPlan?.goal} />}
+      {phase === "review" && currentPlan && <ReviewPhase plan={currentPlan} />}
+      {phase === "executing" && currentPlan && <ExecutingPhase plan={currentPlan} />}
+      {phase === "complete" && currentPlan && <CompletePhase plan={currentPlan} />}
+      {phase === "error" && <ErrorPhase error={progress?.error} plan={currentPlan} />}
+    </div>
+  );
+}
+
+function derivedPhase(progress?: OrchestrationProgress, plan?: OrchestrationPlan): Phase {
+  if (!progress && !plan) return "input";
+
+  const currentPlan = progress?.plan || plan;
+  if (!currentPlan) return "input";
+
+  switch (currentPlan.status) {
+    case "planning": return "planning";
+    case "reviewing": return "review";
+    case "executing": return "executing";
+    case "paused":
+      return "executing";
+    case "completed": return "complete";
+    case "failed": return "error";
+    default: return "input";
+  }
+}
+
+// ── Phase: Input ──
+
+function InputPhase({ cardId }: { cardId: string }) {
+  const [text, setText] = useState("");
+  const startOrchestration = useChatStore((s) => s.startOrchestration);
+
+  function handleSubmit() {
+    if (!text.trim()) return;
+    startOrchestration(cardId, text.trim());
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">{"\u26A1"}</span>
+        <h3 className="text-sm font-semibold text-gray-200">Orchestrator</h3>
+      </div>
+      <p className="text-xs text-gray-400 mb-3">
+        Describe a complex goal or mission. I'll assemble a team of AI agents to research, plan, and build everything you need.
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="e.g. Plan a 2-week trip to Japan for my family, or build a complete freelance management system..."
+        rows={4}
+        className="w-full bg-gray-800/60 border border-gray-700/60 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-500 resize-none focus:outline-none focus:border-blue-500/50"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+        }}
+      />
+      <div className="flex justify-between items-center mt-2">
+        <span className="text-[10px] text-gray-600">Cmd+Enter to submit</span>
+        <button
+          onClick={handleSubmit}
+          disabled={!text.trim()}
+          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Orchestrate
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Phase: Planning ──
+
+function PlanningPhase({ goal }: { goal?: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">{"\u26A1"}</span>
+        <h3 className="text-sm font-semibold text-gray-200">Orchestrator</h3>
+      </div>
+      {goal && (
+        <div className="mb-3 p-2 rounded-lg bg-gray-800/30 border border-gray-700/30">
+          <p className="text-xs text-gray-300 line-clamp-2">{goal}</p>
+        </div>
+      )}
+      <div className="flex items-center gap-2 text-sm text-gray-400">
+        <Spinner />
+        Assembling your team and planning the mission...
+      </div>
+      <p className="text-[11px] text-gray-500 mt-2">
+        Researching your goal, decomposing into tasks, and assigning agent roles.
+      </p>
+    </div>
+  );
+}
+
+// ── Phase: Review ──
+
+function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
+  const approveOrchestration = useChatStore((s) => s.approveOrchestration);
+  const cancelOrchestration = useChatStore((s) => s.cancelOrchestration);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-lg">{"\u26A1"}</span>
+        <h3 className="text-sm font-semibold text-gray-200">Mission Plan</h3>
+      </div>
+
+      {/* Goal summary */}
+      <div className="mb-3 p-2 rounded-lg bg-gray-800/30 border border-gray-700/30">
+        <p className="text-xs text-gray-300 line-clamp-2">{plan.goal}</p>
+      </div>
+
+      <p className="text-xs text-gray-400 mb-3">
+        {plan.tasks.length} tasks across {plan.agents.length} agents. Review and approve to begin.
+      </p>
+
+      {/* Agent Team */}
+      <div className="mb-3 p-2.5 rounded-lg bg-gray-800/40 border border-gray-700/40">
+        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Team</div>
+        <div className="flex flex-wrap gap-2">
+          {plan.agents.map((agent) => (
+            <div key={agent.agentId} className="flex items-center gap-1.5 text-xs text-gray-300 px-2 py-1 rounded-md bg-gray-700/30">
+              <span>{ROLE_EMOJI[agent.role]}</span>
+              <span>{ROLE_LABELS[agent.role]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Task Graph */}
+      <div className="space-y-2">
+        {plan.tasks.map((task, i) => (
+          <TaskRow key={task.taskId} task={task} index={i} showDescription />
+        ))}
+      </div>
+
+      <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-700/40">
+        <button
+          onClick={() => cancelOrchestration(plan.orchestrationId)}
+          className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => approveOrchestration(plan.orchestrationId)}
+          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-green-600 hover:bg-green-500 text-white transition-colors"
+        >
+          Execute Plan
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Phase: Executing ──
+
+function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
+  const approveOrchestration = useChatStore((s) => s.approveOrchestration);
+  const pauseOrchestration = useChatStore((s) => s.pauseOrchestration);
+  const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
+
+  const completed = plan.tasks.filter((t) => t.status === "completed").length;
+  const running = plan.tasks.filter((t) => t.status === "running").length;
+  const total = plan.tasks.length;
+  const isPaused = plan.status === "paused";
+  const awaitingApproval = plan.tasks.filter((t) => t.status === "awaiting_approval");
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{"\u26A1"}</span>
+          <h3 className="text-sm font-semibold text-gray-200">
+            {isPaused ? "Mission Paused" : "Executing Mission"}
+          </h3>
+        </div>
+        <span className="text-[10px] text-gray-500">
+          {completed}/{total} tasks{running > 0 ? ` \u00B7 ${running} running` : ""}
+        </span>
+      </div>
+
+      {/* Goal summary */}
+      <div className="mb-3 p-2 rounded-lg bg-gray-800/30 border border-gray-700/30">
+        <p className="text-[11px] text-gray-400 line-clamp-1">{plan.goal}</p>
+      </div>
+
+      {/* Progress bar */}
+      <div className="mb-3">
+        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              running > 0 ? "bg-blue-500" : "bg-blue-500"
+            }`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="text-[10px] text-gray-500 mt-1">{pct}% complete</div>
+      </div>
+
+      {/* Approval gate */}
+      {awaitingApproval.length > 0 && (
+        <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <p className="text-xs font-medium text-amber-200 mb-1">{"\u26A0\uFE0F"} Approval Required</p>
+          <div className="space-y-1 mb-2">
+            {awaitingApproval.map((t) => (
+              <div key={t.taskId}>
+                <p className="text-[11px] text-amber-300/80 font-medium">{t.title}</p>
+                <p className="text-[10px] text-amber-300/50 line-clamp-2">{t.description}</p>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => approveOrchestration(plan.orchestrationId, awaitingApproval.map((t) => t.taskId))}
+            className="text-xs px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+          >
+            Approve & Continue
+          </button>
+        </div>
+      )}
+
+      {/* Agent team status */}
+      <div className="mb-3 p-2.5 rounded-lg bg-gray-800/40 border border-gray-700/40">
+        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Team</div>
+        <div className="space-y-1">
+          {plan.agents.map((agent) => (
+            <div key={agent.agentId} className="flex items-center gap-2 text-xs">
+              <span>{ROLE_EMOJI[agent.role]}</span>
+              <span className="capitalize text-gray-300 w-20">{ROLE_LABELS[agent.role]}</span>
+              <span className={`text-[10px] flex items-center gap-1 ${
+                agent.status === "working" ? "text-blue-400" :
+                agent.status === "completed" ? "text-green-400" :
+                "text-gray-500"
+              }`}>
+                {agent.status === "working" && <Spinner size="sm" />}
+                {agent.status === "working" && agent.currentTaskId
+                  ? plan.tasks.find((t) => t.taskId === agent.currentTaskId)?.title || "Working..."
+                  : agent.status === "completed" ? "Done" : "Waiting"
+                }
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Task list */}
+      <div className="space-y-1.5">
+        {plan.tasks.map((task, i) => (
+          <TaskRow key={task.taskId} task={task} index={i} />
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="flex justify-end mt-3 pt-2 border-t border-gray-700/40">
+        {isPaused ? (
+          <button
+            onClick={() => resumeOrchestration(plan.orchestrationId)}
+            className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+          >
+            Resume
+          </button>
+        ) : (
+          <button
+            onClick={() => pauseOrchestration(plan.orchestrationId)}
+            className="text-xs px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+          >
+            Pause
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Phase: Complete ──
+
+function CompletePhase({ plan }: { plan: OrchestrationPlan }) {
+  const completed = plan.tasks.filter((t) => t.status === "completed").length;
+  const failed = plan.tasks.filter((t) => t.status === "failed").length;
+  const appTasks = plan.tasks.filter((t) => t.outputType === "app" && t.status === "completed");
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-lg">{"\u2705"}</span>
+        <h3 className="text-sm font-semibold text-green-300">Mission Complete</h3>
+      </div>
+
+      {/* Goal summary */}
+      <div className="mb-3 p-2 rounded-lg bg-green-500/5 border border-green-500/20">
+        <p className="text-xs text-gray-300 line-clamp-2">{plan.goal}</p>
+      </div>
+
+      <p className="text-xs text-gray-400 mb-3">
+        {completed} task{completed !== 1 ? "s" : ""} completed
+        {failed > 0 ? `, ${failed} failed` : ""}
+        {" \u00B7 "}{plan.agents.length} agents deployed
+      </p>
+
+      {/* Built apps highlight */}
+      {appTasks.length > 0 && (
+        <div className="mb-3 p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
+          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-1.5">
+            Apps Built
+          </div>
+          <div className="space-y-1">
+            {appTasks.map((t) => (
+              <div key={t.taskId} className="flex items-center gap-2 text-xs text-gray-300">
+                <span>{"\uD83D\uDD28"}</span>
+                <span>{t.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        {plan.tasks.map((task, i) => (
+          <TaskRow key={task.taskId} task={task} index={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Phase: Error ──
+
+function ErrorPhase({ error, plan }: { error?: string; plan?: OrchestrationPlan }) {
+  const failedTasks = plan?.tasks.filter((t) => t.status === "failed") || [];
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-lg">{"\u26A1"}</span>
+        <h3 className="text-sm font-semibold text-red-300">Orchestration Failed</h3>
+      </div>
+      {plan?.goal && (
+        <div className="mb-2 p-2 rounded-lg bg-red-500/5 border border-red-500/20">
+          <p className="text-xs text-gray-400 line-clamp-2">{plan.goal}</p>
+        </div>
+      )}
+      <p className="text-xs text-red-400/80 mb-2">{error || "An unexpected error occurred."}</p>
+      {failedTasks.length > 0 && (
+        <div className="space-y-1.5">
+          {failedTasks.map((task, i) => (
+            <TaskRow key={task.taskId} task={task} index={i} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Shared: Task Row ──
+
+function TaskRow({ task, index, showDescription }: { task: OrchestrationTask; index: number; showDescription?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div
+      className={`flex items-start gap-2 text-xs p-2 rounded-lg cursor-pointer transition-colors ${
+        task.status === "running" ? "bg-blue-500/5 border border-blue-500/20" :
+        task.status === "completed" ? "bg-green-500/5" :
+        task.status === "failed" ? "bg-red-500/5" :
+        task.status === "awaiting_approval" ? "bg-amber-500/5 border border-amber-500/20" :
+        task.status === "blocked" ? "opacity-40" :
+        "hover:bg-gray-800/30"
+      }`}
+      onClick={() => setExpanded((e) => !e)}
+    >
+      <div className="w-5 pt-0.5 flex-shrink-0">
+        {task.status === "completed" ? (
+          <span className="text-green-400">{"\u2713"}</span>
+        ) : task.status === "failed" ? (
+          <span className="text-red-400">{"\u2717"}</span>
+        ) : task.status === "running" ? (
+          <Spinner size="sm" />
+        ) : task.status === "awaiting_approval" ? (
+          <span className="text-amber-400">{"\u26A0"}</span>
+        ) : task.status === "blocked" ? (
+          <span className="text-gray-600">{"\u2298"}</span>
+        ) : (
+          <span className="text-gray-600">{index + 1}</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`${
+            task.status === "running" ? "text-gray-200" :
+            task.status === "completed" ? "text-gray-300" :
+            task.status === "failed" ? "text-red-300" :
+            "text-gray-400"
+          }`}>
+            {task.title}
+          </span>
+          <span className="text-[10px]">{ROLE_EMOJI[task.agentRole]}</span>
+          {task.requiresApproval && task.status === "pending" && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              approval
+            </span>
+          )}
+        </div>
+        {task.dependsOn.length > 0 && (
+          <div className="text-[10px] text-gray-600 mt-0.5">
+            depends on: {task.dependsOn.join(", ")}
+          </div>
+        )}
+        {/* Show description in review phase or when expanded */}
+        {(showDescription || expanded) && task.description && (
+          <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+            {task.description.length > 200 && !expanded
+              ? task.description.slice(0, 200) + "..."
+              : task.description}
+          </div>
+        )}
+        {task.resultSummary && task.status === "completed" && (
+          <div className="text-[10px] text-green-500/70 mt-0.5 truncate">
+            {task.resultSummary.slice(0, 120)}
+          </div>
+        )}
+        {task.error && (
+          <div className="text-[10px] text-red-400/70 mt-0.5 truncate">
+            {task.error}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Shared: Spinner ──
+
+function Spinner({ size = "md" }: { size?: "sm" | "md" }) {
+  const cls = size === "sm" ? "w-3.5 h-3.5" : "h-4 w-4";
+  return (
+    <svg className={`${cls} animate-spin text-blue-400`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+    </svg>
+  );
+}

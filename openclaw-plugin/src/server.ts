@@ -18,6 +18,7 @@ import { transcribeAudio } from "./transcribe.js";
 import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
+import { classifyTask } from "./task-router.js";
 
 export type ConnectedClient = {
   id: string;
@@ -544,85 +545,96 @@ export async function startEnsoServer(opts: {
   mkdirSync(uploadDir, { recursive: true });
 
   app.post("/upload", express.raw({ type: () => true, limit: "50mb" }), (req, res) => {
-    const contentType = req.headers["content-type"] ?? "application/octet-stream";
-    const bodyLen = Buffer.isBuffer(req.body) ? req.body.length : 0;
-    logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload received: contentType=${contentType}, bodyLen=${bodyLen}, isBuffer=${Buffer.isBuffer(req.body)}` });
-    const extMap: Record<string, string> = {
-      // Images
-      "image/png": ".png",
-      "image/jpeg": ".jpg",
-      "image/gif": ".gif",
-      "image/webp": ".webp",
-      "image/svg+xml": ".svg",
-      "image/bmp": ".bmp",
-      // Video
-      "video/mp4": ".mp4",
-      "video/webm": ".webm",
-      "video/quicktime": ".mov",
-      "video/x-msvideo": ".avi",
-      // Audio
-      "audio/mpeg": ".mp3",
-      "audio/wav": ".wav",
-      "audio/ogg": ".ogg",
-      "audio/flac": ".flac",
-      "audio/mp4": ".m4a",
-      "audio/aac": ".aac",
-      // Documents
-      "application/pdf": ".pdf",
-      "application/msword": ".doc",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-      "application/vnd.ms-excel": ".xls",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-      "application/vnd.ms-powerpoint": ".ppt",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
-      "text/plain": ".txt",
-      "text/csv": ".csv",
-      "text/markdown": ".md",
-      "application/json": ".json",
-      "application/xml": ".xml",
-      "text/xml": ".xml",
-      "application/rtf": ".rtf",
-      "application/zip": ".zip",
-    };
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        res.status(400).json({ error: "Empty or missing upload body" });
+        return;
+      }
 
-    let fileBuffer: Buffer;
-    let mimeType = contentType;
+      const contentType = req.headers["content-type"] ?? "application/octet-stream";
+      const bodyLen = req.body.length;
+      logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload received: contentType=${contentType}, bodyLen=${bodyLen}, isBuffer=true` });
+      const extMap: Record<string, string> = {
+        // Images
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "image/svg+xml": ".svg",
+        "image/bmp": ".bmp",
+        // Video
+        "video/mp4": ".mp4",
+        "video/webm": ".webm",
+        "video/quicktime": ".mov",
+        "video/x-msvideo": ".avi",
+        // Audio
+        "audio/mpeg": ".mp3",
+        "audio/wav": ".wav",
+        "audio/ogg": ".ogg",
+        "audio/flac": ".flac",
+        "audio/mp4": ".m4a",
+        "audio/aac": ".aac",
+        // Documents
+        "application/pdf": ".pdf",
+        "application/msword": ".doc",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+        "application/vnd.ms-excel": ".xls",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+        "application/vnd.ms-powerpoint": ".ppt",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+        "text/plain": ".txt",
+        "text/csv": ".csv",
+        "text/markdown": ".md",
+        "application/json": ".json",
+        "application/xml": ".xml",
+        "text/xml": ".xml",
+        "application/rtf": ".rtf",
+        "application/zip": ".zip",
+      };
 
-    // Handle base64 JSON uploads from Capacitor native (where Blob/ArrayBuffer
-    // fetch bodies are serialized as "{}" by the Android WebView)
-    if (contentType === "application/json") {
-      try {
-        const json = JSON.parse(req.body.toString("utf-8"));
-        if (json.data && json.mimeType) {
-          fileBuffer = Buffer.from(json.data, "base64");
-          mimeType = json.mimeType;
-          logAction({ ts: Date.now(), type: "action", category: "upload", message: `Decoded base64 JSON: mimeType=${mimeType}, decodedLen=${fileBuffer.length}` });
-        } else {
-          // Regular JSON file upload
+      let fileBuffer: Buffer;
+      let mimeType = contentType;
+
+      // Handle base64 JSON uploads from Capacitor native (where Blob/ArrayBuffer
+      // fetch bodies are serialized as "{}" by the Android WebView)
+      if (contentType === "application/json") {
+        try {
+          const json = JSON.parse(req.body.toString("utf-8"));
+          if (json.data && json.mimeType) {
+            fileBuffer = Buffer.from(json.data, "base64");
+            mimeType = json.mimeType;
+            logAction({ ts: Date.now(), type: "action", category: "upload", message: `Decoded base64 JSON: mimeType=${mimeType}, decodedLen=${fileBuffer.length}` });
+          } else {
+            // Regular JSON file upload
+            fileBuffer = req.body;
+          }
+        } catch {
           fileBuffer = req.body;
         }
-      } catch {
+      } else {
         fileBuffer = req.body;
       }
-    } else {
-      fileBuffer = req.body;
+
+      // Reject corrupt uploads (Capacitor Blob serialization produces 2-byte "{}")
+      if (fileBuffer.length < 200 && mimeType.startsWith("image/")) {
+        logError("upload", `Rejecting corrupt image upload: ${fileBuffer.length} bytes`);
+        res.status(400).json({ error: "Upload too small — image appears corrupt. Please try again." });
+        return;
+      }
+
+      const ext = extMap[mimeType] ?? ".bin";
+      const filename = `${randomUUID()}${ext}`;
+      const filePath = join(uploadDir, filename);
+
+      writeFileSync(filePath, fileBuffer);
+      const mediaUrl = toMediaUrl(filePath);
+      logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload saved: ${filename} (${fileBuffer.length} bytes, ${mimeType})` });
+      res.json({ mediaUrl, filePath });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown upload error";
+      logError("upload", `Upload failed: ${message}`);
+      res.status(500).json({ error: `Upload failed: ${message}` });
     }
-
-    // Reject corrupt uploads (Capacitor Blob serialization produces 2-byte "{}")
-    if (fileBuffer.length < 200 && mimeType.startsWith("image/")) {
-      logError("upload", `Rejecting corrupt image upload: ${fileBuffer.length} bytes`);
-      res.status(400).json({ error: "Upload too small — image appears corrupt. Please try again." });
-      return;
-    }
-
-    const ext = extMap[mimeType] ?? ".bin";
-    const filename = `${randomUUID()}${ext}`;
-    const filePath = join(uploadDir, filename);
-
-    writeFileSync(filePath, fileBuffer);
-    const mediaUrl = toMediaUrl(filePath);
-    logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload saved: ${filename} (${fileBuffer.length} bytes, ${mimeType})` });
-    res.json({ mediaUrl, filePath });
   });
 
   // Transcribe audio from the browser (voice input on native)
@@ -630,32 +642,35 @@ export async function startEnsoServer(opts: {
   app.post("/transcribe", express.json({ limit: "20mb" }), express.raw({ type: () => true, limit: "20mb" }), async (req, res) => {
     const account = getActiveAccount();
     if (!account?.geminiApiKey) {
-      res.status(500).json({ error: "No Gemini API key configured" });
+      res.status(422).json({ error: "No Gemini API key configured" });
       return;
     }
-    const extMap: Record<string, string> = {
-      "audio/webm": ".webm",
-      "audio/ogg": ".ogg",
-      "audio/mp4": ".m4a",
-      "audio/mpeg": ".mp3",
-      "audio/wav": ".wav",
-    };
-    let audioBuffer: Buffer;
-    let audioMimeType: string;
-    if (req.body?.audio && typeof req.body.audio === "string") {
-      // Base64 JSON body (from Capacitor native)
-      audioBuffer = Buffer.from(req.body.audio, "base64");
-      audioMimeType = req.body.mimeType ?? "audio/webm";
-    } else {
-      // Raw audio body (from desktop browser)
-      audioBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body);
-      audioMimeType = req.headers["content-type"] ?? "audio/webm";
-    }
-    const ext = extMap[audioMimeType] ?? ".webm";
-    const filename = `${randomUUID()}${ext}`;
-    const filePath = join(uploadDir, filename);
-    writeFileSync(filePath, audioBuffer);
     try {
+      const extMap: Record<string, string> = {
+        "audio/webm": ".webm",
+        "audio/ogg": ".ogg",
+        "audio/mp4": ".m4a",
+        "audio/mpeg": ".mp3",
+        "audio/wav": ".wav",
+      };
+      let audioBuffer: Buffer;
+      let audioMimeType: string;
+      if (req.body?.audio && typeof req.body.audio === "string") {
+        // Base64 JSON body (from Capacitor native)
+        audioBuffer = Buffer.from(req.body.audio, "base64");
+        audioMimeType = req.body.mimeType ?? "audio/webm";
+      } else if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+        // Raw audio body (from desktop browser)
+        audioBuffer = req.body;
+        audioMimeType = req.headers["content-type"] ?? "audio/webm";
+      } else {
+        res.status(400).json({ error: "Empty or missing audio body" });
+        return;
+      }
+      const ext = extMap[audioMimeType] ?? ".webm";
+      const filename = `${randomUUID()}${ext}`;
+      const filePath = join(uploadDir, filename);
+      writeFileSync(filePath, audioBuffer);
       const transcript = await transcribeAudio({ filePath, geminiApiKey: account.geminiApiKey });
       unlinkSync(filePath);
       if (transcript) {
@@ -665,7 +680,6 @@ export async function startEnsoServer(opts: {
       }
     } catch (err) {
       logError("upload", "Audio transcription failed", err);
-      try { unlinkSync(filePath); } catch {}
       res.status(500).json({ error: "Transcription failed" });
     }
   });
@@ -783,7 +797,68 @@ export async function startEnsoServer(opts: {
                   category: "debug-report",
                 });
               }
+            } else if (msg.text && account.geminiApiKey && !msg.routing && account.mode !== "im") {
+              // Smart task routing — auto-classify message complexity
+              try {
+                const classification = await classifyTask({
+                  userMessage: msg.text,
+                  conversationHistory: [],
+                  geminiApiKey: account.geminiApiKey,
+                });
+
+                if (classification.complexity === "orchestrated") {
+                  runtime.log?.(`[enso] task-router: orchestrated → "${msg.text.slice(0, 60)}"`);
+                  const { handleOrchestration } = await import("./orchestrator.js");
+                  handleOrchestration({
+                    userMessage: msg.text,
+                    classification,
+                    client,
+                    account,
+                  }).catch((err) => {
+                    logError("orchestrator", "Auto-routed orchestration failed", err);
+                    runtime.error?.(`[enso] orchestrator error: ${err instanceof Error ? err.message : String(err)}`);
+                  });
+                  break;
+                }
+
+                if (classification.complexity === "one-off") {
+                  runtime.log?.(`[enso] task-router: one-off → "${msg.text.slice(0, 60)}"`);
+                  const runId = randomUUID();
+                  await runClaudeCode({
+                    prompt: msg.text,
+                    cwd: ensoProjectPath,
+                    client,
+                    runId,
+                  });
+                  break;
+                }
+
+                // "simple" — fall through to normal agent pipeline
+                runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
+              } catch (routerErr) {
+                // Router failed — fall through to normal agent (safe fallback)
+                runtime.log?.(`[enso] task-router failed, falling through: ${String(routerErr)}`);
+              }
+
+              // Normal agent pipeline (simple classification or router failure)
+              await handleEnsoInbound({
+                message: {
+                  messageId: randomUUID(),
+                  sessionId: sessionKey,
+                  senderNick: `user_${connectionId}`,
+                  text: msg.text,
+                  mediaUrls: msg.mediaUrls,
+                  timestamp: Date.now(),
+                },
+                account,
+                config,
+                runtime,
+                client,
+                routing: msg.routing,
+                statusSink,
+              });
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
+              // Fallback for: media-only messages, IM mode, no Gemini key, or explicit routing
               await handleEnsoInbound({
                 message: {
                   messageId: randomUUID(),
@@ -930,6 +1005,78 @@ export async function startEnsoServer(opts: {
               }).catch((err) => {
                 logError("mission-planner", "Unhandled mission approve error", err);
                 runtime.error?.(`[enso] mission-planner approve error: ${err instanceof Error ? err.message : String(err)}`);
+              });
+            }
+            break;
+          }
+          case "orchestration.start": {
+            if (msg.orchestrationGoal) {
+              runtime.log?.(`[enso] orchestration start: ${msg.orchestrationGoal.slice(0, 80)}`);
+              const { handleOrchestration } = await import("./orchestrator.js");
+              handleOrchestration({
+                userMessage: msg.orchestrationGoal,
+                classification: { complexity: "orchestrated", reasoning: "User-initiated via /orchestrate" },
+                client,
+                account,
+              }).catch((err) => {
+                logError("orchestrator", "Unhandled orchestration start error", err);
+                runtime.error?.(`[enso] orchestrator error: ${err instanceof Error ? err.message : String(err)}`);
+              });
+            }
+            break;
+          }
+          case "orchestration.approve": {
+            if (msg.orchestrationId) {
+              runtime.log?.(`[enso] orchestration approve: ${msg.orchestrationId}`);
+              const { handleOrchestrationApprove } = await import("./orchestrator.js");
+              handleOrchestrationApprove({
+                orchestrationId: msg.orchestrationId,
+                approvedTaskIds: msg.orchestrationApprovedTasks,
+                client,
+                account,
+              }).catch((err) => {
+                logError("orchestrator", "Unhandled orchestration approve error", err);
+              });
+            }
+            break;
+          }
+          case "orchestration.pause": {
+            if (msg.orchestrationId) {
+              runtime.log?.(`[enso] orchestration pause: ${msg.orchestrationId}`);
+              const { handleOrchestrationPause } = await import("./orchestrator.js");
+              handleOrchestrationPause(msg.orchestrationId);
+            }
+            break;
+          }
+          case "orchestration.resume": {
+            if (msg.orchestrationId) {
+              runtime.log?.(`[enso] orchestration resume: ${msg.orchestrationId}`);
+              const { handleOrchestrationResume } = await import("./orchestrator.js");
+              handleOrchestrationResume({
+                orchestrationId: msg.orchestrationId,
+                client,
+                account,
+              }).catch((err) => {
+                logError("orchestrator", "Unhandled orchestration resume error", err);
+              });
+            }
+            break;
+          }
+          case "orchestration.cancel": {
+            if (msg.orchestrationId) {
+              runtime.log?.(`[enso] orchestration cancel: ${msg.orchestrationId}`);
+              const { handleOrchestrationCancel } = await import("./orchestrator.js");
+              handleOrchestrationCancel(msg.orchestrationId);
+            }
+            break;
+          }
+          case "orchestration.message": {
+            if (msg.orchestrationId && msg.orchestrationTaskId && msg.orchestrationMessage) {
+              const { handleOrchestrationMessage } = await import("./orchestrator.js");
+              handleOrchestrationMessage({
+                orchestrationId: msg.orchestrationId,
+                taskId: msg.orchestrationTaskId,
+                message: msg.orchestrationMessage,
               });
             }
             break;

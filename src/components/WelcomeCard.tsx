@@ -40,6 +40,12 @@ const TEMPLATES: Template[] = [
     toolFamily: "remote_desktop",
   },
   {
+    icon: "\u26A1",
+    title: "Orchestrate",
+    description: "Multi-agent missions",
+    prompt: "/orchestrate",
+  },
+  {
     icon: "\uD83C\uDFAF",
     title: "Mission Planner",
     description: "Design apps for your needs",
