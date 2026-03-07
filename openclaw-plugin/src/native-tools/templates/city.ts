@@ -17,6 +17,8 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   const [imgErrors, setImgErrors] = useState({});
   const [imgLoaded, setImgLoaded] = useState({});
   const [cityInput, setCityInput] = useState("");
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState("");
   const [playingVideo, setPlayingVideo] = useState(null);
   const [favorites, setFavorites] = useState({});
   const [activeTab, setActiveTab] = useState("places");
@@ -844,6 +846,26 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
       const c = cityInput.trim();
       if (c) onAction("explore", { city: c });
     };
+    const handleLocate = () => {
+      if (!navigator.geolocation) { setLocError("Geolocation not supported"); return; }
+      setLocating(true); setLocError("");
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + pos.coords.latitude + "&lon=" + pos.coords.longitude + "&zoom=10&accept-language=zh,en")
+            .then((r) => r.json())
+            .then((d) => {
+              const addr = d.address || {};
+              const name = addr.city || addr.town || addr.county || addr.state || d.display_name || "";
+              setLocating(false);
+              if (name) { setCityInput(name); onAction("explore", { city: name }); }
+              else { setLocError("Unable to determine city"); }
+            })
+            .catch(() => { setLocating(false); setLocError("Location lookup failed"); });
+        },
+        (err) => { setLocating(false); setLocError(err.code === 1 ? "Location access denied" : "Unable to get location"); },
+        { enableHighAccuracy: false, timeout: 10000 }
+      );
+    };
     const suggestions = [
       { name: "Paris", emoji: "\u{1F1EB}\u{1F1F7}", desc: "City of Light", sub: "Art, cuisine & romance", color: "from-blue-500/15 to-indigo-500/10", border: "border-blue-500/10" },
       { name: "Tokyo", emoji: "\u{1F1EF}\u{1F1F5}", desc: "Neon & tradition", sub: "Ancient temples meet tech", color: "from-rose-500/15 to-pink-500/10", border: "border-rose-500/10" },
@@ -868,15 +890,30 @@ const CITY_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Input
-            placeholder="Search any city..."
-            value={cityInput}
-            onChange={(val) => setCityInput(val)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleExplore(); }}
-            icon="Search"
-          />
-          <Button variant="primary" onClick={handleExplore}>Explore</Button>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Search any city..."
+              value={cityInput}
+              onChange={(val) => setCityInput(val)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleExplore(); }}
+              icon="Search"
+            />
+            <Button variant="primary" onClick={handleExplore}>Explore</Button>
+          </div>
+          <button onClick={handleLocate} disabled={locating}
+            className={"w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all text-sm font-medium " + (locating ? "bg-blue-500/10 border-blue-500/20 text-blue-300 cursor-wait" : "bg-white/[0.04] border-white/[0.08] text-gray-300 hover:bg-blue-500/10 hover:border-blue-500/20 hover:text-blue-300 active:scale-[0.98]")}>
+            {locating ? (
+              <><LucideReact.Loader2 className="w-4 h-4 animate-spin" /> Locating...</>
+            ) : (
+              <><LucideReact.LocateFixed className="w-4 h-4" /> Use Current Location</>
+            )}
+          </button>
+          {locError && (
+            <div className="flex items-center gap-1.5 text-xs text-rose-400 px-1">
+              <LucideReact.AlertCircle className="w-3 h-3 shrink-0" /> {locError}
+            </div>
+          )}
         </div>
         {recentCities.length > 0 && (
           <div className="space-y-2.5">
