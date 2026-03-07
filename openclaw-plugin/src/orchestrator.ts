@@ -275,6 +275,11 @@ export async function handleOrchestrationApprove(params: {
   }
   orch.aborted = false; // Clear paused state
 
+  // Update client/account in case the user's WebSocket reconnected since
+  // the orchestration was created (stale client → progress updates lost)
+  orch.client = params.client;
+  orch.account = params.account;
+
   logAction({
     ts: Date.now(),
     type: "action",
@@ -284,7 +289,12 @@ export async function handleOrchestrationApprove(params: {
 
   // Import and start the execution engine
   const { executeOrchestration } = await import("./orchestrator-engine.js");
-  executeOrchestration(orch.plan, orch.client, orch.account, orch.sharedContext);
+  executeOrchestration(orch.plan, orch.client, orch.account, orch.sharedContext)
+    .catch((err) => {
+      logError("orchestrator", "executeOrchestration unhandled error", err, { orchestrationId });
+      updateOrchestrationProgress(orchestrationId, "failed", undefined,
+        err instanceof Error ? err.message : String(err));
+    });
 }
 
 /**
@@ -323,7 +333,12 @@ export async function handleOrchestrationResume(params: {
   persistOrchestration(orchestrationId, orch.plan);
 
   const { executeOrchestration } = await import("./orchestrator-engine.js");
-  executeOrchestration(orch.plan, client, account, orch.sharedContext);
+  executeOrchestration(orch.plan, client, account, orch.sharedContext)
+    .catch((err) => {
+      logError("orchestrator", "executeOrchestration resume error", err, { orchestrationId });
+      updateOrchestrationProgress(orchestrationId, "failed", undefined,
+        err instanceof Error ? err.message : String(err));
+    });
 }
 
 /**

@@ -203,7 +203,8 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
   const total = plan.tasks.length;
   const isPaused = plan.status === "paused";
   const awaitingApproval = plan.tasks.filter((t) => t.status === "awaiting_approval");
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  // Count running tasks as partial progress (50% each) so users see movement
+  const pct = total > 0 ? Math.round(((completed + running * 0.5) / total) * 100) : 0;
 
   return (
     <div>
@@ -229,9 +230,9 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
         <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
-              running > 0 ? "bg-blue-500" : "bg-blue-500"
+              running > 0 ? "bg-blue-500 animate-pulse" : "bg-blue-500"
             }`}
-            style={{ width: `${pct}%` }}
+            style={{ width: `${Math.max(pct, running > 0 ? 3 : 0)}%` }}
           />
         </div>
         <div className="text-[10px] text-gray-500 mt-1">{pct}% complete</div>
