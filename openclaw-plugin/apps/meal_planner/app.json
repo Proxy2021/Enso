@@ -1,0 +1,332 @@
+{
+  "version": 1,
+  "createdAt": 1709500000000,
+  "spec": {
+    "toolFamily": "meal_planner",
+    "toolPrefix": "enso_meal_planner_",
+    "description": "Comprehensive meal planning with weekly scheduling, shopping lists, nutrition tracking, pantry management, and meal suggestions",
+    "signatureId": "meal_planner_view",
+    "tools": [
+      {
+        "suffix": "plan_meals",
+        "description": "Create and manage a weekly meal plan with configurable meal slots and serving sizes. Supports generating AI-powered plans, assigning recipes to slots, and removing meals.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action to perform: generate, assign, remove, or view (default: view)"
+            },
+            "day": {
+              "type": "string",
+              "description": "Day of the week (Monday-Sunday)"
+            },
+            "slot": {
+              "type": "string",
+              "description": "Meal slot: breakfast, lunch, dinner, or snacks"
+            },
+            "recipe": {
+              "type": "string",
+              "description": "Recipe name to assign to a slot"
+            },
+            "servings": {
+              "type": "number",
+              "description": "Number of servings per meal (default: 2)"
+            },
+            "diet": {
+              "type": "string",
+              "description": "Dietary preference for plan generation (e.g., balanced, vegetarian, keto, mediterranean)"
+            },
+            "mealSlots": {
+              "type": "string",
+              "description": "Comma-separated meal slots to include (default: breakfast,lunch,dinner,snacks)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_meal_planner_plan_meals",
+          "weekStart": "2026-03-02",
+          "servings": 2,
+          "mealSlots": ["breakfast", "lunch", "dinner", "snacks"],
+          "plan": {
+            "Monday": {
+              "breakfast": { "name": "Greek Yogurt Parfait", "calories": 320, "protein": 18, "carbs": 42, "fat": 10 },
+              "lunch": { "name": "Chicken Caesar Salad", "calories": 480, "protein": 35, "carbs": 18, "fat": 28 },
+              "dinner": { "name": "Salmon with Roasted Vegetables", "calories": 550, "protein": 40, "carbs": 30, "fat": 25 },
+              "snacks": { "name": "Apple & Almond Butter", "calories": 200, "protein": 5, "carbs": 22, "fat": 12 }
+            },
+            "Tuesday": {
+              "breakfast": { "name": "Overnight Oats", "calories": 350, "protein": 12, "carbs": 55, "fat": 10 },
+              "lunch": { "name": "Turkey & Avocado Wrap", "calories": 520, "protein": 30, "carbs": 40, "fat": 25 },
+              "dinner": { "name": "Beef Stir-Fry with Brown Rice", "calories": 600, "protein": 38, "carbs": 55, "fat": 22 },
+              "snacks": { "name": "Trail Mix", "calories": 180, "protein": 6, "carbs": 20, "fat": 10 }
+            },
+            "Wednesday": {
+              "breakfast": { "name": "Scrambled Eggs & Toast", "calories": 380, "protein": 22, "carbs": 30, "fat": 18 },
+              "lunch": { "name": "Mediterranean Quinoa Bowl", "calories": 450, "protein": 15, "carbs": 60, "fat": 16 },
+              "dinner": { "name": "Grilled Chicken Thighs with Sweet Potato", "calories": 520, "protein": 42, "carbs": 38, "fat": 18 },
+              "snacks": { "name": "Hummus & Veggies", "calories": 160, "protein": 6, "carbs": 18, "fat": 8 }
+            },
+            "Thursday": {
+              "breakfast": { "name": "Smoothie Bowl", "calories": 340, "protein": 14, "carbs": 50, "fat": 10 },
+              "lunch": { "name": "Lentil Soup with Bread", "calories": 420, "protein": 20, "carbs": 58, "fat": 12 },
+              "dinner": { "name": "Pasta Primavera", "calories": 480, "protein": 16, "carbs": 65, "fat": 16 },
+              "snacks": { "name": "Greek Yogurt", "calories": 150, "protein": 15, "carbs": 12, "fat": 5 }
+            },
+            "Friday": {
+              "breakfast": { "name": "Avocado Toast with Egg", "calories": 400, "protein": 18, "carbs": 32, "fat": 24 },
+              "lunch": { "name": "Tuna Nicoise Salad", "calories": 460, "protein": 32, "carbs": 22, "fat": 28 },
+              "dinner": { "name": "Shrimp Tacos", "calories": 500, "protein": 28, "carbs": 45, "fat": 22 },
+              "snacks": { "name": "Mixed Berries", "calories": 120, "protein": 2, "carbs": 28, "fat": 1 }
+            },
+            "Saturday": {
+              "breakfast": { "name": "Pancakes with Maple Syrup", "calories": 450, "protein": 10, "carbs": 70, "fat": 14 },
+              "lunch": { "name": "Grilled Veggie Sandwich", "calories": 380, "protein": 14, "carbs": 45, "fat": 16 },
+              "dinner": { "name": "Baked Cod with Lemon & Herbs", "calories": 420, "protein": 38, "carbs": 20, "fat": 18 },
+              "snacks": { "name": "Dark Chocolate & Nuts", "calories": 220, "protein": 5, "carbs": 18, "fat": 16 }
+            },
+            "Sunday": {
+              "breakfast": { "name": "Veggie Omelette", "calories": 360, "protein": 24, "carbs": 8, "fat": 26 },
+              "lunch": { "name": "Chicken Pho", "calories": 440, "protein": 30, "carbs": 48, "fat": 12 },
+              "dinner": { "name": "Roast Chicken with Potatoes", "calories": 580, "protein": 45, "carbs": 40, "fat": 24 },
+              "snacks": { "name": "Banana & Peanut Butter", "calories": 250, "protein": 8, "carbs": 30, "fat": 12 }
+            }
+          }
+        },
+        "requiredDataKeys": ["tool", "plan"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "generate_shopping_list",
+        "description": "Generate a consolidated shopping list from the current meal plan. Merges duplicate ingredients and categorizes by store department. Subtracts pantry items.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "subtractPantry": {
+              "type": "boolean",
+              "description": "Whether to subtract pantry items from the list (default: true)"
+            },
+            "departments": {
+              "type": "string",
+              "description": "Comma-separated department categories to use (default: Produce,Dairy,Meat,Pantry,Frozen,Bakery,Beverages,Other)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_meal_planner_generate_shopping_list",
+          "totalItems": 18,
+          "subtractedPantry": 3,
+          "departments": [
+            {
+              "name": "Produce",
+              "items": [
+                { "name": "Avocado", "quantity": "3", "unit": "pcs" },
+                { "name": "Sweet Potatoes", "quantity": "4", "unit": "pcs" },
+                { "name": "Mixed Berries", "quantity": "500", "unit": "g" },
+                { "name": "Lemons", "quantity": "3", "unit": "pcs" },
+                { "name": "Baby Spinach", "quantity": "200", "unit": "g" }
+              ]
+            },
+            {
+              "name": "Dairy",
+              "items": [
+                { "name": "Greek Yogurt", "quantity": "1", "unit": "kg" },
+                { "name": "Eggs", "quantity": "12", "unit": "pcs" },
+                { "name": "Butter", "quantity": "250", "unit": "g" }
+              ]
+            },
+            {
+              "name": "Meat",
+              "items": [
+                { "name": "Chicken Thighs", "quantity": "800", "unit": "g" },
+                { "name": "Salmon Fillets", "quantity": "400", "unit": "g" },
+                { "name": "Shrimp", "quantity": "300", "unit": "g" },
+                { "name": "Ground Turkey", "quantity": "500", "unit": "g" }
+              ]
+            },
+            {
+              "name": "Pantry",
+              "items": [
+                { "name": "Brown Rice", "quantity": "500", "unit": "g" },
+                { "name": "Quinoa", "quantity": "300", "unit": "g" },
+                { "name": "Almond Butter", "quantity": "1", "unit": "jar" },
+                { "name": "Olive Oil", "quantity": "1", "unit": "bottle" }
+              ]
+            },
+            {
+              "name": "Bakery",
+              "items": [
+                { "name": "Whole Wheat Bread", "quantity": "1", "unit": "loaf" },
+                { "name": "Tortilla Wraps", "quantity": "1", "unit": "pack" }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "departments"]
+      },
+      {
+        "suffix": "track_nutrition",
+        "description": "Show nutritional summary for planned meals with daily calorie and macro totals, weekly averages, and progress against customizable daily targets.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: view or set_targets (default: view)"
+            },
+            "calorieTarget": {
+              "type": "number",
+              "description": "Daily calorie target (default: 2000)"
+            },
+            "proteinTarget": {
+              "type": "number",
+              "description": "Daily protein target in grams (default: 50)"
+            },
+            "carbsTarget": {
+              "type": "number",
+              "description": "Daily carbs target in grams (default: 250)"
+            },
+            "fatTarget": {
+              "type": "number",
+              "description": "Daily fat target in grams (default: 65)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_meal_planner_track_nutrition",
+          "targets": { "calories": 2000, "protein": 50, "carbs": 250, "fat": 65 },
+          "daily": [
+            { "day": "Monday", "calories": 1550, "protein": 98, "carbs": 112, "fat": 75 },
+            { "day": "Tuesday", "calories": 1650, "protein": 86, "carbs": 170, "fat": 67 },
+            { "day": "Wednesday", "calories": 1510, "protein": 85, "carbs": 146, "fat": 60 },
+            { "day": "Thursday", "calories": 1390, "protein": 65, "carbs": 185, "fat": 43 },
+            { "day": "Friday", "calories": 1480, "protein": 80, "carbs": 127, "fat": 75 },
+            { "day": "Saturday", "calories": 1470, "protein": 67, "carbs": 153, "fat": 64 },
+            { "day": "Sunday", "calories": 1630, "protein": 107, "carbs": 126, "fat": 74 }
+          ],
+          "weeklyAvg": { "calories": 1526, "protein": 84, "carbs": 146, "fat": 65 }
+        },
+        "requiredDataKeys": ["tool", "daily", "targets"]
+      },
+      {
+        "suffix": "manage_pantry",
+        "description": "Track pantry inventory. Add or remove items. Used by shopping list to subtract what you already have.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: view, add, remove, or clear (default: view)"
+            },
+            "item": {
+              "type": "string",
+              "description": "Item description to add (e.g., 'Rice 2kg', 'Olive Oil 1 bottle')"
+            },
+            "itemName": {
+              "type": "string",
+              "description": "Item name to remove"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_meal_planner_manage_pantry",
+          "totalItems": 8,
+          "items": [
+            { "name": "Rice", "quantity": "2", "unit": "kg", "category": "Pantry" },
+            { "name": "Olive Oil", "quantity": "1", "unit": "bottle", "category": "Pantry" },
+            { "name": "Soy Sauce", "quantity": "1", "unit": "bottle", "category": "Pantry" },
+            { "name": "Eggs", "quantity": "6", "unit": "pcs", "category": "Dairy" },
+            { "name": "Butter", "quantity": "250", "unit": "g", "category": "Dairy" },
+            { "name": "Garlic", "quantity": "3", "unit": "heads", "category": "Produce" },
+            { "name": "Onions", "quantity": "5", "unit": "pcs", "category": "Produce" },
+            { "name": "Chicken Breast", "quantity": "500", "unit": "g", "category": "Meat" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "items"]
+      },
+      {
+        "suffix": "suggest_meals",
+        "description": "Suggest recipes based on pantry contents, dietary preferences, nutritional gaps, or time constraints. Provides AI-powered meal ideas with nutritional info.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "criteria": {
+              "type": "string",
+              "description": "Suggestion criteria: pantry, balanced, quick, high-protein, vegetarian, low-carb (default: balanced)"
+            },
+            "excludeRecipes": {
+              "type": "string",
+              "description": "Comma-separated recipe names to exclude from suggestions"
+            },
+            "count": {
+              "type": "number",
+              "description": "Number of suggestions to return (default: 5)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "criteria": "balanced" },
+        "sampleData": {
+          "tool": "enso_meal_planner_suggest_meals",
+          "criteria": "balanced",
+          "suggestions": [
+            {
+              "name": "Teriyaki Salmon Bowl",
+              "description": "Pan-seared salmon over rice with steamed broccoli and teriyaki glaze",
+              "prepTime": "25 min",
+              "calories": 520,
+              "protein": 38,
+              "matchReason": "Uses pantry items: rice, soy sauce"
+            },
+            {
+              "name": "Mediterranean Chicken Wrap",
+              "description": "Grilled chicken with hummus, cucumber, tomato, and feta in a whole wheat wrap",
+              "prepTime": "20 min",
+              "calories": 450,
+              "protein": 32,
+              "matchReason": "Balanced macros, quick prep time"
+            },
+            {
+              "name": "Vegetable Frittata",
+              "description": "Egg-based dish with bell peppers, spinach, onions, and cheese",
+              "prepTime": "30 min",
+              "calories": 380,
+              "protein": 24,
+              "matchReason": "Uses pantry items: eggs, onions"
+            },
+            {
+              "name": "Black Bean Taco Bowl",
+              "description": "Seasoned black beans with rice, corn, avocado, and lime crema",
+              "prepTime": "20 min",
+              "calories": 480,
+              "protein": 18,
+              "matchReason": "High fiber, budget-friendly"
+            },
+            {
+              "name": "Lemon Herb Baked Chicken",
+              "description": "Oven-baked chicken thighs with lemon, garlic, and fresh herbs",
+              "prepTime": "45 min",
+              "calories": 420,
+              "protein": 40,
+              "matchReason": "Uses pantry items: garlic, chicken"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "suggestions"]
+      }
+    ]
+  }
+}

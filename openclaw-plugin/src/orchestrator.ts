@@ -62,15 +62,18 @@ Write your research findings to a file so downstream agents can use them.`,
 
   architect: `You are an Architect Agent. Your job is to take research findings and design a structured plan, blueprint, or framework.
 Consider trade-offs, organize information logically, and create a clear, actionable design.
-Write your design/plan to a file so builder agents can use it.`,
+Write your design/plan to a file so builder agents can use it.
+CRITICAL: Design for REUSE — build a tool CATEGORY, not a single-use solution. If asked about "WKW photos", design a "Photo Studio" that works for any collection with any style. Always parameterize inputs. Specify 4-7 tools per app (browse, view, create, edit, search, manage patterns). Reference openclaw-plugin/apps/media_gallery/ as the gold standard.`,
 
   builder: `You are a Builder Agent in Enso. Your job is to build interactive Enso apps using the app framework.
 Read CLAUDE-REFERENCE.md first to understand the app format (app.json + template.jsx + executors/).
-Build polished, interactive apps with real functionality — not placeholder demos.`,
+Build polished, interactive apps with real functionality — not placeholder demos.
+CRITICAL: Build GENERAL-PURPOSE apps, not one-off solutions. Study openclaw-plugin/apps/media_gallery/ as the gold standard (7 tools, multi-view template, fully parameterized). Aim for 4-7 tools per app. Never hardcode domain-specific data in executors. Family names should be generic categories (e.g., "photo_studio" not "wkw_photobook").`,
 
   coder: `You are a Coder Agent. Your job is to write code, scripts, configurations, or technical artifacts.
 Write clean, well-documented code. Test your work when possible.
-Save all output to files so other agents can reference them.`,
+Save all output to files so other agents can reference them.
+When writing scripts or tools, make them configurable via command-line arguments or parameters — not hardcoded to specific paths, names, or domain data. Build for reuse.`,
 
   reviewer: `You are a Reviewer Agent. Your job is to verify, validate, and quality-check the work of other agents.
 Check for correctness, completeness, and quality. Report issues clearly.
@@ -457,6 +460,16 @@ function buildPlanningPrompt(
     `- Builder tasks create interactive Enso apps (the main deliverable for users)`,
     `- Keep the total to 3–7 tasks (focused, not too granular)`,
     ``,
+    `## App Reusability Principle (IMPORTANT)`,
+    `When the plan includes builder tasks (agentRole: "builder"):`,
+    `- Builder tasks MUST create GENERAL-PURPOSE tools, not one-off solutions`,
+    `- If the user asks to "process photos in WKW style", the builder should create a "Photo Studio" app that can apply various artistic styles to any photo collection — NOT a WKW-specific photobook`,
+    `- The architect should design for the CATEGORY of need, not just the specific request`,
+    `- All tools and executors must be parameterized — no hardcoded paths, names, or domain data`,
+    `- App family names should be generic categories: "photo_studio" not "wkw_photobook", "trip_planner" not "japan_trip"`,
+    `- Builder task descriptions MUST include: "Build a reusable, general-purpose [category] app with at least 4 tools"`,
+    `- Study openclaw-plugin/apps/media_gallery/ as the gold standard (7 tools, parameterized, multi-view template)`,
+    ``,
     `## Output Format`,
     `Write a JSON file to: ${planFilePath}`,
     ``,
@@ -578,9 +591,18 @@ export function buildAgentPrompt(
     parts.push(``);
     parts.push(`## App Building Instructions`);
     parts.push(`First, read the file CLAUDE-REFERENCE.md to understand Enso's app format.`);
-    parts.push(`Then browse openclaw-plugin/apps/ to see examples of existing apps.`);
-    parts.push(`Build a complete, polished Enso app following the format precisely.`);
-    parts.push(`The app must have: app.json, template.jsx, and executors/ directory with .js files.`);
+    parts.push(`Then study openclaw-plugin/apps/media_gallery/ as the GOLD STANDARD for reusable apps.`);
+    parts.push(`It has 7 focused tools, parameterized executors, and multi-view template rendering.`);
+    parts.push(``);
+    parts.push(`Build a GENERAL-PURPOSE, REUSABLE Enso app:`);
+    parts.push(`- Family name must be a generic category (e.g., "photo_studio" not "wkw_photobook")`);
+    parts.push(`- Aim for 4-7 tools (browse, view, create, edit, search, manage patterns)`);
+    parts.push(`- Every executor must be parameterized — no hardcoded paths or domain data`);
+    parts.push(`- Template must use data.tool branching for polymorphic views`);
+    parts.push(`- The app must have: app.json, template.jsx, and executors/ directory with .js files`);
+    parts.push(``);
+    parts.push(`If the task description mentions specific data (e.g., "WKW photos" or "photos at ~/Desktop/"),`);
+    parts.push(`treat that as a TEST CASE, not the app's sole purpose. The app should work for ANY similar data.`);
   }
 
   if (task.outputType === "research") {

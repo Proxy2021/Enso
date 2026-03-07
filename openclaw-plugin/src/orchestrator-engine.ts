@@ -35,6 +35,9 @@ const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
 /** Maximum concurrent agent sessions */
 const MAX_CONCURRENT_AGENTS = 2;
 
+/** Maximum time per task before timeout (20 minutes) */
+const TASK_TIMEOUT_MS = 20 * 60 * 1000;
+
 // ── Main Execution Loop ──
 
 /**
@@ -119,11 +122,18 @@ export async function executeOrchestration(
 
       updateOrchestrationProgress(plan.orchestrationId, "task_started");
 
-      // Execute all tasks in the batch concurrently
+      // Execute all tasks in the batch concurrently (with timeout)
       const results = await Promise.allSettled(
-        batch.map((task) =>
-          executeTask(plan, task, client, account, sharedContext),
-        ),
+        batch.map((task) => {
+          const taskPromise = executeTask(plan, task, client, account, sharedContext);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Task "${task.title}" timed out after 20 minutes`)),
+              TASK_TIMEOUT_MS,
+            ),
+          );
+          return Promise.race([taskPromise, timeoutPromise]);
+        }),
       );
 
       // Process results
@@ -317,7 +327,7 @@ async function executeAppBuildTask(
     // Read full output but truncate to keep prompt manageable
     const fullOutput = readTaskOutput(dep);
     const summary = fullOutput
-      ? fullOutput.slice(0, 3000) + (fullOutput.length > 3000 ? "\n\n[... truncated for brevity]" : "")
+      ? fullOutput.slice(0, 6000) + (fullOutput.length > 6000 ? "\n\n[... truncated for brevity]" : "")
       : sharedContext.get(depId) || dep.resultSummary || "";
     if (summary) {
       depContextParts.push(`### ${dep.title}\n${summary}`);

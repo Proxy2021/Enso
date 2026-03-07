@@ -126,6 +126,8 @@ function PlanningPhase({ goal }: { goal?: string }) {
       </div>
       <p className="text-[11px] text-gray-500 mt-2">
         Researching your goal, decomposing into tasks, and assigning agent roles.
+        <br />
+        The planning session is visible in the terminal card below. This typically takes 30–60 seconds.
       </p>
     </div>
   );

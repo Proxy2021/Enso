@@ -1,0 +1,466 @@
+{
+  "version": 1,
+  "createdAt": 1741305600000,
+  "spec": {
+    "toolFamily": "trip_planner",
+    "toolPrefix": "enso_trip_planner_",
+    "description": "Plan and organize trips with destination research, itineraries, budgets, packing lists, and preparation checklists",
+    "signatureId": "trip_planner_view",
+    "tools": [
+      {
+        "suffix": "list_trips",
+        "description": "List all saved trips with status, dates, and budget summaries",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "Filter by status: all, planning, booked, completed (default: all)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_trip_planner_list_trips",
+          "currency": "USD",
+          "trips": [
+            {
+              "id": "trip_001",
+              "name": "Summer in Tokyo",
+              "destination": "Tokyo, Japan",
+              "startDate": "2026-07-10",
+              "endDate": "2026-07-20",
+              "status": "planning",
+              "totalBudget": 4500,
+              "currency": "USD",
+              "progress": 35
+            },
+            {
+              "id": "trip_002",
+              "name": "Paris Weekend",
+              "destination": "Paris, France",
+              "startDate": "2026-05-01",
+              "endDate": "2026-05-05",
+              "status": "booked",
+              "totalBudget": 2800,
+              "currency": "USD",
+              "progress": 75
+            },
+            {
+              "id": "trip_003",
+              "name": "Bali Adventure",
+              "destination": "Bali, Indonesia",
+              "startDate": "2025-12-15",
+              "endDate": "2025-12-28",
+              "status": "completed",
+              "totalBudget": 3200,
+              "currency": "USD",
+              "progress": 100
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "trips"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "research",
+        "description": "Research a destination with weather, costs, attractions, visa info, and travel tips",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "destination": {
+              "type": "string",
+              "description": "Destination city or region to research"
+            },
+            "travelMonth": {
+              "type": "string",
+              "description": "Month or season of planned travel (e.g. 'July', 'winter')"
+            },
+            "interests": {
+              "type": "string",
+              "description": "Traveler interests for personalized tips (e.g. 'food, history, hiking')"
+            }
+          },
+          "required": ["destination"]
+        },
+        "sampleParams": { "destination": "Tokyo, Japan" },
+        "sampleData": {
+          "tool": "enso_trip_planner_research",
+          "destination": "Tokyo, Japan",
+          "summary": "Tokyo is a vibrant metropolis blending ultra-modern technology with traditional temples. Known for world-class cuisine, efficient public transit, and unique cultural experiences.",
+          "bestTimeToVisit": "Mar-May",
+          "safetyRating": "Very Safe",
+          "visaInfo": "Visa-free 90d",
+          "weather": [
+            { "month": "Jan", "avgTemp": 6, "rainfall": 52 },
+            { "month": "Apr", "avgTemp": 15, "rainfall": 125 },
+            { "month": "Jul", "avgTemp": 27, "rainfall": 154 },
+            { "month": "Oct", "avgTemp": 18, "rainfall": 198 }
+          ],
+          "costs": {
+            "budget_hotel": "$50-80/night",
+            "mid_range_hotel": "$120-200/night",
+            "meal_budget": "$8-15",
+            "meal_mid_range": "$20-40",
+            "public_transport_day": "$5-10",
+            "attraction_avg": "$10-20"
+          },
+          "attractions": [
+            { "name": "Senso-ji Temple", "category": "Temple", "rating": 4.7, "estimatedCost": "Free", "description": "Tokyo's oldest and most significant Buddhist temple" },
+            { "name": "Tsukiji Outer Market", "category": "Food", "rating": 4.5, "estimatedCost": "$20-40", "description": "World-famous fish market with incredible street food" },
+            { "name": "Shibuya Crossing", "category": "Landmark", "rating": 4.3, "estimatedCost": "Free", "description": "The world's busiest pedestrian crossing" }
+          ],
+          "tips": [
+            "Get a Suica/Pasmo card for seamless public transport",
+            "Many restaurants are cash-only — carry yen",
+            "Convenience store food is surprisingly excellent and affordable",
+            "Visit shrines early morning to avoid crowds"
+          ]
+        },
+        "requiredDataKeys": ["tool", "destination"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "itinerary",
+        "description": "View or generate a day-by-day itinerary for a trip with activities, times, and locations",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tripId": {
+              "type": "string",
+              "description": "ID of an existing trip to load itinerary for"
+            },
+            "destination": {
+              "type": "string",
+              "description": "Destination for the itinerary"
+            },
+            "startDate": {
+              "type": "string",
+              "description": "Trip start date (YYYY-MM-DD)"
+            },
+            "endDate": {
+              "type": "string",
+              "description": "Trip end date (YYYY-MM-DD)"
+            },
+            "interests": {
+              "type": "string",
+              "description": "Activities and interests to prioritize"
+            },
+            "action": {
+              "type": "string",
+              "description": "Action: view, generate, or create"
+            }
+          },
+          "required": ["destination"]
+        },
+        "sampleParams": { "destination": "Tokyo, Japan", "startDate": "2026-07-10", "endDate": "2026-07-13" },
+        "sampleData": {
+          "tool": "enso_trip_planner_itinerary",
+          "tripId": "trip_001",
+          "destination": "Tokyo, Japan",
+          "startDate": "2026-07-10",
+          "endDate": "2026-07-13",
+          "status": "planning",
+          "days": [
+            {
+              "dayNumber": 1,
+              "date": "2026-07-10",
+              "title": "Arrival & Asakusa",
+              "activities": [
+                { "time": "14:00", "title": "Arrive at Narita Airport", "category": "transport", "location": "Narita Airport", "duration": "2h", "notes": "Take Narita Express to city" },
+                { "time": "17:00", "title": "Check into hotel", "category": "accommodation", "location": "Shinjuku", "duration": "30m" },
+                { "time": "18:30", "title": "Explore Senso-ji Temple", "category": "attraction", "location": "Asakusa", "duration": "1.5h", "cost": "Free" },
+                { "time": "20:00", "title": "Dinner at Hoppy Street", "category": "food", "location": "Asakusa", "duration": "1.5h", "cost": "$25" }
+              ]
+            },
+            {
+              "dayNumber": 2,
+              "date": "2026-07-11",
+              "title": "Harajuku & Shibuya",
+              "activities": [
+                { "time": "09:00", "title": "Meiji Shrine morning visit", "category": "attraction", "location": "Harajuku", "duration": "1.5h", "cost": "Free" },
+                { "time": "11:00", "title": "Takeshita Street shopping", "category": "shopping", "location": "Harajuku", "duration": "2h" },
+                { "time": "13:00", "title": "Ramen lunch", "category": "food", "location": "Shibuya", "duration": "45m", "cost": "$12" },
+                { "time": "15:00", "title": "Shibuya Crossing & Hachiko", "category": "attraction", "location": "Shibuya", "duration": "1h", "cost": "Free" },
+                { "time": "18:00", "title": "Shibuya Sky observation deck", "category": "attraction", "location": "Shibuya", "duration": "1.5h", "cost": "$18" }
+              ]
+            },
+            {
+              "dayNumber": 3,
+              "date": "2026-07-12",
+              "title": "Tsukiji & Akihabara",
+              "activities": [
+                { "time": "07:00", "title": "Tsukiji Outer Market breakfast", "category": "food", "location": "Tsukiji", "duration": "2h", "cost": "$30" },
+                { "time": "10:00", "title": "TeamLab Borderless", "category": "attraction", "location": "Odaiba", "duration": "2.5h", "cost": "$32" },
+                { "time": "14:00", "title": "Akihabara electronics district", "category": "shopping", "location": "Akihabara", "duration": "3h" },
+                { "time": "19:00", "title": "Izakaya dinner", "category": "food", "location": "Shinjuku", "duration": "2h", "cost": "$35" }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "destination", "days"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "budget",
+        "description": "View or set up a trip budget with category breakdown, spending tracking, and expense log",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tripId": {
+              "type": "string",
+              "description": "ID of an existing trip"
+            },
+            "destination": {
+              "type": "string",
+              "description": "Trip destination"
+            },
+            "totalBudget": {
+              "type": "number",
+              "description": "Total trip budget amount"
+            },
+            "currency": {
+              "type": "string",
+              "description": "Currency code (default: USD)"
+            },
+            "travelers": {
+              "type": "number",
+              "description": "Number of travelers (default: 1)"
+            },
+            "duration": {
+              "type": "number",
+              "description": "Trip duration in days"
+            }
+          },
+          "required": ["destination"]
+        },
+        "sampleParams": { "destination": "Tokyo, Japan", "totalBudget": 4500, "currency": "USD" },
+        "sampleData": {
+          "tool": "enso_trip_planner_budget",
+          "tripId": "trip_001",
+          "destination": "Tokyo, Japan",
+          "currency": "USD",
+          "totalBudget": 4500,
+          "totalSpent": 1850,
+          "categories": [
+            { "name": "Flights", "budgeted": 1200, "spent": 1180 },
+            { "name": "Accommodation", "budgeted": 1400, "spent": 420 },
+            { "name": "Food & Dining", "budgeted": 800, "spent": 150 },
+            { "name": "Activities", "budgeted": 600, "spent": 100 },
+            { "name": "Transport", "budgeted": 300, "spent": 0 },
+            { "name": "Shopping", "budgeted": 200, "spent": 0 }
+          ],
+          "expenses": [
+            { "description": "Round-trip flights LAX-NRT", "category": "Flights", "amount": 1180, "date": "2026-03-15" },
+            { "description": "Hotel deposit (3 nights)", "category": "Accommodation", "amount": 420, "date": "2026-04-01" },
+            { "description": "TeamLab Borderless tickets x2", "category": "Activities", "amount": 64, "date": "2026-05-10" },
+            { "description": "Shibuya Sky tickets x2", "category": "Activities", "amount": 36, "date": "2026-05-10" },
+            { "description": "Restaurant reservations deposit", "category": "Food & Dining", "amount": 150, "date": "2026-06-01" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "destination"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "packing",
+        "description": "Generate or view a categorized packing list based on destination, weather, and trip type",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tripId": {
+              "type": "string",
+              "description": "ID of an existing trip"
+            },
+            "destination": {
+              "type": "string",
+              "description": "Trip destination"
+            },
+            "duration": {
+              "type": "number",
+              "description": "Trip duration in days"
+            },
+            "climate": {
+              "type": "string",
+              "description": "Expected climate (e.g. 'hot and humid', 'cold', 'tropical')"
+            },
+            "activities": {
+              "type": "string",
+              "description": "Planned activities that need special gear (e.g. 'hiking, beach, formal dinner')"
+            },
+            "action": {
+              "type": "string",
+              "description": "Action: view or generate"
+            }
+          },
+          "required": ["destination"]
+        },
+        "sampleParams": { "destination": "Tokyo, Japan", "duration": 10, "climate": "hot and humid" },
+        "sampleData": {
+          "tool": "enso_trip_planner_packing",
+          "tripId": "trip_001",
+          "destination": "Tokyo, Japan",
+          "climate": "hot and humid",
+          "categories": [
+            {
+              "name": "Clothing",
+              "items": [
+                { "name": "Light t-shirts", "quantity": 5, "essential": true },
+                { "name": "Shorts / light pants", "quantity": 3, "essential": true },
+                { "name": "Light jacket / cardigan", "quantity": 1, "essential": false },
+                { "name": "Comfortable walking shoes", "quantity": 1, "essential": true },
+                { "name": "Sandals", "quantity": 1, "essential": false },
+                { "name": "Underwear & socks", "quantity": 7, "essential": true },
+                { "name": "Sleepwear", "quantity": 2, "essential": false }
+              ]
+            },
+            {
+              "name": "Toiletries",
+              "items": [
+                { "name": "Sunscreen SPF 50+", "quantity": 1, "essential": true },
+                { "name": "Insect repellent", "quantity": 1, "essential": false },
+                { "name": "Deodorant", "quantity": 1, "essential": true },
+                { "name": "Toothbrush & toothpaste", "quantity": 1, "essential": true },
+                { "name": "Hand sanitizer", "quantity": 1, "essential": false }
+              ]
+            },
+            {
+              "name": "Electronics",
+              "items": [
+                { "name": "Phone charger", "quantity": 1, "essential": true },
+                { "name": "Power adapter (Type A)", "quantity": 1, "essential": true },
+                { "name": "Portable battery", "quantity": 1, "essential": false },
+                { "name": "Camera", "quantity": 1, "essential": false }
+              ]
+            },
+            {
+              "name": "Documents",
+              "items": [
+                { "name": "Passport", "quantity": 1, "essential": true },
+                { "name": "Travel insurance docs", "quantity": 1, "essential": true },
+                { "name": "Hotel confirmations", "quantity": 1, "essential": true },
+                { "name": "Emergency contacts list", "quantity": 1, "essential": false }
+              ]
+            },
+            {
+              "name": "Accessories",
+              "items": [
+                { "name": "Umbrella / rain jacket", "quantity": 1, "essential": true },
+                { "name": "Day backpack", "quantity": 1, "essential": true },
+                { "name": "Reusable water bottle", "quantity": 1, "essential": false },
+                { "name": "Neck pillow (for flight)", "quantity": 1, "essential": false }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "destination", "categories"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "checklist",
+        "description": "Generate or view a pre-trip preparation checklist with tasks, deadlines, and priority levels",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tripId": {
+              "type": "string",
+              "description": "ID of an existing trip"
+            },
+            "destination": {
+              "type": "string",
+              "description": "Trip destination"
+            },
+            "startDate": {
+              "type": "string",
+              "description": "Trip start date (YYYY-MM-DD) for calculating deadlines"
+            },
+            "action": {
+              "type": "string",
+              "description": "Action: view or generate"
+            }
+          },
+          "required": ["destination"]
+        },
+        "sampleParams": { "destination": "Tokyo, Japan", "startDate": "2026-07-10" },
+        "sampleData": {
+          "tool": "enso_trip_planner_checklist",
+          "tripId": "trip_001",
+          "destination": "Tokyo, Japan",
+          "startDate": "2026-07-10",
+          "tasks": [
+            { "title": "Check passport expiration (6+ months validity)", "status": "done", "priority": "high", "dueDate": "2026-04-10", "notes": "Must be valid until Jan 2027" },
+            { "title": "Book round-trip flights", "status": "done", "priority": "high", "dueDate": "2026-04-15" },
+            { "title": "Reserve accommodations", "status": "in_progress", "priority": "high", "dueDate": "2026-05-01" },
+            { "title": "Purchase travel insurance", "status": "pending", "priority": "high", "dueDate": "2026-05-15" },
+            { "title": "Research and book activities", "status": "pending", "priority": "medium", "dueDate": "2026-06-01" },
+            { "title": "Arrange airport transport", "status": "pending", "priority": "medium", "dueDate": "2026-06-15" },
+            { "title": "Get pocket WiFi / SIM card", "status": "pending", "priority": "medium", "dueDate": "2026-06-20" },
+            { "title": "Exchange currency / notify bank", "status": "pending", "priority": "medium", "dueDate": "2026-07-01" },
+            { "title": "Pack bags", "status": "pending", "priority": "low", "dueDate": "2026-07-08" },
+            { "title": "Download offline maps", "status": "pending", "priority": "low", "dueDate": "2026-07-09" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "destination", "tasks"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "search_dest",
+        "description": "Search for travel destinations by query, interests, budget, or climate preference",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query (e.g. 'beach destinations in Asia', 'cities under $100/day')"
+            },
+            "budget": {
+              "type": "string",
+              "description": "Budget level: budget, mid-range, or luxury"
+            },
+            "climate": {
+              "type": "string",
+              "description": "Preferred climate: tropical, temperate, cold, desert, etc."
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "best cities in Japan for first-time visitors" },
+        "sampleData": {
+          "tool": "enso_trip_planner_search_dest",
+          "query": "best cities in Japan for first-time visitors",
+          "results": [
+            {
+              "name": "Tokyo, Japan",
+              "description": "Japan's sprawling capital, blending ultra-modern technology with traditional temples and incredible food culture.",
+              "highlights": ["Temples", "Food", "Shopping", "Culture"]
+            },
+            {
+              "name": "Kyoto, Japan",
+              "description": "The cultural heart of Japan with over 2,000 temples and shrines, traditional geisha districts, and stunning bamboo groves.",
+              "highlights": ["Temples", "History", "Nature", "Tea Ceremony"]
+            },
+            {
+              "name": "Osaka, Japan",
+              "description": "Japan's kitchen — famous for street food, vibrant nightlife, and the iconic Osaka Castle.",
+              "highlights": ["Street Food", "Nightlife", "Castle", "Markets"]
+            },
+            {
+              "name": "Hiroshima, Japan",
+              "description": "A city of peace and resilience, home to the Peace Memorial and gateway to the iconic Miyajima Island.",
+              "highlights": ["History", "Peace Park", "Miyajima", "Okonomiyaki"]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "query", "results"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

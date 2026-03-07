@@ -1,0 +1,369 @@
+{
+  "version": 1,
+  "createdAt": 1709500000000,
+  "spec": {
+    "toolFamily": "photo_gallery",
+    "toolPrefix": "enso_photo_gallery_",
+    "description": "Beautiful photo gallery for browsing, presenting, and comparing photos in artistic styles with multiple layout modes",
+    "signatureId": "photo_gallery_view",
+    "tools": [
+      {
+        "suffix": "browse_gallery",
+        "description": "Browse photos in a visually rich gallery with grid, masonry, or list views. Supports filtering by style, sorting, and collection browsing.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "collection": {
+              "type": "string",
+              "description": "Collection or folder name to browse (optional, shows all if omitted)"
+            },
+            "viewMode": {
+              "type": "string",
+              "description": "View mode: grid, masonry, or list (default: grid)"
+            },
+            "sortBy": {
+              "type": "string",
+              "description": "Sort field: date, name, or style (default: date)"
+            },
+            "filterStyle": {
+              "type": "string",
+              "description": "Filter photos by artistic style (e.g. watercolor, oil painting, minimal)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photo_gallery_browse_gallery",
+          "collection": "Summer Landscapes",
+          "sortBy": "date",
+          "total": 5,
+          "photos": [
+            {
+              "id": "p1",
+              "title": "Golden Hour at the Coast",
+              "name": "golden_hour_coast.jpg",
+              "url": "/media/golden_hour_coast.jpg",
+              "thumbnail": "/media/thumb_golden_hour_coast.jpg",
+              "style": "Impressionist",
+              "description": "Warm sunset light painting the rocky coastline in soft, diffused tones",
+              "date": "2024-08-15T18:30:00Z",
+              "tags": ["sunset", "coast", "golden hour", "landscape"]
+            },
+            {
+              "id": "p2",
+              "title": "Mountain Mist",
+              "name": "mountain_mist.jpg",
+              "url": "/media/mountain_mist.jpg",
+              "thumbnail": "/media/thumb_mountain_mist.jpg",
+              "style": "Watercolor",
+              "description": "Misty mountain peaks dissolving into soft watercolor washes",
+              "date": "2024-08-14T07:00:00Z",
+              "tags": ["mountain", "mist", "landscape", "morning"]
+            },
+            {
+              "id": "p3",
+              "title": "Urban Geometry",
+              "name": "urban_geometry.jpg",
+              "url": "/media/urban_geometry.jpg",
+              "thumbnail": "/media/thumb_urban_geometry.jpg",
+              "style": "Minimal",
+              "description": "Clean architectural lines creating abstract geometric patterns",
+              "date": "2024-08-16T14:00:00Z",
+              "tags": ["architecture", "urban", "geometry", "minimal"]
+            },
+            {
+              "id": "p4",
+              "title": "Forest Path",
+              "name": "forest_path.jpg",
+              "url": "/media/forest_path.jpg",
+              "thumbnail": "/media/thumb_forest_path.jpg",
+              "style": "Oil Painting",
+              "description": "A winding path through an ancient forest rendered in rich oil textures",
+              "date": "2024-08-13T10:30:00Z",
+              "tags": ["forest", "path", "nature", "green"]
+            },
+            {
+              "id": "p5",
+              "title": "Desert Bloom",
+              "name": "desert_bloom.jpg",
+              "url": "/media/desert_bloom.jpg",
+              "thumbnail": "/media/thumb_desert_bloom.jpg",
+              "style": "Impressionist",
+              "description": "Desert wildflowers in vibrant impressionist brushstrokes",
+              "date": "2024-08-17T09:00:00Z",
+              "tags": ["desert", "flowers", "bloom", "nature"]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "photos"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "view_slideshow",
+        "description": "Present photos as an immersive full-screen slideshow with transitions, auto-advance, and captions",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "collection": {
+              "type": "string",
+              "description": "Collection name to display as slideshow"
+            },
+            "transition": {
+              "type": "string",
+              "description": "Transition effect: fade, slide, or zoom (default: fade)"
+            },
+            "interval": {
+              "type": "number",
+              "description": "Auto-advance interval in milliseconds (default: 4000)"
+            },
+            "captions": {
+              "type": "boolean",
+              "description": "Show photo captions (default: true)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "collection": "Summer Landscapes" },
+        "sampleData": {
+          "tool": "enso_photo_gallery_view_slideshow",
+          "collection": "Summer Landscapes",
+          "transition": "fade",
+          "interval": 4000,
+          "photos": [
+            {
+              "id": "p1",
+              "title": "Golden Hour at the Coast",
+              "url": "/media/golden_hour_coast.jpg",
+              "thumbnail": "/media/thumb_golden_hour_coast.jpg",
+              "style": "Impressionist",
+              "description": "Warm sunset light painting the rocky coastline"
+            },
+            {
+              "id": "p2",
+              "title": "Mountain Mist",
+              "url": "/media/mountain_mist.jpg",
+              "thumbnail": "/media/thumb_mountain_mist.jpg",
+              "style": "Watercolor",
+              "description": "Misty mountain peaks dissolving into soft washes"
+            },
+            {
+              "id": "p3",
+              "title": "Urban Geometry",
+              "url": "/media/urban_geometry.jpg",
+              "thumbnail": "/media/thumb_urban_geometry.jpg",
+              "style": "Minimal",
+              "description": "Clean architectural lines creating abstract patterns"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "photos"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "create_exhibition",
+        "description": "Curate a themed exhibition from selected photos with museum, magazine, or minimal layout styles",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Exhibition title"
+            },
+            "description": {
+              "type": "string",
+              "description": "Exhibition description or curatorial statement"
+            },
+            "collection": {
+              "type": "string",
+              "description": "Source collection to curate from"
+            },
+            "photoIds": {
+              "type": "string",
+              "description": "Comma-separated photo IDs to include (optional, curates automatically if omitted)"
+            },
+            "layout": {
+              "type": "string",
+              "description": "Layout style: museum, magazine, or minimal (default: museum)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "title": "Light & Shadow", "layout": "museum" },
+        "sampleData": {
+          "tool": "enso_photo_gallery_create_exhibition",
+          "title": "Light & Shadow",
+          "description": "An exploration of how light defines form and creates mood across different artistic styles.",
+          "layout": "museum",
+          "curator": "AI Curator",
+          "photos": [
+            {
+              "id": "p1",
+              "title": "Golden Hour at the Coast",
+              "url": "/media/golden_hour_coast.jpg",
+              "style": "Impressionist",
+              "description": "Warm sunset light painting the rocky coastline in soft, diffused tones",
+              "date": "2024-08-15T18:30:00Z"
+            },
+            {
+              "id": "p4",
+              "title": "Forest Path",
+              "url": "/media/forest_path.jpg",
+              "style": "Oil Painting",
+              "description": "A winding path through an ancient forest rendered in rich oil textures",
+              "date": "2024-08-13T10:30:00Z"
+            },
+            {
+              "id": "p3",
+              "title": "Urban Geometry",
+              "url": "/media/urban_geometry.jpg",
+              "style": "Minimal",
+              "description": "Clean architectural lines creating abstract geometric patterns",
+              "date": "2024-08-16T14:00:00Z"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "title", "photos"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "compare_styles",
+        "description": "Show a photo rendered in multiple artistic styles side by side for comparison",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "photoId": {
+              "type": "string",
+              "description": "ID of the original photo to compare"
+            },
+            "photoUrl": {
+              "type": "string",
+              "description": "URL of the original photo"
+            },
+            "collection": {
+              "type": "string",
+              "description": "Collection to find the photo in"
+            },
+            "styles": {
+              "type": "string",
+              "description": "Comma-separated list of styles to compare (e.g. 'watercolor,oil painting,minimal')"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "photoId": "p1" },
+        "sampleData": {
+          "tool": "enso_photo_gallery_compare_styles",
+          "original": {
+            "id": "p1",
+            "title": "Golden Hour at the Coast",
+            "url": "/media/golden_hour_coast.jpg",
+            "description": "Original unprocessed photograph"
+          },
+          "variants": [
+            {
+              "style": "Impressionist",
+              "url": "/media/golden_hour_coast_impressionist.jpg",
+              "description": "Soft brushstrokes with vibrant color mixing"
+            },
+            {
+              "style": "Watercolor",
+              "url": "/media/golden_hour_coast_watercolor.jpg",
+              "description": "Transparent washes with delicate bleeding effects"
+            },
+            {
+              "style": "Oil Painting",
+              "url": "/media/golden_hour_coast_oil.jpg",
+              "description": "Rich, textured impasto with deep color saturation"
+            },
+            {
+              "style": "Minimal",
+              "url": "/media/golden_hour_coast_minimal.jpg",
+              "description": "Reduced palette and simplified geometric forms"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "original", "variants"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "filter_collection",
+        "description": "Search and filter photos by style, date range, tags, or natural language query. Returns matching photos with thumbnails.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "collection": {
+              "type": "string",
+              "description": "Collection to search within (optional, searches all if omitted)"
+            },
+            "query": {
+              "type": "string",
+              "description": "Natural language search query (e.g. 'sunset landscapes', 'warm colors')"
+            },
+            "filterStyle": {
+              "type": "string",
+              "description": "Filter by artistic style name"
+            },
+            "tags": {
+              "type": "string",
+              "description": "Comma-separated tags to filter by"
+            },
+            "dateFrom": {
+              "type": "string",
+              "description": "Filter photos from this date (ISO format)"
+            },
+            "dateTo": {
+              "type": "string",
+              "description": "Filter photos up to this date (ISO format)"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Maximum results to return (default: 30)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "query": "sunset landscape" },
+        "sampleData": {
+          "tool": "enso_photo_gallery_filter_collection",
+          "query": "sunset landscape",
+          "filterStyle": null,
+          "totalScanned": 25,
+          "results": [
+            {
+              "id": "p1",
+              "title": "Golden Hour at the Coast",
+              "name": "golden_hour_coast.jpg",
+              "url": "/media/golden_hour_coast.jpg",
+              "thumbnail": "/media/thumb_golden_hour_coast.jpg",
+              "style": "Impressionist",
+              "description": "Warm sunset light painting the rocky coastline",
+              "date": "2024-08-15T18:30:00Z",
+              "tags": ["sunset", "coast", "golden hour"],
+              "matchReason": "tags: sunset; description: sunset light"
+            },
+            {
+              "id": "p5",
+              "title": "Desert Bloom",
+              "name": "desert_bloom.jpg",
+              "url": "/media/desert_bloom.jpg",
+              "thumbnail": "/media/thumb_desert_bloom.jpg",
+              "style": "Impressionist",
+              "description": "Desert wildflowers in vibrant impressionist brushstrokes",
+              "date": "2024-08-17T09:00:00Z",
+              "tags": ["desert", "flowers", "bloom"],
+              "matchReason": "description: landscape-like desert scene"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "results"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

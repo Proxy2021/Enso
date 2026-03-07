@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "createdAt": 1709500000000,
+  "spec": {
+    "toolFamily": "photo_studio",
+    "toolPrefix": "enso_photo_studio_",
+    "description": "Artistic photo processing studio for importing, styling, batch processing, and organizing photos into collections",
+    "signatureId": "photo_studio_view",
+    "tools": [
+      {
+        "suffix": "import_photos",
+        "description": "Import photos by URL or from device. Accepts single or multiple photo URLs, stores metadata including dimensions and import date.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "urls": {
+              "type": "string",
+              "description": "One or more image URLs, comma-separated or newline-separated"
+            },
+            "collection": {
+              "type": "string",
+              "description": "Optional collection name to add imported photos to"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photo_studio_import_photos",
+          "total": 4,
+          "photos": [
+            {
+              "id": "p1",
+              "name": "sunset_beach.jpg",
+              "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800",
+              "dimensions": "4032×3024",
+              "importedAt": "2024-11-15T10:30:00Z",
+              "styledVersions": 2,
+              "size": 3245678
+            },
+            {
+              "id": "p2",
+              "name": "mountain_view.jpg",
+              "url": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800",
+              "dimensions": "5472×3648",
+              "importedAt": "2024-11-15T10:31:00Z",
+              "styledVersions": 1,
+              "size": 4567890
+            },
+            {
+              "id": "p3",
+              "name": "city_lights.jpg",
+              "url": "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800",
+              "dimensions": "6000×4000",
+              "importedAt": "2024-11-15T10:32:00Z",
+              "styledVersions": 0,
+              "size": 5123456
+            },
+            {
+              "id": "p4",
+              "name": "forest_path.jpg",
+              "url": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800",
+              "dimensions": "3840×2560",
+              "importedAt": "2024-11-15T10:33:00Z",
+              "styledVersions": 3,
+              "size": 2987654
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "photos"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "apply_style",
+        "description": "Apply an artistic style to a photo. Supports watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime styles with adjustable intensity.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "photoId": {
+              "type": "string",
+              "description": "ID of the photo to style"
+            },
+            "style": {
+              "type": "string",
+              "description": "Style name: watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
+            },
+            "intensity": {
+              "type": "number",
+              "description": "Style intensity from 0-100 (default: 75)"
+            },
+            "colorPalette": {
+              "type": "string",
+              "description": "Optional color palette: warm, cool, muted, vibrant, monochrome"
+            }
+          },
+          "required": ["photoId", "style"]
+        },
+        "sampleParams": { "photoId": "p1", "style": "watercolor", "intensity": 75 },
+        "sampleData": {
+          "tool": "enso_photo_studio_apply_style",
+          "photo": {
+            "id": "p1",
+            "name": "sunset_beach.jpg",
+            "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800"
+          },
+          "style": "watercolor",
+          "intensity": 75,
+          "result": {
+            "id": "s1",
+            "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&blur=50",
+            "processedAt": "2024-11-15T10:35:00Z"
+          }
+        },
+        "requiredDataKeys": ["tool", "photo", "style", "result"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "batch_process",
+        "description": "Apply an artistic style to multiple photos at once from a collection or selection. Shows progress and results.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "collection": {
+              "type": "string",
+              "description": "Collection name to process all photos from"
+            },
+            "photoIds": {
+              "type": "string",
+              "description": "Comma-separated photo IDs to process (alternative to collection)"
+            },
+            "style": {
+              "type": "string",
+              "description": "Style name to apply: watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
+            },
+            "intensity": {
+              "type": "number",
+              "description": "Style intensity from 0-100 (default: 75)"
+            }
+          },
+          "required": ["style"]
+        },
+        "sampleParams": { "collection": "Vacation", "style": "watercolor", "intensity": 75 },
+        "sampleData": {
+          "tool": "enso_photo_studio_batch_process",
+          "collection": "Vacation",
+          "style": "watercolor",
+          "intensity": 75,
+          "total": 4,
+          "completed": 4,
+          "status": "complete",
+          "results": [
+            { "id": "p1", "name": "sunset_beach.jpg", "originalUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400", "styledUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&blur=50", "status": "success" },
+            { "id": "p2", "name": "mountain_view.jpg", "originalUrl": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400", "styledUrl": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400&blur=50", "status": "success" },
+            { "id": "p3", "name": "city_lights.jpg", "originalUrl": "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=400", "styledUrl": "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=400&blur=50", "status": "success" },
+            { "id": "p4", "name": "forest_path.jpg", "originalUrl": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400", "styledUrl": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&blur=50", "status": "success" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "style", "results"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "manage_collection",
+        "description": "Create, rename, delete, view, and list photo collections. Organize original and styled photos into named albums.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: create, list, view, rename, delete, add, remove"
+            },
+            "name": {
+              "type": "string",
+              "description": "Collection name"
+            },
+            "newName": {
+              "type": "string",
+              "description": "New name for rename action"
+            },
+            "photoId": {
+              "type": "string",
+              "description": "Photo ID for add/remove actions"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "list" },
+        "sampleData": {
+          "tool": "enso_photo_studio_manage_collection",
+          "action": "list",
+          "collections": [
+            { "name": "Vacation", "count": 12, "coverUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400", "createdAt": "2024-11-10T08:00:00Z" },
+            { "name": "Portraits", "count": 8, "coverUrl": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400", "createdAt": "2024-11-12T14:00:00Z" },
+            { "name": "Nature", "count": 15, "coverUrl": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400", "createdAt": "2024-11-14T09:00:00Z" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "compare_versions",
+        "description": "Show original photo alongside all styled versions for side-by-side comparison",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "photoId": {
+              "type": "string",
+              "description": "ID of the photo to compare versions for"
+            }
+          },
+          "required": ["photoId"]
+        },
+        "sampleParams": { "photoId": "p1" },
+        "sampleData": {
+          "tool": "enso_photo_studio_compare_versions",
+          "photoId": "p1",
+          "original": {
+            "id": "p1",
+            "name": "sunset_beach.jpg",
+            "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800",
+            "dimensions": "4032×3024"
+          },
+          "versions": [
+            { "id": "s1", "style": "watercolor", "intensity": 75, "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&blur=50", "createdAt": "2024-11-15T10:35:00Z" },
+            { "id": "s2", "style": "oil_painting", "intensity": 85, "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&blur=80", "createdAt": "2024-11-15T11:00:00Z" },
+            { "id": "s3", "style": "vintage", "intensity": 60, "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&sat=-50", "createdAt": "2024-11-15T11:15:00Z" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "photoId", "original", "versions"],
+        "isPrimary": false
+      }
+    ]
+  }
+}
