@@ -57,7 +57,8 @@ const DEFAULT_MAX_CHARS = 12000;
 const DEFAULT_SEARCH_DEPTH = 4;
 
 // File-type detection for open_file
-const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"]);
+const RAW_EXTS = new Set([".3fr", ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raf", ".orf", ".rw2", ".pef", ".srw"]);
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ...RAW_EXTS]);
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".avi", ".mov", ".mkv", ".m4v", ".mts"]);
 
 /**

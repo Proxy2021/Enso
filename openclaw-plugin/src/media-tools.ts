@@ -28,8 +28,9 @@ type ProcessPhotosParams = { inputDir: string; style: string; outputSubfolder?: 
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const MEDIA_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".m4v", ".pdf"]);
-const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+const RAW_EXTS = new Set([".3fr", ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raf", ".orf", ".rw2", ".pef", ".srw"]);
+const MEDIA_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".m4v", ".pdf", ...RAW_EXTS]);
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ...RAW_EXTS]);
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
 const DEFAULT_MEDIA_LIMIT = 120;
 const THUMB_DIR = join(homedir(), ".openclaw", "enso-apps", "multimedia", "thumbs");
@@ -63,7 +64,7 @@ function safeResolvePath(inputPath: string): { ok: true; path: string } | { ok: 
 }
 
 function mediaTypeForExt(ext: string): "image" | "video" | "document" | "other" {
-  if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext)) return "image";
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(ext) || RAW_EXTS.has(ext)) return "image";
   if ([".mp4", ".webm", ".mov", ".m4v"].includes(ext)) return "video";
   if ([".pdf"].includes(ext)) return "document";
   return "other";
