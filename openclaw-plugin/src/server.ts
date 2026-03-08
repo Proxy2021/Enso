@@ -694,10 +694,13 @@ export async function startEnsoServer(opts: {
   const server: Server = createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws" });
 
+  /** Cleanup timers for disconnected clients — keyed by clientId. */
+  const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   wss.on("connection", (ws, req) => {
     // ── WebSocket token auth ──
+    const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
     if (accessToken) {
-      const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
       const origin = req.headers.origin ?? "";
       const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`;
       if (!isSameOrigin && wsUrl.searchParams.get("token") !== accessToken) {
@@ -706,27 +709,48 @@ export async function startEnsoServer(opts: {
       }
     }
 
-    const connectionId = randomUUID().slice(0, 8);
-    const sessionKey = `enso_${connectionId}`;
-    runtime.log?.(`[enso] client connected: ${connectionId}`);
-    logAction({ ts: Date.now(), type: "system", category: "system:connect", message: `Client connected: ${connectionId}` });
+    // ── Persistent client identity (reconnect-safe) ──
+    const clientId = wsUrl.searchParams.get("clientId") ?? randomUUID().slice(0, 8);
+    const existing = clients.get(clientId);
 
-    const send = (msg: ServerMessage) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(msg));
-      }
-    };
-
-    const client: ConnectedClient = { id: connectionId, sessionKey, ws, send };
-    clients.set(connectionId, client);
+    let client: ConnectedClient;
+    if (existing) {
+      // Reconnect — swap ws and send on the existing object so all captured
+      // references (runClaudeCode, orchestrator, build-via-claude) automatically
+      // route to the new socket.
+      existing.ws = ws;
+      existing.send = (msg: ServerMessage) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+      };
+      client = existing;
+      // Cancel any pending cleanup timer
+      const timer = cleanupTimers.get(clientId);
+      if (timer) { clearTimeout(timer); cleanupTimers.delete(clientId); }
+      runtime.log?.(`[enso] client reconnected: ${clientId}`);
+      logAction({ ts: Date.now(), type: "system", category: "system:reconnect", message: `Client reconnected: ${clientId}` });
+    } else {
+      // New connection
+      const sessionKey = `enso_${clientId}`;
+      client = {
+        id: clientId,
+        sessionKey,
+        ws,
+        send: (msg: ServerMessage) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+        },
+      };
+      clients.set(clientId, client);
+      runtime.log?.(`[enso] client connected: ${clientId}`);
+      logAction({ ts: Date.now(), type: "system", category: "system:connect", message: `Client connected: ${clientId}` });
+    }
 
     // Send current mode + available tool families + project path to newly connected client
     const toolFamilies = APP_CATALOG.map((c) => ({ appId: c.appId, toolFamily: c.appId, description: c.description }));
     const ensoProjectPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-    send({
+    client.send({
       id: randomUUID(),
       runId: randomUUID(),
-      sessionKey,
+      sessionKey: client.sessionKey,
       seq: 0,
       state: "final",
       settings: { mode: account.mode ?? "full", toolFamilies, ensoProjectPath },
@@ -737,10 +761,10 @@ export async function startEnsoServer(opts: {
     try {
       const unackedFixes = getUnacknowledgedFixes();
       if (unackedFixes.length > 0) {
-        send({
+        client.send({
           id: randomUUID(),
           runId: randomUUID(),
-          sessionKey,
+          sessionKey: client.sessionKey,
           seq: 0,
           state: "final",
           resolvedBugs: unackedFixes.map((f) => ({
@@ -757,6 +781,12 @@ export async function startEnsoServer(opts: {
     } catch (err) {
       logError("server", "Failed to send resolved bugs", err instanceof Error ? err : undefined);
     }
+
+    // Local aliases so the message handler continues to work unchanged.
+    // `send` delegates through `client.send` which is swapped on reconnect.
+    const send = (msg: ServerMessage) => client.send(msg);
+    const sessionKey = client.sessionKey;
+    const connectionId = clientId; // backward-compat alias for senderNick, shell cleanup, etc.
 
     ws.on("message", async (raw) => {
       try {
@@ -824,11 +854,13 @@ export async function startEnsoServer(opts: {
                 if (classification.complexity === "one-off") {
                   runtime.log?.(`[enso] task-router: one-off → "${msg.text.slice(0, 60)}"`);
                   const runId = randomUUID();
+                  const targetCardId = randomUUID();
                   await runClaudeCode({
                     prompt: msg.text,
                     cwd: ensoProjectPath,
                     client,
                     runId,
+                    targetCardId,
                   });
                   break;
                 }
@@ -1593,14 +1625,20 @@ export async function startEnsoServer(opts: {
     });
 
     ws.on("close", () => {
-      // Clean up any shell PTY sessions owned by this client
-      if (shellPty) {
-        const killed = shellPty.destroyClientSessions(connectionId);
-        if (killed > 0) runtime.log?.(`[enso:shell] cleaned up ${killed} session(s) for ${connectionId}`);
-      }
-      clients.delete(connectionId);
-      runtime.log?.(`[enso] client disconnected: ${connectionId}`);
-      logAction({ ts: Date.now(), type: "system", category: "system:disconnect", message: `Client disconnected: ${connectionId}` });
+      runtime.log?.(`[enso] client disconnected: ${clientId}`);
+      logAction({ ts: Date.now(), type: "system", category: "system:disconnect", message: `Client disconnected: ${clientId}` });
+      // Delay cleanup — the client may reconnect within 60 seconds.
+      // If it does, the reconnect handler cancels this timer and swaps the ws.
+      const timer = setTimeout(() => {
+        cleanupTimers.delete(clientId);
+        if (shellPty) {
+          const killed = shellPty.destroyClientSessions(clientId);
+          if (killed > 0) runtime.log?.(`[enso:shell] cleaned up ${killed} session(s) for ${clientId}`);
+        }
+        clients.delete(clientId);
+        runtime.log?.(`[enso] client cleanup: ${clientId} (no reconnect after 60s)`);
+      }, 60_000);
+      cleanupTimers.set(clientId, timer);
     });
   });
 

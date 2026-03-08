@@ -15,6 +15,16 @@ interface WSClient {
   send: (msg: ClientMessage) => void;
 }
 
+/** Persistent client identity — survives reconnects within the same tab. */
+function getClientId(): string {
+  let id = sessionStorage.getItem("enso-clientId");
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem("enso-clientId", id);
+  }
+  return id;
+}
+
 export function createWSClient(options: WSClientOptions): WSClient {
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -26,7 +36,10 @@ export function createWSClient(options: WSClientOptions): WSClient {
     intentionalClose = false;
     options.onStateChange("connecting", false);
 
-    ws = new WebSocket(options.url);
+    // Append persistent clientId so backend can swap WS on reconnect
+    const url = new URL(options.url, location.href);
+    url.searchParams.set("clientId", getClientId());
+    ws = new WebSocket(url.toString());
 
     ws.onopen = () => {
       const isReconnect = hasConnectedBefore;
