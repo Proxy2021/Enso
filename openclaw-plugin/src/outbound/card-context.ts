@@ -29,7 +29,7 @@ export interface CardContext {
    * to produce this card's data. Enables card actions to bypass the agent
    * and call the tool directly via the plugin registry.
    */
-  nativeToolHint?: {
+  appToolHint?: {
     /** The full tool name that produced the original data, e.g. "alpharank_latest_predictions" */
     toolName: string;
     /** The params the agent passed to the tool */
@@ -57,7 +57,7 @@ export function registerCardContext(cardId: string, ctx: {
   account: ResolvedEnsoAccount;
   mode: "im" | "ui" | "full";
   actionHistory: Array<{ action: string; payload: unknown; timestamp: number }>;
-  nativeToolHint?: { toolName: string; params: Record<string, unknown>; handlerPrefix: string };
+  appToolHint?: { toolName: string; params: Record<string, unknown>; handlerPrefix: string };
   interactionMode: "llm" | "tool";
   toolFamily?: string;
   signatureId?: string;
@@ -98,7 +98,7 @@ export function getCardState(cardId: string): {
     toolFamily: ctx.toolFamily,
     signatureId: ctx.signatureId,
     coverageStatus: ctx.coverageStatus,
-    toolMeta: ctx.nativeToolHint ? { toolId: ctx.nativeToolHint.toolName } : undefined,
+    toolMeta: ctx.appToolHint ? { toolId: ctx.appToolHint.toolName } : undefined,
   };
 }
 

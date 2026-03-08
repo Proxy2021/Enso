@@ -123,8 +123,8 @@ vi.mock("./action-log.js", () => ({
   logFix: vi.fn(),
 }));
 
-vi.mock("./tool-families/catalog.js", () => ({
-  TOOL_FAMILY_CAPABILITIES: [],
+vi.mock("./app-catalog.js", () => ({
+  APP_CATALOG: [],
 }));
 
 // ── Helpers ──
@@ -459,7 +459,7 @@ describe("handlePluginCardAction", () => {
       mode: "full",
       actionHistory: [],
       interactionMode: "tool",
-      nativeToolHint: {
+      appToolHint: {
         toolName: "test_latest_data",
         params: { period: "1d" },
         handlerPrefix: "test_",
@@ -509,7 +509,7 @@ describe("handlePluginCardAction", () => {
       mode: "ui",
       actionHistory: [],
       interactionMode: "tool",
-      nativeToolHint: {
+      appToolHint: {
         toolName: "test_latest_data",
         params: { period: "1d" },
         handlerPrefix: "test_",
@@ -692,7 +692,7 @@ describe("handlePluginCardAction", () => {
       toolFamily: "alpharank",
       signatureId: "ranked_predictions_table",
       coverageStatus: "covered",
-      nativeToolHint: {
+      appToolHint: {
         toolName: "alpharank_latest_predictions",
         params: { top_n: 10 },
         handlerPrefix: "alpharank_",
@@ -756,7 +756,7 @@ describe("handlePluginCardAction", () => {
       toolFamily: "filesystem",
       signatureId: "directory_listing",
       coverageStatus: "covered",
-      nativeToolHint: {
+      appToolHint: {
         toolName: "enso_fs_list_directory",
         params: { path: "/Users/demo/Desktop" },
         handlerPrefix: "enso_fs_",
@@ -864,7 +864,7 @@ describe("handlePluginCardAction", () => {
       toolFamily: "system_official_mail",
       signatureId: "system_auto_official_mail",
       coverageStatus: "covered",
-      nativeToolHint: {
+      appToolHint: {
         toolName: "official_mail_list_threads",
         params: { limit: 20 },
         handlerPrefix: "official_mail_",

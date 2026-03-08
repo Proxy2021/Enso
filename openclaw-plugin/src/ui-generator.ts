@@ -866,8 +866,8 @@ export async function selectToolForContent(params: {
   geminiApiKey: string;
   toolFamilies: Array<{
     toolFamily: string;
-    fallbackToolName: string;
-    actionSuffixes: string[];
+    primaryTool: string;
+    actions: string[];
     description?: string;
   }>;
 }): Promise<ToolSelectionResult | null> {
@@ -877,8 +877,8 @@ export async function selectToolForContent(params: {
   const familiesPayload = params.toolFamilies.map((f) => ({
     family: f.toolFamily,
     description: f.description,
-    defaultTool: f.fallbackToolName,
-    actions: f.actionSuffixes,
+    defaultTool: f.primaryTool,
+    actions: f.actions,
   }));
 
   const prompt = `You are Enso's tool selector.

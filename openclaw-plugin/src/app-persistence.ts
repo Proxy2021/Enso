@@ -5,19 +5,19 @@ import { fileURLToPath } from "node:url";
 import type { PluginSpec, PluginToolDef } from "./tool-factory.js";
 import type { ExecutorContext } from "./types.js";
 import {
-  registerGeneratedTool,
-  registerGeneratedTemplateCode,
+  registerAppTool,
+  registerAppTemplate,
   registerToolTemplate,
   registerToolTemplateDataHint,
   registerDynamicAppPrefix,
-  unregisterGeneratedTool,
-  unregisterGeneratedTemplateCode,
+  unregisterAppTool,
+  unregisterAppTemplate,
   unregisterToolTemplate,
   unregisterToolTemplateDataHints,
   executeToolDirect,
   type ToolTemplate,
 } from "./native-tools/registry.js";
-import { addCapability, removeCapability } from "./tool-families/catalog.js";
+import { registerApp, unregisterApp as unregisterAppFromCatalog } from "./app-catalog.js";
 import { getDocCollection } from "./persistence.js";
 import { logAction, logError } from "./action-log.js";
 
@@ -25,8 +25,8 @@ import { logAction, logError } from "./action-log.js";
 
 const PLUGIN_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Codebase apps directory — checked into git, ships with the project */
-export const CODEBASE_APPS_DIR = path.join(PLUGIN_DIR, "apps");
+/** Shipped apps directory — checked into git, ships with the project */
+export const SHIPPED_APPS_DIR = path.join(PLUGIN_DIR, "apps");
 
 // ── Auto-heal: Spec Tracking ──
 
@@ -48,7 +48,7 @@ export function getAppSpecForTool(toolName: string): PluginSpec | undefined {
 
 /** Persist a fixed executor body to disk (user apps first, then codebase). */
 export function persistExecutorFix(toolFamily: string, suffix: string, body: string): void {
-  for (const dir of [appsDir(), CODEBASE_APPS_DIR]) {
+  for (const dir of [appsDir(), SHIPPED_APPS_DIR]) {
     const execPath = path.join(dir, toolFamily, "executors", `${suffix}.js`);
     if (fs.existsSync(execPath)) {
       fs.writeFileSync(execPath, body, "utf-8");
@@ -61,7 +61,7 @@ export function persistExecutorFix(toolFamily: string, suffix: string, body: str
 
 /** Persist a fixed template JSX to disk (user apps first, then codebase). */
 export function persistTemplateFix(toolFamily: string, templateJSX: string): void {
-  for (const dir of [appsDir(), CODEBASE_APPS_DIR]) {
+  for (const dir of [appsDir(), SHIPPED_APPS_DIR]) {
     const templatePath = path.join(dir, toolFamily, "template.jsx");
     if (fs.existsSync(templatePath)) {
       fs.writeFileSync(templatePath, templateJSX, "utf-8");
@@ -101,14 +101,14 @@ const EXECUTOR_CTX_MAX_DEPTH = 3;
 const EXECUTOR_FETCH_MAX_BYTES = 512 * 1024; // 512KB
 const STORE_MAX_SIZE = 1024 * 1024; // 1MB per family store
 
-// ── Codebase App Tracking ──
+// ── Shipped App Tracking ──
 
-/** Tracks which tool families have a version in the codebase apps directory */
-const codebaseFamilies = new Set<string>();
+/** Tracks which apps have a version in the shipped apps directory */
+const shippedAppIds = new Set<string>();
 
-/** Check whether a tool family has a codebase version (in openclaw-plugin/apps/) */
-export function isCodebaseApp(toolFamily: string): boolean {
-  return codebaseFamilies.has(toolFamily);
+/** Check whether an app has a shipped version (in openclaw-plugin/apps/) */
+export function isShippedApp(appId: string): boolean {
+  return shippedAppIds.has(appId);
 }
 
 // ── Key-Value Store ──
@@ -446,20 +446,20 @@ export function loadApps(basePath?: string): LoadedApp[] {
 /**
  * Load apps from both codebase (openclaw-plugin/apps/) and user (~/.openclaw/enso-apps/)
  * directories. User apps override codebase apps with the same toolFamily (for dev iteration).
- * Updates the codebaseFamilies tracking set.
+ * Updates the shippedAppIds tracking set.
  */
 export function loadAllApps(basePath?: string): LoadedApp[] {
-  const codebaseApps = loadAppsFromDir(CODEBASE_APPS_DIR);
+  const codebaseApps = loadAppsFromDir(SHIPPED_APPS_DIR);
   const userApps = loadApps(basePath);
 
   // Reset codebase tracking
-  codebaseFamilies.clear();
+  shippedAppIds.clear();
 
   // Build merged map: codebase first, user overrides
   const merged = new Map<string, LoadedApp>();
   for (const app of codebaseApps) {
     merged.set(app.spec.toolFamily, app);
-    codebaseFamilies.add(app.spec.toolFamily);
+    shippedAppIds.add(app.spec.toolFamily);
   }
   for (const app of userApps) {
     if (merged.has(app.spec.toolFamily)) {
@@ -494,7 +494,7 @@ export function registerLoadedApp(app: LoadedApp): void {
       ctx: ExecutorContext,
     ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
-    registerGeneratedTool({
+    registerAppTool({
       name: toolName,
       description: toolDef.description,
       parameters: toolDef.parameters,
@@ -538,14 +538,14 @@ export function registerLoadedApp(app: LoadedApp): void {
   });
 
   // Register template JSX code
-  registerGeneratedTemplateCode(spec.signatureId, app.templateJSX);
+  registerAppTemplate(spec.signatureId, app.templateJSX);
 
-  // Register in capability catalog
-  const fallbackToolName = `${spec.toolPrefix}${primaryDef.suffix}`;
-  addCapability({
-    toolFamily: spec.toolFamily,
-    fallbackToolName,
-    actionSuffixes,
+  // Register in app catalog
+  const primaryToolName = `${spec.toolPrefix}${primaryDef.suffix}`;
+  registerApp({
+    appId: spec.toolFamily,
+    primaryTool: primaryToolName,
+    actions: actionSuffixes,
     signatureId: spec.signatureId,
     description: spec.description,
   });
@@ -559,11 +559,11 @@ export function registerLoadedApp(app: LoadedApp): void {
  * Load and register apps from both codebase (openclaw-plugin/apps/) and user
  * (~/.openclaw/enso-apps/) directories. User apps override codebase versions.
  */
-export function loadAndRegisterSavedApps(basePath?: string): number {
+export function loadAndRegisterApps(basePath?: string): number {
   const apps = loadAllApps(basePath);
   for (const app of apps) {
     try {
-      const source = codebaseFamilies.has(app.spec.toolFamily) ? "codebase" : "user";
+      const source = shippedAppIds.has(app.spec.toolFamily) ? "shipped" : "user";
       registerLoadedApp(app);
       logAction({ ts: Date.now(), type: "action", category: "persistence", message: `loaded ${source} app "${app.spec.toolFamily}"` });
     } catch (err) {
@@ -588,7 +588,7 @@ export function loadAndRegisterSavedApps(basePath?: string): number {
  * discover and invoke its tools. Idempotent — never overwrites existing files.
  *
  * - All apps: writes to ~/.openclaw/skills/<family>/SKILL.md (managed skills dir)
- * - Codebase apps: also writes to openclaw-plugin/skills/<family>/SKILL.md (plugin-shipped)
+ * - Shipped apps: also writes to openclaw-plugin/skills/<family>/SKILL.md (plugin-shipped)
  */
 function ensureSkillMd(app: LoadedApp, basePath?: string): void {
   const family = app.spec.toolFamily;
@@ -602,14 +602,14 @@ function ensureSkillMd(app: LoadedApp, basePath?: string): void {
     logAction({ ts: Date.now(), type: "action", category: "persistence", message: `generated SKILL.md for "${family}" at ${managedSkillDir}` });
   }
 
-  // 2. For codebase apps, also ensure plugin-shipped skill exists
-  if (codebaseFamilies.has(family)) {
+  // 2. For shipped apps, also ensure plugin-shipped skill exists
+  if (shippedAppIds.has(family)) {
     const pluginSkillDir = path.join(PLUGIN_DIR, "skills", family);
     const pluginSkillPath = path.join(pluginSkillDir, "SKILL.md");
     if (!fs.existsSync(pluginSkillPath)) {
       fs.mkdirSync(pluginSkillDir, { recursive: true });
       fs.writeFileSync(pluginSkillPath, generateSkillMd(app.spec));
-      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `generated plugin SKILL.md for codebase app "${family}" (consider committing)` });
+      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `generated plugin SKILL.md for shipped app "${family}" (consider committing)` });
     }
   }
 }
@@ -637,17 +637,17 @@ export function deleteApp(toolFamily: string, basePath?: string): boolean {
 }
 
 /**
- * Copy an app from the user directory (~/.openclaw/enso-apps/<family>/)
- * to the codebase directory (openclaw-plugin/apps/<family>/).
+ * Promote an app from the user directory (~/.openclaw/enso-apps/<family>/)
+ * to the shipped directory (openclaw-plugin/apps/<family>/).
  * The user can then `git add` and `git commit` the result.
  */
-export function saveAppToCodebase(toolFamily: string, basePath?: string): { success: boolean; path?: string; error?: string } {
+export function promoteApp(toolFamily: string, basePath?: string): { success: boolean; path?: string; error?: string } {
   const sourceDir = path.join(appsDir(basePath), toolFamily);
   if (!fs.existsSync(sourceDir)) {
     return { success: false, error: `App "${toolFamily}" not found in user directory` };
   }
 
-  const targetDir = path.join(CODEBASE_APPS_DIR, toolFamily);
+  const targetDir = path.join(SHIPPED_APPS_DIR, toolFamily);
 
   try {
     // Create target directory
@@ -693,9 +693,9 @@ export function saveAppToCodebase(toolFamily: string, basePath?: string): { succ
     }
 
     // Update tracking
-    codebaseFamilies.add(toolFamily);
+    shippedAppIds.add(toolFamily);
 
-    logAction({ ts: Date.now(), type: "action", category: "persistence", message: `saved app "${toolFamily}" to codebase at ${targetDir}` });
+    logAction({ ts: Date.now(), type: "action", category: "persistence", message: `promoted app "${toolFamily}" to shipped at ${targetDir}` });
     return { success: true, path: targetDir };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -706,15 +706,15 @@ export function saveAppToCodebase(toolFamily: string, basePath?: string): { succ
  * Unregister a loaded app from all in-memory registries.
  * This reverses everything `registerLoadedApp()` does.
  */
-export function unregisterApp(spec: PluginSpec): void {
+export function unregisterLoadedApp(spec: PluginSpec): void {
   // Remove generated tool executors
   for (const toolDef of spec.tools) {
     const toolName = `${spec.toolPrefix}${toolDef.suffix}`;
-    unregisterGeneratedTool(toolName);
+    unregisterAppTool(toolName);
   }
 
   // Remove template code
-  unregisterGeneratedTemplateCode(spec.signatureId);
+  unregisterAppTemplate(spec.signatureId);
 
   // Remove tool template (signature)
   unregisterToolTemplate(spec.toolFamily, spec.signatureId);
@@ -722,15 +722,15 @@ export function unregisterApp(spec: PluginSpec): void {
   // Remove data hints
   unregisterToolTemplateDataHints(spec.toolFamily);
 
-  // Remove from capability catalog
-  removeCapability(spec.toolFamily);
+  // Remove from app catalog
+  unregisterAppFromCatalog(spec.toolFamily);
 
   logAction({ ts: Date.now(), type: "action", category: "persistence", message: `unregistered app "${spec.toolFamily}" from memory` });
 }
 
 /**
  * Delete ALL user-created apps — disk files + in-memory registries.
- * Codebase apps (in openclaw-plugin/apps/) are NOT deleted — they are managed via git.
+ * Shipped apps (in openclaw-plugin/apps/) are NOT deleted — they are managed via git.
  * Returns the list of tool families that were deleted.
  */
 export function deleteAllApps(basePath?: string): string[] {
@@ -740,7 +740,7 @@ export function deleteAllApps(basePath?: string): string[] {
   for (const app of apps) {
     try {
       // Unregister from memory
-      unregisterApp(app.spec);
+      unregisterLoadedApp(app.spec);
       // Delete from disk
       deleteApp(app.spec.toolFamily, basePath);
       deleted.push(app.spec.toolFamily);

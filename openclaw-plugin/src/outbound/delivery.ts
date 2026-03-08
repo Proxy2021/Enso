@@ -6,7 +6,7 @@ import { toMediaUrl } from "../server.js";
 import type { AgentStep } from "@shared/types";
 import type { ServerMessage } from "../types.js";
 import { selectToolForContent } from "../ui-generator.js";
-import { TOOL_FAMILY_CAPABILITIES } from "../tool-families/catalog.js";
+import { APP_CATALOG } from "../app-catalog.js";
 import {
   inferToolTemplate,
   executeToolDirect,
@@ -16,6 +16,9 @@ import {
   isToolRegistered,
   normalizeDataForToolTemplate,
 } from "../native-tools/registry.js";
+import { consumeRecentToolCall } from "../native-tools/tool-call-store.js";
+import type { ToolCallRecord } from "../native-tools/tool-call-store.js";
+import { getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts } from "./card-context.js";
@@ -109,6 +112,145 @@ export async function deliverEnsoReply(params: {
 
   client.send(msg);
   statusSink?.({ lastOutboundAt: Date.now() });
+
+  // ── Auto-enhance: if the agent used a registered tool, render the app card ──
+  // This replaces the old background compat check (which required an LLM call).
+  // Deterministic: did the agent call a tool? If yes, and a template exists, show app view.
+  if (!toolMeta && !targetCardId) {
+    const recentCall = consumeRecentToolCall();
+    if (recentCall) {
+      autoEnhanceFromToolCall(recentCall, msgId, client, params.account).catch((err) => {
+        logError("delivery", "Auto-enhance failed (non-fatal)", err, { cardId: msgId });
+      });
+    }
+  }
+}
+
+// ── Auto-enhance helpers ──
+
+/**
+ * Parse the raw tool result captured by the after_tool_call hook
+ * into structured data suitable for template rendering.
+ */
+function parseToolCallResult(result: unknown): Record<string, unknown> | null {
+  if (!result || typeof result !== "object") return null;
+
+  // AgentToolResult format: { content: [{ type: "text", text: "..." }] }
+  const content = (result as { content?: Array<{ type: string; text?: string }> }).content;
+  if (!Array.isArray(content)) return null;
+
+  const textParts = content.filter((c) => c.type === "text" && c.text).map((c) => c.text!);
+  if (textParts.length === 0) return null;
+
+  // Try parsing each text part as JSON (tool results are typically JSON-stringified)
+  for (const text of textParts) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+    } catch { /* not JSON — skip */ }
+  }
+
+  return null;
+}
+
+/**
+ * Automatically enhance a text card with an app view when the agent used
+ * a registered tool. Sends an enhanceResult targeting the text card's ID
+ * so the frontend shows both the text response AND the interactive app.
+ *
+ * Key advantages over the old background compat check:
+ * - No LLM call — deterministic (did agent use a tool? yes/no)
+ * - No double execution — reuses captured tool data
+ * - Immediate — no 1-2s Gemini Flash latency
+ * - Accurate — no false positive/negative tool matching
+ */
+async function autoEnhanceFromToolCall(
+  toolCall: ToolCallRecord,
+  cardId: string,
+  client: ConnectedClient,
+  account: ResolvedEnsoAccount,
+): Promise<void> {
+  // 1. Parse tool result data from the captured call
+  const data = parseToolCallResult(toolCall.result);
+  if (!data) {
+    logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhance: no parseable data from ${toolCall.toolName}`, cardId });
+    return;
+  }
+
+  // 2. Find matching template
+  const template = inferToolTemplate({ toolName: toolCall.toolName, data });
+  if (!template) {
+    logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhance: no template for ${toolCall.toolName}`, cardId });
+    return;
+  }
+  const templateCode = getToolTemplateCode(template);
+  if (!templateCode) {
+    logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhance: no template code for ${template.signatureId}`, cardId });
+    return;
+  }
+
+  // 3. Normalize data for the template
+  const normalized = normalizeDataForToolTemplate(template, data);
+
+  // 4. Derive handler prefix for card actions
+  const cap = getApp(template.toolFamily);
+  const toolName = toolCall.toolName;
+  let handlerPrefix: string;
+  if (cap) {
+    const fallbackSuffix = cap.actions.find((s) => toolName.endsWith(`_${s}`));
+    handlerPrefix = fallbackSuffix
+      ? toolName.slice(0, -fallbackSuffix.length)
+      : toolName.replace(/_[^_]+$/, "_");
+  } else {
+    // For tools not in APP_CATALOG, derive from the plugin registry
+    const pluginId = getToolPluginId(toolName);
+    handlerPrefix = pluginId ? getPluginToolPrefix(pluginId) : toolName.replace(/_[^_]+$/, "_");
+  }
+
+  // 5. Register card context so card actions work in app mode
+  cardContexts.set(cardId, {
+    cardId,
+    originalPrompt: "",
+    originalResponse: "",
+    currentData: structuredClone(normalized),
+    geminiApiKey: account.geminiApiKey,
+    account,
+    mode: "full",
+    actionHistory: [],
+    appToolHint: {
+      toolName,
+      params: toolCall.params,
+      handlerPrefix,
+    },
+    interactionMode: "tool",
+    toolFamily: template.toolFamily,
+    signatureId: template.signatureId,
+    coverageStatus: template.coverageStatus,
+  });
+
+  // 6. Send enhanceResult to auto-show app view alongside text
+  client.send({
+    id: randomUUID(),
+    runId: randomUUID(),
+    sessionKey: client.sessionKey,
+    seq: 0,
+    state: "final",
+    targetCardId: cardId,
+    enhanceResult: {
+      data: normalized,
+      generatedUI: templateCode,
+      cardMode: {
+        interactionMode: "tool",
+        toolFamily: template.toolFamily,
+        appId: template.toolFamily,
+        signatureId: template.signatureId,
+        coverageStatus: template.coverageStatus,
+      },
+    },
+    timestamp: Date.now(),
+  });
+
+  logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhanced: ${toolName} → ${template.toolFamily}/${template.signatureId}`, cardId });
 }
 
 /**
@@ -150,16 +292,16 @@ export async function handleCardEnhance(params: {
   // When a family is pre-selected from the menu, skip the LLM tool selection call
   let selection: { toolFamily: string; toolName: string; params: Record<string, unknown> } | null;
   if (params.suggestedFamily) {
-    const cap = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === params.suggestedFamily);
+    const cap = APP_CATALOG.find((c) => c.appId === params.suggestedFamily);
     if (cap) {
-      selection = { toolFamily: cap.toolFamily, toolName: cap.fallbackToolName, params: {} };
-      logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Family pre-selected: ${cap.toolFamily}, using fallback tool ${cap.fallbackToolName}`, cardId });
+      selection = { toolFamily: cap.appId, toolName: cap.primaryTool, params: {} };
+      logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Family pre-selected: ${cap.appId}, using fallback tool ${cap.primaryTool}`, cardId });
     } else {
       logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Suggested family "${params.suggestedFamily}" not found, falling back to LLM selection`, cardId });
-      selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: TOOL_FAMILY_CAPABILITIES });
+      selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG });
     }
   } else {
-    selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: TOOL_FAMILY_CAPABILITIES });
+    selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG });
   }
 
   if (!selection) {
@@ -174,20 +316,20 @@ export async function handleCardEnhance(params: {
   // instead of the registered "enso_meal_grocery_list". Derive the real prefix
   // by stripping the fallback tool's own action suffix.
   let toolName = selection.toolName;
-  const capability = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === selection.toolFamily);
+  const capability = APP_CATALOG.find((c) => c.appId === selection.toolFamily);
   if (capability) {
-    const fallbackSuffix = capability.actionSuffixes.find((s) =>
-      capability.fallbackToolName.endsWith(`_${s}`),
+    const fallbackSuffix = capability.actions.find((s) =>
+      capability.primaryTool.endsWith(`_${s}`),
     );
     const familyPrefix = fallbackSuffix
-      ? capability.fallbackToolName.slice(0, -fallbackSuffix.length)
-      : capability.fallbackToolName.replace(/_[^_]+$/, "_");
+      ? capability.primaryTool.slice(0, -fallbackSuffix.length)
+      : capability.primaryTool.replace(/_[^_]+$/, "_");
 
-    const matchedSuffix = capability.actionSuffixes.find((s) => toolName.endsWith(`_${s}`));
+    const matchedSuffix = capability.actions.find((s) => toolName.endsWith(`_${s}`));
     if (matchedSuffix) {
       toolName = `${familyPrefix}${matchedSuffix}`;
     } else {
-      toolName = capability.fallbackToolName;
+      toolName = capability.primaryTool;
     }
   }
 
@@ -269,13 +411,13 @@ export async function handleCardEnhance(params: {
   // If the tool fails, retry: different tool → family fallback; same tool → parent directory
   if (!toolResult.success && capability) {
     const fallbackParams = { ...execParams };
-    if (toolName !== capability.fallbackToolName) {
-      logAction({ ts: Date.now(), type: "action", category: "enhance", message: `${toolName} failed (${toolResult.error}), retrying with ${capability.fallbackToolName}`, cardId });
+    if (toolName !== capability.primaryTool) {
+      logAction({ ts: Date.now(), type: "action", category: "enhance", message: `${toolName} failed (${toolResult.error}), retrying with ${capability.primaryTool}`, cardId });
       if (typeof fallbackParams.path === "string" && fallbackParams.path.includes("/")) {
         const parentDir = fallbackParams.path.replace(/\/[^/]+$/, "");
         if (parentDir) fallbackParams.path = parentDir;
       }
-      toolName = capability.fallbackToolName;
+      toolName = capability.primaryTool;
       toolResult = await executeToolDirect(toolName, fallbackParams);
     } else if (typeof fallbackParams.path === "string" && fallbackParams.path.includes("/")) {
       const parentDir = fallbackParams.path.replace(/\/[^/]+$/, "");
@@ -324,7 +466,7 @@ export async function handleCardEnhance(params: {
   const pluginId = getToolPluginId(toolName);
   const prefix = pluginId ? getPluginToolPrefix(pluginId) : undefined;
   if (prefix) {
-    cardCtx.nativeToolHint = {
+    cardCtx.appToolHint = {
       toolName,
       params: execParams,
       handlerPrefix: prefix,
@@ -332,7 +474,7 @@ export async function handleCardEnhance(params: {
   }
 
   cardContexts.set(cardId, cardCtx);
-  logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Context registered: cardId=${cardId}, family=${selection.toolFamily}, signature=${signature?.signatureId ?? "none"}, prefix=${prefix ?? "none"}, hasNativeHint=${!!cardCtx.nativeToolHint}`, cardId });
+  logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Context registered: cardId=${cardId}, family=${selection.toolFamily}, signature=${signature?.signatureId ?? "none"}, prefix=${prefix ?? "none"}, hasAppHint=${!!cardCtx.appToolHint}`, cardId });
 
   sendEnhanceResult({
     data,

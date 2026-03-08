@@ -10,7 +10,7 @@ import { getActiveBackend } from "../lib/connection";
 import { isNative } from "../lib/platform";
 import { nativeShare } from "../lib/native-share";
 
-const FAMILY_ICONS: Record<string, string> = {
+const APP_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
   filesystem: "\uD83D\uDCC1",
   media_gallery: "\uD83D\uDDBC\uFE0F",
@@ -18,8 +18,8 @@ const FAMILY_ICONS: Record<string, string> = {
   meal_planner: "\uD83C\uDF7D\uFE0F",
 };
 
-/** Human-friendly names for card headers. Falls back to prettified toolFamily. */
-const FAMILY_LABELS: Record<string, string> = {
+/** Human-friendly names for card headers. Falls back to prettified appId. */
+const APP_LABELS: Record<string, string> = {
   alpharank: "AlphaRank",
   filesystem: "File Browser",
   media_gallery: "Photo Gallery",
@@ -35,10 +35,10 @@ function getCardLabel(card: Card, effectiveType: string): string {
   if (card.type === "mission") return "Mission Planner";
   if (effectiveType === "dynamic-ui") {
     const mode = card.viewMode === "app" ? card.appCardMode : card.cardMode;
-    const family = mode?.toolFamily;
+    const family = mode?.appId ?? mode?.toolFamily;
     if (family) {
-      if (FAMILY_LABELS[family]) return FAMILY_LABELS[family];
-      // Prettify unknown families: "media_gallery" → "Media Gallery"
+      if (APP_LABELS[family]) return APP_LABELS[family];
+      // Prettify unknown apps: "media_gallery" → "Media Gallery"
       return family.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     }
     return "Enso";
@@ -193,9 +193,9 @@ function EnhanceButton({ card }: { card: Card }) {
     setShowFactory(true);
   }, []);
 
-  const handleFamilyClick = useCallback((family: string) => {
+  const handleAppClick = useCallback((appId: string) => {
     setShowMenu(false);
-    enhanceCardWithFamily(card.id, family);
+    enhanceCardWithFamily(card.id, appId);
   }, [card.id, enhanceCardWithFamily]);
 
   if (status === "loading") {
@@ -238,7 +238,7 @@ function EnhanceButton({ card }: { card: Card }) {
 
   // Suggested state — server detected a matching tool family in the background
   if (status === "suggested" && suggestedFamily) {
-    const familyIcon = FAMILY_ICONS[suggestedFamily] ?? "\u2728";
+    const familyIcon = APP_ICONS[suggestedFamily] ?? "\u2728";
     const familyLabel = suggestedFamily.replace(/_/g, " ");
     return (
       <button
@@ -300,14 +300,14 @@ function EnhanceButton({ card }: { card: Card }) {
           <div className="max-h-48 overflow-y-auto">
             {toolFamilies.map((f) => (
               <button
-                key={f.toolFamily}
-                onClick={() => handleFamilyClick(f.toolFamily)}
+                key={f.appId ?? f.toolFamily}
+                onClick={() => handleAppClick(f.appId ?? f.toolFamily)}
                 className="w-full text-left px-3 py-1.5 hover:bg-gray-800/70 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-sm">{FAMILY_ICONS[f.toolFamily] ?? "\uD83D\uDD27"}</span>
+                  <span className="text-sm">{APP_ICONS[f.appId ?? f.toolFamily] ?? "\uD83D\uDD27"}</span>
                   <div className="min-w-0">
-                    <div className="text-xs text-gray-200 truncate">{f.toolFamily.replace(/_/g, " ")}</div>
+                    <div className="text-xs text-gray-200 truncate">{(f.appId ?? f.toolFamily).replace(/_/g, " ")}</div>
                     <div className="text-[10px] text-gray-500 truncate">{f.description}</div>
                   </div>
                 </div>
@@ -426,9 +426,9 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
   // Extract current path and toolFamily for scoped sharing
   const cardData = (card.appData ?? card.data ?? {}) as Record<string, unknown>;
   const currentPath = typeof cardData.path === "string" ? cardData.path : null;
-  const toolFamily = card.appCardMode?.toolFamily ?? card.cardMode?.toolFamily;
-  const isMediaGallery = (toolFamily === "media_gallery") && !!currentPath;
-  const familyLabel = toolFamily ? toolFamily.replace(/_/g, " ") : "app";
+  const appId = card.appCardMode?.appId ?? card.appCardMode?.toolFamily ?? card.cardMode?.appId ?? card.cardMode?.toolFamily;
+  const isMediaGallery = (appId === "media_gallery") && !!currentPath;
+  const familyLabel = appId ? appId.replace(/_/g, " ") : "app";
 
   /** Resolve token (creating scoped context if needed). */
   const resolveShareToken = async (): Promise<{ token: string; shareCardId?: string }> => {
@@ -605,8 +605,8 @@ function ExportButton({ card }: { card: Card }) {
 function ViewToggle({ card }: { card: Card }) {
   const toggleCardView = useChatStore((s) => s.toggleCardView);
   const viewMode = card.viewMode ?? "original";
-  const family = card.appCardMode?.toolFamily;
-  const familyIcon = family ? (FAMILY_ICONS[family] ?? "\u2728") : null;
+  const family = card.appCardMode?.appId ?? card.appCardMode?.toolFamily;
+  const familyIcon = family ? (APP_ICONS[family] ?? "\u2728") : null;
   const familyLabel = family ? family.replace(/_/g, " ") : "App";
 
   return (
@@ -742,7 +742,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI;
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
   const isShareable = isAppView || isDynamicCard;
-  const isGeneralSmartCard = card.type === "dynamic-ui" && card.cardMode?.toolFamily === "general";
+  const isGeneralSmartCard = card.type === "dynamic-ui" && (card.cardMode?.appId ?? card.cardMode?.toolFamily) === "general";
   const canEnhance = card.role === "assistant" && card.status === "complete"
     && (card.type === "chat" || isGeneralSmartCard);
 

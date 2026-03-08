@@ -34,7 +34,7 @@ interface CardStore {
 
   // Apps
   apps: AppInfo[];
-  toolFamilies: Array<{ toolFamily: string; description: string }>;
+  toolFamilies: Array<{ appId?: string; toolFamily: string; description: string }>;
   ensoProjectPath: string | null;
 
   // Claude Code session state
@@ -63,9 +63,11 @@ interface CardStore {
   collapseCard: (cardId: string) => void;
   expandCard: (cardId: string) => void;
   deleteAllApps: () => void;
+  deleteApp: (toolFamily: string) => void;
   fetchApps: () => void;
   runApp: (toolFamily: string) => void;
-  saveAppToCodebase: (toolFamily: string) => void;
+  saveAppToCodebase: (toolFamily: string) => void; // legacy name kept for compat
+  promoteApp: (appId: string) => void;
   restartServer: () => void;
   launchEnsoCode: (instruction?: string) => void;
   launchShell: () => void;
@@ -766,6 +768,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
     get()._wsClient?.send({ type: "card.delete_all_apps" });
   },
 
+  deleteApp: (toolFamily: string) => {
+    get()._wsClient?.send({ type: "apps.delete", toolFamily });
+  },
+
   fetchApps: () => {
     get()._wsClient?.send({ type: "apps.list" });
   },
@@ -776,7 +782,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   saveAppToCodebase: (toolFamily: string) => {
-    get()._wsClient?.send({ type: "app.save_to_codebase", toolFamily });
+    get()._wsClient?.send({ type: "app.promote", toolFamily });
+  },
+
+  promoteApp: (appId: string) => {
+    get()._wsClient?.send({ type: "app.promote", toolFamily: appId });
   },
 
   restartServer: () => {
@@ -992,10 +1002,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     // For dynamic-ui / app cards — include app context
     const activeMode = card.appCardMode ?? card.cardMode;
-    if (activeMode?.toolFamily) {
+    const activeAppId = activeMode?.appId ?? activeMode?.toolFamily;
+    if (activeAppId) {
       promptParts.push(
-        `## App: ${activeMode.toolFamily}`,
-        `Location: Look in ~/.openclaw/enso-apps/${activeMode.toolFamily}/ or openclaw-plugin/apps/${activeMode.toolFamily}/`,
+        `## App: ${activeAppId}`,
+        `Location: Look in ~/.openclaw/enso-apps/${activeAppId}/ or openclaw-plugin/apps/${activeAppId}/`,
         `Read CLAUDE-REFERENCE.md for the app structure reference.`,
         "",
       );
@@ -1244,9 +1255,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
         data: state.data,
         generatedUI: state.generatedUI,
         toolMeta: state.toolMeta,
-        cardMode: state.toolFamily ? {
+        cardMode: (state.appId ?? state.toolFamily) ? {
           interactionMode: "tool" as const,
-          toolFamily: state.toolFamily,
+          appId: state.appId ?? state.toolFamily,
+          toolFamily: state.appId ?? state.toolFamily,
           signatureId: state.signatureId,
           coverageStatus: state.coverageStatus,
         } : undefined,

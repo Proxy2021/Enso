@@ -23,9 +23,9 @@ vi.mock("./native-tools/registry.js", () => ({
   })),
 }));
 
-vi.mock("./tool-families/catalog.js", () => ({
-  TOOL_FAMILY_CAPABILITIES: [],
-  addCapability: vi.fn(),
+vi.mock("./app-catalog.js", () => ({
+  APP_CATALOG: [],
+  registerApp: vi.fn(),
 }));
 
 vi.mock("./outbound.js", () => ({

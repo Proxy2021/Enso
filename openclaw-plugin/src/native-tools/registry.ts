@@ -9,8 +9,9 @@ import { getBrowserTemplateCode, isBrowserSignature } from "./templates/browser.
 import { getCityTemplateCode, isCitySignature } from "./templates/city.js";
 import { getResearcherTemplateCode, isResearcherSignature } from "./templates/researcher.js";
 import { getClawHubTemplateCode, isClawHubSignature } from "./templates/clawhub.js";
-import { TOOL_FAMILY_CAPABILITIES, getCapabilityForFamily } from "../tool-families/catalog.js";
+import { APP_CATALOG, getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
+import { getPluginApi } from "../runtime.js";
 
 // ── Types ──
 
@@ -119,15 +120,35 @@ const generatedToolExecutors = new Map<string, {
 /** In-memory store for dynamically generated template JSX code, keyed by signatureId. */
 const generatedTemplateCode = new Map<string, string>();
 
-export function registerGeneratedTool(tool: {
+export function registerAppTool(tool: {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
   body?: string;
   execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }): void {
+  // 1. Internal registry — for Enso card actions and direct invocation
   generatedToolExecutors.set(tool.name, tool);
-  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered generated tool "${tool.name}"` });
+
+  // 2. OpenClaw ecosystem bridge — register with the agent so it can discover
+  //    and call this tool on future requests. This closes the loop: every app
+  //    built by a user is immediately available to the OpenClaw agent.
+  const api = getPluginApi();
+  if (api) {
+    try {
+      api.registerTool({
+        name: tool.name,
+        label: tool.name.replace(/_/g, " ").replace(/^enso /i, "").trim(),
+        description: tool.description,
+        parameters: tool.parameters,
+        execute: tool.execute,
+      } as Parameters<typeof api.registerTool>[0]);
+    } catch (err) {
+      logError("native-tools", `Failed to register "${tool.name}" with OpenClaw ecosystem`, err);
+    }
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered app tool "${tool.name}"${api ? " (+ OpenClaw)" : ""}` });
 }
 
 // ── Auto-heal helpers ──
@@ -178,13 +199,13 @@ export function hotSwapExecutor(
   logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `hot-swapped executor for "${toolName}" (${newBody.length} chars)` });
 }
 
-export function registerGeneratedTemplateCode(signatureId: string, code: string): void {
+export function registerAppTemplate(signatureId: string, code: string): void {
   generatedTemplateCode.set(signatureId, code);
   logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered generated template code for signature "${signatureId}"` });
 }
 
 /** Remove a generated tool executor by name. Returns true if it existed. */
-export function unregisterGeneratedTool(toolName: string): boolean {
+export function unregisterAppTool(toolName: string): boolean {
   const existed = generatedToolExecutors.delete(toolName);
   if (existed) logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `unregistered generated tool "${toolName}"` });
   return existed;
@@ -196,7 +217,7 @@ export function getGeneratedTemplateCodeBySignature(signatureId: string): string
 }
 
 /** Remove generated template code by signatureId. Returns true if it existed. */
-export function unregisterGeneratedTemplateCode(signatureId: string): boolean {
+export function unregisterAppTemplate(signatureId: string): boolean {
   const existed = generatedTemplateCode.delete(signatureId);
   if (existed) logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `unregistered generated template code for signature "${signatureId}"` });
   return existed;
@@ -484,12 +505,12 @@ export function detectToolTemplateForToolName(toolName: string): ToolTemplate | 
     return getToolTemplate("plugin_discovery", "plugin_catalog_list");
   }
 
-  // Capability-suffix detection — catch-all for non-Enso providers
+  // App action detection — catch-all for non-Enso providers
   // that expose equivalent operations under a different prefix.
-  for (const capability of TOOL_FAMILY_CAPABILITIES) {
-    const match = capability.actionSuffixes.some((suffix) => lower.endsWith(`_${suffix}`));
+  for (const app of APP_CATALOG) {
+    const match = app.actions.some((suffix) => lower.endsWith(`_${suffix}`));
     if (match) {
-      return getToolTemplate(capability.toolFamily, capability.signatureId);
+      return getToolTemplate(app.appId, app.signatureId);
     }
   }
 
@@ -949,16 +970,16 @@ export function getPreferredToolProviderForFamily(toolFamily: string): {
   toolName: string;
   handlerPrefix: string;
 } | undefined {
-  const capability = getCapabilityForFamily(toolFamily);
-  if (!capability) return undefined;
+  const app = getApp(toolFamily);
+  if (!app) return undefined;
 
-  const fallbackPrefix = extractToolPrefix(capability.fallbackToolName);
+  const fallbackPrefix = extractToolPrefix(app.primaryTool);
   if (!fallbackPrefix) return undefined;
 
   const existing = findExistingProviderForActionSuffixes({
     excludePrefix: fallbackPrefix,
-    actionSuffixes: capability.actionSuffixes,
-    minMatches: Math.min(2, capability.actionSuffixes.length),
+    actionSuffixes: app.actions,
+    minMatches: Math.min(2, app.actions.length),
   });
   if (existing) {
     return {
@@ -966,9 +987,9 @@ export function getPreferredToolProviderForFamily(toolFamily: string): {
       handlerPrefix: existing.prefix,
     };
   }
-  if (isToolRegistered(capability.fallbackToolName)) {
+  if (isToolRegistered(app.primaryTool)) {
     return {
-      toolName: capability.fallbackToolName,
+      toolName: app.primaryTool,
       handlerPrefix: fallbackPrefix,
     };
   }

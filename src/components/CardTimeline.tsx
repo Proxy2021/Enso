@@ -49,18 +49,66 @@ export default function CardTimeline() {
     return <WelcomeCard />;
   }
 
+  // Build render items: detect orchestration+terminal pairs for side-by-side layout
+  const renderItems: Array<
+    | { type: "single"; id: string }
+    | { type: "orch-pair"; orchId: string; termId: string }
+  > = [];
+  const pairedTerminals = new Set<string>();
+
+  for (let i = 0; i < cardOrder.length; i++) {
+    const id = cardOrder[i];
+    const card = cards[id];
+    if (!card) continue;
+
+    // Detect orchestration card in executing/paused state followed by its terminal card
+    if (card.type === "orchestration") {
+      const progress = (card.data as any)?.orchestrationProgress;
+      const plan = progress?.plan || (card.data as any)?.orchestrationPlan;
+      const isExecuting = plan?.status === "executing" || plan?.status === "paused";
+
+      if (isExecuting) {
+        // Look for the next terminal card (should be the one right after)
+        const nextId = cardOrder[i + 1];
+        const nextCard = nextId ? cards[nextId] : undefined;
+        if (nextCard && nextCard.type === "terminal") {
+          renderItems.push({ type: "orch-pair", orchId: id, termId: nextId });
+          pairedTerminals.add(nextId);
+          continue;
+        }
+      }
+    }
+
+    // Skip terminals that are already paired
+    if (pairedTerminals.has(id)) continue;
+
+    renderItems.push({ type: "single", id });
+  }
+
   return (
     <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-5">
       <div className="max-w-5xl mx-auto">
-        {cardOrder.map((id) => {
-          const card = cards[id];
+        {renderItems.map((item) => {
+          if (item.type === "orch-pair") {
+            const orchCard = cards[item.orchId];
+            const termCard = cards[item.termId];
+            if (!orchCard || !termCard) return null;
+            return (
+              <div key={item.orchId} className="flex gap-3 items-stretch" id={`card-${item.orchId}`}>
+                <div className="w-[220px] flex-shrink-0">
+                  <CardContainer card={orchCard} isActive={item.orchId === lastCardId} />
+                </div>
+                <div className="flex-1 min-w-0" id={`card-${item.termId}`}>
+                  <CardContainer card={termCard} isActive={item.termId === lastCardId} />
+                </div>
+              </div>
+            );
+          }
+          const card = cards[item.id];
           if (!card) return null;
           return (
-            <div key={id} id={`card-${id}`}>
-              <CardContainer
-                card={card}
-                isActive={id === lastCardId}
-              />
+            <div key={item.id} id={`card-${item.id}`}>
+              <CardContainer card={card} isActive={item.id === lastCardId} />
             </div>
           );
         })}

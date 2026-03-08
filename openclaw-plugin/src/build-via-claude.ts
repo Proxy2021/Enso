@@ -21,7 +21,7 @@ import {
 } from "./app-persistence.js";
 import { executeToolDirect } from "./native-tools/registry.js";
 import { registerCardContext } from "./outbound.js";
-import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
+import { APP_CATALOG } from "./app-catalog.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ServerMessage, ToolBuildSummary, EnhanceResult } from "./types.js";
@@ -47,7 +47,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
   const runId = randomUUID();
 
   // 1. Snapshot existing app families before the build starts
-  const preExistingFamilies = new Set(TOOL_FAMILY_CAPABILITIES.map((c) => c.toolFamily));
+  const preExistingFamilies = new Set(APP_CATALOG.map((c) => c.appId));
   const buildStartTime = Date.now();
   logAction({ ts: buildStartTime, type: "build", category: "build-via-claude", message: `Build start: ${buildAppDefinition.slice(0, 100)}`, cardId });
 
@@ -247,7 +247,7 @@ async function postBuildRegistration(
     account,
     mode: account.mode,
     actionHistory: [],
-    nativeToolHint: {
+    appToolHint: {
       toolName: primaryToolName,
       params: primaryDef.sampleParams,
       handlerPrefix: spec.toolPrefix,

@@ -207,7 +207,7 @@ export function hydrateFilesystemLikeData(data: unknown, prompt: string): unknow
 }
 
 export function attachSyntheticNativeToolHint(ctx: CardContext, data: unknown, prompt: string): void {
-  if (ctx.nativeToolHint || !ctx.toolFamily) return;
+  if (ctx.appToolHint || !ctx.toolFamily) return;
   const hydrated = (data && typeof data === "object") ? (data as Record<string, unknown>) : {};
   if (ctx.toolFamily === "filesystem") {
     const provider = getPreferredToolProviderForFamily("filesystem");
@@ -216,7 +216,7 @@ export function attachSyntheticNativeToolHint(ctx: CardContext, data: unknown, p
       (typeof hydrated.path === "string" && hydrated.path.trim())
         ? hydrated.path
         : (inferDesktopLikePathFromPrompt(prompt) ?? ".");
-    ctx.nativeToolHint = {
+    ctx.appToolHint = {
       toolName: provider.toolName,
       params: { path },
       handlerPrefix: provider.handlerPrefix,
@@ -233,7 +233,7 @@ export function attachSyntheticNativeToolHint(ctx: CardContext, data: unknown, p
       (typeof hydrated.days === "number" && hydrated.days > 0)
       ? Math.floor(hydrated.days)
       : 5;
-    ctx.nativeToolHint = {
+    ctx.appToolHint = {
       toolName: provider.toolName,
       params: { destination, days },
       handlerPrefix: provider.handlerPrefix,
@@ -246,7 +246,7 @@ export function attachSyntheticNativeToolHint(ctx: CardContext, data: unknown, p
     const diet =
       (typeof hydrated.diet === "string" && hydrated.diet.trim())
       || "balanced";
-    ctx.nativeToolHint = {
+    ctx.appToolHint = {
       toolName: provider.toolName,
       params: { diet },
       handlerPrefix: provider.handlerPrefix,
@@ -271,7 +271,7 @@ export async function renderFollowupUI(params: {
   const { ctx, action, payload, data, assistantText, actionHints } = params;
   if (ctx.interactionMode === "tool" && ctx.toolFamily && ctx.signatureId) {
     const signature = getToolTemplate(ctx.toolFamily, ctx.signatureId)
-      ?? inferToolTemplate({ toolName: ctx.nativeToolHint?.toolName, data });
+      ?? inferToolTemplate({ toolName: ctx.appToolHint?.toolName, data });
     if (signature) {
       const templateCode = getToolTemplateCode(signature);
       if (templateCode) {

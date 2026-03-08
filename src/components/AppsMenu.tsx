@@ -3,7 +3,7 @@ import { useChatStore } from "../store/chat";
 import { SystemEnhanceDialog } from "./SystemEnhanceDialog";
 import { EnsoCodeDialog } from "./EnsoCodeDialog";
 
-const FAMILY_ICONS: Record<string, string> = {
+const APP_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
   filesystem: "\uD83D\uDCC1",
   media_gallery: "\uD83D\uDDBC\uFE0F",
@@ -15,7 +15,8 @@ export default function AppsMenu() {
   const apps = useChatStore((s) => s.apps);
   const fetchApps = useChatStore((s) => s.fetchApps);
   const runApp = useChatStore((s) => s.runApp);
-  const saveAppToCodebase = useChatStore((s) => s.saveAppToCodebase);
+  const promoteApp = useChatStore((s) => s.promoteApp);
+  const deleteApp = useChatStore((s) => s.deleteApp);
   const restartServer = useChatStore((s) => s.restartServer);
   const launchEnsoCode = useChatStore((s) => s.launchEnsoCode);
   const ensoProjectPath = useChatStore((s) => s.ensoProjectPath);
@@ -23,6 +24,7 @@ export default function AppsMenu() {
   const [open, setOpen] = useState(false);
   const [showEnhance, setShowEnhance] = useState(false);
   const [showCode, setShowCode] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const disabled = connectionState !== "connected";
@@ -49,10 +51,29 @@ export default function AppsMenu() {
     setOpen(false);
   }
 
-  function handleSaveToCodebase(e: React.MouseEvent, toolFamily: string) {
+  function handlePromote(e: React.MouseEvent, appId: string) {
     e.stopPropagation();
-    saveAppToCodebase(toolFamily);
+    promoteApp(appId);
     setOpen(false);
+  }
+
+  function handleDeleteClick(e: React.MouseEvent, appId: string) {
+    e.stopPropagation();
+    setConfirmDeleteId(appId);
+  }
+
+  function handleDeleteConfirm(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (confirmDeleteId) {
+      deleteApp(confirmDeleteId);
+      setConfirmDeleteId(null);
+      fetchApps(); // refresh list
+    }
+  }
+
+  function handleDeleteCancel(e: React.MouseEvent) {
+    e.stopPropagation();
+    setConfirmDeleteId(null);
   }
 
   function handleRestart() {
@@ -102,53 +123,101 @@ export default function AppsMenu() {
             </div>
           ) : (
             <div className="max-h-96 overflow-y-auto">
-              {apps.map((app) => (
-                <button
-                  key={app.toolFamily}
-                  onClick={() => handleRun(app.toolFamily)}
-                  className="w-full text-left px-3 py-2 hover:bg-gray-700/50 transition-colors border-b border-gray-700/20 last:border-b-0"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base shrink-0">
-                      {FAMILY_ICONS[app.toolFamily] ?? "\u2728"}
-                    </span>
-                    <div className="min-w-0 flex-1">
+              {apps.map((app) => {
+                const isConfirming = confirmDeleteId === app.appId;
+                const isDeletable = !app.system && !app.shipped;
+
+                if (isConfirming) {
+                  return (
+                    <div
+                      key={app.toolFamily}
+                      className="w-full px-3 py-2 bg-red-950/30 border-b border-red-700/30 last:border-b-0"
+                    >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-200 font-medium capitalize">
-                          {app.toolFamily.replace(/_/g, " ")}
+                        <span className="text-xs text-red-300">
+                          Delete <span className="font-medium capitalize">{app.toolFamily.replace(/_/g, " ")}</span>?
                         </span>
                         <div className="flex items-center gap-1.5">
-                          {/* Save to codebase — only for user-local apps */}
-                          {!app.builtIn && !app.codebase && (
-                            <span
-                              role="button"
-                              title="Save to codebase"
-                              onClick={(e) => handleSaveToCodebase(e, app.toolFamily)}
-                              className="text-gray-500 hover:text-blue-400 transition-colors cursor-pointer p-0.5"
-                            >
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-                              </svg>
-                            </span>
-                          )}
-                          {/* Codebase indicator */}
-                          {app.codebase && (
-                            <span className="text-[9px] text-emerald-500/70" title="Saved in codebase">
-                              in repo
-                            </span>
-                          )}
-                          <span className="text-[10px] text-gray-500">
-                            {app.toolCount} tool{app.toolCount !== 1 ? "s" : ""}
-                          </span>
+                          <button
+                            onClick={handleDeleteCancel}
+                            className="text-[10px] px-2 py-0.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleDeleteConfirm}
+                            className="text-[10px] px-2 py-0.5 rounded bg-red-600 text-white hover:bg-red-500 transition-colors"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
-                      <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
-                        {app.description}
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    key={app.toolFamily}
+                    onClick={() => handleRun(app.toolFamily)}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-700/50 transition-colors border-b border-gray-700/20 last:border-b-0"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-base shrink-0">
+                        {APP_ICONS[app.toolFamily] ?? "\u2728"}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-200 font-medium capitalize">
+                            {app.toolFamily.replace(/_/g, " ")}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {/* Delete — only for user-local apps (not system, not shipped) */}
+                            {isDeletable && (
+                              <span
+                                role="button"
+                                title="Delete app"
+                                onClick={(e) => handleDeleteClick(e, app.appId)}
+                                className="text-gray-500 hover:text-red-400 transition-colors cursor-pointer p-0.5"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                                </svg>
+                              </span>
+                            )}
+                            {/* Promote — only for user-local apps (not system, not shipped) */}
+                            {isDeletable && (
+                              <span
+                                role="button"
+                                title="Promote to project"
+                                onClick={(e) => handlePromote(e, app.appId)}
+                                className="text-gray-500 hover:text-blue-400 transition-colors cursor-pointer p-0.5"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                                </svg>
+                              </span>
+                            )}
+                            {/* Shipped app indicator */}
+                            {app.shipped && (
+                              <span className="text-[9px] text-emerald-500/70" title="Shipped with project">
+                                in repo
+                              </span>
+                            )}
+                            <span className="text-[10px] text-gray-500">
+                              {app.toolCount} tool{app.toolCount !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
+                          {app.description}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
           {/* Footer actions */}

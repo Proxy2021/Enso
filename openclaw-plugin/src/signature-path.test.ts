@@ -9,7 +9,7 @@ import {
   normalizeDataForToolTemplate,
   registerToolTemplate,
   registerToolTemplateDataHint,
-  registerGeneratedTemplateCode,
+  registerAppTemplate,
 } from "./native-tools/registry";
 
 describe("tool-driven follow-up path", () => {
@@ -158,7 +158,7 @@ describe("generated app shape mismatch detection", () => {
       requiredKeys: ["results"],
     });
 
-    registerGeneratedTemplateCode(sigId, `export default function TestUI({ data }) {
+    registerAppTemplate(sigId, `export default function TestUI({ data }) {
       return <div>{JSON.stringify(data)}</div>;
     }`);
 

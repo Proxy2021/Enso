@@ -165,8 +165,12 @@ function quickClassify(message: string): TaskClassification | null {
 
   // Pure questions that start with question words (and don't contain action verbs)
   if (/^(what|who|when|where|why|how|is|are|does|do|can|could|should|would|will)\b/i.test(lower)) {
-    // But if the question is really asking to DO something...
-    if (/\b(build|create|make|set up|implement|write|develop|design|plan)\b/i.test(lower) && wordCount > 8) {
+    // Longer messages with "can you help" / "could you help" etc. are action requests — always LLM
+    if (/^(can|could|would|will)\s+you\s+(help|please)\b/i.test(lower) && wordCount > 10) {
+      return null; // Let LLM decide — likely an action request
+    }
+    // Messages with action verbs are asking to DO something
+    if (/\b(build|create|make|set up|implement|write|develop|design|plan|process|organize|convert|transform|generate|deploy|configure|analyze|research|launch)\b/i.test(lower) && wordCount > 8) {
       return null; // Let LLM decide
     }
     return {

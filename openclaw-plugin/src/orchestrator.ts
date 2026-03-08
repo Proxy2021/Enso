@@ -1,22 +1,33 @@
 /**
- * Orchestrator — Multi-agent task orchestration for Enso
+ * Orchestrator — Single-session multi-task orchestration for Enso
  *
  * Manages the lifecycle of complex, multi-faceted goals:
  *   1. Planning phase: Claude Code decomposes goal → task DAG with agent roles
- *   2. Dashboard creation: Builds a dynamic mission dashboard app (first task)
- *   3. Execution: DAG-based execution with parallel batches
- *   4. Progress: Real-time updates to the dashboard app
+ *   2. Review: User approves the plan
+ *   3. Execution: A SINGLE Claude Code session processes all tasks sequentially
+ *   4. Progress: Stream listener parses structured markers to update the card
  *
- * Each agent = a Claude Code session with a role-specific prompt prefix.
- * Agent communication is hub-and-spoke through shared context (not direct).
+ * Key insight: execution reuses the planning session's terminal card via
+ * `targetCardId`, so the user sees one continuous terminal — not N separate ones.
+ * Tasks write intermediate results to files on disk; downstream tasks read those
+ * files for context (no prompt bloat).
  */
 
 import { randomUUID } from "crypto";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { runClaudeCode } from "./claude-code.js";
-import { handleBuildAppViaClaude } from "./build-via-claude.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, statSync } from "fs";
+import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
+import {
+  loadAllApps,
+  registerLoadedApp,
+  CODEBASE_APPS_DIR,
+  generateSkillMd,
+  type LoadedApp,
+} from "./app-persistence.js";
+import { executeToolDirect } from "./native-tools/registry.js";
+import { registerCardContext } from "./outbound.js";
+import { APP_CATALOG } from "./app-catalog.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type {
@@ -27,6 +38,8 @@ import type {
   OrchestrationProgress,
   OrchestrationEventType,
   AgentRole,
+  EnhanceResult,
+  ToolBuildSummary,
 } from "./types.js";
 import type { TaskClassification } from "./task-router.js";
 import { logAction, logError } from "./action-log.js";
@@ -49,7 +62,10 @@ const activeOrchestrations = new Map<
     account: ResolvedEnsoAccount;
     sharedContext: Map<string, string>; // taskId → result summary
     bootstrapCardId: string;
+    terminalCardId: string; // Reused across planning + execution sessions
     aborted: boolean;
+    executionRunId?: string; // For cancellation via cancelClaudeCodeRun()
+    executionSessionId?: string; // For session resume
   }
 >();
 
@@ -205,6 +221,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       account,
       sharedContext: new Map(),
       bootstrapCardId,
+      terminalCardId,
       aborted: false,
     });
 
@@ -241,7 +258,8 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
 
 /**
  * Handle user approval of orchestration tasks.
- * Transitions plan to "executing" and starts the engine.
+ * Transitions plan to "executing" and starts a SINGLE Claude Code session
+ * that processes all tasks sequentially in one terminal card.
  */
 export async function handleOrchestrationApprove(params: {
   orchestrationId: string;
@@ -290,24 +308,92 @@ export async function handleOrchestrationApprove(params: {
     message: `Orchestration approved: ${orchestrationId}`,
   });
 
-  // Import and start the execution engine
-  const { executeOrchestration } = await import("./orchestrator-engine.js");
-  executeOrchestration(orch.plan, orch.client, orch.account, orch.sharedContext)
-    .catch((err) => {
-      logError("orchestrator", "executeOrchestration unhandled error", err, { orchestrationId });
+  // Snapshot pre-existing app families for post-build detection
+  const preExistingFamilies = new Set(APP_CATALOG.map((c) => c.appId));
+  const buildStartTime = Date.now();
+
+  // Build the single execution mega-prompt
+  const executionPrompt = buildExecutionPrompt(orch.plan);
+
+  // Wrap client.send to intercept text deltas and parse progress markers
+  const originalSend = orch.client.send.bind(orch.client);
+  let markerBuffer = ""; // Buffer for incomplete marker lines
+  const wrappedClient: ConnectedClient = {
+    ...orch.client,
+    send: (msg: ServerMessage) => {
+      originalSend(msg);
+      // Only intercept text deltas targeting our terminal card
+      if (msg.text && msg.targetCardId === orch.terminalCardId) {
+        markerBuffer += msg.text;
+        // Only parse COMPLETE lines (ending with \n) to avoid firing on partial markers
+        const lastNewline = markerBuffer.lastIndexOf("\n");
+        if (lastNewline >= 0) {
+          const completedLines = markerBuffer.slice(0, lastNewline + 1);
+          markerBuffer = markerBuffer.slice(lastNewline + 1);
+          parseOrchestrationMarkers(completedLines, orch);
+        }
+        // Prevent unbounded growth
+        if (markerBuffer.length > 2000) markerBuffer = markerBuffer.slice(-500);
+      }
+    },
+  };
+
+  // Create the execution run
+  const executionRunId = randomUUID();
+  orch.executionRunId = executionRunId;
+
+  // Mark all pending tasks as ready
+  updateOrchestrationProgress(orchestrationId, "task_started");
+
+  try {
+    // Run a SINGLE Claude Code session on the SAME terminal card as planning
+    const { sessionId } = await runClaudeCode({
+      prompt: executionPrompt,
+      cwd: PROJECT_ROOT,
+      client: wrappedClient,
+      runId: executionRunId,
+      targetCardId: orch.terminalCardId,
+    });
+
+    orch.executionSessionId = sessionId;
+
+    // Post-session: detect and register any built apps
+    await postOrchestrationRegistration(orch, preExistingFamilies, buildStartTime);
+
+    // Finalize: mark remaining tasks based on markers received
+    finalizeOrchestration(orch);
+
+    // Clean up temp files
+    cleanupOrchestrationTempFiles(orch.plan);
+
+  } catch (err) {
+    logError("orchestrator", "Execution session error", err, { orchestrationId });
+
+    // If aborted (pause/cancel), don't mark as failed
+    if (!orch.aborted) {
+      orch.plan.status = "failed";
       updateOrchestrationProgress(orchestrationId, "failed", undefined,
         err instanceof Error ? err.message : String(err));
-    });
+    }
+  } finally {
+    orch.executionRunId = undefined;
+  }
 }
 
 /**
- * Pause a running orchestration (after current batch completes).
+ * Pause a running orchestration — aborts the execution Claude Code session.
  */
 export function handleOrchestrationPause(orchestrationId: string): void {
   const orch = activeOrchestrations.get(orchestrationId);
   if (!orch) return;
   orch.plan.status = "paused";
   orch.aborted = true;
+
+  // Abort the running Claude Code session
+  if (orch.executionRunId) {
+    cancelClaudeCodeRun(orch.executionRunId);
+  }
+
   persistOrchestration(orchestrationId, orch.plan);
 
   logAction({
@@ -319,7 +405,9 @@ export function handleOrchestrationPause(orchestrationId: string): void {
 }
 
 /**
- * Resume a paused orchestration.
+ * Resume a paused orchestration — starts a new Claude Code session that
+ * continues from where the previous one left off, listing completed tasks
+ * and resuming from the next pending one.
  */
 export async function handleOrchestrationResume(params: {
   orchestrationId: string;
@@ -333,25 +421,89 @@ export async function handleOrchestrationResume(params: {
   orch.plan.status = "executing";
   orch.aborted = false;
   orch.client = client; // Update in case of reconnection
+  orch.account = account;
   persistOrchestration(orchestrationId, orch.plan);
 
-  const { executeOrchestration } = await import("./orchestrator-engine.js");
-  executeOrchestration(orch.plan, client, account, orch.sharedContext)
-    .catch((err) => {
-      logError("orchestrator", "executeOrchestration resume error", err, { orchestrationId });
+  // Build a continuation prompt that lists completed tasks and resumes
+  const completedTasks = orch.plan.tasks.filter(t => t.status === "completed");
+  const pendingTasks = orch.plan.tasks.filter(t => t.status === "pending" || t.status === "running");
+
+  // Reset "running" tasks back to pending (they were interrupted)
+  for (const task of orch.plan.tasks) {
+    if (task.status === "running") task.status = "pending";
+  }
+
+  const resumePrompt = buildExecutionPrompt(orch.plan, completedTasks.map(t => t.taskId));
+
+  // Snapshot app families for post-build detection
+  const preExistingFamilies = new Set(APP_CATALOG.map((c) => c.appId));
+  const buildStartTime = Date.now();
+
+  // Wrap client.send for marker parsing
+  const originalSend = client.send.bind(client);
+  let markerBuffer = "";
+  const wrappedClient: ConnectedClient = {
+    ...client,
+    send: (msg: ServerMessage) => {
+      originalSend(msg);
+      if (msg.text && msg.targetCardId === orch.terminalCardId) {
+        markerBuffer += msg.text;
+        const lastNewline = markerBuffer.lastIndexOf("\n");
+        if (lastNewline >= 0) {
+          const completedLines = markerBuffer.slice(0, lastNewline + 1);
+          markerBuffer = markerBuffer.slice(lastNewline + 1);
+          parseOrchestrationMarkers(completedLines, orch);
+        }
+        if (markerBuffer.length > 2000) markerBuffer = markerBuffer.slice(-500);
+      }
+    },
+  };
+
+  const executionRunId = randomUUID();
+  orch.executionRunId = executionRunId;
+
+  updateOrchestrationProgress(orchestrationId, "resumed");
+
+  try {
+    const { sessionId } = await runClaudeCode({
+      prompt: resumePrompt,
+      cwd: PROJECT_ROOT,
+      client: wrappedClient,
+      runId: executionRunId,
+      targetCardId: orch.terminalCardId,
+      ...(orch.executionSessionId ? { toolSessionId: orch.executionSessionId } : {}),
+    });
+
+    orch.executionSessionId = sessionId;
+    await postOrchestrationRegistration(orch, preExistingFamilies, buildStartTime);
+    finalizeOrchestration(orch);
+    cleanupOrchestrationTempFiles(orch.plan);
+  } catch (err) {
+    if (!orch.aborted) {
+      logError("orchestrator", "Resume execution error", err, { orchestrationId });
+      orch.plan.status = "failed";
       updateOrchestrationProgress(orchestrationId, "failed", undefined,
         err instanceof Error ? err.message : String(err));
-    });
+    }
+  } finally {
+    orch.executionRunId = undefined;
+  }
 }
 
 /**
- * Cancel an orchestration entirely.
+ * Cancel an orchestration entirely — aborts any running session.
  */
 export function handleOrchestrationCancel(orchestrationId: string): void {
   const orch = activeOrchestrations.get(orchestrationId);
   if (!orch) return;
   orch.plan.status = "failed";
   orch.aborted = true;
+
+  // Abort the running Claude Code session
+  if (orch.executionRunId) {
+    cancelClaudeCodeRun(orch.executionRunId);
+  }
+
   persistOrchestration(orchestrationId, orch.plan);
   activeOrchestrations.delete(orchestrationId);
 
@@ -633,6 +785,524 @@ export function buildAgentPrompt(
   }
 
   return parts.join("\n");
+}
+
+// ── Execution Prompt Builder ──
+
+/**
+ * Build a mega-prompt for the single execution session.
+ * Contains all tasks in dependency order with role-specific instructions.
+ * If `completedTaskIds` is provided, those tasks are listed as already done
+ * and execution resumes from the next pending task.
+ */
+function buildExecutionPrompt(plan: OrchestrationPlan, completedTaskIds?: string[]): string {
+  const completed = new Set(completedTaskIds || []);
+
+  // Topological sort of tasks by dependency order
+  const sorted = topologicalSort(plan.tasks);
+  const pendingTasks = sorted.filter(t => !completed.has(t.taskId) && t.status !== "blocked" && t.status !== "failed");
+  const totalTasks = pendingTasks.length;
+
+  const parts: string[] = [
+    `You are the Orchestration Executor for Enso, an AI platform that builds interactive apps.`,
+    `Execute ${totalTasks} tasks sequentially. Each task has a specific role and instructions.`,
+    ``,
+    `## Goal: "${plan.goal}"`,
+    ``,
+    `## Progress Markers (CRITICAL — you MUST emit these exactly as shown)`,
+    `Before starting each task, print this exact line:`,
+    `>>>TASK_START:{taskId}:{title}`,
+    ``,
+    `After completing each task successfully, print:`,
+    `>>>TASK_DONE:{taskId}:{one-line summary of what was accomplished}`,
+    ``,
+    `If a task fails, print:`,
+    `>>>TASK_FAIL:{taskId}:{brief error description}`,
+    ``,
+    `When ALL tasks are done, print:`,
+    `>>>ORCHESTRATION_COMPLETE`,
+    ``,
+    `These markers are parsed by the system to update the progress UI.`,
+    `They must be on their own line with no extra spaces or formatting.`,
+    ``,
+  ];
+
+  // List completed tasks for context
+  if (completed.size > 0) {
+    parts.push(`## Already Completed Tasks`);
+    parts.push(`The following tasks were completed in a previous session. Read their output files for context.`);
+    for (const task of sorted) {
+      if (!completed.has(task.taskId)) continue;
+      const summary = plan.tasks.find(t => t.taskId === task.taskId)?.resultSummary || "Completed";
+      parts.push(`- ✅ ${task.taskId}: ${task.title} — ${summary}`);
+      parts.push(`  Output file: openclaw-plugin/.orchestration-output-${task.taskId}.md or openclaw-plugin/.orchestration-research-${task.taskId}.md`);
+    }
+    parts.push(``);
+  }
+
+  // Emit each pending task with full instructions
+  let taskNum = 0;
+  for (const task of pendingTasks) {
+    taskNum++;
+    parts.push(`---`);
+    parts.push(`## Task ${taskNum}/${totalTasks}: ${task.taskId} — ${task.title}`);
+    parts.push(`Role: ${task.agentRole}`);
+    parts.push(``);
+
+    // Role prompt
+    parts.push(ROLE_PROMPTS[task.agentRole]);
+    parts.push(``);
+
+    // Dependencies
+    if (task.dependsOn.length > 0) {
+      parts.push(`### Dependencies`);
+      parts.push(`This task depends on output from previous tasks. Read these files for context:`);
+      for (const depId of task.dependsOn) {
+        const dep = plan.tasks.find(t => t.taskId === depId);
+        if (!dep) continue;
+        parts.push(`- ${depId} (${dep.title}): Read openclaw-plugin/.orchestration-output-${depId}.md or openclaw-plugin/.orchestration-research-${depId}.md`);
+      }
+      parts.push(``);
+    }
+
+    // Task description
+    parts.push(`### Instructions`);
+    parts.push(task.description);
+    parts.push(``);
+
+    // Output instructions based on type
+    if (task.outputType === "app") {
+      parts.push(`### App Building Instructions`);
+      parts.push(`First, read the file CLAUDE-REFERENCE.md to understand Enso's app format.`);
+      parts.push(`Then study openclaw-plugin/apps/media_gallery/ as the GOLD STANDARD for reusable apps.`);
+      parts.push(``);
+      parts.push(`Build a GENERAL-PURPOSE, REUSABLE Enso app:`);
+      parts.push(`- Write files to: openclaw-plugin/apps/<family_name>/`);
+      parts.push(`- Family name must be a generic category (e.g., "photo_studio" not "wkw_photobook")`);
+      parts.push(`- Aim for 4-7 tools (browse, view, create, edit, search, manage patterns)`);
+      parts.push(`- Every executor must be parameterized — no hardcoded paths or domain data`);
+      parts.push(`- Template must use data.tool branching for polymorphic views`);
+      parts.push(`- Required files: app.json, template.jsx, executors/<suffix>.js`);
+      parts.push(`- Write template.jsx FIRST, then app.json, then executors`);
+      parts.push(`- Use var (not const/let) in executors, no imports`);
+      parts.push(`- Use EnsoUI.Tooltip (not Tooltip which conflicts with Recharts)`);
+      parts.push(`- DO NOT restart the server — the system auto-detects new apps`);
+      parts.push(``);
+      parts.push(`If the task description mentions specific data, treat it as a TEST CASE, not the app's sole purpose.`);
+    }
+
+    if (task.outputType === "research") {
+      parts.push(`### Output`);
+      parts.push(`Write your research findings to: openclaw-plugin/.orchestration-research-${task.taskId}.md`);
+      parts.push(`Structure the file with clear sections and data.`);
+    }
+
+    if (task.outputType === "decision" || task.outputType === "document") {
+      parts.push(`### Output`);
+      parts.push(`Write your output to: openclaw-plugin/.orchestration-output-${task.taskId}.md`);
+    }
+
+    if (task.outputType === "review") {
+      parts.push(`### Output`);
+      parts.push(`Write your review findings to: openclaw-plugin/.orchestration-output-${task.taskId}.md`);
+      parts.push(`Include: issues found, suggestions for improvement, and an overall assessment.`);
+    }
+
+    if (task.outputType === "code") {
+      parts.push(`### Output`);
+      parts.push(`Write your code/scripts to appropriate files in the project.`);
+      parts.push(`Also write a summary to: openclaw-plugin/.orchestration-output-${task.taskId}.md`);
+    }
+
+    parts.push(``);
+  }
+
+  parts.push(`---`);
+  parts.push(`## Execution Rules`);
+  parts.push(`1. Execute tasks IN ORDER — do not skip ahead or parallelize`);
+  parts.push(`2. ALWAYS emit >>>TASK_START before beginning each task`);
+  parts.push(`3. ALWAYS emit >>>TASK_DONE or >>>TASK_FAIL after each task`);
+  parts.push(`4. Read dependency output files before starting dependent tasks`);
+  parts.push(`5. If a task fails, still attempt subsequent tasks that don't depend on it`);
+  parts.push(`6. After ALL tasks, emit >>>ORCHESTRATION_COMPLETE`);
+  parts.push(`7. For builder tasks, ensure all app files are valid before marking done`);
+  parts.push(``);
+  parts.push(`Begin now. Start with the first task.`);
+
+  return parts.join("\n");
+}
+
+/**
+ * Topological sort of tasks by dependency order.
+ * Tasks with no dependencies come first.
+ */
+function topologicalSort(tasks: OrchestrationTask[]): OrchestrationTask[] {
+  const sorted: OrchestrationTask[] = [];
+  const visited = new Set<string>();
+  const taskMap = new Map(tasks.map(t => [t.taskId, t]));
+
+  function visit(task: OrchestrationTask) {
+    if (visited.has(task.taskId)) return;
+    visited.add(task.taskId);
+    for (const depId of task.dependsOn) {
+      const dep = taskMap.get(depId);
+      if (dep) visit(dep);
+    }
+    sorted.push(task);
+  }
+
+  for (const task of tasks) visit(task);
+  return sorted;
+}
+
+// ── Stream Marker Parser ──
+
+/**
+ * Parse structured progress markers from Claude Code output.
+ * Markers are emitted on their own line:
+ *   >>>TASK_START:{taskId}:{title}
+ *   >>>TASK_DONE:{taskId}:{summary}
+ *   >>>TASK_FAIL:{taskId}:{error}
+ *   >>>ORCHESTRATION_COMPLETE
+ */
+function parseOrchestrationMarkers(
+  text: string,
+  orch: {
+    plan: OrchestrationPlan;
+    sharedContext: Map<string, string>;
+    bootstrapCardId: string;
+  },
+): void {
+  const lines = text.split("\n");
+  const orchId = orch.plan.orchestrationId;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // >>>TASK_START:{taskId}:{title}
+    const startMatch = trimmed.match(/^>>>TASK_START:([^:]+):(.+)$/);
+    if (startMatch) {
+      const taskId = startMatch[1];
+      const task = orch.plan.tasks.find(t => t.taskId === taskId);
+      if (task && task.status !== "completed") {
+        task.status = "running";
+        updateOrchestrationProgress(orchId, "task_started", taskId);
+        logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Task started: ${taskId} — ${startMatch[2]}` });
+      }
+      continue;
+    }
+
+    // >>>TASK_DONE:{taskId}:{summary}
+    const doneMatch = trimmed.match(/^>>>TASK_DONE:([^:]+):(.+)$/);
+    if (doneMatch) {
+      const taskId = doneMatch[1];
+      const summary = doneMatch[2];
+      const task = orch.plan.tasks.find(t => t.taskId === taskId);
+      if (task) {
+        task.status = "completed";
+        task.resultSummary = summary;
+        orch.sharedContext.set(taskId, summary);
+        updateOrchestrationProgress(orchId, "task_completed", taskId);
+        logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Task completed: ${taskId} — ${summary.slice(0, 100)}` });
+      }
+      continue;
+    }
+
+    // >>>TASK_FAIL:{taskId}:{error}
+    const failMatch = trimmed.match(/^>>>TASK_FAIL:([^:]+):(.+)$/);
+    if (failMatch) {
+      const taskId = failMatch[1];
+      const error = failMatch[2];
+      const task = orch.plan.tasks.find(t => t.taskId === taskId);
+      if (task) {
+        task.status = "failed";
+        task.error = error;
+        blockDependents(orch.plan, taskId);
+        updateOrchestrationProgress(orchId, "task_failed", taskId, error);
+        logError("orchestrator", `Task failed: ${taskId}`, null, { error });
+      }
+      continue;
+    }
+
+    // >>>ORCHESTRATION_COMPLETE
+    if (trimmed === ">>>ORCHESTRATION_COMPLETE") {
+      // Don't set plan status here — finalizeOrchestration will handle it
+      logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration complete marker received` });
+      continue;
+    }
+  }
+}
+
+// ── Post-Build Registration ──
+
+/**
+ * After the execution session completes, detect any newly built apps
+ * and register them. Mirrors logic from build-via-claude.ts.
+ */
+async function postOrchestrationRegistration(
+  orch: {
+    plan: OrchestrationPlan;
+    client: ConnectedClient;
+    account: ResolvedEnsoAccount;
+    bootstrapCardId: string;
+  },
+  preExistingFamilies: Set<string>,
+  buildStartTime: number,
+): Promise<void> {
+  // Only run if there were builder tasks
+  const appTasks = orch.plan.tasks.filter(t => t.outputType === "app" && t.status === "completed");
+  if (appTasks.length === 0) return;
+
+  logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: `Post-build: scanning for ${appTasks.length} new app(s)...` });
+
+  let allApps: LoadedApp[];
+  try {
+    allApps = loadAllApps();
+  } catch (err) {
+    logError("orchestrator", "Post-build app scan failed", err);
+    return;
+  }
+
+  // Find newly created apps (family not in pre-existing set)
+  let freshApps = allApps.filter(a => !preExistingFamilies.has(a.spec.toolFamily));
+
+  // Also check for modified existing apps (file mtime after build start)
+  if (freshApps.length === 0) {
+    for (const app of allApps) {
+      for (const dir of [CODEBASE_APPS_DIR, join(process.env.HOME || process.env.USERPROFILE || "", ".openclaw", "enso-apps")]) {
+        const manifestPath = join(dir, app.spec.toolFamily, "app.json");
+        try {
+          const stat = statSync(manifestPath);
+          if (stat.mtimeMs >= buildStartTime) {
+            freshApps.push(app);
+            break;
+          }
+        } catch {
+          // Not in this directory
+        }
+      }
+    }
+  }
+
+  if (freshApps.length === 0) {
+    logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: "No new apps detected after orchestration." });
+    return;
+  }
+
+  const send = (msg: Partial<ServerMessage>) => {
+    orch.client.send({
+      id: randomUUID(),
+      runId: orch.plan.orchestrationId,
+      sessionKey: orch.client.sessionKey,
+      seq: 0,
+      timestamp: Date.now(),
+      ...msg,
+    } as ServerMessage);
+  };
+
+  // Register each new app
+  for (const app of freshApps) {
+    const spec = app.spec;
+    logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: `Registering new app: ${spec.toolFamily} (${spec.tools.length} tools)` });
+
+    try {
+      registerLoadedApp(app);
+    } catch (err) {
+      logError("orchestrator", `App registration failed: ${spec.toolFamily}`, err);
+      continue;
+    }
+
+    // Generate SKILL.md if missing
+    try {
+      const skillPath = join(CODEBASE_APPS_DIR, spec.toolFamily, "SKILL.md");
+      if (!existsSync(skillPath)) {
+        const appTask = appTasks.find(t => t.resultSummary?.toLowerCase().includes(spec.toolFamily));
+        const skillMd = generateSkillMd(spec, appTask?.description || spec.description);
+        writeFileSync(skillPath, skillMd);
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    // Execute primary tool to get initial data
+    const primaryDef = spec.tools.find((t: any) => t.isPrimary) ?? spec.tools[0];
+    const primaryToolName = `${spec.toolPrefix}${primaryDef.suffix}`;
+    let data: unknown = primaryDef.sampleData;
+
+    try {
+      const result = await executeToolDirect(primaryToolName, primaryDef.sampleParams);
+      if (result.success && result.data != null) {
+        data = result.data;
+      }
+    } catch {
+      // Fall back to sampleData
+    }
+
+    // Register card context using a new card ID for each app
+    const appCardId = randomUUID();
+    registerCardContext(appCardId, {
+      cardId: appCardId,
+      originalPrompt: spec.description,
+      originalResponse: `Built by orchestration: ${orch.plan.goal}`,
+      currentData: data,
+      geminiApiKey: orch.account.geminiApiKey,
+      account: orch.account,
+      mode: orch.account.mode,
+      actionHistory: [],
+      appToolHint: {
+        toolName: primaryToolName,
+        params: primaryDef.sampleParams,
+        handlerPrefix: spec.toolPrefix,
+      },
+      interactionMode: "tool",
+      toolFamily: spec.toolFamily,
+      signatureId: spec.signatureId,
+      coverageStatus: "covered",
+    });
+
+    // Build summary
+    const registeredToolNames = spec.tools.map((t: any) => `${spec.toolPrefix}${t.suffix}`);
+    const buildSummary: ToolBuildSummary = {
+      toolFamily: spec.toolFamily,
+      toolNames: registeredToolNames,
+      description: spec.description,
+      scenario: orch.plan.goal,
+      actions: spec.tools.map((t: any) => t.suffix),
+      steps: [
+        { label: "Orchestration build", status: "passed" },
+        { label: "App registration", status: "passed" },
+      ],
+      persisted: true,
+      skillGenerated: true,
+    };
+
+    // Send enhanceResult to create an app card
+    const enhanceResult: EnhanceResult = {
+      data,
+      generatedUI: app.templateJSX,
+      cardMode: {
+        interactionMode: "tool",
+        toolFamily: spec.toolFamily,
+        signatureId: spec.signatureId,
+        coverageStatus: "covered",
+      },
+      buildSummary,
+    };
+
+    send({
+      state: "final",
+      targetCardId: appCardId,
+      enhanceResult,
+    });
+
+    logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: `App "${spec.toolFamily}" registered (${registeredToolNames.length} tools)` });
+  }
+}
+
+// ── Finalization ──
+
+/**
+ * Finalize orchestration after the execution session completes.
+ * Checks task statuses and sets the final plan status.
+ */
+function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId: string }): void {
+  const orchId = orch.plan.orchestrationId;
+
+  // Mark any "running" tasks that weren't explicitly completed as failed
+  for (const task of orch.plan.tasks) {
+    if (task.status === "running") {
+      task.status = "failed";
+      task.error = "Session ended before task completed";
+      blockDependents(orch.plan, task.taskId);
+    }
+  }
+
+  const allDone = orch.plan.tasks.every(t =>
+    t.status === "completed" || t.status === "blocked" || t.status === "failed",
+  );
+  const anyFailed = orch.plan.tasks.some(t => t.status === "failed");
+
+  if (allDone && !anyFailed) {
+    orch.plan.status = "completed";
+    updateOrchestrationProgress(orchId, "completed");
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration completed: ${orchId}` });
+  } else if (allDone && anyFailed) {
+    // Some tasks failed but the session finished
+    const completed = orch.plan.tasks.filter(t => t.status === "completed").length;
+    const failed = orch.plan.tasks.filter(t => t.status === "failed").length;
+    orch.plan.status = completed > 0 ? "completed" : "failed";
+    updateOrchestrationProgress(orchId, completed > 0 ? "completed" : "failed");
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration finished: ${completed} completed, ${failed} failed` });
+  }
+  // If tasks are still pending, leave status as "executing" (shouldn't happen)
+}
+
+// ── DAG Utilities (moved from orchestrator-engine.ts) ──
+
+/**
+ * Mark all tasks that depend on a failed task as "blocked".
+ */
+function blockDependents(plan: OrchestrationPlan, failedTaskId: string): void {
+  for (const task of plan.tasks) {
+    if (task.status === "pending" && task.dependsOn.includes(failedTaskId)) {
+      task.status = "blocked";
+      // Recursively block downstream
+      blockDependents(plan, task.taskId);
+    }
+  }
+}
+
+/**
+ * Read a task's output file (research, decision, document).
+ */
+function readTaskOutput(task: OrchestrationTask): string | null {
+  const filePaths = [
+    join(PROJECT_ROOT, `openclaw-plugin/.orchestration-research-${task.taskId}.md`),
+    join(PROJECT_ROOT, `openclaw-plugin/.orchestration-output-${task.taskId}.md`),
+  ];
+
+  for (const fp of filePaths) {
+    if (existsSync(fp)) {
+      try {
+        const content = readFileSync(fp, "utf-8");
+        return content.length > 5000 ? content.slice(0, 5000) + "\n\n[... truncated]" : content;
+      } catch {
+        // Ignore read errors
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Clean up temporary orchestration files after completion.
+ */
+function cleanupOrchestrationTempFiles(plan: OrchestrationPlan): void {
+  try {
+    const pluginDir = join(PROJECT_ROOT, "openclaw-plugin");
+    const files = readdirSync(pluginDir);
+    const orchId = plan.orchestrationId;
+    const taskIds = plan.tasks.map(t => t.taskId);
+
+    for (const file of files) {
+      if (file === `.orchestration-${orchId}.json`) {
+        try { unlinkSync(join(pluginDir, file)); } catch {}
+        continue;
+      }
+      for (const taskId of taskIds) {
+        if (
+          file === `.orchestration-research-${taskId}.md` ||
+          file === `.orchestration-output-${taskId}.md`
+        ) {
+          try { unlinkSync(join(pluginDir, file)); } catch {}
+        }
+      }
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Cleaned up temp files for orchestration ${orchId}` });
+  } catch (err) {
+    logError("orchestrator", "Cleanup failed", err);
+  }
 }
 
 // ── Persistence ──

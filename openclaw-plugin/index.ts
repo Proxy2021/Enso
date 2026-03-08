@@ -1,7 +1,7 @@
 import type { ChannelPlugin, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { ensoPlugin } from "./src/channel.js";
-import { setEnsoRuntime } from "./src/runtime.js";
+import { setEnsoRuntime, setPluginApi } from "./src/runtime.js";
 import { findExistingProviderForActionSuffixes, isToolRegistered } from "./src/native-tools/registry.js";
 import { recordToolCall } from "./src/native-tools/tool-call-store.js";
 import { registerFilesystemTools } from "./src/filesystem-tools.js";
@@ -12,7 +12,7 @@ import { registerBrowserTools } from "./src/browser-tools.js";
 import { registerCityTools } from "./src/city-tools.js";
 import { registerResearcherTools } from "./src/researcher-tools.js";
 import { registerClawHubTools } from "./src/clawhub-tools.js";
-import { TOOL_FAMILY_CAPABILITIES } from "./src/tool-families/catalog.js";
+import { APP_CATALOG } from "./src/app-catalog.js";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,11 +76,12 @@ const plugin = {
   register(api: OpenClawPluginApi) {
     loadEnvFile();
     setEnsoRuntime(api.runtime);
+    setPluginApi(api);
     api.registerChannel({ plugin: ensoPlugin as ChannelPlugin });
     maybeRegisterFallbackToolFamily({
       familyLabel: "filesystem",
       fallbackPrefix: "enso_fs_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "filesystem")?.actionSuffixes ?? [],
+      actionSuffixes: APP_CATALOG.find((x) => x.appId === "filesystem")?.actions ?? [],
       register: () => registerFilesystemTools(api),
     });
     // Media tools are registered directly (no catalog entry) — they serve as
@@ -90,25 +91,25 @@ const plugin = {
     maybeRegisterFallbackToolFamily({
       familyLabel: "city",
       fallbackPrefix: "enso_city_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "city_planner")?.actionSuffixes ?? [],
+      actionSuffixes: APP_CATALOG.find((x) => x.appId === "city_planner")?.actions ?? [],
       register: () => registerCityTools(api),
     });
     maybeRegisterFallbackToolFamily({
       familyLabel: "browser",
       fallbackPrefix: "enso_browser_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "web_browser")?.actionSuffixes ?? [],
+      actionSuffixes: APP_CATALOG.find((x) => x.appId === "web_browser")?.actions ?? [],
       register: () => registerBrowserTools(api),
     });
     maybeRegisterFallbackToolFamily({
       familyLabel: "researcher",
       fallbackPrefix: "enso_researcher_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "researcher")?.actionSuffixes ?? [],
+      actionSuffixes: APP_CATALOG.find((x) => x.appId === "researcher")?.actions ?? [],
       register: () => registerResearcherTools(api),
     });
     maybeRegisterFallbackToolFamily({
       familyLabel: "clawhub",
       fallbackPrefix: "enso_clawhub_",
-      actionSuffixes: TOOL_FAMILY_CAPABILITIES.find((x) => x.toolFamily === "clawhub")?.actionSuffixes ?? [],
+      actionSuffixes: APP_CATALOG.find((x) => x.appId === "clawhub")?.actions ?? [],
       register: () => registerClawHubTools(api),
     });
 

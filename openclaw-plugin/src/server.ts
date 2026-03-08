@@ -15,7 +15,7 @@ import { handleCardEnhance, handlePluginCardAction, createScopedShareContext, ge
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { transcribeAudio } from "./transcribe.js";
-import { TOOL_FAMILY_CAPABILITIES } from "./tool-families/catalog.js";
+import { APP_CATALOG } from "./app-catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
 import { classifyTask } from "./task-router.js";
@@ -138,8 +138,8 @@ export async function startEnsoServer(opts: {
 
   // Re-hydrate saved apps from disk before setting up routes
   try {
-    const { loadAndRegisterSavedApps } = await import("./app-persistence.js");
-    const appCount = loadAndRegisterSavedApps();
+    const { loadAndRegisterApps } = await import("./app-persistence.js");
+    const appCount = loadAndRegisterApps();
     if (appCount > 0) {
       console.log(`[enso] re-hydrated ${appCount} saved app(s) from disk`);
     }
@@ -721,7 +721,7 @@ export async function startEnsoServer(opts: {
     clients.set(connectionId, client);
 
     // Send current mode + available tool families + project path to newly connected client
-    const toolFamilies = TOOL_FAMILY_CAPABILITIES.map((c) => ({ toolFamily: c.toolFamily, description: c.description }));
+    const toolFamilies = APP_CATALOG.map((c) => ({ appId: c.appId, toolFamily: c.appId, description: c.description }));
     const ensoProjectPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
     send({
       id: randomUUID(),
@@ -1083,30 +1083,34 @@ export async function startEnsoServer(opts: {
           }
           case "apps.list": {
             try {
-              const { loadAllApps, isCodebaseApp } = await import("./app-persistence.js");
-              const { TOOL_FAMILY_CAPABILITIES } = await import("./tool-families/catalog.js");
+              const { loadAllApps, isShippedApp } = await import("./app-persistence.js");
+              const { APP_CATALOG } = await import("./app-catalog.js");
               const { isToolRegistered } = await import("./native-tools/registry.js");
               const apps = loadAllApps();
               const dynamicApps = apps.map((app) => {
                 const primary = app.spec.tools.find((t) => t.isPrimary) ?? app.spec.tools[0];
                 return {
+                  appId: app.spec.toolFamily,
                   toolFamily: app.spec.toolFamily,
                   description: app.spec.description,
                   toolCount: app.spec.tools.length,
                   primaryToolName: `${app.spec.toolPrefix}${primary.suffix}`,
-                  codebase: isCodebaseApp(app.spec.toolFamily),
+                  shipped: isShippedApp(app.spec.toolFamily),
+                  codebase: isShippedApp(app.spec.toolFamily),
                 };
               });
               // Include built-in tool families whose fallback tool is registered
               const dynamicFamilies = new Set(dynamicApps.map((a) => a.toolFamily));
-              const builtInApps = TOOL_FAMILY_CAPABILITIES
-                .filter((cap) => !dynamicFamilies.has(cap.toolFamily) && isToolRegistered(cap.fallbackToolName))
+              const builtInApps = APP_CATALOG
+                .filter((cap) => !dynamicFamilies.has(cap.appId) && isToolRegistered(cap.primaryTool))
                 .map((cap) => ({
-                  toolFamily: cap.toolFamily,
+                  appId: cap.appId,
+                  toolFamily: cap.appId,
                   description: cap.description,
-                  toolCount: cap.actionSuffixes.length,
-                  primaryToolName: cap.fallbackToolName,
+                  toolCount: cap.actions.length,
+                  primaryToolName: cap.primaryTool,
                   builtIn: true,
+                  system: true,
                 }));
               const appsList = [...builtInApps, ...dynamicApps];
               send({
@@ -1139,7 +1143,7 @@ export async function startEnsoServer(opts: {
               try {
                 const { loadAllApps } = await import("./app-persistence.js");
                 const { executeToolDirect, normalizeDataForToolTemplate, getToolTemplateCode, getToolTemplate } = await import("./native-tools/registry.js");
-                const { getCapabilityForFamily } = await import("./tool-families/catalog.js");
+                const { getApp } = await import("./app-catalog.js");
                 const apps = loadAllApps();
                 const app = apps.find((a) => a.spec.toolFamily === msg.toolFamily);
 
@@ -1171,7 +1175,7 @@ export async function startEnsoServer(opts: {
                     account,
                     mode: "full",
                     actionHistory: [],
-                    nativeToolHint: {
+                    appToolHint: {
                       toolName: primaryToolName,
                       params: primary.sampleParams,
                       handlerPrefix: app.spec.toolPrefix,
@@ -1203,7 +1207,7 @@ export async function startEnsoServer(opts: {
                   });
                 } else {
                   // ── Built-in tool family path ──
-                  const cap = getCapabilityForFamily(msg.toolFamily);
+                  const cap = getApp(msg.toolFamily);
                   if (!cap) {
                     send({
                       id: randomUUID(),
@@ -1217,7 +1221,7 @@ export async function startEnsoServer(opts: {
                     break;
                   }
 
-                  const toolName = cap.fallbackToolName;
+                  const toolName = cap.primaryTool;
                   const result = await executeToolDirect(toolName, {});
                   if (!result.success) {
                     runtime.log?.(`[enso:app-runner] built-in tool ${toolName} failed: ${result.error}`);
@@ -1233,14 +1237,14 @@ export async function startEnsoServer(opts: {
                     break;
                   }
 
-                  const template = getToolTemplate(cap.toolFamily, cap.signatureId);
+                  const template = getToolTemplate(cap.appId, cap.signatureId);
                   const normalized = template
                     ? normalizeDataForToolTemplate(template, result.data)
                     : (result.data as Record<string, unknown>);
                   const generatedUI = template ? getToolTemplateCode(template) : undefined;
 
                   // Derive prefix by stripping the fallback suffix from the tool name
-                  const fallbackSuffix = cap.actionSuffixes.find((s) => toolName.endsWith(`_${s}`));
+                  const fallbackSuffix = cap.actions.find((s) => toolName.endsWith(`_${s}`));
                   const handlerPrefix = fallbackSuffix
                     ? toolName.slice(0, -fallbackSuffix.length)
                     : toolName.replace(/_[^_]+$/, "_");
@@ -1249,25 +1253,25 @@ export async function startEnsoServer(opts: {
                   const cardId = randomUUID();
                   registerCardContext(cardId, {
                     cardId,
-                    originalPrompt: `Run app: ${cap.toolFamily}`,
+                    originalPrompt: `Run app: ${cap.appId}`,
                     originalResponse: "",
                     currentData: structuredClone(normalized),
                     geminiApiKey: account.geminiApiKey,
                     account,
                     mode: "full",
                     actionHistory: [],
-                    nativeToolHint: {
+                    appToolHint: {
                       toolName,
                       params: {},
                       handlerPrefix,
                     },
                     interactionMode: "tool",
-                    toolFamily: cap.toolFamily,
+                    toolFamily: cap.appId,
                     signatureId: cap.signatureId,
                     coverageStatus: "covered",
                   });
 
-                  runtime.log?.(`[enso:app-runner] built-in card=${cardId} tool=${toolName} family=${cap.toolFamily}`);
+                  runtime.log?.(`[enso:app-runner] built-in card=${cardId} tool=${toolName} family=${cap.appId}`);
 
                   send({
                     id: cardId,
@@ -1279,7 +1283,7 @@ export async function startEnsoServer(opts: {
                     generatedUI,
                     cardMode: {
                       interactionMode: "tool",
-                      toolFamily: cap.toolFamily,
+                      toolFamily: cap.appId,
                       signatureId: cap.signatureId,
                       coverageStatus: "covered",
                     },
@@ -1300,6 +1304,38 @@ export async function startEnsoServer(opts: {
                   timestamp: Date.now(),
                 });
               }
+            }
+            break;
+          }
+          case "apps.delete": {
+            const family = msg.toolFamily;
+            if (!family) {
+              send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error", text: "Missing toolFamily for app deletion", timestamp: Date.now() });
+              break;
+            }
+            runtime.log?.(`[enso] delete app requested: ${family}`);
+            try {
+              const { loadApps, unregisterLoadedApp, deleteApp } = await import("./app-persistence.js");
+              const apps = loadApps();
+              const app = apps.find((a) => a.spec.toolFamily === family);
+              if (!app) {
+                send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error", text: `App "${family}" not found`, timestamp: Date.now() });
+                break;
+              }
+              unregisterLoadedApp(app.spec);
+              deleteApp(family);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                appsDeleted: { families: [family], count: 1 },
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              logError("apps", `delete app "${family}" failed`, err);
+              send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error", text: `Failed to delete app: ${err instanceof Error ? err.message : String(err)}`, timestamp: Date.now() });
             }
             break;
           }
@@ -1332,12 +1368,13 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
+          case "app.promote":
           case "app.save_to_codebase": {
             if (msg.toolFamily) {
               runtime.log?.(`[enso] save app to codebase: ${msg.toolFamily}`);
               try {
-                const { saveAppToCodebase } = await import("./app-persistence.js");
-                const result = saveAppToCodebase(msg.toolFamily);
+                const { promoteApp } = await import("./app-persistence.js");
+                const result = promoteApp(msg.toolFamily);
                 send({
                   id: randomUUID(),
                   runId: randomUUID(),

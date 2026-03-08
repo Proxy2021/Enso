@@ -8,20 +8,20 @@ import os from "node:os";
 vi.mock("./native-tools/registry.js", () => ({
   registerToolTemplate: vi.fn(),
   registerToolTemplateDataHint: vi.fn(),
-  registerGeneratedTool: vi.fn(),
-  registerGeneratedTemplateCode: vi.fn(),
+  registerAppTool: vi.fn(),
+  registerAppTemplate: vi.fn(),
   registerDynamicAppPrefix: vi.fn(),
-  unregisterGeneratedTool: vi.fn(),
-  unregisterGeneratedTemplateCode: vi.fn(),
+  unregisterAppTool: vi.fn(),
+  unregisterAppTemplate: vi.fn(),
   unregisterToolTemplate: vi.fn(),
   unregisterToolTemplateDataHints: vi.fn(),
   executeToolDirect: vi.fn().mockResolvedValue({ success: false, data: null, error: "not available in test" }),
 }));
 
-vi.mock("./tool-families/catalog.js", () => ({
-  TOOL_FAMILY_CAPABILITIES: [],
-  addCapability: vi.fn(),
-  removeCapability: vi.fn(),
+vi.mock("./app-catalog.js", () => ({
+  APP_CATALOG: [],
+  registerApp: vi.fn(),
+  unregisterApp: vi.fn(),
 }));
 
 vi.mock("./action-log.js", () => ({
@@ -36,26 +36,26 @@ import {
   saveApp,
   loadApps,
   registerLoadedApp,
-  loadAndRegisterSavedApps,
+  loadAndRegisterApps,
   deleteApp,
   deleteAllApps,
-  unregisterApp,
+  unregisterLoadedApp,
   generateSkillMd,
   buildExecutorContext,
   type SavedApp,
 } from "./app-persistence.js";
 import type { PluginSpec } from "./tool-factory.js";
 import {
-  registerGeneratedTool,
-  registerGeneratedTemplateCode,
+  registerAppTool,
+  registerAppTemplate,
   registerToolTemplate,
   registerToolTemplateDataHint,
-  unregisterGeneratedTool,
-  unregisterGeneratedTemplateCode,
+  unregisterAppTool,
+  unregisterAppTemplate,
   unregisterToolTemplate,
   unregisterToolTemplateDataHints,
 } from "./native-tools/registry.js";
-import { addCapability, removeCapability } from "./tool-families/catalog.js";
+import { registerApp, unregisterApp } from "./app-catalog.js";
 
 // ── Fixtures ──
 
@@ -211,11 +211,11 @@ describe("registerLoadedApp", () => {
     registerLoadedApp(loaded[0]);
 
     // 2 tools registered
-    expect(registerGeneratedTool).toHaveBeenCalledTimes(2);
-    expect(registerGeneratedTool).toHaveBeenCalledWith(
+    expect(registerAppTool).toHaveBeenCalledTimes(2);
+    expect(registerAppTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "enso_workout_plan_week" }),
     );
-    expect(registerGeneratedTool).toHaveBeenCalledWith(
+    expect(registerAppTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "enso_workout_swap_exercise" }),
     );
 
@@ -236,17 +236,17 @@ describe("registerLoadedApp", () => {
     );
 
     // Template code registered
-    expect(registerGeneratedTemplateCode).toHaveBeenCalledWith(
+    expect(registerAppTemplate).toHaveBeenCalledWith(
       "weekly_workout_plan",
       TEMPLATE_JSX,
     );
 
-    // Capability added
-    expect(addCapability).toHaveBeenCalledWith(
+    // App registered in catalog
+    expect(registerApp).toHaveBeenCalledWith(
       expect.objectContaining({
-        toolFamily: "workout_planner",
-        fallbackToolName: "enso_workout_plan_week",
-        actionSuffixes: ["plan_week", "swap_exercise"],
+        appId: "workout_planner",
+        primaryTool: "enso_workout_plan_week",
+        actions: ["plan_week", "swap_exercise"],
       }),
     );
   });
@@ -261,29 +261,29 @@ describe("registerLoadedApp", () => {
     registerLoadedApp(loaded);
 
     // Only 1 tool registered (swap_exercise has no body)
-    expect(registerGeneratedTool).toHaveBeenCalledTimes(1);
-    expect(registerGeneratedTool).toHaveBeenCalledWith(
+    expect(registerAppTool).toHaveBeenCalledTimes(1);
+    expect(registerAppTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "enso_workout_plan_week" }),
     );
   });
 });
 
-describe("loadAndRegisterSavedApps", () => {
+describe("loadAndRegisterApps", () => {
   it("loads and registers all saved apps (user + codebase)", () => {
     saveApp(makeSavedApp(), tmpBase);
 
-    const count = loadAndRegisterSavedApps(tmpBase);
+    const count = loadAndRegisterApps(tmpBase);
     // count includes user apps + any codebase apps from openclaw-plugin/apps/
     expect(count).toBeGreaterThanOrEqual(1);
     // Our workout_planner app's tools were registered
-    expect(registerGeneratedTool).toHaveBeenCalledWith(
+    expect(registerAppTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "enso_workout_plan_week" }),
     );
-    expect(registerGeneratedTool).toHaveBeenCalledWith(
+    expect(registerAppTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "enso_workout_swap_exercise" }),
     );
-    expect(addCapability).toHaveBeenCalledWith(
-      expect.objectContaining({ toolFamily: "workout_planner" }),
+    expect(registerApp).toHaveBeenCalledWith(
+      expect.objectContaining({ appId: "workout_planner" }),
     );
   });
 
@@ -292,7 +292,7 @@ describe("loadAndRegisterSavedApps", () => {
     const userOnly = loadApps(tmpBase);
     expect(userOnly).toHaveLength(0);
 
-    const count = loadAndRegisterSavedApps(tmpBase);
+    const count = loadAndRegisterApps(tmpBase);
     // count may be > 0 due to codebase apps; key is no user apps are loaded
     expect(count).toBeGreaterThanOrEqual(0);
   });
@@ -319,17 +319,17 @@ describe("deleteApp", () => {
   });
 });
 
-describe("unregisterApp", () => {
+describe("unregisterLoadedApp", () => {
   it("calls all unregister functions for the app's spec", () => {
-    unregisterApp(SAMPLE_SPEC);
+    unregisterLoadedApp(SAMPLE_SPEC);
 
     // Should unregister both tool executors
-    expect(unregisterGeneratedTool).toHaveBeenCalledTimes(2);
-    expect(unregisterGeneratedTool).toHaveBeenCalledWith("enso_workout_plan_week");
-    expect(unregisterGeneratedTool).toHaveBeenCalledWith("enso_workout_swap_exercise");
+    expect(unregisterAppTool).toHaveBeenCalledTimes(2);
+    expect(unregisterAppTool).toHaveBeenCalledWith("enso_workout_plan_week");
+    expect(unregisterAppTool).toHaveBeenCalledWith("enso_workout_swap_exercise");
 
     // Should unregister template code
-    expect(unregisterGeneratedTemplateCode).toHaveBeenCalledWith("weekly_workout_plan");
+    expect(unregisterAppTemplate).toHaveBeenCalledWith("weekly_workout_plan");
 
     // Should unregister tool template
     expect(unregisterToolTemplate).toHaveBeenCalledWith("workout_planner", "weekly_workout_plan");
@@ -338,7 +338,7 @@ describe("unregisterApp", () => {
     expect(unregisterToolTemplateDataHints).toHaveBeenCalledWith("workout_planner");
 
     // Should remove capability
-    expect(removeCapability).toHaveBeenCalledWith("workout_planner");
+    expect(unregisterApp).toHaveBeenCalledWith("workout_planner");
   });
 });
 
@@ -378,11 +378,11 @@ describe("deleteAllApps", () => {
 
     // Verify unregister functions were called for both apps
     // workout_planner has 2 tools, yoga_planner has 1 (only plan_week had a body)
-    expect(unregisterGeneratedTool).toHaveBeenCalledWith("enso_workout_plan_week");
-    expect(unregisterGeneratedTool).toHaveBeenCalledWith("enso_workout_swap_exercise");
-    expect(unregisterGeneratedTool).toHaveBeenCalledWith("enso_yoga_plan_week");
-    expect(removeCapability).toHaveBeenCalledWith("workout_planner");
-    expect(removeCapability).toHaveBeenCalledWith("yoga_planner");
+    expect(unregisterAppTool).toHaveBeenCalledWith("enso_workout_plan_week");
+    expect(unregisterAppTool).toHaveBeenCalledWith("enso_workout_swap_exercise");
+    expect(unregisterAppTool).toHaveBeenCalledWith("enso_yoga_plan_week");
+    expect(unregisterApp).toHaveBeenCalledWith("workout_planner");
+    expect(unregisterApp).toHaveBeenCalledWith("yoga_planner");
   });
 
   it("returns empty array when no apps exist", () => {

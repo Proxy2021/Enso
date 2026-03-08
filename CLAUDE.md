@@ -15,7 +15,8 @@ Enso has two layers:
 
 ### Data Flow
 
-- **Normal chat**: Browser → WS → OpenClaw Plugin → Agent → multi-block accumulation → `deliverEnsoReply` → text card → optional enhance → app view → card actions (four-path dispatch)
+- **Normal chat (Q&A)**: Browser → WS → OpenClaw Plugin → Agent → text response → `deliverEnsoReply` → text card
+- **Normal chat (tool use)**: Browser → WS → OpenClaw Plugin → Agent calls registered tool → `after_tool_call` hook captures result → `deliverEnsoReply` → text card + auto-enhance via `consumeRecentToolCall()` → app card rendered alongside text (no LLM call needed)
 - **Claude Code**: Browser → WS → `server.ts` → spawn `claude.exe` (NDJSON stream) → streaming terminal card + interactive questions
 
 ## Project Structure
@@ -31,8 +32,8 @@ src/                          # React frontend (Vite entry)
 
 openclaw-plugin/              # OpenClaw channel plugin (the backend)
 ├── index.ts                  # Plugin entry
-├── apps/                     # Codebase apps (checked into git)
-│   └── <family>/             # app.json + template.jsx + executors/*.js
+├── apps/                     # Shipped apps (checked into git)
+│   └── <appId>/              # app.json + template.jsx + executors/*.js
 └── src/
     ├── channel.ts            # ChannelPlugin implementation
     ├── server.ts             # Express + WS server
@@ -49,11 +50,11 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── app-persistence.ts    # Save/load dynamic apps from disk
     ├── claude-code.ts        # Claude Code CLI integration
     ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
-    ├── *-tools.ts            # Tool family implementations (filesystem, workspace, media, screen, travel, meal)
-    ├── tool-families/catalog.ts  # TOOL_FAMILY_CAPABILITIES definitions
-    └── native-tools/         # Zero-config native tool bridge
-        ├── registry.ts       # Tool auto-discovery + template registry
-        └── templates/        # Pre-built JSX templates per tool family
+    ├── *-tools.ts            # System app implementations (filesystem, workspace, media, screen, travel, meal)
+    ├── app-catalog.ts          # APP_CATALOG definitions (system + app entries)
+    └── native-tools/         # App action bridge
+        ├── registry.ts       # App tool discovery + template registry
+        └── templates/        # Pre-built JSX templates per app
 
 shared/types.ts               # Protocol types shared between frontend and plugin
 ```
@@ -62,7 +63,7 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 
 ### WebSocket Protocol
 
-- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `mission.start`, `mission.approve`, `orchestration.approve`, `orchestration.pause`, `orchestration.resume`, `orchestration.cancel`, `client.error`
+- **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `app.promote`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `mission.start`, `mission.approve`, `orchestration.approve`, `orchestration.pause`, `orchestration.resume`, `orchestration.cancel`, `client.error`
 - **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `missionPlan`, `missionProgress`, `orchestrationProgress`, `questions`
 - `chat.send` with `routing.toolId: "claude-code"` bypasses OpenClaw agent, spawns CLI directly
 - `shell.*` messages manage PTY sessions — `toolMeta.toolId === "shell"` routes to ShellCard
@@ -75,9 +76,10 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 3. Card's `text` set to last block (final answer); earlier blocks in `steps`
 4. Frontend shows expandable "N agent steps" toggle when 2+ steps
 
-### App Enhancement (Three Flows)
+### App Enhancement (Four Flows)
 
-- **Fast Enhance**: User clicks App button → family selected from dropdown (or auto-detect) → deterministic tool execution → template rendering → app view with Original/App toggle
+- **Auto-Enhance**: When the OpenClaw agent calls a registered tool, `deliverEnsoReply()` checks `consumeRecentToolCall()` and automatically renders the app card alongside the text response. No LLM call needed — deterministic based on tool usage. Replaces the old background `selectToolForContent()` LLM call + `enhanceHint` approach.
+- **Fast Enhance** (manual fallback): User clicks App button → app selected from dropdown (or auto-detect) → deterministic tool execution → template rendering → app view with Original/App toggle
 - **Build App**: User clicks "Build custom app..." → single-line instruction → Claude Code session in terminal card → writes app files → post-build auto-registration → `buildComplete` notification
 - **Refine**: User types instruction in app view → single LLM call regenerates template JSX only → in-place update (cheapest iteration path)
 
@@ -128,13 +130,15 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 - Performance: PTY output written directly to xterm.js via `shellWriters` map, bypassing React state
 - Key files: `shell-pty.ts` (backend), `ShellCard.tsx` (frontend), card type `"shell"`
 
-### Native Tool Bridge + Action Dispatch
+### App Action Bridge + Dispatch
 
 Four-path dispatch (first match wins):
 1. **Refine** — `action === "refine"` → regenerate template only (1 LLM call)
 2. **Mechanical** — built-in data mutations (sorting, task boards)
-3. **Native tool** — resolve `prefix + action` to registered tool → execute directly
+3. **App tool** — resolve `prefix + action` to registered tool → execute directly
 4. **Agent fallback** — unmatched actions go through OpenClaw agent pipeline
+
+**Ecosystem Bridge**: `registerAppTool()` in `registry.ts` dual-registers each dynamic app tool with both the internal `generatedToolExecutors` map AND the OpenClaw ecosystem via `api.registerTool()`. The `PluginApi` is stored during plugin init via `setPluginApi()` in `runtime.ts`. This means every user-built app is immediately discoverable by the OpenClaw agent for future requests — closing the loop where apps become reusable ecosystem tools.
 
 ## Building Apps
 
@@ -143,11 +147,27 @@ Four-path dispatch (first match wins):
 | Location | Path | Purpose |
 |----------|------|---------|
 | **User apps** | `~/.openclaw/enso-apps/<family>/` | Created by Build App pipeline |
-| **Codebase apps** | `openclaw-plugin/apps/<family>/` | Promoted via Apps menu bookmark |
+| **Shipped apps** | `openclaw-plugin/apps/<family>/` | Promoted via Apps menu |
 
 Three creation methods: **(1) Build from Enso UI** (recommended), **(2) Via Code button** (Claude Code), **(3) Manual** file creation.
 
-**Built-in apps** (advanced) use a 5-file TypeScript pattern for deeply integrated tool families. See CLAUDE-REFERENCE.md for complete guides on both approaches.
+**System apps** (advanced) use a 5-file TypeScript pattern for deeply integrated platform capabilities. See CLAUDE-REFERENCE.md for complete guides on both approaches.
+
+### App Tiers
+
+| Tier | What | Can Delete? | Examples |
+|------|------|-------------|---------|
+| **System** | Core platform capabilities. Deeply integrated (Node.js APIs, native binaries, SDK sessions). Always available. | No | filesystem, media, screen, browser, claude_code, shell |
+| **Apps** | Everything else. Built on top of system capabilities. Can be pre-installed (`shipped`) or user-created. | Yes | researcher, city_planner, clawhub, alpharank, photo_studio |
+
+### Experience Types
+
+Apps render in two styles:
+
+| Experience | Card Type | Rendering | Apps |
+|------------|-----------|-----------|------|
+| **card** | `dynamic-ui` | React JSX template in sandbox | filesystem, media, screen, browser, researcher, city_planner, all user apps |
+| **terminal** | `terminal` / `shell` | Streaming text terminal (xterm.js) | claude_code, shell |
 
 ### Critical Rules (Quick Reference)
 
@@ -215,7 +235,9 @@ Enso is installable as a Progressive Web App — `public/manifest.json`, `public
 
 - Enso implements `ChannelPlugin<ResolvedEnsoAccount>` and registers via `api.registerChannel()`
 - Uses `resolveAgentRoute()` for agent routing, `dispatchReplyWithBufferedBlockDispatcher()` for streaming
-- Tools registered via `api.registerTool()`, hooks via `api.registerHook()`
+- Built-in tools registered via `api.registerTool()` during plugin init, hooks via `api.registerHook()`
+- Dynamic app tools also registered via `api.registerTool()` at runtime (ecosystem bridge in `registerAppTool()`)
+- `runtime.ts` stores both `PluginRuntime` (via `setEnsoRuntime`) and `OpenClawPluginApi` (via `setPluginApi`) for runtime access
 - Session keys: `<workspace>:<agent>:<channel>:<account>:<peer>`
 - Supports DM policy config: `open`, `pairing`, `disabled`
 

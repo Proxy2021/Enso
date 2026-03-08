@@ -6,6 +6,7 @@ export default function GeneratedUI({ data, onAction }) {
   const [createMode, setCreateMode] = useState(false);
   const [sliderVal, setSliderVal] = useState(null);
   const [viewMode, setViewMode] = useState("grid"); // grid or list
+  const [bookPage, setBookPage] = useState(0);
 
   useEffect(() => {
     if (sliderVal === null && data?.intensity) setSliderVal(data.intensity);
@@ -18,9 +19,18 @@ export default function GeneratedUI({ data, onAction }) {
   const isBatchProcess = tool === "enso_photo_studio_batch_process";
   const isCollection = tool === "enso_photo_studio_manage_collection";
   const isCompare = tool === "enso_photo_studio_compare_versions";
+  const isPhotobook = tool === "enso_photo_studio_photobook";
+  const isAdjust = tool === "enso_photo_studio_adjust";
 
   // ── Helpers ──
   const styleColors = {
+    wong_kar_wai: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300", icon: "Film" },
+    wes_anderson: { bg: "bg-pink-500/10", border: "border-pink-500/30", text: "text-pink-300", icon: "Palette" },
+    film_noir: { bg: "bg-gray-600/10", border: "border-gray-500/30", text: "text-gray-200", icon: "Moon" },
+    terrence_malick: { bg: "bg-yellow-500/10", border: "border-yellow-500/30", text: "text-yellow-300", icon: "Sun" },
+    cyberpunk: { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300", icon: "Zap" },
+    studio_ghibli: { bg: "bg-sky-500/10", border: "border-sky-500/30", text: "text-sky-300", icon: "Cloud" },
+    vintage_kodachrome: { bg: "bg-orange-500/10", border: "border-orange-500/30", text: "text-orange-300", icon: "Camera" },
     watercolor: { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-300", icon: "Droplets" },
     oil_painting: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300", icon: "Brush" },
     sketch: { bg: "bg-gray-500/10", border: "border-gray-400/30", text: "text-gray-300", icon: "Pencil" },
@@ -230,6 +240,29 @@ export default function GeneratedUI({ data, onAction }) {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Actions bar when items exist */}
+        {items.length > 0 && (
+          <div className="flex gap-2 pt-1 border-t border-gray-800/40">
+            <Button size="sm" variant="outline"
+              onClick={() => onAction("photobook", {
+                paths: items.map(function(it) { return it.path; }),
+                layout: "magazine",
+                title: folderName || "Photo Book",
+                folderPath: currentPath
+              })}>
+              <LucideReact.BookOpen className="w-3 h-3 mr-1" /> Photo Book
+            </Button>
+            <Button size="sm" variant="outline"
+              onClick={() => onAction("batch_process", {
+                collection: currentPath,
+                style: "watercolor",
+                intensity: 75
+              })}>
+              <LucideReact.Paintbrush className="w-3 h-3 mr-1" /> Batch Style
+            </Button>
           </div>
         )}
 
@@ -669,6 +702,184 @@ export default function GeneratedUI({ data, onAction }) {
             })}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Photo Book View ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isPhotobook) {
+    var pages = data.pages || [];
+    var totalPages = pages.length;
+    var currentPage = pages[bookPage] || pages[0];
+
+    return (
+      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-3">
+        {/* Book header */}
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", { path: data.folderPath || "" })}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back
+          </Button>
+          <div className="text-center flex-1">
+            <div className="text-sm font-semibold text-gray-100">{data.title || "Photo Book"}</div>
+            {data.subtitle && <div className="text-[10px] text-gray-500 italic">{data.subtitle}</div>}
+          </div>
+          <Badge variant="secondary">{bookPage + 1}/{totalPages}</Badge>
+        </div>
+
+        {/* Layout badge */}
+        <div className="flex items-center justify-center gap-2">
+          <Badge variant="outline" className="text-[10px]">
+            <LucideReact.BookOpen className="w-3 h-3 mr-1" />
+            {(data.layout || "magazine").replace(/_/g, " ")} · {data.totalPhotos || 0} photos
+          </Badge>
+        </div>
+
+        {/* Page content */}
+        {currentPage && (
+          <div className={
+            currentPage.type === "hero"
+              ? "space-y-2"
+              : currentPage.type === "contact"
+              ? "grid grid-cols-3 gap-1"
+              : "grid grid-cols-2 gap-2"
+          }>
+            {(currentPage.photos || []).map(function(photo, i) {
+              return (
+                <div
+                  key={i}
+                  className={"relative rounded-xl overflow-hidden bg-gray-800/60 border border-gray-700/40 " +
+                    (currentPage.type === "hero" && i === 0 ? "col-span-full" : "")}
+                >
+                  {photo.path ? (
+                    <img
+                      src={photo.path}
+                      alt={photo.caption || ""}
+                      loading="lazy"
+                      style={{
+                        width: "100%",
+                        height: currentPage.type === "hero" && i === 0 ? "220px" : currentPage.type === "contact" ? "100px" : "140px",
+                        objectFit: "cover"
+                      }}
+                    />
+                  ) : (
+                    <div style={{ width: "100%", height: "140px" }} className="flex items-center justify-center">
+                      <LucideReact.Image className="w-8 h-8 text-gray-600" />
+                    </div>
+                  )}
+                  {photo.caption && currentPage.type !== "contact" && (
+                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                      <p className="text-white text-[10px] italic leading-tight line-clamp-2">{photo.caption}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Page navigation */}
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <Button
+            variant="ghost" size="sm"
+            disabled={bookPage === 0}
+            onClick={() => setBookPage(function(p) { return Math.max(0, p - 1); })}
+          >
+            <LucideReact.ChevronLeft className="w-4 h-4" />
+          </Button>
+
+          <div className="flex gap-1">
+            {pages.slice(0, 12).map(function(_, i) {
+              return (
+                <button
+                  key={i}
+                  className={"w-2 h-2 rounded-full transition-colors cursor-pointer " +
+                    (i === bookPage ? "bg-violet-400" : "bg-gray-600 hover:bg-gray-500")}
+                  onClick={() => setBookPage(i)}
+                />
+              );
+            })}
+            {pages.length > 12 && <span className="text-gray-500 text-[9px]">+{pages.length - 12}</span>}
+          </div>
+
+          <Button
+            variant="ghost" size="sm"
+            disabled={bookPage >= totalPages - 1}
+            onClick={() => setBookPage(function(p) { return Math.min(totalPages - 1, p + 1); })}
+          >
+            <LucideReact.ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Adjust View ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isAdjust) {
+    var adjParams = [
+      { key: "brightness", label: "Brightness", icon: "Sun", min: -100, max: 100 },
+      { key: "contrast", label: "Contrast", icon: "Circle", min: -100, max: 100 },
+      { key: "saturation", label: "Saturation", icon: "Droplets", min: -100, max: 100 },
+      { key: "temperature", label: "Temperature", icon: "Thermometer", min: -100, max: 100 },
+      { key: "grain", label: "Grain", icon: "Sparkles", min: 0, max: 100 },
+      { key: "vignette", label: "Vignette", icon: "Maximize", min: 0, max: 100 },
+      { key: "fade", label: "Fade", icon: "Layers", min: 0, max: 100 },
+    ];
+
+    return (
+      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-3">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", {})}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-gray-100">Fine Tune</div>
+            <div className="text-[11px] text-gray-500">{data.name || "Photo"}</div>
+          </div>
+        </div>
+
+        {/* Photo preview */}
+        <div className="rounded-xl overflow-hidden border border-gray-700/40 bg-black/30">
+          {data.mediaUrl ? (
+            <img src={data.mediaUrl} alt={data.name} style={{ width: "100%", height: "200px", objectFit: "contain" }} />
+          ) : (
+            <div style={{ width: "100%", height: "200px" }} className="flex items-center justify-center">
+              <LucideReact.Image className="w-10 h-10 text-gray-600" />
+            </div>
+          )}
+        </div>
+
+        {data.description && (
+          <div className="bg-gray-800/40 rounded-lg px-3 py-2 border border-gray-700/30">
+            <span className="text-[11px] text-gray-300 italic">{data.description}</span>
+          </div>
+        )}
+
+        {/* Adjustment sliders */}
+        <div className="space-y-2.5">
+          {adjParams.map(function(adj) {
+            var IconComp = LucideReact[adj.icon] || LucideReact.Circle;
+            var val = data.adjustments ? (data.adjustments[adj.key] || 0) : 0;
+            return (
+              <div key={adj.key} className="space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    <IconComp className="w-3 h-3" /> {adj.label}
+                  </span>
+                  <span className="text-gray-200 font-medium">{val}</span>
+                </div>
+                <Progress value={((val - adj.min) / (adj.max - adj.min)) * 100} max={100} />
+              </div>
+            );
+          })}
+        </div>
+
+        <Button size="sm" className="w-full" onClick={() => onAction("apply_style", { photoId: data.path, style: "watercolor", intensity: 75 })}>
+          <LucideReact.Paintbrush className="w-3.5 h-3.5 mr-1" /> Apply Style Instead
+        </Button>
       </div>
     );
   }

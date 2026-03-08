@@ -62,9 +62,9 @@ When the OpenClaw agent self-iterates (e.g., a tool call fails and it retries), 
 
 ## App Enhancement (Full Details)
 
-### Enhance Menu (Tool Family Vocabulary)
+### Enhance Menu (App Vocabulary)
 
-The "App" enhance button shows a dropdown menu listing all available tool families (from `TOOL_FAMILY_CAPABILITIES`). Each entry shows an icon, family name, and description. Options:
+The "App" enhance button shows a dropdown menu listing all available apps (from `APP_CATALOG`). Each entry shows an icon, app name, and description. Options:
 - **Auto-detect**: LLM picks the best app type (original behavior)
 - **Family shortcut**: Pre-selects a family, skips the LLM tool selection call entirely (instant enhance via `suggestedFamily` in the WS message)
 - **Build custom app...**: Opens the async build pipeline for new app types
@@ -75,7 +75,7 @@ The menu is populated from `toolFamilies` state, sent by the server on WebSocket
 
 1. User clicks the "App" button → dropdown shows families, or clicks a specific family for instant enhance
 2. `card.enhance` message sent to server with `cardText` and optional `suggestedFamily`
-3. **Tool selection**: When `suggestedFamily` is set, the server skips `selectToolForContent()` and uses the family's `fallbackToolName` directly. Otherwise, Gemini analyzes the text and selects the best match from `TOOL_FAMILY_CAPABILITIES`.
+3. **Tool selection** (manual enhance only): When `suggestedFamily` is set, the server skips `selectToolForContent()` and uses the family's `primaryTool` directly. Otherwise, Gemini analyzes the text and selects the best match from `APP_CATALOG`. Note: for auto-enhance (when agent called a tool), this step is skipped entirely — the tool data is already captured.
 4. **Deterministic tool execution**: The selected tool is executed directly via `executeToolDirect()` — no further LLM calls
 5. **Template rendering**: `inferToolTemplate()` selects a pre-built JSX template, `normalizeDataForToolTemplate()` aligns the data shape, `getToolTemplateCode()` returns the JSX string
 6. **App view delivered**: `enhanceResult` sent back with `data`, `generatedUI`, `cardMode`
@@ -192,7 +192,7 @@ Enso embeds Claude Code as a direct tool, bypassing the OpenClaw agent pipeline 
 
 ---
 
-## Native Tool Bridge (Zero-Config — Detailed)
+## App Action Bridge (Zero-Config — Detailed)
 
 When other OpenClaw plugins (e.g., AlphaRank) register tools via `api.registerTool()`, Enso automatically integrates them — no Enso-side code needed. This enables card actions to call tools directly without an agent round-trip.
 
@@ -200,9 +200,13 @@ When other OpenClaw plugins (e.g., AlphaRank) register tools via `api.registerTo
 
 1. **Recording**: The `after_tool_call` hook in `index.ts` fires when the agent calls any registered tool. If the tool exists in the OpenClaw plugin registry, the call is recorded in a time-windowed store (`tool-call-store.ts`, 30s TTL).
 
-2. **Enhance-time linking**: When `handleCardEnhance()` selects and executes a tool, the tool's plugin is identified via `getToolPluginId()`, and a `nativeToolHint` is stored in the card context with the tool name, params, and handler prefix.
+2. **Auto-enhance**: After delivering a text card, `deliverEnsoReply()` in `delivery.ts` calls `consumeRecentToolCall()` to check if the agent used a tool. If so, it parses the captured tool result, finds the matching template via `inferToolTemplate()`, and sends an `enhanceResult` to render the app card alongside the text — no LLM call needed. This replaced the old background `selectToolForContent()` LLM call + `enhanceHint` approach.
 
-3. **Auto-detection**: The tool's common prefix is computed by `getPluginToolPrefix()` (longest common prefix among all tools from that plugin, ending with `_`).
+3. **Manual enhance linking**: When the user manually triggers `handleCardEnhance()`, the tool's plugin is identified via `getToolPluginId()`, and a `appToolHint` is stored in the card context with the tool name, params, and handler prefix.
+
+4. **Auto-detection**: The tool's common prefix is computed by `getPluginToolPrefix()` (longest common prefix among all tools from that plugin, ending with `_`).
+
+**Ecosystem Bridge**: `registerAppTool()` in `registry.ts` dual-registers each dynamic app tool with both the internal `generatedToolExecutors` map AND the OpenClaw ecosystem via `api.registerTool()`. The `PluginApi` is stored at startup via `setPluginApi()` in `runtime.ts`. This means user-built apps are immediately discoverable by the OpenClaw agent.
 
 4. **Four-path action dispatch** when a user clicks a card button:
    - **Path 0 — Refine**: `action === "refine"` with `payload.instruction` → re-generates only the template JSX (1 LLM call), preserving data and executors
@@ -214,7 +218,7 @@ When other OpenClaw plugins (e.g., AlphaRank) register tools via `api.registerTo
 
 ---
 
-## Tool Mode Catalog
+## App Catalog
 
 Enso ships multiple deterministic "app experience" tool families:
 
@@ -231,7 +235,7 @@ The `/tool enso` command opens a dedicated in-app tool console card.
 
 ## Building Enso Applications — Complete Guide
 
-Enso has two approaches for creating apps. **Dynamic apps** are the primary workflow — create them from within Enso itself and optionally promote them into the git repo. **Built-in apps** are the advanced path for deeply integrated tool families that need hardcoded TypeScript.
+Enso has two approaches for creating apps. **Dynamic apps** are the primary workflow — create them from within Enso itself and optionally promote them into the git repo. **System apps** are the advanced path for deeply integrated platform capabilities that need hardcoded TypeScript.
 
 ### Dynamic Apps (Primary Workflow)
 
@@ -240,9 +244,9 @@ Dynamic apps are created via Enso's **Build App** pipeline (or manually) and sto
 | Location | Path | Purpose |
 |----------|------|---------|
 | **User apps** | `~/.openclaw/enso-apps/<family>/` | Created by the Build App pipeline. Personal, not in git. |
-| **Codebase apps** | `openclaw-plugin/apps/<family>/` | Promoted from user apps via "Save to Codebase". Checked into git, ships with the project. |
+| **Shipped apps** | `openclaw-plugin/apps/<family>/` | Promoted from user apps via "Promote". Checked into git, ships with the project. |
 
-At startup, `loadAllApps()` merges both directories. User apps override codebase apps with the same `toolFamily` name (useful for iterating locally before committing).
+At startup, `loadApps()` merges both directories. User apps override shipped apps with the same `toolFamily` name (useful for iterating locally before committing).
 
 #### App Directory Structure
 
@@ -429,7 +433,7 @@ export default function GeneratedUI({ data, onAction }) {
 2. Write `app.json` with the PluginSpec schema above
 3. Write `template.jsx` with the JSX template
 4. Write `executors/<suffix>.js` for each tool
-5. Restart server → app loads automatically via `loadAllApps()`
+5. Restart server → app loads automatically via `loadApps()`
 
 #### App Lifecycle
 
@@ -440,24 +444,24 @@ Saved to ~/.openclaw/enso-apps/<family>/     (user app)
     ↓
 Click bookmark icon in Apps menu
     ↓
-Copied to openclaw-plugin/apps/<family>/     (codebase app)
+Copied to openclaw-plugin/apps/<family>/     (shipped app)
     ↓
 git add + git commit                         (shipped with project)
 ```
 
-- **`loadAllApps()`** merges codebase + user directories at startup. User apps override codebase apps with the same family name.
-- **`/delete-apps`** clears user apps only — codebase apps persist.
-- **Apps menu** shows all apps in a flat list. Codebase apps show "in repo" label. User-only apps show a bookmark icon for save-to-codebase.
+- **`loadApps()`** merges shipped + user directories at startup. User apps override shipped apps with the same family name.
+- **`/delete-apps`** clears user apps only — shipped apps persist.
+- **Apps menu** shows all apps in a flat list. Shipped apps show "in repo" label. User-only apps show a bookmark icon for promotion.
 
-### Built-in Apps (Advanced — Hardcoded TypeScript)
+### System Apps (Advanced — Hardcoded TypeScript)
 
-For deeply integrated tool families that need TypeScript, direct access to Node.js APIs, or complex multi-file logic, use the built-in 5-file pattern. This is the original approach used by filesystem, media, travel, and meal families.
+For deeply integrated platform capabilities that need TypeScript, direct access to Node.js APIs, or complex multi-file logic, use the built-in 5-file pattern. This is the original approach used by filesystem, media, travel, and meal families.
 
 #### Quick Reference — 5 Files to Create/Modify
 
 ```
 1. openclaw-plugin/src/<family>-tools.ts       ← Tool functions
-2. openclaw-plugin/src/tool-families/catalog.ts ← Catalog entry
+2. openclaw-plugin/src/app-catalog.ts          ← App catalog entry
 3. openclaw-plugin/src/native-tools/templates/<family>.ts ← JSX template
 4. openclaw-plugin/src/native-tools/registry.ts ← Registry wiring
 5. openclaw-plugin/index.ts                     ← Plugin registration
@@ -528,22 +532,22 @@ return jsonResult({
 
 #### Step 2: Register in Catalog
 
-**File:** `openclaw-plugin/src/tool-families/catalog.ts`
+**File:** `openclaw-plugin/src/app-catalog.ts`
 
-Add an entry to `TOOL_FAMILY_CAPABILITIES[]`:
+Add an entry to `APP_CATALOG[]`:
 
 ```typescript
 {
-  toolFamily: "my_family",                        // Unique family ID
-  fallbackToolName: "enso_myfam_default_action",  // Tool called when family is selected from menu
-  actionSuffixes: ["default_action", "detail", "search"],  // All action names (without prefix)
+  appId: "my_family",                             // Unique family ID
+  primaryTool: "enso_myfam_default_action",       // Tool called when app is selected from menu
+  actions: ["default_action", "detail", "search"],  // All action names (without prefix)
   signatureId: "my_family_view",                  // Links to the JSX template
   description: "My Family: does X, Y, and Z",    // Shown in enhance dropdown menu
 }
 ```
 
-- `fallbackToolName`: The default tool executed when user selects this family from the Apps/Enhance menu
-- `actionSuffixes`: Must list ALL action suffixes. Used for native tool bridge resolution.
+- `primaryTool`: The default tool executed when user selects this family from the Apps/Enhance menu
+- `actions`: Must list ALL action suffixes. Used for app action bridge resolution.
 - `signatureId`: Must match what the template module checks in `isXSignature()`
 
 #### Step 3: Create JSX Template
@@ -634,10 +638,10 @@ import { isMyFamilySignature, getMyFamilyTemplateCode } from "./templates/my-fam
 **4b. Register signature** in `registerDefaultSignatures()`:
 ```typescript
 {
-  toolFamily: "my_family",
+  appId: "my_family",
   signatureId: "my_family_view",
   templateId: "my-family-browser-v1",
-  supportedActions: ["default_action", "detail", "search"],  // Same as catalog actionSuffixes
+  supportedActions: ["default_action", "detail", "search"],  // Same as catalog actions
   coverageStatus: "covered",
 }
 ```
@@ -665,7 +669,7 @@ import { registerMyFamilyTools } from "./src/my-family-tools.js";
 maybeRegisterFallbackToolFamily({
   familyLabel: "my_family",
   fallbackPrefix: "enso_myfam_",
-  actionSuffixes: TOOL_FAMILY_CAPABILITIES.find(c => c.toolFamily === "my_family")?.actionSuffixes ?? [],
+  actionSuffixes: APP_CATALOG.find(c => c.appId === "my_family")?.actions ?? [],
   register: () => registerMyFamilyTools(api),
 });
 ```

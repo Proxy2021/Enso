@@ -91,7 +91,7 @@
       },
       {
         "suffix": "apply_style",
-        "description": "Apply an artistic style to a photo. Supports watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime styles with adjustable intensity.",
+        "description": "Apply an artistic style to a photo. Supports cinematic styles (wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome) and artistic styles (watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime) with adjustable intensity.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -102,7 +102,7 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name: watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
+              "description": "Style name: wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome, watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
             },
             "intensity": {
               "type": "number",
@@ -247,6 +247,134 @@
           ]
         },
         "requiredDataKeys": ["tool", "photoId", "original", "versions"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "photobook",
+        "description": "Create a beautiful photo book layout from a set of photos. Supports magazine grid, editorial, contact sheet, and storytelling layouts.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Array of photo file paths to include in the book"
+            },
+            "layout": {
+              "type": "string",
+              "description": "Layout style: magazine, editorial, contact_sheet, storytelling"
+            },
+            "title": {
+              "type": "string",
+              "description": "Photo book title"
+            },
+            "subtitle": {
+              "type": "string",
+              "description": "Photo book subtitle"
+            },
+            "folderPath": {
+              "type": "string",
+              "description": "Source folder path for navigation"
+            }
+          },
+          "required": ["paths", "layout"]
+        },
+        "sampleParams": { "paths": ["/Users/demo/Pictures/photo1.jpg", "/Users/demo/Pictures/photo2.jpg"], "layout": "magazine", "title": "My Photo Book" },
+        "sampleData": {
+          "tool": "enso_photo_studio_photobook",
+          "title": "Travel Memories",
+          "subtitle": "A visual journey",
+          "layout": "magazine",
+          "totalPhotos": 6,
+          "totalPages": 2,
+          "pages": [
+            {
+              "pageNum": 1,
+              "type": "hero",
+              "photos": [
+                { "path": "/media/photo1", "width": 4032, "height": 3024, "caption": "Sunset at the beach", "position": "hero" },
+                { "path": "/media/photo2", "width": 3024, "height": 4032, "caption": "Mountain view", "position": "supporting" },
+                { "path": "/media/photo3", "width": 4032, "height": 3024, "caption": "City lights", "position": "supporting" }
+              ]
+            },
+            {
+              "pageNum": 2,
+              "type": "grid",
+              "photos": [
+                { "path": "/media/photo4", "width": 4032, "height": 3024, "caption": "Forest path", "position": "grid" },
+                { "path": "/media/photo5", "width": 3024, "height": 4032, "caption": "River crossing", "position": "grid" }
+              ]
+            }
+          ],
+          "folderPath": "/Users/demo/Pictures"
+        },
+        "requiredDataKeys": ["tool", "pages"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "adjust",
+        "description": "Fine-tune photo processing parameters like brightness, contrast, saturation, temperature, grain, vignette, and fade.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "File path of the photo to adjust"
+            },
+            "brightness": {
+              "type": "number",
+              "description": "Brightness adjustment (-100 to 100)"
+            },
+            "contrast": {
+              "type": "number",
+              "description": "Contrast adjustment (-100 to 100)"
+            },
+            "saturation": {
+              "type": "number",
+              "description": "Saturation adjustment (-100 to 100)"
+            },
+            "temperature": {
+              "type": "number",
+              "description": "Color temperature (-100 to 100, negative=cool, positive=warm)"
+            },
+            "grain": {
+              "type": "number",
+              "description": "Film grain amount (0 to 100)"
+            },
+            "vignette": {
+              "type": "number",
+              "description": "Vignette strength (0 to 100)"
+            },
+            "fade": {
+              "type": "number",
+              "description": "Fade/lift blacks (0 to 100)"
+            }
+          },
+          "required": ["path"]
+        },
+        "sampleParams": { "path": "/Users/demo/Pictures/sunset.jpg", "brightness": 10, "contrast": 15 },
+        "sampleData": {
+          "tool": "enso_photo_studio_adjust",
+          "path": "/Users/demo/Pictures/sunset.jpg",
+          "outputPath": "/media/adjusted_sunset",
+          "name": "sunset.jpg",
+          "mediaUrl": "/media/sunset",
+          "width": 4032,
+          "height": 3024,
+          "adjustments": {
+            "brightness": 10,
+            "contrast": 15,
+            "saturation": 0,
+            "temperature": 0,
+            "grain": 0,
+            "vignette": 0,
+            "fade": 0
+          },
+          "description": "Slightly brighter with enhanced contrast for more punch."
+        },
+        "requiredDataKeys": ["tool", "path", "adjustments"],
         "isPrimary": false
       }
     ]

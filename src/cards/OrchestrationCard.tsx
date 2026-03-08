@@ -202,34 +202,26 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
 
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const running = plan.tasks.filter((t) => t.status === "running").length;
+  const failed = plan.tasks.filter((t) => t.status === "failed").length;
   const total = plan.tasks.length;
   const isPaused = plan.status === "paused";
   const awaitingApproval = plan.tasks.filter((t) => t.status === "awaiting_approval");
-  // Count running tasks as partial progress (50% each) so users see movement
   const pct = total > 0 ? Math.round(((completed + running * 0.5) / total) * 100) : 0;
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{"\u26A1"}</span>
-          <h3 className="text-sm font-semibold text-gray-200">
-            {isPaused ? "Mission Paused" : "Executing Mission"}
-          </h3>
-        </div>
-        <span className="text-[10px] text-gray-500">
-          {completed}/{total} tasks{running > 0 ? ` \u00B7 ${running} running` : ""}
-        </span>
-      </div>
-
-      {/* Goal summary */}
-      <div className="mb-3 p-2 rounded-lg bg-gray-800/30 border border-gray-700/30">
-        <p className="text-[11px] text-gray-400 line-clamp-1">{plan.goal}</p>
+      {/* Compact header */}
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-sm">{"\u26A1"}</span>
+        <h3 className="text-[11px] font-semibold text-gray-200 truncate">
+          {isPaused ? "Paused" : "Mission"}
+        </h3>
+        <span className="text-[9px] text-gray-500 ml-auto whitespace-nowrap">{completed}/{total}</span>
       </div>
 
       {/* Progress bar */}
-      <div className="mb-3">
-        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+      <div className="mb-2.5">
+        <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
               running > 0 ? "bg-blue-500 animate-pulse" : "bg-blue-500"
@@ -237,79 +229,78 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
             style={{ width: `${Math.max(pct, running > 0 ? 3 : 0)}%` }}
           />
         </div>
-        <div className="text-[10px] text-gray-500 mt-1">{pct}% complete</div>
       </div>
 
-      {/* Approval gate */}
+      {/* Approval gate (compact) */}
       {awaitingApproval.length > 0 && (
-        <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-          <p className="text-xs font-medium text-amber-200 mb-1">{"\u26A0\uFE0F"} Approval Required</p>
-          <div className="space-y-1 mb-2">
-            {awaitingApproval.map((t) => (
-              <div key={t.taskId}>
-                <p className="text-[11px] text-amber-300/80 font-medium">{t.title}</p>
-                <p className="text-[10px] text-amber-300/50 line-clamp-2">{t.description}</p>
-              </div>
-            ))}
-          </div>
+        <div className="mb-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+          <p className="text-[10px] font-medium text-amber-200 mb-1">{"\u26A0\uFE0F"} Approval needed</p>
+          {awaitingApproval.map((t) => (
+            <p key={t.taskId} className="text-[9px] text-amber-300/70 truncate">{t.title}</p>
+          ))}
           <button
             onClick={() => approveOrchestration(plan.orchestrationId, awaitingApproval.map((t) => t.taskId))}
-            className="text-xs px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+            className="text-[9px] px-2 py-0.5 mt-1 rounded bg-amber-600 hover:bg-amber-500 text-white transition-colors"
           >
-            Approve & Continue
+            Approve
           </button>
         </div>
       )}
 
-      {/* Agent team status */}
-      <div className="mb-3 p-2.5 rounded-lg bg-gray-800/40 border border-gray-700/40">
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Team</div>
-        <div className="space-y-1">
-          {plan.agents.map((agent) => (
-            <div key={agent.agentId} className="flex items-center gap-2 text-xs">
-              <span>{ROLE_EMOJI[agent.role]}</span>
-              <span className="capitalize text-gray-300 w-20">{ROLE_LABELS[agent.role]}</span>
-              <span className={`text-[10px] flex items-center gap-1 ${
-                agent.status === "working" ? "text-blue-400" :
-                agent.status === "completed" ? "text-green-400" :
-                "text-gray-500"
-              }`}>
-                {agent.status === "working" && <Spinner size="sm" />}
-                {agent.status === "working" && agent.currentTaskId
-                  ? plan.tasks.find((t) => t.taskId === agent.currentTaskId)?.title || "Working..."
-                  : agent.status === "completed" ? "Done" : "Waiting"
-                }
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Task list */}
-      <div className="space-y-1.5">
+      {/* Compact task pipeline */}
+      <div className="space-y-0.5">
         {plan.tasks.map((task, i) => (
-          <TaskRow key={task.taskId} task={task} index={i} />
+          <CompactTaskRow key={task.taskId} task={task} index={i} />
         ))}
       </div>
 
-      {/* Controls */}
-      <div className="flex justify-end mt-3 pt-2 border-t border-gray-700/40">
+      {/* Compact control */}
+      <div className="mt-2 pt-1.5 border-t border-gray-700/30">
         {isPaused ? (
           <button
             onClick={() => resumeOrchestration(plan.orchestrationId)}
-            className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+            className="w-full text-[9px] py-1 rounded bg-blue-600/80 hover:bg-blue-500 text-white transition-colors"
           >
             Resume
           </button>
         ) : (
           <button
             onClick={() => pauseOrchestration(plan.orchestrationId)}
-            className="text-xs px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+            className="w-full text-[9px] py-1 rounded bg-gray-700/60 hover:bg-gray-600 text-gray-400 transition-colors"
           >
             Pause
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Compact task row for the sidebar panel (minimal width) */
+function CompactTaskRow({ task, index }: { task: OrchestrationTask; index: number }) {
+  return (
+    <div className={`flex items-center gap-1.5 py-1 px-1.5 rounded text-[10px] ${
+      task.status === "running" ? "bg-blue-500/10 text-gray-200" :
+      task.status === "completed" ? "text-gray-400" :
+      task.status === "failed" ? "text-red-400/80" :
+      task.status === "blocked" ? "opacity-30 text-gray-500" :
+      "text-gray-500"
+    }`}>
+      <span className="flex-shrink-0 w-3.5 text-center">
+        {task.status === "completed" ? (
+          <span className="text-green-400">{"\u2713"}</span>
+        ) : task.status === "failed" ? (
+          <span className="text-red-400">{"\u2717"}</span>
+        ) : task.status === "running" ? (
+          <Spinner size="sm" />
+        ) : task.status === "blocked" ? (
+          <span>{"\u2298"}</span>
+        ) : (
+          <span>{index + 1}</span>
+        )}
+      </span>
+      <span className="flex-shrink-0">{ROLE_EMOJI[task.agentRole]}</span>
+      <span className="truncate">{task.title}</span>
     </div>
   );
 }

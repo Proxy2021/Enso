@@ -4,7 +4,8 @@ interface Template {
   icon: string;
   title: string;
   description: string;
-  toolFamily?: string; // Direct app invocation
+  appId?: string;      // Direct app invocation (preferred)
+  toolFamily?: string; // Legacy alias for appId
   prompt?: string;     // Fallback: send as chat message
 }
 
@@ -73,8 +74,9 @@ export default function WelcomeCard() {
 
   function handleClick(template: Template) {
     if (disabled) return;
-    if (template.toolFamily) {
-      runApp(template.toolFamily);
+    const appId = template.appId ?? template.toolFamily;
+    if (appId) {
+      runApp(appId);
     } else if (template.prompt) {
       sendMessage(template.prompt);
     }

@@ -3,7 +3,7 @@ import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ConnectedClient } from "../server.js";
 import { getActiveAccount } from "../server.js";
 import type { CardModeDetail, CoreConfig, OperationStage, ServerMessage } from "../types.js";
-import { TOOL_FAMILY_CAPABILITIES } from "../tool-families/catalog.js";
+import { APP_CATALOG } from "../app-catalog.js";
 import {
   inferToolTemplate,
   executeToolDirect,
@@ -11,7 +11,7 @@ import {
   getToolTemplateCode,
   isToolRegistered,
   getGeneratedTemplateCodeBySignature,
-  registerGeneratedTemplateCode,
+  registerAppTemplate,
   isDynamicTool,
   getExecutorBody,
   hotSwapExecutor,
@@ -97,7 +97,7 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
-  logAction({ ts: Date.now(), type: "action", category: "action", message: `Context found: cardId=${cardId}, family=${ctx.toolFamily ?? "none"}, signature=${ctx.signatureId ?? "none"}, mode=${ctx.interactionMode}, hasNativeHint=${!!ctx.nativeToolHint}` });
+  logAction({ ts: Date.now(), type: "action", category: "action", message: `Context found: cardId=${cardId}, family=${ctx.toolFamily ?? "none"}, signature=${ctx.signatureId ?? "none"}, mode=${ctx.interactionMode}, hasAppHint=${!!ctx.appToolHint}` });
 
   // Determine effective mode at click-time to avoid stale per-card mode.
   // Priority: explicit client mode > active account mode > card context mode.
@@ -181,7 +181,7 @@ export async function handlePluginCardAction(params: {
   if (action === "fix_with_code") {
     const p = (payload ?? {}) as Record<string, unknown>;
     const errorStr = String(p.error ?? "Unknown error").trim();
-    const toolName = String(p.toolName ?? ctx.nativeToolHint?.toolName ?? "unknown");
+    const toolName = String(p.toolName ?? ctx.appToolHint?.toolName ?? "unknown");
 
     logAction({ ts: Date.now(), type: "action", category: "action:fix_with_code", message: `Fix with code: ${toolName}`, cardId, toolFamily: ctx.toolFamily, metadata: { error: errorStr, toolName } });
 
@@ -306,10 +306,10 @@ export async function handlePluginCardAction(params: {
       }
     }
 
-    if (ctx.nativeToolHint && isDynamicTool(ctx.nativeToolHint.toolName)) {
-      const execBody = getExecutorBody(ctx.nativeToolHint.toolName);
+    if (ctx.appToolHint && isDynamicTool(ctx.appToolHint.toolName)) {
+      const execBody = getExecutorBody(ctx.appToolHint.toolName);
       if (execBody) {
-        improveParts.push(`## Executor Source (${ctx.nativeToolHint.toolName})`, "```javascript", execBody.slice(0, 2000), "```", ``);
+        improveParts.push(`## Executor Source (${ctx.appToolHint.toolName})`, "```javascript", execBody.slice(0, 2000), "```", ``);
       }
     }
 
@@ -401,7 +401,7 @@ export async function handlePluginCardAction(params: {
       }
 
       // Update stored template code
-      registerGeneratedTemplateCode(ctx.signatureId, result.templateJSX);
+      registerAppTemplate(ctx.signatureId, result.templateJSX);
       logAction({ ts: Date.now(), type: "action", category: "action:refine", message: `Template updated for ${ctx.signatureId} (${result.templateJSX.length} chars)`, cardId });
 
       // Send updated card with new template + existing data
@@ -491,7 +491,7 @@ export async function handlePluginCardAction(params: {
         geminiApiKey: ctx.geminiApiKey,
         account: ctx.account,
         mode: ctx.mode,
-        nativeToolHint: ctx.nativeToolHint,
+        appToolHint: ctx.appToolHint,
         actionHistory: [],
         interactionMode: ctx.interactionMode,
         toolFamily: ctx.toolFamily,
@@ -531,8 +531,8 @@ export async function handlePluginCardAction(params: {
     ctx.currentData = updatedData;
 
     // If the card has a native tool hint, include action hints for UI regen
-    const mechanicalActionHints = ctx.nativeToolHint
-      ? getActionDescriptions(ctx.nativeToolHint.toolName)
+    const mechanicalActionHints = ctx.appToolHint
+      ? getActionDescriptions(ctx.appToolHint.toolName)
       : undefined;
 
     const followup = await renderFollowupUI({
@@ -630,21 +630,21 @@ export async function handlePluginCardAction(params: {
   // ── Path 2: Native tool invocation ──
   // If the card was produced by a tool from a co-loaded OpenClaw plugin,
   // try to handle the action by calling the tool directly via the registry.
-  if (ctx.nativeToolHint) {
+  if (ctx.appToolHint) {
     let toolCall: { toolName: string; params: Record<string, unknown> } | null = null;
     let resolvedVia = "";
 
     if (action === "refresh") {
       toolCall = {
-        toolName: ctx.nativeToolHint.toolName,
-        params: ctx.nativeToolHint.params,
+        toolName: ctx.appToolHint.toolName,
+        params: ctx.appToolHint.params,
       };
       resolvedVia = "refresh";
     } else {
       const actionParams = (payload ?? {}) as Record<string, unknown>;
 
       // 1. Exact match: prefix + action
-      const candidateToolName = `${ctx.nativeToolHint.handlerPrefix}${action}`;
+      const candidateToolName = `${ctx.appToolHint.handlerPrefix}${action}`;
       if (isToolRegistered(candidateToolName)) {
         toolCall = { toolName: candidateToolName, params: actionParams };
         resolvedVia = "exact";
@@ -654,14 +654,14 @@ export async function handlePluginCardAction(params: {
 
       // 2. Suffix match
       if (!toolCall && ctx.toolFamily) {
-        const capability = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === ctx.toolFamily);
+        const capability = APP_CATALOG.find((c) => c.appId === ctx.toolFamily);
         if (capability) {
           const suffixRe = (s: string) => new RegExp(`(^|_)${s}(_|$)`);
-          const matchedSuffix = capability.actionSuffixes.find(
+          const matchedSuffix = capability.actions.find(
             (s) => action === s || action.endsWith(`_${s}`) || action.startsWith(`${s}_`) || suffixRe(s).test(action),
           );
           if (matchedSuffix) {
-            const suffixTool = `${ctx.nativeToolHint.handlerPrefix}${matchedSuffix}`;
+            const suffixTool = `${ctx.appToolHint.handlerPrefix}${matchedSuffix}`;
             if (isToolRegistered(suffixTool)) {
               toolCall = { toolName: suffixTool, params: actionParams };
               resolvedVia = `suffix(${matchedSuffix})`;
@@ -670,10 +670,10 @@ export async function handlePluginCardAction(params: {
             }
           }
           // 3. Family fallback tool
-          if (!toolCall && isToolRegistered(capability.fallbackToolName)) {
+          if (!toolCall && isToolRegistered(capability.primaryTool)) {
             toolCall = {
-              toolName: capability.fallbackToolName,
-              params: { ...ctx.nativeToolHint.params, ...actionParams },
+              toolName: capability.primaryTool,
+              params: { ...ctx.appToolHint.params, ...actionParams },
             };
             resolvedVia = "fallback";
           }
@@ -691,12 +691,12 @@ export async function handlePluginCardAction(params: {
 
         // Retry with family fallback if tool fails
         if (!result.success && ctx.toolFamily) {
-          const cap = TOOL_FAMILY_CAPABILITIES.find((c) => c.toolFamily === ctx.toolFamily);
-          if (cap && toolCall.toolName !== cap.fallbackToolName && isToolRegistered(cap.fallbackToolName)) {
-            logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Retrying with fallback ${cap.fallbackToolName}`, cardId });
+          const cap = APP_CATALOG.find((c) => c.appId === ctx.toolFamily);
+          if (cap && toolCall.toolName !== cap.primaryTool && isToolRegistered(cap.primaryTool)) {
+            logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Retrying with fallback ${cap.primaryTool}`, cardId });
             toolCall = {
-              toolName: cap.fallbackToolName,
-              params: { ...ctx.nativeToolHint.params, ...toolCall.params },
+              toolName: cap.primaryTool,
+              params: { ...ctx.appToolHint.params, ...toolCall.params },
             };
             result = await executeToolDirect(toolCall.toolName, toolCall.params);
             logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Fallback result: success=${result.success}, hasData=${result.data != null}`, cardId });
@@ -706,10 +706,10 @@ export async function handlePluginCardAction(params: {
         if (result.success && result.data != null) {
           ctx.currentData = structuredClone(result.data);
 
-          ctx.nativeToolHint = {
+          ctx.appToolHint = {
             toolName: toolCall.toolName,
             params: toolCall.params,
-            handlerPrefix: ctx.nativeToolHint.handlerPrefix,
+            handlerPrefix: ctx.appToolHint.handlerPrefix,
           };
 
           const nativeActionHints = getActionDescriptions(toolCall.toolName);
@@ -813,7 +813,7 @@ export async function handlePluginCardAction(params: {
       logAction({ ts: Date.now(), type: "action", category: "action:native", message: `No tool resolved for action="${action}", falling through to agent` });
     }
   } else {
-    logAction({ ts: Date.now(), type: "action", category: "action", message: `No nativeToolHint on card, skipping native path`, cardId });
+    logAction({ ts: Date.now(), type: "action", category: "action", message: `No appToolHint on card, skipping native path`, cardId });
   }
 
   // ── Path 3: Agent round-trip fallback ──

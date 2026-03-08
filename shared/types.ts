@@ -32,7 +32,8 @@ export type CardCoverageStatus = "covered" | "partial";
 
 export interface CardModeDetail {
   interactionMode: CardInteractionMode;
-  toolFamily?: string;
+  appId?: string;             // Primary identifier (replaces toolFamily)
+  toolFamily?: string;        // Backward compat
   signatureId?: string;
   coverageStatus?: CardCoverageStatus;
 }
@@ -56,12 +57,16 @@ export interface AgentStep {
 // ── App Info (for Apps menu) ──
 
 export interface AppInfo {
-  toolFamily: string;
+  appId: string;              // Primary identifier (replaces toolFamily)
+  toolFamily: string;         // Backward compat — set to same value as appId
   description: string;
   toolCount: number;
   primaryToolName: string;
-  builtIn?: boolean;
-  codebase?: boolean;
+  system?: boolean;           // Core platform capability (replaces builtIn)
+  builtIn?: boolean;          // Backward compat
+  shipped?: boolean;          // Ships with Enso in git (replaces codebase)
+  codebase?: boolean;         // Backward compat
+  experience?: "card" | "terminal"; // How the app renders
 }
 
 // ── Mission Planner ──
@@ -188,7 +193,9 @@ export interface ClientMessage {
     | "card.delete_all_apps"
     | "apps.list"
     | "apps.run"
+    | "apps.delete"
     | "app.save_to_codebase"
+    | "app.promote"
     | "server.restart"
     | "settings.set_mode"
     | "operation.cancel"
