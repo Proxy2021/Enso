@@ -197,6 +197,7 @@ export async function runClaudeCode(params: {
   const toolMeta = (): ServerMessage["toolMeta"] => ({
     toolId: "claude-code",
     ...(sessionId ? { toolSessionId: sessionId } : {}),
+    ...(cwd ? { cwd } : {}),
   });
 
   const send = (

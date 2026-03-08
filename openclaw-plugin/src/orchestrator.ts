@@ -173,7 +173,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
   // Step 2: Create terminal card for the planning Claude Code session
   send({
     text: "",
-    toolMeta: { toolId: "claude-code" },
+    toolMeta: { toolId: "claude-code", cwd: PROJECT_ROOT },
     targetCardId: terminalCardId,
     operation: {
       operationId: runId,

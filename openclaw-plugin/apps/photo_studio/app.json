@@ -91,7 +91,7 @@
       },
       {
         "suffix": "apply_style",
-        "description": "Apply an artistic style to a photo. Supports cinematic styles (wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome) and artistic styles (watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime) with adjustable intensity.",
+        "description": "Apply an artistic style to a photo. Supports cinematic styles (wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome, moriyama_daido) and artistic styles (watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime) with adjustable intensity.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -102,7 +102,7 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name: wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome, watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
+              "description": "Style name: wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome, moriyama_daido, watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
             },
             "intensity": {
               "type": "number",
@@ -149,7 +149,7 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name to apply: watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
+              "description": "Style name to apply: watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime, moriyama_daido"
             },
             "intensity": {
               "type": "number",

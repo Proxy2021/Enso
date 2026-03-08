@@ -1577,7 +1577,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                   ...card,
                   text: (card.text ?? "") + (msg.text ?? ""),
                   status: hasQuestions ? "complete" : "streaming",
-                  toolMeta: { ...card.toolMeta, ...msg.toolMeta, cwd: card.toolMeta?.cwd },
+                  toolMeta: { ...card.toolMeta, ...msg.toolMeta, cwd: card.toolMeta?.cwd ?? msg.toolMeta?.cwd },
                   operation: msg.operation ?? card.operation,
                   cardMode: msg.cardMode ?? card.cardMode,
                   ...(hasQuestions ? { pendingQuestions: msg.questions } : {}),

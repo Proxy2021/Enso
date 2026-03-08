@@ -66,7 +66,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
   send({
     state: "delta",
     text: "",
-    toolMeta: { toolId: "claude-code" },
+    toolMeta: { toolId: "claude-code", cwd: PROJECT_ROOT },
     targetCardId: buildTerminalCardId,
     cardType: "terminal",
   });
