@@ -1,12 +1,13 @@
 export default function GeneratedUI({ data, onAction }) {
   // ── Hooks (all at top level) ──
-  const [selectedStyle, setSelectedStyle] = useState("watercolor");
+  const [selectedStyle, setSelectedStyle] = useState("norwegian_blue");
   const [intensity, setIntensity] = useState(75);
   const [collectionName, setCollectionName] = useState("");
   const [createMode, setCreateMode] = useState(false);
   const [sliderVal, setSliderVal] = useState(null);
   const [viewMode, setViewMode] = useState("grid"); // grid or list
   const [bookPage, setBookPage] = useState(0);
+  const [showStylePicker, setShowStylePicker] = useState(false);
 
   useEffect(() => {
     if (sliderVal === null && data?.intensity) setSliderVal(data.intensity);
@@ -23,10 +24,24 @@ export default function GeneratedUI({ data, onAction }) {
   const isAdjust = tool === "enso_photo_studio_adjust";
 
   // ── Helpers ──
+  // Processing styles (real pixel processing)
+  const processStyles = {
+    norwegian_blue: { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-300", icon: "Mountain", label: "Norwegian Blue", desc: "Deep moody Nordic blue tones" },
+    golden_hour: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300", icon: "Sun", label: "Golden Hour", desc: "Warm golden light" },
+    film_noir: { bg: "bg-gray-600/10", border: "border-gray-500/30", text: "text-gray-200", icon: "Moon", label: "Film Noir", desc: "High contrast B&W" },
+    vintage_film: { bg: "bg-orange-500/10", border: "border-orange-500/30", text: "text-orange-300", icon: "Camera", label: "Vintage Film", desc: "Cross-processed faded look" },
+    teal_orange: { bg: "bg-teal-500/10", border: "border-teal-500/30", text: "text-teal-300", icon: "Film", label: "Teal & Orange", desc: "Hollywood cinematic split-tone" },
+    moody_desaturated: { bg: "bg-slate-500/10", border: "border-slate-500/30", text: "text-slate-300", icon: "CloudRain", label: "Moody", desc: "Muted desaturated tones" },
+    high_contrast_bw: { bg: "bg-gray-500/10", border: "border-gray-400/30", text: "text-gray-300", icon: "Contrast", label: "B&W Contrast", desc: "Classic high-contrast B&W" },
+    warm_fade: { bg: "bg-rose-500/10", border: "border-rose-500/30", text: "text-rose-300", icon: "Sunset", label: "Warm Fade", desc: "Warm pastels, lifted blacks" },
+  };
+  const processStyleKeys = Object.keys(processStyles);
+
+  // Legacy style colors (for apply_style views)
   const styleColors = {
+    ...processStyles,
     wong_kar_wai: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300", icon: "Film" },
     wes_anderson: { bg: "bg-pink-500/10", border: "border-pink-500/30", text: "text-pink-300", icon: "Palette" },
-    film_noir: { bg: "bg-gray-600/10", border: "border-gray-500/30", text: "text-gray-200", icon: "Moon" },
     terrence_malick: { bg: "bg-yellow-500/10", border: "border-yellow-500/30", text: "text-yellow-300", icon: "Sun" },
     cyberpunk: { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300", icon: "Zap" },
     studio_ghibli: { bg: "bg-sky-500/10", border: "border-sky-500/30", text: "text-sky-300", icon: "Cloud" },
@@ -39,6 +54,7 @@ export default function GeneratedUI({ data, onAction }) {
     noir: { bg: "bg-gray-600/10", border: "border-gray-500/30", text: "text-gray-200", icon: "Moon" },
     impressionist: { bg: "bg-purple-500/10", border: "border-purple-500/30", text: "text-purple-300", icon: "Palette" },
     anime: { bg: "bg-rose-500/10", border: "border-rose-500/30", text: "text-rose-300", icon: "Sparkles" },
+    moriyama_daido: { bg: "bg-gray-600/10", border: "border-gray-500/30", text: "text-gray-200", icon: "Camera" },
   };
   const allStyles = Object.keys(styleColors);
   const getStyleInfo = (s) => styleColors[s] || styleColors.watercolor;
@@ -245,24 +261,64 @@ export default function GeneratedUI({ data, onAction }) {
 
         {/* Actions bar when items exist */}
         {items.length > 0 && (
-          <div className="flex gap-2 pt-1 border-t border-gray-800/40">
-            <Button size="sm" variant="outline"
-              onClick={() => onAction("photobook", {
-                paths: items.map(function(it) { return it.path; }),
-                layout: "magazine",
-                title: folderName || "Photo Book",
-                folderPath: currentPath
-              })}>
-              <LucideReact.BookOpen className="w-3 h-3 mr-1" /> Photo Book
-            </Button>
-            <Button size="sm" variant="outline"
-              onClick={() => onAction("batch_process", {
-                collection: currentPath,
-                style: "watercolor",
-                intensity: 75
-              })}>
-              <LucideReact.Paintbrush className="w-3 h-3 mr-1" /> Batch Style
-            </Button>
+          <div className="space-y-3 pt-1 border-t border-gray-800/40">
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline"
+                onClick={() => onAction("photobook", {
+                  paths: items.map(function(it) { return it.path; }),
+                  layout: "magazine",
+                  title: folderName || "Photo Book",
+                  folderPath: currentPath
+                })}>
+                <LucideReact.BookOpen className="w-3 h-3 mr-1" /> Photo Book
+              </Button>
+              <Button size="sm" variant={showStylePicker ? "primary" : "outline"}
+                onClick={() => setShowStylePicker(!showStylePicker)}>
+                <LucideReact.Wand2 className="w-3 h-3 mr-1" /> Process Photos
+              </Button>
+            </div>
+
+            {/* Inline style picker */}
+            {showStylePicker && (
+              <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/40 space-y-3">
+                <div className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">Choose a Style</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {processStyleKeys.map(function(s) {
+                    var info = processStyles[s];
+                    var Icon = LucideReact[info.icon] || LucideReact.Paintbrush;
+                    var isSelected = selectedStyle === s;
+                    return (
+                      <button key={s}
+                        onClick={() => setSelectedStyle(s)}
+                        className={"flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-pointer transition-all text-left " +
+                          (isSelected ? info.bg + " " + info.border + " " + info.text : "bg-gray-800/40 border-gray-700/40 text-gray-400 hover:border-gray-600")}>
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-medium truncate">{info.label}</div>
+                          <div className={"text-[9px] truncate " + (isSelected ? "opacity-70" : "text-gray-500")}>{info.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-3 pt-1">
+                  <Button size="sm" variant="primary"
+                    onClick={() => {
+                      setShowStylePicker(false);
+                      onAction("batch_process", {
+                        collection: currentPath,
+                        style: selectedStyle,
+                        intensity: intensity
+                      });
+                    }}>
+                    <LucideReact.Play className="w-3 h-3 mr-1" /> Process {items.length} Photo{items.length !== 1 ? "s" : ""}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowStylePicker(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, writeFileSync, mkdirS
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve } from "path";
 import { homedir, platform } from "os";
 import { execSync, execFileSync } from "child_process";
+import { fileURLToPath } from "url";
 import { toMediaUrl } from "./server.js";
 import { parseImageMeta, type ExifData } from "./exif-parser.js";
 import { logError } from "./action-log.js";
@@ -23,6 +24,7 @@ type BatchTagParams = { path: string; limit?: number };
 type ToggleFavoriteParams = { path: string; favorite?: boolean };
 type ManageCollectionParams = { action: string; collectionName?: string; photoPath?: string; newName?: string };
 type RatePhotoParams = { path: string; rating: number };
+type ProcessPhotosParams = { inputDir: string; style: string; outputSubfolder?: string };
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -918,6 +920,70 @@ function manageCollection(params: ManageCollectionParams): AgentToolResult {
   return errorResult(`unknown action: ${action}`);
 }
 
+// ── Photo Processing ──────────────────────────────────────────────────────
+
+const PROCESS_STYLES = ["norwegian_blue", "golden_hour", "film_noir", "vintage_film", "teal_orange", "moody_desaturated", "high_contrast_bw", "warm_fade"];
+const PROCESSED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp", ".3fr", ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raf", ".orf", ".rw2", ".pef", ".srw"]);
+
+async function processPhotos(params: ProcessPhotosParams): Promise<AgentToolResult> {
+  const { inputDir, style, outputSubfolder } = params;
+
+  if (!inputDir || !existsSync(inputDir)) return errorResult(`Input directory not found: ${inputDir}`);
+  if (!style || !PROCESS_STYLES.includes(style)) return errorResult(`Unknown style: ${style}. Available: ${PROCESS_STYLES.join(", ")}`);
+
+  const outDir = join(inputDir, outputSubfolder || "processed");
+  const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "photo-processor.py");
+
+  if (!existsSync(scriptPath)) return errorResult(`Processing script not found: ${scriptPath}`);
+
+  try {
+    const output = execFileSync("python3", [
+      scriptPath,
+      "--input-dir", inputDir,
+      "--output-dir", outDir,
+      "--style", style,
+    ], { timeout: 600_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+
+    // Parse NDJSON output — last line is the summary
+    const lines = output.trim().split("\n").filter(Boolean);
+    let summary = { processed: 0, failed: 0, skipped: 0, total: 0, output_dir: outDir };
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.status === "complete") summary = parsed;
+      } catch { /* skip non-JSON lines */ }
+    }
+
+    // List output files and generate media URLs
+    const files: Array<{ name: string; path: string; mediaUrl: string }> = [];
+    if (existsSync(outDir)) {
+      for (const f of readdirSync(outDir).sort()) {
+        const ext = extname(f).toLowerCase();
+        if (ext === ".jpg" || ext === ".jpeg" || ext === ".png") {
+          const filePath = join(outDir, f);
+          files.push({ name: f, path: filePath, mediaUrl: toMediaUrl(filePath) });
+        }
+      }
+    }
+
+    return ok({
+      tool: "enso_media_process_photos",
+      success: true,
+      style,
+      outputDir: outDir,
+      processed: summary.processed,
+      failed: summary.failed,
+      skipped: summary.skipped,
+      total: summary.total,
+      files,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logError("media:process", "Photo processing failed", err, { inputDir, style });
+    return errorResult(`Processing failed: ${msg}`);
+  }
+}
+
 // ── Tool Registration ─────────────────────────────────────────────────────
 
 export function createMediaTools(): AnyAgentTool[] {
@@ -1105,6 +1171,21 @@ export function createMediaTools(): AnyAgentTool[] {
         required: ["path", "rating"],
       },
       execute: async (_callId: string, params: Record<string, unknown>) => ratePhoto(params as RatePhotoParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_media_process_photos",
+      label: "Process Photos",
+      description: `Apply a visual style to all photos in a directory. Styles: ${PROCESS_STYLES.join(", ")}. Supports JPEG, PNG, TIFF, and RAW files. Outputs processed JPEGs to a subfolder.`,
+      parameters: {
+        type: "object", additionalProperties: false,
+        properties: {
+          inputDir: { type: "string", description: "Source directory containing photos" },
+          style: { type: "string", description: `Style to apply: ${PROCESS_STYLES.join(", ")}` },
+          outputSubfolder: { type: "string", description: "Output subfolder name (default: processed)" },
+        },
+        required: ["inputDir", "style"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => processPhotos(params as ProcessPhotosParams),
     } as AnyAgentTool,
   ];
 }

@@ -1,9 +1,7 @@
 var folderPath = (params.collection || "").trim();
-var style = (params.style || "").trim() || "watercolor";
-var intensity = params.intensity || 75;
+var style = (params.style || "").trim() || "norwegian_blue";
 
-// If a folder path is provided, browse it for photos
-// If not, check if we have a stored current folder
+// If no folder path, check stored last browsed folder
 if (!folderPath) {
   var lastFolder = await ctx.store.get("lastBrowsedFolder");
   if (lastFolder) folderPath = lastFolder;
@@ -21,61 +19,53 @@ if (!folderPath) {
   };
 }
 
-// Browse the folder to get photos
-var browseResult = await ctx.callTool("enso_media_browse_folder", {
-  path: folderPath,
-  filter: "image",
-  sortBy: "name",
-  sortDir: "asc"
+// Call real photo processing tool
+var result = await ctx.callTool("enso_media_process_photos", {
+  inputDir: folderPath,
+  style: style,
+  outputSubfolder: "processed"
 });
 
-if (!browseResult.success) {
+// Handle errors
+if (!result || !result.success) {
+  var errMsg = (result && result.error) || "Processing failed";
+  // Try to extract error from data
+  if (result && result.data) {
+    try {
+      var d = typeof result.data === "string" ? JSON.parse(result.data) : result.data;
+      if (d.error) errMsg = d.error;
+    } catch(e) {}
+  }
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_batch_process",
-        error: "Could not browse folder: " + (browseResult.error || folderPath)
+        error: errMsg
       })
     }]
   };
 }
 
-var items = browseResult.data.items || [];
-var results = [];
-var completed = 0;
-
-for (var i = 0; i < items.length; i++) {
-  var item = items[i];
-  var photoPath = item.path;
-
-  // Store styled version record
-  var storeKey = "styles:" + photoPath;
-  var stylesStored = await ctx.store.get(storeKey);
-  var versions = [];
-  if (stylesStored) {
-    try { versions = JSON.parse(stylesStored); } catch(e) { versions = []; }
-  }
-
-  var styledId = "s_" + Date.now() + "_" + i;
-  versions.push({
-    id: styledId,
-    style: style,
-    intensity: intensity,
-    url: item.mediaUrl,
-    createdAt: new Date().toISOString()
-  });
-  await ctx.store.set(storeKey, JSON.stringify(versions));
-
-  completed++;
-  results.push({
-    id: photoPath,
-    name: item.name,
-    originalUrl: item.mediaUrl,
-    styledUrl: item.mediaUrl,
-    status: "success"
-  });
+// Extract result data
+var data = result.data || result;
+if (typeof data === "string") {
+  try { data = JSON.parse(data); } catch(e) { data = {}; }
 }
+
+var files = data.files || [];
+var processed = data.processed || files.length;
+var failed = data.failed || 0;
+
+// Build results for template
+var results = files.map(function(f) {
+  return {
+    id: f.path,
+    name: f.name,
+    styledUrl: f.mediaUrl,
+    status: "success"
+  };
+});
 
 return {
   content: [{
@@ -84,10 +74,12 @@ return {
       tool: "enso_photo_studio_batch_process",
       collection: folderPath,
       style: style,
-      intensity: intensity,
-      total: items.length,
-      completed: completed,
+      intensity: params.intensity || 75,
+      total: processed + failed,
+      completed: processed,
+      failed: failed,
       status: "complete",
+      outputDir: data.outputDir || "",
       results: results
     })
   }]

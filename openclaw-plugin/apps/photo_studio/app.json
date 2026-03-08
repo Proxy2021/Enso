@@ -138,7 +138,7 @@
       },
       {
         "suffix": "batch_process",
-        "description": "Apply an artistic style to multiple photos at once from a collection or selection. Shows progress and results.",
+        "description": "Apply a photo processing style to all photos in a directory. Performs real pixel-level processing and saves results. Styles: norwegian_blue, golden_hour, film_noir, vintage_film, teal_orange, moody_desaturated, high_contrast_bw, warm_fade.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -149,7 +149,7 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name to apply: watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime, moriyama_daido"
+              "description": "Style name: norwegian_blue, golden_hour, film_noir, vintage_film, teal_orange, moody_desaturated, high_contrast_bw, warm_fade"
             },
             "intensity": {
               "type": "number",
@@ -158,20 +158,21 @@
           },
           "required": ["style"]
         },
-        "sampleParams": { "collection": "Vacation", "style": "watercolor", "intensity": 75 },
+        "sampleParams": { "collection": "/Users/demo/Pictures/Norway", "style": "norwegian_blue", "intensity": 75 },
         "sampleData": {
           "tool": "enso_photo_studio_batch_process",
-          "collection": "Vacation",
-          "style": "watercolor",
+          "collection": "/Users/demo/Pictures/Norway",
+          "style": "norwegian_blue",
           "intensity": 75,
           "total": 4,
           "completed": 4,
           "status": "complete",
+          "outputDir": "/Users/demo/Pictures/Norway/processed",
           "results": [
-            { "id": "p1", "name": "sunset_beach.jpg", "originalUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400", "styledUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&blur=50", "status": "success" },
-            { "id": "p2", "name": "mountain_view.jpg", "originalUrl": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400", "styledUrl": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400&blur=50", "status": "success" },
-            { "id": "p3", "name": "city_lights.jpg", "originalUrl": "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=400", "styledUrl": "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=400&blur=50", "status": "success" },
-            { "id": "p4", "name": "forest_path.jpg", "originalUrl": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400", "styledUrl": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&blur=50", "status": "success" }
+            { "id": "/Users/demo/Pictures/Norway/processed/sunset.jpg", "name": "sunset.jpg", "styledUrl": "/media/encoded_path_1", "status": "success" },
+            { "id": "/Users/demo/Pictures/Norway/processed/mountain.jpg", "name": "mountain.jpg", "styledUrl": "/media/encoded_path_2", "status": "success" },
+            { "id": "/Users/demo/Pictures/Norway/processed/fjord.jpg", "name": "fjord.jpg", "styledUrl": "/media/encoded_path_3", "status": "success" },
+            { "id": "/Users/demo/Pictures/Norway/processed/cabin.jpg", "name": "cabin.jpg", "styledUrl": "/media/encoded_path_4", "status": "success" }
           ]
         },
         "requiredDataKeys": ["tool", "style", "results"],
