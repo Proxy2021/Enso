@@ -1,5 +1,5 @@
 var folderPath = (params.collection || "").trim();
-var style = (params.style || "").trim() || "norwegian_blue";
+var style = (params.style || "").trim() || "wong_kar_wai";
 
 // If no folder path, check stored last browsed folder
 if (!folderPath) {

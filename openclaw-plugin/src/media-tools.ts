@@ -922,7 +922,7 @@ function manageCollection(params: ManageCollectionParams): AgentToolResult {
 
 // ── Photo Processing ──────────────────────────────────────────────────────
 
-const PROCESS_STYLES = ["norwegian_blue", "golden_hour", "film_noir", "vintage_film", "teal_orange", "moody_desaturated", "high_contrast_bw", "warm_fade"];
+const PROCESS_STYLES = ["wong_kar_wai", "moriyama", "wes_anderson", "blade_runner", "ghibli", "kodak_portra", "tarantino", "nordic_noir", "terrence_malick", "hitchcock"];
 const PROCESSED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp", ".3fr", ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raf", ".orf", ".rw2", ".pef", ".srw"]);
 
 async function processPhotos(params: ProcessPhotosParams): Promise<AgentToolResult> {
@@ -1175,7 +1175,7 @@ export function createMediaTools(): AnyAgentTool[] {
     {
       name: "enso_media_process_photos",
       label: "Process Photos",
-      description: `Apply a visual style to all photos in a directory. Styles: ${PROCESS_STYLES.join(", ")}. Supports JPEG, PNG, TIFF, and RAW files. Outputs processed JPEGs to a subfolder.`,
+      description: `Apply a cinematic or iconic photographer style to all photos in a directory. Styles: ${PROCESS_STYLES.join(", ")}. Supports JPEG, PNG, TIFF, and RAW files. Outputs processed JPEGs to a subfolder.`,
       parameters: {
         type: "object", additionalProperties: false,
         properties: {

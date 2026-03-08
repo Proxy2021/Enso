@@ -91,7 +91,7 @@
       },
       {
         "suffix": "apply_style",
-        "description": "Apply an artistic style to a photo. Supports cinematic styles (wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome, moriyama_daido) and artistic styles (watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime) with adjustable intensity.",
+        "description": "Apply an artistic style to a photo. Supports cinematic styles (wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock) and artistic styles (watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime) with adjustable intensity.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -102,7 +102,7 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name: wong_kar_wai, wes_anderson, film_noir, terrence_malick, cyberpunk, studio_ghibli, vintage_kodachrome, moriyama_daido, watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
+              "description": "Style name: wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock, watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
             },
             "intensity": {
               "type": "number",
@@ -138,7 +138,7 @@
       },
       {
         "suffix": "batch_process",
-        "description": "Apply a photo processing style to all photos in a directory. Performs real pixel-level processing and saves results. Styles: norwegian_blue, golden_hour, film_noir, vintage_film, teal_orange, moody_desaturated, high_contrast_bw, warm_fade.",
+        "description": "Apply a cinematic or iconic photographer style to all photos in a directory. Performs real pixel-level processing. Styles: wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -149,7 +149,7 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name: norwegian_blue, golden_hour, film_noir, vintage_film, teal_orange, moody_desaturated, high_contrast_bw, warm_fade"
+              "description": "Style name: wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock"
             },
             "intensity": {
               "type": "number",
@@ -158,11 +158,11 @@
           },
           "required": ["style"]
         },
-        "sampleParams": { "collection": "/Users/demo/Pictures/Norway", "style": "norwegian_blue", "intensity": 75 },
+        "sampleParams": { "collection": "/Users/demo/Pictures/Norway", "style": "wong_kar_wai", "intensity": 75 },
         "sampleData": {
           "tool": "enso_photo_studio_batch_process",
           "collection": "/Users/demo/Pictures/Norway",
-          "style": "norwegian_blue",
+          "style": "wong_kar_wai",
           "intensity": 75,
           "total": 4,
           "completed": 4,
