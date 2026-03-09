@@ -1259,8 +1259,8 @@ async function analyzePhotoForStyle(photoPath: string): Promise<AgentToolResult>
   if (!apiKey) return errorResult("No Gemini API key configured");
 
   // Load all style descriptions for the prompt
-  const { registry } = loadStyleRegistry();
-  const styleDescriptions = Object.entries(registry)
+  const { infoMap } = loadStyleRegistry();
+  const styleDescriptions = Object.entries(infoMap)
     .map(([id, info]) => `- ${id}: "${info.name}" — ${info.description}`)
     .join("\n");
 
@@ -1286,14 +1286,18 @@ Respond with ONLY valid JSON (no markdown, no code fences):
       imagePath: photoPath,
       prompt,
       apiKey,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 4096,
     });
+
+    // Strip markdown code fences if present, then parse JSON
+    let cleaned = response.trim();
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?\s*```\s*$/i, "");
 
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(response);
+      parsed = JSON.parse(cleaned);
     } catch {
-      const match = response.match(/\{[\s\S]*\}/);
+      const match = cleaned.match(/\{[\s\S]*\}/);
       if (match) {
         parsed = JSON.parse(match[0]);
       } else {
@@ -1303,9 +1307,9 @@ Respond with ONLY valid JSON (no markdown, no code fences):
 
     // Validate recommended style exists
     const recStyle = String(parsed.recommendedStyle || "");
-    if (recStyle && !registry[recStyle]) {
+    if (recStyle && !infoMap[recStyle]) {
       // Try fuzzy match
-      const found = Object.keys(registry).find(id => id.includes(recStyle) || recStyle.includes(id));
+      const found = Object.keys(infoMap).find(id => id.includes(recStyle) || recStyle.includes(id));
       if (found) parsed.recommendedStyle = found;
     }
 

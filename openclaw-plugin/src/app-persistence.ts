@@ -96,7 +96,7 @@ interface AppManifest {
 
 // ── Executor Context ──
 
-const EXECUTOR_CTX_TIMEOUT_MS = 10_000;
+const EXECUTOR_CTX_TIMEOUT_MS = 60_000;
 const EXECUTOR_CTX_MAX_DEPTH = 3;
 const EXECUTOR_FETCH_MAX_BYTES = 512 * 1024; // 512KB
 const STORE_MAX_SIZE = 1024 * 1024; // 1MB per family store
