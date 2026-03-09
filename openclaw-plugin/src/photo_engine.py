@@ -629,20 +629,22 @@ def blend(base, overlay, mode="normal", opacity=1.0, mask=None):
 # Film Grain
 # ===================================================================
 
-def generate_organic_noise(shape, scale=64.0, octaves=4, persistence=0.5, seed=None):
+def generate_organic_noise(shape, scale=4.0, octaves=4, persistence=0.5, seed=None):
     """Generate organic multi-octave noise for film grain simulation.
 
     Uses stacked Gaussian-filtered random fields at different scales.
+    Scale is relative to image dimensions to ensure consistent grain
+    appearance regardless of resolution.
 
     Args:
         shape: (H, W)
-        scale: base noise scale (higher = larger clumps)
+        scale: base noise scale in pixels (grain clump radius)
         octaves: number of fractal layers
         persistence: amplitude decay per octave (0.5 = halve)
         seed: random seed
 
     Returns:
-        float64 array (H,W), normalized to roughly [-1, 1]
+        float64 array (H,W), normalized to std dev ~1
     """
     if seed is not None:
         rng = np.random.RandomState(seed)
@@ -654,11 +656,9 @@ def generate_organic_noise(shape, scale=64.0, octaves=4, persistence=0.5, seed=N
     total_amplitude = 0.0
 
     for i in range(octaves):
-        # Generate random field
         raw = rng.randn(*shape)
-        # Apply Gaussian filter at decreasing sigma (increasing frequency)
         sigma = scale / (2 ** i)
-        if sigma >= 1.0:
+        if sigma >= 0.5:
             filtered = gaussian_filter(raw, sigma=sigma)
         else:
             filtered = raw
@@ -667,7 +667,6 @@ def generate_organic_noise(shape, scale=64.0, octaves=4, persistence=0.5, seed=N
         total_amplitude += amplitude
         amplitude *= persistence
 
-    # Normalize to [-1, 1]
     if total_amplitude > 0:
         noise /= total_amplitude
 
@@ -680,13 +679,14 @@ def generate_organic_noise(shape, scale=64.0, octaves=4, persistence=0.5, seed=N
 
 
 # ISO profile presets: (amount, size, roughness)
+# Amounts are calibrated for organic noise (perceptually ~2x stronger than Gaussian)
 ISO_PROFILES = {
-    "iso100":  (3,  0.8, 0.3),
-    "iso200":  (6,  1.0, 0.4),
-    "iso400":  (10, 1.5, 0.5),
-    "iso800":  (16, 2.0, 0.6),
-    "iso1600": (22, 2.5, 0.7),
-    "iso3200": (30, 3.0, 0.8),
+    "iso100":  (2,  0.8, 0.3),
+    "iso200":  (3,  1.0, 0.4),
+    "iso400":  (5,  1.2, 0.4),
+    "iso800":  (8,  1.5, 0.5),
+    "iso1600": (12, 1.8, 0.5),
+    "iso3200": (16, 2.2, 0.6),
 }
 
 
@@ -713,8 +713,12 @@ def apply_film_grain(img_array, amount=12, size=1.5, roughness=0.5,
     h, w = img_array.shape[:2]
     img = img_array.astype(np.float64)
 
-    scale = max(2, size * 32)  # Map size to Gaussian scale
-    octaves = max(1, int(1 + roughness * 5))  # 1-6 octaves
+    # Scale grain clump size relative to image dimensions
+    # size=1.0 → ~0.3% of image diagonal (fine grain)
+    # size=2.0 → ~0.6% (medium), size=3.0 → ~0.9% (coarse)
+    diag = np.sqrt(h**2 + w**2)
+    scale = max(1.0, size * diag * 0.003)
+    octaves = max(1, int(1 + roughness * 4))  # 1-5 octaves
 
     # Luminance-aware mask
     if luminance_aware:
