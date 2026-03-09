@@ -89,33 +89,6 @@ export interface ToolBuildSummary {
   persisted?: boolean;
 }
 
-// ── Mission Planner ──
-
-export interface MissionAppProposal {
-  id: string;
-  name: string;
-  family: string;
-  description: string;
-  capabilities: string[];
-  approved: boolean;
-}
-
-export interface MissionPlan {
-  missionId: string;
-  description: string;
-  apps: MissionAppProposal[];
-}
-
-export interface MissionProgress {
-  missionId: string;
-  currentIndex: number;
-  totalApps: number;
-  currentApp: string;
-  stage: "analyzing" | "proposing" | "building" | "built" | "failed" | "complete";
-  error?: string;
-  builtApps?: Array<{ family: string; success: boolean; error?: string }>;
-}
-
 // ── Orchestration ──
 
 export type AgentRole = "researcher" | "architect" | "builder" | "coder" | "reviewer";
@@ -218,8 +191,6 @@ export interface ServerMessage {
   appsDeleted?: { families: string[]; count: number };
   appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string; builtIn?: boolean; codebase?: boolean }>;
   appSaved?: { toolFamily: string; success: boolean; path?: string; error?: string };
-  missionPlan?: MissionPlan;
-  missionProgress?: MissionProgress;
   buildComplete?: {
     cardId: string;
     success: boolean;
@@ -253,8 +224,6 @@ export interface ClientMessage {
     | "server.restart"
     | "settings.set_mode"
     | "operation.cancel"
-    | "mission.start"
-    | "mission.approve"
     | "orchestration.start"
     | "orchestration.approve"
     | "orchestration.pause"
@@ -286,11 +255,6 @@ export interface ClientMessage {
   toolFamily?: string;
   // operation.cancel fields
   operationId?: string;
-  // mission.start fields
-  missionDescription?: string;
-  // mission.approve fields
-  missionId?: string;
-  approvedApps?: MissionAppProposal[];
   // orchestration.* fields
   orchestrationGoal?: string;
   orchestrationId?: string;

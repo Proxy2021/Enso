@@ -69,40 +69,6 @@ export interface AppInfo {
   experience?: "card" | "terminal"; // How the app renders
 }
 
-// ── Mission Planner ──
-
-export interface MissionAppProposal {
-  id: string;
-  name: string;
-  family: string;        // snake_case family name
-  description: string;
-  capabilities: string[];
-  inspiredBy?: string;   // competitive edge — what market leaders do + how Enso does it better
-  approved: boolean;
-}
-
-export interface MissionResearch {
-  competitors: Array<{ name: string; strengths: string[]; gaps: string[] }>;
-  keyInsights: string;
-}
-
-export interface MissionPlan {
-  missionId: string;
-  description: string;
-  research?: MissionResearch;  // competitive research findings
-  apps: MissionAppProposal[];
-}
-
-export interface MissionProgress {
-  missionId: string;
-  currentIndex: number;
-  totalApps: number;
-  currentApp: string;
-  stage: "analyzing" | "proposing" | "building" | "built" | "failed" | "complete";
-  error?: string;
-  builtApps?: Array<{ family: string; success: boolean; error?: string }>;
-}
-
 // ── Protocol Messages ──
 
 export interface ToolBuildSummary {
@@ -148,8 +114,6 @@ export interface ServerMessage {
   appsDeleted?: { families: string[]; count: number };
   appsList?: AppInfo[];
   appSaved?: { toolFamily: string; success: boolean; path?: string; error?: string };
-  missionPlan?: MissionPlan;
-  missionProgress?: MissionProgress;
   buildComplete?: {
     cardId: string;
     success: boolean;
@@ -204,8 +168,6 @@ export interface ClientMessage {
     | "shell.input"
     | "shell.resize"
     | "shell.destroy"
-    | "mission.start"
-    | "mission.approve"
     | "orchestration.start"
     | "orchestration.approve"
     | "orchestration.pause"
@@ -247,11 +209,6 @@ export interface ClientMessage {
   shellInput?: string;
   shellCols?: number;
   shellRows?: number;
-  // mission.start fields
-  missionDescription?: string;
-  // mission.approve fields
-  missionId?: string;
-  approvedApps?: MissionAppProposal[];
   // client.error fields
   clientError?: {
     message: string;

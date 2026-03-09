@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
-import type { AppInfo, ClientMessage, MissionAppProposal, ServerMessage, ToolRouting } from "@shared/types";
+import type { AppInfo, ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
 import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
 import { shellWriters } from "../cards/ShellCard";
@@ -83,8 +83,6 @@ interface CardStore {
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
-  startMission: (cardId: string, description: string) => void;
-  approveMission: (cardId: string, missionId: string, apps: MissionAppProposal[]) => void;
   startOrchestration: (cardId: string, goal: string) => void;
   approveOrchestration: (orchestrationId: string, taskIds?: string[]) => void;
   pauseOrchestration: (orchestrationId: string) => void;
@@ -287,26 +285,6 @@ export const useChatStore = create<CardStore>((set, get) => ({
         return;
       }
 
-      // "/mission" command — launch mission planner (keep as alias)
-      if (text.trim() === "/mission") {
-        const id = uuidv4();
-        const now = Date.now();
-        const card: Card = {
-          id,
-          runId: id,
-          type: "mission",
-          role: "assistant",
-          status: "complete",
-          display: "expanded",
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-        }));
-        return;
-      }
 
       // "/shell" command — launch remote terminal
       if (text.trim() === "/shell") {
@@ -602,61 +580,6 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cardText,
       buildAppDefinition: definition,
       conversationContext,
-    });
-  },
-
-  // ── Mission Planner ──
-
-  startMission: (cardId: string, description: string) => {
-    // Update card to show analyzing state
-    set((s) => {
-      const card = s.cards[cardId];
-      if (!card) return s;
-      return {
-        cards: {
-          ...s.cards,
-          [cardId]: {
-            ...card,
-            data: { ...((card.data as any) || {}), missionProgress: { missionId: "", currentIndex: 0, totalApps: 0, currentApp: "", stage: "analyzing" } },
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-
-    get()._wsClient?.send({
-      type: "mission.start",
-      cardId,
-      missionDescription: description,
-    });
-  },
-
-  approveMission: (cardId: string, missionId: string, apps: MissionAppProposal[]) => {
-    // Update card to show building state
-    set((s) => {
-      const card = s.cards[cardId];
-      if (!card) return s;
-      const approvedCount = apps.filter((a) => a.approved).length;
-      return {
-        cards: {
-          ...s.cards,
-          [cardId]: {
-            ...card,
-            data: {
-              ...((card.data as any) || {}),
-              missionProgress: { missionId, currentIndex: 0, totalApps: approvedCount, currentApp: "", stage: "building", builtApps: [] },
-            },
-            updatedAt: Date.now(),
-          },
-        },
-      };
-    });
-
-    get()._wsClient?.send({
-      type: "mission.approve",
-      cardId,
-      missionId,
-      approvedApps: apps,
     });
   },
 
@@ -1425,35 +1348,6 @@ export const useChatStore = create<CardStore>((set, get) => ({
             // Auto-append to cardOrder if new card
             cardOrder: existingCard ? s.cardOrder : [...s.cardOrder, targetId],
             cards: { ...s.cards, [targetId]: updatedCard },
-          };
-        });
-      }
-      return;
-    }
-
-    // Handle mission plan and progress updates
-    if (msg.missionPlan || msg.missionProgress) {
-      const targetId = msg.targetCardId;
-      if (targetId) {
-        set((s) => {
-          const card = s.cards[targetId];
-          if (!card) return s;
-          const existingData = (card.data as any) || {};
-          return {
-            cards: {
-              ...s.cards,
-              [targetId]: {
-                ...card,
-                type: "mission",
-                data: {
-                  ...existingData,
-                  ...(msg.missionPlan ? { missionPlan: msg.missionPlan } : {}),
-                  ...(msg.missionProgress ? { missionProgress: msg.missionProgress } : {}),
-                },
-                status: msg.state === "final" ? "complete" : "streaming",
-                updatedAt: Date.now(),
-              },
-            },
           };
         });
       }

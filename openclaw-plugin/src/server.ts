@@ -1007,40 +1007,6 @@ export async function startEnsoServer(opts: {
               });
             }
             break;
-          case "mission.start": {
-            if (msg.missionDescription) {
-              runtime.log?.(`[enso] mission start: ${msg.missionDescription.slice(0, 80)}`);
-              const { handleMissionStart } = await import("./mission-planner.js");
-              const missionCardId = msg.cardId || randomUUID();
-              handleMissionStart({
-                description: msg.missionDescription,
-                cardId: missionCardId,
-                client,
-                account,
-              }).catch((err) => {
-                logError("mission-planner", "Unhandled mission start error", err);
-                runtime.error?.(`[enso] mission-planner error: ${err instanceof Error ? err.message : String(err)}`);
-              });
-            }
-            break;
-          }
-          case "mission.approve": {
-            if (msg.missionId && msg.approvedApps) {
-              runtime.log?.(`[enso] mission approve: ${msg.missionId} (${msg.approvedApps.filter((a: any) => a.approved).length} apps)`);
-              const { handleMissionApprove } = await import("./mission-planner.js");
-              handleMissionApprove({
-                missionId: msg.missionId,
-                approvedApps: msg.approvedApps,
-                cardId: msg.cardId || "",
-                client,
-                account,
-              }).catch((err) => {
-                logError("mission-planner", "Unhandled mission approve error", err);
-                runtime.error?.(`[enso] mission-planner approve error: ${err instanceof Error ? err.message : String(err)}`);
-              });
-            }
-            break;
-          }
           case "orchestration.start": {
             if (msg.orchestrationGoal) {
               runtime.log?.(`[enso] orchestration start: ${msg.orchestrationGoal.slice(0, 80)}`);
