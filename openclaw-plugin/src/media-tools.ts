@@ -25,7 +25,7 @@ type ToggleFavoriteParams = { path: string; favorite?: boolean };
 type ManageCollectionParams = { action: string; collectionName?: string; photoPath?: string; newName?: string };
 type RatePhotoParams = { path: string; rating: number };
 type ProcessPhotosParams = { inputDir: string; style: string; outputSubfolder?: string };
-type ProcessSinglePhotoParams = { inputFile: string; outputFile?: string; style: string };
+type ProcessSinglePhotoParams = { inputFile: string; outputFile?: string; style: string; maxSize?: number };
 type StylePreviewsParams = { photoPath: string; styles?: string[] };
 
 // ── Style Registry (loaded from styles.json) ─────────────────────────────
@@ -1077,6 +1077,10 @@ async function processSinglePhoto(params: ProcessSinglePhotoParams): Promise<Age
   mkdirSync(outDir, { recursive: true });
   const outputFile = params.outputFile || join(outDir, `${base}_${style}.jpg`);
 
+  // Cap processing size for interactive use — full resolution is too slow.
+  // 3000px long edge gives excellent quality while processing ~4x faster.
+  const maxSize = params.maxSize || 3000;
+
   try {
     const output = execFileSync("python3", [
       scriptPath,
@@ -1084,6 +1088,8 @@ async function processSinglePhoto(params: ProcessSinglePhotoParams): Promise<Age
       "--output-file", outputFile,
       "--style", style,
       "--styles-file", stylesFilePath,
+      "--preview",
+      "--preview-size", String(maxSize),
     ], { timeout: 600_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
 
     const result = JSON.parse(output.trim().split("\n").filter(Boolean).pop() || "{}");
