@@ -881,13 +881,30 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         if (!files || files.length === 0) return;
         try {
           const { getBackendBaseUrl, authHeaders } = await import("../lib/connection");
+          const { isNative } = await import("../lib/platform");
           const uploaded: { filePath: string; mediaUrl: string; name: string }[] = [];
           for (const file of Array.from(files)) {
-            const res = await fetch(`${getBackendBaseUrl()}/upload`, {
-              method: "POST",
-              headers: authHeaders({ "Content-Type": file.type }),
-              body: file,
-            });
+            let res: Response;
+            if (isNative) {
+              // On Android/Capacitor, Blob fetch bodies are serialized as "{}"
+              // by the WebView. Convert to base64 JSON so the server can decode.
+              const buf = await file.arrayBuffer();
+              const bytes = new Uint8Array(buf);
+              let binary = "";
+              for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+              const b64 = btoa(binary);
+              res = await fetch(`${getBackendBaseUrl()}/upload`, {
+                method: "POST",
+                headers: authHeaders({ "Content-Type": "application/json" }),
+                body: JSON.stringify({ data: b64, mimeType: file.type || "image/jpeg" }),
+              });
+            } else {
+              res = await fetch(`${getBackendBaseUrl()}/upload`, {
+                method: "POST",
+                headers: authHeaders({ "Content-Type": file.type }),
+                body: file,
+              });
+            }
             if (res.ok) {
               const { filePath, mediaUrl } = await res.json();
               uploaded.push({ filePath, mediaUrl, name: file.name });
