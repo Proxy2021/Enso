@@ -6,9 +6,12 @@ import { resolveMediaUrl } from "../lib/connection";
 import { reportError } from "../lib/error-reporter";
 import type { CardRendererProps } from "./types";
 
-/** Recursively resolve all `/media/...` strings in data to absolute URLs for remote backends. */
+/** Server-relative path prefixes that need resolving for remote backends. */
+const SERVER_PATH_PREFIXES = ["/media/", "/demo/"];
+
+/** Recursively resolve all server-relative strings in data to absolute URLs for remote backends. */
 function resolveMediaUrlsInData(data: unknown): unknown {
-  if (typeof data === "string" && data.startsWith("/media/")) return resolveMediaUrl(data);
+  if (typeof data === "string" && SERVER_PATH_PREFIXES.some(p => data.startsWith(p))) return resolveMediaUrl(data);
   if (Array.isArray(data)) return data.map(resolveMediaUrlsInData);
   if (data && typeof data === "object") {
     const result: Record<string, unknown> = {};

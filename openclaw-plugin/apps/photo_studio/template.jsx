@@ -149,7 +149,8 @@ export default function GeneratedUI({ data, onAction }) {
     var isRoot = !currentPath || currentPath === "/";
     var folderName = isRoot ? "Select a Folder" : currentPath.split("/").filter(Boolean).pop() || currentPath;
 
-    // Demo showcase images
+    // Demo showcase images — URLs come from data (resolved for remote/mobile clients)
+    var demoImages = data.demoImages || {};
     var demoStyles = [
       { id: "kodak_portra_400", name: "Portra 400", cat: "Film" },
       { id: "blade_runner", name: "Blade Runner", cat: "Cinema" },
@@ -207,8 +208,8 @@ export default function GeneratedUI({ data, onAction }) {
                 return (
                   <div key={ds.id} className="shrink-0 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all cursor-pointer group"
                     style={{ width: 140 }}
-                    onClick={function() { setLightboxUrl("/demo/" + ds.id + ".jpg"); setLightboxName(ds.name); }}>
-                    <img src={"/demo/" + ds.id + ".jpg"} alt={ds.name} loading="lazy"
+                    onClick={function() { setLightboxUrl(demoImages[ds.id] || ("/demo/" + ds.id + ".jpg")); setLightboxName(ds.name); }}>
+                    <img src={(demoImages[ds.id]) || ("/demo/" + ds.id + ".jpg")} alt={ds.name} loading="lazy"
                       style={{ width: "100%", height: 95, objectFit: "cover" }}
                       className="group-hover:scale-105 transition-transform duration-300" />
                     <div className="px-2 py-1.5 bg-gray-800/80">

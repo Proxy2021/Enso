@@ -361,9 +361,10 @@ function buildLiveScript(params: {
     const INITIAL_JSX = ${escapedJsx};
 
     // ── Media URL resolver ──
+    var SERVER_PATH_PREFIXES = ["/media/", "/demo/"];
     function resolveMedia(obj) {
       if (typeof obj === "string") {
-        if (obj.startsWith("/media/")) {
+        if (SERVER_PATH_PREFIXES.some(function(p) { return obj.startsWith(p); })) {
           const sep = obj.includes("?") ? "&" : "?";
           return SERVER_URL + obj + (SERVER_TOKEN ? sep + "token=" + encodeURIComponent(SERVER_TOKEN) : "");
         }
