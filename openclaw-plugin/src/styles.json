@@ -21,9 +21,9 @@
           "g": { "points": [[0,4], [64,68], [128,134], [192,194], [255,253]] },
           "b": { "points": [[0,2], [64,58], [128,122], [192,188], [255,250]] }
         },
-        "lab_adjust": { "a_shift": 1.5, "b_shift": 4, "chroma_scale": 0.96 },
+        "lab_adjust": { "a_shift": 2, "b_shift": 6, "chroma_scale": 0.94 },
         "contrast": { "strength": 0.10, "type": "s_curve", "blend_mode": "luminosity" },
-        "warm_boost": { "threshold": 15, "saturation_factor": 1.12 },
+        "warm_boost": { "threshold": 12, "saturation_factor": 1.18 },
         "black_lift": 14,
         "highlight_fade": 8,
         "grain": { "amount": 5, "size": 1.5, "roughness": 0.5, "color_grain": true, "r_amount": 4, "g_amount": 3, "b_amount": 6, "luminance_aware": true },
@@ -223,7 +223,7 @@
         "lab_adjust": { "a_shift": 2, "b_shift": -6 },
         "contrast": { "strength": 0.16, "type": "s_curve", "blend_mode": "luminosity" },
         "saturation": 1.12,
-        "halation": { "strength": 0.18, "radius": null },
+        "halation": { "strength": 0.35, "radius": null },
         "shadow_color": { "threshold": 80, "g": -2, "b": 10, "feather": 30 },
         "warm_boost": { "threshold": 15, "saturation_factor": 1.20 },
         "black_lift": 6,
@@ -263,15 +263,16 @@
       "ui": { "bg": "bg-amber-500/10", "border": "border-amber-500/30", "text": "text-amber-300" },
       "recipe": {
         "layers": [
-          { "effect": "curves", "params": { "r": { "points": [[0,8], [64,72], [128,146], [192,204], [255,255]] }, "g": { "points": [[0,0], [64,60], [128,132], [192,194], [255,254]] }, "b": { "points": [[0,10], [64,56], [128,118], [192,180], [255,240]] } }, "blend_mode": "normal", "opacity": 1.0 },
-          { "effect": "shadow_crush", "params": { "threshold": 55, "factor": 0.60, "feather": 25 }, "blend_mode": "multiply", "opacity": 0.7, "mask": { "type": "luminosity", "zone": "shadows", "feather": 35 } },
-          { "effect": "solid_color", "params": { "color": [0, 60, 80] }, "blend_mode": "color", "opacity": 0.35, "mask": { "type": "luminosity", "zone": "shadows", "feather": 40 } },
-          { "effect": "solid_color", "params": { "color": [220, 160, 60] }, "blend_mode": "soft_light", "opacity": 0.25, "mask": { "type": "luminosity", "zone": "highlights", "feather": 35 } },
-          { "effect": "contrast", "params": { "strength": 0.22, "type": "s_curve" }, "blend_mode": "luminosity", "opacity": 1.0 },
-          { "effect": "warm_boost", "params": { "threshold": 15, "saturation_factor": 1.35 }, "blend_mode": "normal", "opacity": 1.0 },
-          { "effect": "saturation", "params": { "factor": 1.15 }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "curves", "params": { "r": { "points": [[0,12], [64,74], [128,148], [192,206], [255,255]] }, "g": { "points": [[0,4], [64,62], [128,134], [192,196], [255,254]] }, "b": { "points": [[0,14], [64,58], [128,120], [192,182], [255,242]] } }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "shadow_crush", "params": { "threshold": 40, "factor": 0.72, "feather": 30 }, "blend_mode": "normal", "opacity": 0.8 },
+          { "effect": "solid_color", "params": { "color": [0, 70, 90] }, "blend_mode": "color", "opacity": 0.28, "mask": { "type": "luminosity", "zone": "shadows", "feather": 45 } },
+          { "effect": "solid_color", "params": { "color": [230, 170, 65] }, "blend_mode": "soft_light", "opacity": 0.30, "mask": { "type": "luminosity", "zone": "highlights", "feather": 40 } },
+          { "effect": "contrast", "params": { "strength": 0.18, "type": "s_curve" }, "blend_mode": "luminosity", "opacity": 1.0 },
+          { "effect": "warm_boost", "params": { "threshold": 12, "saturation_factor": 1.40 }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "saturation", "params": { "factor": 1.20 }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "black_lift", "params": { "amount": 8 }, "blend_mode": "normal", "opacity": 1.0 },
           { "effect": "grain", "params": { "amount": 4, "size": 1.5, "roughness": 0.5, "color_grain": true, "luminance_aware": true }, "blend_mode": "normal", "opacity": 1.0 },
-          { "effect": "vignette", "params": { "strength": 0.42 }, "blend_mode": "multiply", "opacity": 1.0 }
+          { "effect": "vignette", "params": { "strength": 0.30 }, "blend_mode": "multiply", "opacity": 1.0 }
         ]
       }
     },
@@ -307,15 +308,16 @@
       "ui": { "bg": "bg-cyan-500/10", "border": "border-cyan-500/30", "text": "text-cyan-300" },
       "recipe": {
         "layers": [
-          { "effect": "curves", "params": { "master": { "hd_curve": { "toe": 0.20, "toe_strength": 0.50, "shoulder": 0.25, "shoulder_strength": 0.45, "midtone_contrast": 1.08 } } }, "blend_mode": "normal", "opacity": 1.0 },
-          { "effect": "solid_color", "params": { "color": [0, 50, 70] }, "blend_mode": "color", "opacity": 0.45, "mask": { "type": "luminosity", "zone": "shadows", "feather": 40 } },
-          { "effect": "solid_color", "params": { "color": [200, 140, 50] }, "blend_mode": "color", "opacity": 0.30, "mask": { "type": "luminosity", "zone": "highlights", "feather": 35 } },
-          { "effect": "shadow_crush", "params": { "threshold": 40, "factor": 0.50, "feather": 25 }, "blend_mode": "normal", "opacity": 1.0 },
-          { "effect": "contrast", "params": { "strength": 0.24, "type": "s_curve" }, "blend_mode": "luminosity", "opacity": 1.0 },
-          { "effect": "saturation", "params": { "factor": 0.82 }, "blend_mode": "normal", "opacity": 1.0 },
-          { "effect": "selective_boost", "params": { "channel": "b", "threshold": 12, "factor": 1.25 }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "curves", "params": { "master": { "hd_curve": { "toe": 0.22, "toe_strength": 0.42, "shoulder": 0.25, "shoulder_strength": 0.45, "midtone_contrast": 1.06 } } }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "solid_color", "params": { "color": [0, 60, 80] }, "blend_mode": "color", "opacity": 0.35, "mask": { "type": "luminosity", "zone": "shadows", "feather": 45 } },
+          { "effect": "solid_color", "params": { "color": [210, 150, 55] }, "blend_mode": "color", "opacity": 0.35, "mask": { "type": "luminosity", "zone": "highlights", "feather": 40 } },
+          { "effect": "shadow_crush", "params": { "threshold": 30, "factor": 0.68, "feather": 30 }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "contrast", "params": { "strength": 0.20, "type": "s_curve" }, "blend_mode": "luminosity", "opacity": 1.0 },
+          { "effect": "saturation", "params": { "factor": 0.85 }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "selective_boost", "params": { "channel": "b", "threshold": 12, "factor": 1.20 }, "blend_mode": "normal", "opacity": 1.0 },
+          { "effect": "black_lift", "params": { "amount": 6 }, "blend_mode": "normal", "opacity": 1.0 },
           { "effect": "grain", "params": { "amount": 3, "size": 1.2, "roughness": 0.4, "color_grain": true, "luminance_aware": true }, "blend_mode": "normal", "opacity": 1.0 },
-          { "effect": "vignette", "params": { "strength": 0.38 }, "blend_mode": "multiply", "opacity": 1.0 }
+          { "effect": "vignette", "params": { "strength": 0.28 }, "blend_mode": "multiply", "opacity": 1.0 }
         ]
       }
     },
@@ -449,11 +451,11 @@
       "recipe": {
         "monochrome": { "weights": [0.35, 0.45, 0.20] },
         "curves": {
-          "master": { "hd_curve": { "toe": 0.15, "toe_strength": 0.60, "shoulder": 0.18, "shoulder_strength": 0.55, "midtone_contrast": 1.20 } }
+          "master": { "hd_curve": { "toe": 0.12, "toe_strength": 0.65, "shoulder": 0.15, "shoulder_strength": 0.60, "midtone_contrast": 1.28 } }
         },
-        "contrast": { "strength": 0.38, "type": "double_s_curve" },
-        "shadow_crush": { "threshold": 50, "factor": 0.55, "feather": 22 },
-        "highlight_blow": { "threshold": 200, "factor": 1.18, "feather": 22 },
+        "contrast": { "strength": 0.45, "type": "double_s_curve" },
+        "shadow_crush": { "threshold": 55, "factor": 0.45, "feather": 18 },
+        "highlight_blow": { "threshold": 190, "factor": 1.25, "feather": 18 },
         "grain": { "iso_profile": "iso1600", "color_grain": false, "luminance_aware": false },
         "vignette": 0.25
       }
@@ -637,16 +639,16 @@
           "g": { "points": [[0,2], [64,66], [128,132], [192,196], [255,254]] },
           "b": { "points": [[0,12], [64,74], [128,136], [192,194], [255,252]] }
         },
-        "lab_adjust": { "chroma_scale": 0.68, "a_shift": -2, "b_shift": -4 },
-        "contrast": { "strength": 0.14, "type": "s_curve", "blend_mode": "luminosity" },
+        "lab_adjust": { "chroma_scale": 0.72, "a_shift": -2, "b_shift": -3 },
+        "contrast": { "strength": 0.16, "type": "s_curve", "blend_mode": "luminosity" },
         "split_tone": {
           "shadow_zone": "shadows", "highlight_zone": "highlights",
           "feather": 35,
           "shadows": { "r": -3, "g": 2, "b": 6 },
           "highlights": { "r": 0, "g": 0, "b": 0 }
         },
-        "black_lift": 28,
-        "highlight_fade": 16,
+        "black_lift": 18,
+        "highlight_fade": 10,
         "grain": { "amount": 3, "size": 1.0, "roughness": 0.4, "color_grain": true, "luminance_aware": true },
         "vignette": 0.15
       }
