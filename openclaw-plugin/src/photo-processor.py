@@ -22,7 +22,7 @@ import sys
 import json
 import argparse
 import numpy as np
-from PIL import Image, ImageFilter, ImageEnhance
+from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 
@@ -354,7 +354,9 @@ def load_image(path):
             )
         return rgb
     else:
-        pil_img = Image.open(path).convert("RGB")
+        pil_img = Image.open(path)
+        pil_img = ImageOps.exif_transpose(pil_img)  # Apply EXIF orientation
+        pil_img = pil_img.convert("RGB")
         return np.array(pil_img)
 
 
@@ -387,6 +389,7 @@ def process_single_file(args):
             try:
                 os.makedirs(thumb_dir, exist_ok=True)
                 thumb = Image.open(dst_path)
+                thumb = ImageOps.exif_transpose(thumb)
                 thumb.thumbnail((800, 800), Image.LANCZOS)
                 thumb.save(thumb_path, "JPEG", quality=75)
             except Exception:
