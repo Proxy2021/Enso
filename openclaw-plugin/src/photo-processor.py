@@ -36,7 +36,8 @@ from photo_engine import (
     apply_green_boost, apply_sky_boost, apply_selective_boost,
     lift_blacks, fade_highlights, color_tint, apply_halation,
     apply_film_grain, add_vignette, apply_haze_highlights,
-    apply_layer_stack, luminosity_mask, blend, compute_luminance
+    apply_layer_stack, luminosity_mask, blend, compute_luminance,
+    auto_enhance
 )
 
 # Allow very large images (Hasselblad 100MP etc.)
@@ -411,14 +412,20 @@ def process_single_file(args):
             pil_preview.thumbnail((preview_size, preview_size), Image.LANCZOS)
             rgb = np.array(pil_preview)
 
+        # Adaptive exposure normalization — brings dark/underexposed images
+        # to a well-exposed baseline before style is applied
+        if not recipe.get("skip_auto_enhance"):
+            ae = recipe.get("auto_enhance", {})
+            rgb = auto_enhance(rgb,
+                               target_mean_L=ae.get("target_mean_L", 42.0),
+                               shadow_floor_L=ae.get("shadow_floor_L", 4.0),
+                               local_contrast_strength=ae.get("local_contrast", 0.15))
+
         styled = apply_recipe(rgb, recipe)
         pil_img = Image.fromarray(styled)
 
         # Slight sharpening
         pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=40, threshold=2))
-        # Slight brightness reduction for moodiness
-        enhancer = ImageEnhance.Brightness(pil_img)
-        pil_img = enhancer.enhance(0.97)
 
         pil_img.save(dst_path, "JPEG", quality=quality, subsampling=0)
 
@@ -460,11 +467,17 @@ def process_single_photo(input_file, output_file, recipe, preview_size=0, qualit
             pil_preview.thumbnail((preview_size, preview_size), Image.LANCZOS)
             rgb = np.array(pil_preview)
 
+        # Adaptive exposure normalization
+        if not recipe.get("skip_auto_enhance"):
+            ae = recipe.get("auto_enhance", {})
+            rgb = auto_enhance(rgb,
+                               target_mean_L=ae.get("target_mean_L", 42.0),
+                               shadow_floor_L=ae.get("shadow_floor_L", 4.0),
+                               local_contrast_strength=ae.get("local_contrast", 0.15))
+
         styled = apply_recipe(rgb, recipe)
         pil_img = Image.fromarray(styled)
         pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=40, threshold=2))
-        enhancer = ImageEnhance.Brightness(pil_img)
-        pil_img = enhancer.enhance(0.97)
 
         os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
         pil_img.save(output_file, "JPEG", quality=quality, subsampling=0)

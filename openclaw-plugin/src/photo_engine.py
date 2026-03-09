@@ -303,6 +303,74 @@ def adjust_lab(img_array, l_shift=0, a_shift=0, b_shift=0,
 
 
 # ===================================================================
+# Adaptive Auto-Enhance
+# ===================================================================
+
+def auto_enhance(img_array, target_mean_L=42.0, shadow_floor_L=4.0,
+                 local_contrast_strength=0.15, max_gamma=2.8):
+    """Adaptive exposure normalization — brings any image to a well-exposed baseline.
+
+    Works in LAB space so color is untouched; only lightness is corrected.
+
+    Steps:
+      1. Adaptive gamma on L channel to bring mean luminance toward target
+      2. Shadow floor lifting — ensures deepest shadows retain visible detail
+      3. Mild local contrast — enhances micro-detail without halos
+
+    Only applies corrections when needed. Well-exposed images pass through
+    with minimal or no change.
+
+    Args:
+        img_array: uint8 RGB (H,W,3)
+        target_mean_L: desired mean L in LAB (0-100). ~42 = balanced exposure.
+        shadow_floor_L: minimum L value — lifts crushed blacks above this floor.
+        local_contrast_strength: 0-1 strength of local contrast enhancement.
+        max_gamma: maximum gamma correction allowed (safety cap).
+
+    Returns:
+        uint8 RGB (H,W,3) with exposure-corrected lightness.
+    """
+    lab = rgb_to_lab(img_array)
+    L = lab[:, :, 0].copy()  # float64, range [0, 100]
+
+    mean_L = L.mean()
+
+    # ── Step 1: Adaptive gamma ──
+    # Only correct if significantly underexposed (> 15% below target)
+    if mean_L < target_mean_L * 0.85 and mean_L > 0.5:
+        # gamma = log(target / max) / log(current / max)
+        gamma = np.log(target_mean_L / 100.0) / np.log(mean_L / 100.0)
+        gamma = float(np.clip(gamma, 0.4, max_gamma))
+
+        # Apply gamma: L_out = 100 * (L_in / 100) ^ gamma
+        L_norm = L / 100.0
+        L_norm = np.power(np.clip(L_norm, 0, 1), gamma)
+        L = L_norm * 100.0
+
+    # ── Step 2: Shadow floor lifting ──
+    # Smooth lift of deepest shadows above the floor
+    p2 = np.percentile(L, 2)
+    if p2 < shadow_floor_L:
+        lift = shadow_floor_L - p2
+        # Affects only deep shadows (tapers off by L=25)
+        shadow_mask = np.clip(1.0 - L / 25.0, 0, 1) ** 1.5
+        L = L + lift * shadow_mask
+
+    # ── Step 3: Local contrast enhancement ──
+    # Subtract blurred version, scale deviation, add back
+    if local_contrast_strength > 0:
+        # Sigma relative to image size for consistent effect
+        h = L.shape[0]
+        sigma = max(h / 8.0, 10.0)  # ~50px for 400px preview, ~700 for 5600px
+        L_blur = gaussian_filter(L, sigma=sigma)
+        detail = L - L_blur
+        L = L_blur + detail * (1.0 + local_contrast_strength)
+
+    lab[:, :, 0] = np.clip(L, 0, 100)
+    return lab_to_rgb(lab)
+
+
+# ===================================================================
 # Luminosity Masks
 # ===================================================================
 
