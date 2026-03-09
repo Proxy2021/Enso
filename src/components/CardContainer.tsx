@@ -848,6 +848,28 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       window.open((payload as Record<string,unknown>).url as string, "_blank", "noopener");
       return;
     }
+    // Client-side photo save (download to device)
+    if (action === "__save_photo") {
+      const p = payload as Record<string, unknown> | undefined;
+      const url = typeof p?.url === "string" ? p.url : null;
+      if (url) {
+        import("../lib/media-actions").then(({ savePhoto }) => {
+          savePhoto(url, typeof p?.filename === "string" ? p.filename : undefined);
+        }).catch(console.error);
+      }
+      return;
+    }
+    // Client-side photo share (Web Share API or native share sheet)
+    if (action === "__share_photo") {
+      const p = payload as Record<string, unknown> | undefined;
+      const url = typeof p?.url === "string" ? p.url : null;
+      if (url) {
+        import("../lib/media-actions").then(({ sharePhoto }) => {
+          sharePhoto(url, typeof p?.filename === "string" ? p.filename : undefined);
+        }).catch(console.error);
+      }
+      return;
+    }
     sendCardAction(card.id, action, payload);
   }
 

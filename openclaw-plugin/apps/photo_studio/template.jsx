@@ -55,18 +55,26 @@ export default function GeneratedUI({ data, onAction }) {
   const defaultUi = { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" };
 
   // ── Lightbox overlay (full-view photo) ──
-  const lightbox = lightboxUrl ? (
-    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: "rgba(0,0,0,0.95)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
-      onClick={() => setLightboxUrl(null)}>
-      <button onClick={() => setLightboxUrl(null)} style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", padding: 8 }}>
+  var lightbox = lightboxUrl ? (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: "rgba(0,0,0,0.95)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      onClick={function() { setLightboxUrl(null); }}>
+      <button onClick={function() { setLightboxUrl(null); }} style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", padding: 8, zIndex: 10 }}>
         <LucideReact.X className="w-7 h-7 text-white/70 hover:text-white" />
       </button>
-      <img src={lightboxUrl} alt={lightboxName} style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 8 }} onClick={function(e) { e.stopPropagation(); }} />
-      {lightboxName && <div className="text-sm text-white/60 mt-3">{lightboxName}</div>}
-      <div className="flex gap-2 mt-3" onClick={function(e) { e.stopPropagation(); }}>
-        <Button size="sm" variant="outline" onClick={function() { setLightboxUrl(null); }}>
-          <LucideReact.X className="w-3 h-3 mr-1" /> Close
-        </Button>
+      <img src={lightboxUrl} alt={lightboxName} style={{ maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100vh - 80px)", objectFit: "contain", borderRadius: 8 }} onClick={function(e) { e.stopPropagation(); }} />
+      <div style={{ position: "absolute", bottom: 16, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, pointerEvents: "none" }}>
+        {lightboxName && <div className="text-sm text-white/60" style={{ pointerEvents: "auto" }}>{lightboxName}</div>}
+        <div className="flex gap-2" style={{ pointerEvents: "auto" }} onClick={function(e) { e.stopPropagation(); }}>
+          <Button size="sm" variant="outline" onClick={function() { onAction("__save_photo", { url: lightboxUrl, filename: lightboxName || "photo.jpg" }); }}>
+            <LucideReact.Download className="w-3 h-3 mr-1" /> Save
+          </Button>
+          <Button size="sm" variant="outline" onClick={function() { onAction("__share_photo", { url: lightboxUrl, filename: lightboxName || "photo.jpg" }); }}>
+            <LucideReact.Share2 className="w-3 h-3 mr-1" /> Share
+          </Button>
+          <Button size="sm" variant="outline" onClick={function() { setLightboxUrl(null); }}>
+            <LucideReact.X className="w-3 h-3 mr-1" /> Close
+          </Button>
+        </div>
       </div>
     </div>
   ) : null;
