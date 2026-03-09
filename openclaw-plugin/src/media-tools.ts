@@ -1247,6 +1247,87 @@ async function listStyles(): Promise<AgentToolResult> {
 
 // ── Tool Registration ─────────────────────────────────────────────────────
 
+// ── AI Photo Analysis — Style Recommendation ─────────────────────────────
+
+async function analyzePhotoForStyle(photoPath: string): Promise<AgentToolResult> {
+  if (!photoPath || !existsSync(photoPath)) return errorResult(`Photo not found: ${photoPath}`);
+
+  const { callGeminiVision } = await import("./ui-generator.js");
+  const { getActiveAccount } = await import("./server.js");
+  const account = getActiveAccount();
+  const apiKey = account?.geminiApiKey;
+  if (!apiKey) return errorResult("No Gemini API key configured");
+
+  // Load all style descriptions for the prompt
+  const { registry } = loadStyleRegistry();
+  const styleDescriptions = Object.entries(registry)
+    .map(([id, info]) => `- ${id}: "${info.name}" — ${info.description}`)
+    .join("\n");
+
+  const prompt = `You are a professional photo editor and art director. Analyze this photograph in detail, then recommend the single best artistic style from the list below.
+
+AVAILABLE STYLES:
+${styleDescriptions}
+
+Respond with ONLY valid JSON (no markdown, no code fences):
+{
+  "scene": "A detailed 2-3 sentence description of what's in this photo — subject, setting, lighting, colors, mood, composition, time of day.",
+  "recommendedStyle": "style_id_here",
+  "styleName": "Human Readable Name",
+  "reason": "2-3 sentences explaining specifically WHY this style is the perfect match for THIS photo — reference concrete visual elements in the photo and how the style will enhance them.",
+  "caption": "A compelling, evocative 1-2 sentence caption for the resulting styled photo — written as if describing the final art piece in a gallery. Be poetic but specific to this image.",
+  "alternateStyle": "second_best_style_id",
+  "alternateStyleName": "Second Best Name",
+  "alternateReason": "Brief reason for the alternate choice."
+}`;
+
+  try {
+    const response = await callGeminiVision({
+      imagePath: photoPath,
+      prompt,
+      apiKey,
+      maxOutputTokens: 1024,
+    });
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(response);
+    } catch {
+      const match = response.match(/\{[\s\S]*\}/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      } else {
+        return errorResult("Failed to parse AI response");
+      }
+    }
+
+    // Validate recommended style exists
+    const recStyle = String(parsed.recommendedStyle || "");
+    if (recStyle && !registry[recStyle]) {
+      // Try fuzzy match
+      const found = Object.keys(registry).find(id => id.includes(recStyle) || recStyle.includes(id));
+      if (found) parsed.recommendedStyle = found;
+    }
+
+    return jsonResult({
+      tool: "enso_media_analyze_photo",
+      path: photoPath,
+      name: basename(photoPath),
+      mediaUrl: toMediaUrl(photoPath),
+      scene: parsed.scene || "",
+      recommendedStyle: parsed.recommendedStyle || "",
+      styleName: parsed.styleName || "",
+      reason: parsed.reason || "",
+      caption: parsed.caption || "",
+      alternateStyle: parsed.alternateStyle || "",
+      alternateStyleName: parsed.alternateStyleName || "",
+      alternateReason: parsed.alternateReason || "",
+    });
+  } catch (err) {
+    return errorResult(`AI analysis failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export function createMediaTools(): AnyAgentTool[] {
   return [
     // ── Original tools (enhanced) ──
@@ -1487,6 +1568,19 @@ export function createMediaTools(): AnyAgentTool[] {
         required: [],
       },
       execute: async () => listStyles(),
+    } as AnyAgentTool,
+    {
+      name: "enso_media_analyze_photo",
+      label: "AI Photo Analysis",
+      description: "Analyze a photo using AI vision to determine its content, recommend the best artistic style, and generate a creative caption.",
+      parameters: {
+        type: "object", additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "Path to the photo to analyze" },
+        },
+        required: ["path"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => analyzePhotoForStyle(params.path as string),
     } as AnyAgentTool,
   ];
 }

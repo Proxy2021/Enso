@@ -346,6 +346,35 @@
         "isPrimary": false
       },
       {
+        "suffix": "analyze_photo",
+        "description": "Use AI vision to analyze a photo's content, recommend the best artistic style, and generate a creative caption for the result.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "File path of the photo to analyze"
+            }
+          },
+          "required": ["path"]
+        },
+        "sampleParams": { "path": "/Users/demo/Pictures/sunset.jpg" },
+        "sampleData": {
+          "tool": "enso_photo_studio_analyze_photo",
+          "photoPath": "/Users/demo/Pictures/sunset.jpg",
+          "scene": "A dramatic sunset over a coastal harbor with colorful wooden houses reflected in calm water.",
+          "recommendedStyle": "nordic_noir",
+          "styleName": "Nordic Noir",
+          "reason": "The cool Scandinavian harbor scene with overcast skies and muted colors will be enhanced by Nordic Noir's icy desaturation.",
+          "caption": "Where the frozen sea meets painted wood — silence rendered in steel and slate.",
+          "alternateStyle": "blade_runner",
+          "alternateStyleName": "Blade Runner"
+        },
+        "requiredDataKeys": ["tool", "recommendedStyle"],
+        "isPrimary": false
+      },
+      {
         "suffix": "adjust",
         "description": "Fine-tune photo processing parameters like brightness, contrast, saturation, temperature, grain, vignette, and fade.",
         "parameters": {

@@ -25,6 +25,7 @@ export default function GeneratedUI({ data, onAction }) {
   const isAdjust = tool === "enso_photo_studio_adjust";
   const isPreviewStyles = tool === "enso_photo_studio_preview_styles";
   const isListStyles = tool === "enso_photo_studio_list_styles";
+  const isAnalyze = tool === "enso_photo_studio_analyze_photo";
 
   // ── Reset processing overlay when data changes (batch completes or navigates away) ──
   useEffect(() => {
@@ -315,6 +316,10 @@ export default function GeneratedUI({ data, onAction }) {
                         <div className="text-[9px] text-gray-500">{formatSize(item.size)}</div>
                       </div>
                       <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={function(e) { e.stopPropagation(); onAction("analyze_photo", { path: item.path }); }}
+                          className="p-1 rounded-md bg-black/60 text-amber-300 hover:text-amber-200 cursor-pointer backdrop-blur-sm" title="AI Recommend">
+                          <LucideReact.Sparkles className="w-3 h-3" />
+                        </button>
                         <button onClick={function(e) { e.stopPropagation(); onAction("preview_styles", { photoPath: item.path }); }}
                           className="p-1 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
                           <LucideReact.Palette className="w-3 h-3" />
@@ -344,6 +349,10 @@ export default function GeneratedUI({ data, onAction }) {
                         <div className="text-xs text-gray-200 truncate">{item.name}</div>
                         <div className="text-[10px] text-gray-500">{formatSize(item.size)} · {item.ext}</div>
                       </div>
+                      <button onClick={() => onAction("analyze_photo", { path: item.path })}
+                        className="p-1.5 rounded-lg bg-gray-700/40 hover:bg-amber-500/20 cursor-pointer transition-all opacity-0 group-hover:opacity-100" title="AI Recommend">
+                        <LucideReact.Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      </button>
                       <button onClick={() => onAction("preview_styles", { photoPath: item.path })}
                         className="p-1.5 rounded-lg bg-gray-700/40 hover:bg-violet-500/20 cursor-pointer transition-all opacity-0 group-hover:opacity-100">
                         <LucideReact.Palette className="w-3.5 h-3.5 text-violet-400" />
@@ -571,6 +580,99 @@ export default function GeneratedUI({ data, onAction }) {
             </div>
           );
         })}
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── AI Analysis View — Scene, Style Recommendation, Caption ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isAnalyze) {
+    var scene = data.scene || "Analyzing...";
+    var recStyle = data.recommendedStyle || "";
+    var recStyleName = data.styleName || recStyle;
+    var reason = data.reason || "";
+    var caption = data.caption || "";
+    var altStyle = data.alternateStyle || "";
+    var altStyleName = data.alternateStyleName || altStyle;
+    var altReason = data.alternateReason || "";
+    var photoPath = data.photoPath || "";
+    var photoUrl = data.mediaUrl || "";
+
+    return (
+      <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 space-y-4">
+        {lightbox}
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <button onClick={() => onAction("import_photos", { path: photoPath ? photoPath.split("/").slice(0, -1).join("/") : "" })}
+            className="text-gray-400 hover:text-white cursor-pointer">
+            <LucideReact.ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1">
+            <div className="text-base font-bold text-gray-50 flex items-center gap-2">
+              <LucideReact.Sparkles className="w-4 h-4 text-amber-400" />
+              AI Style Recommendation
+            </div>
+            <div className="text-xs text-gray-500">{data.name || "Photo Analysis"}</div>
+          </div>
+        </div>
+
+        {/* Photo preview */}
+        {photoUrl && (
+          <div className="rounded-xl overflow-hidden border border-gray-700/40 cursor-pointer"
+            onClick={() => { setLightboxUrl(photoUrl); setLightboxName(data.name || ""); }}>
+            <img src={photoUrl} alt={data.name || ""} style={{ width: "100%", maxHeight: 280, objectFit: "contain", background: "#000" }} />
+          </div>
+        )}
+
+        {/* Scene description */}
+        <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/30">
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-1">Scene Analysis</div>
+          <div className="text-sm text-gray-200 leading-relaxed">{scene}</div>
+        </div>
+
+        {/* Primary recommendation */}
+        <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl p-4 border border-amber-500/30">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <div className="text-[10px] text-amber-400 uppercase tracking-wider font-medium">Best Match</div>
+              <div className="text-lg font-bold text-amber-200">{recStyleName}</div>
+            </div>
+            <Button size="sm" onClick={() => onAction("apply_style", { photoId: photoPath, style: recStyle })}>
+              <LucideReact.Wand2 className="w-3.5 h-3.5 mr-1" /> Apply
+            </Button>
+          </div>
+          <div className="text-sm text-gray-300 leading-relaxed">{reason}</div>
+        </div>
+
+        {/* Caption */}
+        {caption && (
+          <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/30">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-1">Suggested Caption</div>
+            <div className="text-sm text-gray-100 italic leading-relaxed">"{caption}"</div>
+          </div>
+        )}
+
+        {/* Alternate recommendation */}
+        {altStyle && (
+          <div className="bg-gray-800/30 rounded-xl p-3 border border-gray-700/20 flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Also Consider</div>
+              <div className="text-sm font-medium text-gray-300">{altStyleName}</div>
+              {altReason && <div className="text-xs text-gray-500 mt-0.5">{altReason}</div>}
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => onAction("apply_style", { photoId: photoPath, style: altStyle })}>
+              <LucideReact.Wand2 className="w-3 h-3 mr-1" /> Try
+            </Button>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="ghost" onClick={() => onAction("preview_styles", { photoPath: photoPath })}>
+            <LucideReact.Palette className="w-3 h-3 mr-1" /> Browse All Styles
+          </Button>
+        </div>
       </div>
     );
   }
