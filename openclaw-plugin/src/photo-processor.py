@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Enso Photo Processor v2 — Data-driven recipe-based photo style engine.
+Enso Photo Processor v3 — Professional-grade recipe-based photo style engine.
+
+Uses photo_engine.py for spline curves, H&D film response, LAB color space,
+feathered luminosity masks, blend modes, organic film grain, and layer compositing.
+
 Reads style recipes from styles.json. Adding a new style = adding a JSON entry. Zero code changes.
 
 Supports JPEG/PNG/TIFF and RAW files (.3FR, .ARW, .CR2, .NEF, .DNG, .RAF, .ORF, .RW2).
@@ -22,6 +26,19 @@ from PIL import Image, ImageFilter, ImageEnhance
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 
+# Import professional processing engine
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from photo_engine import (
+    apply_curves, adjust_lab, apply_monochrome, apply_split_tone,
+    apply_shadow_crush, apply_highlight_blow, apply_contrast,
+    adjust_saturation, apply_warm_boost, apply_flatten_contrast,
+    apply_desaturate_blend, apply_green_to_teal, apply_teal_boost,
+    apply_green_boost, apply_sky_boost, apply_selective_boost,
+    lift_blacks, fade_highlights, color_tint, apply_halation,
+    apply_film_grain, add_vignette, apply_haze_highlights,
+    apply_layer_stack, luminosity_mask, blend, compute_luminance
+)
+
 # Allow very large images (Hasselblad 100MP etc.)
 Image.MAX_IMAGE_PIXELS = None
 
@@ -36,376 +53,40 @@ RECIPE_REGISTRY = {}
 
 
 # ===================================================================
-# Core utilities — low-level image manipulation building blocks
-# ===================================================================
-
-def apply_curve(channel, shadows_shift=0, midtone_shift=0, highlight_shift=0):
-    """Apply a 3-point tone curve to a single channel (0-255 numpy array)."""
-    lut = np.zeros(256, dtype=np.float64)
-    p0 = max(0, min(255, 0 + shadows_shift))
-    p1 = max(0, min(255, 128 + midtone_shift))
-    p2 = max(0, min(255, 255 + highlight_shift))
-    for i in range(256):
-        if i <= 128:
-            t = i / 128.0
-            lut[i] = p0 * (1 - t) + p1 * t
-        else:
-            t = (i - 128) / 127.0
-            lut[i] = p1 * (1 - t) + p2 * t
-    lut = np.clip(lut, 0, 255).astype(np.uint8)
-    return lut[channel]
-
-
-def add_vignette(img_array, strength=0.3):
-    """Apply vignette darkening from edges."""
-    if strength <= 0:
-        return img_array
-    h, w = img_array.shape[:2]
-    Y, X = np.ogrid[:h, :w]
-    cx, cy = w / 2, h / 2
-    dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
-    max_dist = np.sqrt(cx ** 2 + cy ** 2)
-    dist_norm = dist / max_dist
-    vignette = 1.0 - strength * (dist_norm ** 1.8)
-    vignette = np.clip(vignette, 0, 1)
-    out = img_array.astype(np.float64)
-    for c in range(3):
-        out[:, :, c] *= vignette
-    return np.clip(out, 0, 255).astype(np.uint8)
-
-
-def adjust_saturation(img_array, factor):
-    """Adjust saturation. factor=0 is grayscale, 1 is unchanged, >1 is more saturated."""
-    if factor == 1.0:
-        return img_array
-    img = img_array.astype(np.float64)
-    gray = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    for c in range(3):
-        img[:, :, c] = gray + factor * (img[:, :, c] - gray)
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def s_curve_contrast(img_array, strength=0.15):
-    """Apply S-curve contrast on luminance."""
-    if strength <= 0:
-        return img_array
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    lum_norm = lum / 255.0
-    lum_curved = lum_norm + strength * np.sin(2 * np.pi * lum_norm) / (2 * np.pi)
-    lum_curved = np.clip(lum_curved, 0, 1)
-    scale = np.where(lum > 0, (lum_curved * 255) / np.maximum(lum, 1), 1.0)
-    for c in range(3):
-        img[:, :, c] = np.clip(img[:, :, c] * scale, 0, 255)
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def double_s_curve_contrast(img_array, strength=0.38):
-    """Apply a double S-curve for extreme contrast (Moriyama, Delta 3200)."""
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    lum_norm = lum / 255.0
-    # First pass
-    s1 = strength
-    lum_curved = lum_norm + s1 * np.sin(2 * np.pi * lum_norm) / (2 * np.pi)
-    lum_curved = np.clip(lum_curved, 0, 1)
-    # Second pass (weaker)
-    s2 = strength * 0.47
-    lum_curved = lum_curved + s2 * np.sin(2 * np.pi * lum_curved) / (2 * np.pi)
-    lum_curved = np.clip(lum_curved, 0, 1)
-    scale = np.where(lum > 0, (lum_curved * 255) / np.maximum(lum, 1), 1.0)
-    for c in range(3):
-        img[:, :, c] = np.clip(img[:, :, c] * scale, 0, 255)
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def lift_blacks(img_array, amount=15):
-    """Lift shadow values."""
-    if amount <= 0:
-        return img_array
-    return np.clip(img_array.astype(np.float64) + amount, 0, 255).astype(np.uint8)
-
-
-def fade_highlights(img_array, amount=8):
-    """Pull white point down for film look."""
-    if amount <= 0:
-        return img_array
-    return np.clip(img_array.astype(np.float64), 0, 255 - amount).astype(np.uint8)
-
-
-def add_grain(img_array, amount=12, luminance_aware=False):
-    """Add film-like grain. luminance_aware: more grain in midtones, less in shadows/highlights."""
-    if amount <= 0:
-        return img_array
-    noise = np.random.normal(0, amount, img_array.shape).astype(np.float64)
-    if luminance_aware:
-        lum = (0.299 * img_array[:, :, 0].astype(np.float64) +
-               0.587 * img_array[:, :, 1].astype(np.float64) +
-               0.114 * img_array[:, :, 2].astype(np.float64)) / 255.0
-        # Bell curve: more grain in midtones, less at extremes
-        grain_mask = np.exp(-4.0 * (lum - 0.5) ** 2)
-        grain_mask = np.clip(grain_mask * 0.7 + 0.3, 0, 1)  # floor at 30%
-        for c in range(3):
-            noise[:, :, c] *= grain_mask
-    return np.clip(img_array.astype(np.float64) + noise, 0, 255).astype(np.uint8)
-
-
-def color_tint(img_array, r_shift=0, g_shift=0, b_shift=0):
-    """Apply global RGB shifts."""
-    if r_shift == 0 and g_shift == 0 and b_shift == 0:
-        return img_array
-    img = img_array.astype(np.float64)
-    img[:, :, 0] = np.clip(img[:, :, 0] + r_shift, 0, 255)
-    img[:, :, 1] = np.clip(img[:, :, 1] + g_shift, 0, 255)
-    img[:, :, 2] = np.clip(img[:, :, 2] + b_shift, 0, 255)
-    return img.astype(np.uint8)
-
-
-def selective_color_boost(img_array, channel_idx, threshold=10, boost=1.2):
-    """Boost saturation in areas where a specific channel dominates."""
-    img = img_array.astype(np.float64)
-    others = [i for i in range(3) if i != channel_idx]
-    dominant = (img[:, :, channel_idx] > img[:, :, others[0]] + threshold) & \
-               (img[:, :, channel_idx] > img[:, :, others[1]] + threshold)
-    gray = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    for c in range(3):
-        img[:, :, c] = np.where(dominant, np.clip(gray + boost * (img[:, :, c] - gray), 0, 255), img[:, :, c])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-# ===================================================================
-# New recipe utilities — extended building blocks for JSON recipes
-# ===================================================================
-
-def apply_monochrome(img_array, weights):
-    """Convert to B&W with custom channel weights, output as 3-channel grayscale."""
-    img = img_array.astype(np.float64)
-    w = weights
-    gray = w[0] * img[:, :, 0] + w[1] * img[:, :, 1] + w[2] * img[:, :, 2]
-    gray = np.clip(gray, 0, 255)
-    return np.stack([gray, gray, gray], axis=2).astype(np.uint8)
-
-
-def apply_shadow_crush(img_array, threshold=60, factor=0.65):
-    """Crush shadow values below threshold."""
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    shadow_mask = lum < threshold
-    for c in range(3):
-        img[:, :, c] = np.where(shadow_mask, img[:, :, c] * factor, img[:, :, c])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_highlight_blow(img_array, threshold=200, factor=1.15):
-    """Blow out highlights above threshold for extreme B&W looks."""
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    bright_mask = lum > threshold
-    for c in range(3):
-        img[:, :, c] = np.where(bright_mask, np.clip(img[:, :, c] * factor, 0, 255), img[:, :, c])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_shadow_color(img_array, threshold=80, r_shift=0, g_shift=0, b_shift=0):
-    """Push color into shadows (below luminance threshold)."""
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    shadow_mask = lum < threshold
-    if r_shift != 0:
-        img[:, :, 0] = np.where(shadow_mask, np.clip(img[:, :, 0] + r_shift, 0, 255), img[:, :, 0])
-    if g_shift != 0:
-        img[:, :, 1] = np.where(shadow_mask, np.clip(img[:, :, 1] + g_shift, 0, 255), img[:, :, 1])
-    if b_shift != 0:
-        img[:, :, 2] = np.where(shadow_mask, np.clip(img[:, :, 2] + b_shift, 0, 255), img[:, :, 2])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_split_tone(img_array, shadow_threshold=110, shadows=None, highlights=None):
-    """Split-tone: different color casts for shadows vs highlights."""
-    shadows = shadows or {}
-    highlights = highlights or {}
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    shadow_mask = lum < shadow_threshold
-    highlight_mask = lum >= shadow_threshold
-
-    for c_idx, c_key in enumerate(["r", "g", "b"]):
-        s_val = shadows.get(c_key, 0)
-        h_val = highlights.get(c_key, 0)
-        if s_val != 0:
-            img[:, :, c_idx] = np.where(shadow_mask, np.clip(img[:, :, c_idx] + s_val, 0, 255), img[:, :, c_idx])
-        if h_val != 0:
-            img[:, :, c_idx] = np.where(highlight_mask, np.clip(img[:, :, c_idx] + h_val, 0, 255), img[:, :, c_idx])
-
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_midtone_tint(img_array, r_shift=0, g_shift=0, b_shift=0):
-    """Apply color tint only in midtone range (60-200 luminance)."""
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    mid_mask = (lum > 60) & (lum < 200)
-    if r_shift != 0:
-        img[:, :, 0] = np.where(mid_mask, np.clip(img[:, :, 0] + r_shift, 0, 255), img[:, :, 0])
-    if g_shift != 0:
-        img[:, :, 1] = np.where(mid_mask, np.clip(img[:, :, 1] + g_shift, 0, 255), img[:, :, 1])
-    if b_shift != 0:
-        img[:, :, 2] = np.where(mid_mask, np.clip(img[:, :, 2] + b_shift, 0, 255), img[:, :, 2])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_shadow_tint(img_array, r_shift=0, g_shift=0, b_shift=0):
-    """Apply color tint only in shadow range (< 60 luminance)."""
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    shadow_mask = lum < 60
-    if r_shift != 0:
-        img[:, :, 0] = np.where(shadow_mask, np.clip(img[:, :, 0] + r_shift, 0, 255), img[:, :, 0])
-    if g_shift != 0:
-        img[:, :, 1] = np.where(shadow_mask, np.clip(img[:, :, 1] + g_shift, 0, 255), img[:, :, 1])
-    if b_shift != 0:
-        img[:, :, 2] = np.where(shadow_mask, np.clip(img[:, :, 2] + b_shift, 0, 255), img[:, :, 2])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_warm_boost(img_array, threshold=15, saturation_factor=1.12):
-    """Boost saturation specifically in warm-toned areas (skin tones, golden light)."""
-    img = img_array.astype(np.float64)
-    warm_mask = (img[:, :, 0] > img[:, :, 2] + threshold) & (img[:, :, 0] > 100)
-    gray = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    for c in range(3):
-        img[:, :, c] = np.where(warm_mask,
-                                np.clip(gray + saturation_factor * (img[:, :, c] - gray), 0, 255),
-                                img[:, :, c])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_flatten_contrast(img_array, midpoint=135, amount=0.15):
-    """Flatten contrast — compress dynamic range toward a midpoint."""
-    if amount <= 0:
-        return img_array
-    img = img_array.astype(np.float64)
-    img = midpoint + (img - midpoint) * (1 - amount)
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_desaturate_blend(img_array, blend=0.65):
-    """Blend image with grayscale version (0 = full gray, 1 = original color).
-    blend is the color retention amount."""
-    img = img_array.astype(np.float64)
-    gray = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    for c in range(3):
-        img[:, :, c] = img[:, :, c] * blend + gray * (1 - blend)
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_green_to_teal(img_array, blue_add_factor=0.15, green_reduce=0.92):
-    """Convert green-dominant areas toward teal (push blue, reduce green)."""
-    img = img_array.astype(np.float64)
-    green_dominant = (img[:, :, 1] > img[:, :, 0] + 10) & (img[:, :, 1] > img[:, :, 2])
-    img[:, :, 2] = np.where(green_dominant,
-                            np.clip(img[:, :, 2] + img[:, :, 1] * blue_add_factor, 0, 255),
-                            img[:, :, 2])
-    img[:, :, 1] = np.where(green_dominant,
-                            np.clip(img[:, :, 1] * green_reduce, 0, 255),
-                            img[:, :, 1])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_teal_boost(img_array, factor=1.18):
-    """Boost teal/blue-dominant areas."""
-    img = img_array.astype(np.float64)
-    blue_dominant = (img[:, :, 2] > img[:, :, 0] + 12) & (img[:, :, 2] > img[:, :, 1])
-    teal_area = blue_dominant | ((img[:, :, 1] > img[:, :, 0]) & (img[:, :, 2] > img[:, :, 0] + 8))
-    for c in [1, 2]:
-        img[:, :, c] = np.where(teal_area, np.clip(img[:, :, c] * factor, 0, 255), img[:, :, c])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_green_boost(img_array, factor=1.10, warm_shift=6):
-    """Boost green-dominant areas (Ghibli lush nature)."""
-    img = img_array.astype(np.float64)
-    green_dominant = (img[:, :, 1] > img[:, :, 0]) & (img[:, :, 1] > img[:, :, 2])
-    img[:, :, 1] = np.where(green_dominant, np.clip(img[:, :, 1] * factor, 0, 255), img[:, :, 1])
-    if warm_shift > 0:
-        img[:, :, 0] = np.where(green_dominant, np.clip(img[:, :, 0] + warm_shift, 0, 255), img[:, :, 0])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_sky_boost(img_array, blue_factor=1.08, green_add=4):
-    """Boost sky blue areas gently."""
-    img = img_array.astype(np.float64)
-    blue_sky = (img[:, :, 2] > img[:, :, 0] + 20) & (img[:, :, 2] > img[:, :, 1])
-    img[:, :, 2] = np.where(blue_sky, np.clip(img[:, :, 2] * blue_factor, 0, 255), img[:, :, 2])
-    if green_add > 0:
-        img[:, :, 1] = np.where(blue_sky, np.clip(img[:, :, 1] + green_add, 0, 255), img[:, :, 1])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_haze_highlights(img_array, threshold=180, factor=0.92, add=20):
-    """Compress and lift highlights for hazy/dreamy look (Malick golden hour)."""
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-    bright = lum > threshold
-    for c in range(3):
-        img[:, :, c] = np.where(bright, np.clip(img[:, :, c] * factor + add, 0, 255), img[:, :, c])
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-def apply_halation(img_array, strength=0.15):
-    """Simulate halation (red bloom around bright areas, like CineStill 800T).
-    Blurs the red channel of bright areas and bleeds it outward."""
-    if strength <= 0:
-        return img_array
-    img = img_array.astype(np.float64)
-    lum = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
-
-    # Extract bright areas
-    bright_mask = (lum > 180).astype(np.float64)
-
-    # Create a red glow from bright areas
-    red_glow = img[:, :, 0] * bright_mask
-
-    # Blur the glow (simulate light scatter) — use PIL for Gaussian blur
-    glow_img = Image.fromarray(np.clip(red_glow, 0, 255).astype(np.uint8))
-    # Blur radius proportional to image size
-    blur_radius = max(5, min(img_array.shape[0], img_array.shape[1]) // 80)
-    glow_blurred = np.array(glow_img.filter(ImageFilter.GaussianBlur(radius=blur_radius))).astype(np.float64)
-
-    # Blend the halation glow back into red channel
-    img[:, :, 0] = np.clip(img[:, :, 0] + glow_blurred * strength, 0, 255)
-    # Slight warm bleed into green
-    img[:, :, 1] = np.clip(img[:, :, 1] + glow_blurred * strength * 0.3, 0, 255)
-
-    return np.clip(img, 0, 255).astype(np.uint8)
-
-
-# ===================================================================
-# Recipe engine — interprets JSON recipe from styles.json
+# Recipe Engine v3 — Professional pipeline
 # ===================================================================
 
 def apply_recipe(img_array, recipe):
-    """Apply a style recipe (dict from styles.json) to an image array.
+    """Apply a style recipe to an image array.
 
-    Processing order is carefully designed:
-    1. Monochrome (fundamental change)
-    2. Per-channel curves (base color grading)
-    3. Split tone / shadow color / shadow tint / midtone tint
-    4. Color tint (global)
-    5. Shadow crush / highlight blow
-    6. Haze highlights
-    7. Contrast (S-curve)
-    8. Flatten contrast
-    9. Desaturate blend
-    10. Saturation
-    11. Warm boost / green boost / sky boost
-    12. Green-to-teal / teal boost
-    13. Selective boost
-    14. Black lift / highlight fade
-    15. Halation
-    16. Grain
-    17. Vignette
+    If recipe has "layers" key: uses layer compositor for full control.
+    Otherwise: sequential pipeline with professional primitives.
+
+    Pipeline order:
+    1. Monochrome conversion
+    2. Curves (spline/H&D via photo_engine)
+    3. LAB adjustments
+    4. Split tone (feathered luminosity masks)
+    5. Shadow color / Shadow tint / Midtone tint (feathered)
+    6. Color tint (global)
+    7. Shadow crush / Highlight blow (feathered)
+    8. Haze highlights
+    9. Contrast (with optional blend mode)
+    10. Flatten contrast
+    11. Desaturate blend
+    12. Saturation
+    13. Warm boost / Green boost / Sky boost
+    14. Green-to-teal / Teal boost
+    15. Selective boost
+    16. Black lift / Highlight fade
+    17. Halation
+    18. Grain (organic film grain)
+    19. Vignette
     """
+    # Layer-based processing (full control)
+    if "layers" in recipe:
+        return apply_layer_stack(img_array, recipe["layers"])
+
     img = img_array.copy()
 
     # 1. Monochrome conversion
@@ -414,80 +95,105 @@ def apply_recipe(img_array, recipe):
         weights = mono.get("weights", [0.299, 0.587, 0.114])
         img = apply_monochrome(img, weights)
 
-    # 2. Per-channel curves
+    # 2. Curves (spline/H&D/legacy)
     if "curves" in recipe:
-        curves = recipe["curves"]
-        r, g, b = img[:, :, 0], img[:, :, 1], img[:, :, 2]
-        if "r" in curves:
-            rc = curves["r"]
-            r = apply_curve(np.clip(r, 0, 255).astype(np.uint8),
-                            rc.get("shadows", 0), rc.get("midtones", 0), rc.get("highlights", 0))
-        if "g" in curves:
-            gc = curves["g"]
-            g = apply_curve(np.clip(g, 0, 255).astype(np.uint8),
-                            gc.get("shadows", 0), gc.get("midtones", 0), gc.get("highlights", 0))
-        if "b" in curves:
-            bc = curves["b"]
-            b = apply_curve(np.clip(b, 0, 255).astype(np.uint8),
-                            bc.get("shadows", 0), bc.get("midtones", 0), bc.get("highlights", 0))
-        img = np.stack([r, g, b], axis=2)
+        img = apply_curves(img, recipe["curves"])
 
-    # 3. Split tone
+    # 3. LAB adjustments
+    if "lab_adjust" in recipe:
+        la = recipe["lab_adjust"]
+        img = adjust_lab(img,
+                         l_shift=la.get("l_shift", 0),
+                         a_shift=la.get("a_shift", 0),
+                         b_shift=la.get("b_shift", 0),
+                         chroma_scale=la.get("chroma_scale", 1.0),
+                         hue_rotate=la.get("hue_rotate", 0))
+
+    # 4. Split tone (feathered)
     if "split_tone" in recipe:
         st = recipe["split_tone"]
         img = apply_split_tone(img,
-                               shadow_threshold=st.get("shadow_threshold", 110),
+                               shadow_zone=st.get("shadow_zone", "shadows"),
+                               highlight_zone=st.get("highlight_zone", "highlights"),
+                               feather=st.get("feather", 30),
                                shadows=st.get("shadows"),
-                               highlights=st.get("highlights"))
+                               highlights=st.get("highlights"),
+                               blend_mode=st.get("blend_mode"),
+                               opacity=st.get("opacity", 1.0))
 
-    # 4. Shadow color push
+    # 5a. Shadow color (feathered)
     if "shadow_color" in recipe:
         sc = recipe["shadow_color"]
-        img = apply_shadow_color(img,
-                                 threshold=sc.get("threshold", 80),
-                                 r_shift=sc.get("r", 0),
-                                 g_shift=sc.get("g", 0),
-                                 b_shift=sc.get("b", 0))
+        # Use feathered mask via tint with shadow zone
+        shifts = {"r": sc.get("r", 0), "g": sc.get("g", 0), "b": sc.get("b", 0)}
+        if any(v != 0 for v in shifts.values()):
+            mask = luminosity_mask(img, zone="shadows",
+                                   feather=sc.get("feather", 25),
+                                   custom_range=(0, sc.get("threshold", 80)))
+            tinted = img.astype(np.float64)
+            for c_idx, c_key in enumerate(["r", "g", "b"]):
+                if shifts[c_key] != 0:
+                    tinted[:,:,c_idx] += shifts[c_key]
+            tinted = np.clip(tinted, 0, 255)
+            img_f = img.astype(np.float64)
+            for c in range(3):
+                img_f[:,:,c] = img_f[:,:,c] * (1 - mask) + tinted[:,:,c] * mask
+            img = np.clip(img_f, 0, 255).astype(np.uint8)
 
-    # 5. Shadow tint
+    # 5b. Shadow tint (feathered)
     if "shadow_tint" in recipe:
         st = recipe["shadow_tint"]
-        img = apply_shadow_tint(img,
-                                r_shift=st.get("r", 0),
-                                g_shift=st.get("g", 0),
-                                b_shift=st.get("b", 0))
+        shifts = {"r": st.get("r", 0), "g": st.get("g", 0), "b": st.get("b", 0)}
+        if any(v != 0 for v in shifts.values()):
+            mask = luminosity_mask(img, zone="shadows", feather=st.get("feather", 25))
+            tinted = img.astype(np.float64)
+            for c_idx, c_key in enumerate(["r", "g", "b"]):
+                if shifts[c_key] != 0:
+                    tinted[:,:,c_idx] += shifts[c_key]
+            tinted = np.clip(tinted, 0, 255)
+            img_f = img.astype(np.float64)
+            for c in range(3):
+                img_f[:,:,c] = img_f[:,:,c] * (1 - mask) + tinted[:,:,c] * mask
+            img = np.clip(img_f, 0, 255).astype(np.uint8)
 
-    # 6. Midtone tint
+    # 5c. Midtone tint (feathered)
     if "midtone_tint" in recipe:
         mt = recipe["midtone_tint"]
-        img = apply_midtone_tint(img,
-                                 r_shift=mt.get("r", 0),
-                                 g_shift=mt.get("g", 0),
-                                 b_shift=mt.get("b", 0))
+        shifts = {"r": mt.get("r", 0), "g": mt.get("g", 0), "b": mt.get("b", 0)}
+        if any(v != 0 for v in shifts.values()):
+            mask = luminosity_mask(img, zone="midtones", feather=mt.get("feather", 25))
+            tinted = img.astype(np.float64)
+            for c_idx, c_key in enumerate(["r", "g", "b"]):
+                if shifts[c_key] != 0:
+                    tinted[:,:,c_idx] += shifts[c_key]
+            tinted = np.clip(tinted, 0, 255)
+            img_f = img.astype(np.float64)
+            for c in range(3):
+                img_f[:,:,c] = img_f[:,:,c] * (1 - mask) + tinted[:,:,c] * mask
+            img = np.clip(img_f, 0, 255).astype(np.uint8)
 
-    # 7. Global color tint
+    # 6. Global color tint
     if "color_tint" in recipe:
         ct = recipe["color_tint"]
-        img = color_tint(img,
-                         r_shift=ct.get("r", 0),
-                         g_shift=ct.get("g", 0),
-                         b_shift=ct.get("b", 0))
+        img = color_tint(img, r_shift=ct.get("r", 0), g_shift=ct.get("g", 0), b_shift=ct.get("b", 0))
 
-    # 8. Shadow crush
+    # 7a. Shadow crush (feathered)
     if "shadow_crush" in recipe:
         sc = recipe["shadow_crush"]
         img = apply_shadow_crush(img,
                                  threshold=sc.get("threshold", 60),
-                                 factor=sc.get("factor", 0.65))
+                                 factor=sc.get("factor", 0.65),
+                                 feather=sc.get("feather", 20))
 
-    # 9. Highlight blow
+    # 7b. Highlight blow (feathered)
     if "highlight_blow" in recipe:
         hb = recipe["highlight_blow"]
         img = apply_highlight_blow(img,
                                    threshold=hb.get("threshold", 200),
-                                   factor=hb.get("factor", 1.15))
+                                   factor=hb.get("factor", 1.15),
+                                   feather=hb.get("feather", 20))
 
-    # 10. Haze highlights
+    # 8. Haze highlights (feathered)
     if "haze_highlights" in recipe:
         hh = recipe["haze_highlights"]
         img = apply_haze_highlights(img,
@@ -495,97 +201,98 @@ def apply_recipe(img_array, recipe):
                                     factor=hh.get("factor", 0.92),
                                     add=hh.get("add", 20))
 
-    # 11. Contrast
+    # 9. Contrast (with optional blend mode)
     if "contrast" in recipe:
         ct = recipe["contrast"]
-        strength = ct.get("strength", 0.15)
-        ctype = ct.get("type", "s_curve")
-        if ctype == "double_s_curve":
-            img = double_s_curve_contrast(img, strength=strength)
-        else:
-            img = s_curve_contrast(img, strength=strength)
+        img = apply_contrast(img,
+                             strength=ct.get("strength", 0.15),
+                             contrast_type=ct.get("type", "s_curve"),
+                             blend_mode=ct.get("blend_mode"))
 
-    # 12. Flatten contrast
+    # 10. Flatten contrast
     if "flatten_contrast" in recipe:
         fc = recipe["flatten_contrast"]
         img = apply_flatten_contrast(img,
                                      midpoint=fc.get("midpoint", 128),
                                      amount=fc.get("amount", 0.15))
 
-    # 13. Desaturate blend
+    # 11. Desaturate blend
     if "desaturate_blend" in recipe:
-        img = apply_desaturate_blend(img, blend=recipe["desaturate_blend"])
+        img = apply_desaturate_blend(img, blend_amount=recipe["desaturate_blend"])
 
-    # 14. Saturation
+    # 12. Saturation
     if "saturation" in recipe:
         img = adjust_saturation(img, recipe["saturation"])
 
-    # 15. Warm boost
+    # 13a. Warm boost
     if "warm_boost" in recipe:
         wb = recipe["warm_boost"]
         img = apply_warm_boost(img,
                                threshold=wb.get("threshold", 15),
                                saturation_factor=wb.get("saturation_factor", 1.12))
 
-    # 16. Green boost
+    # 13b. Green boost
     if "green_boost" in recipe:
         gb = recipe["green_boost"]
-        img = apply_green_boost(img,
-                                factor=gb.get("factor", 1.10),
-                                warm_shift=gb.get("warm_shift", 6))
+        img = apply_green_boost(img, factor=gb.get("factor", 1.10), warm_shift=gb.get("warm_shift", 6))
 
-    # 17. Sky boost
+    # 13c. Sky boost
     if "sky_boost" in recipe:
         sb = recipe["sky_boost"]
-        img = apply_sky_boost(img,
-                              blue_factor=sb.get("blue_factor", 1.08),
-                              green_add=sb.get("green_add", 4))
+        img = apply_sky_boost(img, blue_factor=sb.get("blue_factor", 1.08), green_add=sb.get("green_add", 4))
 
-    # 18. Green to teal
+    # 14a. Green to teal
     if "green_to_teal" in recipe:
         gt = recipe["green_to_teal"]
-        img = apply_green_to_teal(img,
-                                  blue_add_factor=gt.get("blue_add_factor", 0.15),
-                                  green_reduce=gt.get("green_reduce", 0.92))
+        img = apply_green_to_teal(img, blue_add_factor=gt.get("blue_add_factor", 0.15), green_reduce=gt.get("green_reduce", 0.92))
 
-    # 19. Teal boost
+    # 14b. Teal boost
     if "teal_boost" in recipe:
         tb = recipe["teal_boost"]
         img = apply_teal_boost(img, factor=tb.get("factor", 1.18))
 
-    # 20. Selective color boost
+    # 15. Selective boost
     if "selective_boost" in recipe:
         sb = recipe["selective_boost"]
-        ch_map = {"r": 0, "g": 1, "b": 2}
-        ch_idx = ch_map.get(sb.get("channel", "r"), 0)
-        img = selective_color_boost(img,
-                                    channel_idx=ch_idx,
+        img = apply_selective_boost(img,
+                                    channel=sb.get("channel", "r"),
                                     threshold=sb.get("threshold", 10),
-                                    boost=sb.get("factor", 1.2))
+                                    factor=sb.get("factor", 1.2))
 
-    # 21. Black lift
+    # 16a. Black lift
     if "black_lift" in recipe:
         img = lift_blacks(img, amount=recipe["black_lift"])
 
-    # 22. Highlight fade
+    # 16b. Highlight fade
     if "highlight_fade" in recipe:
         img = fade_highlights(img, amount=recipe["highlight_fade"])
 
-    # 23. Halation
+    # 17. Halation
     if "halation" in recipe:
-        img = apply_halation(img, strength=recipe["halation"])
+        h = recipe["halation"]
+        if isinstance(h, dict):
+            img = apply_halation(img, strength=h.get("strength", 0.15), radius=h.get("radius"))
+        else:
+            img = apply_halation(img, strength=h)
 
-    # 24. Grain
+    # 18. Grain (organic film grain)
     if "grain" in recipe:
         gr = recipe["grain"]
         if isinstance(gr, dict):
-            img = add_grain(img,
-                            amount=gr.get("amount", 12),
-                            luminance_aware=gr.get("luminance_aware", False))
+            img = apply_film_grain(img,
+                                   amount=gr.get("amount", 12),
+                                   size=gr.get("size", 1.5),
+                                   roughness=gr.get("roughness", 0.5),
+                                   color_grain=gr.get("color_grain", False),
+                                   r_amount=gr.get("r_amount"),
+                                   g_amount=gr.get("g_amount"),
+                                   b_amount=gr.get("b_amount"),
+                                   luminance_aware=gr.get("luminance_aware", True),
+                                   iso_profile=gr.get("iso_profile"))
         else:
-            img = add_grain(img, amount=gr)
+            img = apply_film_grain(img, amount=gr)
 
-    # 25. Vignette
+    # 19. Vignette
     if "vignette" in recipe:
         img = add_vignette(img, strength=recipe["vignette"])
 
@@ -667,8 +374,8 @@ def get_image_files(directory):
 # ===================================================================
 
 def process_single_file(args):
-    """Process a single file. Used by multiprocessing pool.
-    args is a tuple: (idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality)
+    """Process a single file (for multiprocessing pool).
+    args: (idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality)
     """
     idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality = args
 
@@ -693,32 +400,26 @@ def process_single_file(args):
         })
 
     try:
-        # Load
         rgb = load_image(src_path)
 
-        # Preview mode: resize to target before processing (much faster)
+        # Preview mode: resize before processing (much faster)
         if preview_size and preview_size > 0:
             pil_preview = Image.fromarray(rgb)
             pil_preview.thumbnail((preview_size, preview_size), Image.LANCZOS)
             rgb = np.array(pil_preview)
 
-        # Apply style via recipe engine
         styled = apply_recipe(rgb, recipe)
-
-        # Convert to PIL for final touches
         pil_img = Image.fromarray(styled)
 
         # Slight sharpening
         pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=40, threshold=2))
-
         # Slight brightness reduction for moodiness
         enhancer = ImageEnhance.Brightness(pil_img)
         pil_img = enhancer.enhance(0.97)
 
-        # Save full-resolution (or preview-resolution)
         pil_img.save(dst_path, "JPEG", quality=quality, subsampling=0)
 
-        # Generate web-friendly thumbnail for UI display (skip for preview mode)
+        # Generate web-friendly thumbnail (skip for preview mode)
         if not preview_size:
             thumb_dir = os.path.join(os.path.dirname(dst_path), "thumbs")
             os.makedirs(thumb_dir, exist_ok=True)
@@ -797,7 +498,7 @@ def process_single_photo(input_file, output_file, recipe, preview_size=0, qualit
 # ===================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Enso Photo Processor v2 — Recipe-based style engine")
+    parser = argparse.ArgumentParser(description="Enso Photo Processor v3 — Professional recipe-based engine")
 
     # Style selection
     parser.add_argument("--style", help="Style name from styles.json")
@@ -813,7 +514,7 @@ def main():
 
     # Options
     parser.add_argument("--quality", type=int, default=95, help="JPEG quality (1-100)")
-    parser.add_argument("--preview", action="store_true", help="Preview mode: resize to 400px before processing")
+    parser.add_argument("--preview", action="store_true", help="Preview mode: resize before processing")
     parser.add_argument("--preview-size", type=int, default=400, help="Preview resize target (default: 400px)")
 
     # Utility
@@ -827,7 +528,6 @@ def main():
     # Resolve styles file path
     styles_file = args.styles_file
     if not styles_file:
-        # Default: look for styles.json next to this script
         script_dir = os.path.dirname(os.path.abspath(__file__))
         styles_file = os.path.join(script_dir, "styles.json")
 
@@ -858,10 +558,9 @@ def main():
     recipe = RECIPE_REGISTRY[args.style]
     preview_size = args.preview_size if args.preview else 0
 
-    # ── Single file mode ──
+    # Single file mode
     if args.input_file:
         if not args.output_file:
-            # Auto-generate output path
             base, ext = os.path.splitext(args.input_file)
             args.output_file = f"{base}_{args.style}.jpg"
 
@@ -874,7 +573,7 @@ def main():
         print(json.dumps(result), flush=True)
         sys.exit(0 if result["status"] == "processed" else 1)
 
-    # ── Batch mode ──
+    # Batch mode
     if not args.input_dir:
         print(json.dumps({"status": "error", "error": "Specify --input-dir (batch) or --input-file (single)."}), flush=True)
         sys.exit(1)
