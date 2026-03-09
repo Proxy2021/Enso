@@ -1173,8 +1173,8 @@ async function generateStylePreviews(params: StylePreviewsParams): Promise<Agent
         "--style", styleId,
         "--styles-file", stylesFilePath,
         "--preview",
-        "--preview-size", "400",
-        "--quality", "75",
+        "--preview-size", "800",
+        "--quality", "82",
       ], { timeout: 60_000, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024 });
 
       const info = infoMap[styleId];

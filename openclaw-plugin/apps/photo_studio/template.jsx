@@ -149,24 +149,61 @@ export default function GeneratedUI({ data, onAction }) {
     var isRoot = !currentPath || currentPath === "/";
     var folderName = isRoot ? "Select a Folder" : currentPath.split("/").filter(Boolean).pop() || currentPath;
 
+    // Demo showcase images
+    var demoStyles = [
+      { id: "kodak_portra_400", name: "Portra 400", cat: "Film" },
+      { id: "blade_runner", name: "Blade Runner", cat: "Cinema" },
+      { id: "wong_kar_wai", name: "Wong Kar-wai", cat: "Cinema" },
+      { id: "cinestill_800t", name: "CineStill 800T", cat: "Film" },
+      { id: "moriyama", name: "Moriyama", cat: "B&W" },
+      { id: "nordic_noir", name: "Nordic Noir", cat: "Cinema" },
+      { id: "wes_anderson", name: "Wes Anderson", cat: "Cinema" },
+      { id: "ghibli", name: "Ghibli", cat: "Cinema" },
+      { id: "faded_editorial", name: "Faded Editorial", cat: "Trend" }
+    ];
+
     return (
-      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-3">
+      <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 space-y-4">
         {lightbox}
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
-              <LucideReact.ImagePlus className="w-4 h-4 text-violet-400" />
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center border border-violet-500/20">
+              <LucideReact.Aperture className="w-5 h-5 text-violet-400" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-gray-100">Photo Studio</div>
-              <div className="text-[11px] text-gray-500">Browse & select photos</div>
+              <div className="text-base font-bold text-gray-50">Photo Studio</div>
+              <div className="text-xs text-gray-500">Professional film & cinematic styles</div>
             </div>
           </div>
           <Button size="sm" variant="ghost" onClick={() => onAction("manage_collection", { action: "list" })}>
             <LucideReact.FolderOpen className="w-3.5 h-3.5 mr-1" /> Collections
           </Button>
         </div>
+
+        {/* Demo showcase — shown when browsing root or empty folder */}
+        {(isRoot || items.length === 0) && (
+          <div className="space-y-2">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Style Showcase</div>
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
+              {demoStyles.map(function(ds) {
+                return (
+                  <div key={ds.id} className="shrink-0 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all cursor-pointer group"
+                    style={{ width: 140 }}
+                    onClick={function() { setLightboxUrl("/demo/" + ds.id + ".jpg"); setLightboxName(ds.name); }}>
+                    <img src={"/demo/" + ds.id + ".jpg"} alt={ds.name} loading="lazy"
+                      style={{ width: "100%", height: 95, objectFit: "cover" }}
+                      className="group-hover:scale-105 transition-transform duration-300" />
+                    <div className="px-2 py-1.5 bg-gray-800/80">
+                      <div className="text-[11px] font-medium text-gray-200">{ds.name}</div>
+                      <div className="text-[9px] text-gray-500">{ds.cat}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Breadcrumb */}
         {!isRoot && (
@@ -243,15 +280,15 @@ export default function GeneratedUI({ data, onAction }) {
             </div>
 
             {viewMode === "grid" ? (
-              <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+              <div className="grid grid-cols-3 gap-2 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
                 {items.map(function(item, idx) {
                   return (
                     <div key={idx} className="relative group bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all cursor-pointer"
                       onClick={function() { if (item.mediaUrl) { setLightboxUrl(item.mediaUrl); setLightboxName(item.name); } }}>
                       {item.mediaUrl ? (
-                        <img src={item.mediaUrl} alt={item.name} loading="lazy" style={{ width: "100%", height: "100px", objectFit: "cover" }} />
+                        <img src={item.mediaUrl} alt={item.name} loading="lazy" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover" }} />
                       ) : (
-                        <div style={{ width: "100%", height: "100px" }} className="bg-gray-700/30 flex items-center justify-center">
+                        <div style={{ width: "100%", aspectRatio: "4/3" }} className="bg-gray-700/30 flex items-center justify-center">
                           <LucideReact.Image className="w-6 h-6 text-gray-500" />
                         </div>
                       )}
@@ -452,15 +489,16 @@ export default function GeneratedUI({ data, onAction }) {
               <button key={item.id} onClick={() => onAction("apply_style", { photoId: data.photoPath, style: item.id })}
                 className={"rounded-xl overflow-hidden border cursor-pointer transition-all hover:scale-[1.02] text-left " + ui.border + " hover:" + ui.border}>
                 {item.previewUrl ? (
-                  <img src={item.previewUrl} alt={item.name} loading="lazy" style={{ width: "100%", height: "120px", objectFit: "cover" }} />
+                  <img src={item.previewUrl} alt={item.name} loading="lazy" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover" }}
+                    className="group-hover:scale-[1.03] transition-transform duration-300" />
                 ) : (
-                  <div style={{ width: "100%", height: "120px" }} className={"flex items-center justify-center " + ui.bg}>
+                  <div style={{ width: "100%", aspectRatio: "4/3" }} className={"flex items-center justify-center " + ui.bg}>
                     <LucideReact.Aperture className={"w-8 h-8 " + ui.text} />
                   </div>
                 )}
-                <div className="p-2 bg-gray-800/60">
-                  <div className={"text-[11px] font-semibold " + ui.text}>{item.name}</div>
-                  <div className="text-[9px] text-gray-500">{item.subtitle}</div>
+                <div className="p-2 bg-gray-800/80">
+                  <div className={"text-xs font-semibold " + ui.text}>{item.name}</div>
+                  <div className="text-[10px] text-gray-500">{item.subtitle}</div>
                 </div>
               </button>
             );
@@ -546,14 +584,14 @@ export default function GeneratedUI({ data, onAction }) {
 
         {/* Before / After — click to view full size */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider text-center">Original</div>
-            <div className="rounded-xl overflow-hidden border border-gray-700/40 bg-black/30 cursor-pointer hover:ring-1 hover:ring-gray-500/40 transition-all group relative"
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider text-center font-medium">Original</div>
+            <div className="rounded-xl overflow-hidden border border-gray-700/40 bg-black cursor-pointer hover:ring-1 hover:ring-gray-500/40 transition-all group relative"
               onClick={function() { if (photo.originalUrl) { setLightboxUrl(photo.originalUrl); setLightboxName("Original — " + (photo.name || "Photo")); } }}>
               {photo.originalUrl ? (
-                <img src={photo.originalUrl} alt="Original" style={{ width: "100%", height: "160px", objectFit: "cover" }} />
+                <img src={photo.originalUrl} alt="Original" style={{ width: "100%", height: "220px", objectFit: "contain" }} />
               ) : (
-                <div style={{ width: "100%", height: "160px" }} className="flex items-center justify-center">
+                <div style={{ width: "100%", height: "220px" }} className="flex items-center justify-center">
                   <LucideReact.Image className="w-8 h-8 text-gray-600" />
                 </div>
               )}
@@ -564,14 +602,14 @@ export default function GeneratedUI({ data, onAction }) {
               )}
             </div>
           </div>
-          <div className="space-y-1">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider text-center">Styled</div>
-            <div className="rounded-xl overflow-hidden border border-violet-500/30 bg-black/30 cursor-pointer hover:ring-1 hover:ring-violet-500/40 transition-all group relative"
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-violet-400 uppercase tracking-wider text-center font-medium">Styled</div>
+            <div className="rounded-xl overflow-hidden border border-violet-500/30 bg-black cursor-pointer hover:ring-1 hover:ring-violet-500/40 transition-all group relative"
               onClick={function() { var url = result.mediaUrl || result.thumbUrl; if (url) { setLightboxUrl(url); setLightboxName(styleName + " — " + (photo.name || "Photo")); } }}>
               {(result.thumbUrl || result.mediaUrl) ? (
-                <img src={result.thumbUrl || result.mediaUrl} alt="Styled" style={{ width: "100%", height: "160px", objectFit: "cover" }} />
+                <img src={result.thumbUrl || result.mediaUrl} alt="Styled" style={{ width: "100%", height: "220px", objectFit: "contain" }} />
               ) : (
-                <div style={{ width: "100%", height: "160px" }} className="flex items-center justify-center bg-violet-500/10">
+                <div style={{ width: "100%", height: "220px" }} className="flex items-center justify-center bg-violet-500/10">
                   <LucideReact.Aperture className="w-8 h-8 text-violet-300" />
                 </div>
               )}
@@ -665,7 +703,7 @@ export default function GeneratedUI({ data, onAction }) {
 
         {/* Photo results grid — click to view full size */}
         {results.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
             {results.map(function(item, idx) {
               return (
                 <div key={idx} className={"rounded-xl overflow-hidden border transition-all cursor-pointer hover:ring-1 hover:ring-violet-500/40 " +
@@ -673,9 +711,9 @@ export default function GeneratedUI({ data, onAction }) {
                   onClick={function() { if (item.fullUrl || item.styledUrl) { setLightboxUrl(item.fullUrl || item.styledUrl); setLightboxName(item.name || "Photo"); } }}>
                   <div className="relative group">
                     {item.styledUrl ? (
-                      <img src={item.styledUrl} alt={item.name} loading="lazy" style={{ width: "100%", height: "100px", objectFit: "cover" }} />
+                      <img src={item.styledUrl} alt={item.name} loading="lazy" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover" }} />
                     ) : (
-                      <div style={{ width: "100%", height: "100px" }} className="bg-gray-700/30 flex items-center justify-center">
+                      <div style={{ width: "100%", aspectRatio: "4/3" }} className="bg-gray-700/30 flex items-center justify-center">
                         <LucideReact.Image className="w-5 h-5 text-gray-500" />
                       </div>
                     )}
@@ -773,9 +811,9 @@ export default function GeneratedUI({ data, onAction }) {
                   <button key={i} onClick={() => onAction("manage_collection", { action: "view", name: col.name })}
                     className="bg-gray-800/60 rounded-xl border border-gray-700/40 overflow-hidden hover:border-violet-500/40 cursor-pointer text-left transition-all group">
                     {col.coverUrl ? (
-                      <img src={col.coverUrl} alt={col.name} loading="lazy" style={{ width: "100%", height: "80px", objectFit: "cover" }} className="group-hover:opacity-90 transition-opacity" />
+                      <img src={col.coverUrl} alt={col.name} loading="lazy" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover" }} className="group-hover:scale-[1.03] transition-transform duration-300" />
                     ) : (
-                      <div style={{ width: "100%", height: "80px" }} className="bg-gray-700/30 flex items-center justify-center">
+                      <div style={{ width: "100%", aspectRatio: "4/3" }} className="bg-gray-700/30 flex items-center justify-center">
                         <LucideReact.Images className="w-6 h-6 text-gray-600" />
                       </div>
                     )}
@@ -809,15 +847,15 @@ export default function GeneratedUI({ data, onAction }) {
             description="Import photos and add them to this collection."
             action={<Button size="sm" onClick={() => onAction("import_photos", {})}>Import Photos</Button>} />
         ) : (
-          <div className="grid grid-cols-3 gap-1.5 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          <div className="grid grid-cols-3 gap-2 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
             {colItems.map(function(item, idx) {
               return (
                 <button key={idx} onClick={() => onAction("preview_styles", { photoPath: item.id || item.path })}
-                  className="relative group bg-gray-800/60 rounded-lg overflow-hidden border border-gray-700/40 hover:border-violet-500/40 cursor-pointer text-left transition-all">
+                  className="relative group bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 cursor-pointer text-left transition-all">
                   {item.url ? (
-                    <img src={item.url} alt={item.name} loading="lazy" style={{ width: "100%", height: "90px", objectFit: "cover" }} />
+                    <img src={item.url} alt={item.name} loading="lazy" style={{ width: "100%", aspectRatio: "1", objectFit: "cover" }} />
                   ) : (
-                    <div style={{ width: "100%", height: "90px" }} className="bg-gray-700/30 flex items-center justify-center">
+                    <div style={{ width: "100%", aspectRatio: "1" }} className="bg-gray-700/30 flex items-center justify-center">
                       <LucideReact.Image className="w-5 h-5 text-gray-500" />
                     </div>
                   )}

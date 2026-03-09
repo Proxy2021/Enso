@@ -268,6 +268,12 @@ export async function startEnsoServer(opts: {
     createReadStream(apkPath).pipe(res);
   });
 
+  // ── Demo assets (public — shipped showcase images for Photo Studio) ──
+  const demoDir = join(pluginDir, "..", "apps", "photo_studio", "demo");
+  if (existsSync(demoDir)) {
+    app.use("/demo", express.static(demoDir, { maxAge: "7d" }));
+  }
+
   // ── Media serving (before auth — URLs use non-guessable base64url paths) ──
   app.get("/media/:encodedPath", (req, res) => {
     let filePath = Buffer.from(req.params.encodedPath, "base64url").toString("utf-8");
