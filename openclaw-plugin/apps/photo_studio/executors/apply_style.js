@@ -78,6 +78,28 @@ try {
   }
 } catch(e) {}
 
+// Auto-add processed photo to "Recent" collection
+var outputFile = data.outputFile || "";
+if (outputFile) {
+  try {
+    var colStored = await ctx.store.get("collections");
+    var collections = {};
+    if (colStored) {
+      try { collections = JSON.parse(colStored); } catch(e) { collections = {}; }
+    }
+    if (!collections["Recent"]) {
+      collections["Recent"] = { name: "Recent", photoPaths: [], createdAt: new Date().toISOString() };
+    }
+    var paths = collections["Recent"].photoPaths || [];
+    if (paths.indexOf(outputFile) === -1) {
+      paths.unshift(outputFile);  // newest first
+      if (paths.length > 200) paths = paths.slice(0, 200);  // cap at 200
+      collections["Recent"].photoPaths = paths;
+      await ctx.store.set("collections", JSON.stringify(collections));
+    }
+  } catch(e) { /* silently skip */ }
+}
+
 return {
   content: [{
     type: "text",

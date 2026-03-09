@@ -68,28 +68,29 @@ var results = files.map(function(f) {
   };
 });
 
-// Auto-save processed photos to "Latest Edits" collection
+// Auto-save processed photos to "Recent" collection
 var savedToCollection = false;
 if (results.length > 0) {
   try {
-    // Create collection if it doesn't exist (silently ignore "already exists")
-    await ctx.callTool("enso_media_manage_collection", {
-      action: "create",
-      collectionName: "Latest Edits"
-    });
-  } catch(e) { /* collection may already exist */ }
-
-  try {
-    // Add each processed photo to the collection
-    for (var ri = 0; ri < results.length; ri++) {
-      await ctx.callTool("enso_media_manage_collection", {
-        action: "add",
-        collectionName: "Latest Edits",
-        photoPath: results[ri].id
-      });
+    var colStored = await ctx.store.get("collections");
+    var collections = {};
+    if (colStored) {
+      try { collections = JSON.parse(colStored); } catch(e) { collections = {}; }
     }
+    if (!collections["Recent"]) {
+      collections["Recent"] = { name: "Recent", photoPaths: [], createdAt: new Date().toISOString() };
+    }
+    var paths = collections["Recent"].photoPaths || [];
+    for (var ri = 0; ri < results.length; ri++) {
+      if (results[ri].id && paths.indexOf(results[ri].id) === -1) {
+        paths.unshift(results[ri].id);
+      }
+    }
+    if (paths.length > 200) paths = paths.slice(0, 200);
+    collections["Recent"].photoPaths = paths;
+    await ctx.store.set("collections", JSON.stringify(collections));
     savedToCollection = true;
-  } catch(e) { /* silently skip if collection feature fails */ }
+  } catch(e) { /* silently skip */ }
 }
 
 return {
