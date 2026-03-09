@@ -49,6 +49,10 @@ function errorResult(message: string): AgentToolResult {
   return { content: [{ type: "text", text: `[ERROR] ${message}` }] };
 }
 
+function ok(data: Record<string, unknown>): AgentToolResult {
+  return { content: [{ type: "text", text: JSON.stringify(data) }] };
+}
+
 /** Resolve a user-provided path. Aligned with filesystem-tools.ts — no root restriction. */
 function safeResolvePath(inputPath: string): { ok: true; path: string } | { ok: false; error: string } {
   if (!inputPath || !inputPath.trim()) return { ok: false, error: "path is required" };
