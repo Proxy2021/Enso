@@ -89,6 +89,7 @@ interface CardStore {
   resumeOrchestration: (orchestrationId: string) => void;
   cancelOrchestration: (orchestrationId: string) => void;
   loadSharedCard: (cardId: string) => Promise<void>;
+  removeCard: (cardId: string) => void;
   pinCard: (cardId: string) => void;
   unpinCard: (cardId: string) => void;
   toggleSidebar: () => void;
@@ -683,6 +684,17 @@ export const useChatStore = create<CardStore>((set, get) => ({
           ...s.cards,
           [cardId]: { ...card, display: "expanded" },
         },
+      };
+    });
+  },
+
+  removeCard: (cardId: string) => {
+    set((s) => {
+      const { [cardId]: _, ...rest } = s.cards;
+      return {
+        cards: rest,
+        cardOrder: s.cardOrder.filter((id) => id !== cardId),
+        pinnedCards: s.pinnedCards.filter((id) => id !== cardId),
       };
     });
   },

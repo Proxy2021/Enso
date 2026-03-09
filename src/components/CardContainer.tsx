@@ -1,7 +1,7 @@
 import { useChatStore } from "../store/chat";
 import { cardRegistry } from "../cards";
 import type { Card } from "../cards/types";
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
 import { CodeInvestigateDialog } from "./CodeInvestigateDialog";
@@ -43,7 +43,7 @@ function getCardLabel(card: Card, effectiveType: string): string {
     }
     return "Enso";
   }
-  if (effectiveType === "chat") return "Chat";
+  if (effectiveType === "chat") return "OpenClaw";
   return effectiveType.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
@@ -53,7 +53,7 @@ interface CardContainerProps {
 }
 
 const TYPE_ICONS: Record<string, string> = {
-  chat: "\uD83D\uDCAC",
+  chat: "\uD83E\uDD16",
   terminal: "\uD83D\uDCBB",
   "dynamic-ui": "\u2728",
   "user-bubble": "\uD83D\uDC64",
@@ -731,12 +731,51 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
   );
 }
 
+function CardContextMenu({ x, y, onRemove, onClose }: { x: number; y: number; onRemove: () => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: globalThis.MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-[300] bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_12px_40px_rgba(0,0,0,0.5)] overflow-hidden min-w-[140px]"
+      style={{ left: x, top: y }}
+    >
+      <button
+        onClick={() => { onRemove(); onClose(); }}
+        className="w-full text-left px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/15 transition-colors flex items-center gap-2"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18" />
+          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+        </svg>
+        Remove
+      </button>
+    </div>
+  );
+}
+
 export default function CardContainer({ card, isActive }: CardContainerProps) {
   const collapseCard = useChatStore((s) => s.collapseCard);
   const expandCard = useChatStore((s) => s.expandCard);
+  const removeCard = useChatStore((s) => s.removeCard);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   const isCollapsed = card.display === "collapsed";
   const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI;
@@ -773,11 +812,21 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
 
   if (card.type === "user-bubble") {
     return (
-      <Renderer
-        card={card}
-        isActive={isActive}
-        onAction={(action, payload) => sendCardAction(card.id, action, payload)}
-      />
+      <div onContextMenu={handleContextMenu} className="relative">
+        {contextMenu && (
+          <CardContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onRemove={() => removeCard(card.id)}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+        <Renderer
+          card={card}
+          isActive={isActive}
+          onAction={(action, payload) => sendCardAction(card.id, action, payload)}
+        />
+      </div>
     );
   }
 
@@ -803,7 +852,15 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   }
 
   return (
-    <div className="relative group mb-3">
+    <div className="relative group mb-3" onContextMenu={handleContextMenu}>
+      {contextMenu && (
+        <CardContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onRemove={() => removeCard(card.id)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
       {card.status === "complete" && (
         <button
           onClick={() => (isCollapsed ? expandCard(card.id) : collapseCard(card.id))}
