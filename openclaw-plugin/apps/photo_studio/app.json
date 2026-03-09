@@ -310,6 +310,42 @@
         "isPrimary": false
       },
       {
+        "suffix": "upload_photos",
+        "description": "Receive photos uploaded from the user's device (phone or computer). Returns the uploaded files as browseable items ready for style previews and processing.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Server file paths of the uploaded photos"
+            },
+            "names": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Original file names"
+            },
+            "mediaUrls": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Media URLs for displaying the photos"
+            }
+          },
+          "required": ["files"]
+        },
+        "sampleParams": { "files": ["/tmp/upload1.jpg"], "names": ["photo.jpg"], "mediaUrls": ["/media/encoded"] },
+        "sampleData": {
+          "tool": "enso_photo_studio_import_photos",
+          "currentPath": "Uploaded Photos",
+          "isRoot": false,
+          "items": [{ "name": "photo.jpg", "path": "/tmp/upload1.jpg", "ext": ".jpg", "type": "image", "mediaUrl": "/media/encoded" }],
+          "total": 1
+        },
+        "requiredDataKeys": ["tool"],
+        "isPrimary": false
+      },
+      {
         "suffix": "adjust",
         "description": "Fine-tune photo processing parameters like brightness, contrast, saturation, temperature, grain, vignette, and fade.",
         "parameters": {

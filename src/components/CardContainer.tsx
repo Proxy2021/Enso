@@ -870,6 +870,43 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       }
       return;
     }
+    // Client-side photo upload — opens file picker, uploads to server, then triggers backend action
+    if (action === "__upload_photos") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.multiple = true;
+      input.onchange = async () => {
+        const files = input.files;
+        if (!files || files.length === 0) return;
+        try {
+          const { getBackendBaseUrl, authHeaders } = await import("../lib/connection");
+          const uploaded: { filePath: string; mediaUrl: string; name: string }[] = [];
+          for (const file of Array.from(files)) {
+            const res = await fetch(`${getBackendBaseUrl()}/upload`, {
+              method: "POST",
+              headers: authHeaders({ "Content-Type": file.type }),
+              body: file,
+            });
+            if (res.ok) {
+              const { filePath, mediaUrl } = await res.json();
+              uploaded.push({ filePath, mediaUrl, name: file.name });
+            }
+          }
+          if (uploaded.length > 0) {
+            sendCardAction(card.id, "upload_photos", {
+              files: uploaded.map((u) => u.filePath),
+              names: uploaded.map((u) => u.name),
+              mediaUrls: uploaded.map((u) => u.mediaUrl),
+            });
+          }
+        } catch (err) {
+          console.error("[upload_photos] failed:", err);
+        }
+      };
+      input.click();
+      return;
+    }
     sendCardAction(card.id, action, payload);
   }
 

@@ -176,10 +176,27 @@ export default function GeneratedUI({ data, onAction }) {
               <div className="text-xs text-gray-500">Professional film & cinematic styles</div>
             </div>
           </div>
-          <Button size="sm" variant="ghost" onClick={() => onAction("manage_collection", { action: "list" })}>
-            <LucideReact.FolderOpen className="w-3.5 h-3.5 mr-1" /> Collections
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => onAction("__upload_photos")}>
+              <LucideReact.Upload className="w-3.5 h-3.5 mr-1" /> Upload
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => onAction("manage_collection", { action: "list" })}>
+              <LucideReact.FolderOpen className="w-3.5 h-3.5 mr-1" /> Collections
+            </Button>
+          </div>
         </div>
+
+        {/* Upload zone — shown on landing page */}
+        {(isRoot || items.length === 0) && (
+          <div
+            className="border-2 border-dashed border-gray-700 hover:border-violet-500/50 rounded-xl p-4 cursor-pointer transition-colors group text-center"
+            onClick={() => onAction("__upload_photos")}
+          >
+            <LucideReact.ImagePlus className="w-8 h-8 text-gray-500 group-hover:text-violet-400 mx-auto mb-2 transition-colors" />
+            <div className="text-sm font-medium text-gray-300 group-hover:text-gray-100">Upload Photos from Device</div>
+            <div className="text-xs text-gray-500 mt-0.5">Select photos from your phone or computer to style</div>
+          </div>
+        )}
 
         {/* Demo showcase — shown when browsing root or empty folder */}
         {(isRoot || items.length === 0) && (
