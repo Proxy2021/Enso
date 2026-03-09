@@ -26,6 +26,21 @@ export default function GeneratedUI({ data, onAction }) {
   const isPreviewStyles = tool === "enso_photo_studio_preview_styles";
   const isListStyles = tool === "enso_photo_studio_list_styles";
 
+  // ── Reset processing overlay when data changes (batch completes or navigates away) ──
+  useEffect(() => {
+    if (isProcessing && !isImport) {
+      setIsProcessing(false);
+    }
+  }, [tool]);
+
+  // ── Safety timeout: clear processing overlay after 3 minutes ──
+  useEffect(() => {
+    if (isProcessing) {
+      var timer = setTimeout(function() { setIsProcessing(false); }, 180000);
+      return function() { clearTimeout(timer); };
+    }
+  }, [isProcessing]);
+
   // ── Helpers ──
   const getIcon = (name) => {
     var I = LucideReact[name];
