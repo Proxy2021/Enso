@@ -1,7 +1,5 @@
 var photoPath = (params.photoId || "").trim();
-var style = (params.style || "").trim() || "watercolor";
-var intensity = params.intensity || 75;
-var colorPalette = (params.colorPalette || "").trim();
+var style = (params.style || "").trim();
 
 if (!photoPath) {
   return {
@@ -15,55 +13,70 @@ if (!photoPath) {
   };
 }
 
-// Get photo details from filesystem via native tool
-var viewResult = await ctx.callTool("enso_media_view_photo", { path: photoPath });
-if (!viewResult.success) {
+if (!style) {
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_apply_style",
-        error: "Photo not found: " + photoPath
+        error: "Style is required. Use preview_styles or list_styles to see available styles."
       })
     }]
   };
 }
 
-var photo = viewResult.data;
+// Get photo details
+var viewResult = await ctx.callTool("enso_media_view_photo", { path: photoPath });
+var photo = viewResult.success ? viewResult.data : null;
+var photoName = photo ? photo.name : photoPath.split("/").pop();
+var originalUrl = photo ? photo.mediaUrl : "";
 
-// Use AI to describe the styled transformation
-var stylePrompt = "Describe what a " + style.replace(/_/g, " ") + " style transformation at " + intensity + "% intensity would look like applied to a photo named '" + photo.name + "'. Be concise in 1-2 sentences.";
-if (colorPalette) {
-  stylePrompt += " Use a " + colorPalette + " color palette.";
+// Process the photo using the real processing engine
+var processResult = await ctx.callTool("enso_media_process_single_photo", {
+  inputFile: photoPath,
+  style: style
+});
+
+if (!processResult || !processResult.success) {
+  var errMsg = "Processing failed";
+  if (processResult && processResult.data) {
+    try {
+      var d = typeof processResult.data === "string" ? JSON.parse(processResult.data) : processResult.data;
+      if (d.error) errMsg = d.error;
+    } catch(e) {}
+  }
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        tool: "enso_photo_studio_apply_style",
+        error: errMsg
+      })
+    }]
+  };
 }
-var aiDesc = "";
+
+var data = processResult.data || processResult;
+if (typeof data === "string") {
+  try { data = JSON.parse(data); } catch(e) { data = {}; }
+}
+
+// Get style name from list_styles
+var styleName = style.replace(/_/g, " ");
 try {
-  var aiResult = await ctx.ask(stylePrompt);
-  if (aiResult.ok) aiDesc = aiResult.text;
-} catch(e) { /* ignore */ }
-
-// Load or create styled versions for this photo path
-var storeKey = "styles:" + photoPath;
-var stylesStored = await ctx.store.get(storeKey);
-var versions = [];
-if (stylesStored) {
-  try { versions = JSON.parse(stylesStored); } catch(e) { versions = []; }
-}
-
-// Create styled version record
-var styledId = "s_" + Date.now();
-var styledVersion = {
-  id: styledId,
-  style: style,
-  intensity: intensity,
-  colorPalette: colorPalette || null,
-  url: photo.mediaUrl,
-  description: aiDesc,
-  createdAt: new Date().toISOString()
-};
-
-versions.push(styledVersion);
-await ctx.store.set(storeKey, JSON.stringify(versions));
+  var stylesResult = await ctx.callTool("enso_media_list_styles", {});
+  if (stylesResult && stylesResult.success) {
+    var stylesData = stylesResult.data || stylesResult;
+    if (typeof stylesData === "string") stylesData = JSON.parse(stylesData);
+    var allStyles = stylesData.styles || [];
+    for (var i = 0; i < allStyles.length; i++) {
+      if (allStyles[i].id === style) {
+        styleName = allStyles[i].name;
+        break;
+      }
+    }
+  }
+} catch(e) {}
 
 return {
   content: [{
@@ -72,20 +85,19 @@ return {
       tool: "enso_photo_studio_apply_style",
       photo: {
         id: photoPath,
-        name: photo.name,
-        url: photo.mediaUrl,
-        path: photoPath,
-        size: photo.size,
-        dimensions: photo.dimensions || ""
+        name: photoName,
+        originalUrl: originalUrl,
+        path: photoPath
       },
       style: style,
-      intensity: intensity,
-      colorPalette: colorPalette || null,
-      description: aiDesc,
+      styleName: styleName,
       result: {
-        id: styledId,
-        url: photo.mediaUrl,
-        processedAt: styledVersion.createdAt
+        mediaUrl: data.mediaUrl || "",
+        thumbUrl: data.thumbUrl || "",
+        outputFile: data.outputFile || "",
+        width: data.width || 0,
+        height: data.height || 0,
+        size_mb: data.size_mb || 0
       }
     })
   }]

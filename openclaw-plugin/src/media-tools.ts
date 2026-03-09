@@ -25,6 +25,67 @@ type ToggleFavoriteParams = { path: string; favorite?: boolean };
 type ManageCollectionParams = { action: string; collectionName?: string; photoPath?: string; newName?: string };
 type RatePhotoParams = { path: string; rating: number };
 type ProcessPhotosParams = { inputDir: string; style: string; outputSubfolder?: string };
+type ProcessSinglePhotoParams = { inputFile: string; outputFile?: string; style: string };
+type StylePreviewsParams = { photoPath: string; styles?: string[] };
+
+// ── Style Registry (loaded from styles.json) ─────────────────────────────
+
+interface StyleInfo {
+  id: string;
+  name: string;
+  subtitle: string;
+  category: string;
+  description: string;
+  tags: string[];
+  ui: { bg: string; border: string; text: string };
+}
+
+let _styleIds: string[] | null = null;
+let _styleInfoMap: Record<string, StyleInfo> | null = null;
+
+function getStylesFilePath(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "styles.json");
+}
+
+function loadStyleRegistry(): { ids: string[]; infoMap: Record<string, StyleInfo> } {
+  if (_styleIds && _styleInfoMap) return { ids: _styleIds, infoMap: _styleInfoMap };
+
+  const stylesPath = getStylesFilePath();
+  try {
+    const raw = JSON.parse(readFileSync(stylesPath, "utf-8"));
+    const ids: string[] = [];
+    const infoMap: Record<string, StyleInfo> = {};
+    const categories: Record<string, string> = {};
+    for (const cat of (raw.categories || [])) categories[cat.id] = cat.name;
+
+    for (const [id, def] of Object.entries(raw.styles || {})) {
+      const s = def as Record<string, unknown>;
+      if (!(s as { recipe?: unknown }).recipe) continue;
+      ids.push(id);
+      infoMap[id] = {
+        id,
+        name: (s.name as string) || id,
+        subtitle: (s.subtitle as string) || "",
+        category: categories[(s.category as string)] || (s.category as string) || "",
+        description: (s.description as string) || "",
+        tags: (s.tags as string[]) || [],
+        ui: (s.ui as { bg: string; border: string; text: string }) || { bg: "", border: "", text: "" },
+      };
+    }
+    _styleIds = ids;
+    _styleInfoMap = infoMap;
+    return { ids, infoMap };
+  } catch (err) {
+    logError("media:styles", "Failed to load styles.json", err);
+    return { ids: [], infoMap: {} };
+  }
+}
+
+/** Invalidate cached style registry (call after styles.json changes) */
+export function invalidateStyleCache(): void {
+  _styleIds = null;
+  _styleInfoMap = null;
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -927,17 +988,18 @@ function manageCollection(params: ManageCollectionParams): AgentToolResult {
 
 // ── Photo Processing ──────────────────────────────────────────────────────
 
-const PROCESS_STYLES = ["wong_kar_wai", "moriyama", "wes_anderson", "blade_runner", "ghibli", "kodak_portra", "tarantino", "nordic_noir", "terrence_malick", "hitchcock"];
 const PROCESSED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp", ".3fr", ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raf", ".orf", ".rw2", ".pef", ".srw"]);
 
 async function processPhotos(params: ProcessPhotosParams): Promise<AgentToolResult> {
   const { inputDir, style, outputSubfolder } = params;
+  const { ids: validStyles } = loadStyleRegistry();
 
   if (!inputDir || !existsSync(inputDir)) return errorResult(`Input directory not found: ${inputDir}`);
-  if (!style || !PROCESS_STYLES.includes(style)) return errorResult(`Unknown style: ${style}. Available: ${PROCESS_STYLES.join(", ")}`);
+  if (!style || !validStyles.includes(style)) return errorResult(`Unknown style: ${style}. Available: ${validStyles.join(", ")}`);
 
   const outDir = join(inputDir, outputSubfolder || "processed");
   const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "photo-processor.py");
+  const stylesFilePath = getStylesFilePath();
 
   if (!existsSync(scriptPath)) return errorResult(`Processing script not found: ${scriptPath}`);
 
@@ -947,6 +1009,7 @@ async function processPhotos(params: ProcessPhotosParams): Promise<AgentToolResu
       "--input-dir", inputDir,
       "--output-dir", outDir,
       "--style", style,
+      "--styles-file", stylesFilePath,
     ], { timeout: 600_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
 
     // Parse NDJSON output — last line is the summary
@@ -991,6 +1054,189 @@ async function processPhotos(params: ProcessPhotosParams): Promise<AgentToolResu
     logError("media:process", "Photo processing failed", err, { inputDir, style });
     return errorResult(`Processing failed: ${msg}`);
   }
+}
+
+// ── Single Photo Processing ──────────────────────────────────────────────
+
+async function processSinglePhoto(params: ProcessSinglePhotoParams): Promise<AgentToolResult> {
+  const { inputFile, style } = params;
+  const { ids: validStyles } = loadStyleRegistry();
+
+  if (!inputFile || !existsSync(inputFile)) return errorResult(`Input file not found: ${inputFile}`);
+  if (!style || !validStyles.includes(style)) return errorResult(`Unknown style: ${style}. Available: ${validStyles.join(", ")}`);
+
+  const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "photo-processor.py");
+  const stylesFilePath = getStylesFilePath();
+
+  if (!existsSync(scriptPath)) return errorResult(`Processing script not found: ${scriptPath}`);
+
+  // Determine output path
+  const dir = dirname(inputFile);
+  const base = basename(inputFile, extname(inputFile));
+  const outDir = join(dir, "processed");
+  mkdirSync(outDir, { recursive: true });
+  const outputFile = params.outputFile || join(outDir, `${base}_${style}.jpg`);
+
+  try {
+    const output = execFileSync("python3", [
+      scriptPath,
+      "--input-file", inputFile,
+      "--output-file", outputFile,
+      "--style", style,
+      "--styles-file", stylesFilePath,
+    ], { timeout: 300_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+
+    const result = JSON.parse(output.trim().split("\n").filter(Boolean).pop() || "{}");
+
+    if (result.status === "error") {
+      return errorResult(result.error || "Processing failed");
+    }
+
+    // Generate media URLs
+    const thumbDir = join(dirname(outputFile), "thumbs");
+    const thumbPath = join(thumbDir, basename(outputFile));
+    const thumbUrl = existsSync(thumbPath) ? toMediaUrl(thumbPath) : undefined;
+
+    return ok({
+      tool: "enso_media_process_single_photo",
+      success: true,
+      style,
+      inputFile,
+      outputFile,
+      mediaUrl: toMediaUrl(outputFile),
+      thumbUrl,
+      width: result.width,
+      height: result.height,
+      size_mb: result.size_mb,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logError("media:process-single", "Single photo processing failed", err, { inputFile, style });
+    return errorResult(`Processing failed: ${msg}`);
+  }
+}
+
+// ── Style Previews ───────────────────────────────────────────────────────
+
+async function generateStylePreviews(params: StylePreviewsParams): Promise<AgentToolResult> {
+  const { photoPath } = params;
+  const { ids: allStyleIds, infoMap } = loadStyleRegistry();
+
+  if (!photoPath || !existsSync(photoPath)) return errorResult(`Photo not found: ${photoPath}`);
+
+  const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "photo-processor.py");
+  const stylesFilePath = getStylesFilePath();
+
+  if (!existsSync(scriptPath)) return errorResult(`Processing script not found: ${scriptPath}`);
+
+  // Which styles to preview
+  const styleIds = params.styles?.length ? params.styles.filter(s => allStyleIds.includes(s)) : allStyleIds;
+
+  const previewDir = join(dirname(photoPath), ".style-previews");
+  mkdirSync(previewDir, { recursive: true });
+
+  const results: Array<{
+    id: string; name: string; subtitle: string; category: string;
+    description: string; tags: string[];
+    previewUrl: string;
+    ui: { bg: string; border: string; text: string };
+  }> = [];
+  const errors: string[] = [];
+
+  for (const styleId of styleIds) {
+    const base = basename(photoPath, extname(photoPath));
+    const previewPath = join(previewDir, `${base}_${styleId}.jpg`);
+
+    // Skip if preview already exists
+    if (existsSync(previewPath)) {
+      const info = infoMap[styleId];
+      if (info) {
+        results.push({
+          id: styleId,
+          name: info.name,
+          subtitle: info.subtitle,
+          category: info.category,
+          description: info.description,
+          tags: info.tags,
+          previewUrl: toMediaUrl(previewPath),
+          ui: info.ui,
+        });
+      }
+      continue;
+    }
+
+    try {
+      execFileSync("python3", [
+        scriptPath,
+        "--input-file", photoPath,
+        "--output-file", previewPath,
+        "--style", styleId,
+        "--styles-file", stylesFilePath,
+        "--preview",
+        "--preview-size", "400",
+        "--quality", "75",
+      ], { timeout: 60_000, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024 });
+
+      const info = infoMap[styleId];
+      if (info && existsSync(previewPath)) {
+        results.push({
+          id: styleId,
+          name: info.name,
+          subtitle: info.subtitle,
+          category: info.category,
+          description: info.description,
+          tags: info.tags,
+          previewUrl: toMediaUrl(previewPath),
+          ui: info.ui,
+        });
+      }
+    } catch (err) {
+      errors.push(`${styleId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Group results by category
+  const byCategory: Record<string, typeof results> = {};
+  for (const r of results) {
+    const cat = r.category || "Other";
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(r);
+  }
+
+  return ok({
+    tool: "enso_media_style_previews",
+    success: true,
+    photoPath,
+    total: results.length,
+    failed: errors.length,
+    categories: byCategory,
+    results,
+    errors: errors.length > 0 ? errors : undefined,
+  });
+}
+
+// ── List Styles ──────────────────────────────────────────────────────────
+
+async function listStyles(): Promise<AgentToolResult> {
+  const { ids, infoMap } = loadStyleRegistry();
+
+  // Group by category
+  const byCategory: Record<string, StyleInfo[]> = {};
+  for (const id of ids) {
+    const info = infoMap[id];
+    if (!info) continue;
+    const cat = info.category || "Other";
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(info);
+  }
+
+  return ok({
+    tool: "enso_media_list_styles",
+    success: true,
+    total: ids.length,
+    styles: ids.map(id => infoMap[id]).filter(Boolean),
+    categories: byCategory,
+  });
 }
 
 // ── Tool Registration ─────────────────────────────────────────────────────
@@ -1183,18 +1429,58 @@ export function createMediaTools(): AnyAgentTool[] {
     } as AnyAgentTool,
     {
       name: "enso_media_process_photos",
-      label: "Process Photos",
-      description: `Apply a cinematic or iconic photographer style to all photos in a directory. Styles: ${PROCESS_STYLES.join(", ")}. Supports JPEG, PNG, TIFF, and RAW files. Outputs processed JPEGs to a subfolder.`,
+      label: "Process Photos (Batch)",
+      description: `Apply a photo style to all photos in a directory. 28 styles across Film Stocks, Cinematic, Photographers, and Trending categories. Supports JPEG, PNG, TIFF, and RAW files. Outputs processed JPEGs to a subfolder.`,
       parameters: {
         type: "object", additionalProperties: false,
         properties: {
           inputDir: { type: "string", description: "Source directory containing photos" },
-          style: { type: "string", description: `Style to apply: ${PROCESS_STYLES.join(", ")}` },
+          style: { type: "string", description: "Style ID to apply (use enso_media_list_styles to see all)" },
           outputSubfolder: { type: "string", description: "Output subfolder name (default: processed)" },
         },
         required: ["inputDir", "style"],
       },
       execute: async (_callId: string, params: Record<string, unknown>) => processPhotos(params as ProcessPhotosParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_media_process_single_photo",
+      label: "Process Single Photo",
+      description: "Apply a photo style to a single image file. Returns the processed image URL.",
+      parameters: {
+        type: "object", additionalProperties: false,
+        properties: {
+          inputFile: { type: "string", description: "Path to the source photo" },
+          outputFile: { type: "string", description: "Output path (optional — auto-generated if omitted)" },
+          style: { type: "string", description: "Style ID to apply" },
+        },
+        required: ["inputFile", "style"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => processSinglePhoto(params as ProcessSinglePhotoParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_media_style_previews",
+      label: "Generate Style Previews",
+      description: "Generate 400px preview thumbnails of a photo in multiple styles. Returns URLs for each style preview, grouped by category.",
+      parameters: {
+        type: "object", additionalProperties: false,
+        properties: {
+          photoPath: { type: "string", description: "Path to the source photo" },
+          styles: { type: "array", items: { type: "string" }, description: "Optional: specific style IDs to preview (default: all)" },
+        },
+        required: ["photoPath"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => generateStylePreviews(params as StylePreviewsParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_media_list_styles",
+      label: "List Photo Styles",
+      description: "List all available photo processing styles with names, descriptions, and categories.",
+      parameters: {
+        type: "object", additionalProperties: false,
+        properties: {},
+        required: [],
+      },
+      execute: async () => listStyles(),
     } as AnyAgentTool,
   ];
 }

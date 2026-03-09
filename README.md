@@ -38,8 +38,8 @@ Ask any question and get a structured research board with key findings, confiden
 ### 🏙️ City Planner
 Say "plan a trip to Tokyo" and get an interactive travel board — restaurants with ratings and cuisine filters, photo spots, landmarks, and YouTube video guides. Click any place for a detailed modal. Send the full itinerary as an HTML email.
 
-### 📸 Photo Gallery
-Browse your local photo library with AI-powered descriptions, EXIF metadata, search, favorites, star ratings, and batch tagging. Full lightbox viewer with keyboard navigation. Organize photos into collections.
+### 📸 Photo Studio
+Professional photo processing with 28 styles across four categories — Film Stocks (Portra, Ektar, Tri-X, CineStill), Cinematic (Wong Kar-wai, Blade Runner, Wes Anderson, Ghibli), Photographers (Moriyama, Fan Ho, Saul Leiter), and 2026 Trending (Moody Natural, Soft Film, Faded Editorial). Data-driven recipe engine: adding a new style is a JSON entry — zero code changes. Style previews let you see every look before committing. Single-photo and batch processing with automatic thumbnail generation. Photo book creation with aspect-ratio-aware layouts (hero, grid, editorial, panoramic, minimal). Also includes AI-powered descriptions, EXIF metadata, search, favorites, and collections.
 
 ### 🌐 Remote Browser
 A full web browser inside a chat card. Navigate to URLs, click on the page screenshot to interact, type into forms, scroll, and manage bookmarks — all through the agent.

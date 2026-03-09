@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "photo_studio",
     "toolPrefix": "enso_photo_studio_",
-    "description": "Artistic photo processing studio for importing, styling, batch processing, and organizing photos into collections",
+    "description": "Professional photo processing studio — 28 styles across Film Stocks, Cinematic, Photographers, and Trending categories. Style previews, batch processing, and photo book creation.",
     "signatureId": "photo_studio_view",
     "tools": [
       {
@@ -47,40 +47,11 @@
               "type": "image",
               "size": 3245678,
               "modifiedAt": "2024-11-15T10:30:00Z",
-              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vc3Vuc2V0X2JlYWNoLmpwZw"
-            },
-            {
-              "name": "mountain_view.jpg",
-              "path": "/Users/demo/Pictures/Vacation/mountain_view.jpg",
-              "ext": ".jpg",
-              "type": "image",
-              "size": 4567890,
-              "modifiedAt": "2024-11-15T10:31:00Z",
-              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vbW91bnRhaW5fdmlldy5qcGc"
-            },
-            {
-              "name": "city_lights.jpg",
-              "path": "/Users/demo/Pictures/Vacation/city_lights.jpg",
-              "ext": ".jpg",
-              "type": "image",
-              "size": 5123456,
-              "modifiedAt": "2024-11-15T10:32:00Z",
-              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vY2l0eV9saWdodHMuanBn"
-            },
-            {
-              "name": "forest_path.jpg",
-              "path": "/Users/demo/Pictures/Vacation/forest_path.jpg",
-              "ext": ".jpg",
-              "type": "image",
-              "size": 2987654,
-              "modifiedAt": "2024-11-15T10:33:00Z",
-              "mediaUrl": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvVmFjYXRpb24vZm9yZXN0X3BhdGguanBn"
+              "mediaUrl": "/media/encoded_path"
             }
           ],
           "directories": [
-            { "name": "Portraits", "path": "/Users/demo/Pictures/Vacation/Portraits", "itemCount": 8 },
-            { "name": "Landscapes", "path": "/Users/demo/Pictures/Vacation/Landscapes", "itemCount": 15 },
-            { "name": "Night Shots", "path": "/Users/demo/Pictures/Vacation/Night Shots", "itemCount": 5 }
+            { "name": "Portraits", "path": "/Users/demo/Pictures/Vacation/Portraits", "itemCount": 8 }
           ],
           "filter": "image",
           "sortBy": "name",
@@ -90,8 +61,42 @@
         "isPrimary": true
       },
       {
+        "suffix": "preview_styles",
+        "description": "Generate preview thumbnails of a photo in all 28 styles so the user can see what each style looks like before applying. Shows previews grouped by category: Film Stocks, Cinematic, Photographers, Trending.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "photoPath": {
+              "type": "string",
+              "description": "Path to the source photo to generate previews for"
+            },
+            "styles": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Optional: specific style IDs to preview (default: all)"
+            }
+          },
+          "required": ["photoPath"]
+        },
+        "sampleParams": { "photoPath": "/Users/demo/Pictures/sunset.jpg" },
+        "sampleData": {
+          "tool": "enso_photo_studio_preview_styles",
+          "photoPath": "/Users/demo/Pictures/sunset.jpg",
+          "total": 28,
+          "categories": {
+            "Film Stocks": [
+              { "id": "kodak_portra_400", "name": "Portra 400", "subtitle": "Kodak", "previewUrl": "/media/preview1", "ui": { "bg": "bg-amber-500/10", "border": "border-amber-500/30", "text": "text-amber-300" } }
+            ]
+          },
+          "results": []
+        },
+        "requiredDataKeys": ["tool", "results"],
+        "isPrimary": false
+      },
+      {
         "suffix": "apply_style",
-        "description": "Apply an artistic style to a photo. Supports cinematic styles (wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock) and artistic styles (watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime) with adjustable intensity.",
+        "description": "Apply a photo processing style to a single photo. Performs real pixel-level processing using the recipe engine. Returns the processed image.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -102,35 +107,28 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name: wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock, watercolor, oil_painting, sketch, pop_art, vintage, noir, impressionist, anime"
-            },
-            "intensity": {
-              "type": "number",
-              "description": "Style intensity from 0-100 (default: 75)"
-            },
-            "colorPalette": {
-              "type": "string",
-              "description": "Optional color palette: warm, cool, muted, vibrant, monochrome"
+              "description": "Style ID from the style registry (e.g. kodak_portra_400, wong_kar_wai)"
             }
           },
           "required": ["photoId", "style"]
         },
-        "sampleParams": { "photoId": "/Users/demo/Pictures/sunset_beach.jpg", "style": "watercolor", "intensity": 75 },
+        "sampleParams": { "photoId": "/Users/demo/Pictures/sunset_beach.jpg", "style": "kodak_portra_400" },
         "sampleData": {
           "tool": "enso_photo_studio_apply_style",
           "photo": {
             "id": "/Users/demo/Pictures/sunset_beach.jpg",
             "name": "sunset_beach.jpg",
-            "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw",
+            "originalUrl": "/media/original",
             "path": "/Users/demo/Pictures/sunset_beach.jpg"
           },
-          "style": "watercolor",
-          "intensity": 75,
-          "description": "A soft, translucent watercolor wash softens the edges and colors of the beach scene.",
+          "style": "kodak_portra_400",
+          "styleName": "Portra 400",
           "result": {
-            "id": "s1",
-            "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw",
-            "processedAt": "2024-11-15T10:35:00Z"
+            "mediaUrl": "/media/processed",
+            "thumbUrl": "/media/thumb",
+            "outputFile": "/Users/demo/Pictures/processed/sunset_beach_kodak_portra_400.jpg",
+            "width": 4032,
+            "height": 3024
           }
         },
         "requiredDataKeys": ["tool", "photo", "style", "result"],
@@ -138,7 +136,7 @@
       },
       {
         "suffix": "batch_process",
-        "description": "Apply a cinematic or iconic photographer style to all photos in a directory. Performs real pixel-level processing. Styles: wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock.",
+        "description": "Apply a photo processing style to all photos in a directory. 28 styles: Film Stocks (Portra, Ektar, Tri-X, etc.), Cinematic (Wong Kar-wai, Blade Runner, etc.), Photographers (Moriyama, Fan Ho, etc.), Trending (Moody Natural, Soft Film, etc.).",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -149,7 +147,7 @@
             },
             "style": {
               "type": "string",
-              "description": "Style name: wong_kar_wai, moriyama, wes_anderson, blade_runner, ghibli, kodak_portra, tarantino, nordic_noir, terrence_malick, hitchcock"
+              "description": "Style ID to apply (e.g. kodak_portra_400, wong_kar_wai, moriyama)"
             },
             "intensity": {
               "type": "number",
@@ -158,24 +156,41 @@
           },
           "required": ["style"]
         },
-        "sampleParams": { "collection": "/Users/demo/Pictures/Norway", "style": "wong_kar_wai", "intensity": 75 },
+        "sampleParams": { "collection": "/Users/demo/Pictures/Norway", "style": "kodak_portra_400", "intensity": 75 },
         "sampleData": {
           "tool": "enso_photo_studio_batch_process",
           "collection": "/Users/demo/Pictures/Norway",
-          "style": "wong_kar_wai",
+          "style": "kodak_portra_400",
           "intensity": 75,
           "total": 4,
           "completed": 4,
           "status": "complete",
           "outputDir": "/Users/demo/Pictures/Norway/processed",
           "results": [
-            { "id": "/Users/demo/Pictures/Norway/processed/sunset.jpg", "name": "sunset.jpg", "styledUrl": "/media/encoded_path_1", "status": "success" },
-            { "id": "/Users/demo/Pictures/Norway/processed/mountain.jpg", "name": "mountain.jpg", "styledUrl": "/media/encoded_path_2", "status": "success" },
-            { "id": "/Users/demo/Pictures/Norway/processed/fjord.jpg", "name": "fjord.jpg", "styledUrl": "/media/encoded_path_3", "status": "success" },
-            { "id": "/Users/demo/Pictures/Norway/processed/cabin.jpg", "name": "cabin.jpg", "styledUrl": "/media/encoded_path_4", "status": "success" }
+            { "id": "/path/sunset.jpg", "name": "sunset.jpg", "styledUrl": "/media/encoded_path_1", "fullUrl": "/media/full_1", "status": "success" }
           ]
         },
         "requiredDataKeys": ["tool", "style", "results"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "list_styles",
+        "description": "List all available photo processing styles grouped by category.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photo_studio_list_styles",
+          "total": 28,
+          "categories": {
+            "Film Stocks": [{ "id": "kodak_portra_400", "name": "Portra 400", "subtitle": "Kodak" }]
+          }
+        },
+        "requiredDataKeys": ["tool"],
         "isPrimary": false
       },
       {
@@ -208,11 +223,7 @@
         "sampleData": {
           "tool": "enso_photo_studio_manage_collection",
           "action": "list",
-          "collections": [
-            { "name": "Vacation", "count": 12, "coverUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400", "createdAt": "2024-11-10T08:00:00Z" },
-            { "name": "Portraits", "count": 8, "coverUrl": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400", "createdAt": "2024-11-12T14:00:00Z" },
-            { "name": "Nature", "count": 15, "coverUrl": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400", "createdAt": "2024-11-14T09:00:00Z" }
-          ]
+          "collections": []
         },
         "requiredDataKeys": ["tool", "action"],
         "isPrimary": false
@@ -238,21 +249,17 @@
           "original": {
             "id": "/Users/demo/Pictures/sunset_beach.jpg",
             "name": "sunset_beach.jpg",
-            "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw",
-            "path": "/Users/demo/Pictures/sunset_beach.jpg",
-            "dimensions": "4032×3024"
+            "url": "/media/encoded",
+            "path": "/Users/demo/Pictures/sunset_beach.jpg"
           },
-          "versions": [
-            { "id": "s1", "style": "watercolor", "intensity": 75, "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw", "createdAt": "2024-11-15T10:35:00Z" },
-            { "id": "s2", "style": "oil_painting", "intensity": 85, "url": "/media/L1VzZXJzL2RlbW8vUGljdHVyZXMvc3Vuc2V0X2JlYWNoLmpwZw", "createdAt": "2024-11-15T11:00:00Z" }
-          ]
+          "versions": []
         },
         "requiredDataKeys": ["tool", "photoId", "original", "versions"],
         "isPrimary": false
       },
       {
         "suffix": "photobook",
-        "description": "Create a beautiful photo book layout from a set of photos. Supports magazine grid, editorial, contact sheet, and storytelling layouts.",
+        "description": "Create a professional photo book layout from a set of photos. Aspect-ratio-aware placement with hero, grid, editorial, panoramic, and minimal page types. Supports auto, magazine, editorial, contact_sheet, storytelling, and minimal layouts.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -264,7 +271,7 @@
             },
             "layout": {
               "type": "string",
-              "description": "Layout style: magazine, editorial, contact_sheet, storytelling"
+              "description": "Layout style: auto, magazine, editorial, contact_sheet, storytelling, minimal"
             },
             "title": {
               "type": "string",
@@ -279,14 +286,14 @@
               "description": "Source folder path for navigation"
             }
           },
-          "required": ["paths", "layout"]
+          "required": ["paths"]
         },
-        "sampleParams": { "paths": ["/Users/demo/Pictures/photo1.jpg", "/Users/demo/Pictures/photo2.jpg"], "layout": "magazine", "title": "My Photo Book" },
+        "sampleParams": { "paths": ["/path/photo1.jpg", "/path/photo2.jpg"], "layout": "auto", "title": "My Photo Book" },
         "sampleData": {
           "tool": "enso_photo_studio_photobook",
           "title": "Travel Memories",
-          "subtitle": "A visual journey",
-          "layout": "magazine",
+          "subtitle": "",
+          "layout": "auto",
           "totalPhotos": 6,
           "totalPages": 2,
           "pages": [
@@ -294,21 +301,10 @@
               "pageNum": 1,
               "type": "hero",
               "photos": [
-                { "path": "/media/photo1", "width": 4032, "height": 3024, "caption": "Sunset at the beach", "position": "hero" },
-                { "path": "/media/photo2", "width": 3024, "height": 4032, "caption": "Mountain view", "position": "supporting" },
-                { "path": "/media/photo3", "width": 4032, "height": 3024, "caption": "City lights", "position": "supporting" }
-              ]
-            },
-            {
-              "pageNum": 2,
-              "type": "grid",
-              "photos": [
-                { "path": "/media/photo4", "width": 4032, "height": 3024, "caption": "Forest path", "position": "grid" },
-                { "path": "/media/photo5", "width": 3024, "height": 4032, "caption": "River crossing", "position": "grid" }
+                { "path": "/media/photo1", "width": 4032, "height": 3024, "caption": "Beach sunset", "position": "hero", "orientation": "landscape" }
               ]
             }
-          ],
-          "folderPath": "/Users/demo/Pictures"
+          ]
         },
         "requiredDataKeys": ["tool", "pages"],
         "isPrimary": false
@@ -324,34 +320,13 @@
               "type": "string",
               "description": "File path of the photo to adjust"
             },
-            "brightness": {
-              "type": "number",
-              "description": "Brightness adjustment (-100 to 100)"
-            },
-            "contrast": {
-              "type": "number",
-              "description": "Contrast adjustment (-100 to 100)"
-            },
-            "saturation": {
-              "type": "number",
-              "description": "Saturation adjustment (-100 to 100)"
-            },
-            "temperature": {
-              "type": "number",
-              "description": "Color temperature (-100 to 100, negative=cool, positive=warm)"
-            },
-            "grain": {
-              "type": "number",
-              "description": "Film grain amount (0 to 100)"
-            },
-            "vignette": {
-              "type": "number",
-              "description": "Vignette strength (0 to 100)"
-            },
-            "fade": {
-              "type": "number",
-              "description": "Fade/lift blacks (0 to 100)"
-            }
+            "brightness": { "type": "number", "description": "Brightness adjustment (-100 to 100)" },
+            "contrast": { "type": "number", "description": "Contrast adjustment (-100 to 100)" },
+            "saturation": { "type": "number", "description": "Saturation adjustment (-100 to 100)" },
+            "temperature": { "type": "number", "description": "Color temperature (-100 cool to 100 warm)" },
+            "grain": { "type": "number", "description": "Film grain (0-100)" },
+            "vignette": { "type": "number", "description": "Vignette strength (0-100)" },
+            "fade": { "type": "number", "description": "Fade/lift blacks (0-100)" }
           },
           "required": ["path"]
         },
@@ -362,18 +337,7 @@
           "outputPath": "/media/adjusted_sunset",
           "name": "sunset.jpg",
           "mediaUrl": "/media/sunset",
-          "width": 4032,
-          "height": 3024,
-          "adjustments": {
-            "brightness": 10,
-            "contrast": 15,
-            "saturation": 0,
-            "temperature": 0,
-            "grain": 0,
-            "vignette": 0,
-            "fade": 0
-          },
-          "description": "Slightly brighter with enhanced contrast for more punch."
+          "adjustments": { "brightness": 10, "contrast": 15 }
         },
         "requiredDataKeys": ["tool", "path", "adjustments"],
         "isPrimary": false
