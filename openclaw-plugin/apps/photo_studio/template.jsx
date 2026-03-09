@@ -8,6 +8,11 @@ export default function GeneratedUI({ data, onAction }) {
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [activeTab, setActiveTab] = useState("Film Stocks");
   const [previewFilter, setPreviewFilter] = useState("all");
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [lightboxName, setLightboxName] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStyle, setProcessingStyle] = useState("");
+  const [processingCount, setProcessingCount] = useState(0);
 
   // ── Detect tool view ──
   const tool = data?.tool || "";
@@ -34,6 +39,61 @@ export default function GeneratedUI({ data, onAction }) {
   };
   const defaultUi = { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" };
 
+  // ── Lightbox overlay (full-view photo) ──
+  const lightbox = lightboxUrl ? (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: "rgba(0,0,0,0.95)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
+      onClick={() => setLightboxUrl(null)}>
+      <button onClick={() => setLightboxUrl(null)} style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", padding: 8 }}>
+        <LucideReact.X className="w-7 h-7 text-white/70 hover:text-white" />
+      </button>
+      <img src={lightboxUrl} alt={lightboxName} style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 8 }} onClick={function(e) { e.stopPropagation(); }} />
+      {lightboxName && <div className="text-sm text-white/60 mt-3">{lightboxName}</div>}
+      <div className="flex gap-2 mt-3" onClick={function(e) { e.stopPropagation(); }}>
+        <Button size="sm" variant="outline" onClick={function() { setLightboxUrl(null); }}>
+          <LucideReact.X className="w-3 h-3 mr-1" /> Close
+        </Button>
+      </div>
+    </div>
+  ) : null;
+
+  // ── Processing overlay (shown while batch is running) ──
+  const processingOverlay = isProcessing ? (
+    <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
+          <LucideReact.Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-gray-100">Processing Photos</div>
+          <div className="text-[11px] text-gray-500">{processingCount} photo{processingCount !== 1 ? "s" : ""} · {processingStyle.replace(/_/g, " ")}</div>
+        </div>
+        <Badge variant="info">
+          <LucideReact.Zap className="w-3 h-3 mr-1" /> Working
+        </Badge>
+      </div>
+      <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/40 flex flex-col items-center gap-3">
+        <div className="relative">
+          <div className="w-16 h-16 rounded-full border-2 border-violet-500/30 flex items-center justify-center">
+            <LucideReact.Aperture className="w-8 h-8 text-violet-400 animate-spin" style={{ animationDuration: "3s" }} />
+          </div>
+          <div className="absolute -top-1 -right-1 w-5 h-5 bg-violet-500 rounded-full flex items-center justify-center">
+            <LucideReact.Sparkles className="w-3 h-3 text-white" />
+          </div>
+        </div>
+        <div className="text-center space-y-1">
+          <div className="text-xs text-gray-200 font-medium">Applying {processingStyle.replace(/_/g, " ")} style</div>
+          <div className="text-[11px] text-gray-500">Each photo is being professionally graded...</div>
+        </div>
+        <div className="w-full space-y-1">
+          <div className="h-1.5 bg-gray-700/40 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full animate-pulse" style={{ width: "60%" }} />
+          </div>
+          <div className="text-[10px] text-gray-500 text-center">This may take a moment for large photos</div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   // ── Error view ──
   if (data?.error) {
     return (
@@ -49,6 +109,13 @@ export default function GeneratedUI({ data, onAction }) {
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  // ── Processing Overlay (shown while batch is in progress) ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isProcessing && isImport) {
+    return processingOverlay;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   // ── Import / Browse Photos View ──
   // ════════════════════════════════════════════════════════════════════════
   if (isImport) {
@@ -61,6 +128,7 @@ export default function GeneratedUI({ data, onAction }) {
 
     return (
       <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-3">
+        {lightbox}
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -155,7 +223,8 @@ export default function GeneratedUI({ data, onAction }) {
               <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
                 {items.map(function(item, idx) {
                   return (
-                    <div key={idx} className="relative group bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all">
+                    <div key={idx} className="relative group bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all cursor-pointer"
+                      onClick={function() { if (item.mediaUrl) { setLightboxUrl(item.mediaUrl); setLightboxName(item.name); } }}>
                       {item.mediaUrl ? (
                         <img src={item.mediaUrl} alt={item.name} loading="lazy" style={{ width: "100%", height: "100px", objectFit: "cover" }} />
                       ) : (
@@ -168,9 +237,13 @@ export default function GeneratedUI({ data, onAction }) {
                         <div className="text-[9px] text-gray-500">{formatSize(item.size)}</div>
                       </div>
                       <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => onAction("preview_styles", { photoPath: item.path })}
+                        <button onClick={function(e) { e.stopPropagation(); onAction("preview_styles", { photoPath: item.path }); }}
                           className="p-1 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
                           <LucideReact.Palette className="w-3 h-3" />
+                        </button>
+                        <button onClick={function(e) { e.stopPropagation(); if (item.mediaUrl) { setLightboxUrl(item.mediaUrl); setLightboxName(item.name); } }}
+                          className="p-1 rounded-md bg-black/60 text-gray-300 hover:text-white cursor-pointer backdrop-blur-sm">
+                          <LucideReact.Maximize2 className="w-3 h-3" />
                         </button>
                       </div>
                     </div>
@@ -285,7 +358,7 @@ export default function GeneratedUI({ data, onAction }) {
                 </div>
 
                 <div className="flex items-center gap-3 pt-1">
-                  <Button size="sm" variant="primary" onClick={() => { setShowStylePicker(false); onAction("batch_process", { collection: currentPath, style: selectedStyle }); }}>
+                  <Button size="sm" variant="primary" onClick={() => { setShowStylePicker(false); setIsProcessing(true); setProcessingStyle(selectedStyle); setProcessingCount(items.length); onAction("batch_process", { collection: currentPath, style: selectedStyle }); }}>
                     <LucideReact.Play className="w-3 h-3 mr-1" /> Process {items.length} Photo{items.length !== 1 ? "s" : ""}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setShowStylePicker(false)}>Cancel</Button>
@@ -434,6 +507,7 @@ export default function GeneratedUI({ data, onAction }) {
 
     return (
       <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+        {lightbox}
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", {})}>
             <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
@@ -447,11 +521,12 @@ export default function GeneratedUI({ data, onAction }) {
           </Badge>
         </div>
 
-        {/* Before / After */}
+        {/* Before / After — click to view full size */}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <div className="text-[10px] text-gray-500 uppercase tracking-wider text-center">Original</div>
-            <div className="rounded-xl overflow-hidden border border-gray-700/40 bg-black/30">
+            <div className="rounded-xl overflow-hidden border border-gray-700/40 bg-black/30 cursor-pointer hover:ring-1 hover:ring-gray-500/40 transition-all group relative"
+              onClick={function() { if (photo.originalUrl) { setLightboxUrl(photo.originalUrl); setLightboxName("Original — " + (photo.name || "Photo")); } }}>
               {photo.originalUrl ? (
                 <img src={photo.originalUrl} alt="Original" style={{ width: "100%", height: "160px", objectFit: "cover" }} />
               ) : (
@@ -459,16 +534,27 @@ export default function GeneratedUI({ data, onAction }) {
                   <LucideReact.Image className="w-8 h-8 text-gray-600" />
                 </div>
               )}
+              {photo.originalUrl && (
+                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <LucideReact.Maximize2 className="w-5 h-5 text-white drop-shadow" />
+                </div>
+              )}
             </div>
           </div>
           <div className="space-y-1">
             <div className="text-[10px] text-gray-500 uppercase tracking-wider text-center">Styled</div>
-            <div className="rounded-xl overflow-hidden border border-violet-500/30 bg-black/30">
+            <div className="rounded-xl overflow-hidden border border-violet-500/30 bg-black/30 cursor-pointer hover:ring-1 hover:ring-violet-500/40 transition-all group relative"
+              onClick={function() { var url = result.mediaUrl || result.thumbUrl; if (url) { setLightboxUrl(url); setLightboxName(styleName + " — " + (photo.name || "Photo")); } }}>
               {(result.thumbUrl || result.mediaUrl) ? (
                 <img src={result.thumbUrl || result.mediaUrl} alt="Styled" style={{ width: "100%", height: "160px", objectFit: "cover" }} />
               ) : (
                 <div style={{ width: "100%", height: "160px" }} className="flex items-center justify-center bg-violet-500/10">
                   <LucideReact.Aperture className="w-8 h-8 text-violet-300" />
+                </div>
+              )}
+              {(result.thumbUrl || result.mediaUrl) && (
+                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <LucideReact.Maximize2 className="w-5 h-5 text-white drop-shadow" />
                 </div>
               )}
             </div>
@@ -484,12 +570,15 @@ export default function GeneratedUI({ data, onAction }) {
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => onAction("preview_styles", { photoPath: photo.path || photo.id })}>
             <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Try Other Styles
           </Button>
           <Button size="sm" variant="ghost" onClick={() => onAction("compare_versions", { photoId: photo.path || photo.id })}>
             <LucideReact.Columns className="w-3.5 h-3.5 mr-1" /> Compare
+          </Button>
+          <Button size="sm" variant="ghost" onClick={function() { onAction("manage_collection", { action: "add", collectionName: "Latest Edits", photoPath: result.outputFile }); }}>
+            <LucideReact.FolderPlus className="w-3.5 h-3.5 mr-1" /> Save to Collection
           </Button>
         </div>
       </div>
@@ -504,11 +593,13 @@ export default function GeneratedUI({ data, onAction }) {
     var total = data.total || results.length;
     var completed = data.completed || results.length;
     var batchStyle = data.style || "";
+    var failedCount = data.failed || 0;
 
     return (
       <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+        {lightbox}
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", {})}>
+          <Button variant="ghost" size="sm" onClick={() => { setIsProcessing(false); onAction("import_photos", {}); }}>
             <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
           </Button>
           <div className="flex-1 min-w-0">
@@ -516,29 +607,52 @@ export default function GeneratedUI({ data, onAction }) {
             <div className="text-[11px] text-gray-500">{completed}/{total} photos · {batchStyle.replace(/_/g, " ")}</div>
           </div>
           <Badge variant={data.status === "complete" ? "success" : "info"}>
-            {data.status === "complete" ? "Done" : "Processing"}
+            {data.status === "complete" ? (
+              <><LucideReact.CheckCircle className="w-3 h-3 mr-1" /> Done</>
+            ) : (
+              <><LucideReact.Loader2 className="w-3 h-3 mr-1 animate-spin" /> Processing</>
+            )}
           </Badge>
         </div>
 
+        {/* Progress bar */}
         <div className="bg-gray-800/40 rounded-xl p-3 border border-gray-700/40 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-gray-400">Progress</span>
             <span className="text-gray-200 font-medium">{total > 0 ? Math.round((completed / total) * 100) : 0}%</span>
           </div>
           <Progress value={completed} max={total} />
+          {data.status === "complete" && (
+            <div className="flex items-center gap-2 text-[10px] pt-1">
+              <span className="text-emerald-400">{completed - failedCount} processed</span>
+              {failedCount > 0 && <span className="text-rose-400">{failedCount} failed</span>}
+            </div>
+          )}
         </div>
 
+        {/* Auto-saved to collection notice */}
+        {data.status === "complete" && data.savedToCollection && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-violet-500/10 border border-violet-500/20 rounded-lg">
+            <LucideReact.FolderCheck className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <span className="text-[11px] text-violet-300">Auto-saved to <strong>Latest Edits</strong> collection</span>
+            <button className="ml-auto text-[10px] text-violet-400 hover:text-violet-300 cursor-pointer underline"
+              onClick={() => onAction("manage_collection", { action: "view", name: "Latest Edits" })}>View</button>
+          </div>
+        )}
+
+        {/* Photo results grid — click to view full size */}
         {results.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
             {results.map(function(item, idx) {
               return (
-                <div key={idx} className={"rounded-xl overflow-hidden border transition-all " +
-                  (item.status === "success" ? "border-emerald-500/30" : item.status === "error" ? "border-rose-500/30" : "border-gray-700/40")}>
-                  <div className="relative">
+                <div key={idx} className={"rounded-xl overflow-hidden border transition-all cursor-pointer hover:ring-1 hover:ring-violet-500/40 " +
+                  (item.status === "success" ? "border-emerald-500/30" : item.status === "error" ? "border-rose-500/30" : "border-gray-700/40")}
+                  onClick={function() { if (item.fullUrl || item.styledUrl) { setLightboxUrl(item.fullUrl || item.styledUrl); setLightboxName(item.name || "Photo"); } }}>
+                  <div className="relative group">
                     {item.styledUrl ? (
-                      <img src={item.styledUrl} alt={item.name} loading="lazy" style={{ width: "100%", height: "90px", objectFit: "cover" }} />
+                      <img src={item.styledUrl} alt={item.name} loading="lazy" style={{ width: "100%", height: "100px", objectFit: "cover" }} />
                     ) : (
-                      <div style={{ width: "100%", height: "90px" }} className="bg-gray-700/30 flex items-center justify-center">
+                      <div style={{ width: "100%", height: "100px" }} className="bg-gray-700/30 flex items-center justify-center">
                         <LucideReact.Image className="w-5 h-5 text-gray-500" />
                       </div>
                     )}
@@ -547,6 +661,12 @@ export default function GeneratedUI({ data, onAction }) {
                     )}
                     {item.status === "error" && (
                       <div className="absolute top-1 right-1"><LucideReact.XCircle className="w-4 h-4 text-rose-400 drop-shadow" /></div>
+                    )}
+                    {/* Full view hint on hover */}
+                    {item.styledUrl && (
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <LucideReact.Maximize2 className="w-5 h-5 text-white drop-shadow" />
+                      </div>
                     )}
                   </div>
                   <div className="p-1.5">
@@ -558,15 +678,23 @@ export default function GeneratedUI({ data, onAction }) {
           </div>
         )}
 
-        {data.status === "complete" && data.outputDir && (
-          <Button size="sm" variant="outline" onClick={() => onAction("photobook", {
-            paths: results.map(function(r) { return r.id; }),
-            layout: "auto",
-            title: batchStyle.replace(/_/g, " "),
-            folderPath: data.collection
-          })}>
-            <LucideReact.BookOpen className="w-3 h-3 mr-1" /> Create Photo Book
-          </Button>
+        {/* Action buttons */}
+        {data.status === "complete" && (
+          <div className="flex gap-2 flex-wrap">
+            {data.outputDir && (
+              <Button size="sm" variant="outline" onClick={() => onAction("photobook", {
+                paths: results.map(function(r) { return r.id; }),
+                layout: "auto",
+                title: batchStyle.replace(/_/g, " "),
+                folderPath: data.collection
+              })}>
+                <LucideReact.BookOpen className="w-3 h-3 mr-1" /> Photo Book
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => onAction("import_photos", { path: data.collection })}>
+              <LucideReact.FolderOpen className="w-3 h-3 mr-1" /> Browse Folder
+            </Button>
+          </div>
         )}
       </div>
     );

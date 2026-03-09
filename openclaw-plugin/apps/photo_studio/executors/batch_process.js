@@ -68,6 +68,30 @@ var results = files.map(function(f) {
   };
 });
 
+// Auto-save processed photos to "Latest Edits" collection
+var savedToCollection = false;
+if (results.length > 0) {
+  try {
+    // Create collection if it doesn't exist (silently ignore "already exists")
+    await ctx.callTool("enso_media_manage_collection", {
+      action: "create",
+      collectionName: "Latest Edits"
+    });
+  } catch(e) { /* collection may already exist */ }
+
+  try {
+    // Add each processed photo to the collection
+    for (var ri = 0; ri < results.length; ri++) {
+      await ctx.callTool("enso_media_manage_collection", {
+        action: "add",
+        collectionName: "Latest Edits",
+        photoPath: results[ri].id
+      });
+    }
+    savedToCollection = true;
+  } catch(e) { /* silently skip if collection feature fails */ }
+}
+
 return {
   content: [{
     type: "text",
@@ -81,6 +105,7 @@ return {
       failed: failed,
       status: "complete",
       outputDir: data.outputDir || "",
+      savedToCollection: savedToCollection,
       results: results
     })
   }]
