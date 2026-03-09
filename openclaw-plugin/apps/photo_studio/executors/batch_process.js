@@ -57,12 +57,13 @@ var files = data.files || [];
 var processed = data.processed || files.length;
 var failed = data.failed || 0;
 
-// Build results for template
+// Build results for template (prefer thumbnail for web display, full-res for download)
 var results = files.map(function(f) {
   return {
     id: f.path,
     name: f.name,
-    styledUrl: f.mediaUrl,
+    styledUrl: f.thumbUrl || f.mediaUrl,
+    fullUrl: f.mediaUrl,
     status: "success"
   };
 });

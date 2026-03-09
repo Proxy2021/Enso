@@ -14,6 +14,9 @@ from PIL import Image, ImageFilter, ImageEnhance
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 
+# Allow very large images (Hasselblad 100MP etc.)
+Image.MAX_IMAGE_PIXELS = None
+
 # Supported file extensions
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp"}
 RAW_EXTS = {".3fr", ".arw", ".cr2", ".cr3", ".nef", ".dng", ".raf", ".orf", ".rw2", ".pef", ".srw"}
@@ -593,6 +596,17 @@ def process_single_file(args):
     idx, total, fname, src_path, dst_path, style_name = args
 
     if os.path.exists(dst_path):
+        # Ensure thumbnail exists even for previously processed files
+        thumb_dir = os.path.join(os.path.dirname(dst_path), "thumbs")
+        thumb_path = os.path.join(thumb_dir, os.path.basename(dst_path))
+        if not os.path.exists(thumb_path):
+            try:
+                os.makedirs(thumb_dir, exist_ok=True)
+                thumb = Image.open(dst_path)
+                thumb.thumbnail((800, 800), Image.LANCZOS)
+                thumb.save(thumb_path, "JPEG", quality=75)
+            except Exception:
+                pass
         return json.dumps({
             "status": "skipped",
             "file": fname,
@@ -619,8 +633,16 @@ def process_single_file(args):
         enhancer = ImageEnhance.Brightness(pil_img)
         pil_img = enhancer.enhance(0.97)
 
-        # Save
+        # Save full-resolution
         pil_img.save(dst_path, "JPEG", quality=QUALITY, subsampling=0)
+
+        # Generate web-friendly thumbnail for UI display
+        thumb_dir = os.path.join(os.path.dirname(dst_path), "thumbs")
+        os.makedirs(thumb_dir, exist_ok=True)
+        thumb_path = os.path.join(thumb_dir, os.path.basename(dst_path))
+        thumb = pil_img.copy()
+        thumb.thumbnail((800, 800), Image.LANCZOS)
+        thumb.save(thumb_path, "JPEG", quality=75)
 
         size_mb = os.path.getsize(dst_path) / (1024 * 1024)
         return json.dumps({

@@ -959,14 +959,18 @@ async function processPhotos(params: ProcessPhotosParams): Promise<AgentToolResu
       } catch { /* skip non-JSON lines */ }
     }
 
-    // List output files and generate media URLs
-    const files: Array<{ name: string; path: string; mediaUrl: string }> = [];
+    // List output files and generate media URLs (with thumbnails for web display)
+    const thumbDir = join(outDir, "thumbs");
+    const hasThumbDir = existsSync(thumbDir);
+    const files: Array<{ name: string; path: string; mediaUrl: string; thumbUrl?: string }> = [];
     if (existsSync(outDir)) {
       for (const f of readdirSync(outDir).sort()) {
         const ext = extname(f).toLowerCase();
         if (ext === ".jpg" || ext === ".jpeg" || ext === ".png") {
           const filePath = join(outDir, f);
-          files.push({ name: f, path: filePath, mediaUrl: toMediaUrl(filePath) });
+          const thumbPath = join(thumbDir, f);
+          const thumbUrl = hasThumbDir && existsSync(thumbPath) ? toMediaUrl(thumbPath) : undefined;
+          files.push({ name: f, path: filePath, mediaUrl: toMediaUrl(filePath), thumbUrl });
         }
       }
     }
