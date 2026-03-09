@@ -1084,7 +1084,7 @@ async function processSinglePhoto(params: ProcessSinglePhotoParams): Promise<Age
       "--output-file", outputFile,
       "--style", style,
       "--styles-file", stylesFilePath,
-    ], { timeout: 300_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+    ], { timeout: 600_000, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
 
     const result = JSON.parse(output.trim().split("\n").filter(Boolean).pop() || "{}");
 

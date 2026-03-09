@@ -421,11 +421,18 @@ def process_single_file(args):
                                shadow_floor_L=ae.get("shadow_floor_L", 4.0),
                                local_contrast_strength=ae.get("local_contrast", 0.15))
 
+        # Measure original brightness for adaptive sharpening
+        orig_mean = rgb.mean()
+
         styled = apply_recipe(rgb, recipe)
         pil_img = Image.fromarray(styled)
 
-        # Slight sharpening
-        pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=40, threshold=2))
+        # Adaptive sharpening — gentler on dark/noisy images, normal on well-lit ones
+        if orig_mean > 80:
+            pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=40, threshold=2))
+        elif orig_mean > 40:
+            pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=25, threshold=3))
+        # Very dark images (orig_mean <= 40): skip sharpening entirely to avoid amplifying noise
 
         pil_img.save(dst_path, "JPEG", quality=quality, subsampling=0)
 
@@ -475,9 +482,18 @@ def process_single_photo(input_file, output_file, recipe, preview_size=0, qualit
                                shadow_floor_L=ae.get("shadow_floor_L", 4.0),
                                local_contrast_strength=ae.get("local_contrast", 0.15))
 
+        # Measure original brightness for adaptive sharpening
+        orig_mean = rgb.mean()
+
         styled = apply_recipe(rgb, recipe)
         pil_img = Image.fromarray(styled)
-        pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=40, threshold=2))
+
+        # Adaptive sharpening — gentler on dark/noisy images, normal on well-lit ones
+        if orig_mean > 80:
+            pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=40, threshold=2))
+        elif orig_mean > 40:
+            pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=25, threshold=3))
+        # Very dark images (orig_mean <= 40): skip sharpening entirely
 
         os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
         pil_img.save(output_file, "JPEG", quality=quality, subsampling=0)

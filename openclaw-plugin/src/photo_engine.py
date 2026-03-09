@@ -9,7 +9,7 @@ Dependencies: numpy, scipy, PIL/Pillow
 
 import numpy as np
 from scipy.interpolate import CubicSpline
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, median_filter
 from PIL import Image, ImageFilter
 
 
@@ -334,6 +334,7 @@ def auto_enhance(img_array, target_mean_L=42.0, shadow_floor_L=4.0,
     L = lab[:, :, 0].copy()  # float64, range [0, 100]
 
     mean_L = L.mean()
+    gamma_applied = 1.0  # track how much gamma lift was applied
 
     # ── Step 1: Adaptive gamma ──
     # Only correct if significantly underexposed (> 15% below target)
@@ -341,6 +342,7 @@ def auto_enhance(img_array, target_mean_L=42.0, shadow_floor_L=4.0,
         # gamma = log(target / max) / log(current / max)
         gamma = np.log(target_mean_L / 100.0) / np.log(mean_L / 100.0)
         gamma = float(np.clip(gamma, 0.4, max_gamma))
+        gamma_applied = gamma
 
         # Apply gamma: L_out = 100 * (L_in / 100) ^ gamma
         L_norm = L / 100.0
@@ -356,7 +358,19 @@ def auto_enhance(img_array, target_mean_L=42.0, shadow_floor_L=4.0,
         shadow_mask = np.clip(1.0 - L / 25.0, 0, 1) ** 1.5
         L = L + lift * shadow_mask
 
-    # ── Step 3: Local contrast enhancement ──
+    # ── Step 3: Noise reduction ──
+    # Gamma lifting dark images amplifies sensor noise. Denoise proportionally.
+    # Chroma channels (a, b) always benefit from mild denoising.
+    chroma_sigma = 1.5 if gamma_applied > 1.1 else 0.8
+    lab[:, :, 1] = gaussian_filter(lab[:, :, 1], sigma=chroma_sigma)
+    lab[:, :, 2] = gaussian_filter(lab[:, :, 2], sigma=chroma_sigma)
+
+    # Luminance: median filter preserves edges while removing noise.
+    # Stronger when more gamma was applied (more noise was amplified).
+    if gamma_applied > 1.2:
+        L = median_filter(L, size=3)  # 3×3 edge-preserving denoise
+
+    # ── Step 4: Local contrast enhancement ──
     # Subtract blurred version, scale deviation, add back
     if local_contrast_strength > 0:
         # Sigma relative to image size for consistent effect
