@@ -659,18 +659,18 @@ export default function GeneratedUI({ data, onAction }) {
             <div className="rounded-xl overflow-hidden border border-gray-700/40 cursor-pointer"
               onClick={function() { setLightboxUrl(photoUrl); setLightboxName("Original"); }}>
               <div className="text-[9px] text-gray-500 uppercase tracking-wider px-2 pt-1.5 pb-0.5 bg-gray-800/80 font-medium">Original</div>
-              <img src={photoUrl} alt="Original" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", background: "#000" }} />
+              <img src={photoUrl} alt="Original" style={{ width: "100%", aspectRatio: "4/3", objectFit: "contain", background: "#111" }} />
             </div>
             <div className="rounded-xl overflow-hidden border border-amber-500/30 cursor-pointer"
               onClick={function() { setLightboxUrl(recPreviewUrl); setLightboxName(recStyleName); }}>
               <div className="text-[9px] text-amber-400 uppercase tracking-wider px-2 pt-1.5 pb-0.5 bg-amber-500/10 font-medium">{recStyleName}</div>
-              <img src={recPreviewUrl} alt={recStyleName} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", background: "#000" }} />
+              <img src={recPreviewUrl} alt={recStyleName} style={{ width: "100%", aspectRatio: "4/3", objectFit: "contain", background: "#111" }} />
             </div>
           </div>
         ) : photoUrl ? (
           <div className="rounded-xl overflow-hidden border border-gray-700/40 cursor-pointer"
             onClick={function() { setLightboxUrl(photoUrl); setLightboxName(data.name || ""); }}>
-            <img src={photoUrl} alt={data.name || ""} style={{ width: "100%", maxHeight: 280, objectFit: "contain", background: "#000" }} />
+            <img src={photoUrl} alt={data.name || ""} style={{ width: "100%", maxHeight: 280, objectFit: "contain", background: "#111" }} />
           </div>
         ) : null}
 
@@ -736,7 +736,7 @@ export default function GeneratedUI({ data, onAction }) {
             {altPreviewUrl && (
               <div className="mt-2 rounded-lg overflow-hidden border border-gray-700/30 cursor-pointer"
                 onClick={function() { setLightboxUrl(altPreviewUrl); setLightboxName(altStyleName); }}>
-                <img src={altPreviewUrl} alt={altStyleName} style={{ width: "100%", maxHeight: 160, objectFit: "cover", background: "#000" }} />
+                <img src={altPreviewUrl} alt={altStyleName} style={{ width: "100%", aspectRatio: "16/9", objectFit: "contain", background: "#111" }} />
               </div>
             )}
             {altStyleMood.length > 0 && (
