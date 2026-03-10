@@ -38,6 +38,12 @@ interface StyleInfo {
   description: string;
   tags: string[];
   ui: { bg: string; border: string; text: string };
+  signature: string;
+  famous_for: string;
+  best_for: string[];
+  mood: string[];
+  intensity: number;
+  era: string;
 }
 
 let _styleIds: string[] | null = null;
@@ -70,6 +76,12 @@ function loadStyleRegistry(): { ids: string[]; infoMap: Record<string, StyleInfo
         description: (s.description as string) || "",
         tags: (s.tags as string[]) || [],
         ui: (s.ui as { bg: string; border: string; text: string }) || { bg: "", border: "", text: "" },
+        signature: (s.signature as string) || "",
+        famous_for: (s.famous_for as string) || "",
+        best_for: (s.best_for as string[]) || [],
+        mood: (s.mood as string[]) || [],
+        intensity: (s.intensity as number) || 3,
+        era: (s.era as string) || "",
       };
     }
     _styleIds = ids;
@@ -1258,13 +1270,22 @@ async function analyzePhotoForStyle(photoPath: string): Promise<AgentToolResult>
   const apiKey = account?.geminiApiKey;
   if (!apiKey) return errorResult("No Gemini API key configured");
 
-  // Load all style descriptions for the prompt
+  // Load all style descriptions for the prompt — now with rich metadata
   const { infoMap } = loadStyleRegistry();
   const styleDescriptions = Object.entries(infoMap)
-    .map(([id, info]) => `- ${id}: "${info.name}" — ${info.description}`)
+    .map(([id, info]) => {
+      const parts = [`- ${id}: "${info.name}" — ${info.description}`];
+      if (info.signature) parts.push(`  | Signature: ${info.signature}`);
+      if (info.mood?.length) parts.push(`  | Mood: ${info.mood.join(", ")}`);
+      if (info.best_for?.length) parts.push(`  | Best for: ${info.best_for.join(", ")}`);
+      if (info.intensity) parts.push(`  | Intensity: ${info.intensity}/5`);
+      return parts.join("\n");
+    })
     .join("\n");
 
-  const prompt = `You are a professional photo editor and art director. Analyze this photograph in detail, then recommend the single best artistic style from the list below.
+  const prompt = `You are a professional photo editor and art director with deep knowledge of film photography, cinema, and visual aesthetics. Analyze this photograph in detail, then recommend the single best artistic style from the list below.
+
+Consider the photo's subject, lighting, mood, color palette, and composition when matching to a style. Pay special attention to each style's signature look, mood alignment, and what it's best suited for.
 
 AVAILABLE STYLES:
 ${styleDescriptions}
@@ -1274,7 +1295,7 @@ Respond with ONLY valid JSON (no markdown, no code fences):
   "scene": "A detailed 2-3 sentence description of what's in this photo — subject, setting, lighting, colors, mood, composition, time of day.",
   "recommendedStyle": "style_id_here",
   "styleName": "Human Readable Name",
-  "reason": "2-3 sentences explaining specifically WHY this style is the perfect match for THIS photo — reference concrete visual elements in the photo and how the style will enhance them.",
+  "reason": "2-3 sentences explaining specifically WHY this style is the perfect match for THIS photo — reference concrete visual elements in the photo and how the style's signature characteristics will enhance them.",
   "caption": "A compelling, evocative 1-2 sentence caption for the resulting styled photo — written as if describing the final art piece in a gallery. Be poetic but specific to this image.",
   "alternateStyle": "second_best_style_id",
   "alternateStyleName": "Second Best Name",
@@ -1313,19 +1334,66 @@ Respond with ONLY valid JSON (no markdown, no code fences):
       if (found) parsed.recommendedStyle = found;
     }
 
+    // Enrich result with style metadata from the registry
+    const recId = String(parsed.recommendedStyle || "");
+    const altId = String(parsed.alternateStyle || "");
+    const recInfo = recId ? infoMap[recId] : undefined;
+    const altInfo = altId ? infoMap[altId] : undefined;
+
+    // ── Generate preview images for recommended + alternate styles ──
+    const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "photo-processor.py");
+    const stylesFilePath = getStylesFilePath();
+    const previewDir = join(dirname(photoPath), ".style-previews");
+    mkdirSync(previewDir, { recursive: true });
+    const photoBase = basename(photoPath, extname(photoPath));
+
+    let recommendedPreviewUrl = "";
+    let alternatePreviewUrl = "";
+
+    for (const sid of [recId, altId].filter(Boolean)) {
+      const previewPath = join(previewDir, `${photoBase}_${sid}.jpg`);
+      if (!existsSync(previewPath)) {
+        try {
+          execFileSync("python3", [
+            scriptPath, "--input-file", photoPath, "--output-file", previewPath,
+            "--style", sid, "--styles-file", stylesFilePath,
+            "--preview", "--preview-size", "800", "--quality", "82",
+          ], { timeout: 60_000, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024 });
+        } catch { /* preview generation is best-effort */ }
+      }
+      if (existsSync(previewPath)) {
+        if (sid === recId) recommendedPreviewUrl = toMediaUrl(previewPath);
+        else alternatePreviewUrl = toMediaUrl(previewPath);
+      }
+    }
+
     return jsonResult({
       tool: "enso_media_analyze_photo",
       path: photoPath,
       name: basename(photoPath),
       mediaUrl: toMediaUrl(photoPath),
       scene: parsed.scene || "",
-      recommendedStyle: parsed.recommendedStyle || "",
-      styleName: parsed.styleName || "",
+      recommendedStyle: recId,
+      styleName: parsed.styleName || recInfo?.name || "",
       reason: parsed.reason || "",
       caption: parsed.caption || "",
-      alternateStyle: parsed.alternateStyle || "",
-      alternateStyleName: parsed.alternateStyleName || "",
+      // Rich metadata for primary recommendation
+      styleSignature: recInfo?.signature || "",
+      styleMood: recInfo?.mood || [],
+      styleBestFor: recInfo?.best_for || [],
+      styleFamousFor: recInfo?.famous_for || "",
+      styleIntensity: recInfo?.intensity || 3,
+      styleEra: recInfo?.era || "",
+      // Alternate recommendation
+      alternateStyle: altId,
+      alternateStyleName: parsed.alternateStyleName || altInfo?.name || "",
       alternateReason: parsed.alternateReason || "",
+      altStyleSignature: altInfo?.signature || "",
+      altStyleMood: altInfo?.mood || [],
+      altStyleBestFor: altInfo?.best_for || [],
+      // Preview images of recommended styles applied to this photo
+      recommendedPreviewUrl,
+      alternatePreviewUrl,
     });
   } catch (err) {
     return errorResult(`AI analysis failed: ${err instanceof Error ? err.message : String(err)}`);

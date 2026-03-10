@@ -2,7 +2,14 @@
   "name": "@openclaw/enso",
   "version": "2026.2.15",
   "description": "OpenClaw channel plugin — a self-evolving AI app platform where every answer is an interactive app",
-  "keywords": ["openclaw", "openclaw-plugin", "channel", "react", "interactive-ui", "ai"],
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "channel",
+    "react",
+    "interactive-ui",
+    "ai"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/Proxy2021/Enso.git",
@@ -14,8 +21,7 @@
       "./index.ts"
     ]
   },
-  "dependencies": {},
   "peerDependencies": {
-    "openclaw": ">=1.0.0"
+    "openclaw": "^2026.3.8"
   }
 }
