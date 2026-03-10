@@ -1357,8 +1357,8 @@ Respond with ONLY valid JSON (no markdown, no code fences):
           execFileSync("python3", [
             scriptPath, "--input-file", photoPath, "--output-file", previewPath,
             "--style", sid, "--styles-file", stylesFilePath,
-            "--preview", "--preview-size", "800", "--quality", "82",
-          ], { timeout: 60_000, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024 });
+            "--preview", "--preview-size", "1600", "--quality", "90",
+          ], { timeout: 90_000, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024 });
         } catch { /* preview generation is best-effort */ }
       }
       if (existsSync(previewPath)) {
