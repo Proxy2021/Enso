@@ -1,5 +1,5 @@
 import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { existsSync, lstatSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync, unlinkSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve } from "path";
 import { homedir, platform } from "os";
 import { execSync, execFileSync } from "child_process";
@@ -1262,13 +1262,40 @@ async function listStyles(): Promise<AgentToolResult> {
 // ── AI Photo Analysis — Style Recommendation ─────────────────────────────
 
 async function analyzePhotoForStyle(photoPath: string): Promise<AgentToolResult> {
-  if (!photoPath || !existsSync(photoPath)) return errorResult(`Photo not found: ${photoPath}`);
+  if (!photoPath || !existsSync(photoPath)) {
+    console.error(`[enso:analyze] Photo not found: ${photoPath}`);
+    return errorResult(`Photo not found: ${photoPath}`);
+  }
 
   const { callGeminiVision } = await import("./ui-generator.js");
   const { getActiveAccount } = await import("./server.js");
   const account = getActiveAccount();
   const apiKey = account?.geminiApiKey;
-  if (!apiKey) return errorResult("No Gemini API key configured");
+  if (!apiKey) {
+    console.error(`[enso:analyze] No Gemini API key. account=${!!account}`);
+    return errorResult("No Gemini API key configured");
+  }
+
+  // If photo is too large for the Vision API (>8 MB), create a resized copy
+  // callGeminiVision has a 10 MB limit; we resize proactively at 8 MB
+  let visionPhotoPath = photoPath;
+  const photoSize = statSync(photoPath).size;
+  if (photoSize > 8 * 1024 * 1024) {
+    const tmpResized = join(dirname(photoPath), `.analyze_${basename(photoPath)}`);
+    try {
+      const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "photo-processor.py");
+      // Use the processor's preview mode just to resize — no style applied
+      execFileSync("python3", ["-c", `
+from PIL import Image
+img = Image.open("${photoPath.replace(/"/g, '\\"')}")
+img.thumbnail((3000, 3000), Image.LANCZOS)
+img.save("${tmpResized.replace(/"/g, '\\"')}", "JPEG", quality=88)
+`], { timeout: 15_000 });
+      if (existsSync(tmpResized) && statSync(tmpResized).size < 10 * 1024 * 1024) {
+        visionPhotoPath = tmpResized;
+      }
+    } catch { /* if resize fails, try with original anyway */ }
+  }
 
   // Load all style descriptions for the prompt — now with rich metadata
   const { infoMap } = loadStyleRegistry();
@@ -1304,11 +1331,16 @@ Respond with ONLY valid JSON (no markdown, no code fences):
 
   try {
     const response = await callGeminiVision({
-      imagePath: photoPath,
+      imagePath: visionPhotoPath,
       prompt,
       apiKey,
       maxOutputTokens: 4096,
     });
+
+    // Clean up temp resized file if we created one
+    if (visionPhotoPath !== photoPath) {
+      try { unlinkSync(visionPhotoPath); } catch { /* ignore */ }
+    }
 
     // Strip markdown code fences if present, then parse JSON
     let cleaned = response.trim();
@@ -1396,6 +1428,7 @@ Respond with ONLY valid JSON (no markdown, no code fences):
       alternatePreviewUrl,
     });
   } catch (err) {
+    console.error(`[enso:analyze] AI analysis failed:`, err instanceof Error ? err.message : String(err));
     return errorResult(`AI analysis failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

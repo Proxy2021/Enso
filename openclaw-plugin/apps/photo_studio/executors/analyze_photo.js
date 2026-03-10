@@ -16,8 +16,10 @@ if (!photoPath) {
 // Call the AI vision analysis tool
 var result = await ctx.callTool("enso_media_analyze_photo", { path: photoPath });
 
+// Check for explicit failure
 if (!result || !result.success) {
   var errMsg = "Analysis failed";
+  if (result && result.error) errMsg = result.error;
   if (result && result.data) {
     try {
       var d = typeof result.data === "string" ? JSON.parse(result.data) : result.data;
@@ -38,6 +40,19 @@ if (!result || !result.success) {
 var data = result.data || result;
 if (typeof data === "string") {
   try { data = JSON.parse(data); } catch(e) { data = {}; }
+}
+
+// Check for error inside data (tool returned success but data contains error)
+if (data.error) {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        tool: "enso_photo_studio_analyze_photo",
+        error: data.error
+      })
+    }]
+  };
 }
 
 // Re-tag for our template
