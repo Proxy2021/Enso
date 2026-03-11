@@ -378,9 +378,13 @@ def get_image_files(directory):
 
 def process_single_file(args):
     """Process a single file (for multiprocessing pool).
-    args: (idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality)
+    args: (idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality[, output_size])
     """
-    idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality = args
+    if len(args) == 10:
+        idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality, output_size = args
+    else:
+        idx, total, fname, src_path, dst_path, style_name, recipe, preview_size, quality = args
+        output_size = 0
 
     if os.path.exists(dst_path):
         # Ensure thumbnail exists even for previously processed files
@@ -411,6 +415,14 @@ def process_single_file(args):
             pil_preview = Image.fromarray(rgb)
             pil_preview.thumbnail((preview_size, preview_size), Image.LANCZOS)
             rgb = np.array(pil_preview)
+        elif output_size and output_size > 0:
+            # Cap processing resolution at 2x output_size for speed/quality balance
+            process_cap = output_size * 2
+            h, w = rgb.shape[:2]
+            if max(h, w) > process_cap:
+                pil_cap = Image.fromarray(rgb)
+                pil_cap.thumbnail((process_cap, process_cap), Image.LANCZOS)
+                rgb = np.array(pil_cap)
 
         # Adaptive exposure normalization — brings dark/underexposed images
         # to a well-exposed baseline before style is applied
@@ -434,10 +446,14 @@ def process_single_file(args):
             pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=25, threshold=3))
         # Very dark images (orig_mean <= 40): skip sharpening entirely to avoid amplifying noise
 
+        # Output resize: resize AFTER processing for high-quality style at web-friendly size
+        if output_size and output_size > 0:
+            pil_img.thumbnail((output_size, output_size), Image.LANCZOS)
+
         pil_img.save(dst_path, "JPEG", quality=quality, subsampling=0)
 
-        # Generate web-friendly thumbnail (skip for preview mode)
-        if not preview_size:
+        # Generate web-friendly thumbnail (skip for preview/output-size mode)
+        if not preview_size and not output_size:
             thumb_dir = os.path.join(os.path.dirname(dst_path), "thumbs")
             os.makedirs(thumb_dir, exist_ok=True)
             thumb_path = os.path.join(thumb_dir, os.path.basename(dst_path))
@@ -464,7 +480,7 @@ def process_single_file(args):
         })
 
 
-def process_single_photo(input_file, output_file, recipe, preview_size=0, quality=95):
+def process_single_photo(input_file, output_file, recipe, preview_size=0, quality=95, output_size=0):
     """Process a single photo file (non-batch mode). Returns result dict."""
     try:
         rgb = load_image(input_file)
@@ -473,6 +489,15 @@ def process_single_photo(input_file, output_file, recipe, preview_size=0, qualit
             pil_preview = Image.fromarray(rgb)
             pil_preview.thumbnail((preview_size, preview_size), Image.LANCZOS)
             rgb = np.array(pil_preview)
+        elif output_size and output_size > 0:
+            # Cap processing resolution at 2x output_size for speed/quality balance
+            # Effects at 2x look excellent when downscaled to output_size
+            process_cap = output_size * 2
+            h, w = rgb.shape[:2]
+            if max(h, w) > process_cap:
+                pil_cap = Image.fromarray(rgb)
+                pil_cap.thumbnail((process_cap, process_cap), Image.LANCZOS)
+                rgb = np.array(pil_cap)
 
         # Adaptive exposure normalization
         if not recipe.get("skip_auto_enhance"):
@@ -495,11 +520,15 @@ def process_single_photo(input_file, output_file, recipe, preview_size=0, qualit
             pil_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=25, threshold=3))
         # Very dark images (orig_mean <= 40): skip sharpening entirely
 
+        # Output resize: resize AFTER processing for high-quality style at web-friendly size
+        if output_size and output_size > 0:
+            pil_img.thumbnail((output_size, output_size), Image.LANCZOS)
+
         os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
         pil_img.save(output_file, "JPEG", quality=quality, subsampling=0)
 
         # Generate thumbnail alongside output
-        if not preview_size:
+        if not preview_size and not output_size:
             thumb_dir = os.path.join(os.path.dirname(output_file), "thumbs")
             os.makedirs(thumb_dir, exist_ok=True)
             thumb_path = os.path.join(thumb_dir, os.path.basename(output_file))
@@ -548,6 +577,7 @@ def main():
     parser.add_argument("--quality", type=int, default=95, help="JPEG quality (1-100)")
     parser.add_argument("--preview", action="store_true", help="Preview mode: resize before processing")
     parser.add_argument("--preview-size", type=int, default=400, help="Preview resize target (default: 400px)")
+    parser.add_argument("--output-size", type=int, default=0, help="Resize output AFTER processing (preserves full-res style quality)")
 
     # Utility
     parser.add_argument("--list-styles", action="store_true", help="List all available styles and exit")
@@ -589,6 +619,7 @@ def main():
 
     recipe = RECIPE_REGISTRY[args.style]
     preview_size = args.preview_size if args.preview else 0
+    output_size = args.output_size
 
     # Single file mode
     if args.input_file:
@@ -601,7 +632,7 @@ def main():
             sys.exit(1)
 
         result = process_single_photo(args.input_file, args.output_file, recipe,
-                                      preview_size=preview_size, quality=QUALITY)
+                                      preview_size=preview_size, quality=QUALITY, output_size=output_size)
         print(json.dumps(result), flush=True)
         sys.exit(0 if result["status"] == "processed" else 1)
 
@@ -633,7 +664,7 @@ def main():
         src = os.path.join(args.input_dir, fname)
         base = os.path.splitext(fname)[0]
         dst = os.path.join(args.output_dir, f"{base}.jpg")
-        tasks.append((i, total, fname, src, dst, args.style, recipe, preview_size, QUALITY))
+        tasks.append((i, total, fname, src, dst, args.style, recipe, preview_size, QUALITY, output_size))
 
     # Process with multiprocessing
     num_workers = max(1, multiprocessing.cpu_count() - 1)

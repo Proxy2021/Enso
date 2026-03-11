@@ -1257,6 +1257,210 @@ async function listStyles(): Promise<AgentToolResult> {
   });
 }
 
+// ── Style Gallery ────────────────────────────────────────────────────────
+
+type StyleGalleryParams = { styleId?: string };
+
+interface RecipeStep { en: string; zh: string }
+
+function describeRecipe(recipe: Record<string, unknown>): RecipeStep[] {
+  const steps: RecipeStep[] = [];
+  if (!recipe) return steps;
+
+  // Handle layer-based recipes
+  if (Array.isArray(recipe.layers)) {
+    for (const layer of recipe.layers as Array<Record<string, unknown>>) {
+      const effect = layer.effect as string;
+      const params = (layer.params || {}) as Record<string, unknown>;
+      const blend = layer.blend_mode as string;
+      const opacity = layer.opacity as number;
+      const mask = layer.mask as Record<string, unknown> | undefined;
+      let en = "", zh = "";
+
+      switch (effect) {
+        case "curves": en = "Color tone curves shaping the palette"; zh = "色调曲线塑造色彩特性"; break;
+        case "monochrome": en = "Black & white conversion"; zh = "黑白转换"; break;
+        case "shadow_crush": en = `Deep shadow compression (threshold ${params.threshold || 40})`; zh = `深暗部压缩（阈值 ${params.threshold || 40}）`; break;
+        case "highlight_blow": en = `Highlight expansion for dramatic brightness`; zh = `高光扩展增加亮度戏剧性`; break;
+        case "solid_color": {
+          const c = params.color as number[] || [0,0,0];
+          en = `Color overlay (${c.join(",")})`;
+          zh = `色彩叠加（${c.join(",")}）`;
+          break;
+        }
+        case "contrast": en = `Contrast enhancement (${Math.round(((params.strength as number) || 0.15) * 100)}%)`; zh = `对比度增强（${Math.round(((params.strength as number) || 0.15) * 100)}%）`; break;
+        case "warm_boost": en = "Selective warm tone boost"; zh = "选择性暖色调增强"; break;
+        case "saturation": en = `Saturation adjustment (${Math.round(((params.factor as number) || 1) * 100)}%)`; zh = `饱和度调整（${Math.round(((params.factor as number) || 1) * 100)}%）`; break;
+        case "black_lift": en = `Lifted blacks (+${params.amount || 0})`; zh = `提升黑位（+${params.amount || 0}）`; break;
+        case "highlight_fade": en = "Highlight softening"; zh = "高光柔化"; break;
+        case "halation": en = "Film halation bloom"; zh = "胶片光晕扩散"; break;
+        case "grain": en = `Film grain (amount ${params.amount || 1})`; zh = `胶片颗粒（量 ${params.amount || 1}）`; break;
+        case "vignette": en = `Optical vignette (${Math.round(((params.strength as number) || 0.2) * 100)}%)`; zh = `光学暗角（${Math.round(((params.strength as number) || 0.2) * 100)}%）`; break;
+        case "desaturate_blend": en = "Partial desaturation"; zh = "部分去饱和"; break;
+        case "green_to_teal": en = "Green to teal shift"; zh = "绿色转青色偏移"; break;
+        case "teal_boost": en = "Teal enhancement"; zh = "青色增强"; break;
+        case "haze_highlights": en = "Highlight haze/softening"; zh = "高光雾化柔化"; break;
+        case "flatten_contrast": en = "Contrast flattening"; zh = "对比度压平"; break;
+        case "split_tone": en = "Split toning"; zh = "分离色调"; break;
+        case "lab_adjust": {
+          const parts: string[] = [];
+          if (params.a_shift) parts.push(`a*${(params.a_shift as number) > 0 ? "+" : ""}${params.a_shift}`);
+          if (params.b_shift) parts.push(`b*${(params.b_shift as number) > 0 ? "+" : ""}${params.b_shift}`);
+          if (params.chroma_scale && params.chroma_scale !== 1) parts.push(`chroma ${Math.round((params.chroma_scale as number) * 100)}%`);
+          en = `LAB color space: ${parts.join(", ")}`; zh = `LAB色彩空间调整：${parts.join("、")}`;
+          break;
+        }
+        default: en = effect.replace(/_/g, " "); zh = effect.replace(/_/g, " ");
+      }
+      if (mask) {
+        const maskType = (mask.type as string) || "luminosity";
+        if (maskType === "color_range") {
+          const hue = mask.target_hue as number || 0;
+          const hueName = hue < 30 || hue > 330 ? "red" : hue < 90 ? "yellow/green" : hue < 150 ? "green/cyan" : hue < 210 ? "cyan/blue" : hue < 270 ? "blue/purple" : "purple/red";
+          const hueNameZh = hue < 30 || hue > 330 ? "红色" : hue < 90 ? "黄绿色" : hue < 150 ? "绿青色" : hue < 210 ? "青蓝色" : hue < 270 ? "蓝紫色" : "紫红色";
+          en += ` [${hueName} range]`;
+          zh += `【${hueNameZh}范围】`;
+        } else {
+          const zone = (mask.zone as string) || "all";
+          en += ` [${zone} zone]`;
+          zh += `【${zone === "shadows" ? "暗部" : zone === "highlights" ? "亮部" : "中间调"}区域】`;
+        }
+      }
+      if (blend && blend !== "normal") {
+        en += ` (${blend} ${Math.round((opacity ?? 1) * 100)}%)`;
+        zh += `（${blend} ${Math.round((opacity ?? 1) * 100)}%）`;
+      }
+      steps.push({ en, zh });
+    }
+    return steps;
+  }
+
+  // Flat recipe
+  if (recipe.monochrome) { steps.push({ en: "Black & white conversion with custom channel weights", zh: "使用自定义通道权重转换为黑白" }); }
+  if (recipe.curves) {
+    const c = recipe.curves as Record<string, unknown>;
+    if (c.master) steps.push({ en: "H&D characteristic curve for authentic film density response", zh: "H&D特征曲线模拟胶片密度响应" });
+    if (c.r || c.g || c.b) steps.push({ en: "Per-channel RGB tone curves for color character", zh: "逐通道RGB色调曲线塑造色彩特性" });
+  }
+  if (recipe.lab_adjust) {
+    const la = recipe.lab_adjust as Record<string, number>;
+    const parts: string[] = [];
+    if (la.a_shift) parts.push(`a*${la.a_shift > 0 ? "+" : ""}${la.a_shift}`);
+    if (la.b_shift) parts.push(`b*${la.b_shift > 0 ? "+" : ""}${la.b_shift}`);
+    if (la.chroma_scale && la.chroma_scale !== 1) parts.push(`chroma ${Math.round(la.chroma_scale * 100)}%`);
+    steps.push({ en: `LAB color space: ${parts.join(", ")}`, zh: `LAB色彩空间调整：${parts.join("、")}` });
+  }
+  if (recipe.split_tone) steps.push({ en: "Split toning with luminosity masks", zh: "分离色调配合明度蒙版" });
+  if (recipe.shadow_tint || recipe.midtone_tint || recipe.color_tint) steps.push({ en: "Zone-based color tinting", zh: "区域色彩着色" });
+  if (recipe.shadow_crush) steps.push({ en: `Shadow compression (threshold ${(recipe.shadow_crush as Record<string, number>).threshold})`, zh: `暗部压缩（阈值 ${(recipe.shadow_crush as Record<string, number>).threshold}）` });
+  if (recipe.highlight_blow) steps.push({ en: "Highlight expansion", zh: "高光扩展" });
+  if (recipe.contrast) {
+    const ct = recipe.contrast as Record<string, unknown>;
+    steps.push({ en: `${ct.type === "double_s_curve" ? "Double S-curve" : "S-curve"} contrast (${Math.round(((ct.strength as number) || 0.15) * 100)}%)`, zh: `${ct.type === "double_s_curve" ? "双S曲线" : "S曲线"}对比度（${Math.round(((ct.strength as number) || 0.15) * 100)}%）` });
+  }
+  if (recipe.flatten_contrast) steps.push({ en: "Contrast flattening", zh: "对比度压平" });
+  if (recipe.desaturate_blend) steps.push({ en: "Partial desaturation blend", zh: "部分去饱和混合" });
+  if (recipe.warm_boost) steps.push({ en: "Selective warm tone boost", zh: "选择性暖色调增强" });
+  if (recipe.haze_highlights) steps.push({ en: "Highlight haze/softening", zh: "高光雾化柔化" });
+  if (typeof recipe.black_lift === "number") steps.push({ en: `Lifted blacks (+${recipe.black_lift})`, zh: `提升黑位（+${recipe.black_lift}）` });
+  if (typeof recipe.highlight_fade === "number") steps.push({ en: `Highlight fade (-${recipe.highlight_fade})`, zh: `高光衰减（-${recipe.highlight_fade}）` });
+  if (recipe.halation) steps.push({ en: "Film halation bloom around bright areas", zh: "亮部区域胶片光晕扩散" });
+  if (recipe.grain) {
+    const gr = recipe.grain as Record<string, unknown>;
+    const amt = gr.amount || gr.iso_profile || "standard";
+    steps.push({ en: `Organic film grain (${amt})`, zh: `有机胶片颗粒（${amt}）` });
+  }
+  if (recipe.vignette) steps.push({ en: `Optical vignette`, zh: `光学暗角` });
+  return steps;
+}
+
+let _galleryCache: Record<string, unknown> | null = null;
+
+function loadGalleryData(): Record<string, unknown> {
+  if (_galleryCache) return _galleryCache;
+  const galleryPath = join(dirname(fileURLToPath(import.meta.url)), "..", "apps", "photo_studio", "style-gallery.json");
+  try {
+    if (existsSync(galleryPath)) {
+      _galleryCache = JSON.parse(readFileSync(galleryPath, "utf-8"));
+      return _galleryCache!;
+    }
+  } catch (err) {
+    logError("media:gallery", "Failed to load style-gallery.json", err);
+  }
+  return {};
+}
+
+/** Invalidate gallery cache */
+export function invalidateGalleryCache(): void { _galleryCache = null; }
+
+async function styleGallery(params: StyleGalleryParams): Promise<AgentToolResult> {
+  const { ids, infoMap } = loadStyleRegistry();
+  const gallery = loadGalleryData();
+  const galleryStyles = (gallery as { styles?: Record<string, unknown> }).styles || {};
+
+  // Load raw styles.json for recipe data
+  const stylesPath = getStylesFilePath();
+  let rawStyles: Record<string, Record<string, unknown>> = {};
+  try {
+    const raw = JSON.parse(readFileSync(stylesPath, "utf-8"));
+    rawStyles = (raw.styles || {}) as Record<string, Record<string, unknown>>;
+  } catch { /* ignore */ }
+
+  const styleId = params.styleId?.trim();
+
+  if (styleId) {
+    // Detail mode — single style
+    const info = infoMap[styleId];
+    if (!info) return errorResult(`Style "${styleId}" not found`);
+
+    const galleryEntry = (galleryStyles[styleId] || {}) as Record<string, unknown>;
+    const recipe = (rawStyles[styleId]?.recipe || {}) as Record<string, unknown>;
+    const pipelineSteps = describeRecipe(recipe);
+
+    // Build gallery image URLs from /demo/gallery/<id>/
+    const galleryImages = ((galleryEntry.gallery || []) as Array<Record<string, unknown>>).map(img => ({
+      url: `/demo/gallery/${styleId}/${img.filename}`,
+      caption: img.caption || {},
+    }));
+
+    return ok({
+      tool: "enso_media_style_gallery",
+      mode: "detail",
+      styleId,
+      ...info,
+      bio: galleryEntry.bio || {},
+      cultural_significance: galleryEntry.cultural_significance || {},
+      technical_description: galleryEntry.technical_description || {},
+      gallery: galleryImages,
+      notable_works: galleryEntry.notable_works || {},
+      fun_facts: galleryEntry.fun_facts || {},
+      pipelineSteps,
+      demoImageUrl: `/demo/${styleId}.jpg`,
+    });
+  }
+
+  // List mode — all styles grouped by category
+  const byCategory: Record<string, Array<StyleInfo & { demoImageUrl: string; hasGallery: boolean }>> = {};
+  for (const id of ids) {
+    const info = infoMap[id];
+    if (!info) continue;
+    const cat = info.category || "Other";
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push({
+      ...info,
+      demoImageUrl: `/demo/${id}.jpg`,
+      hasGallery: !!galleryStyles[id],
+    });
+  }
+
+  return ok({
+    tool: "enso_media_style_gallery",
+    mode: "list",
+    total: ids.length,
+    categories: byCategory,
+  });
+}
+
 // ── Tool Registration ─────────────────────────────────────────────────────
 
 // ── AI Photo Analysis — Style Recommendation ─────────────────────────────
@@ -1386,11 +1590,12 @@ Respond with ONLY valid JSON (no markdown, no code fences):
       const previewPath = join(previewDir, `${photoBase}_${sid}.jpg`);
       if (!existsSync(previewPath)) {
         try {
+          // Process at full resolution for quality, then resize output to 1600px
           execFileSync("python3", [
             scriptPath, "--input-file", photoPath, "--output-file", previewPath,
             "--style", sid, "--styles-file", stylesFilePath,
-            "--preview", "--preview-size", "1600", "--quality", "90",
-          ], { timeout: 90_000, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024 });
+            "--output-size", "1600", "--quality", "92",
+          ], { timeout: 120_000, encoding: "utf-8", maxBuffer: 5 * 1024 * 1024 });
         } catch { /* preview generation is best-effort */ }
       }
       if (existsSync(previewPath)) {
@@ -1686,6 +1891,19 @@ export function createMediaTools(): AnyAgentTool[] {
         required: ["path"],
       },
       execute: async (_callId: string, params: Record<string, unknown>) => analyzePhotoForStyle(params.path as string),
+    } as AnyAgentTool,
+    {
+      name: "enso_media_style_gallery",
+      label: "Style Gallery",
+      description: "Browse the Style Gallery with rich bilingual descriptions, reference image galleries, and technical processing details for all styles.",
+      parameters: {
+        type: "object", additionalProperties: false,
+        properties: {
+          styleId: { type: "string", description: "Style ID for detail view (omit for gallery listing)" },
+        },
+        required: [],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => styleGallery(params as StyleGalleryParams),
     } as AnyAgentTool,
   ];
 }

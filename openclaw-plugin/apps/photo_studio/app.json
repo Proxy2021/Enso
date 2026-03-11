@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "photo_studio",
     "toolPrefix": "enso_photo_studio_",
-    "description": "Professional photo processing studio — 28 styles across Film Stocks, Cinematic, Photographers, and Trending categories. Style previews, batch processing, and photo book creation.",
+    "description": "Professional photo processing studio — 56 styles across Film Stocks, Cinematic, Photographers, and Trending categories. Style Gallery with bilingual educational content, style previews, batch processing, and photo book creation.",
     "signatureId": "photo_studio_view",
     "tools": [
       {
@@ -405,6 +405,32 @@
           "adjustments": { "brightness": 10, "contrast": 15 }
         },
         "requiredDataKeys": ["tool", "path", "adjustments"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "style_gallery",
+        "description": "Browse the Style Gallery — rich bilingual descriptions, reference image galleries, and technical processing details for all artistic styles.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "styleId": {
+              "type": "string",
+              "description": "Style ID for detail view (omit for gallery listing)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photo_studio_style_gallery",
+          "mode": "list",
+          "total": 56,
+          "categories": {
+            "Film Stocks": [{ "id": "kodak_portra_400", "name": "Portra 400", "subtitle": "Kodak" }]
+          }
+        },
+        "requiredDataKeys": ["tool"],
         "isPrimary": false
       }
     ]

@@ -1372,6 +1372,29 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
+          case "apps.reload": {
+            runtime.log?.(`[enso] reload all apps requested`);
+            try {
+              const { loadAndRegisterApps } = await import("./app-persistence.js");
+              const { invalidateGalleryCache } = await import("./media-tools.js");
+              invalidateGalleryCache();
+              const appCount = loadAndRegisterApps();
+              runtime.log?.(`[enso] reloaded ${appCount} app(s) from disk`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                text: `Reloaded ${appCount} app(s) from disk.`,
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              logError("apps", "apps.reload failed", err);
+              send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error", text: `Failed to reload apps: ${err instanceof Error ? err.message : String(err)}`, timestamp: Date.now() });
+            }
+            break;
+          }
           case "app.promote":
           case "app.save_to_codebase": {
             if (msg.toolFamily) {

@@ -13,6 +13,9 @@ export default function GeneratedUI({ data, onAction }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStyle, setProcessingStyle] = useState("");
   const [processingCount, setProcessingCount] = useState(0);
+  const [galleryLang, setGalleryLang] = useState("en");
+  const [galleryTab, setGalleryTab] = useState("all");
+  const [galleryAccordion, setGalleryAccordion] = useState(null);
 
   // ── Detect tool view ──
   const tool = data?.tool || "";
@@ -26,6 +29,7 @@ export default function GeneratedUI({ data, onAction }) {
   const isPreviewStyles = tool === "enso_photo_studio_preview_styles";
   const isListStyles = tool === "enso_photo_studio_list_styles";
   const isAnalyze = tool === "enso_photo_studio_analyze_photo" || tool === "enso_media_analyze_photo";
+  const isStyleGallery = tool === "enso_photo_studio_style_gallery";
 
   // ── Reset processing overlay when data changes (batch completes or navigates away) ──
   useEffect(() => {
@@ -34,13 +38,26 @@ export default function GeneratedUI({ data, onAction }) {
     }
   }, [tool]);
 
-  // ── Safety timeout: clear processing overlay after 3 minutes ──
+  // ── Safety timeout: clear processing overlay after 10 minutes ──
   useEffect(() => {
     if (isProcessing) {
-      var timer = setTimeout(function() { setIsProcessing(false); }, 180000);
+      var timer = setTimeout(function() { setIsProcessing(false); }, 600000);
       return function() { clearTimeout(timer); };
     }
   }, [isProcessing]);
+
+  // ── Elapsed time tracker for processing overlay ──
+  const [processingElapsed, setProcessingElapsed] = useState(0);
+  useEffect(() => {
+    if (isProcessing) {
+      setProcessingElapsed(0);
+      var interval = setInterval(function() { setProcessingElapsed(function(e) { return e + 1; }); }, 1000);
+      return function() { clearInterval(interval); };
+    }
+  }, [isProcessing]);
+  var elapsedMin = Math.floor(processingElapsed / 60);
+  var elapsedSec = processingElapsed % 60;
+  var elapsedStr = elapsedMin > 0 ? elapsedMin + "m " + elapsedSec + "s" : elapsedSec + "s";
 
   // ── Helpers ──
   const getIcon = (name) => {
@@ -109,10 +126,18 @@ export default function GeneratedUI({ data, onAction }) {
           <div className="text-[11px] text-gray-500">Each photo is being professionally graded...</div>
         </div>
         <div className="w-full space-y-1">
-          <div className="h-1.5 bg-gray-700/40 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full animate-pulse" style={{ width: "60%" }} />
+          <div className="h-1.5 bg-gray-700/40 rounded-full overflow-hidden relative">
+            <div style={{
+              position: "absolute", top: 0, bottom: 0, width: "30%", borderRadius: 9999,
+              background: "linear-gradient(90deg, transparent, #8b5cf6, #d946ef, #8b5cf6, transparent)",
+              animation: "enso-slide 2s ease-in-out infinite"
+            }} />
           </div>
-          <div className="text-[10px] text-gray-500 text-center">This may take a moment for large photos</div>
+          <style>{`@keyframes enso-slide { 0% { left: -30%; } 50% { left: 100%; } 100% { left: -30%; } }`}</style>
+          <div className="text-[10px] text-gray-500 text-center">
+            {processingCount > 2 ? "Processing " + processingCount + " photos at full quality — " : "Full-quality processing — "}
+            {elapsedStr} elapsed
+          </div>
         </div>
       </div>
     </div>
@@ -179,6 +204,9 @@ export default function GeneratedUI({ data, onAction }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => onAction("style_gallery", {})}>
+              <LucideReact.BookOpen className="w-3.5 h-3.5 mr-1" /> Gallery
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => onAction("__upload_photos")}>
               <LucideReact.Upload className="w-3.5 h-3.5 mr-1" /> Upload
             </Button>
@@ -425,7 +453,7 @@ export default function GeneratedUI({ data, onAction }) {
                     { id: "clean_bright", name: "Clean & Bright", subtitle: "Modern Commercial", category: "Trending", ui: { bg: "bg-sky-400/10", border: "border-sky-400/30", text: "text-sky-300" } },
                     { id: "warm_vintage_bw", name: "Warm Vintage B&W", subtitle: "Sepia Soul", category: "Trending", ui: { bg: "bg-amber-600/10", border: "border-amber-600/30", text: "text-amber-400" } },
                     { id: "faded_editorial", name: "Faded Editorial", subtitle: "Fashion Magazine", category: "Trending", ui: { bg: "bg-teal-500/10", border: "border-teal-500/30", text: "text-teal-300" } },
-                  ]).filter(function(s) { return s.category === activeTab; }).map(function(s) {
+                  ]).filter(function(s) { return s.category === activeTab || (activeTab === "Trending" && s.category && s.category.indexOf("Trending") >= 0); }).map(function(s) {
                     var isSelected = selectedStyle === s.id;
                     var ui = s.ui || defaultUi;
                     return (
@@ -606,6 +634,315 @@ export default function GeneratedUI({ data, onAction }) {
             </div>
           );
         })}
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Style Gallery — Browse View (list of all styles) ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isStyleGallery && data.mode === "list") {
+    var galleryCats = data.categories || {};
+    var galleryCatNames = Object.keys(galleryCats);
+    var lang = galleryLang;
+    var filteredCatNames = galleryTab === "all" ? galleryCatNames : galleryCatNames.filter(function(c) { return c === galleryTab; });
+
+    return (
+      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-3">
+        {lightbox}
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", {})}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-gray-100 flex items-center gap-2">
+              <LucideReact.BookOpen className="w-4 h-4 text-violet-400" />
+              Style Gallery
+            </div>
+            <div className="text-[11px] text-gray-500">{data.total || 56} artistic styles — learn the stories behind each look</div>
+          </div>
+          {/* EN/ZH toggle */}
+          <button onClick={() => setGalleryLang(lang === "en" ? "zh" : "en")}
+            className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer bg-gray-800/60 border border-gray-700/40 hover:border-violet-500/30 text-gray-300 transition-all">
+            {lang === "en" ? "中文" : "EN"}
+          </button>
+        </div>
+
+        {/* Category tabs */}
+        <div className="flex gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
+          <button onClick={() => setGalleryTab("all")}
+            className={"px-2.5 py-1 rounded-lg text-[10px] font-medium cursor-pointer transition-all whitespace-nowrap " +
+              (galleryTab === "all" ? "bg-violet-500/20 text-violet-300 border border-violet-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent")}>
+            All
+          </button>
+          {galleryCatNames.map(function(cat) {
+            var count = (galleryCats[cat] || []).length;
+            return (
+              <button key={cat} onClick={() => setGalleryTab(cat)}
+                className={"px-2.5 py-1 rounded-lg text-[10px] font-medium cursor-pointer transition-all whitespace-nowrap " +
+                  (galleryTab === cat ? "bg-violet-500/20 text-violet-300 border border-violet-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent")}>
+                {cat} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Style cards grid */}
+        <div className="space-y-4 max-h-[600px] overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          {filteredCatNames.map(function(catName) {
+            var catStyles = galleryCats[catName] || [];
+            return (
+              <div key={catName} className="space-y-2">
+                {galleryTab === "all" && <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">{catName}</div>}
+                <div className="grid grid-cols-2 gap-2">
+                  {catStyles.map(function(s) {
+                    var ui = s.ui || defaultUi;
+                    var intensity = s.intensity || 3;
+                    var moodArr = s.mood || [];
+                    return (
+                      <button key={s.id}
+                        onClick={() => onAction("style_gallery", { styleId: s.id })}
+                        className={"rounded-xl overflow-hidden border cursor-pointer transition-all hover:scale-[1.02] text-left " + ui.border + " bg-gray-800/40 hover:" + ui.bg}>
+                        {/* Demo thumbnail */}
+                        {s.demoImageUrl ? (
+                          <img src={s.demoImageUrl} alt={s.name} loading="lazy"
+                            style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ width: "100%", aspectRatio: "4/3" }} className={"flex items-center justify-center " + ui.bg}>
+                            <LucideReact.Aperture className={"w-8 h-8 " + ui.text + " opacity-40"} />
+                          </div>
+                        )}
+                        <div className="p-2 space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <div className={"text-[11px] font-semibold truncate " + ui.text}>{s.name}</div>
+                          </div>
+                          <div className="text-[9px] text-gray-500 truncate">{s.subtitle}{s.era ? " · " + s.era : ""}</div>
+                          <div className="flex items-center gap-1.5">
+                            {/* Intensity dots */}
+                            <div className="flex gap-0.5">
+                              {[1,2,3,4,5].map(function(n) {
+                                return <div key={n} className={"w-1 h-1 rounded-full " + (n <= intensity ? "bg-amber-400" : "bg-gray-700")} />;
+                              })}
+                            </div>
+                            {/* First mood tag */}
+                            {moodArr.length > 0 && <span className="text-[8px] px-1 py-0.5 rounded-full bg-gray-700/60 text-gray-400">{moodArr[0]}</span>}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Style Gallery — Detail View (single style deep dive) ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isStyleGallery && data.mode === "detail") {
+    var lang = galleryLang;
+    var ui = data.ui || defaultUi;
+    var intensity = data.intensity || 3;
+    var moodArr = data.mood || [];
+    var bestFor = data.best_for || [];
+    var galleryImages = (data.gallery || []);
+    var notableWorks = (data.notable_works || {})[lang] || [];
+    var funFacts = (data.fun_facts || {})[lang] || [];
+    var bio = (data.bio || {})[lang] || "";
+    var cultural = (data.cultural_significance || {})[lang] || "";
+    var techDesc = (data.technical_description || {})[lang] || "";
+    var pipelineSteps = data.pipelineSteps || { en: [], zh: [] };
+    var stepsLang = pipelineSteps[lang] || pipelineSteps.en || [];
+    var demoUrl = data.demoImageUrl || "";
+
+    return (
+      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+        {lightbox}
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onAction("style_gallery", {})}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <div className={"text-base font-bold " + ui.text}>{data.name || data.styleId}</div>
+            <div className="text-[11px] text-gray-500">{data.subtitle || ""}{data.era ? " · " + data.era : ""}</div>
+          </div>
+          {/* EN/ZH toggle */}
+          <button onClick={() => setGalleryLang(lang === "en" ? "zh" : "en")}
+            className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer bg-gray-800/60 border border-gray-700/40 hover:border-violet-500/30 text-gray-300 transition-all">
+            {lang === "en" ? "中文" : "EN"}
+          </button>
+        </div>
+
+        {/* Hero: demo image + signature + meta */}
+        <div className={"rounded-xl overflow-hidden border " + ui.border}>
+          {demoUrl ? (
+            <img src={demoUrl} alt={data.name} style={{ width: "100%", maxHeight: 300, objectFit: "cover" }}
+              className="cursor-pointer" onClick={() => { setLightboxUrl(demoUrl); setLightboxName(data.name); }} />
+          ) : (
+            <div style={{ width: "100%", height: 180 }} className={"flex items-center justify-center " + ui.bg}>
+              <LucideReact.Aperture className={"w-12 h-12 " + ui.text + " opacity-30"} />
+            </div>
+          )}
+          <div className={"p-3 " + ui.bg + " space-y-2"}>
+            {data.signature && <div className="text-xs text-gray-300 italic leading-relaxed">{data.signature}</div>}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Intensity */}
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-gray-500">{lang === "en" ? "Intensity" : "强度"}</span>
+                <div className="flex gap-0.5">
+                  {[1,2,3,4,5].map(function(n) {
+                    return <div key={n} className={"w-1.5 h-1.5 rounded-full " + (n <= intensity ? "bg-amber-400" : "bg-gray-700")} />;
+                  })}
+                </div>
+              </div>
+              <Separator orientation="vertical" className="h-3" />
+              {/* Mood tags */}
+              {moodArr.map(function(m) {
+                return <span key={m} className="text-[8px] px-1.5 py-0.5 rounded-full bg-gray-700/60 text-gray-400">{m}</span>;
+              })}
+            </div>
+            {bestFor.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                <span className="text-[9px] text-gray-500">{lang === "en" ? "Best for:" : "适用于："}</span>
+                {bestFor.map(function(b) {
+                  return <span key={b} className={"text-[8px] px-1.5 py-0.5 rounded-full " + ui.bg + " " + ui.text}>{b.replace(/_/g, " ")}</span>;
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Biography */}
+        {bio && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1.5">
+              <LucideReact.User className="w-3 h-3" /> {lang === "en" ? "Biography" : "简介"}
+            </div>
+            <div className="text-xs text-gray-300 leading-relaxed bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">{bio}</div>
+          </div>
+        )}
+
+        {/* Cultural significance */}
+        {cultural && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1.5">
+              <LucideReact.Globe className="w-3 h-3" /> {lang === "en" ? "Cultural Significance" : "文化意义"}
+            </div>
+            <div className="text-xs text-gray-300 leading-relaxed bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">{cultural}</div>
+          </div>
+        )}
+
+        {/* Reference gallery — horizontal scroll carousel */}
+        {galleryImages.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1.5">
+              <LucideReact.Images className="w-3 h-3" /> {lang === "en" ? "Reference Gallery" : "参考画廊"}
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
+              {galleryImages.map(function(img, idx) {
+                var imgUrl = img.url || img.mediaUrl || "";
+                var imgCaption = (img.caption || {})[lang] || img.caption?.en || "";
+                return (
+                  <div key={idx} className="shrink-0 rounded-lg overflow-hidden border border-gray-700/40 hover:border-violet-500/40 cursor-pointer transition-all"
+                    style={{ width: 180 }}
+                    onClick={function() { setLightboxUrl(imgUrl); setLightboxName(imgCaption || data.name); }}>
+                    <img src={imgUrl} alt={imgCaption} loading="lazy"
+                      style={{ width: "100%", height: 120, objectFit: "cover" }}
+                      className="hover:scale-105 transition-transform duration-300" />
+                    {imgCaption && <div className="px-2 py-1 text-[9px] text-gray-400 bg-gray-800/80 truncate">{imgCaption}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Notable Works */}
+        {notableWorks.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1.5">
+              <LucideReact.Award className="w-3 h-3" /> {lang === "en" ? "Notable Works" : "代表作品"}
+            </div>
+            <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30 space-y-1">
+              {notableWorks.map(function(w, idx) {
+                return (
+                  <div key={idx} className="flex items-start gap-2">
+                    <div className={"w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 " + (ui.text.includes("text-") ? "bg-current " + ui.text : "bg-violet-400")} style={{ opacity: 0.6 }} />
+                    <div className="text-xs text-gray-300">{w}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Technical Processing */}
+        {(techDesc || stepsLang.length > 0) && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1.5">
+              <LucideReact.Settings className="w-3 h-3" /> {lang === "en" ? "Technical Processing" : "技术处理"}
+            </div>
+            {techDesc && <div className="text-xs text-gray-300 leading-relaxed bg-gray-800/40 rounded-lg p-3 border border-gray-700/30">{techDesc}</div>}
+            {stepsLang.length > 0 && (
+              <button
+                onClick={() => setGalleryAccordion(galleryAccordion === "pipeline" ? null : "pipeline")}
+                className="w-full text-left cursor-pointer">
+                <div className={"flex items-center gap-2 px-3 py-2 rounded-lg border transition-all " +
+                  (galleryAccordion === "pipeline" ? "bg-gray-800/60 border-gray-600/40" : "bg-gray-800/30 border-gray-700/30 hover:border-gray-600/40")}>
+                  <LucideReact.ChevronRight className={"w-3 h-3 text-gray-500 transition-transform " + (galleryAccordion === "pipeline" ? "rotate-90" : "")} />
+                  <span className="text-[10px] text-gray-400 font-medium">{lang === "en" ? "Processing Pipeline" : "处理管线"} ({stepsLang.length} {lang === "en" ? "steps" : "步骤"})</span>
+                </div>
+              </button>
+            )}
+            {galleryAccordion === "pipeline" && stepsLang.length > 0 && (
+              <div className="bg-gray-800/30 rounded-lg p-3 border border-gray-700/20 space-y-1.5">
+                {stepsLang.map(function(step, idx) {
+                  return (
+                    <div key={idx} className="flex items-start gap-2">
+                      <div className="text-[9px] text-gray-600 font-mono w-4 text-right shrink-0 mt-0.5">{idx + 1}</div>
+                      <div className="text-[10px] text-gray-400 leading-relaxed">{step}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Fun Facts */}
+        {funFacts.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1.5">
+              <LucideReact.Lightbulb className="w-3 h-3" /> {lang === "en" ? "Fun Facts" : "趣闻"}
+            </div>
+            <div className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30 space-y-2">
+              {funFacts.map(function(fact, idx) {
+                return (
+                  <div key={idx} className="flex items-start gap-2">
+                    <LucideReact.Sparkles className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-gray-300 leading-relaxed">{fact}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" variant="primary" onClick={() => onAction("preview_styles", { photoPath: "__pick__", styles: [data.styleId] })}>
+            <LucideReact.Eye className="w-3 h-3 mr-1" /> {lang === "en" ? "Preview on My Photo" : "预览效果"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onAction("style_gallery", {})}>
+            <LucideReact.ArrowLeft className="w-3 h-3 mr-1" /> {lang === "en" ? "Back to Gallery" : "返回画廊"}
+          </Button>
+        </div>
       </div>
     );
   }
@@ -1323,7 +1660,7 @@ export default function GeneratedUI({ data, onAction }) {
       <EmptyState
         icon={<LucideReact.Camera className="w-10 h-10 text-violet-400" />}
         title="Photo Studio"
-        description="Professional photo processing with 28 styles — Film Stocks, Cinematic, Photographers, and Trending looks."
+        description="Professional photo processing with 56 styles — Film Stocks, Cinematic, Photographers, and Trending looks."
         action={<Button size="sm" variant="primary" onClick={() => onAction("import_photos", {})}>
           <LucideReact.ImagePlus className="w-3.5 h-3.5 mr-1" /> Get Started
         </Button>}

@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "categories": [
     {
       "id": "film_stock",
@@ -3989,6 +3989,4376 @@
       ],
       "intensity": 3,
       "era": "contemporary"
+    },
+    "ansel_adams": {
+      "name": "Ansel Adams",
+      "subtitle": "Zone System",
+      "category": "photographer",
+      "description": "Zone System mastery — full tonal range B&W with luminous highlights and true blacks",
+      "tags": [
+        "bw",
+        "landscape",
+        "zone_system",
+        "classic"
+      ],
+      "ui": {
+        "bg": "bg-zinc-500/10",
+        "border": "border-zinc-400/30",
+        "text": "text-zinc-300"
+      },
+      "recipe": {
+        "monochrome": {
+          "weights": [
+            0.3,
+            0.55,
+            0.15
+          ]
+        },
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.15,
+              "toe_strength": 0.5,
+              "shoulder": 0.35,
+              "shoulder_strength": 0.55,
+              "midtone_contrast": 1.2
+            }
+          }
+        },
+        "contrast": {
+          "strength": 0.3,
+          "type": "s_curve"
+        },
+        "black_lift": 0,
+        "highlight_fade": 3,
+        "grain": {
+          "amount": 0.6,
+          "size": 0.6,
+          "roughness": 0.25,
+          "color_grain": false,
+          "luminance_aware": true
+        },
+        "vignette": 0.08
+      },
+      "signature": "Full Zone System tonality with luminous highlights, true blacks, and exquisite midtone separation across every tonal zone",
+      "famous_for": "The father of modern landscape photography — Ansel Adams' Zone System technique and his majestic images of Yosemite and the American West defined how we see wilderness and established photography as fine art",
+      "best_for": [
+        "landscape",
+        "nature",
+        "architecture",
+        "fine_art"
+      ],
+      "mood": [
+        "majestic",
+        "precise",
+        "timeless"
+      ],
+      "intensity": 3,
+      "era": "1940s"
+    },
+    "cartier_bresson": {
+      "name": "Cartier-Bresson",
+      "subtitle": "The Decisive Moment",
+      "category": "photographer",
+      "description": "Clean geometric B&W — sharp decisive moments with balanced tones and subtle grain",
+      "tags": [
+        "bw",
+        "street",
+        "geometric",
+        "decisive"
+      ],
+      "ui": {
+        "bg": "bg-slate-500/10",
+        "border": "border-slate-400/30",
+        "text": "text-slate-300"
+      },
+      "recipe": {
+        "monochrome": {
+          "weights": [
+            0.28,
+            0.58,
+            0.14
+          ]
+        },
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.2,
+              "toe_strength": 0.42,
+              "shoulder": 0.25,
+              "shoulder_strength": 0.45,
+              "midtone_contrast": 1.08
+            }
+          }
+        },
+        "contrast": {
+          "strength": 0.18,
+          "type": "s_curve"
+        },
+        "black_lift": 6,
+        "highlight_fade": 4,
+        "grain": {
+          "amount": 1.2,
+          "size": 0.9,
+          "roughness": 0.4,
+          "color_grain": false,
+          "luminance_aware": true
+        },
+        "vignette": 0.12
+      },
+      "signature": "Clean geometric compositions with balanced silvery tones, moderate grain, and razor-sharp decisive-moment clarity",
+      "famous_for": "The inventor of modern photojournalism — Henri Cartier-Bresson's concept of 'the decisive moment' and his perfectly composed street photographs with a Leica defined the art of candid photography for the 20th century",
+      "best_for": [
+        "street",
+        "documentary",
+        "travel",
+        "portrait"
+      ],
+      "mood": [
+        "precise",
+        "elegant",
+        "observational"
+      ],
+      "intensity": 2,
+      "era": "1950s"
+    },
+    "robert_frank": {
+      "name": "Robert Frank",
+      "subtitle": "The Americans",
+      "category": "photographer",
+      "description": "Raw gritty B&W — heavy grain, crushed shadows, unflinching American documentary",
+      "tags": [
+        "bw",
+        "gritty",
+        "documentary",
+        "raw"
+      ],
+      "ui": {
+        "bg": "bg-zinc-600/10",
+        "border": "border-zinc-500/30",
+        "text": "text-zinc-200"
+      },
+      "recipe": {
+        "monochrome": {
+          "weights": [
+            0.32,
+            0.48,
+            0.2
+          ]
+        },
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.18,
+              "toe_strength": 0.55,
+              "shoulder": 0.22,
+              "shoulder_strength": 0.5,
+              "midtone_contrast": 1.12
+            }
+          }
+        },
+        "contrast": {
+          "strength": 0.25,
+          "type": "s_curve"
+        },
+        "shadow_crush": {
+          "threshold": 50,
+          "factor": 0.55,
+          "feather": 22
+        },
+        "black_lift": 8,
+        "highlight_fade": 5,
+        "grain": {
+          "amount": 3,
+          "size": 1.4,
+          "roughness": 0.7,
+          "iso_profile": "iso800",
+          "color_grain": false,
+          "luminance_aware": true
+        },
+        "vignette": 0.2
+      },
+      "signature": "Heavy pushed grain with crushed inky shadows, blown highlights, and a raw unflinching energy that feels ripped from the road",
+      "famous_for": "The book that changed photography forever — Robert Frank's 'The Americans' broke every rule of clean photojournalism with its blurry, grainy, off-kilter frames, revealing a poetic and troubled America no one had shown before",
+      "best_for": [
+        "street",
+        "documentary",
+        "road_trip",
+        "editorial"
+      ],
+      "mood": [
+        "raw",
+        "melancholic",
+        "restless"
+      ],
+      "intensity": 3,
+      "era": "1950s"
+    },
+    "salgado": {
+      "name": "Salgado",
+      "subtitle": "Epic Humanitarian",
+      "category": "photographer",
+      "description": "Epic humanitarian B&W — sweeping tonal range, rich shadow detail, monumental grain",
+      "tags": [
+        "bw",
+        "epic",
+        "humanitarian",
+        "dramatic"
+      ],
+      "ui": {
+        "bg": "bg-gray-500/10",
+        "border": "border-gray-400/30",
+        "text": "text-gray-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "monochrome",
+            "params": {
+              "weights": [
+                0.25,
+                0.55,
+                0.2
+              ]
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "curves",
+            "params": {
+              "master": {
+                "hd_curve": {
+                  "toe": 0.18,
+                  "toe_strength": 0.52,
+                  "shoulder": 0.3,
+                  "shoulder_strength": 0.5,
+                  "midtone_contrast": 1.18
+                }
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.35,
+              "type": "double_s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                20,
+                18,
+                15
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.15
+          },
+          {
+            "effect": "black_lift",
+            "params": {
+              "amount": 4
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "highlight_fade",
+            "params": {
+              "amount": 3
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 1.8,
+              "size": 1.1,
+              "roughness": 0.5,
+              "color_grain": false,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.3
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Monumental B&W with sweeping tonal range, sculpted shadow detail, and a warm selenium undertone that gives every frame epic grandeur",
+      "famous_for": "The most important documentary photographer alive — Sebastiao Salgado's decade-long projects like 'Genesis' and 'Workers' chronicle the human condition and natural world with a scale and beauty that transforms photojournalism into fine art",
+      "best_for": [
+        "documentary",
+        "landscape",
+        "humanitarian",
+        "portrait"
+      ],
+      "mood": [
+        "epic",
+        "monumental",
+        "compassionate"
+      ],
+      "intensity": 4,
+      "era": "1980s"
+    },
+    "steve_mccurry": {
+      "name": "Steve McCurry",
+      "subtitle": "Kodachrome Master",
+      "category": "photographer",
+      "description": "Vibrant Kodachrome documentary — saturated warm tones, intense reds, global storytelling",
+      "tags": [
+        "vibrant",
+        "documentary",
+        "warm",
+        "kodachrome"
+      ],
+      "ui": {
+        "bg": "bg-amber-500/10",
+        "border": "border-amber-500/30",
+        "text": "text-amber-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.2,
+              "toe_strength": 0.45,
+              "shoulder": 0.28,
+              "shoulder_strength": 0.5,
+              "midtone_contrast": 1.1
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                10
+              ],
+              [
+                64,
+                76
+              ],
+              [
+                128,
+                142
+              ],
+              [
+                192,
+                200
+              ],
+              [
+                255,
+                254
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                4
+              ],
+              [
+                64,
+                68
+              ],
+              [
+                128,
+                132
+              ],
+              [
+                192,
+                194
+              ],
+              [
+                255,
+                252
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                58
+              ],
+              [
+                128,
+                120
+              ],
+              [
+                192,
+                186
+              ],
+              [
+                255,
+                248
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 3,
+          "b_shift": 8,
+          "chroma_scale": 1.05
+        },
+        "contrast": {
+          "strength": 0.15,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 15,
+          "saturation_factor": 1.35
+        },
+        "black_lift": 6,
+        "highlight_fade": 4,
+        "grain": {
+          "amount": 1,
+          "size": 0.8,
+          "roughness": 0.35,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.14
+      },
+      "signature": "Saturated Kodachrome warmth with intense reds and golds, deep shadow anchoring, and vivid color that pops off the frame",
+      "famous_for": "The last great Kodachrome shooter — Steve McCurry's 'Afghan Girl' became the most recognized photograph in National Geographic's history, and his vivid color documentary work across Asia defined a generation of travel photography",
+      "best_for": [
+        "travel",
+        "documentary",
+        "portrait",
+        "editorial"
+      ],
+      "mood": [
+        "vibrant",
+        "warm",
+        "intense"
+      ],
+      "intensity": 3,
+      "era": "1980s"
+    },
+    "eggleston": {
+      "name": "William Eggleston",
+      "subtitle": "Dye Transfer",
+      "category": "photographer",
+      "description": "Dye-transfer saturated color — rich reds, elevated mundane, democratic camera",
+      "tags": [
+        "saturated",
+        "color",
+        "mundane",
+        "southern"
+      ],
+      "ui": {
+        "bg": "bg-red-500/10",
+        "border": "border-red-500/30",
+        "text": "text-red-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.24,
+              "toe_strength": 0.4,
+              "shoulder": 0.28,
+              "shoulder_strength": 0.48,
+              "midtone_contrast": 1.04
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                8
+              ],
+              [
+                64,
+                78
+              ],
+              [
+                128,
+                148
+              ],
+              [
+                192,
+                206
+              ],
+              [
+                255,
+                255
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                4
+              ],
+              [
+                64,
+                66
+              ],
+              [
+                128,
+                130
+              ],
+              [
+                192,
+                192
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                56
+              ],
+              [
+                128,
+                118
+              ],
+              [
+                192,
+                182
+              ],
+              [
+                255,
+                244
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 4,
+          "b_shift": 10,
+          "chroma_scale": 1.08
+        },
+        "contrast": {
+          "strength": 0.08,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 18,
+          "saturation_factor": 1.2
+        },
+        "black_lift": 10,
+        "highlight_fade": 5,
+        "grain": {
+          "amount": 0.8,
+          "size": 0.7,
+          "roughness": 0.3,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.08
+      },
+      "signature": "Hyper-saturated dye-transfer reds and deep color purity that transforms gas stations and supermarkets into luminous color-field paintings",
+      "famous_for": "The father of color art photography — William Eggleston's dye-transfer prints at MoMA in 1976 scandalized the art world by proving that mundane everyday subjects in the American South could be elevated to high art through sheer force of color",
+      "best_for": [
+        "everyday",
+        "still_life",
+        "urban",
+        "americana"
+      ],
+      "mood": [
+        "vivid",
+        "surreal",
+        "contemplative"
+      ],
+      "intensity": 2,
+      "era": "1970s"
+    },
+    "leibovitz": {
+      "name": "Annie Leibovitz",
+      "subtitle": "Dramatic Portrait",
+      "category": "photographer",
+      "description": "Dramatic editorial portraits — rich deep shadows, warm skin, painterly light",
+      "tags": [
+        "portrait",
+        "dramatic",
+        "editorial",
+        "painterly"
+      ],
+      "ui": {
+        "bg": "bg-purple-500/10",
+        "border": "border-purple-500/30",
+        "text": "text-purple-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.2,
+              "toe_strength": 0.5,
+              "shoulder": 0.28,
+              "shoulder_strength": 0.48,
+              "midtone_contrast": 1.08
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                6
+              ],
+              [
+                64,
+                70
+              ],
+              [
+                128,
+                136
+              ],
+              [
+                192,
+                196
+              ],
+              [
+                255,
+                252
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                3
+              ],
+              [
+                64,
+                64
+              ],
+              [
+                128,
+                128
+              ],
+              [
+                192,
+                190
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                58
+              ],
+              [
+                128,
+                122
+              ],
+              [
+                192,
+                186
+              ],
+              [
+                255,
+                248
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 2,
+          "b_shift": 4,
+          "chroma_scale": 0.92
+        },
+        "contrast": {
+          "strength": 0.2,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 15,
+          "saturation_factor": 1.12
+        },
+        "shadow_crush": {
+          "threshold": 35,
+          "factor": 0.7,
+          "feather": 28
+        },
+        "black_lift": 5,
+        "highlight_fade": 4,
+        "grain": {
+          "amount": 1.2,
+          "size": 0.9,
+          "roughness": 0.35,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.22,
+        "shadow_tint": {
+          "r": 5,
+          "g": 1,
+          "b": -3,
+          "feather": 28
+        }
+      },
+      "signature": "Dramatic painterly light with rich velvet shadows, slightly desaturated warmth, and a heavy vignette that sculpts the subject like a Renaissance master",
+      "famous_for": "The most famous portrait photographer in the world — Annie Leibovitz's iconic images for Rolling Stone and Vanity Fair, from John Lennon to the Queen, defined celebrity portraiture with theatrical lighting and elaborate conceptual setups",
+      "best_for": [
+        "portrait",
+        "editorial",
+        "fashion",
+        "celebrity"
+      ],
+      "mood": [
+        "dramatic",
+        "painterly",
+        "theatrical"
+      ],
+      "intensity": 3,
+      "era": "1980s"
+    },
+    "ernst_haas": {
+      "name": "Ernst Haas",
+      "subtitle": "Color Pioneer",
+      "category": "photographer",
+      "description": "Color abstraction pioneer — extreme warmth, motion blur, painterly Kodachrome glow",
+      "tags": [
+        "warm",
+        "abstract",
+        "motion",
+        "pioneer"
+      ],
+      "ui": {
+        "bg": "bg-orange-500/10",
+        "border": "border-orange-500/30",
+        "text": "text-orange-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.22,
+              "toe_strength": 0.42,
+              "shoulder": 0.3,
+              "shoulder_strength": 0.52,
+              "midtone_contrast": 1.05
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                12
+              ],
+              [
+                64,
+                80
+              ],
+              [
+                128,
+                148
+              ],
+              [
+                192,
+                204
+              ],
+              [
+                255,
+                255
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                5
+              ],
+              [
+                64,
+                68
+              ],
+              [
+                128,
+                132
+              ],
+              [
+                192,
+                194
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                64,
+                52
+              ],
+              [
+                128,
+                110
+              ],
+              [
+                192,
+                178
+              ],
+              [
+                255,
+                240
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 3,
+          "b_shift": 12,
+          "chroma_scale": 1.02
+        },
+        "contrast": {
+          "strength": 0.1,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 12,
+          "saturation_factor": 1.3
+        },
+        "black_lift": 8,
+        "highlight_fade": 10,
+        "grain": {
+          "amount": 1.5,
+          "size": 1,
+          "roughness": 0.45,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.12
+      },
+      "signature": "Painterly Kodachrome warmth with extreme golden tones, soft washed highlights, and an abstract color-field quality that blurs the line between photography and painting",
+      "famous_for": "The first color photography artist — Ernst Haas pioneered color as a creative medium in the 1950s when it was dismissed as commercial, and his abstract motion studies and vibrant Kodachrome images opened the door for every color photographer who followed",
+      "best_for": [
+        "abstract",
+        "motion",
+        "landscape",
+        "urban"
+      ],
+      "mood": [
+        "warm",
+        "painterly",
+        "lyrical"
+      ],
+      "intensity": 3,
+      "era": "1950s"
+    },
+    "rinko_kawauchi": {
+      "name": "Rinko Kawauchi",
+      "subtitle": "Illuminance",
+      "category": "photographer",
+      "description": "Ethereal Japanese light — overexposed softness, lifted shadows, delicate whisper of color",
+      "tags": [
+        "ethereal",
+        "soft",
+        "japanese",
+        "light"
+      ],
+      "ui": {
+        "bg": "bg-pink-400/10",
+        "border": "border-pink-400/30",
+        "text": "text-pink-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.3,
+              "toe_strength": 0.35,
+              "shoulder": 0.35,
+              "shoulder_strength": 0.6,
+              "midtone_contrast": 0.96
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                22
+              ],
+              [
+                64,
+                80
+              ],
+              [
+                128,
+                140
+              ],
+              [
+                192,
+                200
+              ],
+              [
+                255,
+                252
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                20
+              ],
+              [
+                64,
+                78
+              ],
+              [
+                128,
+                138
+              ],
+              [
+                192,
+                198
+              ],
+              [
+                255,
+                252
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                18
+              ],
+              [
+                64,
+                76
+              ],
+              [
+                128,
+                136
+              ],
+              [
+                192,
+                198
+              ],
+              [
+                255,
+                253
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": -1,
+          "b_shift": 2,
+          "chroma_scale": 0.94
+        },
+        "contrast": {
+          "strength": 0.04,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "highlight_blow": {
+          "threshold": 160,
+          "factor": 1.2,
+          "feather": 20
+        },
+        "haze_highlights": {
+          "threshold": 150,
+          "factor": 0.85,
+          "add": 30
+        },
+        "black_lift": 20,
+        "highlight_fade": 15,
+        "grain": {
+          "amount": 0.3,
+          "size": 0.5,
+          "roughness": 0.2,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.05
+      },
+      "signature": "Blown ethereal highlights with deeply lifted shadows, barely-there color, and a luminous overexposed softness that makes everyday moments feel sacred",
+      "famous_for": "Japan's poet of light — Rinko Kawauchi's radically soft, overexposed photographs of insects, bubbles, and fleeting moments redefined contemporary Japanese photography with an intimate spiritual quality that finds the extraordinary in the overlooked",
+      "best_for": [
+        "still_life",
+        "nature",
+        "intimate",
+        "everyday"
+      ],
+      "mood": [
+        "ethereal",
+        "meditative",
+        "luminous"
+      ],
+      "intensity": 1,
+      "era": "2000s"
+    },
+    "slim_aarons": {
+      "name": "Slim Aarons",
+      "subtitle": "Poolside Glamour",
+      "category": "photographer",
+      "description": "Golden poolside glamour — warm Kodachrome glow, sun-drenched leisure, aspirational color",
+      "tags": [
+        "glamour",
+        "warm",
+        "poolside",
+        "golden"
+      ],
+      "ui": {
+        "bg": "bg-yellow-500/10",
+        "border": "border-yellow-400/30",
+        "text": "text-yellow-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.24,
+              "toe_strength": 0.4,
+              "shoulder": 0.3,
+              "shoulder_strength": 0.5,
+              "midtone_contrast": 1.02
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                10
+              ],
+              [
+                64,
+                74
+              ],
+              [
+                128,
+                142
+              ],
+              [
+                192,
+                200
+              ],
+              [
+                255,
+                254
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                5
+              ],
+              [
+                64,
+                68
+              ],
+              [
+                128,
+                134
+              ],
+              [
+                192,
+                196
+              ],
+              [
+                255,
+                253
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                56
+              ],
+              [
+                128,
+                118
+              ],
+              [
+                192,
+                184
+              ],
+              [
+                255,
+                246
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 1,
+          "b_shift": 10,
+          "chroma_scale": 1
+        },
+        "contrast": {
+          "strength": 0.1,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 15,
+          "saturation_factor": 1.25
+        },
+        "black_lift": 8,
+        "highlight_fade": 5,
+        "grain": {
+          "amount": 0.6,
+          "size": 0.7,
+          "roughness": 0.3,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.05
+      },
+      "signature": "Sun-drenched Kodachrome warmth with golden highlights, dropped blues, and a buttery glow that makes every scene look like an eternal summer afternoon",
+      "famous_for": "The photographer of 'attractive people doing attractive things in attractive places' — Slim Aarons' poolside images of high society in Palm Beach, Capri, and the Riviera defined aspirational glamour photography and remain the most pinned travel images on the internet",
+      "best_for": [
+        "lifestyle",
+        "travel",
+        "portrait",
+        "fashion"
+      ],
+      "mood": [
+        "golden",
+        "glamorous",
+        "carefree"
+      ],
+      "intensity": 2,
+      "era": "1960s"
+    },
+    "gordon_parks": {
+      "name": "Gordon Parks",
+      "subtitle": "Dignified Vision",
+      "category": "photographer",
+      "description": "Rich editorial color — dignified warmth, Kodachrome depth, powerful storytelling light",
+      "tags": [
+        "editorial",
+        "warm",
+        "dignified",
+        "powerful"
+      ],
+      "ui": {
+        "bg": "bg-indigo-500/10",
+        "border": "border-indigo-500/30",
+        "text": "text-indigo-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.22,
+              "toe_strength": 0.45,
+              "shoulder": 0.28,
+              "shoulder_strength": 0.5,
+              "midtone_contrast": 1.06
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                7
+              ],
+              [
+                64,
+                72
+              ],
+              [
+                128,
+                138
+              ],
+              [
+                192,
+                198
+              ],
+              [
+                255,
+                254
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                4
+              ],
+              [
+                64,
+                66
+              ],
+              [
+                128,
+                131
+              ],
+              [
+                192,
+                193
+              ],
+              [
+                255,
+                252
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                60
+              ],
+              [
+                128,
+                124
+              ],
+              [
+                192,
+                188
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 2,
+          "b_shift": 5,
+          "chroma_scale": 0.97
+        },
+        "contrast": {
+          "strength": 0.15,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 15,
+          "saturation_factor": 1.18
+        },
+        "black_lift": 6,
+        "highlight_fade": 4,
+        "grain": {
+          "amount": 1.2,
+          "size": 0.9,
+          "roughness": 0.4,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.14,
+        "shadow_tint": {
+          "r": 3,
+          "g": 1,
+          "b": -1,
+          "feather": 28
+        }
+      },
+      "signature": "Rich editorial warmth with dignified color depth, controlled shadow warmth, and a luminosity that honors its subjects with quiet power",
+      "famous_for": "The first Black photographer at Life magazine — Gordon Parks used his camera as a weapon against poverty and racism, creating iconic color essays that combined artistic brilliance with social activism and paved the way for generations of Black visual artists",
+      "best_for": [
+        "portrait",
+        "editorial",
+        "documentary",
+        "fashion"
+      ],
+      "mood": [
+        "dignified",
+        "warm",
+        "powerful"
+      ],
+      "intensity": 3,
+      "era": "1960s"
+    },
+    "nan_goldin": {
+      "name": "Nan Goldin",
+      "subtitle": "Intimate Snapshot",
+      "category": "photographer",
+      "description": "Intimate tungsten amber — on-camera flash warmth, heavy grain, confessional snapshot",
+      "tags": [
+        "intimate",
+        "amber",
+        "snapshot",
+        "confessional"
+      ],
+      "ui": {
+        "bg": "bg-amber-600/10",
+        "border": "border-amber-600/30",
+        "text": "text-amber-400"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.22,
+              "toe_strength": 0.42,
+              "shoulder": 0.26,
+              "shoulder_strength": 0.48,
+              "midtone_contrast": 1.04
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                18
+              ],
+              [
+                64,
+                85
+              ],
+              [
+                128,
+                152
+              ],
+              [
+                192,
+                208
+              ],
+              [
+                255,
+                255
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                6
+              ],
+              [
+                64,
+                64
+              ],
+              [
+                128,
+                126
+              ],
+              [
+                192,
+                188
+              ],
+              [
+                255,
+                246
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                64,
+                44
+              ],
+              [
+                128,
+                100
+              ],
+              [
+                192,
+                170
+              ],
+              [
+                255,
+                234
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 4,
+          "b_shift": 14,
+          "chroma_scale": 0.98
+        },
+        "contrast": {
+          "strength": 0.12,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 10,
+          "saturation_factor": 1.4
+        },
+        "black_lift": 15,
+        "highlight_fade": 6,
+        "grain": {
+          "amount": 2,
+          "size": 1.2,
+          "roughness": 0.55,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.18
+      },
+      "signature": "Intense tungsten amber cast with heavily lifted shadows, on-camera flash harshness, and grainy snapshot intimacy that feels like a confessional diary",
+      "famous_for": "The most influential diarist photographer of the 20th century — Nan Goldin's 'Ballad of Sexual Dependency' slideshow documented her intimate circle of lovers, drag queens, and addicts in 1980s New York with unflinching honesty that transformed personal photography into high art",
+      "best_for": [
+        "portrait",
+        "intimate",
+        "nightlife",
+        "documentary"
+      ],
+      "mood": [
+        "intimate",
+        "raw",
+        "confessional"
+      ],
+      "intensity": 3,
+      "era": "1980s"
+    },
+    "meyerowitz": {
+      "name": "Joel Meyerowitz",
+      "subtitle": "Cape Light",
+      "category": "photographer",
+      "description": "Cape Cod golden light — gentle warm glow, soft highlights, luminous late-afternoon color",
+      "tags": [
+        "golden",
+        "soft",
+        "light",
+        "cape_cod"
+      ],
+      "ui": {
+        "bg": "bg-orange-400/10",
+        "border": "border-orange-400/30",
+        "text": "text-orange-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.25,
+              "toe_strength": 0.4,
+              "shoulder": 0.3,
+              "shoulder_strength": 0.52,
+              "midtone_contrast": 1
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                8
+              ],
+              [
+                64,
+                72
+              ],
+              [
+                128,
+                138
+              ],
+              [
+                192,
+                198
+              ],
+              [
+                255,
+                254
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                5
+              ],
+              [
+                64,
+                68
+              ],
+              [
+                128,
+                133
+              ],
+              [
+                192,
+                195
+              ],
+              [
+                255,
+                253
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                3
+              ],
+              [
+                64,
+                60
+              ],
+              [
+                128,
+                124
+              ],
+              [
+                192,
+                190
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 1,
+          "b_shift": 6,
+          "chroma_scale": 0.98
+        },
+        "contrast": {
+          "strength": 0.08,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "warm_boost": {
+          "threshold": 18,
+          "saturation_factor": 1.15
+        },
+        "black_lift": 10,
+        "highlight_fade": 8,
+        "grain": {
+          "amount": 0.6,
+          "size": 0.7,
+          "roughness": 0.3,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.08
+      },
+      "signature": "Gentle golden-hour warmth with luminous faded highlights, soft contrast, and a late-afternoon glow that bathes every scene in Cape Cod light",
+      "famous_for": "A pioneer of large-format color street photography — Joel Meyerowitz's 'Cape Light' captured the luminous quality of natural light on Cape Cod with an 8x10 camera, creating images of such gentle radiance that they helped legitimize color photography as fine art alongside Eggleston",
+      "best_for": [
+        "landscape",
+        "golden_hour",
+        "architecture",
+        "coastal"
+      ],
+      "mood": [
+        "golden",
+        "serene",
+        "luminous"
+      ],
+      "intensity": 2,
+      "era": "1970s"
+    },
+    "alex_webb": {
+      "name": "Alex Webb",
+      "subtitle": "Tropical Complexity",
+      "category": "photographer",
+      "description": "Complex tropical color — deep saturated layers, teal shadows, explosive warmth",
+      "tags": [
+        "tropical",
+        "complex",
+        "saturated",
+        "layered"
+      ],
+      "ui": {
+        "bg": "bg-emerald-500/10",
+        "border": "border-emerald-500/30",
+        "text": "text-emerald-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "master": {
+                "hd_curve": {
+                  "toe": 0.18,
+                  "toe_strength": 0.5,
+                  "shoulder": 0.25,
+                  "shoulder_strength": 0.48,
+                  "midtone_contrast": 1.12
+                }
+              },
+              "r": {
+                "points": [
+                  [
+                    0,
+                    6
+                  ],
+                  [
+                    64,
+                    74
+                  ],
+                  [
+                    128,
+                    144
+                  ],
+                  [
+                    192,
+                    204
+                  ],
+                  [
+                    255,
+                    255
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    4
+                  ],
+                  [
+                    64,
+                    70
+                  ],
+                  [
+                    128,
+                    138
+                  ],
+                  [
+                    192,
+                    198
+                  ],
+                  [
+                    255,
+                    252
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    4
+                  ],
+                  [
+                    64,
+                    62
+                  ],
+                  [
+                    128,
+                    124
+                  ],
+                  [
+                    192,
+                    188
+                  ],
+                  [
+                    255,
+                    248
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "shadow_crush",
+            "params": {
+              "threshold": 45,
+              "factor": 0.55,
+              "feather": 28
+            },
+            "blend_mode": "normal",
+            "opacity": 0.85
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                0,
+                60,
+                80
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.2,
+            "mask": {
+              "type": "luminosity",
+              "zone": "shadows",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                200,
+                140,
+                60
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.2,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 35
+            }
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.35
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "warm_boost",
+            "params": {
+              "threshold": 12,
+              "saturation_factor": 1.3
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.18,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 1.5,
+              "size": 1,
+              "roughness": 0.45,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.28
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Explosively saturated tropical color with deep teal shadows, golden highlight warmth, and dense multi-layered compositions that reward extended viewing",
+      "famous_for": "The master of tropical color complexity — Alex Webb's Magnum photographs layer multiple subjects in deep saturated color across Mexico, Haiti, and the Caribbean, creating images so dense with information and color that they collapse foreground and background into a single vibrant plane",
+      "best_for": [
+        "street",
+        "tropical",
+        "travel",
+        "documentary"
+      ],
+      "mood": [
+        "vibrant",
+        "complex",
+        "immersive"
+      ],
+      "intensity": 4,
+      "era": "1980s"
+    },
+    "crewdson": {
+      "name": "Gregory Crewdson",
+      "subtitle": "Suburban Twilight",
+      "category": "photographer",
+      "description": "Blue-hour suburban eerie — cold cinematic light, theatrical fog, uncanny atmosphere",
+      "tags": [
+        "cinematic",
+        "eerie",
+        "blue",
+        "suburban"
+      ],
+      "ui": {
+        "bg": "bg-blue-500/10",
+        "border": "border-blue-500/30",
+        "text": "text-blue-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "master": {
+                "hd_curve": {
+                  "toe": 0.2,
+                  "toe_strength": 0.48,
+                  "shoulder": 0.28,
+                  "shoulder_strength": 0.5,
+                  "midtone_contrast": 1.06
+                }
+              },
+              "r": {
+                "points": [
+                  [
+                    0,
+                    2
+                  ],
+                  [
+                    64,
+                    56
+                  ],
+                  [
+                    128,
+                    118
+                  ],
+                  [
+                    192,
+                    182
+                  ],
+                  [
+                    255,
+                    242
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    3
+                  ],
+                  [
+                    64,
+                    60
+                  ],
+                  [
+                    128,
+                    124
+                  ],
+                  [
+                    192,
+                    188
+                  ],
+                  [
+                    255,
+                    248
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    10
+                  ],
+                  [
+                    64,
+                    74
+                  ],
+                  [
+                    128,
+                    140
+                  ],
+                  [
+                    192,
+                    200
+                  ],
+                  [
+                    255,
+                    254
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                40,
+                60,
+                120
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.3,
+            "mask": {
+              "type": "luminosity",
+              "zone": "shadows",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "lab_adjust",
+            "params": {
+              "chroma_scale": 0.85,
+              "a_shift": -2,
+              "b_shift": -6
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.22,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "haze_highlights",
+            "params": {
+              "threshold": 170,
+              "factor": 0.9,
+              "add": 15
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "black_lift",
+            "params": {
+              "amount": 10
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "highlight_fade",
+            "params": {
+              "amount": 6
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 0.8,
+              "size": 0.8,
+              "roughness": 0.3,
+              "color_grain": false,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.35
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Cold blue-hour atmosphere with desaturated suburban pallor, deep theatrical shadows, heavy cinematic vignette, and an uncanny fog that makes ordinary streets feel like David Lynch film stills",
+      "famous_for": "The filmmaker who makes photographs — Gregory Crewdson stages elaborate cinematic productions with Hollywood lighting crews, fog machines, and entire dressed sets to create single twilight images of American suburbia that feel like stills from a psychological thriller that was never made",
+      "best_for": [
+        "cinematic",
+        "suburban",
+        "night",
+        "atmospheric"
+      ],
+      "mood": [
+        "eerie",
+        "cinematic",
+        "uncanny"
+      ],
+      "intensity": 4,
+      "era": "2000s"
+    },
+    "martin_parr": {
+      "name": "Martin Parr",
+      "subtitle": "Flash Pop Art",
+      "category": "photographer",
+      "description": "Flash pop art — harsh on-camera flash, hyper-saturated color, darkly comic observation",
+      "tags": [
+        "flash",
+        "saturated",
+        "pop_art",
+        "comic"
+      ],
+      "ui": {
+        "bg": "bg-lime-500/10",
+        "border": "border-lime-500/30",
+        "text": "text-lime-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "master": {
+                "hd_curve": {
+                  "toe": 0.16,
+                  "toe_strength": 0.55,
+                  "shoulder": 0.2,
+                  "shoulder_strength": 0.45,
+                  "midtone_contrast": 1.15
+                }
+              },
+              "r": {
+                "points": [
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    64,
+                    72
+                  ],
+                  [
+                    128,
+                    142
+                  ],
+                  [
+                    192,
+                    206
+                  ],
+                  [
+                    255,
+                    255
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    3
+                  ],
+                  [
+                    64,
+                    66
+                  ],
+                  [
+                    128,
+                    132
+                  ],
+                  [
+                    192,
+                    196
+                  ],
+                  [
+                    255,
+                    252
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    2
+                  ],
+                  [
+                    64,
+                    58
+                  ],
+                  [
+                    128,
+                    122
+                  ],
+                  [
+                    192,
+                    186
+                  ],
+                  [
+                    255,
+                    248
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.35,
+              "type": "double_s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "highlight_blow",
+            "params": {
+              "threshold": 170,
+              "factor": 1.35,
+              "feather": 15
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.45
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "warm_boost",
+            "params": {
+              "threshold": 12,
+              "saturation_factor": 1.3
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                255,
+                200,
+                100
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.15,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 30
+            }
+          },
+          {
+            "effect": "lab_adjust",
+            "params": {
+              "a_shift": 3,
+              "b_shift": 8,
+              "chroma_scale": 1.1
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 2.2,
+              "size": 1.2,
+              "roughness": 0.55,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.15
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Harsh flash-lit hyper-saturation with blown specular highlights, punchy double-S contrast, and aggressively warm color that turns everyday scenes into lurid pop art",
+      "famous_for": "Britain's sharpest visual satirist — Martin Parr's close-up ring-flash photographs of food, tourists, and consumer culture for Magnum combine garish hyper-real color with darkly comic observation, turning the banality of modern life into a relentless pop art critique",
+      "best_for": [
+        "documentary",
+        "food",
+        "street",
+        "pop_art"
+      ],
+      "mood": [
+        "brash",
+        "satirical",
+        "vivid"
+      ],
+      "intensity": 4,
+      "era": "1990s"
+    },
+    "fincher": {
+      "name": "David Fincher",
+      "subtitle": "大卫·芬奇",
+      "category": "cinematic",
+      "description": "Green-teal desaturated sickly palette of obsessive procedural thrillers",
+      "tags": [
+        "teal",
+        "desaturated",
+        "sickly",
+        "noir"
+      ],
+      "ui": {
+        "bg": "bg-teal-500/10",
+        "border": "border-teal-500/30",
+        "text": "text-teal-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "r": {
+                "points": [
+                  [
+                    0,
+                    2
+                  ],
+                  [
+                    64,
+                    58
+                  ],
+                  [
+                    128,
+                    118
+                  ],
+                  [
+                    192,
+                    178
+                  ],
+                  [
+                    255,
+                    238
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    64,
+                    70
+                  ],
+                  [
+                    128,
+                    136
+                  ],
+                  [
+                    192,
+                    198
+                  ],
+                  [
+                    255,
+                    250
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    3
+                  ],
+                  [
+                    64,
+                    56
+                  ],
+                  [
+                    128,
+                    120
+                  ],
+                  [
+                    192,
+                    180
+                  ],
+                  [
+                    255,
+                    240
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "desaturate_blend",
+            "params": {
+              "factor": 0.2
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "green_to_teal",
+            "params": {},
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                30,
+                55,
+                45
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.25,
+            "mask": {
+              "type": "luminosity",
+              "zone": "shadows",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                140,
+                135,
+                80
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.12,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "shadow_crush",
+            "params": {
+              "threshold": 50,
+              "factor": 0.6,
+              "feather": 28
+            },
+            "blend_mode": "normal",
+            "opacity": 0.85
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.22,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 0.85
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 1.2,
+              "size": 1,
+              "roughness": 0.45,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.25
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Sickly green-teal desaturation with crushed shadows and clinical precision",
+      "famous_for": "The oppressive green-teal palette of Se7en and Zodiac, where every frame feels like evidence under fluorescent light. Fincher's obsessive color control turns ordinary spaces into psychological traps.",
+      "best_for": [
+        "urban night scenes",
+        "detective/procedural",
+        "moody interiors",
+        "psychological portraits"
+      ],
+      "mood": [
+        "obsessive",
+        "clinical",
+        "dread"
+      ],
+      "intensity": 4,
+      "era": "2000s"
+    },
+    "kubrick": {
+      "name": "Stanley Kubrick",
+      "subtitle": "斯坦利·库布里克",
+      "category": "cinematic",
+      "description": "Cold symmetrical precision with cool blue undertones and razor-sharp clarity",
+      "tags": [
+        "cold",
+        "precise",
+        "blue",
+        "symmetrical"
+      ],
+      "ui": {
+        "bg": "bg-sky-500/10",
+        "border": "border-sky-500/30",
+        "text": "text-sky-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.2,
+              "toe_strength": 0.45,
+              "shoulder": 0.28,
+              "shoulder_strength": 0.5,
+              "midtone_contrast": 1.05
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                64,
+                59
+              ],
+              [
+                128,
+                123
+              ],
+              [
+                192,
+                187
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                64
+              ],
+              [
+                128,
+                128
+              ],
+              [
+                192,
+                192
+              ],
+              [
+                255,
+                253
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                8
+              ],
+              [
+                64,
+                74
+              ],
+              [
+                128,
+                138
+              ],
+              [
+                192,
+                200
+              ],
+              [
+                255,
+                255
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": -1,
+          "b_shift": -4,
+          "chroma_scale": 0.96
+        },
+        "contrast": {
+          "strength": 0.2,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "grain": {
+          "amount": 0.8,
+          "size": 1,
+          "roughness": 0.35,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "black_lift": 4,
+        "vignette": 0.15
+      },
+      "signature": "Cold blue precision where every frame is a mathematically composed tableau",
+      "famous_for": "The unsettling sterility of 2001: A Space Odyssey and The Shining, where perfect symmetry and cool tones create a world that feels observed rather than lived in.",
+      "best_for": [
+        "architectural interiors",
+        "symmetrical compositions",
+        "cold landscapes",
+        "institutional spaces"
+      ],
+      "mood": [
+        "detached",
+        "unsettling",
+        "precise"
+      ],
+      "intensity": 3,
+      "era": "1960s"
+    },
+    "winding_refn": {
+      "name": "Nicolas Winding Refn",
+      "subtitle": "尼古拉斯·温丁·雷弗恩",
+      "category": "cinematic",
+      "description": "Extreme neon noir with magenta shadows and cyan highlights bleeding into darkness",
+      "tags": [
+        "neon",
+        "magenta",
+        "cyan",
+        "extreme"
+      ],
+      "ui": {
+        "bg": "bg-fuchsia-500/10",
+        "border": "border-fuchsia-500/30",
+        "text": "text-fuchsia-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "r": {
+                "points": [
+                  [
+                    0,
+                    0
+                  ],
+                  [
+                    64,
+                    45
+                  ],
+                  [
+                    128,
+                    115
+                  ],
+                  [
+                    192,
+                    195
+                  ],
+                  [
+                    255,
+                    255
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    0
+                  ],
+                  [
+                    64,
+                    40
+                  ],
+                  [
+                    128,
+                    100
+                  ],
+                  [
+                    192,
+                    160
+                  ],
+                  [
+                    255,
+                    220
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    15
+                  ],
+                  [
+                    64,
+                    70
+                  ],
+                  [
+                    128,
+                    120
+                  ],
+                  [
+                    192,
+                    170
+                  ],
+                  [
+                    255,
+                    235
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "shadow_crush",
+            "params": {
+              "threshold": 55,
+              "factor": 0.4,
+              "feather": 25
+            },
+            "blend_mode": "normal",
+            "opacity": 0.9
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                180,
+                30,
+                100
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.3,
+            "mask": {
+              "type": "luminosity",
+              "zone": "shadows",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                0,
+                180,
+                200
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.25,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "halation",
+            "params": {
+              "amount": 0.6,
+              "radius": 15,
+              "threshold": 180
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.5
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.3,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 1.8,
+              "size": 1,
+              "roughness": 0.5,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.4
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Neon-soaked noir where magenta and cyan bleed through inky darkness",
+      "famous_for": "The hypnotic neon fever dream of Drive and Only God Forgives, where Bangkok nightscapes and LA streets dissolve into pure chromatic sensation. Color becomes emotion made visible.",
+      "best_for": [
+        "neon-lit streets",
+        "night portraits",
+        "urban noir",
+        "nightclub scenes"
+      ],
+      "mood": [
+        "hypnotic",
+        "violent",
+        "electric"
+      ],
+      "intensity": 5,
+      "era": "2010s"
+    },
+    "sofia_coppola": {
+      "name": "Sofia Coppola",
+      "subtitle": "索菲亚·科波拉",
+      "category": "cinematic",
+      "description": "Pastel dreamy haze with lifted blacks and a soft pink whisper throughout",
+      "tags": [
+        "pastel",
+        "dreamy",
+        "pink",
+        "haze"
+      ],
+      "ui": {
+        "bg": "bg-rose-500/10",
+        "border": "border-rose-500/30",
+        "text": "text-rose-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.22,
+              "toe_strength": 0.3,
+              "shoulder": 0.3,
+              "shoulder_strength": 0.4,
+              "midtone_contrast": 0.98
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                8
+              ],
+              [
+                64,
+                72
+              ],
+              [
+                128,
+                136
+              ],
+              [
+                192,
+                198
+              ],
+              [
+                255,
+                253
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                4
+              ],
+              [
+                64,
+                66
+              ],
+              [
+                128,
+                130
+              ],
+              [
+                192,
+                193
+              ],
+              [
+                255,
+                251
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                10
+              ],
+              [
+                64,
+                70
+              ],
+              [
+                128,
+                132
+              ],
+              [
+                192,
+                194
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": 2,
+          "b_shift": 1,
+          "chroma_scale": 0.94
+        },
+        "contrast": {
+          "strength": 0.06,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "black_lift": 22,
+        "highlight_fade": 15,
+        "haze_highlights": {
+          "threshold": 155,
+          "factor": 0.82,
+          "add": 28
+        },
+        "flatten_contrast": {
+          "factor": 0.12
+        },
+        "color_tint": {
+          "r": 4,
+          "g": -1,
+          "b": 3
+        },
+        "grain": {
+          "amount": 0.5,
+          "size": 0.8,
+          "roughness": 0.3,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.05
+      },
+      "signature": "Pastel dreamscape where reality dissolves into soft pink light and faded luxury",
+      "famous_for": "The ethereal loneliness of Lost in Translation and Marie Antoinette, where overexposed pastels and gauzy light create a world of beautiful isolation. Every frame feels like a memory already fading.",
+      "best_for": [
+        "soft portraits",
+        "fashion editorial",
+        "dreamy interiors",
+        "golden hour"
+      ],
+      "mood": [
+        "melancholic",
+        "dreamy",
+        "tender"
+      ],
+      "intensity": 2,
+      "era": "2000s"
+    },
+    "park_chanwook": {
+      "name": "Park Chan-wook",
+      "subtitle": "朴赞郁",
+      "category": "cinematic",
+      "description": "Saturated operatic palette with rich greens and warm golds for baroque revenge",
+      "tags": [
+        "saturated",
+        "operatic",
+        "green",
+        "baroque"
+      ],
+      "ui": {
+        "bg": "bg-green-500/10",
+        "border": "border-green-500/30",
+        "text": "text-green-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "r": {
+                "points": [
+                  [
+                    0,
+                    3
+                  ],
+                  [
+                    64,
+                    70
+                  ],
+                  [
+                    128,
+                    140
+                  ],
+                  [
+                    192,
+                    205
+                  ],
+                  [
+                    255,
+                    252
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    64,
+                    72
+                  ],
+                  [
+                    128,
+                    142
+                  ],
+                  [
+                    192,
+                    202
+                  ],
+                  [
+                    255,
+                    250
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    0
+                  ],
+                  [
+                    64,
+                    55
+                  ],
+                  [
+                    128,
+                    118
+                  ],
+                  [
+                    192,
+                    180
+                  ],
+                  [
+                    255,
+                    240
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "shadow_crush",
+            "params": {
+              "threshold": 45,
+              "factor": 0.55,
+              "feather": 25
+            },
+            "blend_mode": "normal",
+            "opacity": 0.85
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                10,
+                40,
+                20
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.2,
+            "mask": {
+              "type": "luminosity",
+              "zone": "shadows",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                200,
+                160,
+                80
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.2,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.4
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.3
+            },
+            "blend_mode": "normal",
+            "opacity": 1,
+            "mask": {
+              "type": "color_range",
+              "target_hue": 0,
+              "hue_range": 30,
+              "saturation_min": 0.2,
+              "feather": 15
+            }
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.25,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 1,
+              "size": 1,
+              "roughness": 0.4,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.25
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Saturated operatic grandeur where deep greens and golds frame baroque revenge",
+      "famous_for": "The lush visual excess of Oldboy and The Handmaiden, where every frame is a painterly composition dripping with jewel-toned intensity. Violence and beauty are inseparable.",
+      "best_for": [
+        "dramatic portraits",
+        "lush interiors",
+        "period settings",
+        "theatrical scenes"
+      ],
+      "mood": [
+        "operatic",
+        "vengeful",
+        "sumptuous"
+      ],
+      "intensity": 4,
+      "era": "2000s"
+    },
+    "tarkovsky": {
+      "name": "Andrei Tarkovsky",
+      "subtitle": "安德烈·塔可夫斯基",
+      "category": "cinematic",
+      "description": "Muted poetic earth tones with sepia-green shadows and organic film texture",
+      "tags": [
+        "muted",
+        "poetic",
+        "earth",
+        "organic"
+      ],
+      "ui": {
+        "bg": "bg-lime-500/10",
+        "border": "border-lime-500/30",
+        "text": "text-lime-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.22,
+              "toe_strength": 0.4,
+              "shoulder": 0.3,
+              "shoulder_strength": 0.45,
+              "midtone_contrast": 1.02
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                5
+              ],
+              [
+                64,
+                65
+              ],
+              [
+                128,
+                126
+              ],
+              [
+                192,
+                188
+              ],
+              [
+                255,
+                245
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                6
+              ],
+              [
+                64,
+                67
+              ],
+              [
+                128,
+                130
+              ],
+              [
+                192,
+                190
+              ],
+              [
+                255,
+                246
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                58
+              ],
+              [
+                128,
+                120
+              ],
+              [
+                192,
+                182
+              ],
+              [
+                255,
+                240
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": -2,
+          "b_shift": 4,
+          "chroma_scale": 0.9
+        },
+        "desaturate_blend": {
+          "factor": 0.25
+        },
+        "contrast": {
+          "strength": 0.1,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "black_lift": 15,
+        "highlight_fade": 12,
+        "shadow_tint": {
+          "r": 4,
+          "g": 5,
+          "b": -2,
+          "feather": 30
+        },
+        "grain": {
+          "amount": 1.8,
+          "size": 1.1,
+          "roughness": 0.5,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "vignette": 0.2
+      },
+      "signature": "Muted earth-tone poetry where light itself becomes a spiritual presence",
+      "famous_for": "The transcendent stillness of Stalker and Nostalghia, where desaturated greens and browns create landscapes that feel like fading memories. Time moves differently in Tarkovsky's muted palette.",
+      "best_for": [
+        "landscapes",
+        "water reflections",
+        "forest scenes",
+        "contemplative portraits"
+      ],
+      "mood": [
+        "contemplative",
+        "spiritual",
+        "melancholic"
+      ],
+      "intensity": 3,
+      "era": "1970s"
+    },
+    "zhang_yimou": {
+      "name": "Zhang Yimou",
+      "subtitle": "张艺谋",
+      "category": "cinematic",
+      "description": "Bold saturated reds and warm ambers of epic Chinese visual storytelling",
+      "tags": [
+        "red",
+        "bold",
+        "warm",
+        "epic"
+      ],
+      "ui": {
+        "bg": "bg-red-500/10",
+        "border": "border-red-500/30",
+        "text": "text-red-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "r": {
+                "points": [
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    64,
+                    80
+                  ],
+                  [
+                    128,
+                    152
+                  ],
+                  [
+                    192,
+                    215
+                  ],
+                  [
+                    255,
+                    255
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    2
+                  ],
+                  [
+                    64,
+                    62
+                  ],
+                  [
+                    128,
+                    125
+                  ],
+                  [
+                    192,
+                    188
+                  ],
+                  [
+                    255,
+                    245
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    0
+                  ],
+                  [
+                    64,
+                    52
+                  ],
+                  [
+                    128,
+                    110
+                  ],
+                  [
+                    192,
+                    172
+                  ],
+                  [
+                    255,
+                    235
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.4
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.5
+            },
+            "blend_mode": "normal",
+            "opacity": 1,
+            "mask": {
+              "type": "color_range",
+              "target_hue": 0,
+              "hue_range": 40,
+              "saturation_min": 0.15,
+              "feather": 20
+            }
+          },
+          {
+            "effect": "warm_boost",
+            "params": {
+              "factor": 1.35
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                210,
+                140,
+                40
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.2,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "shadow_crush",
+            "params": {
+              "threshold": 40,
+              "factor": 0.65,
+              "feather": 25
+            },
+            "blend_mode": "normal",
+            "opacity": 0.85
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.2,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 0.8,
+              "size": 1,
+              "roughness": 0.35,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.2
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Blazing reds and warm golds that transform the frame into a living Chinese painting",
+      "famous_for": "The breathtaking color choreography of Hero and Raise the Red Lantern, where saturated reds carry narrative weight and emotional force. Each color tells a story within the story.",
+      "best_for": [
+        "red-dominant scenes",
+        "cultural ceremonies",
+        "landscape epics",
+        "warm-toned portraits"
+      ],
+      "mood": [
+        "epic",
+        "passionate",
+        "ceremonial"
+      ],
+      "intensity": 4,
+      "era": "1990s"
+    },
+    "kurosawa": {
+      "name": "Akira Kurosawa",
+      "subtitle": "黑泽明",
+      "category": "cinematic",
+      "description": "High-contrast black and white with deep blacks and luminous silver highlights",
+      "tags": [
+        "monochrome",
+        "contrast",
+        "silver",
+        "classic"
+      ],
+      "ui": {
+        "bg": "bg-zinc-500/10",
+        "border": "border-zinc-500/30",
+        "text": "text-zinc-300"
+      },
+      "recipe": {
+        "monochrome": {
+          "weights": [
+            0.28,
+            0.55,
+            0.17
+          ]
+        },
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.18,
+              "toe_strength": 0.55,
+              "shoulder": 0.2,
+              "shoulder_strength": 0.55,
+              "midtone_contrast": 1.18
+            }
+          }
+        },
+        "contrast": {
+          "strength": 0.32,
+          "type": "double_s_curve",
+          "blend_mode": "luminosity"
+        },
+        "shadow_crush": {
+          "threshold": 50,
+          "factor": 0.5,
+          "feather": 20
+        },
+        "grain": {
+          "amount": 1.8,
+          "size": 1.1,
+          "roughness": 0.5,
+          "color_grain": false,
+          "luminance_aware": true
+        },
+        "vignette": 0.22
+      },
+      "signature": "Stark monochrome power where deep blacks and silver highlights carve drama from light",
+      "famous_for": "The monumental black-and-white compositions of Seven Samurai and Rashomon, where extreme contrast and dynamic weather create images of almost mythic power.",
+      "best_for": [
+        "dramatic weather",
+        "action scenes",
+        "stark portraits",
+        "high-contrast landscapes"
+      ],
+      "mood": [
+        "powerful",
+        "mythic",
+        "turbulent"
+      ],
+      "intensity": 3,
+      "era": "1950s"
+    },
+    "almodovar": {
+      "name": "Pedro Almodovar",
+      "subtitle": "佩德罗·阿莫多瓦",
+      "category": "cinematic",
+      "description": "Bold warm Spanish palette with saturated reds and yellows in theatrical interiors",
+      "tags": [
+        "warm",
+        "saturated",
+        "red",
+        "theatrical"
+      ],
+      "ui": {
+        "bg": "bg-orange-500/10",
+        "border": "border-orange-500/30",
+        "text": "text-orange-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "r": {
+                "points": [
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    64,
+                    75
+                  ],
+                  [
+                    128,
+                    145
+                  ],
+                  [
+                    192,
+                    210
+                  ],
+                  [
+                    255,
+                    255
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    3
+                  ],
+                  [
+                    64,
+                    64
+                  ],
+                  [
+                    128,
+                    128
+                  ],
+                  [
+                    192,
+                    192
+                  ],
+                  [
+                    255,
+                    248
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    0
+                  ],
+                  [
+                    64,
+                    55
+                  ],
+                  [
+                    128,
+                    115
+                  ],
+                  [
+                    192,
+                    178
+                  ],
+                  [
+                    255,
+                    238
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.35
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.4
+            },
+            "blend_mode": "normal",
+            "opacity": 1,
+            "mask": {
+              "type": "color_range",
+              "target_hue": 0,
+              "hue_range": 35,
+              "saturation_min": 0.2,
+              "feather": 15
+            }
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.25
+            },
+            "blend_mode": "normal",
+            "opacity": 1,
+            "mask": {
+              "type": "color_range",
+              "target_hue": 45,
+              "hue_range": 30,
+              "saturation_min": 0.2,
+              "feather": 15
+            }
+          },
+          {
+            "effect": "warm_boost",
+            "params": {
+              "factor": 1.3
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                220,
+                160,
+                70
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.2,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "black_lift",
+            "params": {
+              "amount": 10
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.18,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 0.8,
+              "size": 0.9,
+              "roughness": 0.35,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.15
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Bold warm primaries that turn domestic interiors into melodramatic stage sets",
+      "famous_for": "The fearless color saturation of All About My Mother and Volver, where candy-red walls, sunflower yellows, and fuchsia wardrobes create an emotional landscape as vivid as the characters.",
+      "best_for": [
+        "colorful interiors",
+        "fashion portraits",
+        "warm-lit scenes",
+        "theatrical compositions"
+      ],
+      "mood": [
+        "passionate",
+        "theatrical",
+        "vivid"
+      ],
+      "intensity": 4,
+      "era": "1990s"
+    },
+    "del_toro": {
+      "name": "Guillermo del Toro",
+      "subtitle": "吉尔莫·德尔·托罗",
+      "category": "cinematic",
+      "description": "Gothic amber and teal split toning with halation glow and deep crushed shadows",
+      "tags": [
+        "gothic",
+        "amber",
+        "teal",
+        "halation"
+      ],
+      "ui": {
+        "bg": "bg-yellow-500/10",
+        "border": "border-yellow-500/30",
+        "text": "text-yellow-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "r": {
+                "points": [
+                  [
+                    0,
+                    2
+                  ],
+                  [
+                    64,
+                    60
+                  ],
+                  [
+                    128,
+                    130
+                  ],
+                  [
+                    192,
+                    200
+                  ],
+                  [
+                    255,
+                    252
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    3
+                  ],
+                  [
+                    64,
+                    62
+                  ],
+                  [
+                    128,
+                    125
+                  ],
+                  [
+                    192,
+                    190
+                  ],
+                  [
+                    255,
+                    248
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    8
+                  ],
+                  [
+                    64,
+                    68
+                  ],
+                  [
+                    128,
+                    118
+                  ],
+                  [
+                    192,
+                    175
+                  ],
+                  [
+                    255,
+                    235
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                15,
+                60,
+                75
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.3,
+            "mask": {
+              "type": "luminosity",
+              "zone": "shadows",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                210,
+                170,
+                70
+              ]
+            },
+            "blend_mode": "soft_light",
+            "opacity": 0.25,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "shadow_crush",
+            "params": {
+              "threshold": 45,
+              "factor": 0.55,
+              "feather": 25
+            },
+            "blend_mode": "normal",
+            "opacity": 0.85
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.22,
+              "type": "s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "halation",
+            "params": {
+              "amount": 0.3,
+              "radius": 10,
+              "threshold": 190
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.15
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 1.2,
+              "size": 1,
+              "roughness": 0.45,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.3
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Gothic fairy tale where teal shadows and amber warmth frame the monstrous and the magical",
+      "famous_for": "The dark romanticism of Pan's Labyrinth and Crimson Peak, where cold teal horrors lurk in shadows while golden amber light promises safety that may never come.",
+      "best_for": [
+        "gothic architecture",
+        "candlelit scenes",
+        "dark fantasy",
+        "atmospheric fog"
+      ],
+      "mood": [
+        "gothic",
+        "wondrous",
+        "ominous"
+      ],
+      "intensity": 4,
+      "era": "2000s"
+    },
+    "michael_mann": {
+      "name": "Michael Mann",
+      "subtitle": "迈克尔·曼",
+      "category": "cinematic",
+      "description": "Digital night blue-teal with coarse grain and desaturated urban cool",
+      "tags": [
+        "digital",
+        "blue",
+        "night",
+        "urban"
+      ],
+      "ui": {
+        "bg": "bg-indigo-500/10",
+        "border": "border-indigo-500/30",
+        "text": "text-indigo-300"
+      },
+      "recipe": {
+        "curves": {
+          "master": {
+            "hd_curve": {
+              "toe": 0.2,
+              "toe_strength": 0.45,
+              "shoulder": 0.28,
+              "shoulder_strength": 0.5,
+              "midtone_contrast": 1.05
+            }
+          },
+          "r": {
+            "points": [
+              [
+                0,
+                0
+              ],
+              [
+                64,
+                56
+              ],
+              [
+                128,
+                120
+              ],
+              [
+                192,
+                184
+              ],
+              [
+                255,
+                247
+              ]
+            ]
+          },
+          "g": {
+            "points": [
+              [
+                0,
+                2
+              ],
+              [
+                64,
+                63
+              ],
+              [
+                128,
+                127
+              ],
+              [
+                192,
+                190
+              ],
+              [
+                255,
+                250
+              ]
+            ]
+          },
+          "b": {
+            "points": [
+              [
+                0,
+                12
+              ],
+              [
+                64,
+                76
+              ],
+              [
+                128,
+                140
+              ],
+              [
+                192,
+                202
+              ],
+              [
+                255,
+                255
+              ]
+            ]
+          }
+        },
+        "lab_adjust": {
+          "a_shift": -2,
+          "b_shift": -6,
+          "chroma_scale": 0.94
+        },
+        "desaturate_blend": {
+          "factor": 0.18
+        },
+        "contrast": {
+          "strength": 0.15,
+          "type": "s_curve",
+          "blend_mode": "luminosity"
+        },
+        "grain": {
+          "amount": 1.5,
+          "size": 1.2,
+          "roughness": 0.5,
+          "color_grain": true,
+          "luminance_aware": true
+        },
+        "black_lift": 6,
+        "vignette": 0.18
+      },
+      "signature": "Digital blue-teal nightscape where city lights dissolve into electronic cool",
+      "famous_for": "The pioneering digital cinematography of Collateral and Miami Vice, where the raw texture of early HD captures LA and Miami nights with a cold, immediate intimacy no film stock could match.",
+      "best_for": [
+        "city nightscapes",
+        "car interiors at night",
+        "urban streets",
+        "blue-hour scenes"
+      ],
+      "mood": [
+        "cool",
+        "nocturnal",
+        "restless"
+      ],
+      "intensity": 3,
+      "era": "2000s"
+    },
+    "argento": {
+      "name": "Dario Argento",
+      "subtitle": "达里奥·阿基多",
+      "category": "cinematic",
+      "description": "Extreme Italian giallo with vivid bleeding primaries and halation-soaked highlights",
+      "tags": [
+        "giallo",
+        "vivid",
+        "primaries",
+        "extreme"
+      ],
+      "ui": {
+        "bg": "bg-violet-500/10",
+        "border": "border-violet-500/30",
+        "text": "text-violet-300"
+      },
+      "recipe": {
+        "layers": [
+          {
+            "effect": "curves",
+            "params": {
+              "r": {
+                "points": [
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    64,
+                    78
+                  ],
+                  [
+                    128,
+                    148
+                  ],
+                  [
+                    192,
+                    218
+                  ],
+                  [
+                    255,
+                    255
+                  ]
+                ]
+              },
+              "g": {
+                "points": [
+                  [
+                    0,
+                    3
+                  ],
+                  [
+                    64,
+                    60
+                  ],
+                  [
+                    128,
+                    125
+                  ],
+                  [
+                    192,
+                    195
+                  ],
+                  [
+                    255,
+                    250
+                  ]
+                ]
+              },
+              "b": {
+                "points": [
+                  [
+                    0,
+                    8
+                  ],
+                  [
+                    64,
+                    75
+                  ],
+                  [
+                    128,
+                    142
+                  ],
+                  [
+                    192,
+                    210
+                  ],
+                  [
+                    255,
+                    255
+                  ]
+                ]
+              }
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.5
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.6
+            },
+            "blend_mode": "normal",
+            "opacity": 1,
+            "mask": {
+              "type": "color_range",
+              "target_hue": 0,
+              "hue_range": 25,
+              "saturation_min": 0.2,
+              "feather": 12
+            }
+          },
+          {
+            "effect": "saturation",
+            "params": {
+              "factor": 1.5
+            },
+            "blend_mode": "normal",
+            "opacity": 1,
+            "mask": {
+              "type": "color_range",
+              "target_hue": 240,
+              "hue_range": 30,
+              "saturation_min": 0.2,
+              "feather": 15
+            }
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                160,
+                20,
+                20
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.2,
+            "mask": {
+              "type": "luminosity",
+              "zone": "shadows",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "solid_color",
+            "params": {
+              "color": [
+                40,
+                40,
+                180
+              ]
+            },
+            "blend_mode": "color",
+            "opacity": 0.15,
+            "mask": {
+              "type": "luminosity",
+              "zone": "highlights",
+              "feather": 40
+            }
+          },
+          {
+            "effect": "highlight_blow",
+            "params": {
+              "threshold": 175,
+              "factor": 1.3
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "halation",
+            "params": {
+              "amount": 0.5,
+              "radius": 12,
+              "threshold": 185
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "contrast",
+            "params": {
+              "strength": 0.28,
+              "type": "double_s_curve"
+            },
+            "blend_mode": "luminosity",
+            "opacity": 1
+          },
+          {
+            "effect": "grain",
+            "params": {
+              "amount": 2,
+              "size": 1.1,
+              "roughness": 0.55,
+              "color_grain": true,
+              "luminance_aware": true
+            },
+            "blend_mode": "normal",
+            "opacity": 1
+          },
+          {
+            "effect": "vignette",
+            "params": {
+              "strength": 0.25
+            },
+            "blend_mode": "multiply",
+            "opacity": 1
+          }
+        ]
+      },
+      "signature": "Fever-dream primaries where blood reds and electric blues bleed through halation into nightmares",
+      "famous_for": "The psychedelic horror of Suspiria and Deep Red, where impossibly vivid reds and blues wash through baroque interiors like colored spotlights in a waking nightmare. Giallo's most extreme visual stylist.",
+      "best_for": [
+        "horror scenes",
+        "vivid interiors",
+        "dramatic lighting",
+        "theatrical compositions"
+      ],
+      "mood": [
+        "feverish",
+        "nightmarish",
+        "lurid"
+      ],
+      "intensity": 5,
+      "era": "1970s"
     }
   }
 }

@@ -158,6 +158,7 @@ export interface ClientMessage {
     | "apps.list"
     | "apps.run"
     | "apps.delete"
+    | "apps.reload"
     | "app.save_to_codebase"
     | "app.promote"
     | "server.restart"
