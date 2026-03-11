@@ -1406,6 +1406,9 @@ async function styleGallery(params: StyleGalleryParams): Promise<AgentToolResult
     rawStyles = (raw.styles || {}) as Record<string, Record<string, unknown>>;
   } catch { /* ignore */ }
 
+  // Resolve demo assets directory to check which images actually exist
+  const demoDir = join(dirname(fileURLToPath(import.meta.url)), "..", "apps", "photo_studio", "demo");
+
   const styleId = params.styleId?.trim();
 
   if (styleId) {
@@ -1417,12 +1420,15 @@ async function styleGallery(params: StyleGalleryParams): Promise<AgentToolResult
     const recipe = (rawStyles[styleId]?.recipe || {}) as Record<string, unknown>;
     const pipelineSteps = describeRecipe(recipe);
 
-    // Build gallery image URLs from /demo/gallery/<id>/
-    const galleryImages = ((galleryEntry.gallery || []) as Array<Record<string, unknown>>).map(img => ({
-      url: `/demo/gallery/${styleId}/${img.filename}`,
-      caption: img.caption || {},
-    }));
+    // Build gallery image URLs from /demo/gallery/<id>/ — only include images that exist on disk
+    const galleryImages = ((galleryEntry.gallery || []) as Array<Record<string, unknown>>)
+      .filter(img => img.filename && existsSync(join(demoDir, "gallery", styleId, String(img.filename))))
+      .map(img => ({
+        url: `/demo/gallery/${styleId}/${img.filename}`,
+        caption: img.caption || {},
+      }));
 
+    const demoFile = join(demoDir, `${styleId}.jpg`);
     return ok({
       tool: "enso_media_style_gallery",
       mode: "detail",
@@ -1435,7 +1441,7 @@ async function styleGallery(params: StyleGalleryParams): Promise<AgentToolResult
       notable_works: galleryEntry.notable_works || {},
       fun_facts: galleryEntry.fun_facts || {},
       pipelineSteps,
-      demoImageUrl: `/demo/${styleId}.jpg`,
+      demoImageUrl: existsSync(demoFile) ? `/demo/${styleId}.jpg` : "",
     });
   }
 
@@ -1446,9 +1452,10 @@ async function styleGallery(params: StyleGalleryParams): Promise<AgentToolResult
     if (!info) continue;
     const cat = info.category || "Other";
     if (!byCategory[cat]) byCategory[cat] = [];
+    const demoFile = join(demoDir, `${id}.jpg`);
     byCategory[cat].push({
       ...info,
-      demoImageUrl: `/demo/${id}.jpg`,
+      demoImageUrl: existsSync(demoFile) ? `/demo/${id}.jpg` : "",
       hasGallery: !!galleryStyles[id],
     });
   }
