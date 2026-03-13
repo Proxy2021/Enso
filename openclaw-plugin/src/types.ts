@@ -204,6 +204,13 @@ export interface ServerMessage {
   };
   orchestrationPlan?: OrchestrationPlan;
   orchestrationProgress?: OrchestrationProgress;
+  appSuggestion?: {
+    cardId: string;
+    category: string;
+    label: string;
+    suggestedFamily?: string;
+    buildHint?: string;
+  };
   timestamp: number;
 }
 
@@ -307,6 +314,19 @@ export interface ExecutorContext {
       has(id: string): Promise<boolean>;
       remove(id: string): Promise<boolean>;
       clear(): Promise<void>;
+      count(): Promise<number>;
+    };
+    /** Read-only access to this app's interaction history (actions, enhances, errors). */
+    interactions(): {
+      list(count?: number): Promise<Array<{
+        type: "action" | "enhance" | "refine" | "view" | "error";
+        action?: string;
+        toolName?: string;
+        params?: Record<string, unknown>;
+        error?: string;
+        cardId?: string;
+        timestamp: number;
+      }>>;
       count(): Promise<number>;
     };
   };

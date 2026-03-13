@@ -42,6 +42,14 @@ export interface Card {
   suggestedFamily?: string;
   pendingProposal?: string;
 
+  // App suggestion (pattern detection)
+  appSuggestion?: {
+    category: string;
+    label: string;
+    suggestedFamily?: string;
+    buildHint?: string;
+  };
+
   // Auto-heal status
   autoHealStatus?: "fixing" | "fixed" | "failed";
   autoHealError?: string;

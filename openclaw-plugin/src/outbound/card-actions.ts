@@ -23,6 +23,7 @@ import {
   handleToolConsoleAdd,
 } from "../tooling-console.js";
 import { logAction, logError, logFix } from "../action-log.js";
+import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts, isPathWithinRoot, validateScopedAction } from "./card-context.js";
 import {
@@ -158,8 +159,17 @@ export async function handlePluginCardAction(params: {
     }
   }
 
-  // Record action in history
+  // Record action in history (in-memory, volatile)
   ctx.actionHistory.push({ action, payload, timestamp: Date.now() });
+
+  // Record action in persistent interaction tracker (Living Apps)
+  recordAppInteraction(ctx.toolFamily, {
+    type: action === "refine" ? "refine" : "action",
+    action,
+    payload,
+    cardId,
+    timestamp: Date.now(),
+  });
 
   // Block code modification actions for scoped shares
   if (ctx.allowedRoot && (action === "refine" || action === "fix_with_code" || action === "improve_with_code")) {
@@ -211,6 +221,14 @@ export async function handlePluginCardAction(params: {
       const templateCode = getGeneratedTemplateCodeBySignature(ctx.signatureId);
       if (templateCode) {
         debugParts.push(``, `## Template JSX`, `\`\`\`jsx`, templateCode.slice(0, 3000), `\`\`\``);
+      }
+    }
+
+    // Inject interaction trail for contextual debugging (Living Apps Phase 1B)
+    if (ctx.toolFamily) {
+      const failureCtx = buildFailureContext(ctx.toolFamily, errorStr);
+      if (failureCtx.interactionTrail.length > 0) {
+        debugParts.push(``, failureCtx.formatted);
       }
     }
 

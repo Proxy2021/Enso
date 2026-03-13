@@ -1,6 +1,7 @@
 import { useState } from "react";
 import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
+import AppSuggestion from "../components/AppSuggestion";
 import { useChatStore } from "../store/chat";
 import type { CardRendererProps } from "./types";
 
@@ -15,6 +16,13 @@ export default function ChatCard({ card }: CardRendererProps) {
       </div>
       {hasMedia && <MediaGallery urls={card.mediaUrls!} />}
       {showRestart && <RestartButton />}
+      {card.appSuggestion && card.status === "complete" && (
+        <AppSuggestion
+          cardId={card.id}
+          suggestion={card.appSuggestion}
+          cardText={card.text ?? ""}
+        />
+      )}
       {card.status === "streaming" && (
         <span className="inline-block w-1.5 h-4 bg-gray-400 animate-pulse ml-0.5 align-text-bottom rounded-sm" />
       )}

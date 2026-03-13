@@ -341,6 +341,20 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
           async count() { return coll.count(); },
         };
       },
+      interactions() {
+        if (!toolFamily) throw new Error("No tool family for interactions");
+        const family = toolFamily;
+        return {
+          async list(count?: number) {
+            const { getRecentInteractions } = await import("./interaction-tracker.js");
+            return getRecentInteractions(family, count ?? 20);
+          },
+          async count() {
+            const coll = getDocCollection(family, "interactions", { maxEntries: 200 });
+            return coll.count();
+          },
+        };
+      },
     },
   };
 }
@@ -504,8 +518,21 @@ export function registerLoadedApp(app: LoadedApp): void {
         const { getActiveAccount } = await import("./server.js");
         const activeApiKey = getActiveAccount()?.geminiApiKey;
         const ctx = buildExecutorContext(spec.toolFamily, toolDef.suffix, activeApiKey);
-        const result = await executeFn(callId, toolParams, ctx);
-        return result;
+        try {
+          const result = await executeFn(callId, toolParams, ctx);
+          return result;
+        } catch (err) {
+          // Record error interaction for Living Apps contextual debugging
+          const { recordAppInteraction } = await import("./interaction-tracker.js");
+          recordAppInteraction(spec.toolFamily, {
+            type: "error",
+            toolName,
+            params: toolParams,
+            error: err instanceof Error ? err.message : String(err),
+            timestamp: Date.now(),
+          });
+          throw err;
+        }
       },
     });
 

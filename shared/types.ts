@@ -141,6 +141,13 @@ export interface ServerMessage {
   }>;
   orchestrationPlan?: OrchestrationPlan;
   orchestrationProgress?: OrchestrationProgress;
+  appSuggestion?: {
+    cardId: string;
+    category: string;
+    label: string;
+    suggestedFamily?: string;
+    buildHint?: string;
+  };
   timestamp: number;
 }
 

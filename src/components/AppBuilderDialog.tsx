@@ -6,11 +6,12 @@ import { useVoiceInput } from "./VoiceMicButton";
 interface AppBuilderDialogProps {
   cardId: string;
   cardText: string;
+  defaultDefinition?: string;
   onClose: () => void;
 }
 
-export function AppBuilderDialog({ cardId, cardText, onClose }: AppBuilderDialogProps) {
-  const [instruction, setInstruction] = useState("");
+export function AppBuilderDialog({ cardId, cardText, defaultDefinition, onClose }: AppBuilderDialogProps) {
+  const [instruction, setInstruction] = useState(defaultDefinition ?? "");
   const buildApp = useChatStore((s) => s.buildApp);
   const inputRef = useRef<HTMLInputElement>(null);
   const { VoiceMic } = useVoiceInput(setInstruction);

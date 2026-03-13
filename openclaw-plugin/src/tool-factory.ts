@@ -118,6 +118,8 @@ export async function autoHealExecutor(params: {
   sampleData: Record<string, unknown>;
   expectedKeys: string[];
   apiKey: string;
+  /** Interaction trail context for contextual debugging (Living Apps Phase 1B). */
+  failureContext?: { formatted: string };
 }): Promise<{ success: boolean; fixedBody?: string; error?: string }> {
   try {
     const prompt = buildExecutorFixPrompt(params);
@@ -148,7 +150,12 @@ function buildExecutorFixPrompt(params: {
   errorMessage: string;
   failedParams: Record<string, unknown>;
   sampleData: Record<string, unknown>;
+  failureContext?: { formatted: string };
 }): string {
+  const failureContextSection = params.failureContext
+    ? `\n\n${params.failureContext.formatted}\n`
+    : "";
+
   return `You are a JavaScript code fixer. A tool executor function body is failing at runtime.
 
 TOOL: ${params.toolName}
@@ -162,7 +169,7 @@ ${params.executorBody}
 
 RUNTIME ERROR:
 ${params.errorMessage}
-
+${failureContextSection}
 EXECUTOR CONTEXT — ctx has these methods:
 - await ctx.callTool(name, params) → { success, data, error }
 - await ctx.listDir(path) → { success, data, error }

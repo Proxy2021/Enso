@@ -1331,6 +1331,26 @@ export const useChatStore = create<CardStore>((set, get) => ({
       return;
     }
 
+    // Handle app suggestion (pattern detection)
+    if (msg.appSuggestion) {
+      const { cardId: sugCardId, category, label, suggestedFamily, buildHint } = msg.appSuggestion;
+      set((s) => {
+        const card = s.cards[sugCardId];
+        if (!card) return s;
+        return {
+          cards: {
+            ...s.cards,
+            [sugCardId]: {
+              ...card,
+              appSuggestion: { category, label, suggestedFamily, buildHint },
+              updatedAt: Date.now(),
+            },
+          },
+        };
+      });
+      return;
+    }
+
     // Handle orchestration plan and progress updates
     if (msg.orchestrationPlan || msg.orchestrationProgress) {
       const targetId = msg.targetCardId;

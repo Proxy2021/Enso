@@ -20,6 +20,14 @@ import { consumeRecentToolCall } from "../native-tools/tool-call-store.js";
 import type { ToolCallRecord } from "../native-tools/tool-call-store.js";
 import { getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
+import { recordAppInteraction } from "../interaction-tracker.js";
+import {
+  detectPattern,
+  buildSuggestion,
+  refinePatternSuggestion,
+  canSuggest,
+  markSuggested,
+} from "../pattern-detector.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts } from "./card-context.js";
 import {
@@ -116,12 +124,76 @@ export async function deliverEnsoReply(params: {
   // ── Auto-enhance: if the agent used a registered tool, render the app card ──
   // This replaces the old background compat check (which required an LLM call).
   // Deterministic: did the agent call a tool? If yes, and a template exists, show app view.
+  let didAutoEnhance = false;
   if (!toolMeta && !targetCardId) {
     const recentCall = consumeRecentToolCall();
     if (recentCall) {
+      didAutoEnhance = true;
       autoEnhanceFromToolCall(recentCall, msgId, client, params.account).catch((err) => {
         logError("delivery", "Auto-enhance failed (non-fatal)", err, { cardId: msgId });
       });
+    }
+  }
+
+  // ── Pattern detection: suggest app-ification for structured text responses ──
+  // Only fires when: no tool meta, no targetCardId, no auto-enhance, text > 200 chars,
+  // and rate limit not exceeded (max 1 suggestion per 30 seconds).
+  if (!toolMeta && !targetCardId && !didAutoEnhance && text.length > 200 && canSuggest()) {
+    const match = detectPattern(text);
+    if (match) {
+      markSuggested();
+      const suggestion = buildSuggestion(match);
+      logAction({
+        ts: Date.now(),
+        type: "action",
+        category: "pattern-detector",
+        message: `Pattern detected: ${match.category} (conf=${match.confidence.toFixed(2)})`,
+        cardId: msgId,
+      });
+
+      // Send immediate suggestion
+      client.send({
+        id: randomUUID(),
+        runId,
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "final",
+        appSuggestion: {
+          cardId: msgId,
+          category: suggestion.category,
+          label: suggestion.label,
+          suggestedFamily: suggestion.suggestedFamily,
+          buildHint: suggestion.buildHint,
+        },
+        timestamp: Date.now(),
+      });
+
+      // Fire-and-forget LLM refinement — if it returns a better family, send an update
+      if (params.account.geminiApiKey) {
+        refinePatternSuggestion(text, match, params.account.geminiApiKey)
+          .then((refined) => {
+            if (refined.suggestedFamily !== suggestion.suggestedFamily || refined.label !== suggestion.label) {
+              client.send({
+                id: randomUUID(),
+                runId,
+                sessionKey: client.sessionKey,
+                seq: 0,
+                state: "final",
+                appSuggestion: {
+                  cardId: msgId,
+                  category: refined.category,
+                  label: refined.label,
+                  suggestedFamily: refined.suggestedFamily,
+                  buildHint: refined.buildHint,
+                },
+                timestamp: Date.now(),
+              });
+            }
+          })
+          .catch((err) => {
+            logError("pattern-detector", "LLM refinement failed (non-fatal)", err, { cardId: msgId });
+          });
+      }
     }
   }
 }
@@ -251,6 +323,16 @@ async function autoEnhanceFromToolCall(
   });
 
   logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhanced: ${toolName} → ${template.toolFamily}/${template.signatureId}`, cardId });
+
+  // Record enhance interaction for Living Apps tracking
+  recordAppInteraction(template.toolFamily, {
+    type: "enhance",
+    toolName,
+    params: toolCall.params,
+    resultSummary: JSON.stringify(normalized).slice(0, 200),
+    cardId,
+    timestamp: Date.now(),
+  });
 }
 
 /**
