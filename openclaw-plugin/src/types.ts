@@ -211,6 +211,24 @@ export interface ServerMessage {
     suggestedFamily?: string;
     buildHint?: string;
   };
+  /** Batch of historical cards sent in response to chat.history */
+  cardHistory?: Array<{
+    id: string;
+    runId: string;
+    type: string;
+    role: "user" | "assistant";
+    text?: string;
+    data?: unknown;
+    generatedUI?: string;
+    mediaUrls?: string[];
+    steps?: Array<{ seq: number; text: string }>;
+    toolMeta?: { toolId: string; toolSessionId?: string; cwd?: string };
+    cardMode?: CardModeDetail;
+    appData?: unknown;
+    appGeneratedUI?: string;
+    appCardMode?: CardModeDetail;
+    timestamp: number;
+  }>;
   timestamp: number;
 }
 
@@ -262,6 +280,8 @@ export interface ClientMessage {
   toolFamily?: string;
   // operation.cancel fields
   operationId?: string;
+  // chat.history fields
+  historyCount?: number;
   // orchestration.* fields
   orchestrationGoal?: string;
   orchestrationId?: string;

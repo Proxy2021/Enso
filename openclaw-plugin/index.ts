@@ -4,6 +4,7 @@ import { ensoPlugin } from "./src/channel.js";
 import { setEnsoRuntime, setPluginApi } from "./src/runtime.js";
 import { findExistingProviderForActionSuffixes, isToolRegistered } from "./src/native-tools/registry.js";
 import { recordToolCall } from "./src/native-tools/tool-call-store.js";
+import { buildEnsoContext, setWorkspaceDir } from "./src/memory-bridge.js";
 import { registerFilesystemTools } from "./src/filesystem-tools.js";
 
 import { registerMediaTools } from "./src/media-tools.js";
@@ -126,6 +127,22 @@ const plugin = {
           result: event.result,
           timestamp: Date.now(),
         });
+      }
+    });
+
+    // ── Memory Bridge: inject Enso usage context into agent prompts ──
+    api.on("before_prompt_build", async (_event, ctx) => {
+      // Capture workspace directory for memory surface REST endpoints
+      if (ctx.workspaceDir) setWorkspaceDir(ctx.workspaceDir);
+
+      // Only inject for Enso channel sessions
+      if (!ctx.sessionKey?.includes(":enso:")) return {};
+      try {
+        const prependContext = await buildEnsoContext();
+        if (!prependContext) return {};
+        return { prependContext };
+      } catch {
+        return {};
       }
     });
   },

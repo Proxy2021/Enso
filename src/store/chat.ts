@@ -1233,6 +1233,57 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (msg.settings.toolFamilies) patch.toolFamilies = msg.settings.toolFamilies;
       if (msg.settings.ensoProjectPath) patch.ensoProjectPath = msg.settings.ensoProjectPath;
       if (Object.keys(patch).length > 0) set(patch);
+
+      // Request chat history after initial settings arrive
+      const wsClient = get()._wsClient;
+      if (wsClient) {
+        wsClient.send({ type: "chat.history", historyCount: 50 });
+      }
+      return;
+    }
+
+    // Handle card history batch (response to chat.history)
+    if (msg.cardHistory?.length) {
+      const historicCards: Record<string, Card> = {};
+      const historicOrder: string[] = [];
+      for (const rec of msg.cardHistory) {
+        historicCards[rec.id] = {
+          id: rec.id,
+          runId: rec.runId,
+          type: rec.type,
+          role: rec.role,
+          status: "complete",
+          display: "collapsed",
+          text: rec.text,
+          data: rec.data,
+          generatedUI: rec.generatedUI,
+          mediaUrls: rec.mediaUrls,
+          steps: rec.steps,
+          toolMeta: rec.toolMeta,
+          cardMode: rec.cardMode,
+          appData: rec.appData,
+          appGeneratedUI: rec.appGeneratedUI,
+          appCardMode: rec.appCardMode,
+          viewMode: rec.appData ? "app" : "original",
+          enhanceStatus: rec.appData ? "ready" : undefined,
+          createdAt: rec.timestamp,
+          updatedAt: rec.timestamp,
+        };
+        historicOrder.push(rec.id);
+      }
+      // Prepend history before any current-session cards (deduplicate by ID)
+      set((s) => {
+        const merged = { ...historicCards };
+        for (const [id, card] of Object.entries(s.cards)) {
+          merged[id] = card; // current session wins
+        }
+        const existingIds = new Set(s.cardOrder);
+        const newOrder = historicOrder.filter((id) => !existingIds.has(id));
+        return {
+          cards: merged,
+          cardOrder: [...newOrder, ...s.cardOrder],
+        };
+      });
       return;
     }
 

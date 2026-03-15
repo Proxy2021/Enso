@@ -21,6 +21,7 @@ import type { ToolCallRecord } from "../native-tools/tool-call-store.js";
 import { getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
 import { recordAppInteraction } from "../interaction-tracker.js";
+import { persistCard } from "../memory-bridge.js";
 import {
   detectPattern,
   buildSuggestion,
@@ -120,6 +121,18 @@ export async function deliverEnsoReply(params: {
 
   client.send(msg);
   statusSink?.({ lastOutboundAt: Date.now() });
+
+  // Persist assistant card to history
+  persistCard(client.id, {
+    id: msgId,
+    runId,
+    type: "chat",
+    role: "assistant",
+    text,
+    mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+    steps: params.steps && params.steps.length > 1 ? params.steps : undefined,
+    timestamp: msg.timestamp,
+  });
 
   // ── Auto-enhance: if the agent used a registered tool, render the app card ──
   // This replaces the old background compat check (which required an LLM call).
@@ -323,6 +336,24 @@ async function autoEnhanceFromToolCall(
   });
 
   logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhanced: ${toolName} → ${template.toolFamily}/${template.signatureId}`, cardId });
+
+  // Persist enhance update to card history (merges with existing card record)
+  persistCard(client.id, {
+    id: cardId,
+    runId: "",
+    type: "chat",
+    role: "assistant",
+    appData: normalized,
+    appGeneratedUI: templateCode,
+    appCardMode: {
+      interactionMode: "tool",
+      toolFamily: template.toolFamily,
+      appId: template.toolFamily,
+      signatureId: template.signatureId,
+      coverageStatus: template.coverageStatus,
+    },
+    timestamp: Date.now(),
+  });
 
   // Record enhance interaction for Living Apps tracking
   recordAppInteraction(template.toolFamily, {

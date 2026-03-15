@@ -287,8 +287,11 @@ export async function runClaudeCode(params: {
   const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
   process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = "300000"; // 5 minutes
 
-  // Heartbeat: abort if no message arrives for 3 minutes (hung stream protection)
-  const HEARTBEAT_TIMEOUT_MS = 180_000;
+  // Heartbeat: abort if no message arrives for 10 minutes (hung stream protection).
+  // Needs to be generous — Claude Code can go silent for extended periods during
+  // context compaction on /resume, long-running bash tools (ffmpeg, sleep), and
+  // API-side processing. 180s was too aggressive and caused false aborts.
+  const HEARTBEAT_TIMEOUT_MS = 600_000;
   let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   const resetHeartbeat = () => {
     if (heartbeatTimer) clearTimeout(heartbeatTimer);
@@ -775,6 +778,10 @@ export async function runClaudeCode(params: {
   try {
     await runQuery();
   } catch (err: unknown) {
+    // Always clear heartbeat on error — the for-await clearHeartbeat() at
+    // the end of runQuery() is skipped when the loop throws (e.g. abort).
+    clearHeartbeat();
+
     // If we already received a success result but the process exited with
     // a non-zero code (e.g. exit code 1 after cleanup), flush the pending
     // final instead of treating it as an error — the work completed fine.

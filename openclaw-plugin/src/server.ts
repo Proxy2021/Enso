@@ -19,6 +19,8 @@ import { APP_CATALOG } from "./app-catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
 import { classifyTask } from "./task-router.js";
+import { persistCard, loadCardHistory, pruneStaleJournals, readWorkspaceMemory, writeUserProfile, getWorkspaceDir } from "./memory-bridge.js";
+import type { CardRecord } from "./memory-bridge.js";
 
 export type ConnectedClient = {
   id: string;
@@ -546,6 +548,22 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
+  // ── Memory Surface API — expose OpenClaw workspace memory to frontend ──
+  app.get("/api/memory", (_req, res) => {
+    res.json(readWorkspaceMemory());
+  });
+
+  app.put("/api/memory", express.json(), (req, res) => {
+    const wsDir = getWorkspaceDir();
+    if (!wsDir) { res.status(503).json({ error: "Workspace not available yet" }); return; }
+    const { user } = req.body as { user?: string };
+    if (typeof user === "string") {
+      const ok = writeUserProfile(user);
+      if (!ok) { res.status(500).json({ error: "Failed to write USER.md" }); return; }
+    }
+    res.json({ ok: true });
+  });
+
   // Accept file uploads from the browser client
   const uploadDir = join(tmpdir(), "enso-uploads");
   mkdirSync(uploadDir, { recursive: true });
@@ -803,6 +821,19 @@ export async function startEnsoServer(opts: {
 
         switch (msg.type) {
           case "chat.send":
+            // Persist user bubble to card history
+            if (msg.text) {
+              const userCardId = randomUUID();
+              persistCard(clientId, {
+                id: userCardId,
+                runId: userCardId,
+                type: "user-bubble",
+                role: "user",
+                text: msg.text,
+                mediaUrls: msg.mediaUrls,
+                timestamp: Date.now(),
+              });
+            }
             // Direct tool invocation — bypass OpenClaw pipeline entirely
             if (msg.routing?.toolId === "claude-code" && msg.text) {
               runtime.log?.(`[enso] direct claude-code: "${msg.text.slice(0, 60)}"`);
@@ -1602,8 +1633,22 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
-          case "chat.history":
+          case "chat.history": {
+            const historyCount = msg.historyCount ?? 50;
+            const records = loadCardHistory(clientId, historyCount);
+            if (records.length > 0) {
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                cardHistory: records,
+                timestamp: Date.now(),
+              });
+            }
             break;
+          }
         }
       } catch (err) {
         runtime.error?.(`[enso] message handling error: ${String(err)}`);
@@ -1642,6 +1687,9 @@ export async function startEnsoServer(opts: {
     server.listen(port, () => {
       runtime.log?.(`[enso] server listening on :${port}`);
       logAction({ ts: Date.now(), type: "system", category: "system", message: `Server started on port ${port}`, metadata: { port, hostname: hostname(), platform: platform() } });
+
+      // Prune stale card history files on startup
+      try { pruneStaleJournals(); } catch { /* best-effort */ }
 
       // Broadcast fix notifications to all connected clients in real-time
       onFixLogged((fix: FixEntry) => {
