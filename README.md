@@ -32,11 +32,8 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 
 Enso ships with production-ready interactive apps that showcase the platform's range. Every app is generated from tool results — the same pipeline you use to build your own.
 
-### 🔍 Web Researcher
-Ask any question and get a structured research board with key findings, confidence levels, source attribution, embedded videos, and images. Drill into subtopics, compare two topics side-by-side, ask follow-up questions in context, or email the full report.
-
-### 🏙️ City Planner
-Say "plan a trip to Tokyo" and get an interactive travel board — restaurants with ratings and cuisine filters, photo spots, landmarks, and YouTube video guides. Click any place for a detailed modal. Send the full itinerary as an HTML email.
+### 🔍 Researcher
+Research any topic in any language. Get a structured research board with key findings, confidence levels, source attribution, contradiction detection, gap analysis, embedded videos, books, and images. Generate AI podcast overviews with two-host conversational audio. Drill into subtopics, compare topics side-by-side, ask follow-up questions in context, or email the full report. Complex topics auto-escalate to deep research via Claude Code for iterative, citation-chain analysis.
 
 ### 📸 Photo Studio
 Professional photo processing with 28 styles across four categories — Film Stocks (Portra, Ektar, Tri-X, CineStill), Cinematic (Wong Kar-wai, Blade Runner, Wes Anderson, Ghibli), Photographers (Moriyama, Fan Ho, Saul Leiter), and 2026 Trending (Moody Natural, Soft Film, Faded Editorial). Data-driven recipe engine: adding a new style is a JSON entry — zero code changes. Style previews let you see every look before committing. Single-photo and batch processing with automatic thumbnail generation. Photo book creation with aspect-ratio-aware layouts (hero, grid, editorial, panoramic, minimal). Also includes AI-powered descriptions, EXIF metadata, search, favorites, and collections.

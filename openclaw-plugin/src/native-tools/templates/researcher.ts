@@ -19,9 +19,15 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const [sourceFilter, setSourceFilter] = useState("");
   const [deepDiveInput, setDeepDiveInput] = useState("");
   const [imgErrors, setImgErrors] = useState({});
+  const [expandedSource, setExpandedSource] = useState(null);
+  const [playingVideos, setPlayingVideos] = useState({});
+  const [copied, setCopied] = useState(false);
+  const [podcastLoading, setPodcastLoading] = useState(false);
+  const [scriptExpanded, setScriptExpanded] = useState(false);
 
   // ── View detection ──
   const topic = String(data?.topic ?? "");
+  const phase = String(data?.phase ?? "complete");
   const isWelcome = !topic || data?.category === "welcome";
   const isSearch = data?.tool === "enso_researcher_search" && !isWelcome;
   const isDeepDive = data?.tool === "enso_researcher_deep_dive";
@@ -39,13 +45,19 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const metadata = data?.metadata || {};
   const images = Array.isArray(data?.images) ? data.images : [];
   const videos = Array.isArray(data?.videos) ? data.videos : [];
-  const heroImage = images.find((img) => img.sectionIdx === 0) || images[0];
+  const books = Array.isArray(data?.books) ? data.books : [];
+  const movies = Array.isArray(data?.movies) ? data.movies : [];
+  const recommendedVideos = Array.isArray(data?.recommendedVideos) ? data.recommendedVideos : [];
+  const contradictions = Array.isArray(data?.contradictions) ? data.contradictions : [];
+  const searchQueries = Array.isArray(data?.searchQueries) ? data.searchQueries : (Array.isArray(metadata?.searchQueries) ? metadata.searchQueries : []);
+  const gapQueries = Array.isArray(metadata?.gapQueries) ? metadata.gapQueries : [];
+  const audioUrl = data?.audioUrl || null;
+  const podcastScript = data?.podcastScript || null;
+  const podcastStatus = data?.podcastStatus || null;
+  const podcastError = data?.podcastError || null;
   const galleryImages = images.filter((img) => !imgErrors[img.url]);
   const handleImgError = (url) => setImgErrors((prev) => ({ ...prev, [url]: true }));
-  const getSectionImage = (sIdx) => {
-    const img = images.find((i) => i.sectionIdx === sIdx);
-    return img && !imgErrors[img.url] ? img : null;
-  };
+  const heroImage = images.find((img) => img.sectionIdx === 0) || images[0];
 
   // ── Research history ──
   const recentTopics = Array.isArray(data?.recentTopics) ? data.recentTopics : [];
@@ -67,7 +79,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     const m = url.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
   };
-  const [playingVideos, setPlayingVideos] = useState({});
   const togglePlay = (url) => setPlayingVideos((prev) => ({ ...prev, [url]: !prev[url] }));
 
   // ── Finding type styling ──
@@ -75,13 +86,18 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const findingAccent = { fact: "emerald", trend: "blue", insight: "purple", warning: "amber" };
   const confidenceVariant = { high: "success", medium: "warning", low: "outline" };
 
+  // ── Phase checks ──
+  const isLoading = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking", "deep_research"].includes(phase);
+  const hasSynthesis = ["synthesized", "gap_checking", "complete"].includes(phase);
+  const isComplete = phase === "complete";
+
   // ── Helper: source reference badges ──
   const SourceRefs = ({ refs }) => {
     if (!refs || refs.length === 0) return null;
     return (
       <span className="inline-flex gap-0.5 ml-1">
         {refs.slice(0, 3).map((idx) => (
-          <span key={idx} className="text-[9px] px-1 py-0.5 rounded bg-gray-700/50 text-gray-400 font-mono">
+          <span key={idx} className="text-[9px] px-1 py-0.5 rounded bg-gray-700/50 text-gray-400 font-mono cursor-pointer hover:bg-gray-600/50" onClick={(e) => { e.stopPropagation(); setExpandedSource(idx); }}>
             {idx + 1}
           </span>
         ))}
@@ -89,8 +105,74 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     );
   };
 
+  // ── Helper: skeleton pulse block ──
+  const Skeleton = ({ className }) => (
+    <div className={"animate-pulse bg-gray-700/40 rounded " + (className || "")} />
+  );
+
+  // ── Helper: phase status text ──
+  const phaseLabels = {
+    generating_queries: "Generating search queries...",
+    searching: "Searching the web...",
+    sources: "Gathering sources...",
+    synthesizing: "Analyzing & synthesizing...",
+    gap_checking: "Checking for gaps...",
+    deep_research: "Deep research in progress (Claude Code)...",
+    synthesized: "Finalizing...",
+    complete: "Research complete",
+  };
+
+  // ── Video card component ──
+  const VideoCard = ({ v, compact }) => {
+    const ytId = getYouTubeId(v.url);
+    const isPlaying = playingVideos[v.url];
+    return (
+      <div className="rounded-lg overflow-hidden bg-gray-800/50">
+        {isPlaying && ytId ? (
+          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
+            <iframe
+              src={"https://www.youtube.com/embed/" + ytId + "?autoplay=1&rel=0"}
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
+              allow="autoplay; encrypted-media"
+              allowFullScreen
+            />
+          </div>
+        ) : (
+          <div className="relative cursor-pointer" onClick={() => ytId ? togglePlay(v.url) : onAction("open_url", { url: v.url })}>
+            {v.thumbnail && (
+              <img
+                src={v.thumbnail}
+                alt={v.title}
+                className={"w-full object-cover " + (compact ? "h-32" : "h-auto max-h-56")}
+                referrerPolicy="no-referrer"
+              />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <div className={"rounded-full bg-red-600/90 flex items-center justify-center shadow-lg hover:bg-red-500 transition-colors " + (compact ? "w-10 h-10" : "w-14 h-14")}>
+                <LucideReact.Play className={(compact ? "w-5 h-5" : "w-7 h-7") + " text-white ml-0.5"} />
+              </div>
+            </div>
+            {v.duration && (
+              <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] text-white font-mono">
+                {v.duration}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="px-3 py-2">
+          <div className={"font-semibold text-gray-100 " + (compact ? "text-[11px] line-clamp-1" : "text-xs line-clamp-2")}>{v.title}</div>
+          <div className="flex gap-1.5 mt-1 flex-wrap items-center">
+            {v.publisher && <Badge variant="info">{v.publisher}</Badge>}
+            {v.creator && <span className="text-[10px] text-gray-400">{v.creator}</span>}
+            {v.age && <span className="text-[10px] text-gray-500">{v.age}</span>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ═══════════════════════════════════════════
-  // VIEW 1: Welcome — topic input
+  // VIEW 1: Welcome
   // ═══════════════════════════════════════════
   if (isWelcome) {
     const handleSearch = () => {
@@ -111,7 +193,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             <LucideReact.Search className="w-5 h-5 text-blue-400" />
             <div className="text-lg font-semibold text-gray-100">Research Assistant</div>
           </div>
-          <div className="text-xs text-gray-400">Deep multi-angle web research with images, videos & AI synthesis</div>
+          <div className="text-xs text-gray-400">Deep multi-angle web research with AI synthesis, multimedia & gap analysis</div>
         </div>
         <div className="flex gap-2">
           <div className="flex-1">
@@ -138,33 +220,43 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
         {recentTopics.length > 0 && (
           <div className="space-y-2">
-            <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-              <LucideReact.BookOpen className="w-3 h-3" /> Your Research Library
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                <LucideReact.BookOpen className="w-3 h-3" /> Research Library ({recentTopics.length})
+              </div>
             </div>
-            <div className="space-y-1">
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
               {recentTopics.map((entry) => {
                 const entryTopic = entry.meta?.topic || entry.id || "";
+                const m = entry.meta || {};
                 return (
                   <div
                     key={entry.id}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-800/40 hover:bg-gray-700/50 cursor-pointer transition-colors group"
+                    className="rounded-lg bg-gray-800/40 hover:bg-gray-700/50 cursor-pointer transition-colors group p-3 space-y-1.5"
                     onClick={() => onAction("search", { topic: entryTopic })}
                   >
-                    <LucideReact.FileText className="w-4 h-4 text-blue-400 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-100 truncate">{entryTopic}</div>
-                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                        {entry.meta?.sourceCount > 0 && <span>{entry.meta.sourceCount} sources</span>}
-                        {entry.meta?.depth && <span>{entry.meta.depth}</span>}
-                        {entry.timestamp && <span>{timeAgo(entry.timestamp)}</span>}
-                      </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm font-medium text-gray-100 line-clamp-2">{entryTopic}</div>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-600/50 shrink-0"
+                        onClick={(e) => { e.stopPropagation(); onAction("delete_history", { topic: entryTopic }); }}
+                      >
+                        <LucideReact.X className="w-3 h-3 text-gray-500" />
+                      </button>
                     </div>
-                    <button
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-600/50"
-                      onClick={(e) => { e.stopPropagation(); onAction("delete_history", { topic: entryTopic }); }}
-                    >
-                      <LucideReact.X className="w-3.5 h-3.5 text-gray-500" />
-                    </button>
+                    {m.summaryPreview && (
+                      <div className="text-[11px] text-gray-400 line-clamp-2">{m.summaryPreview}</div>
+                    )}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {m.sourceCount > 0 && <Badge variant="default">{m.sourceCount} sources</Badge>}
+                      {m.findingCount > 0 && <Badge variant="info">{m.findingCount} findings</Badge>}
+                      {m.isDeepResearch && <Badge variant="success">deep</Badge>}
+                      {m.hasBooks && <span className="text-[10px] text-indigo-400">books</span>}
+                      {m.hasVideos && <span className="text-[10px] text-red-400">videos</span>}
+                      {m.hasContradictions && <span className="text-[10px] text-amber-400">contradictions</span>}
+                      {m.depth && !m.isDeepResearch && <span className="text-[10px] text-gray-500">{m.depth}</span>}
+                      {entry.timestamp && <span className="text-[10px] text-gray-600">{timeAgo(entry.timestamp)}</span>}
+                    </div>
                   </div>
                 );
               })}
@@ -238,13 +330,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           <div className="grid grid-cols-3 gap-1.5 rounded-lg overflow-hidden">
             {images.filter((img) => !imgErrors[img.url]).slice(0, 3).map((img, i) => (
               <div key={i} className="h-24 overflow-hidden bg-gray-800">
-                <img
-                  src={img.url}
-                  alt={img.title}
-                  className="w-full h-full object-cover"
-                  onError={() => handleImgError(img.url)}
-                  referrerPolicy="no-referrer"
-                />
+                <img src={img.url} alt={img.title} className="w-full h-full object-cover" onError={() => handleImgError(img.url)} referrerPolicy="no-referrer" />
               </div>
             ))}
           </div>
@@ -466,16 +552,9 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   }
 
   // ═══════════════════════════════════════════
-  // VIEW 2: Research Overview — narrative-first
+  // VIEW 2: Research Overview — progressive rendering
   // ═══════════════════════════════════════════
-  const hasNarrative = narrativeParagraphs.length > 0;
-  const inlineImages = galleryImages.slice(0, 3);
-  const inlineVideos = videos.slice(0, 2);
-  const remainingImages = galleryImages.slice(inlineImages.length);
-  const remainingVideos = videos.slice(inlineVideos.length);
-  const remainingMediaCount = remainingImages.length + remainingVideos.length;
-  const imgInsertIdx = Math.max(1, Math.floor(narrativeParagraphs.length / 3));
-  const vidInsertIdx = Math.max(2, Math.floor((narrativeParagraphs.length * 2) / 3));
+
   const filteredSources = sourceFilter
     ? sources.filter((s) =>
         String(s.title).toLowerCase().includes(sourceFilter.toLowerCase()) ||
@@ -483,379 +562,221 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       )
     : sources;
 
+  // Count media for tab labels
+  const recVideos = recommendedVideos.map((rv) => videos[rv.index]).filter(Boolean);
+  const otherVideos = videos.filter((_, i) => !recommendedVideos.some((rv) => rv.index === i));
+  const hasMedia = videos.length > 0 || books.length > 0 || movies.length > 0;
+  const mediaCount = videos.length + books.length + movies.length;
+
+  // Build tab list dynamically
+  const tabList = [
+    { value: "overview", label: "Overview" },
+    ...(sections.length > 0 || !hasSynthesis ? [{ value: "sections", label: "Sections" + (sections.length > 0 ? " (" + sections.length + ")" : "") }] : []),
+    ...(hasMedia || !hasSynthesis ? [{ value: "media", label: "Media" + (mediaCount > 0 ? " (" + mediaCount + ")" : "") }] : []),
+    { value: "sources", label: "Sources" + (sources.length > 0 ? " (" + sources.length + ")" : "") },
+  ];
+
   return (
     <div className="space-y-3">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <Stat label="Research" value={topic} accent="blue" />
-          <Badge variant="info">{sources.length} sources</Badge>
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <LucideReact.BookOpen className="w-5 h-5 text-blue-400 shrink-0" />
+          <div className="text-base font-semibold text-gray-100 truncate">{topic}</div>
         </div>
-        <div className="flex gap-1.5">
-          <Button variant="ghost" onClick={() => onAction("search", { topic: "" })}>
-            <LucideReact.Plus className="w-3.5 h-3.5" /> New
-          </Button>
-          <Button variant="primary" onClick={() => setEmailOpen(true)}>
-            <LucideReact.Mail className="w-3.5 h-3.5" /> Email
-          </Button>
+        <div className="flex gap-1 sm:gap-1.5 shrink-0 flex-wrap justify-end">
+          {isComplete && !audioUrl && (
+            <Button variant="ghost" onClick={() => {
+              setPodcastLoading(true);
+              onAction("generate_podcast", { topic });
+            }} disabled={podcastLoading}>
+              {podcastLoading
+                ? <><div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /> <span className="hidden sm:inline">{podcastStatus === "rendering_audio" ? "Recording..." : "Writing..."}</span></>
+                : podcastError
+                  ? <><LucideReact.AlertCircle className="w-3.5 h-3.5 text-rose-400" /> <span className="hidden sm:inline">Retry</span></>
+                  : <><LucideReact.Podcast className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Listen</span></>
+              }
+            </Button>
+          )}
+          {isComplete && audioUrl && (
+            <Button variant="ghost" onClick={() => {
+              const el = document.getElementById("research-audio-player");
+              if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+            }}>
+              <LucideReact.Headphones className="w-3.5 h-3.5 text-cyan-400" /> <span className="hidden sm:inline">Podcast</span>
+            </Button>
+          )}
+          {isComplete && (
+            <Button variant="ghost" onClick={() => {
+              setCopied(true);
+              onAction("__copy_research", { topic, summary, keyFindings, sources, narrative });
+              setTimeout(() => setCopied(false), 2000);
+            }}>
+              {copied
+                ? <><LucideReact.Check className="w-3.5 h-3.5 text-emerald-400" /> <span className="hidden sm:inline">Copied</span></>
+                : <><LucideReact.Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy</span></>
+              }
+            </Button>
+          )}
+          {isComplete && (
+            <Button variant="ghost" onClick={() => onAction("__share_research_image", { topic })}>
+              <LucideReact.Image className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Image</span>
+            </Button>
+          )}
+          {isComplete && (
+            <Button variant="ghost" onClick={() => onAction("__share_research", { topic, summary, keyFindings, sources, narrative })}>
+              <LucideReact.Share2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Share</span>
+            </Button>
+          )}
+          {isComplete && (
+            <Button variant="ghost" onClick={() => onAction("search", { topic: "" })}>
+              <LucideReact.Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">New</span>
+            </Button>
+          )}
+          {isComplete && (
+            <Button variant="primary" onClick={() => setEmailOpen(true)}>
+              <LucideReact.Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Email</span>
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* From library indicator */}
-      {data?.fromHistory && (
-        <div className="flex items-center gap-2 px-1">
-          <LucideReact.BookOpen className="w-3 h-3 text-gray-500" />
-          <span className="text-[11px] text-gray-500">From library</span>
-          <Button variant="ghost" onClick={() => onAction("search", { topic, depth: data?.depth || "standard", force: true })}>
-            <LucideReact.RefreshCw className="w-3 h-3" /> Refresh
-          </Button>
+      {/* ── Phase indicator ── */}
+      {isLoading && (
+        <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+          <div className="flex-1">
+            <div className="text-sm text-blue-300">{phaseLabels[phase] || "Working..."}</div>
+            {sources.length > 0 && <div className="text-[10px] text-blue-400/60">{sources.length} sources found</div>}
+          </div>
         </div>
       )}
 
-      {/* Hero image */}
-      {heroImage && !imgErrors[heroImage.url] && (
-        <div className="w-full h-44 overflow-hidden rounded-lg cursor-pointer" onClick={() => onAction("open_url", { url: heroImage.pageUrl || heroImage.url })}>
-          <img
-            src={heroImage.url}
-            alt={heroImage.title}
-            className="w-full h-full object-cover"
-            onError={() => handleImgError(heroImage.url)}
-            referrerPolicy="no-referrer"
-          />
+      {/* ── Complete status badges ── */}
+      {isComplete && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="success">{sources.length} sources</Badge>
+          {keyFindings.length > 0 && <Badge variant="info">{keyFindings.length} findings</Badge>}
+          {contradictions.length > 0 && <Badge variant="warning">{contradictions.length} contradictions</Badge>}
+          {gapQueries.length > 0 && <Badge variant="default">gap-checked</Badge>}
+          {data?.fromHistory && (
+            <span className="flex items-center gap-1 text-[10px] text-gray-500">
+              <LucideReact.BookOpen className="w-3 h-3" /> from library
+              <button className="text-blue-400 hover:text-blue-300 ml-1" onClick={() => onAction("search", { topic, depth: data?.depth || "standard", force: true })}>refresh</button>
+            </span>
+          )}
         </div>
       )}
 
-      {/* Metadata note */}
-      {metadata?.note && (
-        <div className="text-[11px] text-amber-400/70 px-1">{String(metadata.note)}</div>
-      )}
-
-      <Separator />
-
-      {/* ── Narrative (primary content) or summary fallback ── */}
-      {hasNarrative ? (
-        <div className="space-y-4">
-          {narrativeParagraphs.map((p, pi) => (
-            <Fragment key={pi}>
-              <div className="text-sm text-gray-200 leading-relaxed">{p}</div>
-
-              {/* Inline images after ~1/3 of paragraphs */}
-              {pi === imgInsertIdx - 1 && inlineImages.length > 0 && (
-                <div className={"grid gap-2 rounded-lg overflow-hidden " + (inlineImages.length === 1 ? "grid-cols-1" : inlineImages.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
-                  {inlineImages.map((img, ii) => (
-                    <div key={ii} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
-                      <img
-                        src={img.url}
-                        alt={img.title}
-                        className="w-full h-28 object-cover"
-                        onError={() => handleImgError(img.url)}
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
-                        <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
-                      </div>
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-0.5">
-                        <LucideReact.ExternalLink className="w-3 h-3 text-white" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Featured video after ~2/3 of paragraphs */}
-              {pi === vidInsertIdx - 1 && inlineVideos.length > 0 && (
-                <div className="space-y-3">
-                  {inlineVideos.map((v, vi) => {
-                    const ytId = getYouTubeId(v.url);
-                    const isPlaying = playingVideos[v.url];
-                    return (
-                      <div key={vi} className="rounded-lg overflow-hidden bg-gray-800/50">
-                        {isPlaying && ytId ? (
-                          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
-                            <iframe
-                              src={"https://www.youtube.com/embed/" + ytId + "?autoplay=1&rel=0"}
-                              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
-                              allow="autoplay; encrypted-media"
-                              allowFullScreen
-                            />
-                          </div>
-                        ) : (
-                          <div className="relative cursor-pointer" onClick={() => ytId ? togglePlay(v.url) : onAction("open_url", { url: v.url })}>
-                            {v.thumbnail && (
-                              <img
-                                src={v.thumbnail}
-                                alt={v.title}
-                                className="w-full h-auto max-h-64 object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                            )}
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                              <div className="w-14 h-14 rounded-full bg-red-600/90 flex items-center justify-center shadow-lg hover:bg-red-500 transition-colors">
-                                <LucideReact.Play className="w-7 h-7 text-white ml-1" />
-                              </div>
-                            </div>
-                            {v.duration && (
-                              <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] text-white font-mono">
-                                {v.duration}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <div className="px-3 py-2">
-                          <div className="text-xs font-semibold text-gray-100 line-clamp-2">{v.title}</div>
-                          <div className="flex gap-1.5 mt-1 flex-wrap items-center">
-                            {v.publisher && <Badge variant="info">{v.publisher}</Badge>}
-                            {v.creator && <span className="text-[10px] text-gray-400">{v.creator}</span>}
-                            {v.age && <span className="text-[10px] text-gray-500">{v.age}</span>}
-                            {!ytId && <span className="text-[10px] text-gray-500 italic">Opens in browser</span>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Fragment>
+      {/* ── Search queries pills ── */}
+      {searchQueries.length > 0 && (phase === "searching" || phase === "sources") && (
+        <div className="flex flex-wrap gap-1.5">
+          {searchQueries.map((q, i) => (
+            <span key={i} className="text-[10px] px-2 py-1 rounded-full bg-gray-800 text-gray-400 border border-gray-700/50">
+              {q}
+            </span>
           ))}
         </div>
-      ) : summary ? (
-        <UICard accent="blue">
-          <div className="text-sm text-gray-200 leading-relaxed">{summary}</div>
-        </UICard>
-      ) : null}
+      )}
 
-      <Separator />
+      {/* ── Skeleton: sources arriving ── */}
+      {(phase === "searching" || phase === "sources") && (
+        <div className="space-y-1.5">
+          {sources.length > 0 ? sources.slice(0, 8).map((s, i) => (
+            <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded bg-gray-800/30">
+              <span className="text-[10px] text-gray-500 font-mono w-4">{i + 1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
+                <div className="text-[10px] text-gray-500">{String(s.domain)}</div>
+              </div>
+            </div>
+          )) : (
+            <div className="space-y-1.5">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-3/4" />
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* ── Collapsible bottom sections ── */}
-      <Accordion
-        items={[
-          ...(sections.length > 0 ? [{
-            value: "explore",
-            title: "Explore Further (" + sections.length + " topics)",
-            content: (
-              <div className="space-y-3">
-                <Accordion
-                  items={sections.map((s, i) => ({
-                    value: "sec-" + i,
-                    title: String(s.title),
-                    content: (
-                      <div className="space-y-2">
-                        {(() => {
-                          const secImg = getSectionImage(i);
-                          return secImg ? (
-                            <div className="w-full h-28 overflow-hidden rounded-lg">
-                              <img
-                                src={secImg.url}
-                                alt={secImg.title}
-                                className="w-full h-full object-cover"
-                                onError={() => handleImgError(secImg.url)}
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
-                          ) : null;
-                        })()}
-                        {s.summary && <div className="text-xs text-gray-400 italic">{String(s.summary)}</div>}
-                        {Array.isArray(s.bullets) && s.bullets.length > 0 && (
-                          <div className="space-y-1">
-                            {s.bullets.map((b, bi) => (
-                              <div key={bi} className="flex gap-2 text-sm text-gray-300">
-                                <LucideReact.ChevronRight className="w-3.5 h-3.5 mt-0.5 text-blue-400 shrink-0" />
-                                <span>{String(b)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <SourceRefs refs={s.sourceRefs} />
-                        <Button
-                          variant="outline"
-                          onClick={() => onAction("deep_dive", { topic, subtopic: s.title })}
-                        >
-                          <LucideReact.ArrowRight className="w-3 h-3" /> Deep Dive
-                        </Button>
-                      </div>
-                    ),
-                  }))}
-                  type="multiple"
-                />
-                <div className="space-y-2 pt-2">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Ask a follow-up question..."
-                      value={followUpInput}
-                      onChange={(val) => setFollowUpInput(val)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && followUpInput.trim()) {
-                          onAction("follow_up", { topic, question: followUpInput.trim() });
-                          setFollowUpInput("");
-                        }
-                      }}
-                      icon={<LucideReact.MessageCircle className="w-3.5 h-3.5" />}
-                    />
-                    <Button variant="primary" onClick={() => {
-                      if (followUpInput.trim()) {
-                        onAction("follow_up", { topic, question: followUpInput.trim() });
-                        setFollowUpInput("");
-                      }
-                    }}>Ask</Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder={"Compare " + topic + " with..."}
-                      value={compareInput}
-                      onChange={(val) => setCompareInput(val)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && compareInput.trim()) {
-                          onAction("compare", { topicA: topic, topicB: compareInput.trim() });
-                          setCompareInput("");
-                        }
-                      }}
-                      icon={<LucideReact.GitCompare className="w-3.5 h-3.5" />}
-                    />
-                    <Button variant="outline" onClick={() => {
-                      if (compareInput.trim()) {
-                        onAction("compare", { topicA: topic, topicB: compareInput.trim() });
-                        setCompareInput("");
-                      }
-                    }}>Compare</Button>
-                  </div>
-                </div>
+      {/* ── Skeleton: synthesizing ── */}
+      {phase === "synthesizing" && (
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-5 w-1/2" />
+          <div className="grid grid-cols-2 gap-2">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          SYNTHESIZED / COMPLETE CONTENT
+         ══════════════════════════════════════ */}
+      {/* ── Audio Player (when podcast is ready) ── */}
+      {audioUrl && (
+        <div id="research-audio-player" className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-[11px] text-cyan-400 uppercase tracking-wide">
+            <LucideReact.Headphones className="w-3.5 h-3.5" /> AI Podcast Overview
+          </div>
+          <audio controls preload="metadata" className="w-full h-10" style={{ borderRadius: "8px" }}>
+            <source src={audioUrl} type="audio/wav" />
+            Your browser does not support audio playback.
+          </audio>
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] text-gray-500">Two AI hosts discuss the key findings from this research</div>
+            {podcastScript && (
+              <button
+                onClick={() => setScriptExpanded(!scriptExpanded)}
+                className="flex items-center gap-1 text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
+              >
+                <LucideReact.FileText className="w-3 h-3" />
+                <span>{scriptExpanded ? "Hide" : "Show"} Transcript</span>
+                <svg className={"w-3 h-3 transition-transform " + (scriptExpanded ? "rotate-180" : "")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+            )}
+          </div>
+          {scriptExpanded && podcastScript && (
+            <div className="mt-2 pt-2 border-t border-cyan-500/20 max-h-[300px] overflow-y-auto text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">
+              {podcastScript.split(/\\n/).map((line, i) => {
+                const hostMatch = line.match(/^(Host [AB]):\\s*(.*)/);
+                if (hostMatch) {
+                  const isA = hostMatch[1] === "Host A";
+                  return (
+                    <div key={i} className="mb-2">
+                      <span className={"font-semibold " + (isA ? "text-cyan-400" : "text-purple-400")}>{hostMatch[1]}:</span>{" "}
+                      <span>{hostMatch[2]}</span>
+                    </div>
+                  );
+                }
+                if (!line.trim()) return null;
+                return <div key={i} className="mb-2 text-gray-400 italic">{line}</div>;
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasSynthesis && (
+        <>
+          {/* ── Key Findings (prominent, findings-first) ── */}
+          {keyFindings.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                <LucideReact.Lightbulb className="w-3 h-3" /> Key Findings
               </div>
-            ),
-          }] : []),
-          ...(remainingMediaCount > 0 ? [{
-            value: "media",
-            title: "Media Gallery (" + remainingMediaCount + ")",
-            content: (
-              <div className="space-y-3">
-                {remainingImages.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                      <LucideReact.Image className="w-3 h-3" /> Images ({remainingImages.length})
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {remainingImages.slice(0, 9).map((img, i) => (
-                        <div key={i} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
-                          <img
-                            src={img.url}
-                            alt={img.title}
-                            className="w-full h-24 object-cover"
-                            onError={() => handleImgError(img.url)}
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
-                            <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
-                          </div>
-                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-0.5">
-                            <LucideReact.ExternalLink className="w-3 h-3 text-white" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {remainingVideos.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                      <LucideReact.Play className="w-3 h-3" /> Videos ({remainingVideos.length})
-                    </div>
-                    <div className="space-y-2">
-                      {remainingVideos.map((v, i) => {
-                        const ytId = getYouTubeId(v.url);
-                        const isPlaying = playingVideos[v.url];
-                        return (
-                          <div key={i} className="rounded-lg overflow-hidden bg-gray-800/50">
-                            {isPlaying && ytId ? (
-                              <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
-                                <iframe
-                                  src={"https://www.youtube.com/embed/" + ytId + "?autoplay=1&rel=0"}
-                                  style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
-                                  allow="autoplay; encrypted-media"
-                                  allowFullScreen
-                                />
-                              </div>
-                            ) : (
-                              <div className="relative cursor-pointer" onClick={() => ytId ? togglePlay(v.url) : onAction("open_url", { url: v.url })}>
-                                {v.thumbnail && (
-                                  <img
-                                    src={v.thumbnail}
-                                    alt={v.title}
-                                    className="w-full h-auto max-h-48 object-cover"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                )}
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                  <div className="w-12 h-12 rounded-full bg-red-600/90 flex items-center justify-center shadow-lg">
-                                    <LucideReact.Play className="w-6 h-6 text-white ml-0.5" />
-                                  </div>
-                                </div>
-                                {v.duration && (
-                                  <div className="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] text-white font-mono">
-                                    {v.duration}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <div className="px-3 py-2">
-                              <div className="text-xs font-semibold text-gray-100 line-clamp-1">{v.title}</div>
-                              <div className="flex gap-1.5 mt-1 flex-wrap items-center">
-                                {v.publisher && <Badge variant="info">{v.publisher}</Badge>}
-                                {v.creator && <span className="text-[10px] text-gray-400">{v.creator}</span>}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ),
-          }] : []),
-          ...(sources.length > 0 ? [{
-            value: "sources",
-            title: "Sources (" + sources.length + ")",
-            content: (
-              <div className="space-y-2">
-                <Input
-                  placeholder="Filter sources..."
-                  value={sourceFilter}
-                  onChange={(val) => setSourceFilter(val)}
-                  icon={<LucideReact.Filter className="w-3.5 h-3.5" />}
-                />
-                <div className="space-y-1">
-                  {filteredSources.slice(0, 20).map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 py-1 px-2 rounded bg-gray-800/30 cursor-pointer hover:bg-gray-700/40 transition-colors" onClick={() => s.url && onAction("open_url", { url: s.url })}>
-                      <span className="text-[10px] text-gray-500 font-mono w-5 text-right">{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
-                        <div className="text-[10px] text-gray-500">{String(s.domain)}</div>
-                      </div>
-                      <div className="w-16 shrink-0">
-                        <Progress value={s.relevance || 0} max={100} variant="blue" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ),
-          }] : []),
-          ...(keyFindings.length > 0 ? [{
-            value: "findings",
-            title: "Research Data (" + keyFindings.length + " findings)",
-            content: (
-              <div className="space-y-2">
+              <div className="grid gap-2" style={{ gridTemplateColumns: keyFindings.length === 1 ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))" }}>
                 {keyFindings.map((f, i) => (
                   <UICard key={i} accent={findingAccent[f.type] || "blue"}>
-                    <div className="flex items-start gap-2">
-                      <div className="flex gap-1 shrink-0 mt-0.5">
-                        <Badge variant={findingVariant[f.type] || "default"}>
-                          {String(f.type)}
-                        </Badge>
-                        <Badge variant={confidenceVariant[f.confidence] || "outline"}>
-                          {String(f.confidence)}
-                        </Badge>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant={findingVariant[f.type] || "default"}>{String(f.type)}</Badge>
+                        <Badge variant={confidenceVariant[f.confidence] || "outline"}>{String(f.confidence)}</Badge>
                       </div>
-                      <div className="text-sm text-gray-200 flex-1">
+                      <div className="text-sm text-gray-200 leading-relaxed">
                         {String(f.text)}
                         <SourceRefs refs={f.sourceRefs} />
                       </div>
@@ -863,11 +784,422 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                   </UICard>
                 ))}
               </div>
-            ),
-          }] : []),
-        ]}
-        type="multiple"
-      />
+            </div>
+          )}
+
+          {/* ── Contradictions ── */}
+          {contradictions.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                <LucideReact.AlertTriangle className="w-3 h-3 text-amber-400" /> Contradictions Found
+              </div>
+              {contradictions.map((c, i) => (
+                <UICard key={i} accent="amber">
+                  <div className="space-y-1.5">
+                    <div className="text-sm font-medium text-amber-200">{String(c.claim)}</div>
+                    <div className="space-y-1">
+                      {(c.perspectives || []).map((p, pi) => (
+                        <div key={pi} className="flex gap-2 text-xs text-gray-300">
+                          <LucideReact.MessageSquare className="w-3 h-3 mt-0.5 shrink-0 text-gray-500" />
+                          <span>{String(p)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <SourceRefs refs={c.sourceRefs} />
+                  </div>
+                </UICard>
+              ))}
+            </div>
+          )}
+
+          <Separator />
+
+          {/* ── Tabbed content ── */}
+          <Tabs tabs={tabList} defaultValue="overview" variant="underline">
+            {(tab) => {
+              // ── OVERVIEW TAB ──
+              if (tab === "overview") {
+                const inlineImages = galleryImages.slice(0, 3);
+                const imgInsertIdx = Math.max(1, Math.floor(narrativeParagraphs.length / 3));
+                return (
+                  <div className="space-y-4 pt-2">
+                    {/* Hero image */}
+                    {heroImage && !imgErrors[heroImage.url] && (
+                      <div className="w-full h-40 overflow-hidden rounded-lg cursor-pointer" onClick={() => onAction("open_url", { url: heroImage.pageUrl || heroImage.url })}>
+                        <img src={heroImage.url} alt={heroImage.title} className="w-full h-full object-cover" onError={() => handleImgError(heroImage.url)} referrerPolicy="no-referrer" />
+                      </div>
+                    )}
+
+                    {/* Narrative */}
+                    {narrativeParagraphs.length > 0 ? (
+                      <div className="space-y-3">
+                        {narrativeParagraphs.map((p, pi) => (
+                          <Fragment key={pi}>
+                            <div className="text-sm text-gray-200 leading-relaxed">{p}</div>
+                            {pi === imgInsertIdx - 1 && inlineImages.length > 1 && (
+                              <div className={"grid gap-2 rounded-lg overflow-hidden " + (inlineImages.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+                                {inlineImages.slice(1).map((img, ii) => (
+                                  <div key={ii} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
+                                    <img src={img.url} alt={img.title} className="w-full h-24 object-cover" onError={() => handleImgError(img.url)} referrerPolicy="no-referrer" />
+                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1">
+                                      <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </Fragment>
+                        ))}
+                      </div>
+                    ) : summary ? (
+                      <div className="text-sm text-gray-200 leading-relaxed">{summary}</div>
+                    ) : null}
+
+                    {/* Recommended videos inline */}
+                    {recVideos.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <LucideReact.Star className="w-3 h-3 text-amber-400" /> Recommended Videos
+                        </div>
+                        {recVideos.slice(0, 2).map((v, i) => (
+                          <div key={i}>
+                            <VideoCard v={v} />
+                            {recommendedVideos[i]?.reason && (
+                              <div className="text-[11px] text-gray-400 mt-1 px-1 italic">{recommendedVideos[i].reason}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Quick actions */}
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Ask a follow-up question..."
+                          value={followUpInput}
+                          onChange={(val) => setFollowUpInput(val)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && followUpInput.trim()) {
+                              onAction("follow_up", { topic, question: followUpInput.trim() });
+                              setFollowUpInput("");
+                            }
+                          }}
+                          icon={<LucideReact.MessageCircle className="w-3.5 h-3.5" />}
+                        />
+                        <Button variant="primary" onClick={() => {
+                          if (followUpInput.trim()) {
+                            onAction("follow_up", { topic, question: followUpInput.trim() });
+                            setFollowUpInput("");
+                          }
+                        }}>Ask</Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder={"Compare " + topic + " with..."}
+                          value={compareInput}
+                          onChange={(val) => setCompareInput(val)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && compareInput.trim()) {
+                              onAction("compare", { topicA: topic, topicB: compareInput.trim() });
+                              setCompareInput("");
+                            }
+                          }}
+                          icon={<LucideReact.GitCompare className="w-3.5 h-3.5" />}
+                        />
+                        <Button variant="outline" onClick={() => {
+                          if (compareInput.trim()) {
+                            onAction("compare", { topicA: topic, topicB: compareInput.trim() });
+                            setCompareInput("");
+                          }
+                        }}>Compare</Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ── SECTIONS TAB ──
+              if (tab === "sections") {
+                if (sections.length === 0) {
+                  return <EmptyState icon={<LucideReact.Layers className="w-6 h-6" />} title="No sections" description="Sections will appear once synthesis completes" />;
+                }
+                const getSectionImage = (sIdx) => {
+                  const img = images.find((i) => i.sectionIdx === sIdx);
+                  return img && !imgErrors[img.url] ? img : null;
+                };
+                return (
+                  <div className="space-y-2 pt-2">
+                    <Accordion
+                      items={sections.map((s, i) => ({
+                        value: "sec-" + i,
+                        title: String(s.title),
+                        content: (
+                          <div className="space-y-2">
+                            {(() => {
+                              const secImg = getSectionImage(i);
+                              return secImg ? (
+                                <div className="w-full h-28 overflow-hidden rounded-lg">
+                                  <img src={secImg.url} alt={secImg.title} className="w-full h-full object-cover" onError={() => handleImgError(secImg.url)} referrerPolicy="no-referrer" />
+                                </div>
+                              ) : null;
+                            })()}
+                            {s.summary && <div className="text-xs text-gray-400 italic">{String(s.summary)}</div>}
+                            {Array.isArray(s.bullets) && s.bullets.length > 0 && (
+                              <div className="space-y-1">
+                                {s.bullets.map((b, bi) => (
+                                  <div key={bi} className="flex gap-2 text-sm text-gray-300">
+                                    <LucideReact.ChevronRight className="w-3.5 h-3.5 mt-0.5 text-blue-400 shrink-0" />
+                                    <span>{String(b)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <SourceRefs refs={s.sourceRefs} />
+                              <Button variant="outline" onClick={() => onAction("deep_dive", { topic, subtopic: s.title })}>
+                                <LucideReact.ArrowRight className="w-3 h-3" /> Deep Dive
+                              </Button>
+                            </div>
+                          </div>
+                        ),
+                      }))}
+                      type="multiple"
+                    />
+                  </div>
+                );
+              }
+
+              // ── MEDIA TAB ──
+              if (tab === "media") {
+                if (!hasMedia && isComplete) {
+                  return <EmptyState icon={<LucideReact.Film className="w-6 h-6" />} title="No media found" description="No videos, books, or related media discovered" />;
+                }
+                return (
+                  <div className="space-y-4 pt-2">
+                    {/* Recommended videos */}
+                    {recVideos.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <LucideReact.Star className="w-3 h-3 text-amber-400" /> Recommended ({recVideos.length})
+                        </div>
+                        {recVideos.map((v, i) => (
+                          <div key={i}>
+                            <VideoCard v={v} />
+                            {recommendedVideos[i]?.reason && (
+                              <div className="text-[11px] text-gray-400 mt-1 px-1 italic">{recommendedVideos[i].reason}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* All videos */}
+                    {otherVideos.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <LucideReact.Play className="w-3 h-3" /> Videos ({otherVideos.length})
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {otherVideos.map((v, i) => (
+                            <VideoCard key={i} v={v} compact />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Books */}
+                    {books.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <LucideReact.BookOpen className="w-3 h-3 text-indigo-400" /> Books ({books.length})
+                        </div>
+                        {books.map((b, i) => (
+                          <UICard key={i} accent="indigo">
+                            <div className="flex gap-3">
+                              <div className="w-8 h-12 bg-indigo-900/30 rounded flex items-center justify-center shrink-0">
+                                <LucideReact.BookOpen className="w-4 h-4 text-indigo-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-100">{b.title}</div>
+                                <div className="text-[11px] text-gray-400">{b.author}{b.year ? " (" + b.year + ")" : ""}</div>
+                                {b.description && <div className="text-xs text-gray-400 mt-1">{b.description}</div>}
+                              </div>
+                              {b.url && (
+                                <Button variant="ghost" onClick={() => onAction("open_url", { url: b.url })}>
+                                  <LucideReact.ExternalLink className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </UICard>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Movies / TV / Documentaries / Podcasts */}
+                    {movies.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <LucideReact.Film className="w-3 h-3 text-rose-400" /> Movies & Shows ({movies.length})
+                        </div>
+                        {movies.map((m, i) => {
+                          const typeAccent = { movie: "rose", tv: "cyan", documentary: "teal", podcast: "orange" };
+                          const typeIcon = { movie: "Film", tv: "Monitor", documentary: "Clapperboard", podcast: "Mic" };
+                          const IconComp = LucideReact[typeIcon[m.type]] || LucideReact.Film;
+                          return (
+                            <UICard key={i} accent={typeAccent[m.type] || "rose"}>
+                              <div className="flex gap-3">
+                                <div className="w-8 h-12 bg-gray-800/50 rounded flex items-center justify-center shrink-0">
+                                  <IconComp className="w-4 h-4 text-gray-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm font-medium text-gray-100">{m.title}</div>
+                                    {m.year && <span className="text-[10px] text-gray-500">({m.year})</span>}
+                                  </div>
+                                  <Badge variant={m.type === "documentary" ? "info" : m.type === "podcast" ? "warning" : "default"}>{m.type}</Badge>
+                                  {m.description && <div className="text-xs text-gray-400 mt-1">{m.description}</div>}
+                                </div>
+                                {m.url && (
+                                  <Button variant="ghost" onClick={() => onAction("open_url", { url: m.url })}>
+                                    <LucideReact.ExternalLink className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </UICard>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Image gallery */}
+                    {galleryImages.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <LucideReact.Image className="w-3 h-3" /> Images ({galleryImages.length})
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {galleryImages.slice(0, 9).map((img, i) => (
+                            <div key={i} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
+                              <img src={img.url} alt={img.title} className="w-full h-24 object-cover" onError={() => handleImgError(img.url)} referrerPolicy="no-referrer" />
+                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1">
+                                <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // ── SOURCES TAB ──
+              if (tab === "sources") {
+                if (sources.length === 0) {
+                  return <EmptyState icon={<LucideReact.Globe className="w-6 h-6" />} title="No sources" description="Sources will appear as search completes" />;
+                }
+                return (
+                  <div className="space-y-2 pt-2">
+                    <Input
+                      placeholder="Filter sources..."
+                      value={sourceFilter}
+                      onChange={(val) => setSourceFilter(val)}
+                      icon={<LucideReact.Filter className="w-3.5 h-3.5" />}
+                    />
+                    <div className="space-y-1">
+                      {filteredSources.slice(0, 25).map((s, i) => {
+                        const isExpanded = expandedSource === i;
+                        const hasContent = s.fullContent && s.fullContent.length > 100;
+                        return (
+                          <div key={i} className="rounded bg-gray-800/30">
+                            <div
+                              className="flex items-center gap-2 py-1.5 px-2 cursor-pointer hover:bg-gray-700/40 transition-colors"
+                              onClick={() => hasContent ? setExpandedSource(isExpanded ? null : i) : (s.url && onAction("open_url", { url: s.url }))}
+                            >
+                              <span className="text-[10px] text-gray-500 font-mono w-5 text-right shrink-0">{i + 1}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
+                                <div className="text-[10px] text-gray-500">{String(s.domain)}</div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="w-12">
+                                  <Progress value={s.relevance || 0} max={100} variant="blue" />
+                                </div>
+                                {hasContent && (
+                                  <LucideReact.ChevronDown className={"w-3 h-3 text-gray-500 transition-transform " + (isExpanded ? "rotate-180" : "")} />
+                                )}
+                                <button className="p-0.5 rounded hover:bg-gray-600/50" onClick={(e) => { e.stopPropagation(); s.url && onAction("open_url", { url: s.url }); }}>
+                                  <LucideReact.ExternalLink className="w-3 h-3 text-gray-500" />
+                                </button>
+                              </div>
+                            </div>
+                            {/* Inline source reader */}
+                            {isExpanded && hasContent && (
+                              <div className="px-3 py-2 border-t border-gray-700/30 max-h-64 overflow-y-auto">
+                                <div className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{String(s.fullContent).slice(0, 3000)}</div>
+                                {String(s.fullContent).length > 3000 && (
+                                  <div className="text-[10px] text-gray-500 mt-2">
+                                    Showing first 3000 chars. <button className="text-blue-400 hover:text-blue-300" onClick={() => onAction("open_url", { url: s.url })}>Read full article</button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Audit trail */}
+                    {(searchQueries.length > 0 || gapQueries.length > 0) && (
+                      <Accordion items={[{
+                        value: "audit",
+                        title: "How this was researched",
+                        content: (
+                          <div className="space-y-2">
+                            {searchQueries.length > 0 && (
+                              <div>
+                                <div className="text-[10px] text-gray-500 uppercase mb-1">Search queries ({searchQueries.length})</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {searchQueries.map((q, i) => (
+                                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700/50">{q}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {gapQueries.length > 0 && (
+                              <div>
+                                <div className="text-[10px] text-gray-500 uppercase mb-1">Gap-check queries ({gapQueries.length})</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {gapQueries.map((q, i) => (
+                                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/20 text-amber-400 border border-amber-700/30">{q}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {metadata?.sourcesFound != null && (
+                              <div className="text-[10px] text-gray-500">
+                                {metadata.sourcesFound} sources found, {metadata.sectionsGenerated || 0} sections, {metadata.queriesRun || 0} queries run
+                              </div>
+                            )}
+                          </div>
+                        ),
+                      }]} />
+                    )}
+                  </div>
+                );
+              }
+
+              return null;
+            }}
+          </Tabs>
+        </>
+      )}
+
+      {/* Metadata note */}
+      {metadata?.note && (
+        <div className="text-[11px] text-amber-400/70 px-1">{String(metadata.note)}</div>
+      )}
 
       {/* Email dialog */}
       <Dialog open={emailOpen} onClose={() => setEmailOpen(false)} title={"Email Research: " + topic} footer={

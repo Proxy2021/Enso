@@ -158,7 +158,7 @@ Three creation methods: **(1) Build from Enso UI** (recommended), **(2) Via Code
 | Tier | What | Can Delete? | Examples |
 |------|------|-------------|---------|
 | **System** | Core platform capabilities. Deeply integrated (Node.js APIs, native binaries, SDK sessions). Always available. | No | filesystem, media, screen, browser, claude_code, shell |
-| **Apps** | Everything else. Built on top of system capabilities. Can be pre-installed (`shipped`) or user-created. | Yes | researcher, city_planner, clawhub, alpharank, photo_studio |
+| **Apps** | Everything else. Built on top of system capabilities. Can be pre-installed (`shipped`) or user-created. | Yes | researcher, clawhub, alpharank, photo_studio |
 
 ### Experience Types
 
@@ -166,7 +166,7 @@ Apps render in two styles:
 
 | Experience | Card Type | Rendering | Apps |
 |------------|-----------|-----------|------|
-| **card** | `dynamic-ui` | React JSX template in sandbox | filesystem, media, screen, browser, researcher, city_planner, all user apps |
+| **card** | `dynamic-ui` | React JSX template in sandbox | filesystem, media, screen, browser, researcher, all user apps |
 | **terminal** | `terminal` / `shell` | Streaming text terminal (xterm.js) | claude_code, shell |
 
 ### Critical Rules (Quick Reference)

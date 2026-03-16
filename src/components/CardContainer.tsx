@@ -23,7 +23,6 @@ const APP_LABELS: Record<string, string> = {
   alpharank: "AlphaRank",
   filesystem: "File Browser",
   media_gallery: "Photo Gallery",
-  city_planner: "City Planner",
   web_browser: "Browser",
   researcher: "Researcher",
   clawhub: "ClawHub",
@@ -200,12 +199,12 @@ function EnhanceButton({ card }: { card: Card }) {
 
   if (status === "loading") {
     return (
-      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300">
-        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+      <div className="flex items-center gap-1 sm:gap-1.5 min-h-[28px] px-1.5 sm:px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300">
+        <svg className="animate-spin h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        <span className="text-[10px]">Enhancing</span>
+        <span className="text-[10px] hidden sm:inline">Enhancing</span>
       </div>
     );
   }
@@ -215,13 +214,13 @@ function EnhanceButton({ card }: { card: Card }) {
       <>
         <button
           onClick={handleBuildAppClick}
-          className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors"
+          className="flex items-center justify-center gap-1 text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors"
           title="Build a new app for this content"
         >
-          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          Build App
+          <span className="hidden sm:inline">Build App</span>
         </button>
         {showFactory && (
           <AppBuilderDialog
@@ -243,12 +242,12 @@ function EnhanceButton({ card }: { card: Card }) {
     return (
       <button
         onClick={() => enhanceCardWithFamily(card.id, suggestedFamily)}
-        className="flex items-center gap-1.5 text-[10px] px-2.5 py-0.5 rounded-full border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-colors"
+        className="flex items-center justify-center gap-1 sm:gap-1.5 text-[10px] min-h-[28px] px-1.5 sm:px-2.5 py-0.5 rounded-full border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-colors"
         title={`Enhance as ${familyLabel} (auto-detected)`}
       >
         <span className="text-xs leading-none">{familyIcon}</span>
-        <span className="capitalize">{familyLabel}</span>
-        <svg className="h-3 w-3 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <span className="capitalize hidden sm:inline">{familyLabel}</span>
+        <svg className="h-3 w-3 opacity-60 hidden sm:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
       </button>
@@ -266,13 +265,13 @@ function EnhanceButton({ card }: { card: Card }) {
             enhanceCard(card.id);
           }
         }}
-        className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
+        className="flex items-center justify-center gap-1 text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors"
         title="Turn this response into an interactive app"
       >
-        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
         </svg>
-        App
+        <span className="hidden sm:inline">App</span>
         {toolFamilies.length > 0 && (
           <svg className="h-2.5 w-2.5 ml-0.5 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9" />
@@ -402,14 +401,14 @@ function PinButton({ cardId }: { cardId: string }) {
   return (
     <button
       onClick={() => isPinned ? unpinCard(cardId) : pinCard(cardId)}
-      className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${
+      className={`min-h-[28px] min-w-[28px] px-1 py-0.5 rounded-full border transition-colors flex items-center justify-center ${
         isPinned
           ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
           : "border-gray-600/50 bg-transparent text-gray-500 hover:text-gray-300"
       }`}
       title={isPinned ? "Unpin" : "Pin to sidebar"}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 17v5" />
         <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1h.5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5H8a1 1 0 0 1 1 1z" />
       </svg>
@@ -587,15 +586,15 @@ function ExportButton({ card }: { card: Card }) {
     <>
       <button
         onClick={() => setShowDialog(true)}
-        className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center gap-1"
+        className="text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1"
         title="Share / Export app"
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
           <polyline points="16 6 12 2 8 6" />
           <line x1="12" y1="2" x2="12" y2="15" />
         </svg>
-        <span>Share</span>
+        <span className="hidden sm:inline">Share</span>
       </button>
       {showDialog && <ShareDialog card={card} onClose={() => setShowDialog(false)} />}
     </>
@@ -613,24 +612,26 @@ function ViewToggle({ card }: { card: Card }) {
     <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
       <button
         onClick={() => toggleCardView(card.id, "original")}
-        className={`text-[10px] px-2.5 py-0.5 rounded-full transition-colors ${
+        className={`text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-colors ${
           viewMode === "original"
             ? "bg-gray-600/60 text-gray-200"
             : "text-gray-400 hover:text-gray-300"
         }`}
       >
-        Original
+        <span className="sm:hidden">Text</span>
+        <span className="hidden sm:inline">Original</span>
       </button>
       <button
         onClick={() => toggleCardView(card.id, "app")}
-        className={`text-[10px] px-2.5 py-0.5 rounded-full transition-colors ${
+        className={`text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-colors ${
           viewMode === "app"
             ? "bg-violet-500/30 text-violet-200 border-violet-500/40"
             : "text-gray-400 hover:text-gray-300"
         }`}
       >
-        {familyIcon && <span className="mr-1">{familyIcon}</span>}
-        <span className="capitalize">{familyLabel}</span>
+        {familyIcon && <span className="mr-0.5 sm:mr-1">{familyIcon}</span>}
+        <span className="capitalize hidden sm:inline">{familyLabel}</span>
+        <span className="capitalize sm:hidden">App</span>
       </button>
     </div>
   );
@@ -715,14 +716,14 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
             </span>
             <button
               onClick={() => setShowInput(true)}
-              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 transition-colors shrink-0 ml-2"
+              className="flex items-center justify-center gap-1 text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 transition-colors shrink-0 ml-2"
               title="Refine this app's UI"
             >
-              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
-              Refine
+              <span className="hidden sm:inline">Refine</span>
             </button>
           </div>
         )}
@@ -768,6 +769,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const expandCard = useChatStore((s) => s.expandCard);
   const removeCard = useChatStore((s) => s.removeCard);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
+  const sendMessage = useChatStore((s) => s.sendMessage);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -784,6 +786,13 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const isGeneralSmartCard = card.type === "dynamic-ui" && (card.cardMode?.appId ?? card.cardMode?.toolFamily) === "general";
   const canEnhance = card.role === "assistant" && card.status === "complete"
     && (card.type === "chat" || isGeneralSmartCard);
+
+  // "Research this" is available on any assistant card with text, except researcher cards themselves
+  const cardFamily = (isAppView ? card.appCardMode?.appId : card.cardMode?.appId)
+    ?? (isAppView ? card.appCardMode?.toolFamily : card.cardMode?.toolFamily);
+  const canResearch = card.role === "assistant" && card.status === "complete"
+    && !!card.text && card.type !== "terminal" && card.type !== "shell" && card.type !== "mission"
+    && cardFamily !== "researcher";
 
   const effectiveType = isAppView ? "dynamic-ui" : card.type;
   const registration = cardRegistry.get(effectiveType);
@@ -870,6 +879,121 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       }
       return;
     }
+    // Client-side research share as long screenshot image
+    if (action === "__share_research_image") {
+      const p = payload as Record<string, unknown> | undefined;
+      const targetCardId = typeof p?.cardId === "string" ? p.cardId : card.id;
+      const topic = typeof p?.topic === "string" ? p.topic : "Research";
+      const el = document.querySelector(`[data-card-id="${targetCardId}"]`) as HTMLElement | null;
+      if (!el) return;
+
+      (async () => {
+        try {
+          const { toPng } = await import("html-to-image");
+          const dataUrl = await toPng(el, {
+            pixelRatio: 2,
+            cacheBust: true,
+            backgroundColor: "#030712",
+            filter: (node: HTMLElement) => {
+              // Skip context menus, tooltips, etc.
+              if (node.classList?.contains("group-hover:opacity-100")) return false;
+              return true;
+            },
+          });
+          const res = await fetch(dataUrl);
+          const blob = await res.blob();
+          const filename = `enso-research-${topic.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 40)}.png`;
+          const file = new File([blob], filename, { type: "image/png" });
+
+          // Try Web Share API with file
+          if (navigator.share && navigator.canShare?.({ files: [file] })) {
+            try {
+              await navigator.share({ title: `Research: ${topic}`, files: [file] });
+              return;
+            } catch (err) {
+              if ((err as DOMException)?.name === "AbortError") return;
+            }
+          }
+
+          // Fallback: download the image
+          const a = document.createElement("a");
+          a.href = dataUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch (err) {
+          console.error("[share_research_image] capture failed:", err);
+          // Fallback to text share
+          handleAction("__share_research", payload);
+        }
+      })();
+      return;
+    }
+    // Client-side research share (Web Share API / native share / clipboard)
+    if (action === "__share_research" || action === "__copy_research") {
+      const p = payload as Record<string, unknown> | undefined;
+      const topic = typeof p?.topic === "string" ? p.topic : "Research";
+      const summary = typeof p?.summary === "string" ? p.summary : "";
+      const findings = Array.isArray(p?.keyFindings) ? p.keyFindings as Array<Record<string, unknown>> : [];
+      const sources = Array.isArray(p?.sources) ? p.sources as Array<Record<string, unknown>> : [];
+      const narrative = typeof p?.narrative === "string" ? p.narrative : "";
+
+      // Build shareable text
+      const lines: string[] = [];
+      lines.push(`# ${topic}\n`);
+      if (summary) lines.push(`${summary}\n`);
+      if (findings.length > 0) {
+        lines.push(`## Key Findings`);
+        findings.forEach((f, i) => {
+          const claim = typeof f.claim === "string" ? f.claim : String(f.claim ?? "");
+          const type = typeof f.type === "string" ? ` [${f.type}]` : "";
+          lines.push(`${i + 1}. ${claim}${type}`);
+        });
+        lines.push("");
+      }
+      if (narrative) {
+        lines.push(`## Analysis\n${narrative}\n`);
+      }
+      if (sources.length > 0) {
+        lines.push(`## Sources`);
+        sources.slice(0, 15).forEach((s, i) => {
+          const title = typeof s.title === "string" ? s.title : "";
+          const url = typeof s.url === "string" ? s.url : "";
+          lines.push(`${i + 1}. ${title}${url ? ` — ${url}` : ""}`);
+        });
+        if (sources.length > 15) lines.push(`... and ${sources.length - 15} more sources`);
+        lines.push("");
+      }
+      lines.push(`— Researched with Enso`);
+      const text = lines.join("\n");
+
+      if (action === "__copy_research") {
+        navigator.clipboard.writeText(text).then(() => {
+          // Brief visual feedback handled by template state
+        }).catch(console.error);
+      } else {
+        // Share
+        import("../lib/native-share").then(async ({ nativeShare, isNative }) => {
+          if (isNative) {
+            await nativeShare({ title: `Research: ${topic}`, text, url: undefined });
+          } else if (navigator.share) {
+            try {
+              await navigator.share({ title: `Research: ${topic}`, text });
+            } catch (err) {
+              if ((err as DOMException)?.name !== "AbortError") {
+                // Fallback to clipboard
+                await navigator.clipboard.writeText(text);
+              }
+            }
+          } else {
+            // No share API — copy to clipboard
+            await navigator.clipboard.writeText(text);
+          }
+        }).catch(console.error);
+      }
+      return;
+    }
     // Client-side photo upload — opens file picker, uploads to server, then triggers backend action
     if (action === "__upload_photos") {
       const input = document.createElement("input");
@@ -937,39 +1061,77 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           onClose={() => setContextMenu(null)}
         />
       )}
-      {card.status === "complete" && (
-        <button
-          onClick={() => (isCollapsed ? expandCard(card.id) : collapseCard(card.id))}
-          className="absolute -left-6 top-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-gray-300 text-xs z-10"
-          title={isCollapsed ? "Expand" : "Collapse"}
-        >
-          {isCollapsed ? "\u25B6" : "\u25BC"}
-        </button>
-      )}
 
       {isCollapsed ? (
         <button
           onClick={() => expandCard(card.id)}
-          className="w-full text-left px-3 py-2 bg-gray-900/75 border border-gray-700/70 rounded-xl text-sm text-gray-300 hover:bg-gray-900 hover:text-gray-200 transition-colors flex items-center gap-2 shadow-[0_8px_24px_rgba(0,0,0,0.28)]"
+          className="w-full text-left min-h-[36px] px-2.5 sm:px-3 py-1.5 bg-gray-900/75 border border-gray-700/70 rounded-xl text-sm text-gray-300 hover:bg-gray-900 hover:text-gray-200 transition-colors flex items-center gap-2 shadow-[0_8px_24px_rgba(0,0,0,0.28)]"
         >
-          <span>{icon}</span>
-          <span className="truncate">{truncate(card.text, 80)}</span>
+          <svg className="h-3 w-3 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+          <span className="shrink-0">{icon}</span>
+          <span className="text-[11px] text-gray-500 shrink-0">{getCardLabel(card, effectiveType)}</span>
+          <span className="truncate text-gray-400">{truncate(card.text, 60)}</span>
         </button>
       ) : (
-        <div className={`relative rounded-2xl border border-gray-700/70 bg-gray-900/40 backdrop-blur-sm shadow-[0_10px_26px_rgba(0,0,0,0.28)] ${isActive ? "ring-1 ring-indigo-400/35" : ""}`}>
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700/60">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>{icon}</span>
-              <span>{getCardLabel(card, effectiveType)}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
+        <div data-card-id={card.id} className={`relative rounded-2xl border border-gray-700/70 bg-gray-900/40 backdrop-blur-sm shadow-[0_10px_26px_rgba(0,0,0,0.28)] ${isActive ? "ring-1 ring-indigo-400/35" : ""}`}>
+          <div className="flex items-center justify-between px-2 sm:px-3 py-1.5 border-b border-gray-700/60">
+            {card.status === "complete" ? (
+              <button
+                onClick={() => collapseCard(card.id)}
+                className="flex items-center gap-1 sm:gap-1.5 text-xs text-gray-400 min-w-0 hover:text-gray-200 transition-colors"
+                title="Collapse card"
+              >
+                <svg className="h-3 w-3 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                <span>{icon}</span>
+                <span className="truncate">{getCardLabel(card, effectiveType)}</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-gray-400 min-w-0">
+                <span>{icon}</span>
+                <span className="truncate">{getCardLabel(card, effectiveType)}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
               {card.role === "assistant" && card.status === "complete" && (
                 <button
                   onClick={() => setShowCodeDialog(true)}
-                  className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 transition-colors"
+                  className="text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 transition-colors flex items-center justify-center gap-1"
                   title="Enhance with Claude Code"
                 >
-                  &lt;/&gt; Code
+                  <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="16 18 22 12 16 6" />
+                    <polyline points="8 6 2 12 8 18" />
+                  </svg>
+                  <span className="hidden sm:inline">Code</span>
+                </button>
+              )}
+              {canResearch && (
+                <button
+                  onClick={() => {
+                    const data = (isAppView ? card.appData : card.data) as Record<string, unknown> | undefined;
+                    const dataTopic = typeof data?.topic === "string" ? data.topic
+                      : typeof data?.title === "string" ? data.title
+                      : typeof data?.query === "string" ? data.query : null;
+                    if (dataTopic) {
+                      sendMessage(`Research ${dataTopic}`);
+                    } else {
+                      const text = (card.text ?? "").trim();
+                      const topic = text.length > 200 ? text.slice(0, 200) : text;
+                      sendMessage(`Research this: ${topic}`);
+                    }
+                  }}
+                  className="text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors flex items-center justify-center gap-1"
+                  title="Deep research on this topic"
+                >
+                  <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  <span className="hidden sm:inline">Research</span>
                 </button>
               )}
               {isShareable && card.status === "complete" && <ExportButton card={card} />}
@@ -977,7 +1139,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               {card.enhanceStatus === "ready" && <ViewToggle card={card} />}
               {canEnhance && <EnhanceButton card={card} />}
               {statusLabel !== "ready" && (
-                <div className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusTone}`}>
+                <div className={`text-[10px] uppercase tracking-wide px-1.5 sm:px-2 py-0.5 rounded-full border ${statusTone}`}>
                   {statusLabel}
                 </div>
               )}

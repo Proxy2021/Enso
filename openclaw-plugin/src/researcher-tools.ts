@@ -8,6 +8,44 @@ type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 // ── Param types ──
 
 type SearchParams = { topic: string; depth?: "quick" | "standard" | "deep"; force?: boolean };
+
+// ── Progressive rendering support ──
+
+/** Progress callback for streaming intermediate results to the frontend. */
+type ProgressCallback = (data: Record<string, unknown>) => void;
+
+/**
+ * Module-level progress hook. Set by card-actions before invoking the researcher tool,
+ * cleared after. This allows the tool executor (which only returns a single result)
+ * to push intermediate updates through the WebSocket.
+ */
+let _activeProgressCallback: ProgressCallback | null = null;
+
+export function setResearchProgressCallback(cb: ProgressCallback | null): void {
+  _activeProgressCallback = cb;
+}
+
+function pushProgress(data: Record<string, unknown>): void {
+  if (_activeProgressCallback) {
+    try { _activeProgressCallback(data); } catch { /* don't break research pipeline */ }
+  }
+}
+
+// ── Deep Research via Claude Code ──
+
+/** Callback to launch a Claude Code session from within researcher tools. */
+type DeepResearchLauncher = (params: {
+  topic: string;
+  systemPrompt: string;
+  onComplete: (resultJson: string | null) => void;
+}) => void;
+
+let _deepResearchLauncher: DeepResearchLauncher | null = null;
+
+export function setDeepResearchLauncher(launcher: DeepResearchLauncher | null): void {
+  _deepResearchLauncher = launcher;
+}
+
 type DeepDiveParams = { topic: string; subtopic: string };
 type CompareParams = { topicA: string; topicB: string; context?: string };
 type FollowUpParams = { topic: string; question: string };
@@ -94,6 +132,33 @@ interface ResearchVideo {
   age?: string;
 }
 
+interface ResearchBook {
+  title: string;
+  author: string;
+  year?: string;
+  description: string;
+  url?: string;
+}
+
+interface ResearchMovie {
+  title: string;
+  year?: string;
+  type: "movie" | "tv" | "documentary" | "podcast";
+  description: string;
+  url?: string;
+}
+
+interface RecommendedVideo {
+  index: number;       // index into videos array
+  reason: string;      // why this video is worth watching
+}
+
+interface Contradiction {
+  claim: string;
+  perspectives: string[];
+  sourceRefs: number[];
+}
+
 interface CachedResearch {
   topic: string;
   summary: string;
@@ -103,6 +168,12 @@ interface CachedResearch {
   sources: Source[];
   images: ResearchImage[];
   videos: ResearchVideo[];
+  books: ResearchBook[];
+  movies: ResearchMovie[];
+  recommendedVideos: RecommendedVideo[];
+  contradictions: Contradiction[];
+  audioUrl?: string;
+  podcastScript?: string;
   timestamp: number;
 }
 
@@ -116,17 +187,42 @@ interface ResearchHistoryMeta extends DocMeta {
   topic: string;
   depth: string;
   sourceCount: number;
+  findingCount: number;
   summaryPreview: string;
+  hasBooks: boolean;
+  hasVideos: boolean;
+  hasContradictions: boolean;
+  isDeepResearch: boolean;
+  tags: string[];
 }
 
 const researchHistory = getDocCollection<CachedResearch, ResearchHistoryMeta>(
   "researcher",
   "topics",
-  { maxEntries: 50 },
+  { maxEntries: 200 },
 );
 
 function topicSlug(topic: string): string {
-  return topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  // Keep Unicode letters/digits (supports CJK, Cyrillic, Arabic, etc.)
+  const slug = topic.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  // Fallback: if slug is empty (shouldn't happen now), use a hash
+  if (!slug) return "topic-" + Array.from(topic).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0).toString(36).replace("-", "n");
+  return slug;
+}
+
+function buildResearchMeta(entry: CachedResearch, depth: string, isDeepResearch = false): ResearchHistoryMeta {
+  return {
+    topic: entry.topic,
+    depth,
+    sourceCount: entry.sources?.length ?? 0,
+    findingCount: entry.keyFindings?.length ?? 0,
+    summaryPreview: (entry.summary ?? "").slice(0, 150),
+    hasBooks: (entry.books?.length ?? 0) > 0,
+    hasVideos: (entry.videos?.length ?? 0) > 0,
+    hasContradictions: (entry.contradictions?.length ?? 0) > 0,
+    isDeepResearch,
+    tags: [],
+  };
 }
 
 // Hydrate in-memory cache from disk on module load
@@ -173,8 +269,128 @@ async function getGeminiApiKey(): Promise<string | undefined> {
   return undefined;
 }
 
+function sanitizeJsonStrings(json: string): string {
+  // Fix unescaped control characters inside JSON string values.
+  // Walk through the JSON: when inside a string, escape any literal control chars.
+  let result = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    const code = json.charCodeAt(i);
+    if (inString) {
+      if (escaped) { escaped = false; result += ch; continue; }
+      if (ch === "\\") { escaped = true; result += ch; continue; }
+      if (ch === '"') { inString = false; result += ch; continue; }
+      // Escape unescaped control characters (tabs and newlines most common)
+      if (code < 0x20) {
+        if (code === 0x0a) { result += "\\n"; continue; }
+        if (code === 0x0d) { result += "\\r"; continue; }
+        if (code === 0x09) { result += "\\t"; continue; }
+        result += "\\u" + code.toString(16).padStart(4, "0");
+        continue;
+      }
+      result += ch;
+    } else {
+      if (ch === '"') inString = true;
+      result += ch;
+    }
+  }
+  return result;
+}
+
 function cleanJson(raw: string): string {
-  return raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  // Strip markdown fences
+  let s = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+
+  // Extract the outermost JSON object/array if there's surrounding text
+  const firstBrace = s.indexOf("{");
+  const firstBracket = s.indexOf("[");
+  const start = firstBrace >= 0 && (firstBracket < 0 || firstBrace < firstBracket) ? firstBrace : firstBracket;
+  if (start > 0) s = s.slice(start);
+
+  // Try parsing as-is first
+  try { JSON.parse(s); return s; } catch { /* continue with repairs */ }
+
+  // Sanitize unescaped control characters inside strings (common LLM issue)
+  s = sanitizeJsonStrings(s);
+  try { JSON.parse(s); return s; } catch { /* continue with structural repairs */ }
+
+  // State-machine repair: track string/structure context properly
+  const stack: string[] = []; // tracks open { and [
+  let inString = false;
+  let lastValidEnd = -1; // last position where a complete value ended at depth 1
+  let escaped = false;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === "\\") { escaped = true; continue; }
+      if (ch === '"') { inString = false; continue; }
+      continue;
+    }
+    // Not in string
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{" || ch === "[") { stack.push(ch); continue; }
+    if (ch === "}" || ch === "]") {
+      stack.pop();
+      if (stack.length === 0) {
+        // Balanced at root level — try parsing up to here
+        const candidate = s.slice(0, i + 1);
+        try { JSON.parse(candidate); return candidate; } catch { /* continue */ }
+      }
+      if (stack.length === 1) lastValidEnd = i;
+      continue;
+    }
+  }
+
+  // Truncated — try to repair by closing open structures
+  // First, truncate to last position where we had a complete value at depth 1+
+  if (lastValidEnd > 0) {
+    let repaired = s.slice(0, lastValidEnd + 1);
+    // Remove trailing commas
+    repaired = repaired.replace(/,\s*$/, "");
+    // Close remaining open structures from inner to outer
+    // Re-scan to get current stack state
+    const rStack: string[] = [];
+    let rInStr = false, rEsc = false;
+    for (let i = 0; i < repaired.length; i++) {
+      const ch = repaired[i];
+      if (rInStr) { if (rEsc) { rEsc = false; } else if (ch === "\\") { rEsc = true; } else if (ch === '"') { rInStr = false; } continue; }
+      if (ch === '"') { rInStr = true; continue; }
+      if (ch === "{" || ch === "[") rStack.push(ch);
+      if (ch === "}" || ch === "]") rStack.pop();
+    }
+    while (rStack.length > 0) {
+      const open = rStack.pop()!;
+      repaired += open === "{" ? "}" : "]";
+    }
+    try { JSON.parse(repaired); return repaired; } catch { /* continue */ }
+  }
+
+  // Aggressive repair: close the unterminated string + all open structures
+  let repaired = s;
+  if (inString) repaired += '"';
+  repaired = repaired.replace(/,\s*$/, "");
+  // Re-scan for stack
+  const fStack: string[] = [];
+  let fInStr = false, fEsc = false;
+  for (let i = 0; i < repaired.length; i++) {
+    const ch = repaired[i];
+    if (fInStr) { if (fEsc) { fEsc = false; } else if (ch === "\\") { fEsc = true; } else if (ch === '"') { fInStr = false; } continue; }
+    if (ch === '"') { fInStr = true; continue; }
+    if (ch === "{" || ch === "[") fStack.push(ch);
+    if (ch === "}" || ch === "]") fStack.pop();
+  }
+  while (fStack.length > 0) {
+    const open = fStack.pop()!;
+    repaired += open === "{" ? "}" : "]";
+  }
+  try { JSON.parse(repaired); return repaired; } catch { /* continue */ }
+
+  // Last resort: return the stripped version and let caller handle the error
+  return s;
 }
 
 function extractDomain(url: string): string {
@@ -496,9 +712,10 @@ function matchImagesToSections(
   return result;
 }
 
-// ── Search angle generation (deterministic) ──
+// ── Search angle generation ──
 
-function generateSearchAngles(topic: string, depth: "quick" | "standard" | "deep"): string[] {
+/** Deterministic fallback queries (used when LLM generation fails or no Gemini key). */
+function generateSearchAnglesFallback(topic: string, depth: "quick" | "standard" | "deep"): string[] {
   const quick = [
     `${topic} overview explained`,
     `${topic} latest developments 2025 2026`,
@@ -518,6 +735,74 @@ function generateSearchAngles(topic: string, depth: "quick" | "standard" | "deep
   if (depth === "quick") return quick;
   if (depth === "deep") return deep;
   return standard;
+}
+
+interface GeneratedQueries {
+  web: string[];
+  video: string[];
+  media: string[];
+}
+
+/**
+ * LLM-generated search queries tailored to the specific topic.
+ * Returns web queries, video queries, and media/entertainment queries.
+ * Falls back to deterministic generation on failure.
+ */
+async function generateSearchAngles(
+  topic: string,
+  depth: "quick" | "standard" | "deep",
+  geminiKey?: string,
+): Promise<GeneratedQueries> {
+  const count = depth === "quick" ? 3 : depth === "deep" ? 8 : 6;
+  const fallback: GeneratedQueries = {
+    web: generateSearchAnglesFallback(topic, depth),
+    video: [`${topic} video explanation`],
+    media: [],
+  };
+  if (!geminiKey) return fallback;
+
+  try {
+    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
+    const prompt = `Generate search queries for thoroughly researching: "${topic}"
+
+Return JSON with 3 arrays:
+{
+  "web": [${count} diverse web search queries using topic-specific terminology],
+  "video": [2-3 targeted video search queries for tutorials, documentaries, expert talks],
+  "media": [1-2 queries to find recommended books, movies, TV shows, documentaries, podcasts about this topic]
+}
+
+Web queries should cover: core concepts, recent developments (2024-2026), expert analysis, data/statistics, challenges, comparisons.
+Video queries should find the BEST explainer videos, documentaries, and expert presentations — use specific terms.
+Media queries should find cultural/educational media (books, films, series, podcasts) related to the topic.
+
+Use topic-specific language — NOT generic suffixes like "overview explained".
+
+IMPORTANT: Detect the language of the topic. Generate search queries primarily in that same language, but also include 1-2 English queries for broader coverage if the topic is not in English.
+
+Example for "quantum computing":
+{
+  "web": ["quantum computing current state 2025 superconducting qubits", "quantum error correction breakthrough 2024", ...],
+  "video": ["quantum computing explained best YouTube tutorial", "quantum computing documentary IBM Google"],
+  "media": ["best books about quantum computing beginners to advanced", "quantum computing movies documentaries TV shows"]
+}`;
+
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash");
+    const parsed = JSON.parse(cleanJson(raw));
+    if (parsed && Array.isArray(parsed.web) && parsed.web.length >= 2) {
+      const result: GeneratedQueries = {
+        web: (parsed.web as string[]).slice(0, count + 2),
+        video: Array.isArray(parsed.video) ? (parsed.video as string[]).slice(0, 3) : fallback.video,
+        media: Array.isArray(parsed.media) ? (parsed.media as string[]).slice(0, 2) : [],
+      };
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `LLM-generated ${result.web.length} web + ${result.video.length} video + ${result.media.length} media queries for "${topic}"` });
+      return result;
+    }
+  } catch (err) {
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `LLM query generation failed, using fallback: ${err instanceof Error ? err.message : String(err)}` });
+  }
+
+  return fallback;
 }
 
 // ── Result deduplication and scoring ──
@@ -566,6 +851,8 @@ function buildSynthesisPrompt(topic: string, results: BraveWebResult[], sources?
 
   return `You are a senior research analyst. Given web search results about "${topic}", synthesize comprehensive research findings.
 
+CRITICAL LANGUAGE RULE: Detect the language of the topic "${topic}". ALL output text (summary, narrative, keyFindings, sections, books, movies, contradictions) MUST be written in that same language. If the topic is in Chinese, respond entirely in Chinese. If in Japanese, respond in Japanese. If in Spanish, respond in Spanish. Etc. Only sourceRefs, type labels (fact/trend/insight/warning), and confidence labels (high/medium/low) remain in English.
+
 SEARCH RESULTS:
 ${snippetText}${contentNote}
 
@@ -602,7 +889,16 @@ Rules:
 - Finding types: fact (verified data/statistic), trend (emerging pattern), insight (analytical observation), warning (risk/concern/limitation)
 - Confidence: high (multiple corroborating sources), medium (some support), low (single source or speculative)
 - Bullets should be specific, informative, and substantive (not vague)
-- Section titles should be clear topical headings, not generic labels`;
+- Section titles should be clear topical headings, not generic labels
+
+Also extract any books, movies, TV shows, documentaries, and podcasts mentioned or relevant. Add these fields:
+  "books": [{ "title": "...", "author": "...", "year": "...", "description": "one-sentence why it's relevant" }],
+  "movies": [{ "title": "...", "year": "...", "type": "movie|tv|documentary|podcast", "description": "one-sentence why it's relevant" }]
+Include 0-5 books and 0-5 movies/shows. Only include genuinely relevant and real titles — do not fabricate.
+
+If sources contradict each other on any point, add:
+  "contradictions": [{ "claim": "The disputed claim", "perspectives": ["Source A says X", "Source B says Y"], "sourceRefs": [0, 3] }]
+Only include genuine contradictions found across sources — do not fabricate.`;
 }
 
 function buildDeepDivePrompt(topic: string, subtopic: string, parentContext: string, results: BraveWebResult[], sources?: Source[]): string {
@@ -745,7 +1041,7 @@ Rules:
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, undefined, 60_000);
     const parsed = JSON.parse(cleanJson(raw)) as {
       summary: string;
       narrative: string;
@@ -757,6 +1053,7 @@ Rules:
       tool: "enso_researcher_search",
       topic,
       depth,
+      phase: "complete",
       summary: parsed.summary ?? "",
       narrative: parsed.narrative ?? "",
       keyFindings: (parsed.keyFindings ?? []).slice(0, 8),
@@ -764,6 +1061,10 @@ Rules:
       sources: [] as Source[],
       images: [] as ResearchImage[],
       videos: [] as ResearchVideo[],
+      books: [] as ResearchBook[],
+      movies: [] as ResearchMovie[],
+      recommendedVideos: [] as RecommendedVideo[],
+      contradictions: [] as Contradiction[],
       metadata: {
         queriesRun: 0,
         sourcesFound: 0,
@@ -782,15 +1083,14 @@ Rules:
       sources: [],
       images: [],
       videos: [],
+      books: [],
+      movies: [],
+      recommendedVideos: [],
+      contradictions: [],
       timestamp: Date.now(),
     };
     researchCache.set(topic.toLowerCase(), cachedLlm);
-    researchHistory.save(topicSlug(topic), cachedLlm, {
-      topic,
-      depth,
-      sourceCount: 0,
-      summaryPreview: (result.summary ?? "").slice(0, 150),
-    });
+    researchHistory.save(topicSlug(topic), cachedLlm, buildResearchMeta(cachedLlm, depth));
 
     return jsonResult(result);
   } catch (err) {
@@ -822,6 +1122,10 @@ function generateSampleResearch(topic: string, depth: string): AgentToolResult {
     sources: [],
     images: [],
     videos: [],
+    books: [],
+    movies: [],
+    recommendedVideos: [],
+    contradictions: [],
     metadata: {
       queriesRun: 0,
       sourcesFound: 0,
@@ -830,6 +1134,93 @@ function generateSampleResearch(topic: string, depth: string): AgentToolResult {
       note: "Sample data — set BRAVE_API_KEY for live research",
     },
   });
+}
+
+// ── Deep Research Classification ──
+
+async function classifyForDeepResearch(topic: string, geminiKey: string): Promise<boolean> {
+  try {
+    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
+    const prompt = `Classify whether this research topic requires deep iterative research (multiple search rounds, following references, resolving contradictions, analyzing data) or can be handled by a standard web search + synthesis pipeline.
+
+Topic: "${topic}"
+
+Criteria for deep research:
+- Multi-faceted: spans multiple domains or disciplines
+- Analytical: requires synthesizing conflicting viewpoints or analyzing data
+- Comparative at scale: more than 2 things being compared with complex trade-offs
+- Technical depth: academic, scientific, or deeply technical subject matter
+- Strategic: user needs to make a decision based on thorough research
+
+Return valid JSON (no markdown fences):
+{ "deep_research": true/false, "reason": "one sentence why" }`;
+
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash");
+    const parsed = JSON.parse(cleanJson(raw)) as { deep_research: boolean; reason?: string };
+    if (parsed.deep_research) {
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research classified: ${parsed.reason ?? "complex topic"}` });
+    }
+    return parsed.deep_research === true;
+  } catch (err) {
+    logError("researcher", "Deep research classification failed", err, { topic });
+    return false;
+  }
+}
+
+function buildDeepResearchSystemPrompt(topic: string): string {
+  return `You are a thorough research analyst. Your task is to conduct comprehensive research on: "${topic}"
+
+RESEARCH PROCESS:
+1. Start with broad web searches to understand the topic landscape
+2. Follow up with specific searches on key aspects, controversies, and data
+3. Read full articles for the most important sources
+4. Resolve any contradictions by finding additional evidence
+5. Search for relevant books, documentaries, videos, and media
+6. Synthesize everything into a structured research report
+
+OUTPUT REQUIREMENTS:
+When your research is complete, write a JSON file called ".research-result.json" in the current directory with this exact structure:
+{
+  "summary": "2-3 sentence executive summary",
+  "narrative": "Comprehensive 4-8 paragraph narrative covering all angles. Use \\n\\n between paragraphs.",
+  "keyFindings": [
+    { "text": "Finding statement", "type": "fact|trend|insight|warning", "confidence": "high|medium|low", "sourceRefs": [0, 2] }
+  ],
+  "sections": [
+    { "title": "Section Title", "summary": "One sentence", "bullets": ["Point 1", "Point 2"], "sourceRefs": [1, 3] }
+  ],
+  "sources": [
+    { "url": "https://...", "title": "Article Title", "snippet": "Brief description", "domain": "example.com", "relevance": 85 }
+  ],
+  "images": [],
+  "videos": [
+    { "url": "https://youtube.com/...", "title": "Video Title", "thumbnail": "", "description": "Brief desc", "creator": "Channel" }
+  ],
+  "books": [
+    { "title": "Book Title", "author": "Author Name", "year": "2024", "description": "Why it's relevant" }
+  ],
+  "movies": [
+    { "title": "Title", "year": "2024", "type": "movie|tv|documentary|podcast", "description": "Why it's relevant" }
+  ],
+  "recommendedVideos": [
+    { "index": 0, "reason": "Why this video is worth watching" }
+  ],
+  "contradictions": [
+    { "claim": "The disputed claim", "perspectives": ["View A", "View B"], "sourceRefs": [0, 3] }
+  ]
+}
+
+RULES:
+- Generate 6-12 key findings covering the most important discoveries
+- Generate 4-8 thematic sections organized by subtopic
+- Include 10-30 sources with real URLs
+- sourceRefs are 0-indexed into the sources array
+- Every finding and section must reference at least one source
+- Include any books, movies, documentaries, podcasts discovered during research
+- If videos are found, rank the top 3-5 in recommendedVideos
+- Only include genuine contradictions from real sources
+- Write the narrative as engaging, magazine-quality prose
+- Be thorough but factual — cite your sources`;
 }
 
 // ── Tool implementations ──
@@ -863,6 +1254,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
         tool: "enso_researcher_search",
         topic: cached.topic,
         depth,
+        phase: "complete",
         summary: cached.summary,
         narrative: cached.narrative,
         keyFindings: cached.keyFindings,
@@ -870,6 +1262,10 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
         sources: cached.sources,
         images: cached.images,
         videos: cached.videos,
+        books: cached.books ?? [],
+        movies: cached.movies ?? [],
+        recommendedVideos: cached.recommendedVideos ?? [],
+        contradictions: cached.contradictions ?? [],
         metadata: {
           queriesRun: 0,
           sourcesFound: cached.sources.length,
@@ -882,12 +1278,117 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     }
   }
 
-  const queries = generateSearchAngles(topic, depth);
+  // ── Auto-trigger Deep Research classification ──
+  const geminiKey = await getGeminiApiKey();
+
+  if (depth !== "quick" && _deepResearchLauncher && geminiKey) {
+    const shouldDeepResearch = depth === "deep" || await classifyForDeepResearch(topic, geminiKey);
+
+    if (shouldDeepResearch) {
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `auto-escalating to deep research for "${topic}" (depth=${depth})` });
+
+      pushProgress({
+        tool: "enso_researcher_search",
+        topic,
+        depth: "deep",
+        phase: "deep_research",
+        summary: "",
+        narrative: "",
+        keyFindings: [],
+        sections: [],
+        sources: [],
+        images: [],
+        videos: [],
+      });
+
+      // Launch Claude Code deep research — returns a promise that resolves when complete
+      const resultJson = await new Promise<string | null>((resolve) => {
+        _deepResearchLauncher!({
+          topic,
+          systemPrompt: buildDeepResearchSystemPrompt(topic),
+          onComplete: resolve,
+        });
+      });
+
+      if (resultJson) {
+        try {
+          const parsed = JSON.parse(resultJson);
+          const result = {
+            tool: "enso_researcher_search",
+            topic,
+            depth: "deep",
+            phase: "complete",
+            summary: String(parsed.summary ?? ""),
+            narrative: String(parsed.narrative ?? ""),
+            keyFindings: Array.isArray(parsed.keyFindings) ? parsed.keyFindings.slice(0, 12) : [],
+            sections: Array.isArray(parsed.sections) ? parsed.sections.slice(0, 8) : [],
+            sources: Array.isArray(parsed.sources) ? parsed.sources.slice(0, 30) : [],
+            images: Array.isArray(parsed.images) ? parsed.images.slice(0, 12) : [],
+            videos: Array.isArray(parsed.videos) ? parsed.videos.slice(0, 12) : [],
+            books: Array.isArray(parsed.books) ? parsed.books.slice(0, 8) : [],
+            movies: Array.isArray(parsed.movies) ? parsed.movies.slice(0, 8) : [],
+            recommendedVideos: Array.isArray(parsed.recommendedVideos) ? parsed.recommendedVideos.slice(0, 5) : [],
+            contradictions: Array.isArray(parsed.contradictions) ? parsed.contradictions.slice(0, 5) : [],
+            metadata: {
+              queriesRun: 0,
+              sourcesFound: Array.isArray(parsed.sources) ? parsed.sources.length : 0,
+              sectionsGenerated: Array.isArray(parsed.sections) ? parsed.sections.length : 0,
+              timestamp: Date.now(),
+              note: "Deep research via Claude Code",
+              isDeepResearch: true,
+            },
+          };
+
+          // Cache deep research results
+          const cachedEntry: CachedResearch = {
+            topic,
+            summary: result.summary,
+            narrative: result.narrative,
+            keyFindings: result.keyFindings,
+            sections: result.sections,
+            sources: result.sources,
+            images: result.images,
+            videos: result.videos,
+            books: result.books,
+            movies: result.movies,
+            recommendedVideos: result.recommendedVideos,
+            contradictions: result.contradictions,
+            timestamp: Date.now(),
+          };
+          researchCache.set(topic.toLowerCase(), cachedEntry);
+          researchHistory.save(topicSlug(topic), cachedEntry, buildResearchMeta(cachedEntry, "deep", true));
+
+          logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research complete: ${result.keyFindings.length} findings, ${result.sections.length} sections, ${result.sources.length} sources` });
+          return jsonResult(result);
+        } catch (parseErr) {
+          logError("researcher", "Failed to parse deep research result", parseErr, { topic });
+          // Fall through to standard pipeline
+        }
+      }
+      // If deep research failed or returned null, fall through to standard pipeline
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research failed for "${topic}", falling back to standard pipeline` });
+    }
+  }
+
+  // ── Phase: generating_queries ──
+  pushProgress({
+    tool: "enso_researcher_search",
+    topic,
+    depth,
+    phase: "generating_queries",
+    summary: "",
+    narrative: "",
+    keyFindings: [],
+    sections: [],
+    sources: [],
+    images: [],
+    videos: [],
+  });
+  const queries = await generateSearchAngles(topic, depth, geminiKey ?? undefined);
 
   // Fallback: no Brave key
   if (!getBraveApiKey()) {
     logAction({ ts: Date.now(), type: "action", category: "researcher", message: `No BRAVE_API_KEY — attempting LLM-only research` });
-    const geminiKey = await getGeminiApiKey();
     if (geminiKey) {
       try {
         return await llmOnlyResearch(topic, depth, geminiKey);
@@ -898,62 +1399,183 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     return generateSampleResearch(topic, depth);
   }
 
-  // Parallel Brave searches + image/video searches (zero extra latency)
-  logAction({ ts: Date.now(), type: "action", category: "researcher", message: `searching "${topic}" (${depth}): ${queries.length} queries + media` });
-  const [allBatches, rawImages, rawVideos] = await Promise.all([
-    Promise.all(queries.map((q) => braveWebSearch(q, 6))),
+  // ── Phase: searching ──
+  const allQueries = [...queries.web, ...queries.video, ...queries.media];
+  pushProgress({
+    tool: "enso_researcher_search",
+    topic,
+    depth,
+    phase: "searching",
+    searchQueries: allQueries,
+    summary: "",
+    narrative: "",
+    keyFindings: [],
+    sections: [],
+    sources: [],
+    images: [],
+    videos: [],
+    books: [],
+    movies: [],
+    recommendedVideos: [],
+  });
+
+  // Parallel Brave searches + image/video/media searches (zero extra latency)
+  logAction({ ts: Date.now(), type: "action", category: "researcher", message: `searching "${topic}" (${depth}): ${queries.web.length} web + ${queries.video.length} video + ${queries.media.length} media queries` });
+
+  // Stream source results as they arrive
+  const collectedSources: Source[] = [];
+  const searchPromises = queries.web.map((q) =>
+    braveWebSearch(q, 6).then((batch) => {
+      const newSources = deduplicateAndScore([batch]);
+      for (const s of newSources) {
+        if (!collectedSources.some((existing) => existing.url === s.url)) {
+          collectedSources.push(s);
+        }
+      }
+      // Push incremental source update
+      pushProgress({
+        tool: "enso_researcher_search",
+        topic,
+        depth,
+        phase: "sources",
+        searchQueries: allQueries,
+        summary: "",
+        narrative: "",
+        keyFindings: [],
+        sections: [],
+        sources: collectedSources.slice(0, 25),
+        images: [],
+        videos: [],
+        books: [],
+        movies: [],
+        recommendedVideos: [],
+      });
+    }),
+  );
+
+  // All searches run in a single Promise.all — web, video, image, and media in parallel
+  const videoSearchPromises = queries.video.map((q) => braveVideoSearch(q, 6));
+  const mediaSearchPromises = queries.media.map((q) => braveWebSearch(q, 8));
+
+  const [, rawImages, ...mixedResults] = await Promise.all([
+    Promise.all(searchPromises),
     braveImageSearch(`${topic} photos images`, 10),
-    braveVideoSearch(`${topic} video explanation`, 6),
+    ...videoSearchPromises,
+    ...mediaSearchPromises,
   ]);
-  const sources = deduplicateAndScore(allBatches);
+
+  // Split mixed results: first N are video batches, rest are media batches
+  const videoResults = mixedResults.slice(0, queries.video.length);
+  const mediaResults = mixedResults.slice(queries.video.length);
+
+  // Deduplicate videos across all video queries
+  const seenVideoUrls = new Set<string>();
+  const rawVideos: BraveVideoResult[] = [];
+  for (const batch of videoResults) {
+    for (const v of batch as BraveVideoResult[]) {
+      if (v.url && !seenVideoUrls.has(v.url)) {
+        seenVideoUrls.add(v.url);
+        rawVideos.push(v);
+      }
+    }
+  }
+
+  // Collect media results as additional sources for synthesis
+  const mediaSourceBatches = mediaResults.map((batch) => batch as BraveWebResult[]);
+  const mediaSources = deduplicateAndScore(mediaSourceBatches);
+
+  // Re-sort collected sources by relevance
+  collectedSources.sort((a, b) => b.relevance - a.relevance);
+  const sources = collectedSources;
 
   if (sources.length === 0) {
     logError("researcher", `no search results for "${topic}"`, undefined, { topic, depth });
-    const geminiKey = await getGeminiApiKey();
     if (geminiKey) return llmOnlyResearch(topic, depth, geminiKey);
     return generateSampleResearch(topic, depth);
   }
 
-  // Fetch full article content from top sources (parallel, non-blocking on failures)
-  await enrichSourcesWithContent(sources);
+  // Fetch full article content from sources AND media sources in parallel
+  await Promise.all([
+    enrichSourcesWithContent(sources),
+    enrichSourcesWithContent(mediaSources.slice(0, 5)),
+  ]);
+
+  // ── Phase: synthesizing ──
+  pushProgress({
+    tool: "enso_researcher_search",
+    topic,
+    depth,
+    phase: "synthesizing",
+    searchQueries: allQueries,
+    summary: "",
+    narrative: "",
+    keyFindings: [],
+    sections: [],
+    sources: sources.slice(0, 25),
+    images: matchImagesToSections([], rawImages),
+    videos: rawVideos.slice(0, 12),
+    books: [],
+    movies: [],
+    recommendedVideos: [],
+  });
 
   // Build source list for LLM (with full content when available)
-  const snippetsForLLM: BraveWebResult[] = sources.slice(0, 30).map((s) => ({
+  // Include both web sources and media sources for comprehensive synthesis
+  const allSourcesForLLM = [...sources.slice(0, 25), ...mediaSources.slice(0, 5)];
+  const snippetsForLLM: BraveWebResult[] = allSourcesForLLM.map((s) => ({
     title: s.title,
     url: s.url,
     description: s.snippet,
   }));
 
+  // Include video titles in the synthesis prompt for ranking
+  const videoContext = rawVideos.length > 0
+    ? `\n\nVIDEOS FOUND (rank the top 3-5 most helpful — include their index and a brief reason to watch):\n${rawVideos.slice(0, 12).map((v, i) => `[V${i}] "${v.title}" by ${v.creator ?? v.publisher ?? "unknown"} (${v.duration ?? "unknown duration"}): ${v.description?.slice(0, 100) ?? ""}`).join("\n")}\n\nAdd to your JSON: "recommendedVideos": [{ "index": 0, "reason": "Why this video is worth watching" }]`
+    : "";
+
   // LLM synthesis
-  const geminiKey = await getGeminiApiKey();
   if (!geminiKey) {
     return fallbackFromSources(topic, depth, sources);
   }
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const prompt = buildSynthesisPrompt(topic, snippetsForLLM, sources);
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
-    const parsed = JSON.parse(cleanJson(raw)) as {
+    const prompt = buildSynthesisPrompt(topic, snippetsForLLM, allSourcesForLLM) + videoContext;
+    // Synthesis with many sources can take longer — use 60s timeout
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, undefined, 60_000);
+    const cleaned = cleanJson(raw);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      const errMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      logError("researcher", `JSON parse failed after cleanJson: ${errMsg}`, parseErr, { rawLen: raw.length, cleanedLen: cleaned.length, rawTail: raw.slice(-200) });
+      throw parseErr;
+    }
+    const typedParsed = parsed as {
       summary: string;
       narrative: string;
       keyFindings: KeyFinding[];
       sections: ResearchSection[];
+      books?: ResearchBook[];
+      movies?: ResearchMovie[];
+      recommendedVideos?: RecommendedVideo[];
+      contradictions?: Contradiction[];
     };
 
     // Validate and clamp sourceRefs
-    const maxRef = sources.length - 1;
+    const maxRef = allSourcesForLLM.length - 1;
     const clampRefs = (refs: number[] | undefined) =>
       (refs ?? []).filter((r) => typeof r === "number" && r >= 0 && r <= maxRef);
 
-    const keyFindings = (parsed.keyFindings ?? []).slice(0, 8).map((f) => ({
+    const keyFindings = (typedParsed.keyFindings ?? []).slice(0, 8).map((f) => ({
       text: f.text ?? "",
       type: (["fact", "trend", "insight", "warning"].includes(f.type) ? f.type : "insight") as KeyFinding["type"],
       confidence: (["high", "medium", "low"].includes(f.confidence) ? f.confidence : "medium") as KeyFinding["confidence"],
       sourceRefs: clampRefs(f.sourceRefs),
     }));
 
-    const sections = (parsed.sections ?? []).slice(0, 6).map((s) => ({
+    const sections = (typedParsed.sections ?? []).slice(0, 6).map((s) => ({
       title: s.title ?? "Untitled Section",
       summary: s.summary ?? "",
       bullets: Array.isArray(s.bullets) ? s.bullets.filter((b) => typeof b === "string") : [],
@@ -962,23 +1584,236 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
 
     // Match images to sections + build video list
     const images = matchImagesToSections(sections, rawImages);
-    const videos: ResearchVideo[] = rawVideos.slice(0, 6);
+    const videos: ResearchVideo[] = rawVideos.slice(0, 12);
 
-    const result = {
+    // Extract books and movies from synthesis
+    const books: ResearchBook[] = (typedParsed.books ?? []).slice(0, 5).map((b) => ({
+      title: b.title ?? "",
+      author: b.author ?? "",
+      year: b.year,
+      description: b.description ?? "",
+      url: b.url,
+    })).filter((b) => b.title);
+
+    const movies: ResearchMovie[] = (typedParsed.movies ?? []).slice(0, 5).map((m) => ({
+      title: m.title ?? "",
+      year: m.year,
+      type: (["movie", "tv", "documentary", "podcast"].includes(m.type) ? m.type : "documentary") as ResearchMovie["type"],
+      description: m.description ?? "",
+      url: m.url,
+    })).filter((m) => m.title);
+
+    // Extract recommended videos (validate indices)
+    const recommendedVideos: RecommendedVideo[] = (typedParsed.recommendedVideos ?? [])
+      .filter((rv) => typeof rv.index === "number" && rv.index >= 0 && rv.index < videos.length && typeof rv.reason === "string")
+      .slice(0, 5)
+      .map((rv) => ({ index: rv.index, reason: rv.reason }));
+
+    // Extract contradictions
+    const contradictions: Contradiction[] = (typedParsed.contradictions ?? [])
+      .filter((c) => typeof c.claim === "string" && Array.isArray(c.perspectives))
+      .slice(0, 5)
+      .map((c) => ({
+        claim: c.claim,
+        perspectives: c.perspectives.filter((p: unknown) => typeof p === "string"),
+        sourceRefs: clampRefs(c.sourceRefs),
+      }));
+
+    // ── Phase: synthesized ──
+    pushProgress({
       tool: "enso_researcher_search",
       topic,
       depth,
-      summary: parsed.summary ?? "",
-      narrative: parsed.narrative ?? "",
+      phase: "synthesized",
+      searchQueries: allQueries,
+      summary: typedParsed.summary ?? "",
+      narrative: typedParsed.narrative ?? "",
       keyFindings,
       sections,
       sources: sources.slice(0, 25),
       images,
       videos,
+      books,
+      movies,
+      recommendedVideos,
+      contradictions,
+    });
+
+    // ── Gap Check: identify missing angles and enrich ──
+    let gapQueries: string[] = [];
+    if (depth !== "quick" && geminiKey && sections.length > 0) {
+      try {
+        pushProgress({
+          tool: "enso_researcher_search",
+          topic,
+          depth,
+          phase: "gap_checking",
+          searchQueries: allQueries,
+          summary: typedParsed.summary ?? "",
+          narrative: typedParsed.narrative ?? "",
+          keyFindings,
+          sections,
+          sources: sources.slice(0, 25),
+          images,
+          videos,
+          books,
+          movies,
+          recommendedVideos,
+          contradictions,
+        });
+
+        const gapPrompt = `Given this research synthesis about "${topic}":
+
+Summary: ${typedParsed.summary ?? ""}
+
+Key findings: ${keyFindings.map((f) => f.text).join("; ")}
+
+Sections covered: ${sections.map((s) => s.title).join(", ")}
+
+Identify 1-3 specific questions or angles NOT adequately covered that would significantly strengthen this research. Focus on gaps that matter — missing data, unexplored perspectives, or unverified claims.
+
+Return valid JSON (no markdown fences):
+{ "gaps": ["specific search query 1", "specific search query 2"] }
+
+Generate gap queries in the same language as the topic "${topic}".
+
+If the research is already comprehensive, return: { "gaps": [] }`;
+
+        const gapRaw = await callGeminiLLMWithRetry(gapPrompt, geminiKey, "gemini-2.0-flash");
+        const gapParsed = JSON.parse(cleanJson(gapRaw)) as { gaps: string[] };
+        gapQueries = (gapParsed.gaps ?? []).filter((g) => typeof g === "string").slice(0, 3);
+
+        if (gapQueries.length > 0) {
+          logAction({ ts: Date.now(), type: "action", category: "researcher", message: `gap check found ${gapQueries.length} gaps: ${gapQueries.join(", ")}` });
+
+          // Run gap searches in parallel
+          const gapResultSets = await Promise.all(
+            gapQueries.map((q) => braveWebSearch(q, 4)),
+          );
+          const gapResults = gapResultSets.flat();
+
+          // Deduplicate against existing sources
+          const existingUrls = new Set(sources.map((s) => s.url));
+          const newGapSources: Source[] = [];
+          for (const r of gapResults) {
+            if (!existingUrls.has(r.url)) {
+              existingUrls.add(r.url);
+              const domain = (() => { try { return new URL(r.url).hostname.replace("www.", ""); } catch { return "unknown"; } })();
+              newGapSources.push({
+                url: r.url,
+                title: r.title,
+                snippet: r.description,
+                domain,
+                relevance: 0.7,
+              });
+            }
+          }
+
+          if (newGapSources.length > 0) {
+            // Fetch content for new sources
+            await enrichSourcesWithContent(newGapSources);
+            sources.push(...newGapSources);
+
+            // Second synthesis pass: merge gap findings into existing research
+            const gapSourceEntries = newGapSources.map((s, i) => {
+              if (s.fullContent && s.fullContent.length > 100) {
+                return `[GAP-${i}] ${s.title}\n    FULL CONTENT:\n${s.fullContent}`;
+              }
+              return `[GAP-${i}] ${s.title}\n    ${s.snippet}`;
+            }).join("\n\n");
+
+            const mergePrompt = `You previously researched "${topic}" and produced this synthesis:
+
+Summary: ${typedParsed.summary ?? ""}
+Narrative: ${typedParsed.narrative ?? ""}
+Key Findings: ${JSON.stringify(keyFindings)}
+
+We found additional sources to fill gaps in the research:
+
+${gapSourceEntries}
+
+Return valid JSON (no markdown fences) with ONLY the new/updated content to merge:
+{
+  "additionalFindings": [{ "text": "New finding", "type": "fact|trend|insight|warning", "confidence": "high|medium|low" }],
+  "narrativeAddendum": "1-2 paragraphs of additional narrative covering the gap areas. Write as continuation prose.",
+  "additionalContradictions": [{ "claim": "...", "perspectives": ["...", "..."] }]
+}
+
+Only include genuinely new information not already covered. If the gap sources don't add meaningful new content, return empty arrays and empty string.`;
+
+            try {
+              const mergeRaw = await callGeminiLLMWithRetry(mergePrompt, geminiKey, "gemini-2.0-flash");
+              const mergeParsed = JSON.parse(cleanJson(mergeRaw)) as {
+                additionalFindings?: KeyFinding[];
+                narrativeAddendum?: string;
+                additionalContradictions?: Contradiction[];
+              };
+
+              // Merge additional findings
+              if (mergeParsed.additionalFindings?.length) {
+                for (const f of mergeParsed.additionalFindings.slice(0, 3)) {
+                  keyFindings.push({
+                    text: f.text ?? "",
+                    type: (["fact", "trend", "insight", "warning"].includes(f.type) ? f.type : "insight") as KeyFinding["type"],
+                    confidence: (["high", "medium", "low"].includes(f.confidence) ? f.confidence : "medium") as KeyFinding["confidence"],
+                    sourceRefs: [],
+                  });
+                }
+              }
+
+              // Append narrative addendum
+              if (mergeParsed.narrativeAddendum && mergeParsed.narrativeAddendum.length > 50) {
+                typedParsed.narrative = (typedParsed.narrative ?? "") + "\n\n" + mergeParsed.narrativeAddendum;
+              }
+
+              // Merge additional contradictions
+              if (mergeParsed.additionalContradictions?.length) {
+                for (const c of mergeParsed.additionalContradictions.slice(0, 2)) {
+                  if (typeof c.claim === "string" && Array.isArray(c.perspectives)) {
+                    contradictions.push({
+                      claim: c.claim,
+                      perspectives: c.perspectives.filter((p: unknown) => typeof p === "string"),
+                      sourceRefs: [],
+                    });
+                  }
+                }
+              }
+
+              logAction({ ts: Date.now(), type: "action", category: "researcher", message: `gap merge: +${mergeParsed.additionalFindings?.length ?? 0} findings, +${mergeParsed.narrativeAddendum?.length ?? 0} chars narrative` });
+            } catch (mergeErr) {
+              logError("researcher", "Gap merge synthesis failed", mergeErr, { topic });
+              // Non-fatal: continue with existing results
+            }
+          }
+        }
+      } catch (gapErr) {
+        logError("researcher", "Gap check failed", gapErr, { topic });
+        // Non-fatal: continue with existing results
+      }
+    }
+
+    const result = {
+      tool: "enso_researcher_search",
+      topic,
+      depth,
+      phase: "complete",
+      summary: typedParsed.summary ?? "",
+      narrative: typedParsed.narrative ?? "",
+      keyFindings,
+      sections,
+      sources: sources.slice(0, 25),
+      images,
+      videos,
+      books,
+      movies,
+      recommendedVideos,
+      contradictions,
       metadata: {
-        queriesRun: queries.length,
+        queriesRun: queries.web.length,
         sourcesFound: sources.length,
         sectionsGenerated: sections.length,
+        searchQueries: allQueries,
+        gapQueries,
         timestamp: Date.now(),
       },
     };
@@ -993,17 +1828,16 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       sources: result.sources,
       images: result.images,
       videos: result.videos,
+      books: result.books,
+      movies: result.movies,
+      recommendedVideos: result.recommendedVideos,
+      contradictions: result.contradictions,
       timestamp: Date.now(),
     };
     researchCache.set(topic.toLowerCase(), cachedEntry);
-    researchHistory.save(topicSlug(topic), cachedEntry, {
-      topic,
-      depth,
-      sourceCount: result.sources?.length ?? 0,
-      summaryPreview: (result.summary ?? "").slice(0, 150),
-    });
+    researchHistory.save(topicSlug(topic), cachedEntry, buildResearchMeta(cachedEntry, depth));
 
-    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos` });
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos, ${books.length} books, ${movies.length} movies, ${contradictions.length} contradictions, ${gapQueries.length} gap queries` });
     return jsonResult(result);
   } catch (err) {
     logError("researcher", "LLM synthesis error", err, { topic, depth });
@@ -1032,20 +1866,20 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[]): A
     sources: sources.slice(0, 25),
     images: [],
     videos: [],
+    books: [],
+    movies: [],
+    recommendedVideos: [],
+    contradictions: [],
     timestamp: Date.now(),
   };
   researchCache.set(topic.toLowerCase(), cachedFallback);
-  researchHistory.save(topicSlug(topic), cachedFallback, {
-    topic,
-    depth,
-    sourceCount: sources.length,
-    summaryPreview: summary.slice(0, 150),
-  });
+  researchHistory.save(topicSlug(topic), cachedFallback, buildResearchMeta(cachedFallback, depth));
 
   return jsonResult({
     tool: "enso_researcher_search",
     topic,
     depth,
+    phase: "complete",
     summary,
     narrative: "",
     keyFindings: [],
@@ -1053,6 +1887,10 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[]): A
     sources: sources.slice(0, 25),
     images: [],
     videos: [],
+    books: [],
+    movies: [],
+    recommendedVideos: [],
+    contradictions: [],
     metadata: {
       queriesRun: 0,
       sourcesFound: sources.length,
@@ -1623,6 +2461,191 @@ async function researcherDeleteHistory(params: { topic: string }): Promise<Agent
   return researcherSearch({ topic: "" } as SearchParams);
 }
 
+// ── Podcast generation (Gemini TTS) ──
+
+const PODCAST_SCRIPT_PROMPT = `You are a podcast script writer. Given research data, write a natural 3-5 minute conversational podcast script between two hosts.
+
+Rules:
+- Use exactly "Host A:" and "Host B:" as speaker tags (one per line, alternating)
+- Host A drives the conversation, introduces the topic, asks questions
+- Host B provides insights, adds detail, plays devil's advocate
+- Cover the key findings naturally — don't just list them
+- Reference specific data points, statistics, and sources
+- If there are contradictions, discuss both sides
+- Keep it conversational and engaging — use reactions, follow-ups, "that's interesting"
+- End with a brief summary of takeaways
+- Output ONLY the dialogue script, no stage directions or metadata
+- Keep total script under 3000 characters (API limit)
+
+CRITICAL LANGUAGE RULE: The podcast script MUST be in the SAME language as the research topic and data. If the topic and findings are in Chinese, the entire dialogue must be in Chinese. If in Japanese, speak Japanese. If in Spanish, speak Spanish. Always keep "Host A:" and "Host B:" tags in English, but the dialogue itself must match the topic's language.`;
+
+async function generatePodcastScript(research: CachedResearch, geminiKey: string): Promise<string> {
+  const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
+
+  const findingsSummary = (research.keyFindings ?? []).slice(0, 6)
+    .map((f, i) => `${i + 1}. [${f.type}] ${f.text}`).join("\n");
+  const contradictionsSummary = (research.contradictions ?? []).slice(0, 3)
+    .map((c) => `- ${c.claim}: ${c.perspectives.join(" vs ")}`).join("\n");
+
+  const prompt = `${PODCAST_SCRIPT_PROMPT}
+
+Topic: ${research.topic}
+Summary: ${research.summary}
+Key Findings:
+${findingsSummary}
+${contradictionsSummary ? `\nContradictions:\n${contradictionsSummary}` : ""}
+Narrative (condensed):
+${(research.narrative ?? "").slice(0, 1500)}`;
+
+  const script = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash", 30_000);
+  return script?.trim() ?? "";
+}
+
+async function renderPodcastAudio(script: string, geminiKey: string): Promise<Buffer> {
+  const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
+
+  const body = {
+    contents: [{ parts: [{ text: `TTS the following conversation between Host A and Host B:\n\n${script}` }] }],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: {
+        multiSpeakerVoiceConfig: {
+          speakerVoiceConfigs: [
+            { speaker: "Host A", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+            { speaker: "Host B", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } },
+          ],
+        },
+      },
+    },
+  };
+
+  const res = await fetch(`${endpoint}?key=${geminiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "unknown");
+    throw new Error(`Gemini TTS API error ${res.status}: ${errText}`);
+  }
+
+  const json = await res.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
+  };
+  const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!b64) throw new Error("No audio data in Gemini TTS response");
+
+  return Buffer.from(b64, "base64");
+}
+
+/** Convert raw PCM (s16le, 24kHz, mono) to WAV by prepending a WAV header. */
+function pcmToWav(pcm: Buffer): Buffer {
+  const sampleRate = 24000;
+  const bitsPerSample = 16;
+  const numChannels = 1;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataSize = pcm.length;
+  const headerSize = 44;
+  const wav = Buffer.alloc(headerSize + dataSize);
+
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + dataSize, 4);
+  wav.write("WAVE", 8);
+  wav.write("fmt ", 12);
+  wav.writeUInt32LE(16, 16);           // chunk size
+  wav.writeUInt16LE(1, 20);            // PCM format
+  wav.writeUInt16LE(numChannels, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(byteRate, 28);
+  wav.writeUInt16LE(blockAlign, 32);
+  wav.writeUInt16LE(bitsPerSample, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(dataSize, 40);
+  pcm.copy(wav, headerSize);
+
+  return wav;
+}
+
+async function researcherGeneratePodcast(params: { topic: string }): Promise<AgentToolResult> {
+  const topic = params.topic?.trim();
+  if (!topic) return errorResult("No topic specified");
+
+  const geminiKey = await getGeminiApiKey();
+  if (!geminiKey) return errorResult("Gemini API key required for podcast generation");
+
+  // Find cached research
+  const cached = researchCache.get(topic.toLowerCase()) ?? researchHistory.get(topicSlug(topic));
+  if (!cached) return errorResult(`No research found for "${topic}". Run a search first.`);
+
+  // Helper to return full research data with audioUrl + script
+  const fullResult = (audioUrl: string, script?: string) => jsonResult({
+    tool: "enso_researcher_search",
+    topic: cached.topic,
+    depth: "standard",
+    phase: "complete",
+    ...cached,
+    audioUrl,
+    podcastScript: script ?? cached.podcastScript ?? undefined,
+  });
+
+  // If audio already exists, return full data with it
+  if (cached.audioUrl) return fullResult(cached.audioUrl, cached.podcastScript);
+
+  try {
+    // Phase 1: Generate script
+    pushProgress({ tool: "enso_researcher_search", topic, phase: "generating_podcast", podcastStatus: "writing_script" });
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `generating podcast script for "${topic}"` });
+
+    const script = await generatePodcastScript(cached, geminiKey);
+    if (!script) return errorResult("Failed to generate podcast script");
+
+    // Phase 2: Render audio via TTS
+    pushProgress({ tool: "enso_researcher_search", topic, phase: "generating_podcast", podcastStatus: "rendering_audio" });
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `rendering podcast audio for "${topic}"` });
+
+    const pcmData = await renderPodcastAudio(script, geminiKey);
+    const wavData = pcmToWav(pcmData);
+
+    // Phase 3: Save to disk
+    const { join } = await import("node:path");
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const { homedir } = await import("node:os");
+
+    const audioDir = join(homedir(), ".openclaw", "enso-data", "researcher", "audio");
+    mkdirSync(audioDir, { recursive: true });
+
+    const filename = `${topicSlug(topic)}.wav`;
+    const filePath = join(audioDir, filename);
+    writeFileSync(filePath, wavData);
+
+    const { toMediaUrl } = await import("./server.js");
+    const audioUrl = toMediaUrl(filePath);
+
+    // Update cache
+    cached.audioUrl = audioUrl;
+    cached.podcastScript = script;
+    researchCache.set(topic.toLowerCase(), cached);
+    researchHistory.save(topicSlug(topic), cached, buildResearchMeta(cached, "standard"));
+
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `podcast ready for "${topic}" (${wavData.length} bytes)` });
+
+    return fullResult(audioUrl, script);
+  } catch (err) {
+    logError("researcher", "podcast generation failed", err, { topic });
+    // Return the research data unchanged so the card isn't broken
+    return jsonResult({
+      tool: "enso_researcher_search",
+      topic: cached.topic,
+      depth: "standard",
+      phase: "complete",
+      ...cached,
+      podcastError: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 // ── Tool registration ──
 
 export function createResearcherTools(): AnyAgentTool[] {
@@ -1708,6 +2731,21 @@ export function createResearcherTools(): AnyAgentTool[] {
       },
       execute: async (_callId: string, params: Record<string, unknown>) =>
         researcherSendReport(params as SendReportParams),
+    } as AnyAgentTool,
+    {
+      name: "enso_researcher_generate_podcast",
+      label: "Generate Research Podcast",
+      description: "Generate an AI podcast audio overview of research findings using text-to-speech. Requires completed research.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          topic: { type: "string", description: "Research topic to generate podcast for" },
+        },
+        required: ["topic"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) =>
+        researcherGeneratePodcast(params as { topic: string }),
     } as AnyAgentTool,
     {
       name: "enso_researcher_delete_history",

@@ -14,64 +14,76 @@ import { logAction, logError } from "./action-log.js";
 
 // ── Types ──
 
-export type TaskComplexity = "simple" | "one-off" | "orchestrated";
+export type TaskComplexity = "simple" | "research" | "one-off" | "orchestrated";
 
 export interface TaskClassification {
   complexity: TaskComplexity;
   reasoning: string;
   goalSummary?: string;    // For orchestrated: high-level decomposition hint
   directAction?: string;   // For one-off: what to do
+  researchTopic?: string;  // For research: extracted topic to pass to researcher
+  researchDepth?: "quick" | "standard" | "deep";  // For research: suggested depth
 }
 
 // ── Classifier ──
 
-const CLASSIFIER_PROMPT = `You are a task complexity classifier for Enso, an AI assistant that can chat, run code, and orchestrate multi-agent missions.
+const CLASSIFIER_PROMPT = `You are a task complexity classifier for Enso, an AI assistant that can chat, run code, orchestrate multi-agent missions, and do deep web research.
 
-Classify the user's message into exactly ONE of these three categories:
+Classify the user's message into exactly ONE of these four categories:
 
 ## SIMPLE
-Questions, information requests, casual chat, opinions, explanations, single-step lookups, greetings, small talk.
+Casual chat, greetings, small talk, very short factual lookups, code explanations, opinions. Things that can be answered from general knowledge without needing web research.
 Examples:
-- "What's the weather like in Tokyo?"
-- "Explain how React hooks work"
 - "Hi, how are you?"
-- "What's the best restaurant in SF?"
-- "Summarize this article"
+- "Explain how React hooks work"
+- "What does this error mean?"
 - "What time is it in London?"
+- "Translate this to Spanish"
+- "What's 2+2?"
+
+## RESEARCH
+The user wants to learn about, investigate, explore, compare, or understand a topic in depth. This includes any request where web research would significantly improve the answer — current events, comparisons, analysis, recommendations, trends, controversies, or any factual topic that benefits from multiple sources. The user does NOT need to say "research" explicitly — if the question is best answered by searching the web and synthesizing multiple sources, it's RESEARCH.
+Examples:
+- "What are the pros and cons of nuclear vs solar energy?"
+- "Research quantum computing breakthroughs in 2025"
+- "Tell me everything about PFAS contamination in drinking water"
+- "Best programming languages for AI development and why"
+- "How does the housing market look in Austin right now?"
+- "Compare Tesla Model 3 vs BMW i4 vs Polestar 2"
+- "What's happening with AI regulation in the EU?"
+- "Deep dive into SaaS pricing strategies"
+- "What should I know about starting a food truck business?"
+- "Latest developments in CRISPR gene therapy"
+- "Is intermittent fasting actually healthy? What does the research say?"
+- "What are the best tools for building mobile apps in 2025?"
 
 ## ONE-OFF
-A single concrete task that requires code execution, file manipulation, scripting, a bug fix, data processing, or creating ONE thing. The user wants something DONE, not just discussed. But it's a bounded, single-scope task.
+A single concrete task that requires code execution, file manipulation, scripting, a bug fix, data processing, or creating ONE thing. The user wants something DONE (code written, files changed, app built), not just researched or discussed.
 Examples:
-- "Convert all PNG files to JPEG in my Downloads folder"
 - "Fix the bug in server.ts where the API returns 500"
 - "Write a Python script to scrape product prices"
-- "Create a REST API endpoint for user registration"
-- "Optimize this SQL query"
-- "Set up a new React component for the login page"
 - "Build me a todo app"
+- "Convert all PNG files to JPEG"
 - "Refactor this function to use async/await"
 
 ## ORCHESTRATED
-A complex, multi-faceted goal that requires research, planning, AND execution across multiple workstreams. The task needs different types of work (research + design + building, or analysis + multiple deliverables). These are missions, not tasks.
+A complex, multi-faceted goal requiring planning AND execution across multiple workstreams (research + design + building, or analysis + multiple deliverables). These are missions, not tasks.
 Examples:
-- "Plan a 2-week trip to Japan for my family"
 - "Build a complete freelance photography management system"
-- "Help me launch my startup's MVP — I need a landing page, user auth, payment integration, and admin dashboard"
-- "Analyze my competitor landscape and build tools to track them"
-- "Set up my entire development environment with CI/CD, testing, and deployment"
-- "Create a comprehensive marketing strategy with landing pages and analytics"
+- "Help me launch my startup's MVP — landing page, auth, payments, admin"
+- "Set up my entire dev environment with CI/CD, testing, and deployment"
 
 ## Rules
-- If in doubt between simple and one-off, choose SIMPLE (let the normal agent handle it)
-- If in doubt between one-off and orchestrated, choose ONE-OFF (simpler is better)
-- Short messages (< 10 words) are almost always SIMPLE unless they're clear action commands
-- Messages starting with "build me a complete...", "set up a full...", "plan a..." tend toward ORCHESTRATED
-- Messages that mention multiple distinct deliverables or workstreams → ORCHESTRATED
-- The presence of explicit action words (fix, create, write, build, convert, deploy) signals ONE-OFF
-- Just asking about something (even complex topics) is SIMPLE — the user must want ACTION
+- **RESEARCH is the default for informational questions about real-world topics.** If the user asks about something that benefits from current web data, multiple perspectives, or source-backed analysis, choose RESEARCH.
+- SIMPLE is for casual chat, greetings, code help, and trivial factual lookups that don't need web research.
+- If in doubt between SIMPLE and RESEARCH, choose RESEARCH — it's better to give a thorough researched answer than a shallow one.
+- If in doubt between RESEARCH and ONE-OFF, choose based on intent: learning/understanding → RESEARCH, doing/building → ONE-OFF.
+- ONE-OFF requires explicit action intent (fix, create, write, build, convert, deploy, refactor).
+- Messages starting with "build me a complete...", "set up a full...", "plan a..." with multiple deliverables → ORCHESTRATED.
+- For RESEARCH: extract the core topic and suggest a depth (quick for simple comparisons, standard for most topics, deep for complex multi-faceted analysis).
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|one-off|orchestrated","reasoning":"brief reason","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","researchTopic":"extracted topic for research","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
 
 export async function classifyTask(params: {
   userMessage: string;
@@ -107,7 +119,7 @@ export async function classifyTask(params: {
     const parsed = JSON.parse(cleaned) as TaskClassification;
 
     // Validate the complexity field
-    if (!["simple", "one-off", "orchestrated"].includes(parsed.complexity)) {
+    if (!["simple", "research", "one-off", "orchestrated"].includes(parsed.complexity)) {
       throw new Error(`Invalid complexity: ${parsed.complexity}`);
     }
 
@@ -143,11 +155,24 @@ function quickClassify(message: string): TaskClassification | null {
   const lower = trimmed.toLowerCase();
   const wordCount = trimmed.split(/\s+/).length;
 
-  // Very short messages are almost always simple
-  if (wordCount <= 3) {
+  // Check for CJK characters — if present, skip the short-message heuristic
+  // since CJK text doesn't use spaces between words
+  const hasCJK = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(trimmed);
+
+  // Very short messages are almost always simple (skip for CJK)
+  if (wordCount <= 3 && !hasCJK) {
     // Unless they're clear action commands
     if (/^(fix|build|create|deploy|convert|setup|install)\b/i.test(lower)) {
       return null; // Let LLM decide — might be one-off
+    }
+    // "research X" with just a topic word
+    if (/^research\b/i.test(lower)) {
+      return {
+        complexity: "research",
+        reasoning: "Explicit research keyword",
+        researchTopic: trimmed.replace(/^research\s*/i, ""),
+        researchDepth: "standard",
+      };
     }
     return {
       complexity: "simple",
@@ -163,19 +188,114 @@ function quickClassify(message: string): TaskClassification | null {
     };
   }
 
-  // Pure questions that start with question words (and don't contain action verbs)
+  // ── Research intent — explicit keywords ──
+  // Phrases that unambiguously signal research intent
+  const explicitResearchPatterns = [
+    /^research\s+this\s*[:;]?\s/i,
+    /^research\b/i,
+    /^deep\s*dive\b/i,
+    /^investigate\b/i,
+    /^look\s*(in)?to\b/i,
+    /^tell\s+me\s+(everything|all)\s+(about|regarding)\b/i,
+    /^what\s+(should\s+I\s+know|do\s+I\s+need\s+to\s+know)\s+about\b/i,
+    /^(find|gather)\s+(information|info|details|data)\s+(on|about)\b/i,
+    /^(explore|analyze|examine)\s/i,
+    // Chinese research triggers
+    /^(快速)?研究/,
+    /^调查/,
+    /^深入(了解|研究|探索)/,
+    /^了解/,
+    // Japanese research triggers
+    /^(リサーチ|調査|研究|調べ)/,
+    // Spanish research triggers
+    /^investigar?\b/i,
+    /^buscar?\s+(información|info)\b/i,
+    // Korean research triggers
+    /^(연구|조사|리서치)/,
+  ];
+
+  for (const pat of explicitResearchPatterns) {
+    if (pat.test(lower) || pat.test(trimmed)) {
+      // Extract topic by removing the trigger phrase
+      const topic = trimmed
+        .replace(/^(research\s+this\s*[:;]?\s*|research|deep\s*dive\s*(into)?|investigate|look\s*(in)?to|tell\s+me\s+(everything|all)\s+(about|regarding)|what\s+(should\s+I\s+know|do\s+I\s+need\s+to\s+know)\s+about|(find|gather)\s+(information|info|details|data)\s+(on|about)|(explore|analyze|examine))\s*/i, "")
+        // Strip multilingual research prefixes
+        .replace(/^(快速研究|快速)?研究|^调查|^深入(了解|研究|探索)|^了解|^(リサーチ|調査|研究|調べ)(する|して)?|^investigar?\s*|^buscar?\s+(información|info)\s+(sobre|de)\s*|^(연구|조사|리서치)\s*/i, "")
+        .trim();
+      return {
+        complexity: "research",
+        reasoning: "Explicit research-intent phrase detected",
+        researchTopic: topic || trimmed,
+        researchDepth: /deep\s*dive|深入/i.test(lower) || /深入/.test(trimmed) ? "deep" : /quick|快速/i.test(lower) || /快速/.test(trimmed) ? "quick" : "standard",
+      };
+    }
+  }
+
+  // ── Research intent — comparison/analysis patterns ──
+  // "pros and cons of X", "compare X vs Y", "X vs Y", "best X for Y"
+  if (/\b(pros?\s+and\s+cons?|advantages?\s+and\s+disadvantages?)\b/i.test(lower) && wordCount >= 5) {
+    return {
+      complexity: "research",
+      reasoning: "Comparison/analysis pattern detected",
+      researchTopic: trimmed,
+      researchDepth: "standard",
+    };
+  }
+
+  if (/\bcompare\b/i.test(lower) && wordCount >= 4) {
+    return {
+      complexity: "research",
+      reasoning: "Comparison request detected",
+      researchTopic: trimmed,
+      researchDepth: "standard",
+    };
+  }
+
+  if (/\bvs\.?\b/i.test(lower) && wordCount >= 4 && !/\b(fix|build|create|write|code)\b/i.test(lower)) {
+    return {
+      complexity: "research",
+      reasoning: "Versus comparison detected",
+      researchTopic: trimmed,
+      researchDepth: "standard",
+    };
+  }
+
+  if (/^(what\s+are\s+)?the\s+best\b/i.test(lower) && wordCount >= 5 && !/\b(fix|build|create|write)\b/i.test(lower)) {
+    return {
+      complexity: "research",
+      reasoning: "Best-of recommendation request",
+      researchTopic: trimmed,
+      researchDepth: "standard",
+    };
+  }
+
+  // ── Research intent — "what's happening with", "latest on", "current state of" ──
+  if (/\b(latest|current\s+state|what'?s\s+happening|recent\s+developments?|state\s+of\s+the\s+art)\b/i.test(lower) && wordCount >= 4) {
+    return {
+      complexity: "research",
+      reasoning: "Current-events/trends query detected",
+      researchTopic: trimmed,
+      researchDepth: "standard",
+    };
+  }
+
+  // Pure questions that start with question words
   if (/^(what|who|when|where|why|how|is|are|does|do|can|could|should|would|will)\b/i.test(lower)) {
     // Longer messages with "can you help" / "could you help" etc. are action requests — always LLM
     if (/^(can|could|would|will)\s+you\s+(help|please)\b/i.test(lower) && wordCount > 10) {
       return null; // Let LLM decide — likely an action request
     }
-    // Messages with action verbs are asking to DO something
-    if (/\b(build|create|make|set up|implement|write|develop|design|plan|process|organize|convert|transform|generate|deploy|configure|analyze|research|launch)\b/i.test(lower) && wordCount > 8) {
+    // Messages with code/build action verbs → let LLM decide (might be one-off)
+    if (/\b(build|create|make|set up|implement|write|develop|design|process|organize|convert|transform|generate|deploy|configure|refactor|launch)\b/i.test(lower) && wordCount > 8) {
       return null; // Let LLM decide
+    }
+    // Substantive questions (6+ words) about real-world topics → likely research
+    if (wordCount >= 6) {
+      return null; // Let LLM decide — could be research or simple
     }
     return {
       complexity: "simple",
-      reasoning: "Question format — informational request",
+      reasoning: "Short question — likely a quick factual lookup",
     };
   }
 

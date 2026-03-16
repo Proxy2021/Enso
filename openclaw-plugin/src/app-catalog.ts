@@ -37,13 +37,6 @@ export const APP_CATALOG: AppEntry[] = [
     description: "File manager: browse directories, read files, search, create/rename/delete/move files and folders",
   },
   {
-    appId: "city_planner",
-    primaryTool: "enso_city_explore",
-    actions: ["explore", "restaurants", "photo_spots", "landmarks", "send_email", "delete_history"],
-    signatureId: "city_research_board",
-    description: "City research: top restaurants, photography spots, tourist landmarks — with web images, video guides, persistent history, AI summaries, and email reports",
-  },
-  {
     appId: "web_browser",
     primaryTool: "enso_browser_open",
     actions: ["open", "navigate", "click", "scroll", "back", "type"],
@@ -53,9 +46,9 @@ export const APP_CATALOG: AppEntry[] = [
   {
     appId: "researcher",
     primaryTool: "enso_researcher_search",
-    actions: ["search", "deep_dive", "compare", "follow_up", "send_report", "delete_history"],
+    actions: ["search", "deep_dive", "compare", "follow_up", "send_report", "delete_history", "deep_research"],
     signatureId: "research_board",
-    description: "Web researcher: deep multi-angle research on any topic with source attribution, comparisons, follow-up Q&A, and email reports",
+    description: "Research any topic in any language: deep multi-angle web research with AI synthesis, multimedia, podcast generation, gap analysis, contradiction detection, auto-escalating deep research via Claude Code, and email reports",
   },
   {
     appId: "clawhub",

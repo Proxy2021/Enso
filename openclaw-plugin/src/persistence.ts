@@ -232,3 +232,60 @@ export function getDocCollection<T = unknown, M extends DocMeta = DocMeta>(
   }
   return collections.get(key)! as unknown as DocCollection<T, M>;
 }
+
+// ── Global Collections API ──
+
+export interface CollectionInfo {
+  family: string;
+  collection: string;
+  count: number;
+  entries: DocEntry[];
+}
+
+/**
+ * List all instantiated document collections with their entries.
+ * Also scans the disk for any collections not yet loaded into memory.
+ */
+export function listAllCollections(): CollectionInfo[] {
+  // Scan disk for collections that might not be loaded yet
+  try {
+    if (existsSync(BASE_DIR)) {
+      for (const family of readdirSync(BASE_DIR, { withFileTypes: true })) {
+        if (!family.isDirectory()) continue;
+        const familyDir = join(BASE_DIR, family.name);
+        for (const coll of readdirSync(familyDir, { withFileTypes: true })) {
+          if (!coll.isDirectory()) continue;
+          const key = `${family.name}/${coll.name}`;
+          if (!collections.has(key)) {
+            // Instantiate the collection to load its index
+            getDocCollection(family.name, coll.name);
+          }
+        }
+      }
+    }
+  } catch {
+    // Scanning failed — just return what we have
+  }
+
+  const result: CollectionInfo[] = [];
+  for (const [key, coll] of collections.entries()) {
+    const [family, collection] = key.split("/");
+    const entries = coll.list();
+    if (entries.length === 0) continue; // skip empty collections
+    result.push({
+      family,
+      collection,
+      count: entries.length,
+      entries,
+    });
+  }
+  return result.sort((a, b) => a.family.localeCompare(b.family));
+}
+
+/**
+ * Load a specific document from any collection.
+ */
+export function loadCollectionDocument(family: string, collection: string, id: string): unknown | null {
+  const coll = getDocCollection(family, collection);
+  return coll.load(id);
+}

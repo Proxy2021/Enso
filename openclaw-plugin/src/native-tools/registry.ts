@@ -6,7 +6,6 @@ import { getToolingTemplateCode, isToolingSignature } from "./templates/tooling.
 import { getSystemAutoTemplateCode, isSystemAutoSignature } from "./templates/system.js";
 import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.js";
 import { getBrowserTemplateCode, isBrowserSignature } from "./templates/browser.js";
-import { getCityTemplateCode, isCitySignature } from "./templates/city.js";
 import { getResearcherTemplateCode, isResearcherSignature } from "./templates/researcher.js";
 import { getClawHubTemplateCode, isClawHubSignature } from "./templates/clawhub.js";
 import { APP_CATALOG, getApp } from "../app-catalog.js";
@@ -348,13 +347,6 @@ function registerDefaultSignatures(): void {
       coverageStatus: "covered",
     },
     {
-      toolFamily: "city_planner",
-      signatureId: "city_research_board",
-      templateId: "city-research-v1",
-      supportedActions: ["refresh", "explore", "restaurants", "photo_spots", "landmarks", "send_email", "delete_history"],
-      coverageStatus: "covered",
-    },
-    {
       toolFamily: "researcher",
       signatureId: "research_board",
       templateId: "researcher-v1",
@@ -563,9 +555,6 @@ export function detectToolTemplateFromData(data: unknown): ToolTemplate | undefi
   if (Array.isArray(record.steps) && ("logs" in record || "failure" in record)) {
     return getToolTemplate("tool_inspector", "tool_run_summary");
   }
-  if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_city_")) || (Array.isArray(record.places) && "city" in record && ("category" in record || Array.isArray(record.sections)))) {
-    return getToolTemplate("city_planner", "city_research_board");
-  }
   if ((typeof record.tool === "string" && (record.tool as string).startsWith("enso_researcher_")) || (Array.isArray(record.keyFindings) && Array.isArray(record.sections) && "topic" in record)) {
     return getToolTemplate("researcher", "research_board");
   }
@@ -619,9 +608,6 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   }
   if (isBrowserSignature(signature.signatureId)) {
     return getBrowserTemplateCode(signature);
-  }
-  if (isCitySignature(signature.signatureId)) {
-    return getCityTemplateCode(signature);
   }
   if (isResearcherSignature(signature.signatureId)) {
     return getResearcherTemplateCode(signature);
@@ -879,7 +865,6 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
     "alpharank_",
     "enso_",
     "enso_fs_",
-    "enso_city_",
     "enso_browser_",
     "enso_researcher_",
     "enso_clawhub_",

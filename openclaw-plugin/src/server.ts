@@ -566,6 +566,30 @@ export async function startEnsoServer(opts: {
     res.json({ ok: true });
   });
 
+  // ── Collections API — browse all persisted document collections ──
+  app.get("/api/collections", async (_req, res) => {
+    try {
+      const { listAllCollections } = await import("./persistence.js");
+      res.json({ collections: listAllCollections() });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to list collections" });
+    }
+  });
+
+  app.get("/api/collections/:family/:collection/:id", async (req, res) => {
+    try {
+      const { loadCollectionDocument } = await import("./persistence.js");
+      const doc = loadCollectionDocument(req.params.family, req.params.collection, req.params.id);
+      if (doc == null) {
+        res.status(404).json({ error: "Document not found" });
+      } else {
+        res.json(doc);
+      }
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load document" });
+    }
+  });
+
   // Accept file uploads from the browser client
   const uploadDir = join(tmpdir(), "enso-uploads");
   mkdirSync(uploadDir, { recursive: true });
@@ -935,6 +959,100 @@ export async function startEnsoServer(opts: {
                     logError("orchestrator", "Auto-routed orchestration failed", err);
                     runtime.error?.(`[enso] orchestrator error: ${err instanceof Error ? err.message : String(err)}`);
                   });
+                  break;
+                }
+
+                if (classification.complexity === "research") {
+                  const topic = classification.researchTopic || msg.text;
+                  const depth = classification.researchDepth || "standard";
+                  runtime.log?.(`[enso] task-router: research → "${topic.slice(0, 60)}" (depth=${depth})`);
+
+                  try {
+                    const { executeToolDirect, getToolTemplateCode, getToolTemplate } = await import("./native-tools/registry.js");
+                    const { getApp } = await import("./app-catalog.js");
+                    const { registerCardContext } = await import("./outbound.js");
+
+                    // 1. Create researcher card with welcome state
+                    const cap = getApp("researcher");
+                    if (!cap) throw new Error("Researcher app not found in catalog");
+
+                    const welcomeResult = await executeToolDirect(cap.primaryTool, {});
+                    const template = getToolTemplate(cap.appId, cap.signatureId);
+                    const generatedUI = template ? getToolTemplateCode(template) : undefined;
+
+                    const cardId = randomUUID();
+                    const handlerPrefix = cap.primaryTool.replace(/_search$/, "_");
+
+                    registerCardContext(cardId, {
+                      cardId,
+                      originalPrompt: msg.text,
+                      originalResponse: "",
+                      currentData: structuredClone(welcomeResult.success ? welcomeResult.data : {}),
+                      geminiApiKey: account.geminiApiKey,
+                      account,
+                      mode: "full",
+                      actionHistory: [],
+                      appToolHint: {
+                        toolName: cap.primaryTool,
+                        params: {},
+                        handlerPrefix,
+                      },
+                      interactionMode: "tool",
+                      toolFamily: cap.appId,
+                      signatureId: cap.signatureId,
+                      coverageStatus: "covered",
+                    });
+
+                    // 2. Send card to client (shows welcome/loading state)
+                    send({
+                      id: cardId,
+                      runId: randomUUID(),
+                      sessionKey,
+                      seq: 0,
+                      state: "final",
+                      data: welcomeResult.success ? welcomeResult.data : {},
+                      generatedUI,
+                      cardMode: {
+                        interactionMode: "tool",
+                        toolFamily: cap.appId,
+                        signatureId: cap.signatureId,
+                        coverageStatus: "covered",
+                      },
+                      targetCardId: undefined,
+                      timestamp: Date.now(),
+                    });
+
+                    // 3. Trigger the search action on the card (fires async — progressive updates stream to client)
+                    handlePluginCardAction({
+                      cardId,
+                      action: "search",
+                      payload: { topic, depth },
+                      mode: "full",
+                      client,
+                      config,
+                      runtime,
+                    }).catch((err) => {
+                      logError("task-router", "Research action failed", err, { topic });
+                    });
+                  } catch (researchErr) {
+                    logError("task-router", "Research routing failed, falling through to agent", researchErr);
+                    // Don't break — fall through to normal agent as fallback
+                    runtime.log?.(`[enso] task-router: research routing failed, falling through`);
+                    await handleEnsoInbound({
+                      message: {
+                        messageId: randomUUID(),
+                        sessionId: sessionKey,
+                        senderNick: `user_${connectionId}`,
+                        text: msg.text,
+                        mediaUrls: msg.mediaUrls,
+                        timestamp: Date.now(),
+                      },
+                      account,
+                      config,
+                      runtime,
+                      client,
+                    });
+                  }
                   break;
                 }
 

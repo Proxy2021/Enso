@@ -285,9 +285,8 @@ A pattern detector found "${match.category}" content (confidence: ${match.confid
 Available app families (pick one if it fits, or respond "none"):
 - alpharank: Stock market analysis, financial data, portfolios
 - filesystem: File browsing, directory management
-- city_planner: City research, restaurants, landmarks
 - web_browser: Web browsing, URL navigation
-- researcher: Deep research on topics, comparisons
+- researcher: Deep research on any topic in any language, comparisons, city research
 - clawhub: Skill store management
 
 Text excerpt (first 500 chars):

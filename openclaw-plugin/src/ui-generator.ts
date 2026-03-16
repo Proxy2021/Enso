@@ -508,10 +508,10 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000, 
   }
 }
 
-export async function callGeminiLLMWithRetry(prompt: string, apiKey: string, model?: string): Promise<string> {
+export async function callGeminiLLMWithRetry(prompt: string, apiKey: string, model?: string, overrideTimeoutMs?: number): Promise<string> {
   const maxAttempts = 3;
   // Pro models need longer timeouts for large code-generation prompts
-  const timeoutMs = model === GEMINI_MODEL_PRO ? 90_000 : 30_000;
+  const timeoutMs = overrideTimeoutMs ?? (model === GEMINI_MODEL_PRO ? 90_000 : 30_000);
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {

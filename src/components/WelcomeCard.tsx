@@ -23,15 +23,9 @@ const TEMPLATES: Template[] = [
     toolFamily: "media_gallery",
   },
   {
-    icon: "\uD83C\uDFD9\uFE0F",
-    title: "City Planning",
-    description: "Research a city",
-    toolFamily: "city_planner",
-  },
-  {
     icon: "\uD83D\uDD0D",
     title: "Researcher",
-    description: "Deep dive into any topic",
+    description: "Research any topic in any language",
     toolFamily: "researcher",
   },
   {

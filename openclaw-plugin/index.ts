@@ -10,7 +10,6 @@ import { registerFilesystemTools } from "./src/filesystem-tools.js";
 import { registerMediaTools } from "./src/media-tools.js";
 import { registerScreenTools } from "./src/screen-tools.js";
 import { registerBrowserTools } from "./src/browser-tools.js";
-import { registerCityTools } from "./src/city-tools.js";
 import { registerResearcherTools } from "./src/researcher-tools.js";
 import { registerClawHubTools } from "./src/clawhub-tools.js";
 import { APP_CATALOG } from "./src/app-catalog.js";
@@ -94,12 +93,6 @@ const plugin = {
     // the backend for the dynamic media_gallery app via ctx.callTool().
     registerMediaTools(api);
     registerScreenTools(api);
-    maybeRegisterFallbackToolFamily({
-      familyLabel: "city",
-      fallbackPrefix: "enso_city_",
-      actionSuffixes: APP_CATALOG.find((x) => x.appId === "city_planner")?.actions ?? [],
-      register: () => registerCityTools(api),
-    });
     maybeRegisterFallbackToolFamily({
       familyLabel: "browser",
       fallbackPrefix: "enso_browser_",

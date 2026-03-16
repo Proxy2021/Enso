@@ -23,6 +23,9 @@ import {
   handleToolConsoleAdd,
 } from "../tooling-console.js";
 import { logAction, logError, logFix } from "../action-log.js";
+import { setResearchProgressCallback, setDeepResearchLauncher } from "../researcher-tools.js";
+import { runClaudeCode } from "../claude-code.js";
+import { existsSync, readFileSync, unlinkSync } from "fs";
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts, isPathWithinRoot, validateScopedAction } from "./card-context.js";
@@ -703,6 +706,70 @@ export async function handlePluginCardAction(params: {
       logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Resolved=${resolvedVia}, tool=${toolCall.toolName}`, cardId });
       sendOperation("calling_tool", `Calling ${toolCall.toolName}`);
 
+      // Wire up progressive rendering for researcher tools
+      const isResearcherTool = toolCall.toolName.startsWith("enso_researcher_");
+      if (isResearcherTool) {
+        const templateCode = ctx.signatureId
+          ? (getGeneratedTemplateCodeBySignature(ctx.signatureId) ?? undefined)
+          : undefined;
+        setResearchProgressCallback((data: Record<string, unknown>) => {
+          client.send({
+            id: randomUUID(),
+            runId: operationId,
+            sessionKey: client.sessionKey,
+            seq: 0,
+            state: "delta",
+            targetCardId: cardId,
+            data,
+            ...(templateCode ? { generatedUI: templateCode } : {}),
+            cardMode: cardModeFromContext(ctx),
+            timestamp: Date.now(),
+          });
+        });
+
+        // Wire up deep research launcher (Claude Code)
+        setDeepResearchLauncher(({ topic, systemPrompt, onComplete }) => {
+          const deepRunId = randomUUID();
+          const cwd = process.cwd();
+          const resultFile = require("path").join(cwd, ".research-result.json");
+
+          // Clean up any previous result file
+          try { if (existsSync(resultFile)) unlinkSync(resultFile); } catch { /* ignore */ }
+
+          // Send the deep research phase to the terminal card
+          // The researcher tool will show "deep_research" phase in the researcher card
+          // Meanwhile we run Claude Code which streams to a separate terminal-like output
+
+          const fullPrompt = systemPrompt + "\n\nBegin your research now. Write the final JSON result to .research-result.json when done.";
+
+          runClaudeCode({
+            prompt: fullPrompt,
+            cwd,
+            client,
+            runId: deepRunId,
+            targetCardId: cardId + "-deep",
+          }).then(() => {
+            // Claude Code finished — read the result file
+            try {
+              if (existsSync(resultFile)) {
+                const content = readFileSync(resultFile, "utf-8");
+                unlinkSync(resultFile); // clean up
+                onComplete(content);
+              } else {
+                logError("researcher", "Deep research completed but no result file found", undefined, { topic });
+                onComplete(null);
+              }
+            } catch (readErr) {
+              logError("researcher", "Failed to read deep research result", readErr, { topic });
+              onComplete(null);
+            }
+          }).catch((err) => {
+            logError("researcher", "Deep research Claude Code failed", err, { topic });
+            onComplete(null);
+          });
+        });
+      }
+
       try {
         let result = await executeToolDirect(toolCall.toolName, toolCall.params);
         logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Execute result: success=${result.success}, hasData=${result.data != null}, error=${result.error ?? "none"}`, cardId });
@@ -826,6 +893,11 @@ export async function handlePluginCardAction(params: {
         logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Tool failed (${errorMsg}), falling through to agent`, cardId });
       } catch (err) {
         logError("action:native", "Native tool exception", err, { cardId });
+      } finally {
+        if (isResearcherTool) {
+          setResearchProgressCallback(null);
+          setDeepResearchLauncher(null);
+        }
       }
     } else {
       logAction({ ts: Date.now(), type: "action", category: "action:native", message: `No tool resolved for action="${action}", falling through to agent` });
