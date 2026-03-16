@@ -905,7 +905,14 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           const filename = `enso-research-${topic.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 40)}.png`;
           const file = new File([blob], filename, { type: "image/png" });
 
-          // Try Web Share API with file (mobile only — desktop browsers show error dialogs)
+          // Native app: share via Android share sheet with image file
+          const { nativeShareImage, isNative: isNativePlatform } = await import("../lib/native-share");
+          if (isNativePlatform) {
+            await nativeShareImage({ dataUrl, title: `Research: ${topic}`, filename });
+            return;
+          }
+
+          // Mobile browser: try Web Share API with file
           const isMobile = /Mobi|Android/i.test(navigator.userAgent);
           if (isMobile && navigator.share && navigator.canShare?.({ files: [file] })) {
             try {
@@ -916,7 +923,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             }
           }
 
-          // Fallback: download the image
+          // Desktop fallback: download the image
           const a = document.createElement("a");
           a.href = dataUrl;
           a.download = filename;
