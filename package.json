@@ -1,8 +1,8 @@
 {
   "name": "enso",
   "private": true,
-  "version": "0.2.85",
-  "versionCode": 87,
+  "version": "0.2.86",
+  "versionCode": 88,
   "description": "Agentic AI platform with multi-agent orchestration, remote desktop, terminal, and coding agent — every answer becomes a live interactive app",
   "type": "module",
   "scripts": {
