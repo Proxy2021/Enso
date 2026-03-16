@@ -2477,7 +2477,7 @@ Rules:
 - Output ONLY the dialogue script, no stage directions or metadata
 - Keep total script under 3000 characters (API limit)
 
-CRITICAL LANGUAGE RULE: The podcast script MUST be in the SAME language as the research topic and data. If the topic and findings are in Chinese, the entire dialogue must be in Chinese. If in Japanese, speak Japanese. If in Spanish, speak Spanish. Always keep "Host A:" and "Host B:" tags in English, but the dialogue itself must match the topic's language.`;
+CRITICAL LANGUAGE RULE: Detect the language that the TOPIC TEXT ITSELF is written in — ignore the language of any data or snippets below. The podcast dialogue MUST be in the same language as the topic. If the topic is written in English (e.g. "Dune world", "quantum computing"), the ENTIRE dialogue must be in English. If the topic is written in Chinese characters, speak Chinese. If in Japanese, speak Japanese. Default to English when uncertain. Always keep "Host A:" and "Host B:" tags in English.`;
 
 async function generatePodcastScript(research: CachedResearch, geminiKey: string): Promise<string> {
   const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
@@ -2487,7 +2487,13 @@ async function generatePodcastScript(research: CachedResearch, geminiKey: string
   const contradictionsSummary = (research.contradictions ?? []).slice(0, 3)
     .map((c) => `- ${c.claim}: ${c.perspectives.join(" vs ")}`).join("\n");
 
+  // Detect if topic is primarily non-Latin (CJK, Arabic, etc.) to hint language
+  const nonLatinRatio = (research.topic.match(/[^\u0000-\u007F]/g) ?? []).length / Math.max(research.topic.length, 1);
+  const topicLang = nonLatinRatio > 0.3 ? "the same language the topic is written in" : "English";
+
   const prompt = `${PODCAST_SCRIPT_PROMPT}
+
+LANGUAGE FOR THIS PODCAST: ${topicLang}
 
 Topic: ${research.topic}
 Summary: ${research.summary}
