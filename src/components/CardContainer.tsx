@@ -977,17 +977,17 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         import("../lib/native-share").then(async ({ nativeShare, isNative }) => {
           if (isNative) {
             await nativeShare({ title: `Research: ${topic}`, text, url: undefined });
-          } else if (navigator.share) {
+          } else if (navigator.share && /Mobi|Android/i.test(navigator.userAgent)) {
+            // Only use Web Share API on mobile — desktop browsers often show error dialogs
             try {
               await navigator.share({ title: `Research: ${topic}`, text });
             } catch (err) {
               if ((err as DOMException)?.name !== "AbortError") {
-                // Fallback to clipboard
                 await navigator.clipboard.writeText(text);
               }
             }
           } else {
-            // No share API — copy to clipboard
+            // Desktop or no share API — copy to clipboard
             await navigator.clipboard.writeText(text);
           }
         }).catch(console.error);

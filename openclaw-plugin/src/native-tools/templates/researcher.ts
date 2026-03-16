@@ -24,6 +24,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const [copied, setCopied] = useState(false);
   const [podcastLoading, setPodcastLoading] = useState(false);
   const [scriptExpanded, setScriptExpanded] = useState(false);
+  const [narrativeExpanded, setNarrativeExpanded] = useState(false);
 
   // ── View detection ──
   const topic = String(data?.topic ?? "");
@@ -86,10 +87,31 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const findingAccent = { fact: "emerald", trend: "blue", insight: "purple", warning: "amber" };
   const confidenceVariant = { high: "success", medium: "warning", low: "outline" };
 
+  // ── Source trust classification ──
+  const getSourceTrust = (domain) => {
+    if (!domain) return null;
+    const d = String(domain).toLowerCase();
+    if (d.endsWith(".edu") || d.endsWith(".ac.uk") || d.endsWith(".ac.jp")) return { label: "Academic", color: "text-purple-400", bg: "bg-purple-500/10" };
+    if (d.endsWith(".gov") || d.endsWith(".int") || d.endsWith(".mil")) return { label: "Gov", color: "text-emerald-400", bg: "bg-emerald-500/10" };
+    if (d.endsWith(".org") || ["wikipedia.org", "britannica.com", "nature.com", "science.org", "arxiv.org"].some((t) => d.includes(t))) return { label: "Reference", color: "text-blue-400", bg: "bg-blue-500/10" };
+    if (["reuters.com", "apnews.com", "bbc.com", "bbc.co.uk", "nytimes.com", "washingtonpost.com", "theguardian.com", "economist.com"].some((t) => d.includes(t))) return { label: "News", color: "text-cyan-400", bg: "bg-cyan-500/10" };
+    return null;
+  };
+
   // ── Phase checks ──
   const isLoading = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking", "deep_research"].includes(phase);
   const hasSynthesis = ["synthesized", "gap_checking", "complete"].includes(phase);
   const isComplete = phase === "complete";
+
+  // ── Reading time estimate (avg 200 words/min for technical content) ──
+  const wordCount = useMemo(() => {
+    const text = [narrative, summary, ...keyFindings.map((f) => f.text), ...sections.flatMap((s) => [s.summary || "", ...(s.bullets || [])])].join(" ");
+    return text.split(/\\s+/).filter((w) => w.length > 0).length;
+  }, [narrative, summary, keyFindings, sections]);
+  const readingMinutes = Math.max(1, Math.round(wordCount / 200));
+
+  // ── Narrative collapse (show first 3 paragraphs for long content) ──
+  const NARRATIVE_COLLAPSE_THRESHOLD = 4;
 
   // ── Helper: source reference badges ──
   const SourceRefs = ({ refs }) => {
@@ -179,11 +201,17 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       const t = topicInput.trim();
       if (t) onAction("search", { topic: t, depth: depthInput });
     };
-    const allSuggestions = [
-      "AI in healthcare", "Remote work trends 2026", "Quantum computing applications",
-      "Mediterranean diet benefits", "Electric vehicles vs hydrogen fuel",
-      "SaaS pricing strategies", "Ocean plastic cleanup technology", "Space tourism industry",
+    const allSuggestionGroups = [
+      ["AI in healthcare", "CRISPR gene editing breakthroughs", "mRNA vaccine applications beyond COVID"],
+      ["Remote work productivity studies", "Electric vehicles vs hydrogen fuel", "Quantum computing applications"],
+      ["Mediterranean diet benefits", "Weight loss drugs GLP-1 long-term effects", "How the immune system works"],
+      ["SpaceX Starship progress", "Nuclear fusion timeline", "Neuromorphic computing trends"],
+      ["History of the Roman Empire", "How black holes form", "Sourdough fermentation science"],
+      ["Renewable energy storage breakthroughs", "Cybersecurity AI-powered threats", "Microplastics in food chain"],
     ];
+    // Rotate suggestions based on day to keep content fresh
+    const dayIdx = Math.floor(Date.now() / 86400000) % allSuggestionGroups.length;
+    const allSuggestions = [...allSuggestionGroups[dayIdx], ...allSuggestionGroups[(dayIdx + 1) % allSuggestionGroups.length]];
     const recentTopicNames = new Set(recentTopics.map((r) => (r.meta?.topic || "").toLowerCase()));
     const suggestions = allSuggestions.filter((s) => !recentTopicNames.has(s.toLowerCase()));
     return (
@@ -641,13 +669,31 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       </div>
 
-      {/* ── Phase indicator ── */}
+      {/* ── Phase indicator with progress ── */}
       {isLoading && (
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
           <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
           <div className="flex-1">
             <div className="text-sm text-blue-300">{phaseLabels[phase] || "Working..."}</div>
-            {sources.length > 0 && <div className="text-[10px] text-blue-400/60">{sources.length} sources found</div>}
+            <div className="text-[10px] text-blue-400/50 mt-0.5">
+              {sources.length > 0 && <span>{sources.length} sources found</span>}
+              {searchQueries.length > 0 && sources.length > 0 && <span> · </span>}
+              {searchQueries.length > 0 && <span>{searchQueries.length} queries</span>}
+            </div>
+          </div>
+          {/* Phase progress dots */}
+          <div className="flex gap-1 shrink-0">
+            {["generating_queries", "searching", "synthesizing"].map((p, i) => {
+              const phaseOrder = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking"];
+              const currentIdx = phaseOrder.indexOf(phase);
+              const thisIdx = [0, 1, 3].indexOf(i) >= 0 ? i : i;
+              const dotPhases = [0, 1, 3]; // indices in phaseOrder
+              const isDone = currentIdx > dotPhases[i];
+              const isCurrent = currentIdx === dotPhases[i] || (i === 1 && currentIdx === 2);
+              return (
+                <div key={i} className={"w-1.5 h-1.5 rounded-full " + (isDone ? "bg-blue-400" : isCurrent ? "bg-blue-400 animate-pulse" : "bg-gray-600")} />
+              );
+            })}
           </div>
         </div>
       )}
@@ -659,6 +705,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           {keyFindings.length > 0 && <Badge variant="info">{keyFindings.length} findings</Badge>}
           {contradictions.length > 0 && <Badge variant="warning">{contradictions.length} contradictions</Badge>}
           {gapQueries.length > 0 && <Badge variant="default">gap-checked</Badge>}
+          {wordCount > 50 && <span className="flex items-center gap-1 text-[10px] text-gray-500"><LucideReact.Clock className="w-3 h-3" />{readingMinutes} min read</span>}
           {data?.fromHistory && (
             <span className="flex items-center gap-1 text-[10px] text-gray-500">
               <LucideReact.BookOpen className="w-3 h-3" /> from library
@@ -668,8 +715,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       )}
 
-      {/* ── Search queries pills ── */}
-      {searchQueries.length > 0 && (phase === "searching" || phase === "sources") && (
+      {/* ── Search queries pills (visible during searching, sources, synthesizing, gap_checking) ── */}
+      {searchQueries.length > 0 && !hasSynthesis && !isComplete && (
         <div className="flex flex-wrap gap-1.5">
           {searchQueries.map((q, i) => (
             <span key={i} className="text-[10px] px-2 py-1 rounded-full bg-gray-800 text-gray-400 border border-gray-700/50">
@@ -679,8 +726,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       )}
 
-      {/* ── Skeleton: sources arriving ── */}
-      {(phase === "searching" || phase === "sources") && (
+      {/* ── Sources list (stays visible through searching → sources → synthesizing → gap_checking, no flash) ── */}
+      {!hasSynthesis && !isComplete && (
         <div className="space-y-1.5">
           {sources.length > 0 ? sources.slice(0, 8).map((s, i) => (
             <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded bg-gray-800/30">
@@ -697,19 +744,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
               <Skeleton className="h-8 w-3/4" />
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Skeleton: synthesizing ── */}
-      {phase === "synthesizing" && (
-        <div className="space-y-3">
-          <Skeleton className="h-5 w-3/4" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-5 w-1/2" />
-          <div className="grid grid-cols-2 gap-2">
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-          </div>
         </div>
       )}
 
@@ -762,6 +796,13 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
       {hasSynthesis && (
         <>
+          {/* ── Summary preview (brief context before findings) ── */}
+          {summary && (
+            <div className="text-sm text-gray-300 leading-relaxed bg-gray-800/30 rounded-lg px-3 py-2.5 border-l-2 border-blue-500/40">
+              {summary}
+            </div>
+          )}
+
           {/* ── Key Findings (prominent, findings-first) ── */}
           {keyFindings.length > 0 && (
             <div className="space-y-2">
@@ -773,6 +814,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                   <UICard key={i} accent={findingAccent[f.type] || "blue"}>
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono text-gray-500 bg-gray-800/50 w-5 h-5 rounded-full flex items-center justify-center shrink-0">{i + 1}</span>
                         <Badge variant={findingVariant[f.type] || "default"}>{String(f.type)}</Badge>
                         <Badge variant={confidenceVariant[f.confidence] || "outline"}>{String(f.confidence)}</Badge>
                       </div>
@@ -830,30 +872,70 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                       </div>
                     )}
 
-                    {/* Narrative */}
-                    {narrativeParagraphs.length > 0 ? (
-                      <div className="space-y-3">
-                        {narrativeParagraphs.map((p, pi) => (
-                          <Fragment key={pi}>
-                            <div className="text-sm text-gray-200 leading-relaxed">{p}</div>
-                            {pi === imgInsertIdx - 1 && inlineImages.length > 1 && (
-                              <div className={"grid gap-2 rounded-lg overflow-hidden " + (inlineImages.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
-                                {inlineImages.slice(1).map((img, ii) => (
-                                  <div key={ii} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
-                                    <img src={img.url} alt={img.title} className="w-full h-24 object-cover" onError={() => handleImgError(img.url)} referrerPolicy="no-referrer" />
-                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1">
-                                      <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
+                    {/* Narrative with collapse for long content */}
+                    {narrativeParagraphs.length > 0 ? (() => {
+                      const isLong = narrativeParagraphs.length > NARRATIVE_COLLAPSE_THRESHOLD;
+                      const visibleParagraphs = isLong && !narrativeExpanded ? narrativeParagraphs.slice(0, NARRATIVE_COLLAPSE_THRESHOLD) : narrativeParagraphs;
+                      return (
+                        <div className="space-y-3">
+                          {visibleParagraphs.map((p, pi) => (
+                            <Fragment key={pi}>
+                              <div className="text-sm text-gray-200 leading-relaxed">{p}</div>
+                              {pi === imgInsertIdx - 1 && inlineImages.length > 1 && (
+                                <div className={"grid gap-2 rounded-lg overflow-hidden " + (inlineImages.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+                                  {inlineImages.slice(1).map((img, ii) => (
+                                    <div key={ii} className="relative group overflow-hidden rounded-lg bg-gray-800 cursor-pointer" onClick={() => onAction("open_url", { url: img.pageUrl || img.url })}>
+                                      <img src={img.url} alt={img.title} className="w-full h-24 object-cover" onError={() => handleImgError(img.url)} referrerPolicy="no-referrer" />
+                                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1">
+                                        <div className="text-[10px] text-gray-200 truncate">{img.title}</div>
+                                      </div>
                                     </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </Fragment>
-                        ))}
-                      </div>
-                    ) : summary ? (
+                                  ))}
+                                </div>
+                              )}
+                            </Fragment>
+                          ))}
+                          {isLong && !narrativeExpanded && (
+                            <button
+                              onClick={() => setNarrativeExpanded(true)}
+                              className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                            >
+                              <LucideReact.ChevronDown className="w-3.5 h-3.5" />
+                              Read more ({narrativeParagraphs.length - NARRATIVE_COLLAPSE_THRESHOLD} more paragraphs)
+                            </button>
+                          )}
+                          {isLong && narrativeExpanded && (
+                            <button
+                              onClick={() => setNarrativeExpanded(false)}
+                              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-400 transition-colors"
+                            >
+                              <LucideReact.ChevronUp className="w-3.5 h-3.5" />
+                              Show less
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })() : summary ? (
                       <div className="text-sm text-gray-200 leading-relaxed">{summary}</div>
                     ) : null}
+
+                    {/* Quick explore chips from sections */}
+                    {sections.length > 0 && isComplete && (
+                      <div className="space-y-1.5">
+                        <div className="text-[10px] text-gray-500 uppercase tracking-wide">Explore deeper</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {sections.slice(0, 5).map((s, i) => (
+                            <button
+                              key={i}
+                              onClick={() => onAction("deep_dive", { topic, subtopic: s.title })}
+                              className="text-[11px] px-2.5 py-1 rounded-full bg-gray-800/60 text-gray-300 border border-gray-700/50 hover:bg-blue-500/15 hover:border-blue-500/30 hover:text-blue-300 transition-colors"
+                            >
+                              {String(s.title)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Recommended videos inline */}
                     {recVideos.length > 0 && (
@@ -1120,7 +1202,10 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                               <span className="text-[10px] text-gray-500 font-mono w-5 text-right shrink-0">{i + 1}</span>
                               <div className="flex-1 min-w-0">
                                 <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
-                                <div className="text-[10px] text-gray-500">{String(s.domain)}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-gray-500">{String(s.domain)}</span>
+                                  {(() => { const trust = getSourceTrust(s.domain); return trust ? <span className={"text-[9px] px-1 py-0.5 rounded " + trust.bg + " " + trust.color}>{trust.label}</span> : null; })()}
+                                </div>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <div className="w-12">
@@ -1198,7 +1283,16 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
       {/* Metadata note */}
       {metadata?.note && (
-        <div className="text-[11px] text-amber-400/70 px-1">{String(metadata.note)}</div>
+        <div className="flex items-center gap-1.5 text-[11px] text-amber-400/70 px-1">
+          {String(metadata.note).toLowerCase().includes("fail") || String(metadata.note).toLowerCase().includes("error")
+            ? <LucideReact.AlertCircle className="w-3 h-3 shrink-0" />
+            : <LucideReact.Info className="w-3 h-3 shrink-0" />
+          }
+          <span>{String(metadata.note)}</span>
+          {String(metadata.note).toLowerCase().includes("fail") && (
+            <button className="text-blue-400 hover:text-blue-300 ml-1 underline" onClick={() => onAction("search", { topic, depth: data?.depth || "standard", force: true })}>retry</button>
+          )}
+        </div>
       )}
 
       {/* Email dialog */}

@@ -7,7 +7,7 @@ type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
 // ── Param types ──
 
-type SearchParams = { topic: string; depth?: "quick" | "standard" | "deep"; force?: boolean };
+type SearchParams = { topic: string; depth?: "quick" | "standard" | "deep"; force?: boolean; language?: string };
 
 // ── Progressive rendering support ──
 
@@ -226,9 +226,12 @@ function buildResearchMeta(entry: CachedResearch, depth: string, isDeepResearch 
 }
 
 // Hydrate in-memory cache from disk on module load
+// Skip low-quality fallback entries (no findings = failed synthesis) so they get re-attempted
 for (const entry of researchHistory.list()) {
   const data = researchHistory.load(entry.id);
-  if (data) researchCache.set(data.topic.toLowerCase(), data);
+  if (data && (data.keyFindings?.length > 0 || data.narrative)) {
+    researchCache.set(data.topic.toLowerCase(), data);
+  }
 }
 
 // ── Helpers ──
@@ -270,8 +273,10 @@ async function getGeminiApiKey(): Promise<string | undefined> {
 }
 
 function sanitizeJsonStrings(json: string): string {
-  // Fix unescaped control characters inside JSON string values.
-  // Walk through the JSON: when inside a string, escape any literal control chars.
+  // Fix unescaped control characters AND invalid escape sequences inside JSON string values.
+  // JSON only allows these escapes: \" \\ \/ \b \f \n \r \t \uXXXX
+  // LLMs often produce invalid escapes like \s, \d, \p, \' etc.
+  const VALID_ESCAPES = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u']);
   let result = "";
   let inString = false;
   let escaped = false;
@@ -279,7 +284,18 @@ function sanitizeJsonStrings(json: string): string {
     const ch = json[i];
     const code = json.charCodeAt(i);
     if (inString) {
-      if (escaped) { escaped = false; result += ch; continue; }
+      if (escaped) {
+        escaped = false;
+        if (VALID_ESCAPES.has(ch)) {
+          // Valid escape — keep as-is (backslash already appended)
+          result += ch;
+        } else {
+          // Invalid escape like \s, \p, \' — remove the backslash, keep the char
+          // Replace the trailing backslash we already pushed with just the char
+          result = result.slice(0, -1) + ch;
+        }
+        continue;
+      }
       if (ch === "\\") { escaped = true; result += ch; continue; }
       if (ch === '"') { inString = false; result += ch; continue; }
       // Escape unescaped control characters (tabs and newlines most common)
@@ -299,6 +315,69 @@ function sanitizeJsonStrings(json: string): string {
   return result;
 }
 
+/**
+ * Fix unescaped double quotes inside JSON string values.
+ * Walks the JSON, tracking whether we're inside a string. When a " is encountered
+ * inside a string, we check if closing here would produce valid JSON structure
+ * (next meaningful char should be , : } ]). If not, it's an embedded quote → escape it.
+ */
+function fixUnescapedQuotes(json: string): string {
+  const result: string[] = [];
+  let inString = false;
+  let escaped = false;
+  // Track whether we're in a key vs a value position
+  let afterColon = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        result.push(ch);
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        result.push(ch);
+        continue;
+      }
+      if (ch === '"') {
+        // Is this the real end of the string, or an unescaped embedded quote?
+        // Look ahead: skip whitespace, then check if next char is valid JSON after a string
+        let j = i + 1;
+        while (j < json.length && (json[j] === " " || json[j] === "\t" || json[j] === "\n" || json[j] === "\r")) j++;
+        const next = j < json.length ? json[j] : "";
+        // Valid chars after a string value: , } ] : (for keys) or end of input
+        if (next === "" || next === "," || next === "}" || next === "]" || next === ":") {
+          // Looks like a real string terminator
+          inString = false;
+          afterColon = next === ":";
+          result.push(ch);
+        } else {
+          // Not a valid position to end a string — escape the quote
+          result.push('\\"');
+        }
+        continue;
+      }
+      result.push(ch);
+      continue;
+    }
+
+    // Not in string
+    if (ch === '"') {
+      inString = true;
+      result.push(ch);
+      continue;
+    }
+    if (ch === ":") afterColon = true;
+    else if (ch !== " " && ch !== "\t" && ch !== "\n" && ch !== "\r") afterColon = false;
+    result.push(ch);
+  }
+
+  return result.join("");
+}
+
 function cleanJson(raw: string): string {
   // Strip markdown fences
   let s = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
@@ -314,6 +393,13 @@ function cleanJson(raw: string): string {
 
   // Sanitize unescaped control characters inside strings (common LLM issue)
   s = sanitizeJsonStrings(s);
+  try { JSON.parse(s); return s; } catch { /* continue */ }
+
+  // Fix unescaped double quotes inside string values (very common LLM issue).
+  // Strategy: walk character by character, track JSON structure context.
+  // When inside a string and we see a " that doesn't look like a string terminator
+  // (next non-whitespace char is not : , } ] or end-of-input), escape it.
+  s = fixUnescapedQuotes(s);
   try { JSON.parse(s); return s; } catch { /* continue with structural repairs */ }
 
   // State-machine repair: track string/structure context properly
@@ -391,6 +477,35 @@ function cleanJson(raw: string): string {
 
   // Last resort: return the stripped version and let caller handle the error
   return s;
+}
+
+/**
+ * Detect the likely language of a text string using Unicode script heuristics.
+ * Returns a language name (e.g., "Chinese", "Japanese", "Korean", "English").
+ */
+function detectLanguage(text: string): string {
+  // Count characters by Unicode script
+  const cjk = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length;       // CJK Unified
+  const hiragana = (text.match(/[\u3040-\u309f]/g) || []).length;                 // Japanese
+  const katakana = (text.match(/[\u30a0-\u30ff]/g) || []).length;                 // Japanese
+  const hangul = (text.match(/[\uac00-\ud7af\u1100-\u11ff]/g) || []).length;      // Korean
+  const cyrillic = (text.match(/[\u0400-\u04ff]/g) || []).length;                 // Russian etc.
+  const arabic = (text.match(/[\u0600-\u06ff\u0750-\u077f]/g) || []).length;      // Arabic
+  const thai = (text.match(/[\u0e00-\u0e7f]/g) || []).length;                     // Thai
+  const devanagari = (text.match(/[\u0900-\u097f]/g) || []).length;               // Hindi
+
+  const total = text.replace(/\s/g, "").length;
+  if (total === 0) return "English";
+
+  if ((hiragana + katakana) / total > 0.1) return "Japanese";
+  if (hangul / total > 0.1) return "Korean";
+  if (cjk / total > 0.1) return "Chinese";
+  if (cyrillic / total > 0.15) return "Russian";
+  if (arabic / total > 0.15) return "Arabic";
+  if (thai / total > 0.15) return "Thai";
+  if (devanagari / total > 0.15) return "Hindi";
+
+  return "English";
 }
 
 function extractDomain(url: string): string {
@@ -834,7 +949,7 @@ function deduplicateAndScore(batches: BraveWebResult[][]): Source[] {
 
 // ── LLM Synthesis prompts ──
 
-function buildSynthesisPrompt(topic: string, results: BraveWebResult[], sources?: Source[]): string {
+function buildSynthesisPrompt(topic: string, results: BraveWebResult[], sources?: Source[], language?: string): string {
   // Use full article content when available, falling back to snippets
   const sourceEntries = results.slice(0, 30).map((r, i) => {
     const fullContent = sources?.[i]?.fullContent;
@@ -851,7 +966,7 @@ function buildSynthesisPrompt(topic: string, results: BraveWebResult[], sources?
 
   return `You are a senior research analyst. Given web search results about "${topic}", synthesize comprehensive research findings.
 
-CRITICAL LANGUAGE RULE: Detect the language of the topic "${topic}". ALL output text (summary, narrative, keyFindings, sections, books, movies, contradictions) MUST be written in that same language. If the topic is in Chinese, respond entirely in Chinese. If in Japanese, respond in Japanese. If in Spanish, respond in Spanish. Etc. Only sourceRefs, type labels (fact/trend/insight/warning), and confidence labels (high/medium/low) remain in English.
+CRITICAL LANGUAGE RULE: ALL output text (summary, narrative, keyFindings, sections, books, movies, contradictions) MUST be written in ${language || "the same language as the topic"}. ${language ? `Write EVERYTHING in ${language}.` : ""} Even if the source material is in English, translate and write your synthesis in ${language || "the topic's language"}. Only sourceRefs, type labels (fact/trend/insight/warning), and confidence labels (high/medium/low) remain in English.
 
 SEARCH RESULTS:
 ${snippetText}${contentNote}
@@ -882,14 +997,15 @@ Rules:
 - The "narrative" is the PRIMARY output users will read — it must be comprehensive, engaging, and cover ALL important material
 - Write the narrative like a well-crafted magazine feature or intelligence briefing: strong opening that hooks the reader and establishes why this topic matters now, body paragraphs each exploring a distinct angle or theme, closing with forward-looking perspective or implications
 - Each narrative paragraph should be 3-5 sentences of flowing, connected prose
-- Generate 5-8 key findings covering the most important discoveries
-- Generate 3-6 thematic sections organized by subtopic
-- sourceRefs are 0-indexed positions in the SEARCH RESULTS list above
+- Generate 6-10 key findings covering the most important discoveries. Mix fact, trend, insight, and warning types
+- Generate 4-6 thematic sections organized by subtopic, each with 3-5 detailed bullets
+- sourceRefs MUST be valid 0-indexed integers from 0 to ${results.slice(0, 30).length - 1} (there are ${results.slice(0, 30).length} sources). Do NOT use any index >= ${results.slice(0, 30).length}
 - Each finding and section MUST reference at least one source
 - Finding types: fact (verified data/statistic), trend (emerging pattern), insight (analytical observation), warning (risk/concern/limitation)
 - Confidence: high (multiple corroborating sources), medium (some support), low (single source or speculative)
 - Bullets should be specific, informative, and substantive (not vague)
 - Section titles should be clear topical headings, not generic labels
+- CRITICAL: Return ONLY valid JSON. Do NOT use invalid escape sequences in strings. Only use \\n \\t \\\\ \\" — never \\s \\d \\p or similar
 
 Also extract any books, movies, TV shows, documentaries, and podcasts mentioned or relevant. Add these fields:
   "books": [{ "title": "...", "author": "...", "year": "...", "description": "one-sentence why it's relevant" }],
@@ -1244,6 +1360,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   }
 
   const depth = params.depth ?? "standard";
+  const language = params.language || detectLanguage(topic);
 
   // Return cached result unless force-refresh requested
   if (!params.force) {
@@ -1535,22 +1652,34 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
 
   // LLM synthesis
   if (!geminiKey) {
-    return fallbackFromSources(topic, depth, sources);
+    return fallbackFromSources(topic, depth, sources, "no Gemini API key");
   }
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const prompt = buildSynthesisPrompt(topic, snippetsForLLM, allSourcesForLLM) + videoContext;
+    const prompt = buildSynthesisPrompt(topic, snippetsForLLM, allSourcesForLLM, language) + videoContext;
     // Synthesis with many sources can take longer — use 60s timeout
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, undefined, 60_000);
-    const cleaned = cleanJson(raw);
+    let raw = await callGeminiLLMWithRetry(prompt, geminiKey, undefined, 60_000);
+    let cleaned = cleanJson(raw);
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(cleaned);
     } catch (parseErr) {
       const errMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
       logError("researcher", `JSON parse failed after cleanJson: ${errMsg}`, parseErr, { rawLen: raw.length, cleanedLen: cleaned.length, rawTail: raw.slice(-200) });
-      throw parseErr;
+      // Retry once — ask for stricter JSON
+      try {
+        logAction({ ts: Date.now(), type: "action", category: "researcher", message: `retrying synthesis for "${topic}" after JSON parse failure` });
+        raw = await callGeminiLLMWithRetry(
+          prompt + "\n\nIMPORTANT: Your previous response had invalid JSON. Return ONLY a valid JSON object with no markdown, no comments, no trailing commas. Escape all special characters in strings properly.",
+          geminiKey, undefined, 60_000,
+        );
+        cleaned = cleanJson(raw);
+        parsed = JSON.parse(cleaned);
+      } catch (retryErr) {
+        logError("researcher", `Retry synthesis also failed`, retryErr, { topic });
+        throw retryErr;
+      }
     }
     const typedParsed = parsed as {
       summary: string;
@@ -1841,11 +1970,11 @@ Only include genuinely new information not already covered. If the gap sources d
     return jsonResult(result);
   } catch (err) {
     logError("researcher", "LLM synthesis error", err, { topic, depth });
-    return fallbackFromSources(topic, depth, sources);
+    return fallbackFromSources(topic, depth, sources, "synthesis failed");
   }
 }
 
-function fallbackFromSources(topic: string, depth: string, sources: Source[]): AgentToolResult {
+function fallbackFromSources(topic: string, depth: string, sources: Source[], reason: string = "synthesis unavailable"): AgentToolResult {
   const sections: ResearchSection[] = [
     {
       title: "Search Results",
@@ -1854,9 +1983,11 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[]): A
       sourceRefs: sources.slice(0, 10).map((_, i) => i),
     },
   ];
-  const summary = `Found ${sources.length} sources about "${topic}". AI synthesis unavailable — showing raw results.`;
+  const reasonLabel = reason === "no Gemini API key" ? "AI synthesis unavailable" : "AI synthesis failed";
+  const summary = `Found ${sources.length} sources about "${topic}". ${reasonLabel} — showing raw results.`;
 
-  // Persist fallback results to history + cache
+  // Only cache fallback in memory (short-lived) — do NOT persist to disk history.
+  // Failed synthesis results are low-quality and should not pollute the research library.
   const cachedFallback: CachedResearch = {
     topic,
     summary,
@@ -1873,7 +2004,6 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[]): A
     timestamp: Date.now(),
   };
   researchCache.set(topic.toLowerCase(), cachedFallback);
-  researchHistory.save(topicSlug(topic), cachedFallback, buildResearchMeta(cachedFallback, depth));
 
   return jsonResult({
     tool: "enso_researcher_search",
@@ -1896,7 +2026,9 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[]): A
       sourcesFound: sources.length,
       sectionsGenerated: 1,
       timestamp: Date.now(),
-      note: "Raw results — no Gemini API key for synthesis",
+      note: reason === "no Gemini API key"
+        ? "Raw results — no Gemini API key for synthesis"
+        : `Raw results — ${reason}`,
     },
   });
 }
@@ -2667,6 +2799,7 @@ export function createResearcherTools(): AnyAgentTool[] {
           topic: { type: "string", description: "Research topic (any subject)" },
           depth: { type: "string", enum: ["quick", "standard", "deep"], description: "Research depth: quick (3 queries), standard (6), deep (8)" },
           force: { type: "boolean", description: "Force fresh research, ignoring cached results" },
+          language: { type: "string", description: "Output language for synthesis (e.g., 'Chinese', 'Japanese', 'Spanish'). Auto-detected from topic if not specified." },
         },
         required: ["topic"],
       },

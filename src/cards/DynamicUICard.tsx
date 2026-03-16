@@ -117,7 +117,17 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
     [card.generatedUI],
   );
 
-  if (!result) return null;
+  if (!result) {
+    // Show subtle skeleton while template is loading/compiling
+    return (
+      <div className="mb-3 animate-pulse space-y-2 p-3">
+        <div className="h-4 bg-gray-700/40 rounded w-3/4" />
+        <div className="h-3 bg-gray-700/30 rounded w-full" />
+        <div className="h-3 bg-gray-700/30 rounded w-5/6" />
+        <div className="h-3 bg-gray-700/20 rounded w-2/3" />
+      </div>
+    );
+  }
 
   if (result.error) {
     reportError(`Card compile error: ${result.error}`, "sandbox");
