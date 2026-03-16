@@ -65,12 +65,34 @@ public class SharePlugin extends Plugin {
      */
     @PluginMethod()
     public void shareImage(PluginCall call) {
+        shareFileInternal(call, "image/png", "enso-share.png", "shared_images");
+    }
+
+    /**
+     * Share any file via the Android share sheet.
+     * Accepts a base64-encoded file (data URL or raw base64), MIME type, and optional title.
+     */
+    @PluginMethod()
+    public void shareFile(PluginCall call) {
+        String mimeType = call.getString("mimeType", "application/octet-stream");
+        String defaultFilename = "enso-share";
+        if ("application/pdf".equals(mimeType)) {
+            defaultFilename = "enso-research.pdf";
+        }
+        shareFileInternal(call, mimeType, defaultFilename, "shared_files");
+    }
+
+    /**
+     * Internal method to share a base64-encoded file via the Android share sheet.
+     */
+    private void shareFileInternal(PluginCall call, String defaultMimeType, String defaultFilename, String cacheDirName) {
         String dataUrl = call.getString("dataUrl", "");
         String title = call.getString("title", "");
-        String filename = call.getString("filename", "enso-share.png");
+        String filename = call.getString("filename", defaultFilename);
+        String mimeType = call.getString("mimeType", defaultMimeType);
 
         if (dataUrl == null || dataUrl.isEmpty()) {
-            call.reject("No image data provided");
+            call.reject("No file data provided");
             return;
         }
 
@@ -81,25 +103,25 @@ public class SharePlugin extends Plugin {
         }
 
         try {
-            byte[] imageBytes = Base64.decode(base64Data, Base64.DEFAULT);
+            byte[] fileBytes = Base64.decode(base64Data, Base64.DEFAULT);
 
             // Write to cache dir (no permissions needed)
-            File cacheDir = new File(getContext().getCacheDir(), "shared_images");
+            File cacheDir = new File(getContext().getCacheDir(), cacheDirName);
             if (!cacheDir.exists()) cacheDir.mkdirs();
-            File imageFile = new File(cacheDir, filename);
-            FileOutputStream fos = new FileOutputStream(imageFile);
-            fos.write(imageBytes);
+            File file = new File(cacheDir, filename);
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(fileBytes);
             fos.close();
 
             // Get content URI via FileProvider
             Uri contentUri = FileProvider.getUriForFile(
                 getContext(),
                 getContext().getPackageName() + ".fileprovider",
-                imageFile
+                file
             );
 
             Intent shareIntent = new Intent(Intent.ACTION_SEND);
-            shareIntent.setType("image/png");
+            shareIntent.setType(mimeType);
             shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
             if (title != null && !title.isEmpty()) {
                 shareIntent.putExtra(Intent.EXTRA_SUBJECT, title);
@@ -111,7 +133,7 @@ public class SharePlugin extends Plugin {
 
             call.resolve();
         } catch (IOException e) {
-            call.reject("Failed to save image: " + e.getMessage());
+            call.reject("Failed to save file: " + e.getMessage());
         } catch (IllegalArgumentException e) {
             call.reject("Invalid base64 data: " + e.getMessage());
         }

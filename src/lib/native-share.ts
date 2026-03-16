@@ -4,6 +4,7 @@ import { isNative } from "./platform";
 interface SharePlugin {
   share(options: { title?: string; text?: string; url?: string }): Promise<void>;
   shareImage(options: { dataUrl: string; title?: string; filename?: string }): Promise<void>;
+  shareFile(options: { dataUrl: string; title?: string; filename?: string; mimeType?: string }): Promise<void>;
 }
 
 const Share = registerPlugin<SharePlugin>("Share");
@@ -33,6 +34,21 @@ export async function nativeShareImage(options: {
 }): Promise<void> {
   if (!isNative) return;
   await Share.shareImage(options);
+}
+
+/**
+ * Share any file via the Android system share sheet.
+ * Accepts a base64 data URL and MIME type (e.g., application/pdf).
+ * Falls back silently on non-native platforms.
+ */
+export async function nativeShareFile(options: {
+  dataUrl: string;
+  title?: string;
+  filename?: string;
+  mimeType?: string;
+}): Promise<void> {
+  if (!isNative) return;
+  await Share.shareFile(options);
 }
 
 export { isNative };

@@ -938,8 +938,68 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       })();
       return;
     }
-    // Client-side research share (Web Share API / native share / clipboard)
-    if (action === "__share_research" || action === "__copy_research") {
+    // Client-side research share as PDF
+    if (action === "__share_research_pdf") {
+      const p = payload as Record<string, unknown> | undefined;
+      const topic = typeof p?.topic === "string" ? p.topic : "Research";
+      (async () => {
+        try {
+          const { shareResearchAsPDF } = await import("../lib/research-pdf");
+          const { blob, filename } = await shareResearchAsPDF({
+            topic,
+            summary: typeof p?.summary === "string" ? p.summary : "",
+            keyFindings: Array.isArray(p?.keyFindings) ? p.keyFindings as any[] : [],
+            sections: Array.isArray(p?.sections) ? p.sections as any[] : [],
+            sources: Array.isArray(p?.sources) ? p.sources as any[] : [],
+            narrative: typeof p?.narrative === "string" ? p.narrative : "",
+            videos: Array.isArray(p?.videos) ? p.videos as any[] : [],
+            books: Array.isArray(p?.books) ? p.books as any[] : [],
+            movies: Array.isArray(p?.movies) ? p.movies as any[] : [],
+            contradictions: Array.isArray(p?.contradictions) ? p.contradictions as any[] : [],
+          });
+
+          // Native app: share PDF via Android share sheet
+          const { nativeShareFile, isNative: isNativePlatform } = await import("../lib/native-share");
+          if (isNativePlatform) {
+            // Convert blob to base64 data URL for native sharing
+            const reader = new FileReader();
+            const dataUrl = await new Promise<string>((resolve) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            await nativeShareFile({ dataUrl, title: `Research: ${topic}`, filename, mimeType: "application/pdf" });
+            return;
+          }
+
+          // Mobile browser: try Web Share API with file
+          const file = new File([blob], filename, { type: "application/pdf" });
+          const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+          if (isMobile && navigator.share && navigator.canShare?.({ files: [file] })) {
+            try {
+              await navigator.share({ title: `Research: ${topic}`, files: [file] });
+              return;
+            } catch (err) {
+              if ((err as DOMException)?.name === "AbortError") return;
+            }
+          }
+
+          // Desktop fallback: download the PDF
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error("[share_research_pdf] generation failed:", err);
+        }
+      })();
+      return;
+    }
+    // Client-side research copy as text (clipboard)
+    if (action === "__copy_research") {
       const p = payload as Record<string, unknown> | undefined;
       const topic = typeof p?.topic === "string" ? p.topic : "Research";
       const summary = typeof p?.summary === "string" ? p.summary : "";
@@ -947,7 +1007,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       const sources = Array.isArray(p?.sources) ? p.sources as Array<Record<string, unknown>> : [];
       const narrative = typeof p?.narrative === "string" ? p.narrative : "";
 
-      // Build shareable text
       const lines: string[] = [];
       lines.push(`# ${topic}\n`);
       if (summary) lines.push(`${summary}\n`);
@@ -974,32 +1033,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         lines.push("");
       }
       lines.push(`— Researched with Enso`);
-      const text = lines.join("\n");
-
-      if (action === "__copy_research") {
-        navigator.clipboard.writeText(text).then(() => {
-          // Brief visual feedback handled by template state
-        }).catch(console.error);
-      } else {
-        // Share
-        import("../lib/native-share").then(async ({ nativeShare, isNative }) => {
-          if (isNative) {
-            await nativeShare({ title: `Research: ${topic}`, text, url: undefined });
-          } else if (navigator.share && /Mobi|Android/i.test(navigator.userAgent)) {
-            // Only use Web Share API on mobile — desktop browsers often show error dialogs
-            try {
-              await navigator.share({ title: `Research: ${topic}`, text });
-            } catch (err) {
-              if ((err as DOMException)?.name !== "AbortError") {
-                await navigator.clipboard.writeText(text);
-              }
-            }
-          } else {
-            // Desktop or no share API — copy to clipboard
-            await navigator.clipboard.writeText(text);
-          }
-        }).catch(console.error);
-      }
+      navigator.clipboard.writeText(lines.join("\n")).catch(console.error);
       return;
     }
     // Client-side photo upload — opens file picker, uploads to server, then triggers backend action

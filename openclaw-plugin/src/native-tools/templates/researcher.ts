@@ -655,12 +655,12 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           {isComplete && (
             <Button variant="ghost" onClick={() => {
               setShared(true);
-              onAction("__share_research", { topic, summary, keyFindings, sources, narrative });
-              setTimeout(() => setShared(false), 2000);
+              onAction("__share_research_pdf", { topic, summary, keyFindings, sections, sources, narrative, videos, books, movies, contradictions });
+              setTimeout(() => setShared(false), 3000);
             }}>
               {shared
-                ? <><LucideReact.Check className="w-3.5 h-3.5 text-emerald-400" /> <span className="hidden sm:inline">Copied!</span></>
-                : <><LucideReact.Share2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Share</span></>
+                ? <><LucideReact.Check className="w-3.5 h-3.5 text-emerald-400" /> <span className="hidden sm:inline">Saved!</span></>
+                : <><LucideReact.FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PDF</span></>
               }
             </Button>
           )}
