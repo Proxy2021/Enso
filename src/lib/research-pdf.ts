@@ -9,9 +9,9 @@ interface ResearchData {
   narrative: string;
   images?: Array<{ url: string; title?: string }>;
   videos?: Array<{ title: string; url?: string }>;
-  books?: Array<{ title: string; author?: string }>;
-  movies?: Array<{ title: string; year?: string }>;
-  contradictions?: Array<{ claim1: string; claim2: string }>;
+  books?: Array<{ title: string; author?: string; year?: string; url?: string; description?: string }>;
+  movies?: Array<{ title: string; year?: string; type?: string; url?: string; description?: string }>;
+  contradictions?: Array<{ claim: string; claim1?: string; claim2?: string; perspectives?: string[] }>;
 }
 
 /**
@@ -211,10 +211,32 @@ export function generateResearchPDF(data: ResearchData): Blob {
 
     for (const c of data.contradictions) {
       checkPageBreak(14);
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.finding.warning);
-      doc.text("⚡", margin + 1, y);
-      addWrappedText(`"${c.claim1}"  vs.  "${c.claim2}"`, 9.5, colors.body, 1.35, 6);
+      // Contradiction claim
+      if (c.claim) {
+        doc.setFontSize(9.5);
+        doc.setTextColor(...colors.finding.warning);
+        doc.text("⚠", margin + 1, y);
+        addWrappedText(c.claim, 9.5, colors.body, 1.35, 6);
+        y += 1;
+      }
+      // Perspectives
+      if (c.perspectives && c.perspectives.length > 0) {
+        for (const p of c.perspectives) {
+          checkPageBreak(6);
+          doc.setFontSize(8.5);
+          doc.setTextColor(...colors.muted);
+          doc.text("→", margin + 7, y);
+          addWrappedText(p, 8.5, colors.subheading, 1.3, 11);
+          y += 1;
+        }
+      }
+      // Legacy format fallback
+      if (c.claim1 && c.claim2) {
+        doc.setFontSize(9);
+        doc.setTextColor(...colors.finding.warning);
+        doc.text("⚠", margin + 1, y);
+        addWrappedText(`"${c.claim1}"  vs.  "${c.claim2}"`, 9.5, colors.body, 1.35, 6);
+      }
       y += 3;
     }
     y += 2;
@@ -231,16 +253,30 @@ export function generateResearchPDF(data: ResearchData): Blob {
 
     for (let i = 0; i < Math.min(data.videos.length, 10); i++) {
       const v = data.videos[i];
-      checkPageBreak(8);
+      checkPageBreak(10);
       doc.setFontSize(9.5);
       doc.setTextColor(...colors.body);
       doc.text(`${i + 1}.`, margin + 1, y);
-      addWrappedText(v.title, 9.5, colors.body, 1.3, 7);
+      // Video title — clickable if URL available
       if (v.url) {
-        doc.setFontSize(7.5);
+        doc.setFontSize(9.5);
         doc.setTextColor(...colors.accent);
-        doc.textWithLink(v.url, margin + 7, y, { url: v.url });
+        const titleLines = doc.splitTextToSize(v.title, contentWidth - 7);
+        doc.textWithLink(titleLines[0], margin + 7, y, { url: v.url });
+        y += 9.5 * 0.35 * 1.3;
+        for (let tl = 1; tl < titleLines.length; tl++) {
+          checkPageBreak(5);
+          doc.text(titleLines[tl], margin + 7, y);
+          y += 9.5 * 0.35 * 1.3;
+        }
+        // Show URL in smaller text
+        doc.setFontSize(7);
+        doc.setTextColor(...colors.muted);
+        const urlDisplay = v.url.length > 80 ? v.url.slice(0, 77) + "..." : v.url;
+        doc.text(urlDisplay, margin + 7, y);
         y += 3;
+      } else {
+        addWrappedText(v.title, 9.5, colors.body, 1.3, 7);
       }
       y += 2;
     }
@@ -258,12 +294,31 @@ export function generateResearchPDF(data: ResearchData): Blob {
 
     for (let i = 0; i < Math.min(data.books.length, 10); i++) {
       const b = data.books[i];
-      checkPageBreak(7);
+      checkPageBreak(10);
       doc.setFontSize(9.5);
       doc.setTextColor(...colors.body);
       doc.text(`${i + 1}.`, margin + 1, y);
-      const bookText = b.author ? `${b.title} — ${b.author}` : b.title;
-      addWrappedText(bookText, 9.5, colors.body, 1.3, 7);
+      // Book title — clickable if URL available
+      if (b.url) {
+        doc.setFontSize(9.5);
+        doc.setTextColor(...colors.accent);
+        doc.textWithLink(b.title, margin + 7, y, { url: b.url });
+        y += 9.5 * 0.35 * 1.3;
+      } else {
+        addWrappedText(b.title, 9.5, colors.body, 1.3, 7);
+      }
+      // Author + year
+      const meta = [b.author, b.year].filter(Boolean).join(", ");
+      if (meta) {
+        doc.setFontSize(8);
+        doc.setTextColor(...colors.muted);
+        doc.text(meta, margin + 7, y);
+        y += 3;
+      }
+      // Description
+      if (b.description) {
+        addWrappedText(b.description, 8, colors.subheading, 1.3, 7);
+      }
       y += 2;
     }
     y += 2;
@@ -280,11 +335,31 @@ export function generateResearchPDF(data: ResearchData): Blob {
 
     for (let i = 0; i < Math.min(data.movies.length, 10); i++) {
       const m = data.movies[i];
-      checkPageBreak(7);
+      checkPageBreak(10);
       doc.setFontSize(9.5);
       doc.setTextColor(...colors.body);
-      const movieText = m.year ? `${i + 1}. ${m.title} (${m.year})` : `${i + 1}. ${m.title}`;
-      addWrappedText(movieText, 9.5, colors.body, 1.3, 0);
+      doc.text(`${i + 1}.`, margin + 1, y);
+      // Movie title — clickable if URL available
+      if (m.url) {
+        doc.setFontSize(9.5);
+        doc.setTextColor(...colors.accent);
+        const titleText = m.year ? `${m.title} (${m.year})` : m.title;
+        doc.textWithLink(titleText, margin + 7, y, { url: m.url });
+        y += 9.5 * 0.35 * 1.3;
+      } else {
+        const titleText = m.year ? `${m.title} (${m.year})` : m.title;
+        addWrappedText(titleText, 9.5, colors.body, 1.3, 7);
+      }
+      // Type badge + description
+      if (m.type) {
+        doc.setFontSize(7.5);
+        doc.setTextColor(...colors.finding.insight);
+        doc.text(m.type.toUpperCase(), margin + 7, y);
+        y += 3;
+      }
+      if (m.description) {
+        addWrappedText(m.description, 8, colors.subheading, 1.3, 7);
+      }
       y += 2;
     }
     y += 2;
@@ -302,19 +377,31 @@ export function generateResearchPDF(data: ResearchData): Blob {
     for (let i = 0; i < data.sources.length; i++) {
       const s = data.sources[i];
       checkPageBreak(10);
-      // Source number + title
+      // Source number
       doc.setFontSize(9);
       doc.setTextColor(...colors.body);
       doc.text(`${i + 1}.`, margin + 1, y);
-      addWrappedText(s.title || "Untitled", 9, colors.body, 1.3, 7);
-      // URL
+      // Source title — clickable if URL available
       if (s.url) {
-        checkPageBreak(5);
-        doc.setFontSize(7.5);
+        doc.setFontSize(9);
         doc.setTextColor(...colors.accent);
-        const urlLines = doc.splitTextToSize(s.url, contentWidth - 7);
-        doc.textWithLink(urlLines[0], margin + 7, y, { url: s.url });
-        y += 3.5;
+        const titleLines = doc.splitTextToSize(s.title || "Untitled", contentWidth - 7);
+        doc.textWithLink(titleLines[0], margin + 7, y, { url: s.url });
+        y += 9 * 0.35 * 1.3;
+        for (let tl = 1; tl < titleLines.length; tl++) {
+          checkPageBreak(5);
+          doc.text(titleLines[tl], margin + 7, y);
+          y += 9 * 0.35 * 1.3;
+        }
+        // Show URL in smaller text below
+        checkPageBreak(5);
+        doc.setFontSize(7);
+        doc.setTextColor(...colors.muted);
+        const urlDisplay = s.url.length > 80 ? s.url.slice(0, 77) + "..." : s.url;
+        doc.text(urlDisplay, margin + 7, y);
+        y += 3;
+      } else {
+        addWrappedText(s.title || "Untitled", 9, colors.body, 1.3, 7);
       }
       y += 2;
     }

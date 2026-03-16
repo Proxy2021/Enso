@@ -243,6 +243,7 @@ Enso is installable as a Progressive Web App — `public/manifest.json`, `public
 
 ## Conventions
 
+- **Every new feature must be validated with a full end-to-end live test** before considering it complete. Build the code, deploy it (or run dev server), then exercise the feature through the actual UI to confirm it works with full functionality verified. Do not rely solely on successful compilation — always test the real user flow.
 - All source is TypeScript with strict mode, ESM imports throughout
 - Path alias: `@shared` → `./shared`
 - Frontend uses functional React components with hooks
