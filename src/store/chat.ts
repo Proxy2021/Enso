@@ -1293,14 +1293,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
       if (Object.keys(patch).length > 0) set(patch);
 
-      // Request chat history after initial settings arrive
-      const wsClient = get()._wsClient;
-      if (wsClient) {
-        wsClient.send({ type: "chat.history", historyCount: 50 });
-        // Sync model + thinking preference to server
-        const { claudeModel: model, claudeThinking: thinking } = get();
-        if (model) {
-          wsClient.send({ type: "settings.set_model", claudeModel: model, claudeThinking: thinking } as import("@shared/types").ClientMessage);
+      // Request chat history + sync model only on initial settings (has toolFamilies)
+      if (msg.settings.toolFamilies) {
+        const wsClient = get()._wsClient;
+        if (wsClient) {
+          wsClient.send({ type: "chat.history", historyCount: 50 });
+          // Sync model + thinking preference to server
+          const { claudeModel: model, claudeThinking: thinking } = get();
+          if (model) {
+            wsClient.send({ type: "settings.set_model", claudeModel: model, claudeThinking: thinking } as import("@shared/types").ClientMessage);
+          }
         }
       }
       return;
