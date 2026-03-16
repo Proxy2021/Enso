@@ -905,8 +905,9 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           const filename = `enso-research-${topic.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 40)}.png`;
           const file = new File([blob], filename, { type: "image/png" });
 
-          // Try Web Share API with file
-          if (navigator.share && navigator.canShare?.({ files: [file] })) {
+          // Try Web Share API with file (mobile only — desktop browsers show error dialogs)
+          const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+          if (isMobile && navigator.share && navigator.canShare?.({ files: [file] })) {
             try {
               await navigator.share({ title: `Research: ${topic}`, files: [file] });
               return;
