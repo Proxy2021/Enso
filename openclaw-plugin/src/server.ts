@@ -895,8 +895,10 @@ export async function startEnsoServer(opts: {
 
         switch (msg.type) {
           case "chat.send":
-            // Persist user bubble to card history
-            if (msg.text) {
+            // Persist user bubble to card history — but skip tool-routed
+            // messages (e.g. claude-code prompts contain system instructions
+            // that shouldn't appear as user messages in history).
+            if (msg.text && !msg.routing?.toolId) {
               const userCardId = randomUUID();
               persistCard(clientId, {
                 id: userCardId,

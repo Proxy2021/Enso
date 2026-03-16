@@ -103,6 +103,18 @@ export async function deliverEnsoReply(params: {
     };
     client.send(msg);
     statusSink?.({ lastOutboundAt: Date.now() });
+
+    // Persist tool-routed assistant card to history (so it survives reconnect)
+    persistCard(client.id, {
+      id: msgId,
+      runId,
+      type: "chat",
+      role: "assistant",
+      text,
+      toolMeta,
+      mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+      timestamp: msg.timestamp,
+    });
     return;
   }
 
