@@ -29,6 +29,10 @@ export type ConnectedClient = {
   send: (msg: ServerMessage) => void;
   /** Messages buffered while the WebSocket was disconnected (mobile background). */
   _disconnectedBuffer: ServerMessage[];
+  /** User-selected Claude model for Claude Code sessions. */
+  claudeModel?: string;
+  /** User-selected thinking mode. */
+  claudeThinking?: "adaptive" | "disabled";
 };
 
 /** All connected browser clients, keyed by connection id. */
@@ -921,6 +925,8 @@ export async function startEnsoServer(opts: {
                 client,
                 runId,
                 targetCardId: msg.sourceCardId,
+                model: client.claudeModel,
+                thinking: client.claudeThinking,
               });
               if (msg.text.startsWith("The user wants to enhance the Enso system")) {
                 logFix({
@@ -1754,6 +1760,27 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
             }
+            break;
+          }
+          case "settings.set_model": {
+            const validModels = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"];
+            const validThinking = ["adaptive", "disabled"] as const;
+            if (msg.claudeModel && validModels.includes(msg.claudeModel)) {
+              client.claudeModel = msg.claudeModel;
+            }
+            if (msg.claudeThinking && validThinking.includes(msg.claudeThinking as typeof validThinking[number])) {
+              client.claudeThinking = msg.claudeThinking as typeof validThinking[number];
+            }
+            runtime.log?.(`[enso] claude model: ${client.claudeModel ?? "default"}, thinking: ${client.claudeThinking ?? "default"}`);
+            send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey,
+              seq: 0,
+              state: "final",
+              settings: { mode: account.mode, claudeModel: client.claudeModel, claudeThinking: client.claudeThinking },
+              timestamp: Date.now(),
+            });
             break;
           }
           case "shell.create": {

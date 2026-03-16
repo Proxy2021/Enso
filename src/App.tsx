@@ -12,6 +12,7 @@ import { isNative } from "./lib/platform";
 import { initDeepLinkListener } from "./lib/deep-link-handler";
 import UpdateBanner from "./components/UpdateBanner";
 import DebugReporter from "./components/DebugReporter";
+import ModelPicker from "./components/ModelPicker";
 import { reportError } from "./lib/error-reporter";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
@@ -168,6 +169,7 @@ export default function App() {
         <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
           <h1 className="text-lg font-semibold tracking-tight">Enso</h1>
           <div className="flex items-center gap-3">
+            <ModelPicker />
             <DebugReporter />
             <AppsMenu />
             <MemoryButton onClick={() => setShowMemory(true)} />

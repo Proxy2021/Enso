@@ -22,7 +22,7 @@ Enso is an [OpenClaw](https://github.com/nicepkg/openclaw) channel plugin that t
 - **Mission Planner** — Describe your interests and goals, and Enso proposes and builds a suite of custom apps tailored to your needs
 - **Build custom apps** — Describe what you want, and Enso builds a full app (executors + template) that persists and can be reused
 - **Refine in place** — Type an instruction in app view to regenerate just the template (single LLM call, cheapest iteration)
-- **Claude Code integration** — Run `/code` to open a Claude Code session with streaming terminal output and interactive questions
+- **Claude Code integration** — Run `/code` to open a Claude Code session with streaming terminal output, interactive questions, model selection (Opus/Sonnet/Haiku), and optional extended thinking that streams Claude's reasoning process live
 - **Remote terminal** — Run `/shell` to open a real interactive shell (PowerShell on Windows, bash on macOS) with full ANSI color support via xterm.js
 - **Multi-machine remote access** — Connect from anywhere via Cloudflare Tunnel with token auth
 - **Mobile-first** — Android app (Capacitor), PWA support, QR code pairing from phone to PC

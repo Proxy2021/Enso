@@ -18,6 +18,8 @@ const INIT_MARKER_RE = /\u200B\[init:([^\]]*)\]\n?/g;
 const FILES_MARKER_RE = /\u200B\[files:([^\]]*)\]\n?/g;
 const COMPACT_MARKER_RE = /\u200B\[compact:(start|done)(?::([^:]*):([^\]]*))?\]\n?/g;
 const CTX_MARKER_RE = /\u200B\[ctx:(\d+)%?\]\n?/g;
+const THINK_START_RE = /\u200B\[think:start\]\n?/g;
+const THINK_END_RE = /\u200B\[think:end\]\n?/g;
 const CONNECTION_MARKER_RE = /\u200B\[connection:lost\]\n?/g;
 const CONNECTION_RESTORED_RE = /\u200B\[connection:restored\]\n?/g;
 
@@ -59,6 +61,10 @@ interface TaskEvent {
   description: string;
 }
 
+interface ThinkingBlock {
+  text: string;
+}
+
 const TOOL_ICONS: Record<string, string> = {
   Read: "\uD83D\uDCC4",
   Edit: "\u270F\uFE0F",
@@ -80,8 +86,33 @@ function stripMarkers(text: string) {
   const suggestions: string[] = [];
   const filesChanged: FilesChanged[] = [];
   const compactEvents: CompactEvent[] = [];
+  const thinkingBlocks: ThinkingBlock[] = [];
   let sessionInit: SessionInit | null = null;
   let cost: string | null = null;
+  let isThinking = false;
+
+  // Extract thinking blocks (text between [think:start] and [think:end])
+  // Must be done before other marker stripping to avoid corrupting thinking text
+  {
+    const parts = text.split(THINK_START_RE);
+    const rebuilt: string[] = [parts[0]];
+    for (let i = 1; i < parts.length; i++) {
+      const endParts = parts[i].split(THINK_END_RE);
+      if (endParts.length >= 2) {
+        // Found matching end — extract thinking text
+        const thinkText = endParts[0].trim();
+        if (thinkText) thinkingBlocks.push({ text: thinkText });
+        // Rest after [think:end] is normal text
+        rebuilt.push(endParts.slice(1).join(""));
+      } else {
+        // No matching end yet — still thinking (streaming)
+        const thinkText = endParts[0].trim();
+        if (thinkText) thinkingBlocks.push({ text: thinkText });
+        isThinking = true;
+      }
+    }
+    text = rebuilt.join("");
+  }
 
   let clean = text.replace(TOOL_MARKER_RE, (_match, toolName, detail) => {
     tools.push({ toolName, detail: detail || undefined });
@@ -166,7 +197,7 @@ function stripMarkers(text: string) {
     return "";
   });
 
-  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent };
+  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent, thinkingBlocks, isThinking };
 }
 
 // ── Project Picker ──
@@ -573,6 +604,39 @@ function CompactBanner({ events }: { events: CompactEvent[] }) {
   );
 }
 
+// ── Thinking Block ──
+
+function ThinkingBlockView({ block, isActive }: { block: ThinkingBlock; isActive?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = block.text.split("\n");
+  const preview = lines.slice(0, 3).join("\n");
+  const hasMore = lines.length > 3;
+
+  return (
+    <div className="mb-1.5 pl-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-[11px] text-purple-400/80 hover:text-purple-300 transition-colors"
+      >
+        {isActive ? (
+          <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <span className="text-[9px]">{expanded ? "\u25BC" : "\u25B6"}</span>
+        )}
+        <span className="font-medium">{isActive ? "Thinking..." : "Thought process"}</span>
+        {!expanded && !isActive && (
+          <span className="text-gray-600 text-[10px]">({lines.length} line{lines.length !== 1 ? "s" : ""})</span>
+        )}
+      </button>
+      {(expanded || isActive) && (
+        <div className="mt-1 ml-1 pl-2 border-l-2 border-purple-800/40 text-[11px] text-gray-500 leading-relaxed font-mono whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+          {expanded ? block.text : (hasMore ? preview + "\n..." : preview)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Context Warning ──
 
 function ContextWarningBanner({ percent }: { percent: number }) {
@@ -637,6 +701,8 @@ interface TerminalEntry {
   sessionInit: SessionInit | null;
   filesChanged: FilesChanged[];
   compactEvents: CompactEvent[];
+  thinkingBlocks: ThinkingBlock[];
+  isThinking: boolean;
   cost: string | null;
   connectionLost: boolean;
   connectionRestored: boolean;
@@ -654,6 +720,15 @@ function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFi
       )}
       {isFirst && entry.sessionInit && (
         <SessionInitBar init={entry.sessionInit} />
+      )}
+      {entry.thinkingBlocks.length > 0 && (
+        entry.thinkingBlocks.map((tb, i) => (
+          <ThinkingBlockView
+            key={i}
+            block={tb}
+            isActive={entry.isThinking && i === entry.thinkingBlocks.length - 1}
+          />
+        ))
       )}
       {entry.toolActivities.length > 0 && (
         <ToolActivityChips tools={entry.toolActivities} />
@@ -728,7 +803,7 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
 
   // First segment: response text without a preceding prompt
   if (segments[0].trim()) {
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent } = stripMarkers(segments[0].trim());
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent, thinkingBlocks, isThinking } = stripMarkers(segments[0].trim());
     if (ctxPercent != null) latestCtxPercent = ctxPercent;
     entries.push({
       text: clean,
@@ -740,6 +815,8 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
       sessionInit,
       filesChanged,
       compactEvents,
+      thinkingBlocks,
+      isThinking,
       cost,
       connectionLost,
       connectionRestored,
@@ -752,7 +829,7 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
     const userPrompt = segments[i];
     const responseText = (segments[i + 1] ?? "").trim();
     const isLast = i + 2 >= segments.length;
-    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent } = stripMarkers(responseText);
+    const { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent, thinkingBlocks, isThinking } = stripMarkers(responseText);
     if (ctxPercent != null) latestCtxPercent = ctxPercent;
 
     entries.push({
@@ -766,6 +843,8 @@ function parseEntries(card: Card): { entries: TerminalEntry[]; ctxPercent: numbe
       sessionInit,
       filesChanged,
       compactEvents,
+      thinkingBlocks,
+      isThinking,
       cost,
       connectionLost,
       connectionRestored,

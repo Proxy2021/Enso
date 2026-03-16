@@ -120,6 +120,8 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 - Trigger: `/code` opens project picker, then `/code <prompt>` sends prompts
 - Backend spawns `claude.exe --output-format stream-json`, parses NDJSON, streams via WS
 - Session resumption via `--resume <sessionId>`, `AskUserQuestion` tool renders as clickable buttons
+- **Model picker**: Header dropdown lets user choose model + thinking mode (Opus/Sonnet/Haiku × Thinking/Fast). Persisted to localStorage, synced to server via `settings.set_model`. Only affects direct user Claude Code sessions; build/orchestrator sessions default to Opus.
+- **Extended thinking**: When thinking mode is "adaptive", Claude's reasoning is streamed as `[think:start]`/`[think:end]` markers and rendered as collapsible purple sections in TerminalCard. Reduces perceived wait time by showing live reasoning.
 
 ### Remote Terminal (Shell)
 

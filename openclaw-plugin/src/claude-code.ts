@@ -89,6 +89,8 @@ export async function runClaudeCode(params: {
   client: ConnectedClient;
   runId: string;
   targetCardId?: string;
+  model?: string;
+  thinking?: "adaptive" | "disabled";
 }): Promise<{ sessionId: string }> {
   const { prompt: rawPrompt, cwd, toolSessionId, client, runId, targetCardId } = params;
 
@@ -193,6 +195,9 @@ export async function runClaudeCode(params: {
   let lastEmittedDetail: string | null = null;
   let lastCompletedToolName: string | null = null;
   const sessionTaskIds = new Set<string>(); // Track tasks for cleanup on abnormal exit
+
+  // Thinking block tracking
+  let inThinkingBlock = false;
 
   const toolMeta = (): ServerMessage["toolMeta"] => ({
     toolId: "claude-code",
@@ -306,10 +311,17 @@ export async function runClaudeCode(params: {
 
   /** Run the SDK query and process all streamed messages. */
   const runQuery = async () => {
+    const selectedModel = params.model || "claude-opus-4-6";
+    // Build thinking config — adaptive enables extended thinking, disabled turns it off
+    const thinkingMode = params.thinking ?? "adaptive"; // default to adaptive for richer output
+    const thinkingConfig = thinkingMode === "adaptive"
+      ? { type: "adaptive" as const }
+      : { type: "disabled" as const };
     const q = query({
       prompt,
       options: {
-        model: "claude-opus-4-6",
+        model: selectedModel,
+        thinking: thinkingConfig,
         cwd: spawnCwd,
         resume: resumeId || undefined,
         ...(useContinue && !resumeId ? { continue: true } : {}),
@@ -461,7 +473,7 @@ export async function runClaudeCode(params: {
       if (message.type === "stream_event") {
         const event = message.event as Record<string, unknown>;
 
-        // content_block_start → detect tool_use or text block
+        // content_block_start → detect tool_use, thinking, or text block
         if (event.type === "content_block_start") {
           const block = event.content_block as Record<string, unknown> | undefined;
           if (block?.type === "tool_use") {
@@ -478,13 +490,27 @@ export async function runClaudeCode(params: {
                 },
               });
             }
+          } else if (block?.type === "thinking") {
+            inThinkingBlock = true;
+            sendDelta("\u200B[think:start]\n");
+            sendDelta(undefined, {
+              operation: {
+                operationId: runId,
+                stage: "processing",
+                label: "Thinking...",
+                cancellable: true,
+              },
+            });
           }
         }
 
-        // content_block_delta → text or tool input
+        // content_block_delta → text, thinking, or tool input
         if (event.type === "content_block_delta") {
           const delta = event.delta as Record<string, unknown> | undefined;
-          if (delta?.type === "text_delta" && typeof delta.text === "string") {
+          if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+            // Stream thinking text — frontend will render inside collapsible block
+            sendDelta(delta.thinking);
+          } else if (delta?.type === "text_delta" && typeof delta.text === "string") {
             modelTextStreamed += delta.text.length;
             sendDelta(delta.text, {
               operation: {
@@ -517,8 +543,12 @@ export async function runClaudeCode(params: {
           }
         }
 
-        // content_block_stop → emit tool marker if we were tracking a tool
+        // content_block_stop → emit thinking end or tool marker
         if (event.type === "content_block_stop") {
+          if (inThinkingBlock) {
+            inThinkingBlock = false;
+            sendDelta("\u200B[think:end]\n");
+          }
           if (activeToolName && activeToolName !== "AskUserQuestion") {
             lastCompletedToolName = activeToolName;
             if (activeToolName === "Bash") {

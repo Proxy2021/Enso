@@ -106,7 +106,7 @@ export interface ServerMessage {
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
   operation?: OperationStatus;
-  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }>; ensoProjectPath?: string };
+  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }>; ensoProjectPath?: string; claudeModel?: string; claudeThinking?: "adaptive" | "disabled" };
   steps?: AgentStep[];
   enhanceResult?: EnhanceResult | null;
   enhanceHint?: { toolFamily: string };
@@ -188,6 +188,7 @@ export interface ClientMessage {
     | "app.promote"
     | "server.restart"
     | "settings.set_mode"
+    | "settings.set_model"
     | "operation.cancel"
     | "sessions.list"
     | "shell.create"
@@ -203,6 +204,8 @@ export interface ClientMessage {
     | "orchestration.message"
     | "client.error";
   mode?: ChannelMode;
+  claudeModel?: string;
+  claudeThinking?: "adaptive" | "disabled";
   text?: string;
   mediaUrls?: string[];
   sessionKey?: string;

@@ -41,6 +41,8 @@ interface CardStore {
   projects: ProjectInfo[];
   codeSessionCwd: string | null;
   codeSessionId: string | null;
+  claudeModel: string;
+  claudeThinking: "adaptive" | "disabled";
 
   // Internal: active terminal card
   _activeTerminalCardId: string | null;
@@ -80,6 +82,7 @@ interface CardStore {
   setCodeSessionCwd: (cwd: string) => void;
   switchTerminalProject: (cardId: string, cwd: string) => void;
   resumeSessionOnCard: (cardId: string, sessionId: string, cwd: string) => void;
+  setClaudeModel: (model: string, thinking?: "adaptive" | "disabled") => void;
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
@@ -196,6 +199,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   projects: [],
   codeSessionCwd: localStorage.getItem("enso_code_session_cwd") || null,
   codeSessionId: localStorage.getItem("enso_code_session_id") || null,
+  claudeModel: localStorage.getItem("enso_claude_model") || "claude-opus-4-6",
+  claudeThinking: (localStorage.getItem("enso_claude_thinking") as "adaptive" | "disabled") || "adaptive",
   _activeTerminalCardId: null,
   pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
   showSidebar: false,
@@ -1125,6 +1130,21 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }));
   },
 
+  setClaudeModel: (model: string, thinking?: "adaptive" | "disabled") => {
+    const patch: Partial<CardStore> = { claudeModel: model };
+    localStorage.setItem("enso_claude_model", model);
+    if (thinking) {
+      patch.claudeThinking = thinking;
+      localStorage.setItem("enso_claude_thinking", thinking);
+    }
+    set(patch);
+    // Notify server of model + thinking change
+    const ws = get()._wsClient;
+    if (ws) {
+      ws.send({ type: "settings.set_model", claudeModel: model, claudeThinking: thinking ?? get().claudeThinking } as import("@shared/types").ClientMessage);
+    }
+  },
+
   setShowConnectionPicker: (show: boolean) => {
     set({ showConnectionPicker: show });
   },
@@ -1263,12 +1283,25 @@ export const useChatStore = create<CardStore>((set, get) => ({
       const patch: Partial<CardStore> = {};
       if (msg.settings.toolFamilies) patch.toolFamilies = msg.settings.toolFamilies;
       if (msg.settings.ensoProjectPath) patch.ensoProjectPath = msg.settings.ensoProjectPath;
+      if (msg.settings.claudeModel) {
+        patch.claudeModel = msg.settings.claudeModel;
+        localStorage.setItem("enso_claude_model", msg.settings.claudeModel);
+      }
+      if (msg.settings.claudeThinking) {
+        patch.claudeThinking = msg.settings.claudeThinking;
+        localStorage.setItem("enso_claude_thinking", msg.settings.claudeThinking);
+      }
       if (Object.keys(patch).length > 0) set(patch);
 
       // Request chat history after initial settings arrive
       const wsClient = get()._wsClient;
       if (wsClient) {
         wsClient.send({ type: "chat.history", historyCount: 50 });
+        // Sync model + thinking preference to server
+        const { claudeModel: model, claudeThinking: thinking } = get();
+        if (model) {
+          wsClient.send({ type: "settings.set_model", claudeModel: model, claudeThinking: thinking } as import("@shared/types").ClientMessage);
+        }
       }
       return;
     }
