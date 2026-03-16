@@ -505,7 +505,13 @@ function detectLanguage(text: string): string {
 
   if ((hiragana + katakana) / total > 0.1) return "Japanese";
   if (hangul / total > 0.1) return "Korean";
-  if (cjk / total > 0.1) return "Chinese";
+  if (cjk / total > 0.1) {
+    // Distinguish Simplified vs Traditional Chinese
+    // Simplified Chinese uses characters like 的关于这个说话 while Traditional uses 關於這個說話
+    const simplified = (text.match(/[关为们这说个与从给对让来于还进过长会当么义发现没问实间开]/g) || []).length;
+    const traditional = (text.match(/[關為們這說個與從給對讓來於還進過長會當麼義發現沒問實間開]/g) || []).length;
+    return simplified >= traditional ? "Simplified Chinese" : "Traditional Chinese";
+  }
   if (cyrillic / total > 0.15) return "Russian";
   if (arabic / total > 0.15) return "Arabic";
   if (thai / total > 0.15) return "Thai";

@@ -81,9 +81,10 @@ Examples:
 - ONE-OFF requires explicit action intent (fix, create, write, build, convert, deploy, refactor).
 - Messages starting with "build me a complete...", "set up a full...", "plan a..." with multiple deliverables → ORCHESTRATED.
 - For RESEARCH: extract the core topic and suggest a depth (quick for simple comparisons, standard for most topics, deep for complex multi-faceted analysis).
+- IMPORTANT: Keep researchTopic in the SAME LANGUAGE as the user's message. If the user writes in Chinese, the researchTopic must be in Chinese. If in Japanese, keep it in Japanese. Never translate the topic to English.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","researchTopic":"extracted topic for research","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","researchTopic":"extracted topic IN THE USER'S LANGUAGE","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
 
 export async function classifyTask(params: {
   userMessage: string;
