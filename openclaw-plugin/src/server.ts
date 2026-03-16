@@ -27,6 +27,8 @@ export type ConnectedClient = {
   sessionKey: string;
   ws: WebSocket;
   send: (msg: ServerMessage) => void;
+  /** Messages buffered while the WebSocket was disconnected (mobile background). */
+  _disconnectedBuffer: ServerMessage[];
 };
 
 /** All connected browser clients, keyed by connection id. */
@@ -768,14 +770,29 @@ export async function startEnsoServer(opts: {
       // route to the new socket.
       existing.ws = ws;
       existing.send = (msg: ServerMessage) => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(msg));
+        } else {
+          const buf = existing._disconnectedBuffer;
+          if (buf.length < 2000) buf.push(msg);
+        }
       };
       client = existing;
       // Cancel any pending cleanup timer
       const timer = cleanupTimers.get(clientId);
       if (timer) { clearTimeout(timer); cleanupTimers.delete(clientId); }
+
+      // Replay messages that were buffered while disconnected (mobile background).
+      // This ensures Claude Code output isn't lost when the app is backgrounded.
+      const buffered = existing._disconnectedBuffer.splice(0);
+      if (buffered.length > 0) {
+        runtime.log?.(`[enso] replaying ${buffered.length} buffered message(s) for ${clientId}`);
+        for (const msg of buffered) {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+        }
+      }
       runtime.log?.(`[enso] client reconnected: ${clientId}`);
-      logAction({ ts: Date.now(), type: "system", category: "system:reconnect", message: `Client reconnected: ${clientId}` });
+      logAction({ ts: Date.now(), type: "system", category: "system:reconnect", message: `Client reconnected: ${clientId}`, metadata: { bufferedMessages: buffered.length } });
     } else {
       // New connection
       const sessionKey = `enso_${clientId}`;
@@ -783,8 +800,17 @@ export async function startEnsoServer(opts: {
         id: clientId,
         sessionKey,
         ws,
+        _disconnectedBuffer: [],
         send: (msg: ServerMessage) => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(msg));
+          } else {
+            // Buffer messages while disconnected (mobile background) so they
+            // can be replayed on reconnect.  Cap at 2000 entries (~2 MB) to
+            // avoid unbounded memory growth from very long Claude Code sessions.
+            const buf = client._disconnectedBuffer;
+            if (buf.length < 2000) buf.push(msg);
+          }
         },
       };
       clients.set(clientId, client);
@@ -1691,17 +1717,20 @@ export async function startEnsoServer(opts: {
     ws.on("close", () => {
       runtime.log?.(`[enso] client disconnected: ${clientId}`);
       logAction({ ts: Date.now(), type: "system", category: "system:disconnect", message: `Client disconnected: ${clientId}` });
-      // Delay cleanup — the client may reconnect within 60 seconds.
-      // If it does, the reconnect handler cancels this timer and swaps the ws.
+      // Delay cleanup — the client may reconnect (especially on mobile where
+      // backgrounding kills the WS).  Use a longer timeout (10 min) so Claude
+      // Code output is buffered and replayed when the user returns.
       const timer = setTimeout(() => {
         cleanupTimers.delete(clientId);
         if (shellPty) {
           const killed = shellPty.destroyClientSessions(clientId);
           if (killed > 0) runtime.log?.(`[enso:shell] cleaned up ${killed} session(s) for ${clientId}`);
         }
+        const droppedMsgs = client._disconnectedBuffer.length;
+        client._disconnectedBuffer.length = 0;
         clients.delete(clientId);
-        runtime.log?.(`[enso] client cleanup: ${clientId} (no reconnect after 60s)`);
-      }, 60_000);
+        runtime.log?.(`[enso] client cleanup: ${clientId} (no reconnect after 10min, dropped ${droppedMsgs} buffered msgs)`);
+      }, 600_000);
       cleanupTimers.set(clientId, timer);
     });
   });

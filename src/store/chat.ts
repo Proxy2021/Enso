@@ -1178,6 +1178,25 @@ export const useChatStore = create<CardStore>((set, get) => ({
     set({ _wsClient: client });
     initErrorReporter((msg) => client.send(msg));
     client.connect();
+
+    // On mobile (Capacitor), manage WS lifecycle around app background/foreground.
+    // When the app backgrounds, the OS will kill the TCP socket after ~2 min anyway.
+    // By handling it proactively we ensure the backend starts buffering immediately.
+    if ((window as any).Capacitor?.isNativePlatform?.()) {
+      import("@capacitor/app").then(({ App }) => {
+        App.addListener("appStateChange", ({ isActive }) => {
+          if (!isActive) {
+            // App going to background — disconnect cleanly so the backend
+            // knows immediately and starts buffering Claude Code output.
+            client.disconnect();
+          } else {
+            // App returning to foreground — reconnect immediately.
+            // The backend will replay any buffered messages.
+            client.connect();
+          }
+        });
+      }).catch(() => { /* not native — no-op */ });
+    }
   },
 
   loadSharedCard: async (cardId: string) => {

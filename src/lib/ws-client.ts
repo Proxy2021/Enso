@@ -34,6 +34,8 @@ export function createWSClient(options: WSClientOptions): WSClient {
 
   function connect() {
     intentionalClose = false;
+    // Skip if already connected or connecting
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     options.onStateChange("connecting", false);
 
     // Append persistent clientId so backend can swap WS on reconnect
