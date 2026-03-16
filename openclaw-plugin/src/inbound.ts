@@ -11,6 +11,7 @@ import { deliverEnsoReply } from "./outbound.js";
 import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { randomUUID } from "crypto";
 import { logAction, logError } from "./action-log.js";
+import { setLastUserMessage } from "./researcher-tools.js";
 
 const CHANNEL_ID = "enso" as const;
 
@@ -133,6 +134,9 @@ export async function handleEnsoInbound(params: {
 
   logAction({ ts: Date.now(), type: "action", category: "inbound", message: `Dispatching: runId=${runId}, cardId=${stableCardId}, peer=${peerId}, targetCardId=${targetCardId ?? "none"}, textLen=${rawBody.length}` });
   logAction({ ts: Date.now(), type: "action", category: "inbound", message: `Chat: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
+
+  // Store original user message so researcher can detect language even when agent translates the topic
+  setLastUserMessage(rawBody);
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,

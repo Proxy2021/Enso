@@ -46,6 +46,12 @@ export function setDeepResearchLauncher(launcher: DeepResearchLauncher | null): 
   _deepResearchLauncher = launcher;
 }
 
+/** Stores the user's original message so we can detect their language even when the agent translates the topic. */
+let _lastUserMessage = "";
+export function setLastUserMessage(msg: string): void {
+  _lastUserMessage = msg;
+}
+
 type DeepDiveParams = { topic: string; subtopic: string };
 type CompareParams = { topicA: string; topicB: string; context?: string };
 type FollowUpParams = { topic: string; question: string };
@@ -1360,7 +1366,15 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   }
 
   const depth = params.depth ?? "standard";
-  const language = params.language || detectLanguage(topic);
+  // Language priority: explicit param > detect from topic > detect from user's original message
+  let language = params.language || detectLanguage(topic);
+  if (language === "English" && _lastUserMessage) {
+    const userLang = detectLanguage(_lastUserMessage);
+    if (userLang !== "English") {
+      language = userLang;
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `language override from user message: ${userLang} (topic detected as English)` });
+    }
+  }
 
   // Return cached result unless force-refresh requested
   if (!params.force) {
@@ -1419,10 +1433,13 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       });
 
       // Launch Claude Code deep research — returns a promise that resolves when complete
+      const deepPrompt = buildDeepResearchSystemPrompt(topic) +
+        (language !== "English" ? `\n\nCRITICAL: Write ALL output text (summary, narrative, keyFindings, sections, books, movies, contradictions) in ${language}. Only type/confidence labels stay in English.` : "");
+
       const resultJson = await new Promise<string | null>((resolve) => {
         _deepResearchLauncher!({
           topic,
-          systemPrompt: buildDeepResearchSystemPrompt(topic),
+          systemPrompt: deepPrompt,
           onComplete: resolve,
         });
       });
@@ -1430,6 +1447,38 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       if (resultJson) {
         try {
           const parsed = JSON.parse(resultJson);
+
+          // Supplement with Brave image + video search (Claude Code can't reliably find multimedia)
+          let images: ResearchImage[] = Array.isArray(parsed.images) ? parsed.images.slice(0, 12) : [];
+          let videos: ResearchVideo[] = Array.isArray(parsed.videos) ? parsed.videos.slice(0, 12) : [];
+          const needImages = images.length < 3;
+          const needVideos = videos.length < 3;
+          if (needImages || needVideos) {
+            try {
+              const [rawImages, rawVideos] = await Promise.all([
+                needImages ? braveImageSearch(topic, 10) : Promise.resolve([]),
+                needVideos ? braveVideoSearch(topic, 8) : Promise.resolve([]),
+              ]);
+              if (needImages && rawImages.length > 0) {
+                const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
+                images = matchImagesToSections(sections, rawImages);
+              }
+              if (needVideos && rawVideos.length > 0) {
+                // Merge: Claude Code videos first, then Brave videos (deduplicated by URL)
+                const existingUrls = new Set(videos.map((v: ResearchVideo) => v.url));
+                const braveVideos: ResearchVideo[] = rawVideos
+                  .filter((v) => !existingUrls.has(v.url))
+                  .slice(0, 12 - videos.length)
+                  .map((v) => ({
+                    url: v.url, title: v.title, thumbnail: v.thumbnail,
+                    description: v.description, duration: v.duration,
+                    creator: v.creator, publisher: v.publisher, age: v.age,
+                  }));
+                videos = [...videos, ...braveVideos];
+              }
+            } catch { /* multimedia search is best-effort */ }
+          }
+
           const result = {
             tool: "enso_researcher_search",
             topic,
@@ -1440,8 +1489,8 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
             keyFindings: Array.isArray(parsed.keyFindings) ? parsed.keyFindings.slice(0, 12) : [],
             sections: Array.isArray(parsed.sections) ? parsed.sections.slice(0, 8) : [],
             sources: Array.isArray(parsed.sources) ? parsed.sources.slice(0, 30) : [],
-            images: Array.isArray(parsed.images) ? parsed.images.slice(0, 12) : [],
-            videos: Array.isArray(parsed.videos) ? parsed.videos.slice(0, 12) : [],
+            images,
+            videos,
             books: Array.isArray(parsed.books) ? parsed.books.slice(0, 8) : [],
             movies: Array.isArray(parsed.movies) ? parsed.movies.slice(0, 8) : [],
             recommendedVideos: Array.isArray(parsed.recommendedVideos) ? parsed.recommendedVideos.slice(0, 5) : [],
@@ -2791,15 +2840,15 @@ export function createResearcherTools(): AnyAgentTool[] {
     {
       name: "enso_researcher_search",
       label: "Research Topic",
-      description: "Deep multi-angle web research on any topic — returns structured findings, sections, and sources with AI synthesis.",
+      description: "Deep multi-angle web research on any topic — returns structured findings, sections, and sources with AI synthesis. IMPORTANT: If the user writes in a non-English language, you MUST set the 'language' parameter to that language (e.g., 'Chinese', 'Japanese', 'Korean', 'Spanish'). The topic can be in any language but always pass the user's language.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
-          topic: { type: "string", description: "Research topic (any subject)" },
+          topic: { type: "string", description: "Research topic — keep it in the user's original language when possible, or include both the original and English translation" },
           depth: { type: "string", enum: ["quick", "standard", "deep"], description: "Research depth: quick (3 queries), standard (6), deep (8)" },
           force: { type: "boolean", description: "Force fresh research, ignoring cached results" },
-          language: { type: "string", description: "Output language for synthesis (e.g., 'Chinese', 'Japanese', 'Spanish'). Auto-detected from topic if not specified." },
+          language: { type: "string", description: "REQUIRED when user writes in non-English. The language the user is writing in (e.g., 'Chinese', 'Japanese', 'Korean', 'Spanish', 'French'). Results will be synthesized in this language." },
         },
         required: ["topic"],
       },

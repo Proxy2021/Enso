@@ -1541,8 +1541,26 @@ export const useChatStore = create<CardStore>((set, get) => ({
             createdAt: now,
             updatedAt: now,
           };
+
+          // Deep research terminal (cardId + "-deep"): insert BEFORE the parent researcher card
+          // so the terminal shows above and final results appear below in the timeline
+          let newOrder: string[];
+          const deepSuffix = "-deep";
+          if (msg.targetCardId.endsWith(deepSuffix)) {
+            const parentCardId = msg.targetCardId.slice(0, -deepSuffix.length);
+            const parentIdx = state.cardOrder.indexOf(parentCardId);
+            if (parentIdx >= 0) {
+              newOrder = [...state.cardOrder];
+              newOrder.splice(parentIdx, 0, msg.targetCardId);
+            } else {
+              newOrder = [...state.cardOrder, msg.targetCardId];
+            }
+          } else {
+            newOrder = [...state.cardOrder, msg.targetCardId];
+          }
+
           return {
-            cardOrder: [...state.cardOrder, msg.targetCardId],
+            cardOrder: newOrder,
             cards: { ...state.cards, [msg.targetCardId]: card },
             _activeTerminalCardId: msg.targetCardId,
             isWaiting: true,
@@ -1568,6 +1586,29 @@ export const useChatStore = create<CardStore>((set, get) => ({
           return {
             cardOrder: [...state.cardOrder, msg.targetCardId],
             cards: { ...state.cards, [msg.targetCardId]: card },
+          };
+        }
+
+        // Auto-create dynamic-ui card if data + generatedUI arrive for unknown card
+        // (e.g., deep research result arriving after client reconnect lost the original card)
+        if (!card && msg.state === "final" && msg.data != null && msg.generatedUI) {
+          card = {
+            id: msg.targetCardId,
+            runId: msg.runId,
+            type: "dynamic-ui",
+            role: "assistant",
+            status: "complete",
+            display: "expanded",
+            data: msg.data,
+            generatedUI: msg.generatedUI,
+            cardMode: msg.cardMode,
+            createdAt: now,
+            updatedAt: now,
+          };
+          return {
+            cardOrder: [...state.cardOrder, msg.targetCardId],
+            cards: { ...state.cards, [msg.targetCardId]: card },
+            isWaiting: false,
           };
         }
 
@@ -1609,6 +1650,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
               storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
               localStorage.setItem("enso_code_session_id", msg.toolMeta.toolSessionId);
             }
+            // Auto-collapse deep research terminal cards so the researcher results below are prominent
+            const isDeepResearchTerminal = msg.targetCardId.endsWith("-deep");
             return {
               ...storeUpdates,
               cards: {
@@ -1616,6 +1659,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 [msg.targetCardId]: {
                   ...card,
                   status: "complete",
+                  display: isDeepResearchTerminal ? "collapsed" : card.display,
                   toolMeta: newToolMeta,
                   operation: msg.operation,
                   cardMode: msg.cardMode ?? card.cardMode,

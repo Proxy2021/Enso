@@ -969,6 +969,10 @@ export async function startEnsoServer(opts: {
                   const depth = classification.researchDepth || "standard";
                   runtime.log?.(`[enso] task-router: research → "${topic.slice(0, 60)}" (depth=${depth})`);
 
+                  // Store original user message for language detection (agent may translate topic to English)
+                  const { setLastUserMessage } = await import("./researcher-tools.js");
+                  setLastUserMessage(msg.text);
+
                   try {
                     const { executeToolDirect, getToolTemplateCode, getToolTemplate } = await import("./native-tools/registry.js");
                     const { getApp } = await import("./app-catalog.js");

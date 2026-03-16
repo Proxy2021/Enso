@@ -22,6 +22,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const [expandedSource, setExpandedSource] = useState(null);
   const [playingVideos, setPlayingVideos] = useState({});
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
   const [podcastLoading, setPodcastLoading] = useState(false);
   const [scriptExpanded, setScriptExpanded] = useState(false);
   const [narrativeExpanded, setNarrativeExpanded] = useState(false);
@@ -652,8 +653,15 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             </Button>
           )}
           {isComplete && (
-            <Button variant="ghost" onClick={() => onAction("__share_research", { topic, summary, keyFindings, sources, narrative })}>
-              <LucideReact.Share2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Share</span>
+            <Button variant="ghost" onClick={() => {
+              setShared(true);
+              onAction("__share_research", { topic, summary, keyFindings, sources, narrative });
+              setTimeout(() => setShared(false), 2000);
+            }}>
+              {shared
+                ? <><LucideReact.Check className="w-3.5 h-3.5 text-emerald-400" /> <span className="hidden sm:inline">Copied!</span></>
+                : <><LucideReact.Share2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Share</span></>
+              }
             </Button>
           )}
           {isComplete && (
