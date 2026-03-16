@@ -721,7 +721,31 @@ export async function startEnsoServer(opts: {
   /** Cleanup timers for disconnected clients — keyed by clientId. */
   const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  // ── WebSocket keep-alive pings ──
+  // Mobile networks (especially Android cellular) aggressively close idle TCP
+  // connections after ~2 minutes.  Send protocol-level pings every 30s so the
+  // connection is never considered idle.  Browsers respond with pong
+  // automatically at the protocol level.
+  const WS_PING_INTERVAL_MS = 30_000;
+  const WS_PONG_TIMEOUT_MS = 10_000;
+  const pingInterval = setInterval(() => {
+    for (const client of clients.values()) {
+      const { ws: clientWs } = client;
+      if (clientWs.readyState !== WebSocket.OPEN) continue;
+      // Mark as awaiting pong — if no pong arrives before next cycle, terminate.
+      if ((clientWs as any)._ensoAwaitingPong) {
+        runtime.log?.(`[enso] ping timeout for ${client.id}, terminating`);
+        clientWs.terminate();
+        continue;
+      }
+      (clientWs as any)._ensoAwaitingPong = true;
+      clientWs.ping();
+    }
+  }, WS_PING_INTERVAL_MS);
+
   wss.on("connection", (ws, req) => {
+    // Reset pong flag on each pong received
+    ws.on("pong", () => { (ws as any)._ensoAwaitingPong = false; });
     // ── WebSocket token auth ──
     const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
     if (accessToken) {
@@ -1721,6 +1745,7 @@ export async function startEnsoServer(opts: {
 
   function stop() {
     runtime.log?.("[enso] stopping server");
+    clearInterval(pingInterval);
     for (const client of clients.values()) {
       client.ws.close();
     }

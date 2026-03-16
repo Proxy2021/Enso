@@ -157,10 +157,10 @@ async function getGeminiApiKey(): Promise<string | undefined> {
     if (fromAccount) return fromAccount;
   } catch { /* server not ready yet */ }
 
-  // 2. From environment variable (set by .env loader or system)
+  // 2. From environment variable (loaded from .env at module init)
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
 
-  // 3. Direct file read via import.meta.url
+  // 3. Direct file read (gemini.key next to plugin root)
   try {
     const { readFileSync } = await import("node:fs");
     const { join, dirname } = await import("node:path");
@@ -169,28 +169,6 @@ async function getGeminiApiKey(): Promise<string | undefined> {
     const key = readFileSync(keyPath, "utf-8").trim();
     if (key) return key;
   } catch { /* path resolution failed */ }
-
-  // 4. Fallback: locate key file via OpenClaw config
-  try {
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    const home = process.env.USERPROFILE || process.env.HOME || "";
-    const config = JSON.parse(readFileSync(join(home, ".openclaw", "openclaw.json"), "utf-8"));
-    const installPath = config?.plugins?.installs?.enso?.installPath;
-    if (installPath) {
-      const key = readFileSync(join(installPath, "gemini.key"), "utf-8").trim();
-      if (key) return key;
-    }
-    const paths = config?.plugins?.load?.paths;
-    if (Array.isArray(paths)) {
-      for (const p of paths) {
-        try {
-          const key = readFileSync(join(p, "gemini.key"), "utf-8").trim();
-          if (key) return key;
-        } catch { /* skip */ }
-      }
-    }
-  } catch { /* config not available */ }
 
   return undefined;
 }

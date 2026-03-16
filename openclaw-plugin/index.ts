@@ -22,6 +22,9 @@ import { fileURLToPath } from "node:url";
  * Load .env file from the Enso project root into process.env.
  * Only sets keys that are NOT already present (system env takes precedence).
  * No external dependencies — pure Node.js.
+ *
+ * Runs at module load time (not in register()) so that env vars are
+ * available before OpenClaw calls resolveAccount() during plugin init.
  */
 function loadEnvFile(): void {
   try {
@@ -49,6 +52,9 @@ function loadEnvFile(): void {
   }
 }
 
+// Load .env eagerly so GEMINI_API_KEY etc. are available for resolveAccount()
+loadEnvFile();
+
 function maybeRegisterFallbackToolFamily(input: {
   familyLabel: string;
   fallbackPrefix: string;
@@ -75,7 +81,6 @@ const plugin = {
   description: "React-based AI channel with dynamic UI generation",
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
-    loadEnvFile();
     setEnsoRuntime(api.runtime);
     setPluginApi(api);
     api.registerChannel({ plugin: ensoPlugin as ChannelPlugin });

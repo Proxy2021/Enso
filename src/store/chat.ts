@@ -129,22 +129,34 @@ function _handleReconnection(
     set((s) => ({ cards: { ...s.cards, ...updates } }));
   }
 
-  // Auto-resume Claude Code sessions after a brief delay (let settings message arrive first)
+  // Auto-resume Claude Code sessions — but only if the backend session is no
+  // longer alive.  After a brief disconnect the backend swaps the WebSocket
+  // reference and the running session resumes sending deltas automatically.
+  // We wait 5 seconds and check whether the card has already gone back to
+  // "streaming" (meaning the old session is alive) before sending /resume.
   if (resumeTargets.length > 0) {
+    const reconnectTs = Date.now();
     setTimeout(() => {
       for (const target of resumeTargets) {
         const wsClient = get()._wsClient;
         if (!wsClient) continue;
 
+        // If the card already went back to streaming (old session alive) or
+        // has been updated since reconnect (deltas arrived), skip auto-resume.
+        const card = get().cards[target.id];
+        if (!card) continue;
+        if (card.status === "streaming") continue; // old session already resumed
+        if (card.updatedAt > reconnectTs) continue; // got deltas since reconnect
+
         // Mark card as streaming
         set((s) => {
-          const card = s.cards[target.id];
-          if (!card) return {};
+          const c = s.cards[target.id];
+          if (!c) return {};
           return {
             cards: {
               ...s.cards,
               [target.id]: {
-                ...card,
+                ...c,
                 status: "streaming",
                 updatedAt: Date.now(),
               },
@@ -166,7 +178,7 @@ function _handleReconnection(
           sourceCardId: target.id,
         });
       }
-    }, 500);
+    }, 5000);
   }
 }
 

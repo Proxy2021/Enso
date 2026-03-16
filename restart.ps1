@@ -316,7 +316,7 @@ Write-Host "    Enso WS   -> http://localhost:$EnsoPort" -ForegroundColor Gray
 if (-not $NoDev) {
     Write-Host "    Vite      -> http://localhost:$VitePort" -ForegroundColor Gray
 }
-Write-Host "    Tunnel    -> https://app.enso.net" -ForegroundColor Gray
+Write-Host "    Tunnel    -> https://pc1.enso.net" -ForegroundColor Gray
 Write-Host "  Logs:" -ForegroundColor White
 Write-Host "    Gateway   -> $gatewayLog" -ForegroundColor Gray
 if (-not $NoDev) {
