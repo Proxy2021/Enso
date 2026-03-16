@@ -85,7 +85,7 @@ export default function MediaGallery({ urls }: { urls: string[] }) {
             <video
               src={url}
               controls
-              className="w-full h-auto max-h-64 object-cover bg-gray-900"
+              className="w-full h-auto max-h-96 object-contain bg-gray-900"
               onError={handleError}
             >
               Your browser does not support the video tag.
