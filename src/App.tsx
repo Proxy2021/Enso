@@ -67,7 +67,7 @@ function ConnectionDot() {
   return (
     <button
       onClick={() => setShowPicker(true)}
-      className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors max-w-[4.5rem] truncate"
       title="Connection settings"
     >
       <div className={`w-2 h-2 rounded-full ${color}`} />
@@ -83,7 +83,7 @@ function SidebarToggle() {
   return (
     <button
       onClick={toggleSidebar}
-      className="relative flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors px-2 py-1 rounded-lg border border-gray-700/60 bg-gray-800/50"
+      className="relative flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200 transition-colors px-1.5 py-1 rounded-lg border border-gray-700/60 bg-gray-800/50"
       title="Pinned apps"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -99,7 +99,7 @@ function MemoryButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors px-2 py-1 rounded-lg border border-gray-700/60 bg-gray-800/50"
+      className="flex items-center text-sm text-gray-400 hover:text-gray-200 transition-colors p-1.5 rounded-lg border border-gray-700/60 bg-gray-800/50"
       title="Memory"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -166,9 +166,9 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <div className="flex flex-col h-dvh text-gray-100">
-        <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
-          <h1 className="text-lg font-semibold tracking-tight">Enso</h1>
-          <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-20 flex items-center justify-between px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
+          <h1 className="text-base font-semibold tracking-tight">Enso</h1>
+          <div className="flex items-center gap-1.5">
             <ModelPicker />
             <DebugReporter />
             <AppsMenu />

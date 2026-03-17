@@ -91,11 +91,12 @@ export default function AppsMenu() {
       <button
         onClick={handleOpen}
         disabled={disabled}
-        className={`flex items-center gap-1.5 px-2.5 py-1 text-sm rounded-md border transition-colors ${
+        className={`flex items-center gap-1 px-2 py-1 text-sm rounded-md border transition-colors ${
           disabled
             ? "border-gray-700 text-gray-600 cursor-not-allowed"
             : "border-gray-700 text-gray-300 hover:border-gray-600 hover:text-gray-200"
         }`}
+        title="Apps"
       >
         <svg
           className="w-3.5 h-3.5"
@@ -109,7 +110,6 @@ export default function AppsMenu() {
           <rect x="3" y="14" width="7" height="7" rx="1" />
           <rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
-        Apps
       </button>
 
       {open && (
