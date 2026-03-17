@@ -86,6 +86,7 @@ shared/types.ts               # Protocol types shared between frontend and plugi
 - **Auto-Enhance**: When the OpenClaw agent calls a registered tool, `deliverEnsoReply()` checks `consumeRecentToolCall()` and automatically renders the app card alongside the text response. No LLM call needed — deterministic based on tool usage. Replaces the old background `selectToolForContent()` LLM call + `enhanceHint` approach.
 - **Fast Enhance** (manual fallback): User clicks App button → app selected from dropdown (or auto-detect) → deterministic tool execution → template rendering → app view with Original/App toggle
 - **Build App**: User clicks "Build custom app..." → single-line instruction → Claude Code session in terminal card → writes app files → post-build auto-registration → `buildComplete` notification
+- **Deep Research**: User triggers "Deep Dive" on a research card → `handleDeepResearchBuild()` spawns Claude Code session → researches topic + writes a single `.deep-research-ui.jsx` with bespoke interactive UI tailored to the topic → compile-checked with Sucrase → delivered as `generatedUI` on the research card. No app registration needed — each deep research is a one-off custom experience.
 - **Refine**: User types instruction in app view → single LLM call regenerates template JSX only → in-place update (cheapest iteration path)
 
 ### ExecutorContext (`ctx`)
@@ -98,8 +99,9 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 
 ### Agentic Task Orchestration
 
-- **Task Router** (`task-router.ts`): Auto-classifies user messages into 3 tiers via Gemini Flash:
+- **Task Router** (`task-router.ts`): Auto-classifies user messages into 4 tiers via Gemini Flash:
   - `simple` → normal agent chat (questions, information requests)
+  - `research` → direct researcher tool invocation (bypasses agent, progressive streaming)
   - `one-off` → single Claude Code session (file ops, bug fixes, single app builds)
   - `orchestrated` → multi-agent orchestration (complex goals, sustained projects)
 - **Orchestrator** (`orchestrator.ts`): Spawns a Claude Code planning session that decomposes the goal into a task DAG with agent roles. Sends plan to frontend for review/approval.
@@ -119,6 +121,19 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 - Approved apps built sequentially via `handleBuildAppViaClaude`
 - Progress tracked via `missionProgress` messages (analyzing → proposing → building → complete)
 - Key files: `mission-planner.ts` (backend), `MissionCard.tsx` (frontend), card type `"mission"`
+
+### Deep Research Pipeline
+
+Standard research uses a two-phase streaming pipeline (Phase A: summary + findings in ~19s, Phase B: full analysis in ~30s) via the Gemini API. **Deep research** escalates to Claude Code for a fundamentally different output:
+
+- **Trigger**: "Deep Dive" button on a research card, or task router auto-escalation when `depth === "deep"`
+- **Pipeline**: `card.action(deep_dive)` → `setDeepResearchLauncher()` in card-actions → `handleDeepResearchBuild()` in build-via-claude.ts → Claude Code session (visible in terminal card)
+- **Claude Code does two phases**: (1) 5-10 web searches + article reading for thorough research, (2) designs and writes a bespoke interactive JSX component tailored to the topic's nature
+- **Output**: Single `.deep-research-ui.jsx` file with all research data embedded as `var` declarations — no app registration, no executors
+- **Delivery**: Template is compile-checked with Sucrase (auto-fix via session resume if errors), then delivered as `generatedUI` on the original research card via `_generatedUI` field in tool result
+- **`_generatedUI` interception**: Both `card-actions.ts` and `delivery.ts` check for `_generatedUI` in tool result data, extract it, and deliver as `generatedUI` on the card (bypassing template registry)
+- **Topic-adaptive design**: Historical topics get timeline explorers, comparison topics get side-by-side panels with radar charts, location topics get area guides with ratings — each UI is custom-designed
+- Key files: `build-via-claude.ts` (`handleDeepResearchBuild`, `buildDeepResearchUIPrompt`), `researcher-tools.ts` (deep research trigger), `card-actions.ts` (launcher setup + `_generatedUI` interception), `delivery.ts` (`_generatedUI` in auto-enhance)
 
 ### Claude Code Integration
 
