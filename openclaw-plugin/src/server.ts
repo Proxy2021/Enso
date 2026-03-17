@@ -19,7 +19,7 @@ import { APP_CATALOG } from "./app-catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
 import { classifyTask } from "./task-router.js";
-import { persistCard, loadCardHistory, pruneStaleJournals, readWorkspaceMemory, writeUserProfile, getWorkspaceDir } from "./memory-bridge.js";
+import { persistCard, loadCardHistory, clearCardHistory, pruneStaleJournals, readWorkspaceMemory, writeUserProfile, getWorkspaceDir } from "./memory-bridge.js";
 import type { CardRecord } from "./memory-bridge.js";
 
 export type ConnectedClient = {
@@ -568,6 +568,14 @@ export async function startEnsoServer(opts: {
       if (!ok) { res.status(500).json({ error: "Failed to write USER.md" }); return; }
     }
     res.json({ ok: true });
+  });
+
+  // ── Clear Chat History API ──
+  app.delete("/api/history", (req, res) => {
+    const clientId = req.query.clientId as string;
+    if (!clientId) { res.status(400).json({ error: "clientId required" }); return; }
+    const ok = clearCardHistory(clientId);
+    res.json({ ok });
   });
 
   // ── Collections API — browse all persisted document collections ──

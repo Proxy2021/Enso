@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { useChatStore } from "../store/chat";
 
 interface MemoryData {
   user: string | null;
@@ -12,7 +13,11 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"user" | "memory">("user");
+  const [activeTab, setActiveTab] = useState<"user" | "memory" | "history">("user");
+  const [clearing, setClearing] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
+
+  const cardOrder = useChatStore((s) => s.cardOrder);
 
   const fetchMemory = useCallback(async () => {
     setLoading(true);
@@ -36,6 +41,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
     if (show) {
       fetchMemory();
       setEditing(false);
+      setClearConfirm(false);
     }
   }, [show, fetchMemory]);
 
@@ -58,13 +64,34 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
     }
   };
 
+  const handleClearHistory = async () => {
+    setClearing(true);
+    try {
+      const clientId = sessionStorage.getItem("enso-clientId");
+      if (clientId) {
+        await fetch(`${getBackendBaseUrl()}/api/history?clientId=${encodeURIComponent(clientId)}`, {
+          method: "DELETE",
+          headers: authHeaders(),
+        });
+      }
+      // Clear frontend cards
+      useChatStore.setState({ cardOrder: [], cards: {} });
+      setClearConfirm(false);
+      onClose();
+    } catch {
+      // Silently fail
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const startEdit = () => {
     setEditText(data?.user ?? "");
     setEditing(true);
   };
 
-  const content = activeTab === "user" ? data?.user : data?.memory;
-  const tabLabel = activeTab === "user" ? "About You" : "Agent Memory";
+  const content = activeTab === "user" ? data?.user : activeTab === "memory" ? data?.memory : null;
+  const tabLabel = activeTab === "user" ? "About You" : activeTab === "memory" ? "Agent Memory" : "Chat History";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -92,22 +119,82 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
         {/* Tabs */}
         <div className="flex gap-1 px-5 pt-3">
           <button
-            onClick={() => { setActiveTab("user"); setEditing(false); }}
+            onClick={() => { setActiveTab("user"); setEditing(false); setClearConfirm(false); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === "user" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
             About You
           </button>
           <button
-            onClick={() => { setActiveTab("memory"); setEditing(false); }}
+            onClick={() => { setActiveTab("memory"); setEditing(false); setClearConfirm(false); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === "memory" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
             Agent Memory
+          </button>
+          <button
+            onClick={() => { setActiveTab("history"); setEditing(false); setClearConfirm(false); }}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === "history" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
+          >
+            Chat History
           </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {loading ? (
+          {activeTab === "history" ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-gray-300">Chat History</h3>
+              </div>
+              <div className="bg-gray-800/60 rounded-lg border border-gray-700/50 p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 shrink-0">
+                    <path d="M12 8v4l3 3" />
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                  <div>
+                    <p className="text-sm text-gray-300">{cardOrder.length} cards in current session</p>
+                    <p className="text-xs text-gray-500 mt-0.5">History is restored automatically when you refresh the page.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Clear button with confirmation */}
+              <div className="pt-2">
+                {clearConfirm ? (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
+                    <p className="text-sm text-red-300">Are you sure? This will clear all chat history and cannot be undone.</p>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setClearConfirm(false)}
+                        className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleClearHistory}
+                        disabled={clearing}
+                        className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded-md transition-colors disabled:opacity-50"
+                      >
+                        {clearing ? "Clearing..." : "Yes, Clear All"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setClearConfirm(true)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18" />
+                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                    </svg>
+                    Clear Chat History
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
             </div>
@@ -162,7 +249,9 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
           <p className="text-xs text-gray-600 text-center">
             {activeTab === "user"
               ? "Your profile is stored locally and used to personalize the agent's responses."
-              : "Agent memory is built from conversations and persists across sessions."}
+              : activeTab === "memory"
+                ? "Agent memory is built from conversations and persists across sessions."
+                : "Chat history is saved on the server and restored when you refresh the page."}
           </p>
         </div>
       </div>

@@ -151,6 +151,22 @@ export function loadCardHistory(clientId: string, count: number): CardRecord[] {
   }
 }
 
+/**
+ * Clear all card history for a client.
+ * Deletes the JSONL journal file.
+ */
+export function clearCardHistory(clientId: string): boolean {
+  try {
+    const path = journalPath(clientId);
+    if (existsSync(path)) {
+      unlinkSync(path);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Rotate a journal file to keep it bounded. */
 function rotateJournal(path: string): void {
   try {
