@@ -104,8 +104,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
   // ── Phase checks ──
   const isLoading = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking", "deep_research"].includes(phase);
-  const hasSynthesis = ["synthesized", "gap_checking", "complete"].includes(phase);
-  const isComplete = phase === "complete";
+  const hasSynthesis = ["synthesized", "gap_checking", "complete", "generating_podcast"].includes(phase);
+  const isComplete = phase === "complete" || phase === "generating_podcast";
 
   // ── Reading time estimate (avg 200 words/min for technical content) ──
   const wordCount = useMemo(() => {

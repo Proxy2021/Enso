@@ -37,6 +37,49 @@ import {
   cardModeFromContext,
 } from "./helpers.js";
 
+// ── Context Reconstruction ──
+
+/**
+ * Attempt to reconstruct a minimal CardContext for known tool families
+ * when the original context was lost (e.g. server restart).
+ * Returns null if the action/payload doesn't match a known pattern.
+ */
+function tryReconstructContext(
+  cardId: string,
+  action: string,
+  payload: unknown,
+  client: ConnectedClient,
+): CardContext | null {
+  const p = (payload ?? {}) as Record<string, unknown>;
+
+  // ── Researcher family ──
+  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "generate_podcast", "send_report", "delete_history", "clear_all_history"];
+  if (researcherActions.includes(action) || (p.topic && typeof p.topic === "string")) {
+    const account = getActiveAccount();
+    if (!account) return null;
+    return {
+      cardId,
+      originalPrompt: String(p.topic ?? p.question ?? ""),
+      originalResponse: "",
+      currentData: { tool: "enso_researcher_search", topic: p.topic ?? "", phase: "complete" },
+      geminiApiKey: account.geminiApiKey,
+      account,
+      mode: "full",
+      actionHistory: [],
+      appToolHint: {
+        toolName: "enso_researcher_search",
+        params: { topic: String(p.topic ?? ""), depth: "standard" },
+        handlerPrefix: "enso_researcher_",
+      },
+      interactionMode: "tool",
+      toolFamily: "researcher",
+      signatureId: "research_board",
+    };
+  }
+
+  return null;
+}
+
 // ── Card Action Processing ──
 
 /**
@@ -79,26 +122,37 @@ export async function handlePluginCardAction(params: {
   logAction({ ts: Date.now(), type: "action", category: "action", message: `Action: ${action}`, cardId, metadata: { payload } });
   sendOperation("processing", "Processing action");
 
-  const ctx = cardContexts.get(cardId);
+  let ctx = cardContexts.get(cardId);
   if (!ctx) {
-    logError("action", "Card context not found", undefined, { cardId });
-    client.send({
-      id: randomUUID(),
-      runId: randomUUID(),
-      sessionKey: client.sessionKey,
-      seq: 0,
-      state: "error",
-      targetCardId: cardId,
-      text: "Card context not found — the server may have restarted.",
-      operation: {
-        operationId,
-        stage: "error",
-        label: "Action failed",
-        cancellable: false,
-      },
-      timestamp: Date.now(),
-    });
-    return;
+    // ── Reconstruct minimal context for known tool families ──
+    // After server restart, card contexts are lost. For tools where the
+    // payload is self-contained (e.g. researcher follow_up/compare/deep_dive),
+    // we can reconstruct enough context to dispatch the action.
+    const reconstructed = tryReconstructContext(cardId, action, payload, client);
+    if (reconstructed) {
+      ctx = reconstructed;
+      cardContexts.set(cardId, ctx);
+      logAction({ ts: Date.now(), type: "action", category: "action", message: `Reconstructed context for family=${ctx.toolFamily}`, cardId });
+    } else {
+      logError("action", "Card context not found", undefined, { cardId });
+      client.send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "error",
+        targetCardId: cardId,
+        text: "Card context not found — the server may have restarted. Try running the app again.",
+        operation: {
+          operationId,
+          stage: "error",
+          label: "Action failed",
+          cancellable: false,
+        },
+        timestamp: Date.now(),
+      });
+      return;
+    }
   }
 
   logAction({ ts: Date.now(), type: "action", category: "action", message: `Context found: cardId=${cardId}, family=${ctx.toolFamily ?? "none"}, signature=${ctx.signatureId ?? "none"}, mode=${ctx.interactionMode}, hasAppHint=${!!ctx.appToolHint}` });
