@@ -553,7 +553,7 @@ function scoreDomain(domain: string): number {
 // ── Source Content Extraction ──
 
 /** Max chars of extracted article text to keep per source */
-const MAX_CONTENT_LENGTH = 4000;
+const MAX_CONTENT_LENGTH = 2000;
 /** How many top sources to attempt full-content fetch for */
 const MAX_SOURCES_TO_FETCH = 10;
 /** Timeout per page fetch (ms) — 4s is enough for good sites, avoids blocking on slow ones */
@@ -963,6 +963,77 @@ function deduplicateAndScore(batches: BraveWebResult[][]): Source[] {
 }
 
 // ── LLM Synthesis prompts ──
+
+/** Build shared source context string for both synthesis phases */
+function buildSynthesisSourceContext(results: BraveWebResult[], sources?: Source[]): string {
+  const sourceEntries = results.slice(0, 30).map((r, i) => {
+    const fullContent = sources?.[i]?.fullContent;
+    if (fullContent && fullContent.length > 100) {
+      return `[${i}] ${r.title}\n    URL: ${r.url}\n    FULL ARTICLE CONTENT:\n${fullContent}`;
+    }
+    return `[${i}] ${r.title}\n    ${r.description}\n    URL: ${r.url}`;
+  });
+  return sourceEntries.join("\n\n");
+}
+
+/** Phase A: summary + narrative + key findings (fast, pushed to UI immediately) */
+function buildPhaseAPrompt(topic: string, sourceContext: string, language: string | undefined, videoContext: string, sourceCount: number): string {
+  const contentNote = sourceContext.includes("FULL ARTICLE CONTENT")
+    ? "\nNOTE: Some sources include FULL ARTICLE CONTENT. Prioritize these for evidence-rich synthesis."
+    : "";
+
+  return `You are a senior research analyst. Given web search results about "${topic}", produce the core synthesis.
+
+CRITICAL LANGUAGE RULE: ALL output text MUST be written in ${language || "the same language as the topic"}. ${language ? `Write EVERYTHING in ${language}.` : ""}
+
+SEARCH RESULTS:
+${sourceContext}${contentNote}${videoContext}
+
+Return valid JSON (no markdown fences):
+{
+  "summary": "Executive summary paragraph (3-5 sentences covering the most important findings)",
+  "narrative": "A 4-8 paragraph comprehensive article. Engaging magazine-feature style. Flowing prose only — NO bullet points, NO numbered lists. Separate paragraphs with double newlines.",
+  "keyFindings": [
+    { "text": "Clear, specific finding", "type": "fact|trend|insight|warning", "confidence": "high|medium|low", "sourceRefs": [0, 3] }
+  ]
+}
+
+Rules:
+- The narrative is the PRIMARY output — comprehensive, engaging, covering ALL important material
+- Write like a magazine feature: strong hook, thematic paragraphs, forward-looking close
+- Generate 6-10 key findings. Mix fact, trend, insight, warning types
+- sourceRefs: valid 0-indexed integers from 0 to ${sourceCount - 1}
+- CRITICAL: Return ONLY valid JSON. No markdown fences, no comments`;
+}
+
+/** Phase B: sections + books/movies/contradictions (runs in parallel with gap check) */
+function buildPhaseBPrompt(topic: string, sourceContext: string, language: string | undefined, videoContext: string, sourceCount: number, videoCount: number): string {
+  return `You are a senior research analyst. Given web search results about "${topic}", produce detailed sections and media recommendations.
+
+CRITICAL LANGUAGE RULE: ALL output text MUST be written in ${language || "the same language as the topic"}. ${language ? `Write EVERYTHING in ${language}.` : ""}
+
+SEARCH RESULTS:
+${sourceContext}${videoContext}
+
+Return valid JSON (no markdown fences):
+{
+  "sections": [
+    { "title": "Section Title", "summary": "One-sentence overview", "bullets": ["Point 1", "Point 2", "Point 3"], "sourceRefs": [1, 4, 7] }
+  ],
+  "books": [{ "title": "...", "author": "...", "year": "...", "description": "one-sentence why relevant" }],
+  "movies": [{ "title": "...", "year": "...", "type": "movie|tv|documentary|podcast", "description": "one-sentence why relevant" }],
+  "recommendedVideos": [{ "index": 0, "reason": "why this video is valuable" }],
+  "contradictions": [{ "claim": "The disputed claim", "perspectives": ["Source A says X", "Source B says Y"], "sourceRefs": [0, 3] }]
+}
+
+Rules:
+- Generate 4-6 thematic sections organized by subtopic, each with 3-5 detailed bullets
+- sourceRefs: valid 0-indexed integers from 0 to ${sourceCount - 1}
+- recommendedVideos index: 0 to ${videoCount - 1}. Pick top 3-5 most valuable
+- 0-5 books and 0-5 movies/shows — only genuinely relevant and real titles
+- Only include real contradictions found across sources
+- CRITICAL: Return ONLY valid JSON`;
+}
 
 function buildSynthesisPrompt(topic: string, results: BraveWebResult[], sources?: Source[], language?: string): string {
   // Use full article content when available, falling back to snippets
@@ -1780,67 +1851,129 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const prompt = buildSynthesisPrompt(topic, snippetsForLLM, allSourcesForLLM, language) + videoContext;
-    // Synthesis with many sources can take longer — use 60s timeout
+
+    // ── Two-phase synthesis for faster perceived results ──
+    // Phase A (Flash): summary + narrative + key findings → push to UI immediately (~8-12s)
+    // Phase B (Flash): sections + books/movies/contradictions → runs in parallel with gap check
+
+    const sourceContext = buildSynthesisSourceContext(snippetsForLLM, allSourcesForLLM);
+
+    // Phase A: Core synthesis (summary + narrative + key findings)
     mark("synthesis_start");
-    let raw = await callGeminiLLMWithRetry(prompt, geminiKey, undefined, 60_000);
-    let cleaned = cleanJson(raw);
-    let parsed: Record<string, unknown>;
+    const phaseAPrompt = buildPhaseAPrompt(topic, sourceContext, language, videoContext, allSourcesForLLM.length);
+    let phaseARaw = await callGeminiLLMWithRetry(phaseAPrompt, geminiKey, "gemini-2.0-flash", 45_000);
+    let phaseAParsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
-      const errMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-      logError("researcher", `JSON parse failed after cleanJson: ${errMsg}`, parseErr, { rawLen: raw.length, cleanedLen: cleaned.length, rawTail: raw.slice(-200) });
-      // Retry once — ask for stricter JSON
-      try {
-        logAction({ ts: Date.now(), type: "action", category: "researcher", message: `retrying synthesis for "${topic}" after JSON parse failure` });
-        raw = await callGeminiLLMWithRetry(
-          prompt + "\n\nIMPORTANT: Your previous response had invalid JSON. Return ONLY a valid JSON object with no markdown, no comments, no trailing commas. Escape all special characters in strings properly.",
-          geminiKey, undefined, 60_000,
-        );
-        cleaned = cleanJson(raw);
-        parsed = JSON.parse(cleaned);
-      } catch (retryErr) {
-        logError("researcher", `Retry synthesis also failed`, retryErr, { topic });
-        throw retryErr;
-      }
+      phaseAParsed = JSON.parse(cleanJson(phaseARaw));
+    } catch {
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `retrying Phase A synthesis for "${topic}"` });
+      phaseARaw = await callGeminiLLMWithRetry(
+        phaseAPrompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no comments, no trailing commas.",
+        geminiKey, "gemini-2.0-flash", 45_000,
+      );
+      phaseAParsed = JSON.parse(cleanJson(phaseARaw));
     }
-    const typedParsed = parsed as {
-      summary: string;
-      narrative: string;
-      keyFindings: KeyFinding[];
-      sections: ResearchSection[];
-      books?: ResearchBook[];
-      movies?: ResearchMovie[];
-      recommendedVideos?: RecommendedVideo[];
-      contradictions?: Contradiction[];
-    };
+    mark("synthesis_a_done");
 
     // Validate and clamp sourceRefs
     const maxRef = allSourcesForLLM.length - 1;
     const clampRefs = (refs: number[] | undefined) =>
       (refs ?? []).filter((r) => typeof r === "number" && r >= 0 && r <= maxRef);
 
-    const keyFindings = (typedParsed.keyFindings ?? []).slice(0, 8).map((f) => ({
+    const typedA = phaseAParsed as {
+      summary: string; narrative: string; keyFindings: KeyFinding[];
+    };
+    const keyFindings = (typedA.keyFindings ?? []).slice(0, 8).map((f) => ({
       text: f.text ?? "",
       type: (["fact", "trend", "insight", "warning"].includes(f.type) ? f.type : "insight") as KeyFinding["type"],
       confidence: (["high", "medium", "low"].includes(f.confidence) ? f.confidence : "medium") as KeyFinding["confidence"],
       sourceRefs: clampRefs(f.sourceRefs),
     }));
 
-    const sections = (typedParsed.sections ?? []).slice(0, 6).map((s) => ({
+    // Match images + build video list (no LLM needed)
+    const videos: ResearchVideo[] = rawVideos.slice(0, 12);
+
+    // Push Phase A results immediately — user sees summary+findings while Phase B runs
+    pushProgress({
+      tool: "enso_researcher_search",
+      topic,
+      depth,
+      phase: "synthesized",
+      searchQueries: allQueries,
+      summary: typedA.summary ?? "",
+      narrative: typedA.narrative ?? "",
+      keyFindings,
+      sections: [],  // populated by Phase B
+      sources: sources.slice(0, 25),
+      images: [],
+      videos,
+      books: [],
+      movies: [],
+      recommendedVideos: [],
+      contradictions: [],
+    });
+
+    // Phase B: Sections + media extraction (runs in parallel with gap check)
+    const phaseBPrompt = buildPhaseBPrompt(topic, sourceContext, language, videoContext, allSourcesForLLM.length, videos.length);
+
+    // Start Phase B and gap check concurrently
+    const phaseBPromise = callGeminiLLMWithRetry(phaseBPrompt, geminiKey, "gemini-2.0-flash", 45_000)
+      .then((raw) => {
+        try { return JSON.parse(cleanJson(raw)); } catch { return null; }
+      })
+      .catch((err) => { logError("researcher", "Phase B synthesis failed", err, { topic }); return null; });
+
+    let gapQueries: string[] = [];
+    const gapPromise = (depth === "deep" && geminiKey && keyFindings.length > 0) ? (async () => {
+      mark("gap_start");
+      const gapPrompt = `Given this research synthesis about "${topic}":
+
+Summary: ${typedA.summary ?? ""}
+
+Key findings: ${keyFindings.map((f) => f.text).join("; ")}
+
+Identify 1-3 specific questions or angles NOT adequately covered that would significantly strengthen this research.
+
+Return valid JSON (no markdown fences):
+{ "gaps": ["specific search query 1", "specific search query 2"] }
+
+Generate gap queries in the same language as the topic "${topic}".
+If the research is already comprehensive, return: { "gaps": [] }`;
+
+      try {
+        const gapRaw = await callGeminiLLMWithRetry(gapPrompt, geminiKey, "gemini-2.0-flash");
+        const gapParsed = JSON.parse(cleanJson(gapRaw)) as { gaps: string[] };
+        gapQueries = (gapParsed.gaps ?? []).filter((g) => typeof g === "string").slice(0, 3);
+        return gapQueries;
+      } catch (err) {
+        logError("researcher", "Gap detection failed", err, { topic });
+        return [];
+      }
+    })() : Promise.resolve([]);
+
+    // Wait for both Phase B and gap detection to complete in parallel
+    const [phaseBResult, detectedGaps] = await Promise.all([phaseBPromise, gapPromise]);
+    mark("synthesis_done");
+
+    // Extract Phase B results
+    const typedB = (phaseBResult ?? {}) as {
+      sections?: ResearchSection[];
+      books?: ResearchBook[];
+      movies?: ResearchMovie[];
+      recommendedVideos?: RecommendedVideo[];
+      contradictions?: Contradiction[];
+    };
+
+    const sections = (typedB.sections ?? []).slice(0, 6).map((s) => ({
       title: s.title ?? "Untitled Section",
       summary: s.summary ?? "",
       bullets: Array.isArray(s.bullets) ? s.bullets.filter((b) => typeof b === "string") : [],
       sourceRefs: clampRefs(s.sourceRefs),
     }));
 
-    // Match images to sections + build video list
     const images = matchImagesToSections(sections, rawImages);
-    const videos: ResearchVideo[] = rawVideos.slice(0, 12);
 
-    // Extract books and movies from synthesis
-    const books: ResearchBook[] = (typedParsed.books ?? []).slice(0, 5).map((b) => ({
+    const books: ResearchBook[] = (typedB.books ?? []).slice(0, 5).map((b) => ({
       title: b.title ?? "",
       author: b.author ?? "",
       year: b.year,
@@ -1848,7 +1981,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       url: b.url,
     })).filter((b) => b.title);
 
-    const movies: ResearchMovie[] = (typedParsed.movies ?? []).slice(0, 5).map((m) => ({
+    const movies: ResearchMovie[] = (typedB.movies ?? []).slice(0, 5).map((m) => ({
       title: m.title ?? "",
       year: m.year,
       type: (["movie", "tv", "documentary", "podcast"].includes(m.type) ? m.type : "documentary") as ResearchMovie["type"],
@@ -1856,14 +1989,12 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       url: m.url,
     })).filter((m) => m.title);
 
-    // Extract recommended videos (validate indices)
-    const recommendedVideos: RecommendedVideo[] = (typedParsed.recommendedVideos ?? [])
+    const recommendedVideos: RecommendedVideo[] = (typedB.recommendedVideos ?? [])
       .filter((rv) => typeof rv.index === "number" && rv.index >= 0 && rv.index < videos.length && typeof rv.reason === "string")
       .slice(0, 5)
       .map((rv) => ({ index: rv.index, reason: rv.reason }));
 
-    // Extract contradictions
-    const contradictions: Contradiction[] = (typedParsed.contradictions ?? [])
+    const contradictions: Contradiction[] = (typedB.contradictions ?? [])
       .filter((c) => typeof c.claim === "string" && Array.isArray(c.perspectives))
       .slice(0, 5)
       .map((c) => ({
@@ -1872,16 +2003,15 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
         sourceRefs: clampRefs(c.sourceRefs),
       }));
 
-    mark("synthesis_done");
-    // ── Phase: synthesized ──
+    // Push complete results with all Phase B data
     pushProgress({
       tool: "enso_researcher_search",
       topic,
       depth,
       phase: "synthesized",
       searchQueries: allQueries,
-      summary: typedParsed.summary ?? "",
-      narrative: typedParsed.narrative ?? "",
+      summary: typedA.summary ?? "",
+      narrative: typedA.narrative ?? "",
       keyFindings,
       sections,
       sources: sources.slice(0, 25),
@@ -1893,158 +2023,106 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       contradictions,
     });
 
-    // ── Gap Check: identify missing angles and enrich ──
-    // Only for explicit "deep" depth — standard skips this for ~10-15s faster results
-    let gapQueries: string[] = [];
-    if (depth === "deep" && geminiKey && sections.length > 0) {
-      mark("gap_start");
+    // ── Gap enrichment (only if gaps were detected during parallel phase) ──
+    gapQueries = detectedGaps;
+    if (gapQueries.length > 0) {
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `gap check found ${gapQueries.length} gaps: ${gapQueries.join(", ")}` });
       try {
-        pushProgress({
-          tool: "enso_researcher_search",
-          topic,
-          depth,
-          phase: "gap_checking",
-          searchQueries: allQueries,
-          summary: typedParsed.summary ?? "",
-          narrative: typedParsed.narrative ?? "",
-          keyFindings,
-          sections,
-          sources: sources.slice(0, 25),
-          images,
-          videos,
-          books,
-          movies,
-          recommendedVideos,
-          contradictions,
-        });
+        // Run gap searches in parallel
+        const gapResultSets = await Promise.all(
+          gapQueries.map((q) => braveWebSearch(q, 4)),
+        );
+        const gapResults = gapResultSets.flat();
 
-        const gapPrompt = `Given this research synthesis about "${topic}":
-
-Summary: ${typedParsed.summary ?? ""}
-
-Key findings: ${keyFindings.map((f) => f.text).join("; ")}
-
-Sections covered: ${sections.map((s) => s.title).join(", ")}
-
-Identify 1-3 specific questions or angles NOT adequately covered that would significantly strengthen this research. Focus on gaps that matter — missing data, unexplored perspectives, or unverified claims.
-
-Return valid JSON (no markdown fences):
-{ "gaps": ["specific search query 1", "specific search query 2"] }
-
-Generate gap queries in the same language as the topic "${topic}".
-
-If the research is already comprehensive, return: { "gaps": [] }`;
-
-        const gapRaw = await callGeminiLLMWithRetry(gapPrompt, geminiKey, "gemini-2.0-flash");
-        const gapParsed = JSON.parse(cleanJson(gapRaw)) as { gaps: string[] };
-        gapQueries = (gapParsed.gaps ?? []).filter((g) => typeof g === "string").slice(0, 3);
-
-        if (gapQueries.length > 0) {
-          logAction({ ts: Date.now(), type: "action", category: "researcher", message: `gap check found ${gapQueries.length} gaps: ${gapQueries.join(", ")}` });
-
-          // Run gap searches in parallel
-          const gapResultSets = await Promise.all(
-            gapQueries.map((q) => braveWebSearch(q, 4)),
-          );
-          const gapResults = gapResultSets.flat();
-
-          // Deduplicate against existing sources
-          const existingUrls = new Set(sources.map((s) => s.url));
-          const newGapSources: Source[] = [];
-          for (const r of gapResults) {
-            if (!existingUrls.has(r.url)) {
-              existingUrls.add(r.url);
-              const domain = (() => { try { return new URL(r.url).hostname.replace("www.", ""); } catch { return "unknown"; } })();
-              newGapSources.push({
-                url: r.url,
-                title: r.title,
-                snippet: r.description,
-                domain,
-                relevance: 0.7,
-              });
-            }
+        // Deduplicate against existing sources
+        const existingUrls = new Set(sources.map((s) => s.url));
+        const newGapSources: Source[] = [];
+        for (const r of gapResults) {
+          if (!existingUrls.has(r.url)) {
+            existingUrls.add(r.url);
+            const domain = (() => { try { return new URL(r.url).hostname.replace("www.", ""); } catch { return "unknown"; } })();
+            newGapSources.push({
+              url: r.url,
+              title: r.title,
+              snippet: r.description,
+              domain,
+              relevance: 0.7,
+            });
           }
+        }
 
-          if (newGapSources.length > 0) {
-            // Fetch content for new sources
-            await enrichSourcesWithContent(newGapSources);
-            sources.push(...newGapSources);
+        if (newGapSources.length > 0) {
+          await enrichSourcesWithContent(newGapSources);
+          sources.push(...newGapSources);
 
-            // Second synthesis pass: merge gap findings into existing research
-            const gapSourceEntries = newGapSources.map((s, i) => {
-              if (s.fullContent && s.fullContent.length > 100) {
-                return `[GAP-${i}] ${s.title}\n    FULL CONTENT:\n${s.fullContent}`;
-              }
-              return `[GAP-${i}] ${s.title}\n    ${s.snippet}`;
-            }).join("\n\n");
+          const gapSourceEntries = newGapSources.map((s, i) => {
+            if (s.fullContent && s.fullContent.length > 100) {
+              return `[GAP-${i}] ${s.title}\n    FULL CONTENT:\n${s.fullContent}`;
+            }
+            return `[GAP-${i}] ${s.title}\n    ${s.snippet}`;
+          }).join("\n\n");
 
-            const mergePrompt = `You previously researched "${topic}" and produced this synthesis:
+          const mergePrompt = `You previously researched "${topic}" and produced this synthesis:
 
-Summary: ${typedParsed.summary ?? ""}
-Narrative: ${typedParsed.narrative ?? ""}
+Summary: ${typedA.summary ?? ""}
+Narrative: ${typedA.narrative ?? ""}
 Key Findings: ${JSON.stringify(keyFindings)}
 
-We found additional sources to fill gaps in the research:
+We found additional sources to fill gaps:
 
 ${gapSourceEntries}
 
-Return valid JSON (no markdown fences) with ONLY the new/updated content to merge:
+Return valid JSON (no markdown fences) with ONLY new content to merge:
 {
   "additionalFindings": [{ "text": "New finding", "type": "fact|trend|insight|warning", "confidence": "high|medium|low" }],
-  "narrativeAddendum": "1-2 paragraphs of additional narrative covering the gap areas. Write as continuation prose.",
+  "narrativeAddendum": "1-2 paragraphs of additional narrative. Write as continuation prose.",
   "additionalContradictions": [{ "claim": "...", "perspectives": ["...", "..."] }]
 }
 
-Only include genuinely new information not already covered. If the gap sources don't add meaningful new content, return empty arrays and empty string.`;
+Only include genuinely new information. If gap sources don't add meaningful new content, return empty arrays and empty string.`;
 
-            try {
-              const mergeRaw = await callGeminiLLMWithRetry(mergePrompt, geminiKey, "gemini-2.0-flash");
-              const mergeParsed = JSON.parse(cleanJson(mergeRaw)) as {
-                additionalFindings?: KeyFinding[];
-                narrativeAddendum?: string;
-                additionalContradictions?: Contradiction[];
-              };
+          try {
+            const mergeRaw = await callGeminiLLMWithRetry(mergePrompt, geminiKey, "gemini-2.0-flash");
+            const mergeParsed = JSON.parse(cleanJson(mergeRaw)) as {
+              additionalFindings?: KeyFinding[];
+              narrativeAddendum?: string;
+              additionalContradictions?: Contradiction[];
+            };
 
-              // Merge additional findings
-              if (mergeParsed.additionalFindings?.length) {
-                for (const f of mergeParsed.additionalFindings.slice(0, 3)) {
-                  keyFindings.push({
-                    text: f.text ?? "",
-                    type: (["fact", "trend", "insight", "warning"].includes(f.type) ? f.type : "insight") as KeyFinding["type"],
-                    confidence: (["high", "medium", "low"].includes(f.confidence) ? f.confidence : "medium") as KeyFinding["confidence"],
+            if (mergeParsed.additionalFindings?.length) {
+              for (const f of mergeParsed.additionalFindings.slice(0, 3)) {
+                keyFindings.push({
+                  text: f.text ?? "",
+                  type: (["fact", "trend", "insight", "warning"].includes(f.type) ? f.type : "insight") as KeyFinding["type"],
+                  confidence: (["high", "medium", "low"].includes(f.confidence) ? f.confidence : "medium") as KeyFinding["confidence"],
+                  sourceRefs: [],
+                });
+              }
+            }
+
+            if (mergeParsed.narrativeAddendum && mergeParsed.narrativeAddendum.length > 50) {
+              typedA.narrative = (typedA.narrative ?? "") + "\n\n" + mergeParsed.narrativeAddendum;
+            }
+
+            if (mergeParsed.additionalContradictions?.length) {
+              for (const c of mergeParsed.additionalContradictions.slice(0, 2)) {
+                if (typeof c.claim === "string" && Array.isArray(c.perspectives)) {
+                  contradictions.push({
+                    claim: c.claim,
+                    perspectives: c.perspectives.filter((p: unknown) => typeof p === "string"),
                     sourceRefs: [],
                   });
                 }
               }
-
-              // Append narrative addendum
-              if (mergeParsed.narrativeAddendum && mergeParsed.narrativeAddendum.length > 50) {
-                typedParsed.narrative = (typedParsed.narrative ?? "") + "\n\n" + mergeParsed.narrativeAddendum;
-              }
-
-              // Merge additional contradictions
-              if (mergeParsed.additionalContradictions?.length) {
-                for (const c of mergeParsed.additionalContradictions.slice(0, 2)) {
-                  if (typeof c.claim === "string" && Array.isArray(c.perspectives)) {
-                    contradictions.push({
-                      claim: c.claim,
-                      perspectives: c.perspectives.filter((p: unknown) => typeof p === "string"),
-                      sourceRefs: [],
-                    });
-                  }
-                }
-              }
-
-              logAction({ ts: Date.now(), type: "action", category: "researcher", message: `gap merge: +${mergeParsed.additionalFindings?.length ?? 0} findings, +${mergeParsed.narrativeAddendum?.length ?? 0} chars narrative` });
-            } catch (mergeErr) {
-              logError("researcher", "Gap merge synthesis failed", mergeErr, { topic });
-              // Non-fatal: continue with existing results
             }
+
+            logAction({ ts: Date.now(), type: "action", category: "researcher", message: `gap merge: +${mergeParsed.additionalFindings?.length ?? 0} findings, +${mergeParsed.narrativeAddendum?.length ?? 0} chars narrative` });
+          } catch (mergeErr) {
+            logError("researcher", "Gap merge synthesis failed", mergeErr, { topic });
           }
         }
       } catch (gapErr) {
-        logError("researcher", "Gap check failed", gapErr, { topic });
-        // Non-fatal: continue with existing results
+        logError("researcher", "Gap enrichment failed", gapErr, { topic });
       }
       mark("gap_done");
     }
@@ -2054,8 +2132,8 @@ Only include genuinely new information not already covered. If the gap sources d
       topic,
       depth,
       phase: "complete",
-      summary: typedParsed.summary ?? "",
-      narrative: typedParsed.narrative ?? "",
+      summary: typedA.summary ?? "",
+      narrative: typedA.narrative ?? "",
       keyFindings,
       sections,
       sources: sources.slice(0, 25),
