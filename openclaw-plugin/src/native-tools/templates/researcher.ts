@@ -11,7 +11,6 @@ export function getResearcherTemplateCode(_signature: ToolTemplate): string {
 const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   // ── ALL hooks at top level (React rules) ──
   const [topicInput, setTopicInput] = useState("");
-  const [depthInput, setDepthInput] = useState("standard");
   const [followUpInput, setFollowUpInput] = useState("");
   const [compareInput, setCompareInput] = useState("");
   const [emailOpen, setEmailOpen] = useState(false);
@@ -217,7 +216,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   if (isWelcome) {
     const handleSearch = () => {
       const t = topicInput.trim();
-      if (t) onAction("search", { topic: t, depth: depthInput });
+      if (t) onAction("search", { topic: t });
     };
     const allSuggestionGroups = [
       ["AI in healthcare", "CRISPR gene editing breakthroughs", "mRNA vaccine applications beyond COVID"],
@@ -251,15 +250,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
               icon={<LucideReact.Search className="w-3.5 h-3.5" />}
             />
           </div>
-          <Select
-            options={[
-              { value: "quick", label: "Quick" },
-              { value: "standard", label: "Standard" },
-            ]}
-            value={depthInput}
-            onChange={(val) => setDepthInput(val || "standard")}
-            placeholder="Depth"
-          />
           <Button variant="primary" onClick={handleSearch}>Research</Button>
         </div>
 
