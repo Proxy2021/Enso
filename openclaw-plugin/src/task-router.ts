@@ -166,9 +166,12 @@ function quickClassify(message: string): TaskClassification | null {
 
   // Very short messages are almost always simple (skip for CJK)
   if (wordCount <= 3 && !hasCJK) {
-    // Unless they're clear action commands
+    // Unless they're clear action commands or questions
     if (/^(fix|build|create|deploy|convert|setup|install)\b/i.test(lower)) {
       return null; // Let LLM decide — might be one-off
+    }
+    if (/^(what|who|when|where|why|how|is|are|does|do)\b/i.test(lower)) {
+      return null; // Let LLM decide — might be direct answer
     }
     // "research X" with just a topic word
     if (/^research\b/i.test(lower)) {
@@ -181,7 +184,7 @@ function quickClassify(message: string): TaskClassification | null {
     }
     return {
       complexity: "simple",
-      reasoning: "Short message — likely a question or greeting",
+      reasoning: "Short message — likely a greeting or command",
     };
   }
 
@@ -294,14 +297,8 @@ function quickClassify(message: string): TaskClassification | null {
     if (/\b(build|create|make|set up|implement|write|develop|design|process|organize|convert|transform|generate|deploy|configure|refactor|launch)\b/i.test(lower) && wordCount > 8) {
       return null; // Let LLM decide
     }
-    // Substantive questions (6+ words) about real-world topics → likely research
-    if (wordCount >= 6) {
-      return null; // Let LLM decide — could be research or simple
-    }
-    return {
-      complexity: "simple",
-      reasoning: "Short question — likely a quick factual lookup",
-    };
+    // All question-word messages → let LLM decide (may be direct, research, or simple)
+    return null;
   }
 
   // Let LLM handle everything else
