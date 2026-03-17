@@ -11,6 +11,7 @@
 
 import { callGeminiLLMWithRetry, GEMINI_MODEL_FAST } from "./ui-generator.js";
 import { logAction, logError } from "./action-log.js";
+import { getMemoryContext } from "./memory-bridge.js";
 
 // ── Types ──
 
@@ -99,7 +100,13 @@ export async function classifyTask(params: {
     ? `\nRecent conversation:\n${conversationHistory.slice(-3).map((m, i) => `  ${i + 1}. ${m.slice(0, 200)}`).join("\n")}\n`
     : "";
 
-  const fullPrompt = `${CLASSIFIER_PROMPT}\n${recentContext}\nUser message: "${userMessage}"`;
+  // Inject user profile + memory so answers are personalized
+  const memoryContext = getMemoryContext();
+  const memoryBlock = memoryContext
+    ? `\n${memoryContext}\nUse the above context about the user to personalize your answers when relevant.\n`
+    : "";
+
+  const fullPrompt = `${CLASSIFIER_PROMPT}\n${memoryBlock}${recentContext}\nUser message: "${userMessage}"`;
 
   try {
     const raw = await callGeminiLLMWithRetry(fullPrompt, geminiApiKey, GEMINI_MODEL_FAST);

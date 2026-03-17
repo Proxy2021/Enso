@@ -31,7 +31,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
         setData(json);
       }
     } catch {
-      // Silently fail — workspace may not be available yet
+      // Silently fail
     } finally {
       setLoading(false);
     }
@@ -50,12 +50,13 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
   const handleSave = async () => {
     setSaving(true);
     try {
+      const field = activeTab === "user" ? "user" : "memory";
       await fetch(`${getBackendBaseUrl()}/api/memory`, {
         method: "PUT",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ user: editText }),
+        body: JSON.stringify({ [field]: editText }),
       });
-      setData((prev) => (prev ? { ...prev, user: editText } : prev));
+      setData((prev) => (prev ? { ...prev, [field]: editText || null } : prev));
       setEditing(false);
     } catch {
       // Show inline error if needed
@@ -74,7 +75,6 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
           headers: authHeaders(),
         });
       }
-      // Clear frontend cards
       useChatStore.setState({ cardOrder: [], cards: {} });
       setClearConfirm(false);
       onClose();
@@ -86,12 +86,14 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
   };
 
   const startEdit = () => {
-    setEditText(data?.user ?? "");
+    const current = activeTab === "user" ? data?.user : data?.memory;
+    setEditText(current ?? "");
     setEditing(true);
   };
 
   const content = activeTab === "user" ? data?.user : activeTab === "memory" ? data?.memory : null;
-  const tabLabel = activeTab === "user" ? "About You" : activeTab === "memory" ? "Agent Memory" : "Chat History";
+  const tabLabel = activeTab === "user" ? "About You" : activeTab === "memory" ? "Memory" : "Chat History";
+  const editableTab = activeTab === "user" || activeTab === "memory";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -128,7 +130,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
             onClick={() => { setActiveTab("memory"); setEditing(false); setClearConfirm(false); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === "memory" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
-            Agent Memory
+            Memory
           </button>
           <button
             onClick={() => { setActiveTab("history"); setEditing(false); setClearConfirm(false); }}
@@ -198,18 +200,20 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
             <div className="flex items-center justify-center py-12">
               <div className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : !data || (!data.user && !data.memory) ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-sm">Memory not available yet.</p>
-              <p className="text-gray-600 text-xs mt-1">Send a message first so the agent can initialize.</p>
-            </div>
           ) : editing ? (
             <div className="space-y-3">
-              <p className="text-xs text-gray-500">Edit your profile information below. This is what the agent knows about you.</p>
+              <p className="text-xs text-gray-500">
+                {activeTab === "user"
+                  ? "Tell Enso about yourself — your name, preferences, interests, work. This personalizes all responses."
+                  : "Edit Enso's memory. This is what Enso remembers from your conversations."}
+              </p>
               <textarea
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 className="w-full h-64 bg-gray-800 text-gray-200 text-sm rounded-lg border border-gray-700 p-3 focus:outline-none focus:border-violet-500/50 resize-none font-mono"
+                placeholder={activeTab === "user"
+                  ? "# About Me\n\nName: ...\nRole: ...\nInterests: ...\nPreferences: ..."
+                  : "# Memory\n\nEnso will accumulate notes here over time..."}
                 autoFocus
               />
               <div className="flex gap-2 justify-end">
@@ -225,9 +229,9 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-gray-300">{tabLabel}</h3>
-                {activeTab === "user" && data.user && (
+                {editableTab && (
                   <button onClick={startEdit} className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
-                    Edit
+                    {content ? "Edit" : "Create"}
                   </button>
                 )}
               </div>
@@ -236,9 +240,19 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                   <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">{content}</pre>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 italic">
-                  {activeTab === "user" ? "No user profile found." : "No agent memory found."}
-                </p>
+                <div className="text-center py-8">
+                  <p className="text-sm text-gray-500 italic">
+                    {activeTab === "user"
+                      ? "No profile set yet. Click \"Create\" to tell Enso about yourself."
+                      : "No memory yet. Enso will accumulate notes here as you chat."}
+                  </p>
+                  <button
+                    onClick={startEdit}
+                    className="mt-3 px-4 py-2 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-colors"
+                  >
+                    {activeTab === "user" ? "Create Profile" : "Add Memory"}
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -248,10 +262,10 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
         <div className="px-5 py-3 border-t border-gray-800">
           <p className="text-xs text-gray-600 text-center">
             {activeTab === "user"
-              ? "Your profile is stored locally and used to personalize the agent's responses."
+              ? "Your profile is stored locally in ~/.enso/ and personalizes all of Enso's responses."
               : activeTab === "memory"
-                ? "Agent memory is built from conversations and persists across sessions."
-                : "Chat history is saved on the server and restored when you refresh the page."}
+                ? "Memory is stored locally in ~/.enso/ and persists across sessions."
+                : "Chat history is saved locally and restored when you refresh the page."}
           </p>
         </div>
       </div>

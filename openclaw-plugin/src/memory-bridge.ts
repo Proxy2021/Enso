@@ -1,12 +1,17 @@
 /**
- * Memory Bridge — unified memory integration between Enso and OpenClaw.
+ * Memory Bridge — Enso's local memory and card persistence.
  *
  * Three responsibilities:
  *   1. Card History:     persist cards to disk, replay on reconnect
  *   2. Context Injection: feed Enso usage data into agent prompts
- *   3. Memory Surface:   expose OpenClaw workspace memory to frontend
+ *   3. Memory Surface:   local ENSO_USER.md + ENSO_MEMORY.md for personalization
  *
- * Storage: ~/.openclaw/enso-cards/<clientId>.jsonl
+ * Storage:
+ *   ~/.enso/cards/<clientId>.jsonl     — card history journals
+ *   ~/.enso/memory/ENSO_USER.md        — user profile (editable)
+ *   ~/.enso/memory/ENSO_MEMORY.md      — accumulated conversation memory
+ *
+ * Cross-platform: uses os.homedir() + path.join() for Windows/macOS/Linux.
  */
 
 import {
@@ -61,7 +66,9 @@ export function resolveCardType(record: Partial<CardRecord>): string {
 
 // ── Paths ──
 
-const CARDS_DIR = join(homedir(), ".openclaw", "enso-cards");
+const ENSO_HOME = join(homedir(), ".enso");
+const CARDS_DIR = join(ENSO_HOME, "cards");
+const OLD_CARDS_DIR = join(homedir(), ".openclaw", "enso-cards"); // legacy location
 
 const MAX_ENTRIES = 200;
 const KEEP_ENTRIES = 150;
@@ -70,6 +77,27 @@ const STALE_DAYS = 30;
 function ensureCardsDir(): void {
   if (!existsSync(CARDS_DIR)) {
     mkdirSync(CARDS_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Migrate card journals from ~/.openclaw/enso-cards/ to ~/.enso/cards/.
+ * Call once on server startup. Safe to call multiple times (no-op if already migrated).
+ */
+export function migrateCardJournals(): void {
+  try {
+    if (!existsSync(OLD_CARDS_DIR)) return;
+    ensureCardsDir();
+    for (const file of readdirSync(OLD_CARDS_DIR)) {
+      if (!file.endsWith(".jsonl")) continue;
+      const oldPath = join(OLD_CARDS_DIR, file);
+      const newPath = join(CARDS_DIR, file);
+      if (!existsSync(newPath)) {
+        writeFileSync(newPath, readFileSync(oldPath));
+      }
+    }
+  } catch {
+    // Best-effort migration
   }
 }
 
@@ -224,6 +252,10 @@ export async function buildEnsoContext(): Promise<string> {
 
   const sections: string[] = [];
 
+  // Include user profile + memory
+  const memCtx = getMemoryContext();
+  if (memCtx) sections.push(memCtx);
+
   const usage = buildAppUsageSummary();
   if (usage) sections.push(usage);
 
@@ -302,18 +334,16 @@ function formatTimeAgo(ts: number): string {
   return `${days}d ago`;
 }
 
-// ── Part 3: Memory Surface ──
+// ── Part 3: Enso Memory (local, independent of OpenClaw workspace) ──
 
-let workspaceDir: string | null = null;
+const MEMORY_DIR = join(homedir(), ".enso", "memory");
+const USER_FILE = "ENSO_USER.md";
+const MEMORY_FILE = "ENSO_MEMORY.md";
 
-/** Store the OpenClaw workspace directory (captured from hook context). */
-export function setWorkspaceDir(dir: string): void {
-  if (!workspaceDir && dir) workspaceDir = dir;
-}
-
-/** Get the stored workspace directory. */
-export function getWorkspaceDir(): string | null {
-  return workspaceDir;
+function ensureMemoryDir(): void {
+  if (!existsSync(MEMORY_DIR)) {
+    mkdirSync(MEMORY_DIR, { recursive: true });
+  }
 }
 
 /** Safely read a file, returning null if it doesn't exist or errors. */
@@ -326,22 +356,88 @@ export function safeReadFile(path: string): string | null {
   }
 }
 
-/** Read the user's USER.md and MEMORY.md from the OpenClaw workspace. */
-export function readWorkspaceMemory(): { user: string | null; memory: string | null } {
-  if (!workspaceDir) return { user: null, memory: null };
+/** Read Enso's local ENSO_USER.md and ENSO_MEMORY.md. */
+export function readEnsoMemory(): { user: string | null; memory: string | null } {
+  ensureMemoryDir();
   return {
-    user: safeReadFile(join(workspaceDir, "USER.md")),
-    memory: safeReadFile(join(workspaceDir, "MEMORY.md")),
+    user: safeReadFile(join(MEMORY_DIR, USER_FILE)),
+    memory: safeReadFile(join(MEMORY_DIR, MEMORY_FILE)),
   };
 }
 
-/** Write updated USER.md content. */
-export function writeUserProfile(content: string): boolean {
-  if (!workspaceDir) return false;
+/** Write ENSO_USER.md content. */
+export function writeEnsoUser(content: string): boolean {
   try {
-    writeFileSync(join(workspaceDir, "USER.md"), content, "utf-8");
+    ensureMemoryDir();
+    writeFileSync(join(MEMORY_DIR, USER_FILE), content, "utf-8");
     return true;
   } catch {
     return false;
   }
+}
+
+/** Write ENSO_MEMORY.md content. */
+export function writeEnsoMemory(content: string): boolean {
+  try {
+    ensureMemoryDir();
+    writeFileSync(join(MEMORY_DIR, MEMORY_FILE), content, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Append a new entry to ENSO_MEMORY.md with a timestamp header. */
+export function appendEnsoMemory(entry: string): boolean {
+  try {
+    ensureMemoryDir();
+    const filePath = join(MEMORY_DIR, MEMORY_FILE);
+    const existing = safeReadFile(filePath) ?? "";
+    const date = new Date().toISOString().slice(0, 10);
+    const newContent = existing
+      ? `${existing.trimEnd()}\n\n## ${date}\n${entry.trim()}\n`
+      : `# Enso Memory\n\n## ${date}\n${entry.trim()}\n`;
+    writeFileSync(filePath, newContent, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build a compact memory context block for injection into LLM prompts.
+ * Includes user profile and recent memory entries (truncated to budget).
+ */
+const MAX_MEMORY_CHARS = 2000;
+const MAX_USER_CHARS = 1000;
+
+export function getMemoryContext(): string {
+  const { user, memory } = readEnsoMemory();
+  if (!user && !memory) return "";
+
+  const sections: string[] = [];
+
+  if (user) {
+    const trimmed = user.length > MAX_USER_CHARS
+      ? user.slice(0, MAX_USER_CHARS) + "\n... (truncated)"
+      : user;
+    sections.push(`<user_profile>\n${trimmed}\n</user_profile>`);
+  }
+
+  if (memory) {
+    const trimmed = memory.length > MAX_MEMORY_CHARS
+      ? memory.slice(memory.length - MAX_MEMORY_CHARS) // Keep most recent entries
+      : memory;
+    sections.push(`<memory>\n${trimmed}\n</memory>`);
+  }
+
+  return sections.join("\n");
+}
+
+// ── Legacy compatibility (OpenClaw workspace hooks) ──
+
+let workspaceDir: string | null = null;
+
+export function setWorkspaceDir(dir: string): void {
+  if (!workspaceDir && dir) workspaceDir = dir;
 }
