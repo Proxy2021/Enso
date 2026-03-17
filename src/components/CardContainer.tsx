@@ -42,7 +42,7 @@ function getCardLabel(card: Card, effectiveType: string): string {
     }
     return "Enso";
   }
-  if (effectiveType === "chat") return "OpenClaw";
+  if (effectiveType === "chat") return "Enso";
   return effectiveType.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 

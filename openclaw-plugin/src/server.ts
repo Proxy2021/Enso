@@ -19,7 +19,7 @@ import { APP_CATALOG } from "./app-catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
 import { classifyTask } from "./task-router.js";
-import { persistCard, loadCardHistory, clearCardHistory, pruneStaleJournals, readWorkspaceMemory, writeUserProfile, getWorkspaceDir } from "./memory-bridge.js";
+import { persistCard, loadCardHistory, clearCardHistory, pruneStaleJournals, migrateCardJournals, readEnsoMemory, writeEnsoUser, writeEnsoMemory, getMemoryContext } from "./memory-bridge.js";
 import type { CardRecord } from "./memory-bridge.js";
 
 export type ConnectedClient = {
@@ -554,18 +554,20 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
-  // ── Memory Surface API — expose OpenClaw workspace memory to frontend ──
+  // ── Memory API — Enso's local memory (ENSO_USER.md + ENSO_MEMORY.md) ──
   app.get("/api/memory", (_req, res) => {
-    res.json(readWorkspaceMemory());
+    res.json(readEnsoMemory());
   });
 
   app.put("/api/memory", express.json(), (req, res) => {
-    const wsDir = getWorkspaceDir();
-    if (!wsDir) { res.status(503).json({ error: "Workspace not available yet" }); return; }
-    const { user } = req.body as { user?: string };
+    const { user, memory } = req.body as { user?: string; memory?: string };
     if (typeof user === "string") {
-      const ok = writeUserProfile(user);
-      if (!ok) { res.status(500).json({ error: "Failed to write USER.md" }); return; }
+      const ok = writeEnsoUser(user);
+      if (!ok) { res.status(500).json({ error: "Failed to write ENSO_USER.md" }); return; }
+    }
+    if (typeof memory === "string") {
+      const ok = writeEnsoMemory(memory);
+      if (!ok) { res.status(500).json({ error: "Failed to write ENSO_MEMORY.md" }); return; }
     }
     res.json({ ok: true });
   });
@@ -1091,54 +1093,46 @@ export async function startEnsoServer(opts: {
                 }
 
                 // "simple" — router provides the answer directly
-                if (classification.complexity === "simple" && classification.answer) {
-                  runtime.log?.(`[enso] task-router: simple (direct answer) → "${msg.text.slice(0, 60)}"`);
-                  const answerCardId = randomUUID();
-                  const answerRunId = randomUUID();
-                  send({
-                    id: answerCardId,
-                    runId: answerRunId,
-                    sessionKey,
-                    seq: 0,
-                    state: "final",
-                    text: classification.answer,
-                    timestamp: Date.now(),
-                  });
-                  persistCard(clientId, {
-                    id: answerCardId,
-                    runId: answerRunId,
-                    type: "chat",
-                    role: "assistant",
-                    text: classification.answer,
-                    timestamp: Date.now(),
-                  });
-                  break;
-                }
-
-                // "simple" without answer — fall through to agent as safety net
-                runtime.log?.(`[enso] task-router: simple (no answer) → "${msg.text.slice(0, 60)}"`);
-              } catch (routerErr) {
-                // Router failed — fall through to normal agent (safe fallback)
-                runtime.log?.(`[enso] task-router failed, falling through: ${String(routerErr)}`);
-              }
-
-              // Agent fallback — only reached if router returned simple without answer, or router failed
-              await handleEnsoInbound({
-                message: {
-                  messageId: randomUUID(),
-                  sessionId: sessionKey,
-                  senderNick: `user_${connectionId}`,
-                  text: msg.text,
-                  mediaUrls: msg.mediaUrls,
+                runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
+                const answerCardId = randomUUID();
+                const answerRunId = randomUUID();
+                send({
+                  id: answerCardId,
+                  runId: answerRunId,
+                  sessionKey,
+                  seq: 0,
+                  state: "final",
+                  text: classification.answer ?? classification.reasoning,
                   timestamp: Date.now(),
-                },
-                account,
-                config,
-                runtime,
-                client,
-                routing: msg.routing,
-                statusSink,
-              });
+                });
+                persistCard(clientId, {
+                  id: answerCardId,
+                  runId: answerRunId,
+                  type: "chat",
+                  role: "assistant",
+                  text: classification.answer ?? classification.reasoning,
+                  timestamp: Date.now(),
+                });
+              } catch (routerErr) {
+                // Router failed — fall through to agent as last resort
+                runtime.log?.(`[enso] task-router failed, falling through to agent: ${String(routerErr)}`);
+                await handleEnsoInbound({
+                  message: {
+                    messageId: randomUUID(),
+                    sessionId: sessionKey,
+                    senderNick: `user_${connectionId}`,
+                    text: msg.text,
+                    mediaUrls: msg.mediaUrls,
+                    timestamp: Date.now(),
+                  },
+                  account,
+                  config,
+                  runtime,
+                  client,
+                  routing: msg.routing,
+                  statusSink,
+                });
+              }
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
               // Fallback for: media-only messages, IM mode, no Gemini key, or explicit routing
               await handleEnsoInbound({
@@ -1950,6 +1944,9 @@ export async function startEnsoServer(opts: {
     server.listen(port, () => {
       runtime.log?.(`[enso] server listening on :${port}`);
       logAction({ ts: Date.now(), type: "system", category: "system", message: `Server started on port ${port}`, metadata: { port, hostname: hostname(), platform: platform() } });
+
+      // Migrate card journals from old ~/.openclaw/enso-cards/ to ~/.enso/cards/
+      try { migrateCardJournals(); } catch { /* best-effort */ }
 
       // Prune stale card history files on startup
       try { pruneStaleJournals(); } catch { /* best-effort */ }
