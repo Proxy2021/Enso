@@ -231,6 +231,33 @@ function quickClassify(message: string): TaskClassification | null {
     }
   }
 
+  // ── Research intent — Chinese "tell me everything about X" ──
+  // Pattern: 告诉我(关于/有关)X的(全部/一切/所有)(事情/东西/内容/信息)?
+  // Topic is embedded mid-sentence, so we need capturing groups instead of prefix stripping
+  const chTellMeAll = /^告诉我(关于|有关)?(.+?)(的)?(全部|一切|所有)(事情|东西|内容|信息)?$/;
+  const chMatch = chTellMeAll.exec(trimmed);
+  if (chMatch) {
+    return {
+      complexity: "research",
+      reasoning: "Chinese 'tell me everything about' pattern detected",
+      researchTopic: chMatch[2].trim(),
+      researchDepth: "standard",
+    };
+  }
+
+  // ── Research intent — Chinese "I want to know everything about X" ──
+  // Pattern: 我想(了解/知道)(关于/有关)?X的(全部/一切/所有)(事情/信息)?
+  const chWantToKnow = /^我想(了解|知道)(关于|有关)?(.+?)(的)?(全部|一切|所有)(事情|东西|内容|信息)?$/;
+  const chWantMatch = chWantToKnow.exec(trimmed);
+  if (chWantMatch) {
+    return {
+      complexity: "research",
+      reasoning: "Chinese 'I want to know everything about' pattern detected",
+      researchTopic: chWantMatch[3].trim(),
+      researchDepth: "standard",
+    };
+  }
+
   // ── Research intent — comparison/analysis patterns ──
   // "pros and cons of X", "compare X vs Y", "X vs Y", "best X for Y"
   if (/\b(pros?\s+and\s+cons?|advantages?\s+and\s+disadvantages?)\b/i.test(lower) && wordCount >= 5) {
