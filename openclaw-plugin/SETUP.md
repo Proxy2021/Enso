@@ -1,6 +1,6 @@
 # Enso Plugin — Setup Guide
 
-This guide walks through adding the Enso plugin to a fresh OpenClaw installation. Enso provides a WebSocket-based channel that connects the Enso React app to OpenClaw's agent pipeline.
+This guide walks through adding the Enso plugin to a fresh OpenClaw installation. Enso is a Claude Code-powered AI agent that answers any question with rich interactive experiences and tackles complex tasks with a full engineering team of specialized agents — all served via a WebSocket channel connected to OpenClaw's agent pipeline.
 
 ## Prerequisites
 

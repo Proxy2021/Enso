@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.3.0",
   "versionCode": 102,
-  "description": "Agentic AI platform with multi-agent orchestration, remote desktop, terminal, and coding agent — every answer becomes a live interactive app",
+  "description": "Claude Code-powered AI agent — answers any question with the best interactive experience, tackles any task with full engineering team capability",
   "type": "module",
   "scripts": {
     "dev": "vite",

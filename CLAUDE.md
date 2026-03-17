@@ -4,14 +4,19 @@
 
 ## Vision
 
-Enso is an OpenClaw channel plugin that combines conversational AI with **on-demand interactive app experiences**. Agent responses arrive as clean text cards, and users can optionally enhance any card into a fully interactive React application. Guiding principle: **"Any answer can become an app."**
+Enso is a **Claude Code-powered AI agent** that answers any question with the best interactive experience and tackles any task with full engineering team capability. It's built as an OpenClaw channel plugin.
+
+**Core principles:**
+- **Best experience for every answer** — Responses flow through a deterministic tool-to-UI pipeline, delivering rich interactive React apps (research boards, file managers, photo studios) instead of plain text. No LLM call needed for rendering.
+- **Full engineering team for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
+- **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
 
 ## Architecture Overview
 
 Enso has two layers:
 
 1. **React Frontend** — Browser-based chat UI (Vite + React 19 + Tailwind CSS 4 + Zustand)
-2. **OpenClaw Plugin** — Channel integration that routes messages through OpenClaw's agent pipeline, runs the Express + WS server, and provides user-triggered app enhancement via Gemini + deterministic tool templates
+2. **OpenClaw Plugin** — Channel integration that routes messages through OpenClaw's agent pipeline, runs the Express + WS server, and provides deterministic tool-to-template rendering + Claude Code integration
 
 ### Data Flow
 

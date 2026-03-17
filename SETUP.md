@@ -1,6 +1,6 @@
 # Enso Setup Guide
 
-Get Enso running in three commands. The install script handles everything else.
+Get Enso running in minutes. The install script handles dependencies, configuration, and server startup.
 
 ## Prerequisites
 
