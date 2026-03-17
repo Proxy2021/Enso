@@ -820,13 +820,32 @@ export async function handlePluginCardAction(params: {
         if (result.success && result.data != null) {
           ctx.currentData = structuredClone(result.data);
 
-          // Deep research: if the tool returned a custom generated UI, use it directly
+          // Deep research: deliver as enhanceResult so user can toggle between
+          // standard research board (Original) and custom deep UI (App)
           const resultObj = result.data as Record<string, unknown>;
           if (resultObj._generatedUI && typeof resultObj._generatedUI === "string") {
             const customUI = resultObj._generatedUI as string;
             delete resultObj._generatedUI; // Don't pass internal field to frontend
-            logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Deep research custom UI delivered (${customUI.length} chars)`, cardId });
-            sendActionResult(result.data, customUI);
+            logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Deep research custom UI delivered as enhanceResult (${customUI.length} chars)`, cardId });
+
+            // Complete the operation on the card
+            sendOperation("complete", "Deep research complete");
+
+            // Send as enhanceResult → stored in appData/appGeneratedUI, toggleable with Original
+            client.send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey: client.sessionKey,
+              seq: 0,
+              state: "final",
+              targetCardId: cardId,
+              enhanceResult: {
+                data: result.data,
+                generatedUI: customUI,
+                cardMode: cardModeFromContext(ctx),
+              },
+              timestamp: Date.now(),
+            });
             return;
           }
 

@@ -608,6 +608,18 @@ function ViewToggle({ card }: { card: Card }) {
   const familyIcon = family ? (APP_ICONS[family] ?? "\u2728") : null;
   const familyLabel = family ? family.replace(/_/g, " ") : "App";
 
+  // Deep research toggle: show "Standard" / "✨ Deep" instead of "Original" / "App"
+  const isDeepResearch = family === "researcher" && (
+    card.appCardMode?.signatureId === "deep_research_custom" ||
+    (card.appData as Record<string, unknown>)?.metadata &&
+    ((card.appData as Record<string, unknown>)?.metadata as Record<string, unknown>)?.isDeepResearch
+  );
+  const originalLabel = isDeepResearch ? "Standard" : "Original";
+  const originalLabelShort = isDeepResearch ? "Std" : "Text";
+  const appLabel = isDeepResearch ? "Deep" : familyLabel;
+  const appLabelShort = isDeepResearch ? "Deep" : "App";
+  const appIcon = isDeepResearch ? "✨" : familyIcon;
+
   return (
     <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
       <button
@@ -618,8 +630,8 @@ function ViewToggle({ card }: { card: Card }) {
             : "text-gray-400 hover:text-gray-300"
         }`}
       >
-        <span className="sm:hidden">Text</span>
-        <span className="hidden sm:inline">Original</span>
+        <span className="sm:hidden">{originalLabelShort}</span>
+        <span className="hidden sm:inline">{originalLabel}</span>
       </button>
       <button
         onClick={() => toggleCardView(card.id, "app")}
@@ -629,9 +641,9 @@ function ViewToggle({ card }: { card: Card }) {
             : "text-gray-400 hover:text-gray-300"
         }`}
       >
-        {familyIcon && <span className="mr-0.5 sm:mr-1">{familyIcon}</span>}
-        <span className="capitalize hidden sm:inline">{familyLabel}</span>
-        <span className="capitalize sm:hidden">App</span>
+        {appIcon && <span className="mr-0.5 sm:mr-1">{appIcon}</span>}
+        <span className="capitalize hidden sm:inline">{appLabel}</span>
+        <span className="capitalize sm:hidden">{appLabelShort}</span>
       </button>
     </div>
   );

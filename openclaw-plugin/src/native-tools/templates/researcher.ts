@@ -205,8 +205,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     return (
       <div style={{ padding: "24px", textAlign: "center", color: "#888" }}>
         <div style={{ fontSize: "32px", marginBottom: "12px" }}>&#10024;</div>
-        <div style={{ fontSize: "14px", fontWeight: 600, color: "#e2e8f0" }}>Custom research experience built</div>
-        <div style={{ fontSize: "12px", marginTop: "4px" }}>See the app card above for your interactive research experience</div>
+        <div style={{ fontSize: "14px", fontWeight: 600, color: "#e2e8f0" }}>Deep research experience ready</div>
+        <div style={{ fontSize: "12px", marginTop: "4px" }}>Toggle to the App view above to see your custom interactive experience</div>
       </div>
     );
   }
