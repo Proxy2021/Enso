@@ -1454,34 +1454,23 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   // so we only need to decide: standard pipeline vs deep research escalation.
   const geminiKey = await getGeminiApiKey();
 
-  let routeResult: RouteResult | null = null;
-  if (depth === "standard" && geminiKey) {
-    // Run classification AND query generation in parallel
+  // Generate search queries (no separate classification call needed —
+  // task-router already handled simple vs research, and deep is only
+  // triggered explicitly via the ✨ Deep button on completed cards)
+  if (depth !== "deep" && geminiKey) {
     mark("classify_start");
-    const [route, queries_] = await Promise.all([
-      classifyResearchRoute(topic, geminiKey, language),
-      generateSearchAngles(topic, depth, geminiKey),
-    ]);
+    const queries_ = await generateSearchAngles(topic, depth, geminiKey);
     mark("classify_done");
-    routeResult = route;
-
-    // Never short-circuit to "simple" here — task-router already handled that.
-    // If the internal classifier says "simple", treat it as "standard" and do real research.
-    if (route.route === "simple") {
-      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `internal classifier said "simple" for "${topic}" — overriding to standard (task-router already filtered simple Q&A)` });
-      routeResult = { route: "standard", reason: "overridden from simple" };
-    }
-
-    // Stash pre-computed queries for the standard pipeline
-    if (routeResult.route === "standard") {
-      _precomputedQueries = queries_;
-    }
+    _precomputedQueries = queries_;
   }
 
-  const shouldDeepResearch = depth === "deep" || (routeResult?.route === "deep");
+  // Deep research is ONLY triggered explicitly via the ✨ Deep button on a completed card.
+  // Never auto-escalate from the internal classifier route. This ensures users always get
+  // fast standard results first (~30-60s) and can opt into deep research (~5 min) if desired.
+  const shouldDeepResearch = depth === "deep";
 
   if (shouldDeepResearch && _deepResearchLauncher && geminiKey) {
-      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `auto-escalating to deep research app build for "${topic}" (depth=${depth})` });
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research triggered for "${topic}" (explicit depth=deep)` });
 
       pushProgress({
         tool: "enso_researcher_search",

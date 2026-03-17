@@ -74,7 +74,7 @@ Examples:
 - IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only, be helpful and complete)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only, be helpful and complete)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
 
 export async function classifyTask(params: {
   userMessage: string;
@@ -226,7 +226,7 @@ function quickClassify(message: string): TaskClassification | null {
         complexity: "research",
         reasoning: "Explicit research-intent phrase detected",
         researchTopic: topic || trimmed,
-        researchDepth: /deep\s*dive|深入/i.test(lower) || /深入/.test(trimmed) ? "deep" : /quick|快速/i.test(lower) || /快速/.test(trimmed) ? "quick" : "standard",
+        researchDepth: /quick|快速/i.test(lower) || /快速/.test(trimmed) ? "quick" : "standard",
       };
     }
   }

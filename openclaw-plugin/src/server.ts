@@ -982,7 +982,8 @@ export async function startEnsoServer(opts: {
 
                 if (classification.complexity === "research") {
                   const topic = classification.researchTopic || msg.text;
-                  const depth = classification.researchDepth || "standard";
+                  // Deep research is only triggered via ✨ button on completed cards, never from initial classification
+                  const depth = (classification.researchDepth === "quick" ? "quick" : "standard") as "quick" | "standard";
                   runtime.log?.(`[enso] task-router: research → "${topic.slice(0, 60)}" (depth=${depth})`);
 
                   // Store original user message for language detection (agent may translate topic to English)

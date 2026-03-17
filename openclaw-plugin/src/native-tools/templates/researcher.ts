@@ -255,7 +255,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             options={[
               { value: "quick", label: "Quick" },
               { value: "standard", label: "Standard" },
-              { value: "deep", label: "Deep" },
             ]}
             value={depthInput}
             onChange={(val) => setDepthInput(val || "standard")}
