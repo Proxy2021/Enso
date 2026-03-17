@@ -189,12 +189,15 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
 
   try {
     // Step 4: Run Claude Code to analyze and plan
+    // Use Sonnet with thinking disabled for fast planning (~10s vs ~40s with Opus+adaptive)
     const { sessionId } = await runClaudeCode({
       prompt: planningPrompt,
       cwd: PROJECT_ROOT,
       client,
       runId,
       targetCardId: terminalCardId,
+      model: "claude-sonnet-4-6",
+      thinking: "disabled",
     });
 
     // Step 5: Read and parse the plan
@@ -586,11 +589,12 @@ function buildPlanningPrompt(
     ``,
     `The user has a complex goal that requires multiple agents working together.`,
     `Your job is to:`,
-    `1. Analyze the goal thoroughly`,
-    `2. Research the domain (use web search to understand what's needed)`,
-    `3. Decompose it into a dependency graph of tasks`,
-    `4. Assign agent roles to each task`,
-    `5. Write the plan as a structured JSON file`,
+    `1. Analyze the goal`,
+    `2. Decompose it into a dependency graph of tasks`,
+    `3. Assign agent roles to each task`,
+    `4. Write the plan as a structured JSON file`,
+    ``,
+    `Do NOT research or use web search — just plan. Research tasks will do that later.`,
     ``,
     `## User's Goal`,
     `"${userMessage}"`,

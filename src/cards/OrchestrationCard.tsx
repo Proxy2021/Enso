@@ -125,9 +125,9 @@ function PlanningPhase({ goal }: { goal?: string }) {
         Assembling your team and planning the mission...
       </div>
       <p className="text-[11px] text-gray-500 mt-2">
-        Researching your goal, decomposing into tasks, and assigning agent roles.
+        Decomposing into tasks and assigning agent roles.
         <br />
-        The planning session is visible in the terminal card below. This typically takes 30–60 seconds.
+        The planning session is visible in the terminal card below. This typically takes 10–20 seconds.
       </p>
     </div>
   );
