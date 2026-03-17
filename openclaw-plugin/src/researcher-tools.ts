@@ -52,6 +52,9 @@ export function setLastUserMessage(msg: string): void {
   _lastUserMessage = msg;
 }
 
+/** Pre-computed queries from parallel classification + query gen. Consumed once. */
+let _precomputedQueries: GeneratedQueries | null = null;
+
 type DeepDiveParams = { topic: string; subtopic: string };
 type CompareParams = { topicA: string; topicB: string; context?: string };
 type FollowUpParams = { topic: string; question: string };
@@ -553,8 +556,8 @@ function scoreDomain(domain: string): number {
 const MAX_CONTENT_LENGTH = 4000;
 /** How many top sources to attempt full-content fetch for */
 const MAX_SOURCES_TO_FETCH = 10;
-/** Timeout per page fetch (ms) */
-const FETCH_TIMEOUT_MS = 8_000;
+/** Timeout per page fetch (ms) — 4s is enough for good sites, avoids blocking on slow ones */
+const FETCH_TIMEOUT_MS = 4_000;
 
 /** Domains to skip content extraction (paywalled, login-gated, or non-article) */
 const SKIP_CONTENT_DOMAINS = new Set([
@@ -1266,32 +1269,50 @@ function generateSampleResearch(topic: string, depth: string): AgentToolResult {
 
 // ── Deep Research Classification ──
 
-async function classifyForDeepResearch(topic: string, geminiKey: string): Promise<boolean> {
+/**
+ * Smart router: single LLM call that classifies the topic into one of three routes:
+ * - "simple" → returns a direct answer (no research pipeline needed)
+ * - "standard" → proceed with web search + synthesis pipeline
+ * - "deep" → escalate to Claude Code deep research
+ *
+ * This replaces the old `classifyForDeepResearch()` AND handles simple Q&A
+ * that previously went through the full pipeline unnecessarily.
+ */
+type RouteResult = {
+  route: "simple" | "standard" | "deep";
+  answer?: string; // Direct answer for "simple" route
+  reason: string;
+};
+
+async function classifyResearchRoute(topic: string, geminiKey: string, language: string): Promise<RouteResult> {
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const prompt = `Classify whether this research topic requires deep iterative research (multiple search rounds, following references, resolving contradictions, analyzing data) or can be handled by a standard web search + synthesis pipeline.
+    const prompt = `You are a research router. Classify this topic and respond accordingly.
 
 Topic: "${topic}"
 
-Criteria for deep research:
-- Multi-faceted: spans multiple domains or disciplines
-- Analytical: requires synthesizing conflicting viewpoints or analyzing data
-- Comparative at scale: more than 2 things being compared with complex trade-offs
-- Technical depth: academic, scientific, or deeply technical subject matter
-- Strategic: user needs to make a decision based on thorough research
+ROUTES:
+1. "simple" — Factual questions with definitive answers (capitals, dates, definitions, unit conversions, quick facts, how-to with a known answer). Provide the answer directly.
+2. "standard" — Topics that benefit from web search + multiple source synthesis (current events, comparisons of 2-3 things, product reviews, health/science questions, how-to guides needing multiple perspectives).
+3. "deep" — Complex multi-faceted analysis requiring iterative research (policy analysis, multi-domain synthesis, large-scale comparisons, academic/technical deep-dives, strategic decision-making).
+
+${language !== "English" ? `IMPORTANT: Write the answer (if simple) in ${language}.` : ""}
 
 Return valid JSON (no markdown fences):
-{ "deep_research": true/false, "reason": "one sentence why" }`;
+{
+  "route": "simple" | "standard" | "deep",
+  "answer": "Direct answer text (only for simple route, 1-3 sentences. Use markdown for formatting if helpful.)",
+  "reason": "One sentence explaining the classification"
+}`;
 
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash");
-    const parsed = JSON.parse(cleanJson(raw)) as { deep_research: boolean; reason?: string };
-    if (parsed.deep_research) {
-      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research classified: ${parsed.reason ?? "complex topic"}` });
-    }
-    return parsed.deep_research === true;
+    const parsed = JSON.parse(cleanJson(raw)) as RouteResult;
+    const route = (["simple", "standard", "deep"].includes(parsed.route) ? parsed.route : "standard") as RouteResult["route"];
+    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `route: ${route} for "${topic}" — ${parsed.reason ?? ""}` });
+    return { route, answer: parsed.answer, reason: parsed.reason ?? "" };
   } catch (err) {
-    logError("researcher", "Deep research classification failed", err, { topic });
-    return false;
+    logError("researcher", "Research route classification failed", err, { topic });
+    return { route: "standard", reason: "classification failed, defaulting to standard" };
   }
 }
 
@@ -1415,13 +1436,63 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     }
   }
 
-  // ── Auto-trigger Deep Research classification ──
+  // ── Smart routing: classify + optionally answer simple Q&A in one LLM call ──
   const geminiKey = await getGeminiApiKey();
 
-  if (depth !== "quick" && _deepResearchLauncher && geminiKey) {
-    const shouldDeepResearch = depth === "deep" || await classifyForDeepResearch(topic, geminiKey);
+  // For "quick" depth, skip classification entirely — go straight to search pipeline.
+  // For "deep" depth (explicit user choice), skip classification — go straight to deep.
+  // For "standard" depth, classify to decide route.
+  let routeResult: RouteResult | null = null;
+  if (depth === "standard" && geminiKey) {
+    // Run classification AND query generation in parallel — whichever route wins,
+    // we either use the queries (standard) or discard them (simple/deep).
+    const [route, queries_] = await Promise.all([
+      classifyResearchRoute(topic, geminiKey, language),
+      generateSearchAngles(topic, depth, geminiKey),
+    ]);
+    routeResult = route;
 
-    if (shouldDeepResearch) {
+    // Simple Q&A — return direct answer immediately (no search pipeline)
+    if (route.route === "simple" && route.answer) {
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `simple Q&A for "${topic}": ${route.answer.slice(0, 100)}` });
+      const simpleResult = {
+        tool: "enso_researcher_search",
+        topic,
+        depth: "quick" as const,
+        phase: "complete",
+        summary: route.answer,
+        narrative: route.answer,
+        keyFindings: [{ text: route.answer, type: "fact" as const, confidence: "high" as const, sourceRefs: [] }],
+        sections: [],
+        sources: [],
+        images: [],
+        videos: [],
+        books: [],
+        movies: [],
+        recommendedVideos: [],
+        contradictions: [],
+        metadata: { queriesRun: 0, sourcesFound: 0, sectionsGenerated: 0, timestamp: Date.now(), note: "Direct answer" },
+      };
+      // Cache so follow-ups have context
+      researchCache.set(topic.toLowerCase(), {
+        topic, summary: route.answer, narrative: route.answer,
+        keyFindings: simpleResult.keyFindings, sections: [], sources: [],
+        images: [], videos: [], books: [], movies: [], recommendedVideos: [], contradictions: [],
+        timestamp: Date.now(),
+      });
+      return jsonResult(simpleResult);
+    }
+
+    // Stash pre-computed queries for later use in the standard pipeline
+    if (route.route === "standard") {
+      // Store on a module-level var so we don't recompute below
+      _precomputedQueries = queries_;
+    }
+  }
+
+  const shouldDeepResearch = depth === "deep" || (routeResult?.route === "deep");
+
+  if (shouldDeepResearch && _deepResearchLauncher && geminiKey) {
       logAction({ ts: Date.now(), type: "action", category: "researcher", message: `auto-escalating to deep research for "${topic}" (depth=${depth})` });
 
       pushProgress({
@@ -1539,7 +1610,6 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       }
       // If deep research failed or returned null, fall through to standard pipeline
       logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research failed for "${topic}", falling back to standard pipeline` });
-    }
   }
 
   // ── Phase: generating_queries ──
@@ -1556,7 +1626,14 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     images: [],
     videos: [],
   });
-  const queries = await generateSearchAngles(topic, depth, geminiKey ?? undefined);
+  // Use pre-computed queries from parallel classification (if available), otherwise generate now
+  let queries: GeneratedQueries;
+  if (_precomputedQueries) {
+    queries = _precomputedQueries;
+    _precomputedQueries = null; // consume once
+  } else {
+    queries = await generateSearchAngles(topic, depth, geminiKey ?? undefined);
+  }
 
   // Fallback: no Brave key
   if (!getBraveApiKey()) {
@@ -1824,8 +1901,9 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     });
 
     // ── Gap Check: identify missing angles and enrich ──
+    // Only for explicit "deep" depth — standard skips this for ~10-15s faster results
     let gapQueries: string[] = [];
-    if (depth !== "quick" && geminiKey && sections.length > 0) {
+    if (depth === "deep" && geminiKey && sections.length > 0) {
       try {
         pushProgress({
           tool: "enso_researcher_search",
