@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage } from "@shared/types";
 import { reportError } from "./error-reporter";
+import { isNative } from "./platform";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -15,13 +16,23 @@ interface WSClient {
   send: (msg: ClientMessage) => void;
 }
 
-/** Persistent client identity — survives reconnects within the same tab. */
+/**
+ * Persistent client identity.
+ * On native (mobile), use localStorage so the ID survives app restarts
+ * and chat history is properly restored.
+ * On web, use sessionStorage so each tab gets its own identity.
+ */
 function getClientId(): string {
-  let id = sessionStorage.getItem("enso-clientId");
+  const storage = isNative ? localStorage : sessionStorage;
+  let id = storage.getItem("enso-clientId");
+  // Migrate: if native and sessionStorage has an ID but localStorage doesn't, adopt it
+  if (!id && isNative) {
+    id = sessionStorage.getItem("enso-clientId");
+  }
   if (!id) {
     id = crypto.randomUUID();
-    sessionStorage.setItem("enso-clientId", id);
   }
+  storage.setItem("enso-clientId", id);
   return id;
 }
 

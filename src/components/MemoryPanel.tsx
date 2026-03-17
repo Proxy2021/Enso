@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { isNative } from "../lib/platform";
 import { useChatStore } from "../store/chat";
 
 interface MemoryData {
@@ -68,7 +69,8 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
   const handleClearHistory = async () => {
     setClearing(true);
     try {
-      const clientId = sessionStorage.getItem("enso-clientId");
+      const storage = isNative ? localStorage : sessionStorage;
+      const clientId = storage.getItem("enso-clientId");
       if (clientId) {
         await fetch(`${getBackendBaseUrl()}/api/history?clientId=${encodeURIComponent(clientId)}`, {
           method: "DELETE",
