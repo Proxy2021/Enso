@@ -2726,6 +2726,18 @@ async function researcherDeleteHistory(params: { topic: string }): Promise<Agent
   return researcherSearch({ topic: "" } as SearchParams);
 }
 
+// ── Clear all history ──
+
+async function researcherClearAllHistory(): Promise<AgentToolResult> {
+  const count = researchHistory.count();
+  researchCache.clear();
+  researchHistory.clear();
+  logAction({ ts: Date.now(), type: "action", category: "researcher", message: `cleared all research history (${count} entries)` });
+
+  // Return updated welcome view
+  return researcherSearch({ topic: "" } as SearchParams);
+}
+
 // ── Podcast generation (Gemini TTS) ──
 
 const PODCAST_SCRIPT_PROMPT = `You are a podcast script writer. Given research data, write a natural 3-5 minute conversational podcast script between two hosts.
@@ -3033,6 +3045,17 @@ export function createResearcherTools(): AnyAgentTool[] {
       },
       execute: async (_callId: string, params: Record<string, unknown>) =>
         researcherDeleteHistory(params as { topic: string }),
+    } as AnyAgentTool,
+    {
+      name: "enso_researcher_clear_all_history",
+      label: "Clear All Research History",
+      description: "Remove all topics from the research history library.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+      execute: async () => researcherClearAllHistory(),
     } as AnyAgentTool,
   ];
 }

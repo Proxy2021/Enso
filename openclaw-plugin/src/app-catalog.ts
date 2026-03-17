@@ -46,7 +46,7 @@ export const APP_CATALOG: AppEntry[] = [
   {
     appId: "researcher",
     primaryTool: "enso_researcher_search",
-    actions: ["search", "deep_dive", "compare", "follow_up", "send_report", "delete_history", "deep_research"],
+    actions: ["search", "deep_dive", "compare", "follow_up", "send_report", "delete_history", "clear_all_history", "deep_research"],
     signatureId: "research_board",
     description: "Research any topic in any language: deep multi-angle web research with AI synthesis, multimedia, podcast generation, gap analysis, contradiction detection, auto-escalating deep research via Claude Code, and email reports",
   },

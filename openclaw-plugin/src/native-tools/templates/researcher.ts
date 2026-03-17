@@ -253,39 +253,29 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
               <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
                 <LucideReact.BookOpen className="w-3 h-3" /> Research Library ({recentTopics.length})
               </div>
+              <button
+                className="text-[11px] text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1"
+                onClick={() => onAction("clear_all_history", {})}
+              >
+                <LucideReact.Trash2 className="w-3 h-3" /> Clear All
+              </button>
             </div>
-            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+            <div className="flex flex-wrap gap-1.5">
               {recentTopics.map((entry) => {
                 const entryTopic = entry.meta?.topic || entry.id || "";
-                const m = entry.meta || {};
                 return (
                   <div
                     key={entry.id}
-                    className="rounded-lg bg-gray-800/40 hover:bg-gray-700/50 cursor-pointer transition-colors group p-3 space-y-1.5"
+                    className="rounded-lg bg-gray-800/40 hover:bg-gray-700/50 cursor-pointer transition-colors group px-3 py-1.5 flex items-center gap-2"
                     onClick={() => onAction("search", { topic: entryTopic })}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-sm font-medium text-gray-100 line-clamp-2">{entryTopic}</div>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-600/50 shrink-0"
-                        onClick={(e) => { e.stopPropagation(); onAction("delete_history", { topic: entryTopic }); }}
-                      >
-                        <LucideReact.X className="w-3 h-3 text-gray-500" />
-                      </button>
-                    </div>
-                    {m.summaryPreview && (
-                      <div className="text-[11px] text-gray-400 line-clamp-2">{m.summaryPreview}</div>
-                    )}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {m.sourceCount > 0 && <Badge variant="default">{m.sourceCount} sources</Badge>}
-                      {m.findingCount > 0 && <Badge variant="info">{m.findingCount} findings</Badge>}
-                      {m.isDeepResearch && <Badge variant="success">deep</Badge>}
-                      {m.hasBooks && <span className="text-[10px] text-indigo-400">books</span>}
-                      {m.hasVideos && <span className="text-[10px] text-red-400">videos</span>}
-                      {m.hasContradictions && <span className="text-[10px] text-amber-400">contradictions</span>}
-                      {m.depth && !m.isDeepResearch && <span className="text-[10px] text-gray-500">{m.depth}</span>}
-                      {entry.timestamp && <span className="text-[10px] text-gray-600">{timeAgo(entry.timestamp)}</span>}
-                    </div>
+                    <span className="text-sm text-gray-200">{entryTopic}</span>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-600/50 shrink-0"
+                      onClick={(e) => { e.stopPropagation(); onAction("delete_history", { topic: entryTopic }); }}
+                    >
+                      <LucideReact.X className="w-3 h-3 text-gray-500" />
+                    </button>
                   </div>
                 );
               })}
