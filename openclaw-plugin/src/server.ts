@@ -963,30 +963,6 @@ export async function startEnsoServer(opts: {
                   geminiApiKey: account.geminiApiKey,
                 });
 
-                if (classification.complexity === "direct" && classification.answer) {
-                  runtime.log?.(`[enso] task-router: direct answer → "${msg.text.slice(0, 60)}"`);
-                  const directCardId = randomUUID();
-                  const directRunId = randomUUID();
-                  send({
-                    id: directCardId,
-                    runId: directRunId,
-                    sessionKey,
-                    seq: 0,
-                    state: "final",
-                    text: classification.answer,
-                    timestamp: Date.now(),
-                  });
-                  persistCard(clientId, {
-                    id: directCardId,
-                    runId: directRunId,
-                    type: "chat",
-                    role: "assistant",
-                    text: classification.answer,
-                    timestamp: Date.now(),
-                  });
-                  break;
-                }
-
                 if (classification.complexity === "orchestrated") {
                   runtime.log?.(`[enso] task-router: orchestrated → "${msg.text.slice(0, 60)}"`);
                   const { handleOrchestration } = await import("./orchestrator.js");
@@ -1114,14 +1090,39 @@ export async function startEnsoServer(opts: {
                   break;
                 }
 
-                // "simple" — fall through to normal agent pipeline
-                runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
+                // "simple" — router provides the answer directly
+                if (classification.complexity === "simple" && classification.answer) {
+                  runtime.log?.(`[enso] task-router: simple (direct answer) → "${msg.text.slice(0, 60)}"`);
+                  const answerCardId = randomUUID();
+                  const answerRunId = randomUUID();
+                  send({
+                    id: answerCardId,
+                    runId: answerRunId,
+                    sessionKey,
+                    seq: 0,
+                    state: "final",
+                    text: classification.answer,
+                    timestamp: Date.now(),
+                  });
+                  persistCard(clientId, {
+                    id: answerCardId,
+                    runId: answerRunId,
+                    type: "chat",
+                    role: "assistant",
+                    text: classification.answer,
+                    timestamp: Date.now(),
+                  });
+                  break;
+                }
+
+                // "simple" without answer — fall through to agent as safety net
+                runtime.log?.(`[enso] task-router: simple (no answer) → "${msg.text.slice(0, 60)}"`);
               } catch (routerErr) {
                 // Router failed — fall through to normal agent (safe fallback)
                 runtime.log?.(`[enso] task-router failed, falling through: ${String(routerErr)}`);
               }
 
-              // Normal agent pipeline (simple classification or router failure)
+              // Agent fallback — only reached if router returned simple without answer, or router failed
               await handleEnsoInbound({
                 message: {
                   messageId: randomUUID(),

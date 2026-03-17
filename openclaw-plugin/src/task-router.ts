@@ -14,12 +14,12 @@ import { logAction, logError } from "./action-log.js";
 
 // ── Types ──
 
-export type TaskComplexity = "simple" | "direct" | "research" | "one-off" | "orchestrated";
+export type TaskComplexity = "simple" | "research" | "one-off" | "orchestrated";
 
 export interface TaskClassification {
   complexity: TaskComplexity;
   reasoning: string;
-  answer?: string;           // For direct: the answer to return immediately
+  answer?: string;           // For simple: direct answer to return immediately
   goalSummary?: string;      // For orchestrated: high-level decomposition hint
   directAction?: string;     // For one-off: what to do
   researchTopic?: string;    // For research: extracted topic to pass to researcher
@@ -30,45 +30,33 @@ export interface TaskClassification {
 
 const CLASSIFIER_PROMPT = `You are a smart router for Enso, an AI assistant that can chat, run code, orchestrate multi-agent missions, and do deep web research.
 
-Classify the user's message into exactly ONE of these five categories:
-
-## DIRECT
-Factual questions with definitive, well-known answers that you can answer immediately without web search. Provide the answer directly. This saves the user from waiting for unnecessary processing.
-Examples:
-- "What is the capital of France?" → answer: "The capital of France is Paris."
-- "What's 2+2?" → answer: "4"
-- "How many meters in a kilometer?" → answer: "There are 1,000 meters in a kilometer."
-- "When did World War 2 end?" → answer: "World War 2 ended in 1945."
-- "What does HTML stand for?" → answer: "HTML stands for HyperText Markup Language."
-- "Who wrote Romeo and Juliet?" → answer: "William Shakespeare wrote Romeo and Juliet."
+Classify the user's message into exactly ONE of these four categories:
 
 ## SIMPLE
-Casual chat, greetings, small talk, code explanations, opinions, creative writing, translations — things that need conversational AI but NOT web research or direct factual answers.
+Anything you can answer directly from your knowledge — factual questions, greetings, explanations, opinions, creative writing, translations, code help, casual chat. You MUST provide the answer yourself. Be helpful, concise, and accurate.
 Examples:
-- "Hi, how are you?"
-- "Explain how React hooks work"
-- "What does this error mean?"
-- "Translate this to Spanish"
-- "Write me a poem about the ocean"
+- "What is the capital of France?" → answer: "The capital of France is Paris."
+- "Hi, how are you?" → answer: "Hey! I'm doing great. What can I help you with?"
+- "Explain how React hooks work" → answer: "React hooks are functions that let you use state and lifecycle features in functional components..."
+- "Write me a haiku about rain" → answer: "Gentle drops descend / Puddles mirror clouded skies / Earth drinks deeply now"
+- "What does HTML stand for?" → answer: "HTML stands for HyperText Markup Language."
+- "Translate 'hello' to Japanese" → answer: "こんにちは (Konnichiwa)"
 
 ## RESEARCH
-The user wants to learn about, investigate, explore, compare, or understand a topic in depth. This includes any request where web research would significantly improve the answer — current events, comparisons, analysis, recommendations, trends, controversies, or any factual topic that benefits from multiple sources. The user does NOT need to say "research" explicitly.
+The user wants to investigate, explore, compare, or understand a topic in depth using current web data. This includes current events, multi-source comparisons, analysis, recommendations, trends, and anything that benefits from searching the web for up-to-date information from multiple sources.
 Examples:
 - "What are the pros and cons of nuclear vs solar energy?"
 - "Research quantum computing breakthroughs in 2025"
 - "Best programming languages for AI development and why"
-- "Compare Tesla Model 3 vs BMW i4 vs Polestar 2"
 - "What's happening with AI regulation in the EU?"
-- "Latest developments in CRISPR gene therapy"
 - "Is intermittent fasting actually healthy?"
 
 ## ONE-OFF
-A single concrete task that requires code execution, file manipulation, scripting, a bug fix, data processing, or creating ONE thing. The user wants something DONE, not researched.
+A single concrete task that requires code execution, file manipulation, scripting, a bug fix, or creating something. The user wants something DONE, not discussed.
 Examples:
 - "Fix the bug in server.ts where the API returns 500"
 - "Build me a todo app"
 - "Write a Python script to scrape product prices"
-- "Refactor this function to use async/await"
 
 ## ORCHESTRATED
 A complex, multi-faceted goal requiring planning AND execution across multiple workstreams.
@@ -77,18 +65,15 @@ Examples:
 - "Help me launch my startup's MVP — landing page, auth, payments, admin"
 
 ## Rules
-- **DIRECT is for questions with a single, definitive answer** you are confident about. If there's any nuance, debate, or the answer depends on context/timing, use RESEARCH instead.
-- **RESEARCH is the default for informational questions about real-world topics.** If the question benefits from current web data or multiple perspectives, choose RESEARCH.
-- SIMPLE is for chat, greetings, code help, creative tasks, and conversational interactions.
-- If in doubt between DIRECT and RESEARCH, choose RESEARCH.
-- If in doubt between SIMPLE and RESEARCH, choose RESEARCH.
-- ONE-OFF requires explicit action intent (fix, create, write, build, convert, deploy, refactor).
-- For RESEARCH: extract the core topic and suggest a depth.
-- For DIRECT: provide a concise, accurate answer (1-3 sentences).
+- **SIMPLE always includes an answer.** You are the AI — answer the user directly.
+- **RESEARCH is for questions that need current web data or multiple source perspectives.** If the answer depends on recent events, market conditions, scientific consensus, or would benefit from citing sources, choose RESEARCH.
+- If in doubt between SIMPLE and RESEARCH, choose RESEARCH — better to over-research than give a shallow answer.
+- ONE-OFF requires explicit action intent (fix, create, write code, build, convert, deploy, refactor).
+- For RESEARCH: extract the core topic and suggest a depth (quick/standard/deep).
 - IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"direct|simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"direct answer (DIRECT only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only, be helpful and complete)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
 
 export async function classifyTask(params: {
   userMessage: string;
@@ -124,7 +109,7 @@ export async function classifyTask(params: {
     const parsed = JSON.parse(cleaned) as TaskClassification;
 
     // Validate the complexity field
-    if (!["simple", "direct", "research", "one-off", "orchestrated"].includes(parsed.complexity)) {
+    if (!["simple", "research", "one-off", "orchestrated"].includes(parsed.complexity)) {
       throw new Error(`Invalid complexity: ${parsed.complexity}`);
     }
 
