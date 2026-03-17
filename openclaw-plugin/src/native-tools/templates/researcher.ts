@@ -659,6 +659,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
               }
             </Button>
           )}
+          {isComplete && data?.depth !== "deep" && !data?.metadata?.isDeepResearch && (
+            <Button variant="ghost" onClick={() => onAction("search", { topic, depth: "deep" })}>
+              <LucideReact.Sparkles className="w-3.5 h-3.5 text-violet-400" /> <span className="hidden sm:inline">Deep</span>
+            </Button>
+          )}
           {isComplete && (
             <Button variant="ghost" onClick={() => onAction("search", { topic: "" })}>
               <LucideReact.Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">New</span>
