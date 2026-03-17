@@ -828,8 +828,28 @@ export async function handlePluginCardAction(params: {
             delete resultObj._generatedUI; // Don't pass internal field to frontend
             logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Deep research custom UI delivered as enhanceResult (${customUI.length} chars)`, cardId });
 
-            // Complete the operation on the card
-            sendOperation("complete", "Deep research complete");
+            // Mark the standard data so template knows deep research exists
+            // (ctx.currentData is the standard research — add flag to hide the Deep button)
+            if (ctx.currentData && typeof ctx.currentData === "object") {
+              (ctx.currentData as Record<string, unknown>).hasDeepResearch = true;
+            }
+
+            // Update the card's standard data with the flag
+            const templateCode = getToolTemplateCode(
+              inferToolTemplate({ toolName: ctx.appToolHint.toolName, data: ctx.currentData }),
+            );
+            client.send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey: client.sessionKey,
+              seq: 0,
+              state: "final",
+              targetCardId: cardId,
+              data: ctx.currentData,
+              ...(templateCode ? { generatedUI: templateCode } : {}),
+              cardMode: cardModeFromContext(ctx),
+              timestamp: Date.now(),
+            });
 
             // Send as enhanceResult → stored in appData/appGeneratedUI, toggleable with Original
             client.send({
@@ -842,7 +862,10 @@ export async function handlePluginCardAction(params: {
               enhanceResult: {
                 data: result.data,
                 generatedUI: customUI,
-                cardMode: cardModeFromContext(ctx),
+                cardMode: {
+                  ...cardModeFromContext(ctx),
+                  signatureId: "deep_research_custom",
+                },
               },
               timestamp: Date.now(),
             });
