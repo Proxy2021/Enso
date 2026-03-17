@@ -186,10 +186,6 @@ interface CachedResearch {
   timestamp: number;
 }
 
-// ── Module-level research cache ──
-
-const researchCache = new Map<string, CachedResearch>();
-
 // ── Persistent research history ──
 
 interface ResearchHistoryMeta extends DocMeta {
@@ -232,15 +228,6 @@ function buildResearchMeta(entry: CachedResearch, depth: string, isDeepResearch 
     isDeepResearch,
     tags: [],
   };
-}
-
-// Hydrate in-memory cache from disk on module load
-// Skip low-quality fallback entries (no findings = failed synthesis) so they get re-attempted
-for (const entry of researchHistory.list()) {
-  const data = researchHistory.load(entry.id);
-  if (data && (data.keyFindings?.length > 0 || data.narrative)) {
-    researchCache.set(data.topic.toLowerCase(), data);
-  }
 }
 
 // ── Helpers ──
@@ -1201,7 +1188,7 @@ Rules:
 - sourceRefs reference the NEW SEARCH RESULTS indices`;
 }
 
-// ── Context builder for cached research ──
+// ── Context builder for research history ──
 
 function buildParentContext(cached: CachedResearch | undefined): string {
   if (!cached) return "";
@@ -1291,7 +1278,6 @@ Rules:
       contradictions: [],
       timestamp: Date.now(),
     };
-    researchCache.set(topic.toLowerCase(), cachedLlm);
     researchHistory.save(topicSlug(topic), cachedLlm, buildResearchMeta(cachedLlm, depth));
 
     return jsonResult(result);
@@ -1413,39 +1399,6 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     if (userLang !== "English") {
       language = userLang;
       logAction({ ts: Date.now(), type: "action", category: "researcher", message: `language override from user message: ${userLang} (topic detected as English)` });
-    }
-  }
-
-  // Return cached result unless force-refresh requested
-  if (!params.force) {
-    const cached = researchCache.get(topic.toLowerCase());
-    if (cached) {
-      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `returning cached research for "${topic}"` });
-      return jsonResult({
-        tool: "enso_researcher_search",
-        topic: cached.topic,
-        depth,
-        phase: "complete",
-        summary: cached.summary,
-        narrative: cached.narrative,
-        keyFindings: cached.keyFindings,
-        sections: cached.sections,
-        sources: cached.sources,
-        images: cached.images,
-        videos: cached.videos,
-        books: cached.books ?? [],
-        movies: cached.movies ?? [],
-        recommendedVideos: cached.recommendedVideos ?? [],
-        contradictions: cached.contradictions ?? [],
-        metadata: {
-          queriesRun: 0,
-          sourcesFound: cached.sources.length,
-          sectionsGenerated: cached.sections.length,
-          timestamp: cached.timestamp,
-          note: "Loaded from research library",
-        },
-        fromHistory: true,
-      });
     }
   }
 
@@ -2046,7 +1999,6 @@ Only include genuinely new information. If gap sources don't add meaningful new 
       contradictions: result.contradictions,
       timestamp: Date.now(),
     };
-    researchCache.set(topic.toLowerCase(), cachedEntry);
     researchHistory.save(topicSlug(topic), cachedEntry, buildResearchMeta(cachedEntry, depth));
 
     mark("complete");
@@ -2088,8 +2040,6 @@ function fallbackFromSources(topic: string, depth: string, sources: Source[], re
     contradictions: [],
     timestamp: Date.now(),
   };
-  researchCache.set(topic.toLowerCase(), cachedFallback);
-
   return jsonResult({
     tool: "enso_researcher_search",
     topic,
@@ -2123,7 +2073,7 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
   const subtopic = params.subtopic?.trim() || "";
   if (!topic || !subtopic) return errorResult("topic and subtopic are required");
 
-  const cached = researchCache.get(topic.toLowerCase());
+  const cached = researchHistory.get(topicSlug(topic));
   const parentContext = buildParentContext(cached);
 
   // Targeted searches
@@ -2287,7 +2237,7 @@ async function researcherFollowUp(params: FollowUpParams): Promise<AgentToolResu
   const question = params.question?.trim() || "";
   if (!topic || !question) return errorResult("topic and question are required");
 
-  const cached = researchCache.get(topic.toLowerCase());
+  const cached = researchHistory.get(topicSlug(topic));
   const parentContext = buildParentContext(cached);
 
   const queries = [
@@ -2355,7 +2305,7 @@ async function researcherSendReport(params: SendReportParams): Promise<AgentTool
   const topic = params.topic?.trim() || "Research Report";
 
   // Pull rich data from cache (much better than agent-passed flat data)
-  const cached = researchCache.get(topic.toLowerCase());
+  const cached = researchHistory.get(topicSlug(topic));
   const summary = cached?.summary ?? params.summary ?? "";
   const narrative = cached?.narrative ?? params.narrative ?? "";
   const keyFindings = cached?.keyFindings ?? params.keyFindings ?? [];
@@ -2670,7 +2620,6 @@ async function researcherDeleteHistory(params: { topic: string }): Promise<Agent
   if (!topic) return errorResult("No topic specified");
 
   const slug = topicSlug(topic);
-  researchCache.delete(topic.toLowerCase());
   researchHistory.remove(slug);
   logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deleted history for "${topic}" (slug: ${slug})` });
 
@@ -2682,7 +2631,6 @@ async function researcherDeleteHistory(params: { topic: string }): Promise<Agent
 
 async function researcherClearAllHistory(): Promise<AgentToolResult> {
   const count = researchHistory.count();
-  researchCache.clear();
   researchHistory.clear();
   logAction({ ts: Date.now(), type: "action", category: "researcher", message: `cleared all research history (${count} entries)` });
 
@@ -2811,7 +2759,7 @@ async function researcherGeneratePodcast(params: { topic: string }): Promise<Age
   if (!geminiKey) return errorResult("Gemini API key required for podcast generation");
 
   // Find cached research
-  const cached = researchCache.get(topic.toLowerCase()) ?? researchHistory.get(topicSlug(topic));
+  const cached = researchHistory.get(topicSlug(topic)) ?? researchHistory.get(topicSlug(topic));
   if (!cached) return errorResult(`No research found for "${topic}". Run a search first.`);
 
   // Helper to return full research data with audioUrl + script
@@ -2858,10 +2806,9 @@ async function researcherGeneratePodcast(params: { topic: string }): Promise<Age
     const { toMediaUrl } = await import("./server.js");
     const audioUrl = toMediaUrl(filePath);
 
-    // Update cache
+    // Update history
     cached.audioUrl = audioUrl;
     cached.podcastScript = script;
-    researchCache.set(topic.toLowerCase(), cached);
     researchHistory.save(topicSlug(topic), cached, buildResearchMeta(cached, "standard"));
 
     logAction({ ts: Date.now(), type: "action", category: "researcher", message: `podcast ready for "${topic}" (${wavData.length} bytes)` });

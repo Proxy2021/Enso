@@ -818,6 +818,8 @@ export async function handlePluginCardAction(params: {
         }
 
         if (result.success && result.data != null) {
+          // Save standard data before overwriting (needed for deep research toggle)
+          const previousStandardData = ctx.currentData ? structuredClone(ctx.currentData) : null;
           ctx.currentData = structuredClone(result.data);
 
           // Deep research: deliver as enhanceResult so user can toggle between
@@ -828,15 +830,15 @@ export async function handlePluginCardAction(params: {
             delete resultObj._generatedUI; // Don't pass internal field to frontend
             logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Deep research custom UI delivered as enhanceResult (${customUI.length} chars)`, cardId });
 
-            // Mark the standard data so template knows deep research exists
-            // (ctx.currentData is the standard research — add flag to hide the Deep button)
-            if (ctx.currentData && typeof ctx.currentData === "object") {
-              (ctx.currentData as Record<string, unknown>).hasDeepResearch = true;
+            // Mark the ORIGINAL standard data with hasDeepResearch flag to hide the Deep button
+            const standardData = previousStandardData ?? ctx.currentData;
+            if (standardData && typeof standardData === "object") {
+              (standardData as Record<string, unknown>).hasDeepResearch = true;
             }
 
-            // Update the card's standard data with the flag
+            // Update the card's standard data (original research) with the flag
             const templateCode = getToolTemplateCode(
-              inferToolTemplate({ toolName: ctx.appToolHint.toolName, data: ctx.currentData }),
+              inferToolTemplate({ toolName: ctx.appToolHint.toolName, data: standardData }),
             );
             client.send({
               id: randomUUID(),
@@ -845,7 +847,7 @@ export async function handlePluginCardAction(params: {
               seq: 0,
               state: "final",
               targetCardId: cardId,
-              data: ctx.currentData,
+              data: standardData,
               ...(templateCode ? { generatedUI: templateCode } : {}),
               cardMode: cardModeFromContext(ctx),
               timestamp: Date.now(),
@@ -870,6 +872,21 @@ export async function handlePluginCardAction(params: {
               timestamp: Date.now(),
             });
             return;
+          }
+
+          // If deep research build failed (no _generatedUI) and card was in building state,
+          // clear the building status by sending a null enhanceResult
+          if ((resultObj as Record<string, unknown>).depth === "deep") {
+            client.send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey: client.sessionKey,
+              seq: 0,
+              state: "final",
+              targetCardId: cardId,
+              enhanceResult: null,
+              timestamp: Date.now(),
+            });
           }
 
           ctx.appToolHint = {

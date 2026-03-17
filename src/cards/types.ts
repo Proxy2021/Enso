@@ -50,6 +50,10 @@ export interface Card {
     buildHint?: string;
   };
 
+  // Deep research build in progress (terminal streams into app view)
+  deepResearchStatus?: "building";
+  buildTerminalText?: string;
+
   // Auto-heal status
   autoHealStatus?: "fixing" | "fixed" | "failed";
   autoHealError?: string;

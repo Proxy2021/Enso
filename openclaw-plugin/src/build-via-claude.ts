@@ -321,7 +321,6 @@ interface DeepResearchBuild {
  */
 export async function handleDeepResearchBuild(params: DeepResearchBuild): Promise<string | null> {
   const { topic, language, cardId, client } = params;
-  const buildTerminalCardId = cardId + "-deep";
   const runId = randomUUID();
   const outputFile = join(PROJECT_ROOT, ".deep-research-ui.jsx");
 
@@ -330,7 +329,6 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
   // Clean up any previous output file
   try { if (existsSync(outputFile)) unlinkSync(outputFile); } catch { /* ignore */ }
 
-  // Create terminal card for the Claude Code session
   const send = (msg: Partial<ServerMessage>) => {
     client.send({
       id: randomUUID(),
@@ -342,15 +340,19 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
     } as ServerMessage);
   };
 
+  // Send initial enhanceResult to show pulsing Deep toggle (building state)
   send({
-    state: "delta",
-    text: "",
-    toolMeta: { toolId: "claude-code", cwd: PROJECT_ROOT },
-    targetCardId: buildTerminalCardId,
-    cardType: "terminal",
+    state: "final",
+    targetCardId: cardId,
+    enhanceResult: {
+      data: null,
+      generatedUI: undefined as unknown as string,
+      cardMode: { appId: "researcher", toolFamily: "researcher", signatureId: "deep_research_building" },
+    },
   });
 
   // Craft prompt and run Claude Code
+  // Stream terminal output to the SAME card (store accumulates in buildTerminalText)
   const prompt = buildDeepResearchUIPrompt(topic, language);
 
   let sessionId: string | undefined;
@@ -360,7 +362,7 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
       cwd: PROJECT_ROOT,
       client,
       runId,
-      targetCardId: buildTerminalCardId,
+      targetCardId: cardId,
     });
     sessionId = result.sessionId;
   } catch (err) {

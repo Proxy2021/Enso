@@ -1571,6 +1571,40 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (msg.targetCardId) {
         let card = state.cards[msg.targetCardId];
 
+        // ── Deep research build: accumulate terminal text in buildTerminalText ──
+        if (card?.deepResearchStatus === "building" && msg.toolMeta?.toolId === "claude-code") {
+          if (msg.state === "delta") {
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  buildTerminalText: (card.buildTerminalText ?? "") + (msg.text ?? ""),
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+          // final — no-op here, enhanceResult will finalize
+          if (msg.state === "final") {
+            return state;
+          }
+          // error — clear building status (build failed, no enhanceResult coming)
+          if (msg.state === "error") {
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  deepResearchStatus: undefined,
+                  buildTerminalText: undefined,
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+        }
+
         // Auto-create terminal card if it doesn't exist yet (e.g. build-via-claude)
         if (!card && msg.toolMeta?.toolId === "claude-code" && msg.state === "delta") {
           card = {
@@ -1799,13 +1833,18 @@ export const useChatStore = create<CardStore>((set, get) => ({
           if (msg.enhanceResult === null) {
             // Only set unavailable if the card was actively loading (fast enhance path).
             // Background builds send their own buildComplete notification.
-            const newEnhanceStatus = card.enhanceStatus === "loading" ? "unavailable" as const : card.enhanceStatus;
+            const wasDeepBuilding = card.deepResearchStatus === "building";
+            const newEnhanceStatus = wasDeepBuilding
+              ? undefined  // clear enhance status — deep build failed, no toggle
+              : (card.enhanceStatus === "loading" ? "unavailable" as const : card.enhanceStatus);
             return {
               cards: {
                 ...state.cards,
                 [msg.targetCardId]: {
                   ...card,
                   enhanceStatus: newEnhanceStatus,
+                  deepResearchStatus: undefined,
+                  buildTerminalText: undefined,
                   status: "complete",
                   operation: undefined,
                   pendingAction: undefined,
@@ -1814,6 +1853,29 @@ export const useChatStore = create<CardStore>((set, get) => ({
               },
             };
           }
+          // Deep research building phase — show toggle but stay in building state
+          const isDeepBuildStart = msg.enhanceResult.cardMode?.signatureId === "deep_research_building";
+          if (isDeepBuildStart) {
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  appCardMode: msg.enhanceResult.cardMode,
+                  enhanceStatus: "ready",
+                  deepResearchStatus: "building",
+                  buildTerminalText: "",
+                  operation: undefined,
+                  pendingAction: undefined,
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+
+          // Deep research complete — clear building state, show real UI
+          const wasBuilding = card.deepResearchStatus === "building";
+
           // Auto-switch to app view only for the fast enhance path (enhanceStatus was "loading").
           // Background builds keep the current viewMode — user will be notified via buildComplete.
           const wasLoading = card.enhanceStatus === "loading";
@@ -1828,7 +1890,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 appBuildSummary: msg.enhanceResult.buildSummary,
                 enhanceStatus: "ready",
                 status: "complete",
-                viewMode: wasLoading ? "app" : (card.viewMode ?? "app"),
+                deepResearchStatus: undefined,
+                buildTerminalText: undefined,
+                viewMode: wasBuilding ? "app" : (wasLoading ? "app" : (card.viewMode ?? "app")),
                 operation: undefined,
                 pendingAction: undefined,
                 updatedAt: now,

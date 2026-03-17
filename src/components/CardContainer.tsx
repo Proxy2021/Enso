@@ -601,19 +601,74 @@ function ExportButton({ card }: { card: Card }) {
   );
 }
 
+/** Strip ANSI escape codes and Enso terminal markers for build log display */
+function cleanBuildText(text: string): string {
+  return text
+    // Strip ANSI escape codes
+    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+    // Strip zero-width markers like [tool:...], [cost:...], [ctx:...], etc.
+    .replace(/\u200B\[[^\]]*\]/g, "")
+    // Strip thinking markers
+    .replace(/\[think:(?:start|end)\]/g, "")
+    // Collapse multiple blank lines
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function DeepResearchBuildView({ text }: { text: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cleaned = useMemo(() => cleanBuildText(text), [text]);
+  // Show last ~80 lines for performance
+  const displayText = useMemo(() => {
+    const lines = cleaned.split("\n");
+    return lines.length > 80 ? lines.slice(-80).join("\n") : cleaned;
+  }, [cleaned]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [displayText]);
+
+  return (
+    <div className="p-3">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+        </span>
+        <span className="text-xs text-violet-300 font-medium">Building deep research UI...</span>
+      </div>
+      <div
+        ref={containerRef}
+        className="bg-gray-950 rounded-lg border border-gray-800 p-3 max-h-[400px] overflow-y-auto font-mono text-[11px] text-gray-400 leading-relaxed"
+      >
+        {displayText ? (
+          <pre className="whitespace-pre-wrap break-words">{displayText}</pre>
+        ) : (
+          <div className="text-gray-600 italic">Starting Claude Code session...</div>
+        )}
+        <span className="inline-block w-1.5 h-3.5 bg-violet-400 animate-pulse ml-0.5 align-text-bottom rounded-sm" />
+      </div>
+    </div>
+  );
+}
+
 function ViewToggle({ card }: { card: Card }) {
   const toggleCardView = useChatStore((s) => s.toggleCardView);
   const viewMode = card.viewMode ?? "original";
   const family = card.appCardMode?.appId ?? card.appCardMode?.toolFamily;
   const familyIcon = family ? (APP_ICONS[family] ?? "\u2728") : null;
   const familyLabel = family ? family.replace(/_/g, " ") : "App";
+  const isBuilding = card.deepResearchStatus === "building";
 
   // Deep research toggle: show "Standard" / "✨ Deep" instead of "Original" / "App"
-  const isDeepResearch = family === "researcher" && (
+  const isDeepResearch = isBuilding || (family === "researcher" && (
     card.appCardMode?.signatureId === "deep_research_custom" ||
     (card.appData as Record<string, unknown>)?.metadata &&
     ((card.appData as Record<string, unknown>)?.metadata as Record<string, unknown>)?.isDeepResearch
-  );
+  ));
   const originalLabel = isDeepResearch ? "Standard" : "Original";
   const originalLabelShort = isDeepResearch ? "Std" : "Text";
   const appLabel = isDeepResearch ? "Deep" : familyLabel;
@@ -636,9 +691,11 @@ function ViewToggle({ card }: { card: Card }) {
       <button
         onClick={() => toggleCardView(card.id, "app")}
         className={`text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-colors ${
-          viewMode === "app"
-            ? "bg-violet-500/30 text-violet-200 border-violet-500/40"
-            : "text-gray-400 hover:text-gray-300"
+          isBuilding
+            ? "bg-violet-500/20 text-violet-300 border-violet-500/30 animate-pulse"
+            : viewMode === "app"
+              ? "bg-violet-500/30 text-violet-200 border-violet-500/40"
+              : "text-gray-400 hover:text-gray-300"
         }`}
       >
         {appIcon && <span className="mr-0.5 sm:mr-1">{appIcon}</span>}
@@ -792,7 +849,9 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   }, []);
 
   const isCollapsed = card.display === "collapsed";
-  const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI;
+  const isDeepBuilding = card.deepResearchStatus === "building";
+  const isDeepBuildAppView = isDeepBuilding && card.viewMode === "app";
+  const isAppView = (card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI) || isDeepBuildAppView;
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
   const isShareable = isAppView || isDynamicCard;
   const isGeneralSmartCard = card.type === "dynamic-ui" && (card.cardMode?.appId ?? card.cardMode?.toolFamily) === "general";
@@ -1152,7 +1211,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
               {isShareable && card.status === "complete" && <ExportButton card={card} />}
               {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
-              {card.enhanceStatus === "ready" && <ViewToggle card={card} />}
+              {(card.enhanceStatus === "ready" || isDeepBuilding) && <ViewToggle card={card} />}
               {canEnhance && <EnhanceButton card={card} />}
               {statusLabel !== "ready" && (
                 <div className={`text-[10px] uppercase tracking-wide px-1.5 sm:px-2 py-0.5 rounded-full border ${statusTone}`}>
@@ -1161,11 +1220,15 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
             </div>
           </div>
-          <Renderer
-            card={renderCard}
-            isActive={isActive}
-            onAction={handleAction}
-          />
+          {isDeepBuildAppView ? (
+            <DeepResearchBuildView text={card.buildTerminalText ?? ""} />
+          ) : (
+            <Renderer
+              card={renderCard}
+              isActive={isActive}
+              onAction={handleAction}
+            />
+          )}
           {isAppView && card.appBuildSummary && !buildSummaryDismissed && (
             <BuildSummaryBanner
               summary={card.appBuildSummary}
