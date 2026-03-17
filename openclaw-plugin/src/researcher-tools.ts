@@ -1289,8 +1289,10 @@ async function classifyResearchRoute(topic: string, geminiKey: string, _language
 Topic: "${topic}"
 
 ROUTES:
-1. "standard" — Most topics. Web search + multiple source synthesis (current events, comparisons, product reviews, health/science, how-to guides, general knowledge topics).
-2. "deep" — Complex multi-faceted analysis requiring iterative research (policy analysis, multi-domain synthesis, large-scale comparisons with 4+ items, academic/technical deep-dives, strategic decision-making).
+1. "standard" — DEFAULT for almost everything. Web search + synthesis handles: current events, "latest X", "best X for Y", comparisons (even 3-4 items), product reviews, health/science questions, how-to guides, technology trends, breakthroughs/updates, recommendations, pros/cons analysis. Standard research already searches 6+ queries in parallel and synthesizes 10+ full articles — it is thorough.
+2. "deep" — RARE. Only for genuinely complex multi-domain analysis that standard cannot handle: policy impact analysis spanning economics+politics+social, PhD-level academic literature reviews, comprehensive industry reports requiring 20+ sources across different disciplines, or strategic decision-making requiring iterative hypothesis testing. If you can imagine answering it well with 10 good web sources, it's standard.
+
+IMPORTANT: Default to "standard". Deep research takes 5+ minutes and uses expensive resources. Only choose deep when standard would genuinely produce an incomplete or misleading answer.
 
 Return valid JSON (no markdown fences):
 { "route": "standard" | "deep", "reason": "One sentence explaining" }`;
@@ -1383,6 +1385,9 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   }
 
   const depth = params.depth ?? "standard";
+  const t0 = Date.now();
+  const timings: Record<string, number> = {};
+  const mark = (phase: string) => { timings[phase] = Date.now() - t0; };
   // Language priority: explicit param > detect from topic > detect from user's original message
   let language = params.language || detectLanguage(topic);
   if (language === "English" && _lastUserMessage) {
@@ -1434,10 +1439,12 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   let routeResult: RouteResult | null = null;
   if (depth === "standard" && geminiKey) {
     // Run classification AND query generation in parallel
+    mark("classify_start");
     const [route, queries_] = await Promise.all([
       classifyResearchRoute(topic, geminiKey, language),
       generateSearchAngles(topic, depth, geminiKey),
     ]);
+    mark("classify_done");
     routeResult = route;
 
     // Never short-circuit to "simple" here — task-router already handled that.
@@ -1612,6 +1619,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   }
 
   // ── Phase: searching ──
+  mark("search_start");
   const allQueries = [...queries.web, ...queries.video, ...queries.media];
   pushProgress({
     tool: "enso_researcher_search",
@@ -1634,14 +1642,25 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   // Parallel Brave searches + image/video/media searches (zero extra latency)
   logAction({ ts: Date.now(), type: "action", category: "researcher", message: `searching "${topic}" (${depth}): ${queries.web.length} web + ${queries.video.length} video + ${queries.media.length} media queries` });
 
-  // Stream source results as they arrive
+  // Stream source results as they arrive AND start fetching content immediately
   const collectedSources: Source[] = [];
+  const earlyFetchPromises: Promise<void>[] = [];
+  const fetchedUrls = new Set<string>();
   const searchPromises = queries.web.map((q) =>
     braveWebSearch(q, 6).then((batch) => {
       const newSources = deduplicateAndScore([batch]);
       for (const s of newSources) {
         if (!collectedSources.some((existing) => existing.url === s.url)) {
           collectedSources.push(s);
+          // Start fetching content for top sources immediately (don't wait for all searches)
+          if (!SKIP_CONTENT_DOMAINS.has(s.domain) && !fetchedUrls.has(s.url) && fetchedUrls.size < MAX_SOURCES_TO_FETCH) {
+            fetchedUrls.add(s.url);
+            earlyFetchPromises.push(
+              fetchPageContent(s.url).then((content) => {
+                if (content && content.length > 100) s.fullContent = content;
+              }).catch(() => {}),
+            );
+          }
         }
       }
       // Push incremental source update
@@ -1676,6 +1695,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     ...mediaSearchPromises,
   ]);
 
+  mark("search_done");
   // Split mixed results: first N are video batches, rest are media batches
   const videoResults = mixedResults.slice(0, queries.video.length);
   const mediaResults = mixedResults.slice(queries.video.length);
@@ -1706,11 +1726,19 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     return generateSampleResearch(topic, depth);
   }
 
-  // Fetch full article content from sources AND media sources in parallel
+  // Wait for early fetches to complete, then fetch any remaining sources + media
+  mark("fetch_start");
   await Promise.all([
-    enrichSourcesWithContent(sources),
+    ...earlyFetchPromises,
+    // Fetch any sources that weren't caught by early fetch (late-arriving searches)
+    ...sources.filter((s) => !fetchedUrls.has(s.url) && !SKIP_CONTENT_DOMAINS.has(s.domain))
+      .slice(0, MAX_SOURCES_TO_FETCH - fetchedUrls.size)
+      .map((s) => fetchPageContent(s.url).then((content) => {
+        if (content && content.length > 100) s.fullContent = content;
+      }).catch(() => {})),
     enrichSourcesWithContent(mediaSources.slice(0, 5)),
   ]);
+  mark("fetch_done");
 
   // ── Phase: synthesizing ──
   pushProgress({
@@ -1754,6 +1782,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const prompt = buildSynthesisPrompt(topic, snippetsForLLM, allSourcesForLLM, language) + videoContext;
     // Synthesis with many sources can take longer — use 60s timeout
+    mark("synthesis_start");
     let raw = await callGeminiLLMWithRetry(prompt, geminiKey, undefined, 60_000);
     let cleaned = cleanJson(raw);
     let parsed: Record<string, unknown>;
@@ -1843,6 +1872,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
         sourceRefs: clampRefs(c.sourceRefs),
       }));
 
+    mark("synthesis_done");
     // ── Phase: synthesized ──
     pushProgress({
       tool: "enso_researcher_search",
@@ -1867,6 +1897,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     // Only for explicit "deep" depth — standard skips this for ~10-15s faster results
     let gapQueries: string[] = [];
     if (depth === "deep" && geminiKey && sections.length > 0) {
+      mark("gap_start");
       try {
         pushProgress({
           tool: "enso_researcher_search",
@@ -2015,6 +2046,7 @@ Only include genuinely new information not already covered. If the gap sources d
         logError("researcher", "Gap check failed", gapErr, { topic });
         // Non-fatal: continue with existing results
       }
+      mark("gap_done");
     }
 
     const result = {
@@ -2062,7 +2094,9 @@ Only include genuinely new information not already covered. If the gap sources d
     researchCache.set(topic.toLowerCase(), cachedEntry);
     researchHistory.save(topicSlug(topic), cachedEntry, buildResearchMeta(cachedEntry, depth));
 
+    mark("complete");
     logAction({ ts: Date.now(), type: "action", category: "researcher", message: `research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos, ${books.length} books, ${movies.length} movies, ${contradictions.length} contradictions, ${gapQueries.length} gap queries` });
+    logAction({ ts: Date.now(), type: "action", category: "researcher:perf", message: `PERF [${depth}] "${topic.slice(0, 50)}": total=${timings.complete}ms | classify=${(timings.classify_done ?? 0) - (timings.classify_start ?? 0)}ms | search=${(timings.search_done ?? 0) - (timings.search_start ?? 0)}ms | fetch=${(timings.fetch_done ?? 0) - (timings.fetch_start ?? 0)}ms | synthesis=${(timings.synthesis_done ?? 0) - (timings.synthesis_start ?? 0)}ms`, metadata: { timings, depth, topic } });
     return jsonResult(result);
   } catch (err) {
     logError("researcher", "LLM synthesis error", err, { topic, depth });
