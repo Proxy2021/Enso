@@ -1270,40 +1270,30 @@ function generateSampleResearch(topic: string, depth: string): AgentToolResult {
 // ── Deep Research Classification ──
 
 /**
- * Smart router: single LLM call that classifies the topic into one of three routes:
- * - "simple" → returns a direct answer (no research pipeline needed)
- * - "standard" → proceed with web search + synthesis pipeline
- * - "deep" → escalate to Claude Code deep research
+ * Research depth classifier: decides whether a topic needs standard web search
+ * or deep iterative research (Claude Code multi-round analysis).
  *
- * This replaces the old `classifyForDeepResearch()` AND handles simple Q&A
- * that previously went through the full pipeline unnecessarily.
+ * Note: Simple Q&A is already filtered by the task-router before we get here,
+ * so this only decides between standard and deep.
  */
 type RouteResult = {
   route: "simple" | "standard" | "deep";
-  answer?: string; // Direct answer for "simple" route
   reason: string;
 };
 
-async function classifyResearchRoute(topic: string, geminiKey: string, language: string): Promise<RouteResult> {
+async function classifyResearchRoute(topic: string, geminiKey: string, _language: string): Promise<RouteResult> {
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const prompt = `You are a research router. Classify this topic and respond accordingly.
+    const prompt = `Classify whether this research topic needs standard web search or deep iterative research.
 
 Topic: "${topic}"
 
 ROUTES:
-1. "simple" — Factual questions with definitive answers (capitals, dates, definitions, unit conversions, quick facts, how-to with a known answer). Provide the answer directly.
-2. "standard" — Topics that benefit from web search + multiple source synthesis (current events, comparisons of 2-3 things, product reviews, health/science questions, how-to guides needing multiple perspectives).
-3. "deep" — Complex multi-faceted analysis requiring iterative research (policy analysis, multi-domain synthesis, large-scale comparisons, academic/technical deep-dives, strategic decision-making).
-
-${language !== "English" ? `IMPORTANT: Write the answer (if simple) in ${language}.` : ""}
+1. "standard" — Most topics. Web search + multiple source synthesis (current events, comparisons, product reviews, health/science, how-to guides, general knowledge topics).
+2. "deep" — Complex multi-faceted analysis requiring iterative research (policy analysis, multi-domain synthesis, large-scale comparisons with 4+ items, academic/technical deep-dives, strategic decision-making).
 
 Return valid JSON (no markdown fences):
-{
-  "route": "simple" | "standard" | "deep",
-  "answer": "Direct answer text (only for simple route, 1-3 sentences. Use markdown for formatting if helpful.)",
-  "reason": "One sentence explaining the classification"
-}`;
+{ "route": "standard" | "deep", "reason": "One sentence explaining" }`;
 
     const raw = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash");
     const parsed = JSON.parse(cleanJson(raw)) as RouteResult;
@@ -1436,56 +1426,29 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     }
   }
 
-  // ── Smart routing: classify + optionally answer simple Q&A in one LLM call ──
+  // ── Deep research classification ──
+  // The task-router already filters out simple Q&A before we get here,
+  // so we only need to decide: standard pipeline vs deep research escalation.
   const geminiKey = await getGeminiApiKey();
 
-  // For "quick" depth, skip classification entirely — go straight to search pipeline.
-  // For "deep" depth (explicit user choice), skip classification — go straight to deep.
-  // For "standard" depth, classify to decide route.
   let routeResult: RouteResult | null = null;
   if (depth === "standard" && geminiKey) {
-    // Run classification AND query generation in parallel — whichever route wins,
-    // we either use the queries (standard) or discard them (simple/deep).
+    // Run classification AND query generation in parallel
     const [route, queries_] = await Promise.all([
       classifyResearchRoute(topic, geminiKey, language),
       generateSearchAngles(topic, depth, geminiKey),
     ]);
     routeResult = route;
 
-    // Simple Q&A — return direct answer immediately (no search pipeline)
-    if (route.route === "simple" && route.answer) {
-      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `simple Q&A for "${topic}": ${route.answer.slice(0, 100)}` });
-      const simpleResult = {
-        tool: "enso_researcher_search",
-        topic,
-        depth: "quick" as const,
-        phase: "complete",
-        summary: route.answer,
-        narrative: route.answer,
-        keyFindings: [{ text: route.answer, type: "fact" as const, confidence: "high" as const, sourceRefs: [] }],
-        sections: [],
-        sources: [],
-        images: [],
-        videos: [],
-        books: [],
-        movies: [],
-        recommendedVideos: [],
-        contradictions: [],
-        metadata: { queriesRun: 0, sourcesFound: 0, sectionsGenerated: 0, timestamp: Date.now(), note: "Direct answer" },
-      };
-      // Cache so follow-ups have context
-      researchCache.set(topic.toLowerCase(), {
-        topic, summary: route.answer, narrative: route.answer,
-        keyFindings: simpleResult.keyFindings, sections: [], sources: [],
-        images: [], videos: [], books: [], movies: [], recommendedVideos: [], contradictions: [],
-        timestamp: Date.now(),
-      });
-      return jsonResult(simpleResult);
+    // Never short-circuit to "simple" here — task-router already handled that.
+    // If the internal classifier says "simple", treat it as "standard" and do real research.
+    if (route.route === "simple") {
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `internal classifier said "simple" for "${topic}" — overriding to standard (task-router already filtered simple Q&A)` });
+      routeResult = { route: "standard", reason: "overridden from simple" };
     }
 
-    // Stash pre-computed queries for later use in the standard pipeline
-    if (route.route === "standard") {
-      // Store on a module-level var so we don't recompute below
+    // Stash pre-computed queries for the standard pipeline
+    if (routeResult.route === "standard") {
       _precomputedQueries = queries_;
     }
   }
