@@ -998,44 +998,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       })();
       return;
     }
-    // Client-side research copy as text (clipboard)
-    if (action === "__copy_research") {
-      const p = payload as Record<string, unknown> | undefined;
-      const topic = typeof p?.topic === "string" ? p.topic : "Research";
-      const summary = typeof p?.summary === "string" ? p.summary : "";
-      const findings = Array.isArray(p?.keyFindings) ? p.keyFindings as Array<Record<string, unknown>> : [];
-      const sources = Array.isArray(p?.sources) ? p.sources as Array<Record<string, unknown>> : [];
-      const narrative = typeof p?.narrative === "string" ? p.narrative : "";
-
-      const lines: string[] = [];
-      lines.push(`# ${topic}\n`);
-      if (summary) lines.push(`${summary}\n`);
-      if (findings.length > 0) {
-        lines.push(`## Key Findings`);
-        findings.forEach((f, i) => {
-          const claim = typeof f.claim === "string" ? f.claim : String(f.claim ?? "");
-          const type = typeof f.type === "string" ? ` [${f.type}]` : "";
-          lines.push(`${i + 1}. ${claim}${type}`);
-        });
-        lines.push("");
-      }
-      if (narrative) {
-        lines.push(`## Analysis\n${narrative}\n`);
-      }
-      if (sources.length > 0) {
-        lines.push(`## Sources`);
-        sources.slice(0, 15).forEach((s, i) => {
-          const title = typeof s.title === "string" ? s.title : "";
-          const url = typeof s.url === "string" ? s.url : "";
-          lines.push(`${i + 1}. ${title}${url ? ` — ${url}` : ""}`);
-        });
-        if (sources.length > 15) lines.push(`... and ${sources.length - 15} more sources`);
-        lines.push("");
-      }
-      lines.push(`— Researched with Enso`);
-      navigator.clipboard.writeText(lines.join("\n")).catch(console.error);
-      return;
-    }
     // Client-side photo upload — opens file picker, uploads to server, then triggers backend action
     if (action === "__upload_photos") {
       const input = document.createElement("input");

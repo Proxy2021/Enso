@@ -1403,22 +1403,35 @@ export async function startEnsoServer(opts: {
 
                   runtime.log?.(`[enso:app-runner] card=${cardId} prefix=${app.spec.toolPrefix} family=${app.spec.toolFamily}`);
 
-                  send({
+                  const appRunMsg = {
                     id: cardId,
                     runId: randomUUID(),
                     sessionKey,
                     seq: 0,
-                    state: "final",
+                    state: "final" as const,
                     data,
                     generatedUI,
                     cardMode: {
-                      interactionMode: "tool",
+                      interactionMode: "tool" as const,
                       toolFamily: app.spec.toolFamily,
                       signatureId: app.spec.signatureId,
-                      coverageStatus: "covered",
+                      coverageStatus: "covered" as const,
                     },
                     targetCardId: undefined,
                     timestamp: Date.now(),
+                  };
+                  send(appRunMsg);
+
+                  // Persist dynamic app card to history
+                  persistCard(clientId, {
+                    id: cardId,
+                    runId: appRunMsg.runId,
+                    type: "dynamic-ui",
+                    role: "assistant",
+                    data,
+                    generatedUI,
+                    cardMode: appRunMsg.cardMode,
+                    timestamp: appRunMsg.timestamp,
                   });
                 } else {
                   // ── Built-in tool family path ──
@@ -1488,22 +1501,35 @@ export async function startEnsoServer(opts: {
 
                   runtime.log?.(`[enso:app-runner] built-in card=${cardId} tool=${toolName} family=${cap.appId}`);
 
-                  send({
+                  const builtinRunMsg = {
                     id: cardId,
                     runId: randomUUID(),
                     sessionKey,
                     seq: 0,
-                    state: "final",
+                    state: "final" as const,
                     data: normalized,
                     generatedUI,
                     cardMode: {
-                      interactionMode: "tool",
+                      interactionMode: "tool" as const,
                       toolFamily: cap.appId,
                       signatureId: cap.signatureId,
-                      coverageStatus: "covered",
+                      coverageStatus: "covered" as const,
                     },
                     targetCardId: undefined,
                     timestamp: Date.now(),
+                  };
+                  send(builtinRunMsg);
+
+                  // Persist built-in app card to history
+                  persistCard(clientId, {
+                    id: cardId,
+                    runId: builtinRunMsg.runId,
+                    type: "dynamic-ui",
+                    role: "assistant",
+                    data: normalized,
+                    generatedUI,
+                    cardMode: builtinRunMsg.cardMode,
+                    timestamp: builtinRunMsg.timestamp,
                   });
                 }
               } catch (err) {

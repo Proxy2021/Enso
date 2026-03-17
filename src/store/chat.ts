@@ -1313,10 +1313,20 @@ export const useChatStore = create<CardStore>((set, get) => ({
       const historicCards: Record<string, Card> = {};
       const historicOrder: string[] = [];
       for (const rec of msg.cardHistory) {
+        // Re-resolve card type from record fields for backward compatibility
+        // (older records may have type="chat" even for terminal/dynamic-ui cards)
+        let resolvedType = rec.type;
+        if (rec.role === "user") {
+          resolvedType = rec.toolMeta?.toolId === "claude-code" ? "terminal" : "user-bubble";
+        } else {
+          if (rec.toolMeta?.toolId === "shell") resolvedType = "shell";
+          else if (rec.toolMeta?.toolId === "claude-code") resolvedType = "terminal";
+          else if (rec.generatedUI) resolvedType = "dynamic-ui";
+        }
         historicCards[rec.id] = {
           id: rec.id,
           runId: rec.runId,
-          type: rec.type,
+          type: resolvedType,
           role: rec.role,
           status: "complete",
           display: "collapsed",

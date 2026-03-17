@@ -21,7 +21,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const [imgErrors, setImgErrors] = useState({});
   const [expandedSource, setExpandedSource] = useState(null);
   const [playingVideos, setPlayingVideos] = useState({});
-  const [copied, setCopied] = useState(false);
+
   const [shared, setShared] = useState(false);
   const [podcastLoading, setPodcastLoading] = useState(false);
   const [scriptExpanded, setScriptExpanded] = useState(false);
@@ -633,18 +633,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
               if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); }
             }}>
               <LucideReact.Headphones className="w-3.5 h-3.5 text-cyan-400" /> <span className="hidden sm:inline">Podcast</span>
-            </Button>
-          )}
-          {isComplete && (
-            <Button variant="ghost" onClick={() => {
-              setCopied(true);
-              onAction("__copy_research", { topic, summary, keyFindings, sources, narrative });
-              setTimeout(() => setCopied(false), 2000);
-            }}>
-              {copied
-                ? <><LucideReact.Check className="w-3.5 h-3.5 text-emerald-400" /> <span className="hidden sm:inline">Copied</span></>
-                : <><LucideReact.Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy</span></>
-              }
             </Button>
           )}
           {isComplete && (

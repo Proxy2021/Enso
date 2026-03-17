@@ -5,6 +5,7 @@ import { join } from "path";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage, ToolQuestion } from "./types.js";
 import { logAction, logError } from "./action-log.js";
+import { persistCard } from "./memory-bridge.js";
 
 const activeAbortControllers = new Map<string, AbortController>();
 const activeTasks = new Map<string, string>(); // taskId → description
@@ -167,6 +168,7 @@ export async function runClaudeCode(params: {
   let modelTextStreamed = 0; // Only actual model text (text_delta), NOT injected markers
   let lastCharNewline = true;
   let resultSent = false;
+  let accumulatedText = ""; // Buffer for history persistence
   let startTime = Date.now();
 
   // Buffered final — prompt_suggestion messages arrive after result in the SDK
@@ -225,6 +227,7 @@ export async function runClaudeCode(params: {
     if (resultSent) return; // Never send a delta after final (would reset card to "streaming")
     if (text) {
       totalTextSent += text.length;
+      accumulatedText += text;
       lastCharNewline = text.endsWith("\n");
     }
     send({ state: "delta", ...(text ? { text } : {}), ...extra });
@@ -245,6 +248,23 @@ export async function runClaudeCode(params: {
         cancellable: false,
       },
     });
+
+    // Persist terminal card to history (truncate to avoid bloating journal)
+    const maxPersistLen = 8000;
+    const textForHistory = accumulatedText.length > maxPersistLen
+      ? accumulatedText.slice(0, maxPersistLen) + "\n... (truncated)"
+      : accumulatedText;
+    if (textForHistory.trim()) {
+      persistCard(client.id, {
+        id: targetCardId ?? `${runId}-0`,
+        runId,
+        type: "terminal",
+        role: "assistant",
+        text: textForHistory,
+        toolMeta: toolMeta(),
+        timestamp: Date.now(),
+      });
+    }
   };
 
   const sendError = (text: string, cancelled = false) => {

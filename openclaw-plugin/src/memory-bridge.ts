@@ -47,6 +47,18 @@ export interface CardRecord {
   timestamp: number;
 }
 
+/**
+ * Resolve the correct card type from a CardRecord's fields.
+ * Mirrors the logic in src/cards/index.ts registry matching.
+ */
+export function resolveCardType(record: Partial<CardRecord>): string {
+  if (record.toolMeta?.toolId === "shell") return "shell";
+  if (record.toolMeta?.toolId === "claude-code") return "terminal";
+  if (record.generatedUI) return "dynamic-ui";
+  if (record.role === "user") return "user-bubble";
+  return "chat";
+}
+
 // ── Paths ──
 
 const CARDS_DIR = join(homedir(), ".openclaw", "enso-cards");

@@ -21,7 +21,7 @@ import type { ToolCallRecord } from "../native-tools/tool-call-store.js";
 import { getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
 import { recordAppInteraction } from "../interaction-tracker.js";
-import { persistCard } from "../memory-bridge.js";
+import { persistCard, resolveCardType } from "../memory-bridge.js";
 import {
   detectPattern,
   buildSuggestion,
@@ -105,16 +105,18 @@ export async function deliverEnsoReply(params: {
     statusSink?.({ lastOutboundAt: Date.now() });
 
     // Persist tool-routed assistant card to history (so it survives reconnect)
-    persistCard(client.id, {
+    const toolRecord = {
       id: msgId,
       runId,
-      type: "chat",
-      role: "assistant",
+      type: "chat", // placeholder, resolved below
+      role: "assistant" as const,
       text,
       toolMeta,
       mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
       timestamp: msg.timestamp,
-    });
+    };
+    toolRecord.type = resolveCardType(toolRecord);
+    persistCard(client.id, toolRecord);
     return;
   }
 
@@ -135,16 +137,18 @@ export async function deliverEnsoReply(params: {
   statusSink?.({ lastOutboundAt: Date.now() });
 
   // Persist assistant card to history
-  persistCard(client.id, {
+  const chatRecord = {
     id: msgId,
     runId,
-    type: "chat",
-    role: "assistant",
+    type: "chat", // placeholder, resolved below
+    role: "assistant" as const,
     text,
     mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
     steps: params.steps && params.steps.length > 1 ? params.steps : undefined,
     timestamp: msg.timestamp,
-  });
+  };
+  chatRecord.type = resolveCardType(chatRecord);
+  persistCard(client.id, chatRecord);
 
   // ── Auto-enhance: if the agent used a registered tool, render the app card ──
   // This replaces the old background compat check (which required an LLM call).
