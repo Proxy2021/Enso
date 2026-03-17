@@ -278,6 +278,34 @@ async function autoEnhanceFromToolCall(
     return;
   }
 
+  // 1b. Deep research custom UI: if the tool returned _generatedUI, use it directly
+  if (data && typeof data === "object" && "_generatedUI" in data) {
+    const dataObj = data as Record<string, unknown>;
+    const customUI = dataObj._generatedUI as string;
+    delete dataObj._generatedUI;
+    logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhance: deep research custom UI (${customUI.length} chars)`, cardId });
+    client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: client.sessionKey,
+      seq: 0,
+      state: "final",
+      targetCardId: cardId,
+      enhanceResult: {
+        data: dataObj,
+        generatedUI: customUI,
+        cardMode: {
+          interactionMode: "tool",
+          toolFamily: "researcher",
+          signatureId: "deep_research_custom",
+          coverageStatus: "covered",
+        },
+      },
+      timestamp: Date.now(),
+    });
+    return;
+  }
+
   // 2. Find matching template
   const template = inferToolTemplate({ toolName: toolCall.toolName, data });
   if (!template) {

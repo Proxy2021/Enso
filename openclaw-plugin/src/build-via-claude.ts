@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { statSync, existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { statSync, existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { runClaudeCode } from "./claude-code.js";
@@ -299,6 +299,263 @@ async function postBuildRegistration(
 
   logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `App "${spec.toolFamily}" built and registered (${registeredToolNames.length} tools)`, cardId, toolFamily: spec.toolFamily });
   logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `Build success: ${spec.toolFamily} (${registeredToolNames.length} tools)`, cardId, toolFamily: spec.toolFamily });
+}
+
+// ── Deep Research → Custom Template (no app registration) ──
+
+interface DeepResearchBuild {
+  topic: string;
+  language: string;
+  cardId: string;      // The researcher card that initiated this
+  client: ConnectedClient;
+  account: ResolvedEnsoAccount;
+}
+
+/**
+ * Deep research that generates a custom JSX template tailored to the topic.
+ * Claude Code researches the topic, then writes a single .deep-research-ui.jsx
+ * file with all research data embedded. The template is read back and delivered
+ * as `generatedUI` on the researcher card — no app registration needed.
+ *
+ * Returns the JSX string if successful, null if failed (caller falls back to standard).
+ */
+export async function handleDeepResearchBuild(params: DeepResearchBuild): Promise<string | null> {
+  const { topic, language, cardId, client } = params;
+  const buildTerminalCardId = cardId + "-deep";
+  const runId = randomUUID();
+  const outputFile = join(PROJECT_ROOT, ".deep-research-ui.jsx");
+
+  logAction({ ts: Date.now(), type: "build", category: "deep-research-build", message: `Deep research UI build start: "${topic}"`, cardId });
+
+  // Clean up any previous output file
+  try { if (existsSync(outputFile)) unlinkSync(outputFile); } catch { /* ignore */ }
+
+  // Create terminal card for the Claude Code session
+  const send = (msg: Partial<ServerMessage>) => {
+    client.send({
+      id: randomUUID(),
+      runId,
+      sessionKey: client.sessionKey,
+      seq: 0,
+      timestamp: Date.now(),
+      ...msg,
+    } as ServerMessage);
+  };
+
+  send({
+    state: "delta",
+    text: "",
+    toolMeta: { toolId: "claude-code", cwd: PROJECT_ROOT },
+    targetCardId: buildTerminalCardId,
+    cardType: "terminal",
+  });
+
+  // Craft prompt and run Claude Code
+  const prompt = buildDeepResearchUIPrompt(topic, language);
+
+  let sessionId: string | undefined;
+  try {
+    const result = await runClaudeCode({
+      prompt,
+      cwd: PROJECT_ROOT,
+      client,
+      runId,
+      targetCardId: buildTerminalCardId,
+    });
+    sessionId = result.sessionId;
+  } catch (err) {
+    logError("deep-research-build", "Claude Code session error", err, { cardId, topic });
+    return null;
+  }
+
+  // Read the generated template
+  if (!existsSync(outputFile)) {
+    logError("deep-research-build", "No output file after Claude Code session", undefined, { cardId, topic });
+    return null;
+  }
+
+  let templateJSX: string;
+  try {
+    templateJSX = readFileSync(outputFile, "utf-8").trim();
+    unlinkSync(outputFile); // clean up
+  } catch (err) {
+    logError("deep-research-build", "Failed to read output file", err, { cardId, topic });
+    return null;
+  }
+
+  if (!templateJSX || templateJSX.length < 100) {
+    logError("deep-research-build", "Output file too small or empty", undefined, { cardId, topic });
+    return null;
+  }
+
+  // Compile-check with Sucrase
+  try {
+    const { transform } = await import("sucrase");
+    transform(templateJSX, { transforms: ["jsx"], jsxRuntime: "classic" });
+    logAction({ ts: Date.now(), type: "build", category: "deep-research-build", message: "Template compile check: OK", cardId });
+  } catch (compileErr) {
+    logAction({ ts: Date.now(), type: "build", category: "deep-research-build", message: "Compile error, attempting auto-fix", cardId });
+
+    if (sessionId) {
+      // Write it back so Claude Code can fix it
+      writeFileSync(outputFile, templateJSX);
+      const fixPrompt = [
+        "The .deep-research-ui.jsx you just created has a compile error:",
+        "```",
+        String(compileErr),
+        "```",
+        "",
+        "Fix the file. Common issues: unclosed JSX tags, invalid expressions, missing parentheses.",
+        "Remember: no imports allowed. All hooks at top level. Use EnsoUI.Tooltip (not Tooltip).",
+      ].join("\n");
+
+      try {
+        await runClaudeCode({
+          prompt: fixPrompt,
+          cwd: PROJECT_ROOT,
+          toolSessionId: sessionId,
+          client,
+          runId: randomUUID(),
+          targetCardId: buildTerminalCardId,
+        });
+
+        if (existsSync(outputFile)) {
+          templateJSX = readFileSync(outputFile, "utf-8").trim();
+          unlinkSync(outputFile);
+          // Verify fix
+          const { transform } = await import("sucrase");
+          transform(templateJSX, { transforms: ["jsx"], jsxRuntime: "classic" });
+          logFix({ description: "Template compile error in deep research", error: String(compileErr), resolution: "Auto-fixed via Claude Code", category: "deep-research-build" });
+        } else {
+          return null;
+        }
+      } catch (fixErr) {
+        logError("deep-research-build", "Auto-fix failed", fixErr, { cardId });
+        try { unlinkSync(outputFile); } catch { /* ignore */ }
+        return null;
+      }
+    } else {
+      return null;
+    }
+  }
+
+  logAction({ ts: Date.now(), type: "build", category: "deep-research-build", message: `Deep research UI generated for "${topic}" (${templateJSX.length} chars)`, cardId });
+  return templateJSX;
+}
+
+function buildDeepResearchUIPrompt(topic: string, language: string): string {
+  const lines: string[] = [];
+
+  lines.push(`You have TWO jobs: (1) deeply research a topic, then (2) write a single self-contained JSX component that presents your findings in the best possible interactive experience, custom-designed for this specific topic.`);
+  lines.push(``);
+  lines.push(`## PERFORMANCE: Be efficient. Target 5-8 minutes total. Don't over-search — 5-10 focused searches beats 20 broad ones. Prioritize quality findings over volume.`);
+  lines.push(``);
+  lines.push(`## Topic: "${topic}"`);
+  lines.push(``);
+
+  // Phase 1: Research
+  lines.push(`## Phase 1: Deep Research`);
+  lines.push(``);
+  lines.push(`Research this topic thoroughly:`);
+  lines.push(`1. Run 5-10 web searches covering different angles, aspects, and subtopics`);
+  lines.push(`2. Read the most important articles/pages in full for depth`);
+  lines.push(`3. Search for specific data: statistics, timelines, comparisons, rankings`);
+  lines.push(`4. Find multimedia: YouTube videos (get URLs), notable books, documentaries`);
+  lines.push(`5. Identify key entities, relationships, controversies, trends`);
+  lines.push(`6. Note source URLs, titles, and key facts for attribution`);
+  lines.push(``);
+  lines.push(`Take detailed mental notes — you'll embed ALL findings directly into the component.`);
+  lines.push(``);
+
+  // Phase 2: Design
+  lines.push(`## Phase 2: Design the Experience`);
+  lines.push(``);
+  lines.push(`Analyze what interactive experience would BEST serve THIS specific topic:`);
+  lines.push(``);
+  lines.push(`| Topic Type | Ideal Experience |`);
+  lines.push(`|------------|-----------------|`);
+  lines.push(`| Historical/chronological | Timeline explorer with era cards, key events, figure profiles |`);
+  lines.push(`| Data/statistics | Dashboard with Recharts (LineChart, BarChart, PieChart), stat cards, trend analysis |`);
+  lines.push(`| Geographic/location | Region tabs, location cards, neighborhood breakdowns, ratings |`);
+  lines.push(`| People/entities | Profile cards with bios, achievement timelines, connection diagrams |`);
+  lines.push(`| Comparison/vs | Side-by-side panels, scoring matrices, pros/cons, radar charts |`);
+  lines.push(`| Technical/scientific | Concept breakdowns, complexity levels, interactive Q&A, diagrams |`);
+  lines.push(`| Creative/artistic | Gallery layouts, style comparisons, influence maps |`);
+  lines.push(`| Industry/market | Player profiles, market share charts, trend dashboards |`);
+  lines.push(`| Process/how-to | Step-by-step cards, checklists, tip collections, resource links |`);
+  lines.push(``);
+  lines.push(`DO NOT make a generic "research board." Design something that feels CUSTOM-MADE.`);
+  lines.push(``);
+
+  // Phase 3: Write the JSX
+  lines.push(`## Phase 3: Write the JSX Component`);
+  lines.push(``);
+  lines.push(`Write a SINGLE file: \`.deep-research-ui.jsx\` in the project root.`);
+  lines.push(``);
+  lines.push(`The file must contain a function like this:`);
+  lines.push("```jsx");
+  lines.push(`function GeneratedUI({ data, onAction }) {`);
+  lines.push(`  // Your research data is embedded directly as constants here`);
+  lines.push(`  var findings = [ ... ];`);
+  lines.push(`  var timeline = [ ... ];`);
+  lines.push(`  // ... all your researched data as JS objects/arrays`);
+  lines.push(``);
+  lines.push(`  // React hooks`);
+  lines.push(`  var [activeTab, setActiveTab] = React.useState("overview");`);
+  lines.push(`  // ... your UI state`);
+  lines.push(``);
+  lines.push(`  return ( /* your custom JSX */ );`);
+  lines.push(`}`);
+  lines.push("```");
+  lines.push(``);
+
+  // Rules
+  lines.push(`## Template Rules (MUST follow)`);
+  lines.push(``);
+  lines.push(`### Available in the sandbox (no imports needed):`);
+  lines.push(`- **React hooks**: React.useState, React.useEffect, React.useMemo, React.useCallback, React.useRef`);
+  lines.push(`- **EnsoUI**: Tabs, DataTable, Stat, Badge, Button, UICard, Progress, Accordion, Dialog, Select, Input, Switch, Slider, Separator, EmptyState, EnsoUI.Tooltip, EnsoUI.VideoPlayer`);
+  lines.push(`- **Recharts**: LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, AreaChart, Area, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Tooltip (Recharts Tooltip — for EnsoUI tooltip use EnsoUI.Tooltip)`);
+  lines.push(`- **Lucide icons**: any icon, e.g. Clock, Star, MapPin, Users, TrendingUp, BookOpen, Film, Music, etc.`);
+  lines.push(`- **Color palette for accent colors**: emerald, blue, violet, amber, rose, cyan, orange, lime, pink, indigo, teal, fuchsia, sky`);
+  lines.push(``);
+  lines.push(`### Critical rules:`);
+  lines.push(`1. NO imports — everything is injected into the sandbox`);
+  lines.push(`2. Use \`var\` (not const/let) for all declarations`);
+  lines.push(`3. ALL React hooks MUST be at the top level of the function — NEVER inside conditionals, loops, or callbacks`);
+  lines.push(`4. Inline styles only (no CSS classes except Tailwind-style via style objects)`);
+  lines.push(`5. No fetch(), no DOM access, no window/document globals`);
+  lines.push(`6. Use EnsoUI.Tooltip for tooltips (not Tooltip which is Recharts)`);
+  lines.push(`7. Embed your research data directly as \`var\` declarations at the top of the function`);
+  lines.push(`8. \`onAction(name, payload)\` for user interactions — e.g., \`onAction("open_url", { url: "https://..." })\` to open links`);
+  lines.push(`9. Use Tabs component for multi-view navigation — aim for 3-6 tabs`);
+  lines.push(`10. Videos: use EnsoUI.VideoPlayer for YouTube embeds`);
+  lines.push(`11. The \`data\` prop will be \`{ tool: "enso_researcher_search", phase: "app_built", topic: "${topic}" }\` — you can ignore it and use your embedded data`);
+  lines.push(``);
+
+  lines.push(`### Design quality:`);
+  lines.push(`- Dark theme (dark backgrounds: #0f172a, #1e293b, #334155; light text: #e2e8f0, #f8fafc)`);
+  lines.push(`- Professional typography: clear hierarchy, good spacing`);
+  lines.push(`- Interactive: clickable cards, expandable sections, tab navigation`);
+  lines.push(`- Source attribution: link to sources, show credibility`);
+  lines.push(`- Rich: use icons, badges, stat cards, charts where appropriate`);
+  lines.push(`- Make it feel like a premium, bespoke experience for this specific topic`);
+  lines.push(``);
+
+  // Language
+  if (language !== "English") {
+    lines.push(`## Language`);
+    lines.push(`CRITICAL: All user-facing text must be in ${language}.`);
+    lines.push(`Only code identifiers and JSX variable names stay in English.`);
+    lines.push(``);
+  }
+
+  lines.push(`## Output`);
+  lines.push(`Write the JSX to: .deep-research-ui.jsx`);
+  lines.push(`This should be a SINGLE file containing ONLY the function. No imports, no exports, no wrapping.`);
+  lines.push(`The function signature must be: function GeneratedUI({ data, onAction })`);
+
+  return lines.join("\n");
 }
 
 // ── Helpers ──

@@ -106,6 +106,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const isLoading = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking", "deep_research"].includes(phase);
   const hasSynthesis = ["synthesized", "gap_checking", "complete", "generating_podcast"].includes(phase);
   const isComplete = phase === "complete" || phase === "generating_podcast";
+  const isAppBuilt = phase === "app_built";
 
   // ── Reading time estimate (avg 200 words/min for technical content) ──
   const wordCount = useMemo(() => {
@@ -143,7 +144,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     sources: "Gathering sources...",
     synthesizing: "Analyzing & synthesizing...",
     gap_checking: "Checking for gaps...",
-    deep_research: "Deep research in progress (Claude Code)...",
+    deep_research: "Building custom research experience (Claude Code)...",
     synthesized: "Finalizing...",
     complete: "Research complete",
   };
@@ -196,6 +197,19 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       </div>
     );
   };
+
+  // ═══════════════════════════════════════════
+  // VIEW 0: App Built (deep research delivered as custom app)
+  // ═══════════════════════════════════════════
+  if (isAppBuilt) {
+    return (
+      <div style={{ padding: "24px", textAlign: "center", color: "#888" }}>
+        <div style={{ fontSize: "32px", marginBottom: "12px" }}>&#10024;</div>
+        <div style={{ fontSize: "14px", fontWeight: 600, color: "#e2e8f0" }}>Custom research experience built</div>
+        <div style={{ fontSize: "12px", marginTop: "4px" }}>See the app card above for your interactive research experience</div>
+      </div>
+    );
+  }
 
   // ═══════════════════════════════════════════
   // VIEW 1: Welcome

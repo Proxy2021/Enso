@@ -33,11 +33,11 @@ function pushProgress(data: Record<string, unknown>): void {
 
 // ── Deep Research via Claude Code ──
 
-/** Callback to launch a Claude Code session from within researcher tools. */
+/** Callback to launch deep research → custom UI generation. */
 type DeepResearchLauncher = (params: {
   topic: string;
-  systemPrompt: string;
-  onComplete: (resultJson: string | null) => void;
+  language: string;
+  onComplete: (generatedUI: string | null) => void;
 }) => void;
 
 let _deepResearchLauncher: DeepResearchLauncher | null = null;
@@ -1379,61 +1379,8 @@ Return valid JSON (no markdown fences):
   }
 }
 
-function buildDeepResearchSystemPrompt(topic: string): string {
-  return `You are a thorough research analyst. Your task is to conduct comprehensive research on: "${topic}"
-
-RESEARCH PROCESS:
-1. Start with broad web searches to understand the topic landscape
-2. Follow up with specific searches on key aspects, controversies, and data
-3. Read full articles for the most important sources
-4. Resolve any contradictions by finding additional evidence
-5. Search for relevant books, documentaries, videos, and media
-6. Synthesize everything into a structured research report
-
-OUTPUT REQUIREMENTS:
-When your research is complete, write a JSON file called ".research-result.json" in the current directory with this exact structure:
-{
-  "summary": "2-3 sentence executive summary",
-  "narrative": "Comprehensive 4-8 paragraph narrative covering all angles. Use \\n\\n between paragraphs.",
-  "keyFindings": [
-    { "text": "Finding statement", "type": "fact|trend|insight|warning", "confidence": "high|medium|low", "sourceRefs": [0, 2] }
-  ],
-  "sections": [
-    { "title": "Section Title", "summary": "One sentence", "bullets": ["Point 1", "Point 2"], "sourceRefs": [1, 3] }
-  ],
-  "sources": [
-    { "url": "https://...", "title": "Article Title", "snippet": "Brief description", "domain": "example.com", "relevance": 85 }
-  ],
-  "images": [],
-  "videos": [
-    { "url": "https://youtube.com/...", "title": "Video Title", "thumbnail": "", "description": "Brief desc", "creator": "Channel" }
-  ],
-  "books": [
-    { "title": "Book Title", "author": "Author Name", "year": "2024", "description": "Why it's relevant" }
-  ],
-  "movies": [
-    { "title": "Title", "year": "2024", "type": "movie|tv|documentary|podcast", "description": "Why it's relevant" }
-  ],
-  "recommendedVideos": [
-    { "index": 0, "reason": "Why this video is worth watching" }
-  ],
-  "contradictions": [
-    { "claim": "The disputed claim", "perspectives": ["View A", "View B"], "sourceRefs": [0, 3] }
-  ]
-}
-
-RULES:
-- Generate 6-12 key findings covering the most important discoveries
-- Generate 4-8 thematic sections organized by subtopic
-- Include 10-30 sources with real URLs
-- sourceRefs are 0-indexed into the sources array
-- Every finding and section must reference at least one source
-- Include any books, movies, documentaries, podcasts discovered during research
-- If videos are found, rank the top 3-5 in recommendedVideos
-- Only include genuine contradictions from real sources
-- Write the narrative as engaging, magazine-quality prose
-- Be thorough but factual — cite your sources`;
-}
+// Deep research system prompt removed — deep research now builds custom apps
+// via handleDeepResearchBuild() in build-via-claude.ts
 
 // ── Tool implementations ──
 
@@ -1534,7 +1481,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   const shouldDeepResearch = depth === "deep" || (routeResult?.route === "deep");
 
   if (shouldDeepResearch && _deepResearchLauncher && geminiKey) {
-      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `auto-escalating to deep research for "${topic}" (depth=${depth})` });
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `auto-escalating to deep research app build for "${topic}" (depth=${depth})` });
 
       pushProgress({
         tool: "enso_researcher_search",
@@ -1550,107 +1497,48 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
         videos: [],
       });
 
-      // Launch Claude Code deep research — returns a promise that resolves when complete
-      const deepPrompt = buildDeepResearchSystemPrompt(topic) +
-        (language !== "English" ? `\n\nCRITICAL: Write ALL output text (summary, narrative, keyFindings, sections, books, movies, contradictions) in ${language}. Only type/confidence labels stay in English.` : "");
-
-      const resultJson = await new Promise<string | null>((resolve) => {
+      // Launch deep research → custom UI generation
+      // Claude Code researches the topic AND generates a bespoke JSX template
+      const generatedUI = await new Promise<string | null>((resolve) => {
         _deepResearchLauncher!({
           topic,
-          systemPrompt: deepPrompt,
+          language,
           onComplete: resolve,
         });
       });
 
-      if (resultJson) {
-        try {
-          const parsed = JSON.parse(resultJson);
+      if (generatedUI) {
+        // Custom template generated — return result with generatedUI for the card
+        logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research custom UI generated for "${topic}" (${generatedUI.length} chars)` });
 
-          // Supplement with Brave image + video search (Claude Code can't reliably find multimedia)
-          let images: ResearchImage[] = Array.isArray(parsed.images) ? parsed.images.slice(0, 12) : [];
-          let videos: ResearchVideo[] = Array.isArray(parsed.videos) ? parsed.videos.slice(0, 12) : [];
-          const needImages = images.length < 3;
-          const needVideos = videos.length < 3;
-          if (needImages || needVideos) {
-            try {
-              const [rawImages, rawVideos] = await Promise.all([
-                needImages ? braveImageSearch(topic, 10) : Promise.resolve([]),
-                needVideos ? braveVideoSearch(topic, 8) : Promise.resolve([]),
-              ]);
-              if (needImages && rawImages.length > 0) {
-                const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
-                images = matchImagesToSections(sections, rawImages);
-              }
-              if (needVideos && rawVideos.length > 0) {
-                // Merge: Claude Code videos first, then Brave videos (deduplicated by URL)
-                const existingUrls = new Set(videos.map((v: ResearchVideo) => v.url));
-                const braveVideos: ResearchVideo[] = rawVideos
-                  .filter((v) => !existingUrls.has(v.url))
-                  .slice(0, 12 - videos.length)
-                  .map((v) => ({
-                    url: v.url, title: v.title, thumbnail: v.thumbnail,
-                    description: v.description, duration: v.duration,
-                    creator: v.creator, publisher: v.publisher, age: v.age,
-                  }));
-                videos = [...videos, ...braveVideos];
-              }
-            } catch { /* multimedia search is best-effort */ }
-          }
-
-          const result = {
-            tool: "enso_researcher_search",
-            topic,
-            depth: "deep",
-            phase: "complete",
-            summary: String(parsed.summary ?? ""),
-            narrative: String(parsed.narrative ?? ""),
-            keyFindings: Array.isArray(parsed.keyFindings) ? parsed.keyFindings.slice(0, 12) : [],
-            sections: Array.isArray(parsed.sections) ? parsed.sections.slice(0, 8) : [],
-            sources: Array.isArray(parsed.sources) ? parsed.sources.slice(0, 30) : [],
-            images,
-            videos,
-            books: Array.isArray(parsed.books) ? parsed.books.slice(0, 8) : [],
-            movies: Array.isArray(parsed.movies) ? parsed.movies.slice(0, 8) : [],
-            recommendedVideos: Array.isArray(parsed.recommendedVideos) ? parsed.recommendedVideos.slice(0, 5) : [],
-            contradictions: Array.isArray(parsed.contradictions) ? parsed.contradictions.slice(0, 5) : [],
-            metadata: {
-              queriesRun: 0,
-              sourcesFound: Array.isArray(parsed.sources) ? parsed.sources.length : 0,
-              sectionsGenerated: Array.isArray(parsed.sections) ? parsed.sections.length : 0,
-              timestamp: Date.now(),
-              note: "Deep research via Claude Code",
-              isDeepResearch: true,
-            },
-          };
-
-          // Cache deep research results
-          const cachedEntry: CachedResearch = {
-            topic,
-            summary: result.summary,
-            narrative: result.narrative,
-            keyFindings: result.keyFindings,
-            sections: result.sections,
-            sources: result.sources,
-            images: result.images,
-            videos: result.videos,
-            books: result.books,
-            movies: result.movies,
-            recommendedVideos: result.recommendedVideos,
-            contradictions: result.contradictions,
+        const result = {
+          tool: "enso_researcher_search",
+          topic,
+          depth: "deep",
+          phase: "app_built",
+          summary: `Custom research experience for: ${topic}`,
+          narrative: "",
+          keyFindings: [],
+          sections: [],
+          sources: [],
+          images: [],
+          videos: [],
+          metadata: {
+            queriesRun: 0,
+            sourcesFound: 0,
+            sectionsGenerated: 0,
             timestamp: Date.now(),
-          };
-          researchCache.set(topic.toLowerCase(), cachedEntry);
-          researchHistory.save(topicSlug(topic), cachedEntry, buildResearchMeta(cachedEntry, "deep", true));
-
-          logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research complete: ${result.keyFindings.length} findings, ${result.sections.length} sections, ${result.sources.length} sources` });
-          return jsonResult(result);
-        } catch (parseErr) {
-          logError("researcher", "Failed to parse deep research result", parseErr, { topic });
-          // Fall through to standard pipeline
-        }
+            note: "Deep research delivered as custom UI",
+            isDeepResearch: true,
+            isCustomApp: true,
+          },
+          _generatedUI: generatedUI,
+        };
+        return jsonResult(result);
       }
-      // If deep research failed or returned null, fall through to standard pipeline
-      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research failed for "${topic}", falling back to standard pipeline` });
+
+      // If UI generation failed, fall through to standard pipeline
+      logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deep research UI generation failed for "${topic}", falling back to standard pipeline` });
   }
 
   // ── Phase: generating_queries ──

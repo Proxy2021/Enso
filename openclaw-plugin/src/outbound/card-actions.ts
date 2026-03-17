@@ -25,7 +25,8 @@ import {
 import { logAction, logError, logFix } from "../action-log.js";
 import { setResearchProgressCallback, setDeepResearchLauncher } from "../researcher-tools.js";
 import { runClaudeCode } from "../claude-code.js";
-import { existsSync, readFileSync, unlinkSync } from "fs";
+import { handleDeepResearchBuild } from "../build-via-claude.js";
+// fs imports removed — no longer needed after deep research refactor
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts, isPathWithinRoot, validateScopedAction } from "./card-context.js";
@@ -781,44 +782,18 @@ export async function handlePluginCardAction(params: {
           });
         });
 
-        // Wire up deep research launcher (Claude Code)
-        setDeepResearchLauncher(({ topic, systemPrompt, onComplete }) => {
-          const deepRunId = randomUUID();
-          const cwd = process.cwd();
-          const resultFile = require("path").join(cwd, ".research-result.json");
-
-          // Clean up any previous result file
-          try { if (existsSync(resultFile)) unlinkSync(resultFile); } catch { /* ignore */ }
-
-          // Send the deep research phase to the terminal card
-          // The researcher tool will show "deep_research" phase in the researcher card
-          // Meanwhile we run Claude Code which streams to a separate terminal-like output
-
-          const fullPrompt = systemPrompt + "\n\nBegin your research now. Write the final JSON result to .research-result.json when done.";
-
-          runClaudeCode({
-            prompt: fullPrompt,
-            cwd,
+        // Wire up deep research launcher — generates custom UI for the topic
+        setDeepResearchLauncher(({ topic, language, onComplete }) => {
+          handleDeepResearchBuild({
+            topic,
+            language,
+            cardId,
             client,
-            runId: deepRunId,
-            targetCardId: cardId + "-deep",
-          }).then(() => {
-            // Claude Code finished — read the result file
-            try {
-              if (existsSync(resultFile)) {
-                const content = readFileSync(resultFile, "utf-8");
-                unlinkSync(resultFile); // clean up
-                onComplete(content);
-              } else {
-                logError("researcher", "Deep research completed but no result file found", undefined, { topic });
-                onComplete(null);
-              }
-            } catch (readErr) {
-              logError("researcher", "Failed to read deep research result", readErr, { topic });
-              onComplete(null);
-            }
+            account: ctx.account,
+          }).then((generatedUI) => {
+            onComplete(generatedUI);
           }).catch((err) => {
-            logError("researcher", "Deep research Claude Code failed", err, { topic });
+            logError("researcher", "Deep research UI generation failed", err, { topic });
             onComplete(null);
           });
         });
@@ -844,6 +819,16 @@ export async function handlePluginCardAction(params: {
 
         if (result.success && result.data != null) {
           ctx.currentData = structuredClone(result.data);
+
+          // Deep research: if the tool returned a custom generated UI, use it directly
+          const resultObj = result.data as Record<string, unknown>;
+          if (resultObj._generatedUI && typeof resultObj._generatedUI === "string") {
+            const customUI = resultObj._generatedUI as string;
+            delete resultObj._generatedUI; // Don't pass internal field to frontend
+            logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Deep research custom UI delivered (${customUI.length} chars)`, cardId });
+            sendActionResult(result.data, customUI);
+            return;
+          }
 
           ctx.appToolHint = {
             toolName: toolCall.toolName,
