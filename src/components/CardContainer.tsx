@@ -9,6 +9,7 @@ import { useVoiceInput } from "./VoiceMicButton";
 import { getActiveBackend } from "../lib/connection";
 import { isNative } from "../lib/platform";
 import { nativeShare } from "../lib/native-share";
+import TerminalContent from "./TerminalContent";
 
 const APP_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
@@ -601,56 +602,17 @@ function ExportButton({ card }: { card: Card }) {
   );
 }
 
-/** Strip ANSI escape codes and Enso terminal markers for build log display */
-function cleanBuildText(text: string): string {
-  return text
-    // Strip ANSI escape codes
-    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
-    // Strip zero-width markers like [tool:...], [cost:...], [ctx:...], etc.
-    .replace(/\u200B\[[^\]]*\]/g, "")
-    // Strip thinking markers
-    .replace(/\[think:(?:start|end)\]/g, "")
-    // Collapse multiple blank lines
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 function DeepResearchBuildView({ text }: { text: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const cleaned = useMemo(() => cleanBuildText(text), [text]);
-  // Show last ~80 lines for performance
-  const displayText = useMemo(() => {
-    const lines = cleaned.split("\n");
-    return lines.length > 80 ? lines.slice(-80).join("\n") : cleaned;
-  }, [cleaned]);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-  }, [displayText]);
-
   return (
-    <div className="p-3">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
-        </span>
-        <span className="text-xs text-violet-300 font-medium">Building deep research UI...</span>
-      </div>
-      <div
-        ref={containerRef}
-        className="bg-gray-950 rounded-lg border border-gray-800 p-3 max-h-[400px] overflow-y-auto font-mono text-[11px] text-gray-400 leading-relaxed"
-      >
-        {displayText ? (
-          <pre className="whitespace-pre-wrap break-words">{displayText}</pre>
-        ) : (
-          <div className="text-gray-600 italic">Starting Claude Code session...</div>
-        )}
-        <span className="inline-block w-1.5 h-3.5 bg-violet-400 animate-pulse ml-0.5 align-text-bottom rounded-sm" />
-      </div>
+    <div className="bg-[#0d1117] rounded-lg border border-gray-800 overflow-hidden">
+      <TerminalContent
+        text={text}
+        status="streaming"
+        accentColor="violet"
+        showHeader
+        headerLabel="Deep Research"
+        maxHeightClass="max-h-[500px]"
+      />
     </div>
   );
 }
@@ -801,8 +763,9 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
   );
 }
 
-function CardContextMenu({ x, y, onRemove, onClose }: { x: number; y: number; onRemove: () => void; onClose: () => void }) {
+function CardContextMenu({ x, y, onRemove, onClose, cardText }: { x: number; y: number; onRemove: () => void; onClose: () => void; cardText?: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const handler = (e: globalThis.MouseEvent) => {
@@ -812,12 +775,52 @@ function CardContextMenu({ x, y, onRemove, onClose }: { x: number; y: number; on
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
 
+  const handleCopy = async () => {
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim();
+    const textToCopy = selectedText || cardText || "";
+    if (!textToCopy) return;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setTimeout(() => onClose(), 600);
+    } catch {
+      // fallback for older browsers
+      const ta = document.createElement("textarea");
+      ta.value = textToCopy;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => onClose(), 600);
+    }
+  };
+
   return (
     <div
       ref={ref}
       className="fixed z-[300] bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_12px_40px_rgba(0,0,0,0.5)] overflow-hidden min-w-[140px]"
       style={{ left: x, top: y }}
     >
+      <button
+        onClick={handleCopy}
+        className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-colors flex items-center gap-2"
+      >
+        {copied ? (
+          <svg className="h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : (
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        )}
+        {copied ? "Copied!" : "Copy"}
+      </button>
       <button
         onClick={() => { onRemove(); onClose(); }}
         className="w-full text-left px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/15 transition-colors flex items-center gap-2"
@@ -897,6 +900,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           <CardContextMenu
             x={contextMenu.x}
             y={contextMenu.y}
+            cardText={card.text ?? ""}
             onRemove={() => removeCard(card.id)}
             onClose={() => setContextMenu(null)}
           />
@@ -910,7 +914,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     );
   }
 
-  const isLoading = card.status === "streaming" || card.enhanceStatus === "loading";
+  const isLoading = (card.status === "streaming" || card.enhanceStatus === "loading") && !isDeepBuilding;
   const loadingLabel = card.enhanceStatus === "loading"
     ? "Enhancing to app"
     : card.operation?.label ?? card.pendingAction;
@@ -1132,6 +1136,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         <CardContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          cardText={card.text ?? ""}
           onRemove={() => removeCard(card.id)}
           onClose={() => setContextMenu(null)}
         />
