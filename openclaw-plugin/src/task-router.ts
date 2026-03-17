@@ -14,77 +14,81 @@ import { logAction, logError } from "./action-log.js";
 
 // ── Types ──
 
-export type TaskComplexity = "simple" | "research" | "one-off" | "orchestrated";
+export type TaskComplexity = "simple" | "direct" | "research" | "one-off" | "orchestrated";
 
 export interface TaskClassification {
   complexity: TaskComplexity;
   reasoning: string;
-  goalSummary?: string;    // For orchestrated: high-level decomposition hint
-  directAction?: string;   // For one-off: what to do
-  researchTopic?: string;  // For research: extracted topic to pass to researcher
+  answer?: string;           // For direct: the answer to return immediately
+  goalSummary?: string;      // For orchestrated: high-level decomposition hint
+  directAction?: string;     // For one-off: what to do
+  researchTopic?: string;    // For research: extracted topic to pass to researcher
   researchDepth?: "quick" | "standard" | "deep";  // For research: suggested depth
 }
 
 // ── Classifier ──
 
-const CLASSIFIER_PROMPT = `You are a task complexity classifier for Enso, an AI assistant that can chat, run code, orchestrate multi-agent missions, and do deep web research.
+const CLASSIFIER_PROMPT = `You are a smart router for Enso, an AI assistant that can chat, run code, orchestrate multi-agent missions, and do deep web research.
 
-Classify the user's message into exactly ONE of these four categories:
+Classify the user's message into exactly ONE of these five categories:
+
+## DIRECT
+Factual questions with definitive, well-known answers that you can answer immediately without web search. Provide the answer directly. This saves the user from waiting for unnecessary processing.
+Examples:
+- "What is the capital of France?" → answer: "The capital of France is Paris."
+- "What's 2+2?" → answer: "4"
+- "How many meters in a kilometer?" → answer: "There are 1,000 meters in a kilometer."
+- "When did World War 2 end?" → answer: "World War 2 ended in 1945."
+- "What does HTML stand for?" → answer: "HTML stands for HyperText Markup Language."
+- "Who wrote Romeo and Juliet?" → answer: "William Shakespeare wrote Romeo and Juliet."
 
 ## SIMPLE
-Casual chat, greetings, small talk, very short factual lookups, code explanations, opinions. Things that can be answered from general knowledge without needing web research.
+Casual chat, greetings, small talk, code explanations, opinions, creative writing, translations — things that need conversational AI but NOT web research or direct factual answers.
 Examples:
 - "Hi, how are you?"
 - "Explain how React hooks work"
 - "What does this error mean?"
-- "What time is it in London?"
 - "Translate this to Spanish"
-- "What's 2+2?"
+- "Write me a poem about the ocean"
 
 ## RESEARCH
-The user wants to learn about, investigate, explore, compare, or understand a topic in depth. This includes any request where web research would significantly improve the answer — current events, comparisons, analysis, recommendations, trends, controversies, or any factual topic that benefits from multiple sources. The user does NOT need to say "research" explicitly — if the question is best answered by searching the web and synthesizing multiple sources, it's RESEARCH.
+The user wants to learn about, investigate, explore, compare, or understand a topic in depth. This includes any request where web research would significantly improve the answer — current events, comparisons, analysis, recommendations, trends, controversies, or any factual topic that benefits from multiple sources. The user does NOT need to say "research" explicitly.
 Examples:
 - "What are the pros and cons of nuclear vs solar energy?"
 - "Research quantum computing breakthroughs in 2025"
-- "Tell me everything about PFAS contamination in drinking water"
 - "Best programming languages for AI development and why"
-- "How does the housing market look in Austin right now?"
 - "Compare Tesla Model 3 vs BMW i4 vs Polestar 2"
 - "What's happening with AI regulation in the EU?"
-- "Deep dive into SaaS pricing strategies"
-- "What should I know about starting a food truck business?"
 - "Latest developments in CRISPR gene therapy"
-- "Is intermittent fasting actually healthy? What does the research say?"
-- "What are the best tools for building mobile apps in 2025?"
+- "Is intermittent fasting actually healthy?"
 
 ## ONE-OFF
-A single concrete task that requires code execution, file manipulation, scripting, a bug fix, data processing, or creating ONE thing. The user wants something DONE (code written, files changed, app built), not just researched or discussed.
+A single concrete task that requires code execution, file manipulation, scripting, a bug fix, data processing, or creating ONE thing. The user wants something DONE, not researched.
 Examples:
 - "Fix the bug in server.ts where the API returns 500"
-- "Write a Python script to scrape product prices"
 - "Build me a todo app"
-- "Convert all PNG files to JPEG"
+- "Write a Python script to scrape product prices"
 - "Refactor this function to use async/await"
 
 ## ORCHESTRATED
-A complex, multi-faceted goal requiring planning AND execution across multiple workstreams (research + design + building, or analysis + multiple deliverables). These are missions, not tasks.
+A complex, multi-faceted goal requiring planning AND execution across multiple workstreams.
 Examples:
 - "Build a complete freelance photography management system"
 - "Help me launch my startup's MVP — landing page, auth, payments, admin"
-- "Set up my entire dev environment with CI/CD, testing, and deployment"
 
 ## Rules
-- **RESEARCH is the default for informational questions about real-world topics.** If the user asks about something that benefits from current web data, multiple perspectives, or source-backed analysis, choose RESEARCH.
-- SIMPLE is for casual chat, greetings, code help, and trivial factual lookups that don't need web research.
-- If in doubt between SIMPLE and RESEARCH, choose RESEARCH — it's better to give a thorough researched answer than a shallow one.
-- If in doubt between RESEARCH and ONE-OFF, choose based on intent: learning/understanding → RESEARCH, doing/building → ONE-OFF.
+- **DIRECT is for questions with a single, definitive answer** you are confident about. If there's any nuance, debate, or the answer depends on context/timing, use RESEARCH instead.
+- **RESEARCH is the default for informational questions about real-world topics.** If the question benefits from current web data or multiple perspectives, choose RESEARCH.
+- SIMPLE is for chat, greetings, code help, creative tasks, and conversational interactions.
+- If in doubt between DIRECT and RESEARCH, choose RESEARCH.
+- If in doubt between SIMPLE and RESEARCH, choose RESEARCH.
 - ONE-OFF requires explicit action intent (fix, create, write, build, convert, deploy, refactor).
-- Messages starting with "build me a complete...", "set up a full...", "plan a..." with multiple deliverables → ORCHESTRATED.
-- For RESEARCH: extract the core topic and suggest a depth (quick for simple comparisons, standard for most topics, deep for complex multi-faceted analysis).
-- IMPORTANT: Keep researchTopic in the SAME LANGUAGE as the user's message. If the user writes in Chinese, the researchTopic must be in Chinese. If in Japanese, keep it in Japanese. Never translate the topic to English.
+- For RESEARCH: extract the core topic and suggest a depth.
+- For DIRECT: provide a concise, accurate answer (1-3 sentences).
+- IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","researchTopic":"extracted topic IN THE USER'S LANGUAGE","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
+{"complexity":"direct|simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"direct answer (DIRECT only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard|deep","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
 
 export async function classifyTask(params: {
   userMessage: string;
@@ -120,7 +124,7 @@ export async function classifyTask(params: {
     const parsed = JSON.parse(cleaned) as TaskClassification;
 
     // Validate the complexity field
-    if (!["simple", "research", "one-off", "orchestrated"].includes(parsed.complexity)) {
+    if (!["simple", "direct", "research", "one-off", "orchestrated"].includes(parsed.complexity)) {
       throw new Error(`Invalid complexity: ${parsed.complexity}`);
     }
 

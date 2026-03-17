@@ -963,6 +963,30 @@ export async function startEnsoServer(opts: {
                   geminiApiKey: account.geminiApiKey,
                 });
 
+                if (classification.complexity === "direct" && classification.answer) {
+                  runtime.log?.(`[enso] task-router: direct answer → "${msg.text.slice(0, 60)}"`);
+                  const directCardId = randomUUID();
+                  const directRunId = randomUUID();
+                  send({
+                    id: directCardId,
+                    runId: directRunId,
+                    sessionKey,
+                    seq: 0,
+                    state: "final",
+                    text: classification.answer,
+                    timestamp: Date.now(),
+                  });
+                  persistCard(clientId, {
+                    id: directCardId,
+                    runId: directRunId,
+                    type: "chat",
+                    role: "assistant",
+                    text: classification.answer,
+                    timestamp: Date.now(),
+                  });
+                  break;
+                }
+
                 if (classification.complexity === "orchestrated") {
                   runtime.log?.(`[enso] task-router: orchestrated → "${msg.text.slice(0, 60)}"`);
                   const { handleOrchestration } = await import("./orchestrator.js");
