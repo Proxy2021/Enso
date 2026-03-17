@@ -298,15 +298,12 @@ export function generateResearchPDF(data: ResearchData): Blob {
       doc.setFontSize(9.5);
       doc.setTextColor(...colors.body);
       doc.text(`${i + 1}.`, margin + 1, y);
-      // Book title — clickable if URL available
-      if (b.url) {
-        doc.setFontSize(9.5);
-        doc.setTextColor(...colors.accent);
-        doc.textWithLink(b.title, margin + 7, y, { url: b.url });
-        y += 9.5 * 0.35 * 1.3;
-      } else {
-        addWrappedText(b.title, 9.5, colors.body, 1.3, 7);
-      }
+      // Book title — always clickable (fallback to Google search)
+      const bookUrl = b.url || `https://www.google.com/search?q=${encodeURIComponent(b.title + (b.author ? " " + b.author : "") + " book")}`;
+      doc.setFontSize(9.5);
+      doc.setTextColor(...colors.accent);
+      doc.textWithLink(b.title, margin + 7, y, { url: bookUrl });
+      y += 9.5 * 0.35 * 1.3;
       // Author + year
       const meta = [b.author, b.year].filter(Boolean).join(", ");
       if (meta) {
@@ -339,17 +336,13 @@ export function generateResearchPDF(data: ResearchData): Blob {
       doc.setFontSize(9.5);
       doc.setTextColor(...colors.body);
       doc.text(`${i + 1}.`, margin + 1, y);
-      // Movie title — clickable if URL available
-      if (m.url) {
-        doc.setFontSize(9.5);
-        doc.setTextColor(...colors.accent);
-        const titleText = m.year ? `${m.title} (${m.year})` : m.title;
-        doc.textWithLink(titleText, margin + 7, y, { url: m.url });
-        y += 9.5 * 0.35 * 1.3;
-      } else {
-        const titleText = m.year ? `${m.title} (${m.year})` : m.title;
-        addWrappedText(titleText, 9.5, colors.body, 1.3, 7);
-      }
+      // Movie title — always clickable (fallback to Google search)
+      const titleText = m.year ? `${m.title} (${m.year})` : m.title;
+      const movieUrl = m.url || `https://www.google.com/search?q=${encodeURIComponent(m.title + (m.year ? " " + m.year : "") + " " + (m.type || "movie"))}`;
+      doc.setFontSize(9.5);
+      doc.setTextColor(...colors.accent);
+      doc.textWithLink(titleText, margin + 7, y, { url: movieUrl });
+      y += 9.5 * 0.35 * 1.3;
       // Type badge + description
       if (m.type) {
         doc.setFontSize(7.5);

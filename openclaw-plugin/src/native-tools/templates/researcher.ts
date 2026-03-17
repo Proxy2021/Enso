@@ -81,7 +81,10 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     const m = url.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
   };
-  const togglePlay = (url) => setPlayingVideos((prev) => ({ ...prev, [url]: !prev[url] }));
+  const togglePlay = (url) => setPlayingVideos((prev) => {
+    if (prev[url]) return {}; // Pausing — clear all
+    return { [url]: true };   // Playing — only this one (stops all others)
+  });
 
   // ── Finding type styling ──
   const findingVariant = { fact: "success", trend: "info", insight: "default", warning: "warning" };
@@ -1082,9 +1085,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                         <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
                           <LucideReact.BookOpen className="w-3 h-3 text-indigo-400" /> Books ({books.length})
                         </div>
-                        {books.map((b, i) => (
+                        {books.map((b, i) => {
+                          const bookUrl = b.url || "https://www.google.com/search?q=" + encodeURIComponent(b.title + (b.author ? " " + b.author : "") + " book");
+                          return (
                           <UICard key={i} accent="indigo">
-                            <div className="flex gap-3">
+                            <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: bookUrl })}>
                               <div className="w-8 h-12 bg-indigo-900/30 rounded flex items-center justify-center shrink-0">
                                 <LucideReact.BookOpen className="w-4 h-4 text-indigo-400" />
                               </div>
@@ -1093,14 +1098,13 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                                 <div className="text-[11px] text-gray-400">{b.author}{b.year ? " (" + b.year + ")" : ""}</div>
                                 {b.description && <div className="text-xs text-gray-400 mt-1">{b.description}</div>}
                               </div>
-                              {b.url && (
-                                <Button variant="ghost" onClick={() => onAction("open_url", { url: b.url })}>
-                                  <LucideReact.ExternalLink className="w-3 h-3" />
-                                </Button>
-                              )}
+                              <div className="flex items-center shrink-0">
+                                <LucideReact.ExternalLink className="w-3 h-3 text-gray-500" />
+                              </div>
                             </div>
                           </UICard>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
@@ -1114,9 +1118,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                           const typeAccent = { movie: "rose", tv: "cyan", documentary: "teal", podcast: "orange" };
                           const typeIcon = { movie: "Film", tv: "Monitor", documentary: "Clapperboard", podcast: "Mic" };
                           const IconComp = LucideReact[typeIcon[m.type]] || LucideReact.Film;
+                          const searchSuffix = { movie: "movie", tv: "tv show", documentary: "documentary", podcast: "podcast" };
+                          const movieUrl = m.url || "https://www.google.com/search?q=" + encodeURIComponent(m.title + (m.year ? " " + m.year : "") + " " + (searchSuffix[m.type] || "movie"));
                           return (
                             <UICard key={i} accent={typeAccent[m.type] || "rose"}>
-                              <div className="flex gap-3">
+                              <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: movieUrl })}>
                                 <div className="w-8 h-12 bg-gray-800/50 rounded flex items-center justify-center shrink-0">
                                   <IconComp className="w-4 h-4 text-gray-400" />
                                 </div>
@@ -1128,11 +1134,9 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                                   <Badge variant={m.type === "documentary" ? "info" : m.type === "podcast" ? "warning" : "default"}>{m.type}</Badge>
                                   {m.description && <div className="text-xs text-gray-400 mt-1">{m.description}</div>}
                                 </div>
-                                {m.url && (
-                                  <Button variant="ghost" onClick={() => onAction("open_url", { url: m.url })}>
-                                    <LucideReact.ExternalLink className="w-3 h-3" />
-                                  </Button>
-                                )}
+                                <div className="flex items-center shrink-0">
+                                  <LucideReact.ExternalLink className="w-3 h-3 text-gray-500" />
+                                </div>
                               </div>
                             </UICard>
                           );
