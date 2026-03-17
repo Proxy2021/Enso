@@ -1853,7 +1853,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
               },
             };
           }
-          // Deep research building phase — show toggle but stay in building state
+          // Deep research building phase — show terminal in app view, clear overlay
           const isDeepBuildStart = msg.enhanceResult.cardMode?.signatureId === "deep_research_building";
           if (isDeepBuildStart) {
             return {
@@ -1865,6 +1865,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                   enhanceStatus: "ready",
                   deepResearchStatus: "building",
                   buildTerminalText: "",
+                  status: "complete",       // clear "streaming" so CardLoadingOverlay disappears
+                  viewMode: "app",          // auto-switch to app view to show build terminal
                   operation: undefined,
                   pendingAction: undefined,
                   updatedAt: now,
