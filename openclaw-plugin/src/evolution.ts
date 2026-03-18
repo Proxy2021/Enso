@@ -10,8 +10,6 @@
  * new code is persona definitions and an evolution-specific planning prompt.
  */
 
-import { randomUUID } from "crypto";
-import { join } from "path";
 import { logAction, logError } from "./action-log.js";
 import type { ConnectedClient, ResolvedEnsoAccount } from "./types.js";
 import { handleOrchestration } from "./orchestrator.js";
@@ -324,8 +322,6 @@ export async function handleEvolutionSprint(params: {
   account: ResolvedEnsoAccount;
 }): Promise<void> {
   const { goal, client, account } = params;
-  const orchestrationId = randomUUID();
-  const planFilePath = join(PROJECT_ROOT, `openclaw-plugin/.orchestration-${orchestrationId}.json`);
 
   logAction({
     ts: Date.now(),
@@ -343,7 +339,8 @@ export async function handleEvolutionSprint(params: {
       },
       client,
       account,
-      planningPrompt: buildEvolutionPlanningPrompt(goal || "", orchestrationId, planFilePath),
+      planningPromptBuilder: (orchestrationId, planFilePath) =>
+        buildEvolutionPlanningPrompt(goal || "", orchestrationId, planFilePath),
     });
   } catch (err) {
     logError("evolution", "Evolution sprint failed", err);

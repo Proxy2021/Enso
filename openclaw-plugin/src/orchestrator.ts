@@ -144,8 +144,9 @@ export interface OrchestrationStartParams {
   classification: TaskClassification;
   client: ConnectedClient;
   account: ResolvedEnsoAccount;
-  /** Override the auto-generated planning prompt (used by evolution sprints, etc.) */
-  planningPrompt?: string;
+  /** Override the auto-generated planning prompt (used by evolution sprints, etc.)
+   *  Receives (orchestrationId, planFilePath) so it can reference the correct paths. */
+  planningPromptBuilder?: (orchestrationId: string, planFilePath: string) => string;
 }
 
 /**
@@ -215,7 +216,9 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
 
   // Step 2: Build the planning prompt
   const planFilePath = join(PROJECT_ROOT, `openclaw-plugin/.orchestration-${orchestrationId}.json`);
-  const planningPrompt = params.planningPrompt || buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath);
+  const planningPrompt = params.planningPromptBuilder
+    ? params.planningPromptBuilder(orchestrationId, planFilePath)
+    : buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath);
 
   try {
     // Step 4: Run Claude Code to analyze and plan
