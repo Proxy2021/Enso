@@ -26,7 +26,7 @@ import { isNative } from "./platform";
 let _permissionGranted = false;
 let _enabled = true;
 let _soundEnabled = true;
-let _originalTitle = document.title;
+let _originalTitle = typeof document !== "undefined" ? document.title : "";
 let _flashInterval: ReturnType<typeof setInterval> | null = null;
 let _audioCtx: AudioContext | null = null;
 
