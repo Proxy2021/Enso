@@ -72,6 +72,26 @@ const activeOrchestrations = new Map<
 // ── Archetype-Specific Planning Guidance ──
 
 const ORCHESTRATION_ARCHETYPE_GUIDANCE: Record<string, string> = {
+  data_analysis: `This is a DATA ANALYSIS task. Structure it as:
+1. researcher/coder: Read the data file(s), compute summary statistics, find patterns, outliers, and trends
+2. builder: Build a bespoke interactive dashboard with charts (line/bar/pie), stat cards, DataTable with filters, and key insights
+Keep it tight — 2-3 tasks. The final deliverable MUST be an interactive data dashboard, not a text summary.`,
+
+  competitive_analysis: `This is a COMPETITIVE ANALYSIS task. Structure it as:
+1. researcher: Research each entity/product/company — gather specs, pricing, reviews, market position, strengths/weaknesses
+2. builder: Build a bespoke comparison dashboard with side-by-side panels, radar charts, scoring matrix, and pros/cons
+Keep it tight — 2-3 tasks. The final deliverable MUST be an interactive comparison experience, not a text report.`,
+
+  document_processing: `This is a DOCUMENT PROCESSING task. Structure it as:
+1. coder: Read and parse the document(s), extract key data — dates, parties, amounts, terms, clauses, structure
+2. builder: Build a bespoke document review UI with extracted data tables, section breakdown, risk flags, and summary cards
+Keep it tight — 2-3 tasks. The final deliverable MUST be an interactive document analysis experience, not a text summary.`,
+
+  project_planning: `This is a PROJECT PLANNING task. Structure it as:
+1. researcher: Analyze requirements, research best practices, estimate effort, identify risks
+2. builder: Build a bespoke project planner with phase timeline, task breakdown, risk matrix, and milestone tracker
+Keep it tight — 2-3 tasks. The final deliverable MUST be an interactive project board, not a text plan.`,
+
   travel_planning: `This is a TRAVEL PLANNING task. Structure it as:
 1. researcher: Find real prices, availability, weather, activities, restaurants, transport options for the destination
 2. architect: Design the itinerary structure — day-by-day breakdown, budget allocation, logistics
@@ -80,9 +100,8 @@ The final deliverable MUST be an interactive itinerary experience, not a text re
 
   market_research: `This is a MARKET RESEARCH task. Structure it as:
 1. researcher: Gather market data — players, market size, growth rates, trends, analyst opinions, financial metrics
-2. architect: Synthesize findings into a structured market map with competitive positioning
-3. builder: Build a bespoke market intelligence dashboard with player profiles, market share charts, trend lines, and forecasts
-The final deliverable MUST be an interactive dashboard, not a text report.`,
+2. builder: Build a bespoke market intelligence dashboard with player profiles, market share charts, trend lines, and forecasts
+Keep it tight — 2-3 tasks. The final deliverable MUST be an interactive dashboard, not a text report.`,
 
   creative_project: `This is a CREATIVE PROJECT. Structure it as:
 1. researcher: Gather inspiration, reference materials, best practices, trends in the creative domain

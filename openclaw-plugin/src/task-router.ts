@@ -27,8 +27,6 @@ export type TaskArchetype =
   | "creative_project"
   | "general";
 
-export type ArchetypeRouting = "focused" | "orchestrated";
-
 export interface TaskClassification {
   complexity: TaskComplexity;
   reasoning: string;
@@ -39,7 +37,6 @@ export interface TaskClassification {
   researchDepth?: "quick" | "standard" | "deep";  // For research: suggested depth
   // Archetype fields — for one-off and orchestrated tasks
   archetype?: TaskArchetype;
-  archetypeRouting?: ArchetypeRouting;  // "focused" = single session bespoke UI, "orchestrated" = full DAG
   archetypeHints?: Record<string, string>;  // Domain-specific metadata
   isRecurring?: boolean;     // True if the task implies repeated future use → build reusable app
 }
@@ -91,26 +88,23 @@ Examples:
 - IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
 
 ## ARCHETYPE (for ONE-OFF and ORCHESTRATED only)
-When classifying as one-off or orchestrated, also identify the task archetype and whether it has recurring usage potential:
+When classifying as one-off or orchestrated, also identify the task archetype and whether it has recurring usage potential. The archetype guides how the orchestrator decomposes the task:
 
-| Archetype | When to use | Routing |
-|-----------|-------------|---------|
-| data_analysis | Analyze data files, find patterns, build dashboards, visualize statistics | focused |
-| competitive_analysis | Compare products, companies, technologies, investment options | focused |
-| document_processing | Extract data from documents, review contracts, parse invoices | focused |
-| project_planning | Plan projects, create roadmaps, break down tasks, estimate timelines | focused |
-| travel_planning | Plan trips, compare destinations, build itineraries with budgets | orchestrated |
-| market_research | Industry analysis, market sizing, trend analysis, sector deep-dives | orchestrated |
-| creative_project | Design work, content creation, branding, artistic direction | orchestrated |
-| general | Everything else that doesn't fit a specific archetype | orchestrated |
-
-"focused" = single Claude Code session that researches + builds a bespoke interactive UI (fast, custom-fit).
-"orchestrated" = full multi-step planning + execution across workstreams.
+| Archetype | When to use |
+|-----------|-------------|
+| data_analysis | Analyze data files, find patterns, build dashboards, visualize statistics |
+| competitive_analysis | Compare products, companies, technologies, investment options |
+| document_processing | Extract data from documents, review contracts, parse invoices |
+| project_planning | Plan projects, create roadmaps, break down tasks, estimate timelines |
+| travel_planning | Plan trips, compare destinations, build itineraries with budgets |
+| market_research | Industry analysis, market sizing, trend analysis, sector deep-dives |
+| creative_project | Design work, content creation, branding, artistic direction |
+| general | Everything else that doesn't fit a specific archetype |
 
 Set "isRecurring": true ONLY when the user's request implies they'll do this task repeatedly ("every week", "track my X", "monthly report", "daily standup", "whenever I get"). Most tasks are one-off (false).
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeRouting":"focused|orchestrated","archetypeHints":{"key":"value"},"isRecurring":false}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeHints":{"key":"value"},"isRecurring":false}`;
 
 export async function classifyTask(params: {
   userMessage: string;

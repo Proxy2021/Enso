@@ -1139,24 +1139,6 @@ export async function startEnsoServer(opts: {
                   mediaUrls: msg.mediaUrls,
                 });
 
-                // Focused archetype — single Claude Code session that builds bespoke interactive UI
-                if (classification.archetypeRouting === "focused" && classification.archetype
-                    && (classification.complexity === "orchestrated" || classification.complexity === "one-off")) {
-                  runtime.log?.(`[enso] task-router: focused archetype "${classification.archetype}" → "${msg.text.slice(0, 60)}" (recurring=${classification.isRecurring ?? false})`);
-                  const { handleFocusedArchetype } = await import("./archetype-builder.js");
-                  handleFocusedArchetype({
-                    userMessage: msg.text,
-                    classification,
-                    mediaUrls: msg.mediaUrls,
-                    client,
-                    account,
-                  }).catch((err) => {
-                    logError("archetype-builder", "Focused archetype failed", err);
-                    runtime.error?.(`[enso] archetype-builder error: ${err instanceof Error ? err.message : String(err)}`);
-                  });
-                  break;
-                }
-
                 if (classification.complexity === "orchestrated") {
                   runtime.log?.(`[enso] task-router: orchestrated → "${msg.text.slice(0, 60)}"`);
                   const { handleOrchestration } = await import("./orchestrator.js");
@@ -1212,6 +1194,20 @@ export async function startEnsoServer(opts: {
                 }
 
                 if (classification.complexity === "one-off") {
+                  // One-off tasks with archetypes get escalated to orchestrator for bespoke UI output
+                  if (classification.archetype && classification.archetype !== "general") {
+                    runtime.log?.(`[enso] task-router: one-off with archetype "${classification.archetype}" → escalating to orchestrator`);
+                    const { handleOrchestration } = await import("./orchestrator.js");
+                    handleOrchestration({
+                      userMessage: msg.text,
+                      classification: { ...classification, complexity: "orchestrated" },
+                      client,
+                      account,
+                    }).catch((err) => {
+                      logError("orchestrator", "Archetype-escalated orchestration failed", err);
+                    });
+                    break;
+                  }
                   runtime.log?.(`[enso] task-router: one-off → "${msg.text.slice(0, 60)}"`);
                   const runId = randomUUID();
                   const targetCardId = randomUUID();
