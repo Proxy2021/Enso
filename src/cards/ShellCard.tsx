@@ -199,7 +199,7 @@ export default function ShellCard({ card }: CardRendererProps) {
           <div className="flex gap-1">
             <button
               onClick={handleKill}
-              className="w-2.5 h-2.5 rounded-full bg-red-500/70 hover:bg-red-500 transition-colors cursor-pointer"
+              className="w-2.5 h-2.5 rounded-full bg-red-500/70 hover:bg-red-500 active:bg-red-600 active:scale-[0.85] transition-all duration-150 cursor-pointer"
               title="Kill shell"
             />
             <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/30" />

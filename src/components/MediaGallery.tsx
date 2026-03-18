@@ -126,7 +126,7 @@ export default function MediaGallery({ urls }: { urls: string[] }) {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="block overflow-hidden rounded-lg border border-gray-700/50 hover:border-gray-500 transition-colors"
+            className="block overflow-hidden rounded-lg border border-gray-700/50 hover:border-gray-500 transition-all duration-150"
           >
             {mediaElement}
           </a>

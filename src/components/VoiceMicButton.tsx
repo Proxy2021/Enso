@@ -31,7 +31,7 @@ export function VoiceMicButton({ onTranscript, size = "sm", className = "" }: Vo
     <button
       type="button"
       onClick={voice.toggleListening}
-      className={`relative rounded-md transition-colors ${
+      className={`relative rounded-md transition-all duration-150 ${
         isListening
           ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
           : "text-gray-400 hover:text-gray-200"

@@ -36,7 +36,7 @@ function FixButton({
     <div className="flex items-center gap-2 mt-2">
       <button
         onClick={() => onAction("fix_with_code", { error, errorType })}
-        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-indigo-500/50 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 transition-colors"
+        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-indigo-500/50 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 active:bg-indigo-500/35 active:scale-[0.96] transition-all duration-150"
       >
         <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="16 18 22 12 16 6" />
@@ -173,7 +173,7 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
           <div className="mt-1 px-1">
             <button
               onClick={() => setShowRawText(!showRawText)}
-              className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-400 active:text-gray-300 transition-all duration-150"
             >
               {showRawText ? "Hide response text" : "Show response text"}
             </button>

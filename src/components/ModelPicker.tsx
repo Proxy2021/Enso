@@ -62,7 +62,7 @@ export default function ModelPicker() {
       <button
         ref={btnRef}
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium hover:bg-gray-800 transition-colors ${active.color}`}
+        className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium hover:bg-gray-800 transition-all duration-150 ${active.color}`}
         title={`${active.model} (${active.thinking === "adaptive" ? "thinking" : "fast"})`}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -91,7 +91,7 @@ export default function ModelPicker() {
                   setClaudeModel(p.model, p.thinking);
                   setOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-700/60 transition-colors flex items-center gap-2 ${
+                className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-700/60 transition-all duration-150 flex items-center gap-2 ${
                   isActive ? "bg-gray-700/40" : ""
                 }`}
               >

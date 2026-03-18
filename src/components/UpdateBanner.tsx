@@ -92,13 +92,13 @@ export default function UpdateBanner() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleDismiss}
-              className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-all duration-150"
             >
               Later
             </button>
             <button
               onClick={handleDownload}
-              className="text-xs px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-500 transition-colors font-medium"
+              className="text-xs px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-500 transition-all duration-150 font-medium"
             >
               Update
             </button>
@@ -142,13 +142,13 @@ export default function UpdateBanner() {
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={handleDismiss}
-              className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-all duration-150"
             >
               Dismiss
             </button>
             <button
               onClick={handleDownload}
-              className="text-xs px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-500 transition-colors font-medium"
+              className="text-xs px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-500 transition-all duration-150 font-medium"
             >
               Update
             </button>
@@ -163,7 +163,7 @@ export default function UpdateBanner() {
           </p>
           <button
             onClick={handleDownload}
-            className="text-xs px-3 py-1 rounded-md border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-colors flex-shrink-0"
+            className="text-xs px-3 py-1 rounded-md border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-all duration-150 flex-shrink-0"
           >
             Retry
           </button>

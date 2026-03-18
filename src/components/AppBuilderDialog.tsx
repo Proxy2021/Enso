@@ -65,14 +65,14 @@ export function AppBuilderDialog({ cardId, cardText, defaultDefinition, onClose 
         <div className="px-4 py-3 border-t border-gray-700/70 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-xs rounded-md border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors"
+            className="px-3 py-1.5 text-xs rounded-md border border-gray-600 text-gray-300 hover:bg-gray-800 transition-all duration-150"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!instruction.trim()}
-            className="px-3 py-1.5 text-xs rounded-md border border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs rounded-md border border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Build App
           </button>

@@ -140,17 +140,17 @@ function Tabs({
     if (variant === "pills") {
       return isActive
         ? "bg-gray-700 text-gray-100 shadow-sm"
-        : "text-gray-400 hover:text-gray-200 hover:bg-gray-700/40";
+        : "text-gray-400 hover:text-gray-200 hover:bg-gray-700/40 active:bg-gray-700/60 active:scale-[0.97]";
     }
     if (variant === "underline") {
       return isActive
         ? "text-violet-400 border-b-2 border-violet-400 -mb-px"
-        : "text-gray-400 hover:text-gray-200 border-b-2 border-transparent -mb-px";
+        : "text-gray-400 hover:text-gray-200 border-b-2 border-transparent -mb-px active:text-gray-100 active:scale-[0.97]";
     }
     // boxed
     return isActive
       ? "bg-gray-700 text-gray-100 border-b-2 border-violet-400"
-      : "text-gray-400 hover:text-gray-200 hover:bg-gray-700/40 border-b-2 border-transparent";
+      : "text-gray-400 hover:text-gray-200 hover:bg-gray-700/40 border-b-2 border-transparent active:bg-gray-700/60 active:scale-[0.97]";
   };
 
   return (
@@ -198,11 +198,11 @@ function Button({
   className?: string;
 }) {
   const variants: Record<string, string> = {
-    default: "bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600",
-    primary: "bg-violet-600 border-violet-500 text-white hover:bg-violet-500",
-    ghost: "bg-transparent border-transparent text-gray-300 hover:bg-gray-700/50 hover:text-gray-100",
-    danger: "bg-rose-600/15 border-rose-500/40 text-rose-400 hover:bg-rose-600/25",
-    outline: "bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700/50",
+    default: "bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600 active:bg-gray-500",
+    primary: "bg-violet-600 border-violet-500 text-white hover:bg-violet-500 active:bg-violet-400",
+    ghost: "bg-transparent border-transparent text-gray-300 hover:bg-gray-700/50 hover:text-gray-100 active:bg-gray-700/70",
+    danger: "bg-rose-600/15 border-rose-500/40 text-rose-400 hover:bg-rose-600/25 active:bg-rose-600/35",
+    outline: "bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700/50 active:bg-gray-700/70",
   };
 
   const sizes: Record<string, string> = {
@@ -215,7 +215,7 @@ function Button({
     <button
       onClick={onClick}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center font-medium rounded-lg border transition-all duration-150 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant] ?? variants.default} ${sizes[size] ?? sizes.sm} ${className}`}
+      className={`inline-flex items-center justify-center font-medium rounded-lg border transition-all duration-150 active:scale-[0.96] active:brightness-110 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant] ?? variants.default} ${sizes[size] ?? sizes.sm} ${className}`}
     >
       {loading ? (
         <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
@@ -318,7 +318,7 @@ function Switch({
       aria-checked={isChecked}
       onClick={toggle}
       disabled={disabled}
-      className={`inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+      className={`inline-flex items-center gap-2 cursor-pointer active:scale-[0.97] transition-transform duration-150 disabled:opacity-50 disabled:cursor-not-allowed`}
     >
       <span
         className={`relative inline-flex shrink-0 rounded-full transition-colors duration-200 ${trackSize} ${isChecked ? "bg-violet-600" : "bg-gray-600"}`}
@@ -602,7 +602,7 @@ function Accordion({
           <div key={item.value} className="border border-gray-700/50 rounded-lg overflow-hidden">
             <button
               onClick={() => toggleItem(item.value)}
-              className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-gray-200 bg-gray-800/60 hover:bg-gray-800 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-medium text-gray-200 bg-gray-800/60 hover:bg-gray-800 active:bg-gray-700 active:scale-[0.99] transition-all duration-150 cursor-pointer"
             >
               <span className="flex items-center gap-2">
                 {typeof item.title === "string" ? item.title : item.title}
@@ -647,10 +647,10 @@ function Tooltip({
   };
 
   return (
-    <span className="relative inline-flex group">
+    <span className="relative inline-flex group" tabIndex={0}>
       {children}
       <span
-        className={`absolute z-50 px-2 py-1 text-[10px] text-gray-100 bg-gray-900 border border-gray-600 rounded-md shadow-lg whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${positionStyles[side] ?? positionStyles.top}`}
+        className={`absolute z-50 px-2 py-1 text-[10px] text-gray-100 bg-gray-900 border border-gray-600 rounded-md shadow-lg whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100 transition-opacity duration-150 ${positionStyles[side] ?? positionStyles.top}`}
       >
         {content}
       </span>
@@ -788,7 +788,7 @@ function DataTable({
               <th
                 key={col.key}
                 onClick={col.sortable ? () => handleSort(col.key) : undefined}
-                className={`${cellPad} text-gray-400 font-medium whitespace-nowrap ${col.sortable ? "cursor-pointer hover:text-gray-200 select-none" : ""}`}
+                className={`${cellPad} text-gray-400 font-medium whitespace-nowrap ${col.sortable ? "cursor-pointer hover:text-gray-200 active:text-gray-100 active:bg-gray-700/30 select-none transition-colors" : ""}`}
               >
                 <span className="inline-flex items-center gap-1">
                   {col.label}
@@ -811,9 +811,9 @@ function DataTable({
               key={i}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               className={`
-                ${onRowClick ? "cursor-pointer hover:bg-gray-700/40" : ""}
+                ${onRowClick ? "cursor-pointer hover:bg-gray-700/40 active:bg-gray-700/60 active:scale-[0.995]" : ""}
                 ${striped && i % 2 === 1 ? "bg-gray-800/40" : ""}
-                transition-colors
+                transition-all duration-150
               `}
             >
               {columns.map((col) => (
@@ -841,14 +841,14 @@ function DataTable({
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="px-2 py-0.5 text-[10px] rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="px-2 py-0.5 text-[10px] rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 active:bg-gray-600/60 active:scale-[0.96] disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
             >
               Prev
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="px-2 py-0.5 text-[10px] rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="px-2 py-0.5 text-[10px] rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 active:bg-gray-600/60 active:scale-[0.96] disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
             >
               Next
             </button>
@@ -934,7 +934,7 @@ function EmptyState({
       {action && (
         <button
           onClick={action.onClick}
-          className="mt-3 px-3 py-1.5 text-xs font-medium rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors cursor-pointer"
+          className="mt-3 px-3 py-1.5 text-xs font-medium rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 active:bg-violet-500/30 active:scale-[0.96] transition-all duration-150 cursor-pointer"
         >
           {action.label}
         </button>

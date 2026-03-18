@@ -255,7 +255,7 @@ export default function DebugReporter() {
       <button
         onClick={handleBugClick}
         disabled={disabled || isCapturing}
-        className="text-gray-400 hover:text-red-400 transition-colors disabled:opacity-30"
+        className="text-gray-400 hover:text-red-400 transition-all duration-150 disabled:opacity-30"
         title="Report & auto-fix a bug"
       >
         <Bug size={16} />
@@ -299,7 +299,7 @@ export default function DebugReporter() {
               <h3 className="text-sm font-semibold text-gray-200">Report & Auto-Fix</h3>
               <button
                 onClick={handleClose}
-                className="text-gray-400 hover:text-gray-200 transition-colors"
+                className="text-gray-400 hover:text-gray-200 transition-all duration-150"
               >
                 <X size={18} />
               </button>
@@ -311,14 +311,14 @@ export default function DebugReporter() {
               <div className="flex gap-2">
                 <button
                   onClick={() => document.getElementById("debug-camera-input")?.click()}
-                  className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-all duration-150"
                 >
                   <Camera size={20} />
                   <span className="text-xs">Take Photo</span>
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-all duration-150"
                 >
                   <ImagePlus size={20} />
                   <span className="text-xs">From Gallery</span>
@@ -350,7 +350,7 @@ export default function DebugReporter() {
                     {/* Remove button */}
                     <button
                       onClick={() => removeImage(idx)}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center text-gray-400 hover:text-red-400 hover:border-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center text-gray-400 hover:text-red-400 hover:border-red-400 transition-all duration-150 opacity-0 group-hover:opacity-100"
                     >
                       <X size={10} />
                     </button>
@@ -360,7 +360,7 @@ export default function DebugReporter() {
                 {/* Add photos button — inline in the scroll row */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="shrink-0 h-28 w-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="shrink-0 h-28 w-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-all duration-150"
                 >
                   <ImagePlus size={18} />
                   <span className="text-[10px]">Add</span>
@@ -381,7 +381,7 @@ export default function DebugReporter() {
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || (images.length === 0 && !description.trim())}
-              className="w-full py-2.5 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white transition-colors disabled:opacity-50 disabled:hover:bg-amber-600"
+              className="w-full py-2.5 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white transition-all duration-150 disabled:opacity-50 disabled:hover:bg-amber-600"
             >
               {isSubmitting ? "Sending..." : "Report & Fix"}
             </button>

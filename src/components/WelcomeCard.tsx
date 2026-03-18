@@ -83,7 +83,7 @@ export default function WelcomeCard() {
             key={t.title}
             onClick={() => handleClick(t)}
             disabled={disabled}
-            className="text-left p-3 rounded-xl border border-gray-700/70 bg-gray-900/50 hover:bg-gray-800/70 hover:border-gray-600 transition-colors disabled:opacity-50"
+            className="text-left p-3 rounded-xl border border-gray-700/70 bg-gray-900/50 hover:bg-gray-800/70 hover:border-gray-600 active:bg-gray-800 active:scale-[0.96] active:border-gray-500 transition-all duration-150 disabled:opacity-50"
           >
             <span className="text-xl">{t.icon}</span>
             <div className="text-xs font-medium text-gray-200 mt-1.5">

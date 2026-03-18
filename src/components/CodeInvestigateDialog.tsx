@@ -62,14 +62,14 @@ export function CodeInvestigateDialog({ cardId, onClose }: CodeInvestigateDialog
         <div className="px-4 py-3 border-t border-gray-700/70 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-xs rounded-md border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors"
+            className="px-3 py-1.5 text-xs rounded-md border border-gray-600 text-gray-300 hover:bg-gray-800 transition-all duration-150"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!instruction.trim()}
-            className="px-3 py-1.5 text-xs rounded-md border border-indigo-500/60 bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs rounded-md border border-indigo-500/60 bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Start
           </button>

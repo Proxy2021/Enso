@@ -40,7 +40,7 @@ function RestartButton() {
         useChatStore.getState().restartServer();
       }}
       disabled={clicked}
-      className="mt-2 flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-md border border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      className="mt-2 flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-md border border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 active:bg-amber-500/35 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150"
     >
       <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 2v6h-6" />

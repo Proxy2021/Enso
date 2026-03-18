@@ -347,7 +347,7 @@ export default function ChatInput() {
                   )}
                   <button
                     onClick={() => removeFile(i)}
-                    className="absolute top-0 right-0 bg-gray-900/80 text-gray-300 hover:text-white rounded-bl-lg px-1.5 py-0.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-0 right-0 bg-gray-900/80 text-gray-300 hover:text-white active:text-white rounded-bl-lg px-1.5 py-0.5 text-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                   >
                     &times;
                   </button>
@@ -365,10 +365,10 @@ export default function ChatInput() {
                 key={cmd.command}
                 onClick={() => selectCommand(cmd)}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                className={`w-full text-left px-3 py-3 sm:py-2 flex items-center gap-3 transition-colors ${
+                className={`w-full text-left px-3 py-3 sm:py-2 flex items-center gap-3 transition-all duration-150 ${
                   idx === selectedIndex
                     ? "bg-indigo-600/30 text-gray-100"
-                    : "text-gray-300 hover:bg-gray-700/50"
+                    : "text-gray-300 hover:bg-gray-700/50 active:bg-gray-600/50"
                 }`}
               >
                 <span className="text-xs font-mono text-indigo-400 min-w-[120px]">{cmd.label}</span>
@@ -419,7 +419,7 @@ export default function ChatInput() {
             <button
               onClick={() => setAttachMenuOpen(!attachMenuOpen)}
               disabled={disabled}
-              className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 px-3 py-2.5 rounded-xl text-sm transition-colors"
+              className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 active:scale-[0.95] disabled:opacity-50 text-gray-300 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
               title="Attach file"
             >
               <svg
@@ -444,7 +444,7 @@ export default function ChatInput() {
                   <button
                     key={cat.id}
                     onClick={() => handleCategorySelect(cat)}
-                    className="w-full text-left px-3 py-3 sm:py-2.5 flex items-center gap-3 text-gray-300 hover:bg-gray-700/50 transition-colors"
+                    className="w-full text-left px-3 py-3 sm:py-2.5 flex items-center gap-3 text-gray-300 hover:bg-gray-700/50 active:bg-gray-600/50 active:scale-[0.98] transition-all duration-150"
                   >
                     <span className="text-indigo-400 shrink-0">{cat.icon}</span>
                     <span className="text-xs">{cat.label}</span>
@@ -458,7 +458,7 @@ export default function ChatInput() {
           <button
             onClick={() => imageResearchRef.current?.click()}
             disabled={disabled}
-            className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-indigo-400 hover:text-indigo-300 px-3 py-2.5 rounded-xl text-sm transition-colors"
+            className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 active:scale-[0.95] disabled:opacity-50 text-indigo-400 hover:text-indigo-300 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
             title="Upload image to research"
           >
             {/* ScanSearch icon — magnifying glass with scan corners */}
@@ -496,10 +496,10 @@ export default function ChatInput() {
             <button
               onClick={toggleListening}
               disabled={disabled}
-              className={`relative px-3 py-2.5 rounded-xl text-sm transition-colors ${
+              className={`relative px-3 py-2.5 rounded-xl text-sm transition-all duration-150 ${
                 isListening
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  : "bg-gray-800 hover:bg-gray-700 text-gray-300"
+                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 active:bg-red-500/40 active:scale-[0.95]"
+                  : "bg-gray-800 hover:bg-gray-700 active:bg-gray-600 active:scale-[0.95] text-gray-300"
               } disabled:opacity-50`}
               title={isListening ? "Stop recording" : "Voice input"}
               aria-label={isListening ? "Stop voice recording" : "Start voice recording"}
@@ -528,7 +528,7 @@ export default function ChatInput() {
           <button
             onClick={handleSend}
             disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 disabled:hover:bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
           >
             Send
           </button>

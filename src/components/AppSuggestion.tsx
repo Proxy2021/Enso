@@ -65,7 +65,7 @@ export default function AppSuggestion({ cardId, suggestion, cardText }: AppSugge
         </span>
         <button
           onClick={handleEnhance}
-          className="shrink-0 flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full border border-violet-500/50 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 transition-colors"
+          className="shrink-0 flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full border border-violet-500/50 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 transition-all duration-150"
         >
           {hasFamily ? (
             <>
@@ -85,7 +85,7 @@ export default function AppSuggestion({ cardId, suggestion, cardText }: AppSugge
         </button>
         <button
           onClick={handleDismiss}
-          className="shrink-0 text-gray-500 hover:text-gray-300 text-xs px-1 transition-colors"
+          className="shrink-0 text-gray-500 hover:text-gray-300 text-xs px-1 transition-all duration-150"
           title="Dismiss"
         >
           &times;

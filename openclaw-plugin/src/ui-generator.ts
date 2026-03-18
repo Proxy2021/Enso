@@ -60,6 +60,7 @@ RULE OF THUMB: If the data to show is already in the data prop → use useState.
 
 ABSOLUTE RULE: NEVER use sendMessage. It does not exist.
 - Use cursor-pointer and hover:bg-gray-700/hover:bg-gray-800 to signal interactivity
+- MOBILE-FIRST: Always pair hover states with active states (active:bg-*, active:scale-[0.96]) — mobile has no hover
 
 AVAILABLE LIBRARIES (already in scope — do NOT import):
 - React: useState, useEffect, useMemo, useCallback, useRef, Fragment
@@ -139,8 +140,11 @@ WORLD-CLASS UX BAR (Linear + Notion + Vercel style):
 - No dead zones: if it looks clickable, make the full area clickable
 - Strong affordance: hover/active/focus-visible states on all interactive elements
 
-INTERACTION POLISH:
-- Buttons/chips: transition-all duration-150 active:scale-[0.98]
+INTERACTION POLISH (MOBILE-FIRST — users may have NO hover, only touch):
+- Buttons/chips: transition-all duration-150 active:scale-[0.96] active:brightness-110
+- EVERY hover state MUST have a matching active state: hover:bg-gray-700 → also add active:bg-gray-600
+- Use active:scale-[0.96] on buttons, active:scale-[0.98] on cards/rows for satisfying press feedback
+- Prefer EnsoUI.Button (has built-in active states) over raw <button> elements
 - Hover states increase contrast, not decrease
 - Prefer compact information density with clear grouping and whitespace rhythm
 - Use font-variant-numeric: tabular-nums for metrics
@@ -223,7 +227,7 @@ RULE OF THUMB: If the data to show is already in the data prop → use useState.
 
 ABSOLUTE RULE: NEVER use sendMessage. It does not exist.
 
-Visual feedback: cursor-pointer, hover:bg-gray-700, active:scale-[0.98], transition-colors
+Visual feedback: cursor-pointer, hover:bg-gray-700 active:bg-gray-600, active:scale-[0.96], transition-all duration-150 (ALWAYS pair hover+active for mobile)
 
 USE COMPONENT STATE — this is an app, not a template:
 - useState for: active tab, selected filter, sort order, expanded items, view mode
@@ -299,7 +303,7 @@ Typography:
 Layout:
 - Grid: grid grid-cols-2 or grid-cols-1 for card layouts
 - Icons: w-3.5 h-3.5 inline, w-4 h-4 for section headers
-- Action buttons: px-2.5 py-1 text-xs rounded-full bg-gray-700 hover:bg-gray-600 border border-gray-600
+- Action buttons: px-2.5 py-1 text-xs rounded-full bg-gray-700 hover:bg-gray-600 active:bg-gray-500 active:scale-[0.96] border border-gray-600 transition-all duration-150
 - Full width: w-full, no fixed widths
 - Scrollable when needed: max-h-96 overflow-y-auto
 
@@ -314,10 +318,13 @@ WORLD-CLASS UX BAR (Linear + Notion + Vercel style):
 - Contextual actions near the item they affect; avoid detached global controls
 - Design all states: loading, empty, sparse, dense, and error
 - Primary interactions must have clear affordance with hover/focus/active states
+- MOBILE-FIRST: Every hover state MUST have a matching active state — mobile users have NO hover
 
 MICRO-INTERACTIONS:
 - Use transition-all duration-150 for controls
-- Use active:scale-[0.98] for press feedback
+- Use active:scale-[0.96] for button press feedback, active:scale-[0.98] for card/row press feedback
+- ALWAYS add active:bg-* alongside hover:bg-* (one shade brighter than hover for satisfying tap feel)
+- Prefer EnsoUI.Button over raw <button> — it has built-in active:scale + active:brightness
 - Interactive controls always use cursor-pointer
 - Keep hit targets generous (at least button-like sizing with px/py padding)
 - Action labels must describe the outcome clearly (avoid vague labels like "Go", "Open", "Run")

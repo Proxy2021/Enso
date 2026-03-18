@@ -112,7 +112,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
             </svg>
             <h2 className="text-lg font-semibold text-gray-100">Memory</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-colors">
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-all duration-150">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
@@ -124,19 +124,19 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
         <div className="flex gap-1 px-5 pt-3">
           <button
             onClick={() => { setActiveTab("user"); setEditing(false); setClearConfirm(false); }}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === "user" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
+            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "user" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
             About You
           </button>
           <button
             onClick={() => { setActiveTab("memory"); setEditing(false); setClearConfirm(false); }}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === "memory" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
+            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "memory" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
             Memory
           </button>
           <button
             onClick={() => { setActiveTab("history"); setEditing(false); setClearConfirm(false); }}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === "history" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
+            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "history" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
             Chat History
           </button>
@@ -170,14 +170,14 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                     <div className="flex gap-2 justify-end">
                       <button
                         onClick={() => setClearConfirm(false)}
-                        className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-colors"
+                        className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-all duration-150"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={handleClearHistory}
                         disabled={clearing}
-                        className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded-md transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded-md transition-all duration-150 disabled:opacity-50"
                       >
                         {clearing ? "Clearing..." : "Yes, Clear All"}
                       </button>
@@ -186,7 +186,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                 ) : (
                   <button
                     onClick={() => setClearConfirm(true)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20"
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all duration-150 border border-red-500/20"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 6h18" />
@@ -219,10 +219,10 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                 autoFocus
               />
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-colors">
+                <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-all duration-150">
                   Cancel
                 </button>
-                <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded-md transition-colors disabled:opacity-50">
+                <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded-md transition-all duration-150 disabled:opacity-50">
                   {saving ? "Saving..." : "Save"}
                 </button>
               </div>
@@ -232,7 +232,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-gray-300">{tabLabel}</h3>
                 {editableTab && (
-                  <button onClick={startEdit} className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
+                  <button onClick={startEdit} className="text-xs text-violet-400 hover:text-violet-300 transition-all duration-150">
                     {content ? "Edit" : "Create"}
                   </button>
                 )}
@@ -250,7 +250,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                   </p>
                   <button
                     onClick={startEdit}
-                    className="mt-3 px-4 py-2 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-colors"
+                    className="mt-3 px-4 py-2 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-all duration-150"
                   >
                     {activeTab === "user" ? "Create Profile" : "Add Memory"}
                   </button>

@@ -43,7 +43,7 @@ export default function PinnedSidebar() {
             return (
               <div
                 key={id}
-                className="group flex items-center gap-2 px-3 py-2 hover:bg-gray-800/60 cursor-pointer transition-colors"
+                className="group flex items-center gap-2 px-3 py-2 hover:bg-gray-800/60 cursor-pointer transition-all duration-150"
                 onClick={() => handleScrollTo(id)}
               >
                 <div className="flex-1 min-w-0">

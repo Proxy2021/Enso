@@ -46,7 +46,7 @@ function ProjectPicker({ projects, cardId }: { projects: ProjectInfo[]; cardId?:
               if (cardId) switchTerminalProject(cardId, p.path);
               else setCodeSessionCwd(p.path);
             }}
-            className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-800 transition-colors group"
+            className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-800 active:bg-gray-700 active:scale-[0.99] transition-all duration-150 group"
           >
             <span className="text-green-400 font-medium text-sm">{p.name}</span>
             <span className="text-gray-600 text-xs ml-2 group-hover:text-gray-500">{p.path}</span>
@@ -167,7 +167,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
         <button
           onClick={handleSubmit}
           disabled={!text.trim()}
-          className="shrink-0 p-1 rounded text-gray-500 hover:text-green-400 disabled:text-gray-700 disabled:cursor-default transition-colors"
+          className="shrink-0 p-1 rounded text-gray-500 hover:text-green-400 active:scale-[0.9] disabled:text-gray-700 disabled:cursor-default transition-all duration-150"
           title="Send (Enter)"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -199,7 +199,7 @@ function QuestionOptions({
               <button
                 key={oi}
                 onClick={() => onSelect(opt.label)}
-                className="px-3 py-1.5 text-xs rounded-md border border-gray-700 bg-gray-800/60 text-gray-200 hover:bg-gray-700 hover:border-gray-600 hover:text-white transition-colors cursor-pointer"
+                className="px-3 py-1.5 text-xs rounded-md border border-gray-700 bg-gray-800/60 text-gray-200 hover:bg-gray-700 hover:border-gray-600 hover:text-white active:bg-gray-600 active:scale-[0.96] transition-all duration-150 cursor-pointer"
                 title={opt.description}
               >
                 {opt.label}
@@ -253,7 +253,7 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
       <button
         ref={btnRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 text-gray-500 hover:text-gray-300 transition-colors truncate max-w-[180px]"
+        className="flex items-center gap-1 text-gray-500 hover:text-gray-300 active:text-gray-200 transition-all duration-150 truncate max-w-[180px]"
         title={`Project: ${currentCwd}\nClick to switch`}
       >
         <span className="text-[10px]">📁</span>
@@ -276,7 +276,7 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
                   if (p.path !== currentCwd) switchTerminalProject(cardId, p.path);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700/60 transition-colors ${
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700/60 active:bg-gray-600/60 transition-all duration-150 ${
                   p.path === currentCwd ? "text-green-400" : "text-gray-300"
                 }`}
               >
@@ -339,7 +339,7 @@ function SessionPicker({ cardId, onDismiss }: { cardId: string; onDismiss: () =>
                 };
                 sendMessage("/resume", routing, cardId);
               }}
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-800/80 transition-colors group"
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-800/80 active:bg-gray-700/80 active:scale-[0.99] transition-all duration-150 group"
             >
               <div className="flex items-center gap-2">
                 <span className="text-green-400 font-medium text-sm">{projectName}</span>
@@ -424,7 +424,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
           {card.operation?.cancellable && card.operation.operationId && (
             <button
               onClick={() => cancelOperation(card.operation!.operationId)}
-              className="ml-auto px-2 py-0.5 rounded border border-red-700/60 text-red-300 hover:bg-red-900/40 transition-colors"
+              className="ml-auto px-2 py-0.5 rounded border border-red-700/60 text-red-300 hover:bg-red-900/40 active:bg-red-900/60 active:scale-[0.97] transition-all duration-150"
               title="Cancel current operation"
             >
               Cancel

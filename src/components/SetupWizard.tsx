@@ -47,13 +47,13 @@ function WelcomeStep({ onSetup, onManual }: { onSetup: () => void; onManual: () 
       <div className="w-full space-y-3 max-w-xs">
         <button
           onClick={onSetup}
-          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors text-sm"
+          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-all duration-150 text-sm"
         >
           Set up a new server
         </button>
         <button
           onClick={onManual}
-          className="w-full py-3 px-4 rounded-xl border border-gray-700 hover:border-gray-600 text-gray-300 hover:text-white transition-colors text-sm"
+          className="w-full py-3 px-4 rounded-xl border border-gray-700 hover:border-gray-600 text-gray-300 hover:text-white transition-all duration-150 text-sm"
         >
           I already have a server
         </button>
@@ -96,7 +96,7 @@ function OSStep({ onSelect, onBack }: { onSelect: (os: OS) => void; onBack: () =
   return (
     <div className="flex flex-col px-6 py-8 gap-6">
       <div>
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-300 transition-colors mb-4 flex items-center gap-1 text-sm">
+        <button onClick={onBack} className="text-gray-500 hover:text-gray-300 transition-all duration-150 mb-4 flex items-center gap-1 text-sm">
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -147,7 +147,7 @@ function InstallStep({ os, onNext, onBack }: { os: OS; onNext: () => void; onBac
   return (
     <div className="flex flex-col px-6 py-8 gap-6">
       <div>
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-300 transition-colors mb-4 flex items-center gap-1 text-sm">
+        <button onClick={onBack} className="text-gray-500 hover:text-gray-300 transition-all duration-150 mb-4 flex items-center gap-1 text-sm">
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -165,7 +165,7 @@ function InstallStep({ os, onNext, onBack }: { os: OS; onNext: () => void; onBac
           <span className="text-[11px] text-gray-500 font-mono">{termLabel}</span>
           <button
             onClick={handleCopy}
-            className="text-xs text-gray-400 hover:text-white transition-colors flex items-center gap-1"
+            className="text-xs text-gray-400 hover:text-white transition-all duration-150 flex items-center gap-1"
           >
             {copied ? (
               <>
@@ -202,7 +202,7 @@ function InstallStep({ os, onNext, onBack }: { os: OS; onNext: () => void; onBac
 
       <button
         onClick={onNext}
-        className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors text-sm"
+        className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-all duration-150 text-sm"
       >
         I see the QR code →
       </button>
@@ -282,7 +282,7 @@ function ConnectStep({
     return (
       <div className="flex flex-col px-6 py-8 gap-6">
         <div>
-          <button onClick={() => setManualMode(false)} className="text-gray-500 hover:text-gray-300 transition-colors mb-4 flex items-center gap-1 text-sm">
+          <button onClick={() => setManualMode(false)} className="text-gray-500 hover:text-gray-300 transition-all duration-150 mb-4 flex items-center gap-1 text-sm">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -318,7 +318,7 @@ function ConnectStep({
           <button
             onClick={handleTest}
             disabled={testStatus === "testing"}
-            className="text-xs px-3 py-1.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 transition-colors disabled:opacity-50"
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 transition-all duration-150 disabled:opacity-50"
           >
             {testStatus === "testing" ? "Testing..." : "Test"}
           </button>
@@ -329,7 +329,7 @@ function ConnectStep({
         <button
           onClick={handleManualConnect}
           disabled={!url.trim()}
-          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors text-sm disabled:opacity-40"
+          className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-all duration-150 text-sm disabled:opacity-40"
         >
           Connect
         </button>
@@ -340,7 +340,7 @@ function ConnectStep({
   return (
     <div className="flex flex-col items-center text-center px-6 py-8 gap-8">
       <div>
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-300 transition-colors mb-4 flex items-center gap-1 text-sm">
+        <button onClick={onBack} className="text-gray-500 hover:text-gray-300 transition-all duration-150 mb-4 flex items-center gap-1 text-sm">
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -378,7 +378,7 @@ function ConnectStep({
           setManualMode(true);
           onManual();
         }}
-        className="text-sm text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+        className="text-sm text-gray-500 hover:text-gray-300 transition-all duration-150 underline underline-offset-2"
       >
         Enter server details manually
       </button>
@@ -404,7 +404,7 @@ function ConnectedStep({ machineName, onFinish }: { machineName: string; onFinis
 
       <button
         onClick={onFinish}
-        className="w-full max-w-xs py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors text-sm"
+        className="w-full max-w-xs py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-all duration-150 text-sm"
       >
         Get Started
       </button>

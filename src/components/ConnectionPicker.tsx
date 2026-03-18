@@ -112,7 +112,7 @@ export default function ConnectionPicker() {
             <h2 className="text-base font-semibold text-gray-100">Connect to Backend</h2>
             <p className="text-xs text-gray-500 mt-0.5">Choose an OpenClaw server to connect to</p>
           </div>
-          <button onClick={() => setShow(false)} className="text-gray-500 hover:text-gray-300 transition-colors p-1">
+          <button onClick={() => setShow(false)} className="text-gray-500 hover:text-gray-300 transition-all duration-150 p-1">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -124,7 +124,7 @@ export default function ConnectionPicker() {
           {!isNative && (
             <button
               onClick={handleLocalMode}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-800/40 hover:bg-gray-800/80 transition-colors text-left group"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-800/40 hover:bg-gray-800/80 transition-all duration-150 text-left group"
             >
               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
                 <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -146,7 +146,7 @@ export default function ConnectionPicker() {
             <div key={b.id} className="flex items-center gap-2">
               <button
                 onClick={() => handleConnect(b)}
-                className="flex-1 flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-800/40 hover:bg-gray-800/80 transition-colors text-left"
+                className="flex-1 flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-800/40 hover:bg-gray-800/80 transition-all duration-150 text-left"
               >
                 <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
                   <svg className="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -161,7 +161,7 @@ export default function ConnectionPicker() {
               </button>
               <button
                 onClick={() => handleRemove(b.id)}
-                className="p-1.5 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
+                className="p-1.5 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150 flex-shrink-0"
                 title="Remove"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -197,7 +197,7 @@ export default function ConnectionPicker() {
                 <button
                   onClick={handleTest}
                   disabled={testStatus === "testing"}
-                  className="text-xs px-2.5 py-1 rounded-md border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 transition-colors disabled:opacity-50"
+                  className="text-xs px-2.5 py-1 rounded-md border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 transition-all duration-150 disabled:opacity-50"
                 >
                   {testStatus === "testing" ? "Testing..." : "Test"}
                 </button>
@@ -206,14 +206,14 @@ export default function ConnectionPicker() {
                 <div className="flex-1" />
                 <button
                   onClick={() => setShowAdd(false)}
-                  className="text-xs px-2.5 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors"
+                  className="text-xs px-2.5 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-all duration-150"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAdd}
                   disabled={!url.trim()}
-                  className="text-xs px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-500 transition-colors disabled:opacity-40"
+                  className="text-xs px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-500 transition-all duration-150 disabled:opacity-40"
                 >
                   Connect
                 </button>
@@ -222,7 +222,7 @@ export default function ConnectionPicker() {
           ) : (
             <button
               onClick={() => setShowAdd(true)}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-600 transition-colors text-sm"
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-600 transition-all duration-150 text-sm"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -235,7 +235,7 @@ export default function ConnectionPicker() {
           {isNative && backends.length === 0 && (
             <button
               onClick={() => { setShow(false); setShowWizard(true); }}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-blue-400 hover:text-blue-300 transition-colors text-sm"
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-blue-400 hover:text-blue-300 transition-all duration-150 text-sm"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 7V4h3" /><path d="M17 4h3v3" /><path d="M20 17v3h-3" /><path d="M7 20H4v-3" />
