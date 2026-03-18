@@ -30,9 +30,9 @@ Enso has two layers:
 src/                          # React frontend (Vite entry)
 ├── App.tsx                   # Root layout
 ├── cards/                    # Card renderers (DynamicUICard, TerminalCard, ShellCard, etc.)
-├── components/               # CardTimeline, CardContainer, ChatInput, MarkdownText, ConnectionPicker
+├── components/               # CardTimeline, CardContainer, ChatInput, MarkdownText, ConnectionPicker, ToastContainer, BackgroundTaskBar, ResultsInbox
 ├── store/chat.ts             # Zustand state
-├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components), connection manager
+├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components), connection manager, notifications, useElapsedTime
 └── types.ts
 
 openclaw-plugin/              # OpenClaw channel plugin (the backend)
@@ -151,6 +151,19 @@ Standard research uses a two-phase streaming pipeline (Phase A: summary + findin
 - Character-level I/O: keystrokes forwarded via `shell.input`, output streamed as `ServerMessage` deltas with `toolMeta.toolId === "shell"`
 - Performance: PTY output written directly to xterm.js via `shellWriters` map, bypassing React state
 - Key files: `shell-pty.ts` (backend), `ShellCard.tsx` (frontend), card type `"shell"`
+
+### Task Progress & Notifications
+
+Long-running tasks (builds, orchestrations, deep research, Claude Code sessions) use a multi-layer progress and notification system:
+
+- **Progress bars with ETA**: `CardLoadingOverlay` shows elapsed time + determinate progress bar when duration is estimable (research ~35s, build ~2min). Indeterminate sliding bar for unpredictable operations. `ActivityIndicator` in terminal cards also shows elapsed time.
+- **Background task bar**: `BackgroundTaskBar` component sits above ChatInput, showing compact pills for each active background task (terminal, orchestration, deep research, shell) with elapsed time + click-to-scroll. Typing indicator suppressed when only background tasks are running — the chat stays available.
+- **Browser notifications** (web): When tab is not focused — Notification API, tab title flash, favicon badge dot, completion chime (Web Audio API two-tone C5→E5).
+- **Mobile notifications** (Capacitor native): Haptic vibration + chime + in-app toast. Handles "return from background" via `wasRecentlyBackgrounded()` detection.
+- **In-app toast banners**: `ToastContainer` component shows slide-down toast for all completions on both platforms. Auto-dismiss 5-8s, tap to dismiss.
+- **Results inbox**: Slide-up sheet (`ResultsInbox`) accessible from header button with unseen badge count. Lists all completed long-running tasks with seen/unseen tracking (persisted to localStorage). One-tap scroll-to-card navigation.
+- **Card context recovery**: After server restart, `tryReconstructContext()` in card-actions.ts recovers card contexts from the JSONL journal (`loadCardHistory`) — historical cards become interactive again without re-running the app.
+- Key files: `src/lib/notifications.ts`, `src/lib/useElapsedTime.ts`, `src/components/ToastContainer.tsx`, `src/components/BackgroundTaskBar.tsx`, `src/components/ResultsInbox.tsx`, `openclaw-plugin/src/outbound/card-actions.ts`
 
 ### App Action Bridge + Dispatch
 

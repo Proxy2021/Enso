@@ -112,6 +112,9 @@ Describe your interests → Enso proposes 2–5 custom apps → approve/edit eac
 ### 🛒 ClawHub Store
 Browse and install OpenClaw skills from the marketplace with one click.
 
+### ⚡ Long-Running Task UX
+Complex tasks (builds, orchestrations, deep research, Claude Code sessions) run in the background while you keep chatting. Progress bars with elapsed time and ETA, background task pills above the chat input, browser notifications (desktop) and haptic vibration (mobile) on completion, in-app toast banners, and a Results Inbox for catching up on completed work. Card contexts survive server restarts via journal-based recovery.
+
 ---
 
 ## Quick Start

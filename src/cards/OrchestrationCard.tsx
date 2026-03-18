@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useChatStore } from "../store/chat";
+import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import type { CardRendererProps } from "./types";
 import type {
   OrchestrationPlan,
@@ -97,7 +98,7 @@ function InputPhase({ cardId }: { cardId: string }) {
         <button
           onClick={handleSubmit}
           disabled={!text.trim()}
-          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-400 active:scale-[0.97] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
         >
           Orchestrate
         </button>
@@ -178,13 +179,13 @@ function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
       <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-700/40">
         <button
           onClick={() => cancelOrchestration(plan.orchestrationId)}
-          className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-colors"
+          className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-all duration-150"
         >
           Cancel
         </button>
         <button
           onClick={() => approveOrchestration(plan.orchestrationId)}
-          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-green-600 hover:bg-green-500 text-white transition-colors"
+          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-green-600 hover:bg-green-500 active:bg-green-400 active:scale-[0.97] text-white transition-all duration-150"
         >
           Execute Plan
         </button>
@@ -207,6 +208,7 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
   const isPaused = plan.status === "paused";
   const awaitingApproval = plan.tasks.filter((t) => t.status === "awaiting_approval");
   const pct = total > 0 ? Math.round(((completed + running * 0.5) / total) * 100) : 0;
+  const elapsed = useElapsedTime();
 
   return (
     <div>
@@ -216,6 +218,7 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
         <h3 className="text-[11px] font-semibold text-gray-200 truncate">
           {isPaused ? "Paused" : "Mission"}
         </h3>
+        <span className="text-[9px] text-gray-500 tabular-nums">{formatElapsed(elapsed)}</span>
         <span className="text-[9px] text-gray-500 ml-auto whitespace-nowrap">{completed}/{total}</span>
       </div>
 
@@ -240,7 +243,7 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
           ))}
           <button
             onClick={() => approveOrchestration(plan.orchestrationId, awaitingApproval.map((t) => t.taskId))}
-            className="text-[9px] px-2 py-0.5 mt-1 rounded bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+            className="text-[9px] px-2 py-0.5 mt-1 rounded bg-amber-600 hover:bg-amber-500 active:bg-amber-400 active:scale-[0.97] text-white transition-all duration-150"
           >
             Approve
           </button>
@@ -259,14 +262,14 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
         {isPaused ? (
           <button
             onClick={() => resumeOrchestration(plan.orchestrationId)}
-            className="w-full text-[9px] py-1 rounded bg-blue-600/80 hover:bg-blue-500 text-white transition-colors"
+            className="w-full text-[9px] py-1 rounded bg-blue-600/80 hover:bg-blue-500 active:bg-blue-400 active:scale-[0.97] text-white transition-all duration-150"
           >
             Resume
           </button>
         ) : (
           <button
             onClick={() => pauseOrchestration(plan.orchestrationId)}
-            className="w-full text-[9px] py-1 rounded bg-gray-700/60 hover:bg-gray-600 text-gray-400 transition-colors"
+            className="w-full text-[9px] py-1 rounded bg-gray-700/60 hover:bg-gray-600 active:bg-gray-500 active:scale-[0.97] text-gray-400 transition-all duration-150"
           >
             Pause
           </button>
@@ -391,7 +394,7 @@ function TaskRow({ task, index, showDescription }: { task: OrchestrationTask; in
 
   return (
     <div
-      className={`flex items-start gap-2 text-xs p-2 rounded-lg cursor-pointer transition-colors ${
+      className={`flex items-start gap-2 text-xs p-2 rounded-lg cursor-pointer transition-all duration-150 ${
         task.status === "running" ? "bg-blue-500/5 border border-blue-500/20" :
         task.status === "completed" ? "bg-green-500/5" :
         task.status === "failed" ? "bg-red-500/5" :

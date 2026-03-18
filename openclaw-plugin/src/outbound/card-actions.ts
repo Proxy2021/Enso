@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ConnectedClient } from "../server.js";
 import { getActiveAccount } from "../server.js";
+import { loadCardHistory } from "../memory-bridge.js";
 import type { CardModeDetail, CoreConfig, OperationStage, ServerMessage } from "../types.js";
 import { persistCard } from "../memory-bridge.js";
 import { APP_CATALOG } from "../app-catalog.js";
@@ -77,6 +78,43 @@ function tryReconstructContext(
       toolFamily: "researcher",
       signatureId: "research_board",
     };
+  }
+
+  // ── Generic recovery from persisted card journal ──
+  // Scan the client's card history for this cardId and reconstruct
+  // from the stored data, cardMode, and appCardMode fields.
+  const account = getActiveAccount();
+  if (account) {
+    const records = loadCardHistory(client.id, 200);
+    const rec = records.find((r) => r.id === cardId);
+    if (rec) {
+      const mode = rec.appCardMode ?? rec.cardMode;
+      const data = rec.appData ?? rec.data;
+      const toolFamily = mode?.toolFamily ?? mode?.appId;
+      if (toolFamily && data) {
+        const toolName = (data as Record<string, unknown>).tool as string | undefined;
+        const handlerPrefix = toolName
+          ? toolName.replace(/_[^_]+$/, "_") // "enso_filesystem_list_dir" → "enso_filesystem_"
+          : `enso_${toolFamily}_`;
+        logAction({ ts: Date.now(), type: "action", category: "action", message: `Journal-recovered context for family=${toolFamily}`, cardId });
+        return {
+          cardId,
+          originalPrompt: rec.text ?? "",
+          originalResponse: "",
+          currentData: data,
+          geminiApiKey: account.geminiApiKey,
+          account,
+          mode: "full",
+          actionHistory: [],
+          appToolHint: toolName
+            ? { toolName, params: {}, handlerPrefix }
+            : undefined,
+          interactionMode: "tool",
+          toolFamily,
+          signatureId: mode?.signatureId,
+        };
+      }
+    }
   }
 
   return null;

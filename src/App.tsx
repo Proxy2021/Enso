@@ -13,6 +13,9 @@ import { initDeepLinkListener } from "./lib/deep-link-handler";
 import UpdateBanner from "./components/UpdateBanner";
 import DebugReporter from "./components/DebugReporter";
 import ModelPicker from "./components/ModelPicker";
+import ToastContainer from "./components/ToastContainer";
+import BackgroundTaskBar from "./components/BackgroundTaskBar";
+import ResultsInbox, { useUnseenCount } from "./components/ResultsInbox";
 import { reportError } from "./lib/error-reporter";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
@@ -95,6 +98,26 @@ function SidebarToggle() {
   );
 }
 
+function ResultsButton({ onClick }: { onClick: () => void }) {
+  const unseen = useUnseenCount();
+  return (
+    <button
+      onClick={onClick}
+      className="relative flex items-center text-sm text-gray-400 hover:text-gray-200 transition-colors p-1.5 rounded-lg border border-gray-700/60 bg-gray-800/50"
+      title="Completed tasks"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      </svg>
+      {unseen > 0 && (
+        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-indigo-500 text-[9px] text-white font-bold px-1">
+          {unseen > 9 ? "9+" : unseen}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function MemoryButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -116,6 +139,7 @@ export default function App() {
   const connectToBackend = useChatStore((s) => s.connectToBackend);
   const loadSharedCard = useChatStore((s) => s.loadSharedCard);
   const [showMemory, setShowMemory] = useState(false);
+  const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
     // Handle deep-link: ?backend=https://...&token=xxx&share=cardId
@@ -172,6 +196,7 @@ export default function App() {
             <ModelPicker />
             <DebugReporter />
             <AppsMenu />
+            <ResultsButton onClick={() => setShowResults(true)} />
             <MemoryButton onClick={() => setShowMemory(true)} />
             <SidebarToggle />
             <ConnectionDot />
@@ -181,10 +206,13 @@ export default function App() {
         <div className="flex flex-1 overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden">
             <CardTimeline />
+            <BackgroundTaskBar />
             <ChatInput />
           </div>
           <PinnedSidebar />
         </div>
+        <ToastContainer />
+        <ResultsInbox show={showResults} onClose={() => setShowResults(false)} />
         <ConnectionPicker />
         <SetupWizard />
         <MemoryPanel show={showMemory} onClose={() => setShowMemory(false)} />

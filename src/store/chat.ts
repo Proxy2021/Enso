@@ -7,6 +7,11 @@ import { shellWriters } from "../cards/ShellCard";
 import { createWSClient, type ConnectionState } from "../lib/ws-client";
 import { initErrorReporter } from "../lib/error-reporter";
 import {
+  initNotifications,
+  requestNotificationPermission,
+  notifyTaskComplete,
+} from "../lib/notifications";
+import {
   getActiveBackend,
   buildWsUrl,
   getBackendBaseUrl,
@@ -260,6 +265,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     set({ _wsClient: client });
     initErrorReporter((msg) => client.send(msg));
+    initNotifications();
     client.connect();
   },
 
@@ -493,6 +499,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
     // The Deep button uses action "search" with depth:"deep", not "deep_dive"
     const isDeepDive = action === "deep_dive"
       || (action === "search" && (payload as Record<string, unknown>)?.depth === "deep");
+    // Request notification permission for long-running deep research
+    if (isDeepDive) requestNotificationPermission();
     set((s) => ({
       cards: {
         ...s.cards,
@@ -597,6 +605,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const card = get().cards[cardId];
     if (!card) return;
 
+    // Request notification permission for long-running build
+    requestNotificationPermission();
+
     // Gather recent conversation context for the build prompt
     const { cardOrder, cards } = get();
     const recent = cardOrder.slice(-6).map((id) => cards[id]).filter(Boolean);
@@ -638,6 +649,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
         },
       };
     });
+
+    // Request notification permission for long-running orchestration
+    requestNotificationPermission();
 
     get()._wsClient?.send({
       type: "orchestration.start",
@@ -1493,6 +1507,19 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     // Handle orchestration plan and progress updates
     if (msg.orchestrationPlan || msg.orchestrationProgress) {
+      // Browser notification when orchestration completes or fails
+      const orchEvent = msg.orchestrationProgress?.eventType;
+      if (orchEvent === "completed" || orchEvent === "failed") {
+        const goal = msg.orchestrationProgress?.plan?.goal || "Orchestration";
+        const shortGoal = goal.length > 60 ? goal.slice(0, 57) + "..." : goal;
+        notifyTaskComplete({
+          type: "orchestration",
+          title: orchEvent === "completed" ? "Task complete" : "Task failed",
+          body: shortGoal,
+          success: orchEvent === "completed",
+        });
+      }
+
       const targetId = msg.targetCardId;
       if (targetId) {
         set((s) => {
@@ -1553,6 +1580,24 @@ export const useChatStore = create<CardStore>((set, get) => ({
       const { cardId: buildCardId, success, summary, error } = msg.buildComplete;
       const now = Date.now();
       const notifId = msg.id;
+
+      // Browser notification for build completion
+      if (success && summary) {
+        const familyLabel = summary.toolFamily.replace(/_/g, " ");
+        notifyTaskComplete({
+          type: "build",
+          title: `App built: ${familyLabel}`,
+          body: summary.description,
+          success: true,
+        });
+      } else {
+        notifyTaskComplete({
+          type: "build",
+          title: "App build failed",
+          body: error || "Build encountered an error",
+          success: false,
+        });
+      }
 
       // Create a notification chat card
       let notifText: string;
@@ -1782,8 +1827,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
               storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
               localStorage.setItem("enso_code_session_id", msg.toolMeta.toolSessionId);
             }
-            // Auto-collapse deep research terminal cards so the researcher results below are prominent
+            // Browser notification for Claude Code session completion
             const isDeepResearchTerminal = msg.targetCardId.endsWith("-deep");
+            if (!isDeepResearchTerminal) {
+              notifyTaskComplete({
+                type: "claude_code",
+                title: "Claude Code session complete",
+                body: card.toolMeta?.cwd || "Session finished",
+                success: true,
+              });
+            }
             return {
               ...storeUpdates,
               cards: {
@@ -1943,6 +1996,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
           const wasBuilding = card.deepResearchStatus === "building";
           const isOrchestration = card.type === "orchestration";
 
+          // Browser notification for deep research / enhance completion
+          if (wasBuilding) {
+            notifyTaskComplete({
+              type: "deep_research",
+              title: "Deep research complete",
+              body: (card.text ?? "").slice(0, 100) || "Your deep research results are ready",
+              success: true,
+            });
+          }
+
           // Auto-switch to app view only for the fast enhance path (enhanceStatus was "loading").
           // Background builds keep the current viewMode — user will be notified via buildComplete.
           const wasLoading = card.enhanceStatus === "loading";
@@ -2087,6 +2150,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
             storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
             localStorage.setItem("enso_code_session_id", msg.toolMeta.toolSessionId);
           }
+          // Browser notification for active Claude Code session completion
+          notifyTaskComplete({
+            type: "claude_code",
+            title: "Claude Code session complete",
+            body: card.toolMeta?.cwd || "Session finished",
+            success: true,
+          });
           return {
             ...storeUpdates,
             cards: {
@@ -2190,6 +2260,17 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
         // Resolve card type from the full message
         const type = msg.cardType ?? cardRegistry.resolve(msg, "assistant");
+
+        // Browser notification for research results (skip simple chat / fast enhance)
+        const toolName = (msg.data as any)?.tool as string | undefined;
+        if (toolName?.includes("research")) {
+          notifyTaskComplete({
+            type: "research",
+            title: "Research complete",
+            body: (msg.text ?? "").slice(0, 100) || "Your research results are ready",
+            success: true,
+          });
+        }
 
         if (existing && existingId) {
           return {

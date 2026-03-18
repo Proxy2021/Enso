@@ -1,15 +1,50 @@
 import { useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
+import type { Card } from "../cards/types";
 import CardContainer from "./CardContainer";
 import WelcomeCard from "./WelcomeCard";
+import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
+
+/**
+ * Returns true when the only streaming activity is background tasks
+ * (terminal, orchestration, shell, deep research builds) which have
+ * their own progress UI. In that case the typing indicator is hidden
+ * so the chat feels available.
+ */
+function hasOnlyBackgroundTasks(
+  cards: Record<string, Card>,
+  cardOrder: string[],
+): boolean {
+  let hasStreamingAgent = false;
+  for (const id of cardOrder) {
+    const c = cards[id];
+    if (!c || c.status !== "streaming") continue;
+    if (
+      c.type === "terminal" ||
+      c.type === "shell" ||
+      c.type === "orchestration" ||
+      c.deepResearchStatus === "building"
+    ) {
+      continue; // background task — skip
+    }
+    hasStreamingAgent = true;
+  }
+  return !hasStreamingAgent;
+}
 
 function TypingIndicator() {
+  const elapsed = useElapsedTime();
   return (
     <div className="flex justify-start mb-4">
-      <div className="bg-gray-900/80 border border-gray-700/70 rounded-2xl px-4 py-3 flex items-center gap-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+      <div className="bg-gray-900/80 border border-gray-700/70 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+        </span>
+        {elapsed >= 3 && (
+          <span className="text-[11px] text-gray-500 tabular-nums">{formatElapsed(elapsed)}</span>
+        )}
       </div>
     </div>
   );
@@ -112,7 +147,7 @@ export default function CardTimeline() {
             </div>
           );
         })}
-        {isWaiting && <TypingIndicator />}
+        {isWaiting && !hasOnlyBackgroundTasks(cards, cardOrder) && <TypingIndicator />}
         <div ref={bottomRef} />
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 @theme {
   --animate-shimmer: shimmer 1.5s ease-in-out infinite;
+  --animate-tap-flash: tap-flash 0.35s ease-out;
 }
 
 @layer base {
@@ -17,9 +18,45 @@
       radial-gradient(circle at 50% 120%, rgba(139, 92, 246, 0.08), transparent 30%);
     min-height: 100dvh;
   }
+
+  /* Remove default mobile tap highlight — we provide our own */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+
+/* Brief brightness flash on tap — gives instant "substance" feedback */
+@keyframes tap-flash {
+  0%   { filter: brightness(1); }
+  30%  { filter: brightness(1.25); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(200%); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Touch-device utilities: mirror hover states on active for mobile */
+@layer utilities {
+  /* Make group-hover patterns also trigger on group-active (touch) */
+  .group:active .group-active\:opacity-100 {
+    opacity: 1;
+  }
 }
