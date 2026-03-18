@@ -541,6 +541,13 @@ function buildDeepResearchUIPrompt(topic: string, language: string): string {
   lines.push(`11. The \`data\` prop will be \`{ tool: "enso_researcher_search", phase: "app_built", topic: "${topic}" }\` — you can ignore it and use your embedded data`);
   lines.push(``);
 
+  lines.push(`### Null Safety (CRITICAL — render errors crash the entire UI):`);
+  lines.push(`- NEVER call .toUpperCase(), .toLowerCase(), .trim(), .split(), .map(), .filter(), .length on a value without guarding`);
+  lines.push(`- Use: (val || "").toUpperCase(), (arr || []).map(), (str ?? "").split()`);
+  lines.push(`- Use optional chaining: item?.category NOT item.category`);
+  lines.push(`- Provide fallbacks for display: {item.name || "Unknown"}, {item.count ?? 0}`);
+  lines.push(``);
+
   lines.push(`### Design quality:`);
   lines.push(`- Dark theme (dark backgrounds: #0f172a, #1e293b, #334155; light text: #e2e8f0, #f8fafc)`);
   lines.push(`- Professional typography: clear hierarchy, good spacing`);
