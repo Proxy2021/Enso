@@ -54,6 +54,43 @@ const STREAMABLE_EXTS = new Set([
 ]);
 
 /**
+ * Detect MIME type from file magic bytes (header signatures).
+ * Returns the MIME string or undefined if not recognized.
+ */
+function detectMimeFromMagicBytes(buffer: Buffer): string | undefined {
+  if (buffer.length < 4) return undefined;
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return "image/jpeg";
+  // PNG: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return "image/png";
+  // GIF: 47 49 46 38
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) return "image/gif";
+  // WebP: RIFF....WEBP
+  if (buffer.length >= 12 && buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46
+    && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) return "image/webp";
+  // BMP: 42 4D
+  if (buffer[0] === 0x42 && buffer[1] === 0x4D) return "image/bmp";
+  // PDF: 25 50 44 46
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) return "application/pdf";
+  return undefined;
+}
+
+/**
+ * Detect MIME type from a file path by extension.
+ */
+function mimeFromExtension(filePath: string): string | undefined {
+  const ext = extname(filePath).toLowerCase();
+  const map: Record<string, string> = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".svg": "image/svg+xml", ".mp4": "video/mp4", ".webm": "video/webm",
+    ".mov": "video/quicktime", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+    ".ogg": "audio/ogg", ".pdf": "application/pdf",
+  };
+  return map[ext];
+}
+
+/**
  * Convert a local file path to an HTTP URL served by the Enso media endpoint.
  * Appends `?ext=` with the original file extension so the frontend can detect
  * media type even though the URL path itself is base64url-encoded.
@@ -802,6 +839,16 @@ export async function startEnsoServer(opts: {
         }
       } else {
         fileBuffer = req.body;
+      }
+
+      // Detect MIME from magic bytes when Content-Type is missing/generic
+      // (common on Capacitor Android where file.type can be empty)
+      if (!mimeType || mimeType === "application/octet-stream" || !extMap[mimeType]) {
+        const detected = detectMimeFromMagicBytes(fileBuffer);
+        if (detected) {
+          logAction({ ts: Date.now(), type: "action", category: "upload", message: `MIME detected from magic bytes: ${detected} (was: ${mimeType || "(empty)"})` });
+          mimeType = detected;
+        }
       }
 
       // Reject corrupt uploads (Capacitor Blob serialization produces 2-byte "{}")

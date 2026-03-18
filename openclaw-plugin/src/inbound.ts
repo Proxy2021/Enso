@@ -10,10 +10,24 @@ import { getEnsoRuntime } from "./runtime.js";
 import { deliverEnsoReply } from "./outbound.js";
 import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { randomUUID } from "crypto";
+import { extname } from "path";
 import { logAction, logError } from "./action-log.js";
 import { setLastUserMessage } from "./researcher-tools.js";
 
 const CHANNEL_ID = "enso" as const;
+
+/** Detect MIME type from file path extension, fallback to octet-stream. */
+function mimeFromPath(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  const map: Record<string, string> = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    ".svg": "image/svg+xml", ".mp4": "video/mp4", ".webm": "video/webm",
+    ".mov": "video/quicktime", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+    ".ogg": "audio/ogg", ".pdf": "application/pdf",
+  };
+  return map[ext] ?? "application/octet-stream";
+}
 
 export async function handleEnsoInbound(params: {
   message: EnsoInboundMessage;
@@ -108,6 +122,8 @@ export async function handleEnsoInbound(params: {
       MediaPath: mediaUrls[0],
       MediaUrls: mediaUrls,
       MediaUrl: mediaUrls[0],
+      MediaTypes: mediaUrls.map((u) => mimeFromPath(u)),
+      MediaType: mimeFromPath(mediaUrls[0]),
     }),
   });
 
