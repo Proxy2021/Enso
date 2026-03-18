@@ -310,6 +310,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
 
 
+      // "/evolve" command — launch evolution sprint
+      if (text.trim().startsWith("/evolve")) {
+        const goal = text.trim().slice(7).trim();
+        get()._wsClient?.send({
+          type: "evolution.start",
+          evolutionGoal: goal || undefined,
+        } as any);
+        return;
+      }
+
       // "/shell" command — launch remote terminal
       if (text.trim() === "/shell") {
         get().launchShell();

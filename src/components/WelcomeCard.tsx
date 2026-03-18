@@ -41,6 +41,12 @@ const TEMPLATES: Template[] = [
     prompt: "/orchestrate",
   },
   {
+    icon: "\uD83E\uDDEC",
+    title: "Evolve",
+    description: "Self-improvement sprint",
+    prompt: "/evolve",
+  },
+  {
     icon: "\uD83D\uDCBB",
     title: "Code Assistant",
     description: "Open Claude Code",

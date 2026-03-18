@@ -1514,6 +1514,18 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
+          case "evolution.start": {
+            runtime.log?.(`[enso] evolution sprint start`);
+            const { handleEvolutionSprint } = await import("./evolution.js");
+            handleEvolutionSprint({
+              goal: msg.evolutionGoal,
+              client,
+              account,
+            }).catch((err) => {
+              logError("evolution", "Unhandled evolution start error", err);
+            });
+            break;
+          }
           case "apps.list": {
             try {
               const { loadAllApps, isShippedApp } = await import("./app-persistence.js");

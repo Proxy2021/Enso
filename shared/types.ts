@@ -202,6 +202,7 @@ export interface ClientMessage {
     | "orchestration.modify"
     | "orchestration.cancel"
     | "orchestration.message"
+    | "evolution.start"
     | "image_research"
     | "client.error";
   mode?: ChannelMode;
@@ -252,6 +253,8 @@ export interface ClientMessage {
   };
   // orchestration.* fields
   orchestrationGoal?: string;
+  // evolution.start fields
+  evolutionGoal?: string;
   orchestrationId?: string;
   orchestrationApprovedTasks?: string[];
   orchestrationTaskId?: string;
