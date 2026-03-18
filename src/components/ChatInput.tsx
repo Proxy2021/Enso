@@ -94,7 +94,6 @@ function getFileExt(file: File): string {
 export default function ChatInput() {
   const [text, setText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [imageResearchMode, setImageResearchMode] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -171,19 +170,13 @@ export default function ChatInput() {
     }
 
     if (attachedFiles.length > 0) {
-      const hasImage = attachedFiles.some((f) => f.type.startsWith("image/"));
-      await sendMessageWithMedia(
-        trimmed,
-        attachedFiles,
-        imageResearchMode && hasImage ? "image_research" : undefined,
-      );
+      await sendMessageWithMedia(trimmed, attachedFiles);
     } else {
       sendMessage(trimmed);
     }
 
     setText("");
     setAttachedFiles([]);
-    setImageResearchMode(false);
     setSelectedIndex(0);
     textareaRef.current?.focus();
   }
@@ -242,21 +235,19 @@ export default function ChatInput() {
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length > 0) {
-      setAttachedFiles((prev) => [...prev, ...files]);
-      // If from the image-research button, activate research mode
+      // Image-research: auto-send immediately, no staging
       if (e.target === imageResearchRef.current) {
-        setImageResearchMode(true);
+        e.target.value = "";
+        sendMessageWithMedia("", files, "image_research");
+        return;
       }
+      setAttachedFiles((prev) => [...prev, ...files]);
     }
     e.target.value = "";
   }
 
   function removeFile(index: number) {
-    setAttachedFiles((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      if (next.length === 0) setImageResearchMode(false);
-      return next;
-    });
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handleCategorySelect(cat: (typeof ATTACH_CATEGORIES)[number]) {
@@ -467,11 +458,7 @@ export default function ChatInput() {
           <button
             onClick={() => imageResearchRef.current?.click()}
             disabled={disabled}
-            className={`px-3 py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50 ${
-              imageResearchMode
-                ? "bg-indigo-600/20 text-indigo-300 ring-1 ring-indigo-500/40"
-                : "bg-gray-800 hover:bg-gray-700 text-indigo-400 hover:text-indigo-300"
-            }`}
+            className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-indigo-400 hover:text-indigo-300 px-3 py-2.5 rounded-xl text-sm transition-colors"
             title="Upload image to research"
           >
             {/* ScanSearch icon — magnifying glass with scan corners */}
@@ -500,7 +487,7 @@ export default function ChatInput() {
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : imageResearchMode ? "Add context or tap Send to research..." : "Message..."}
+            placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : "Message..."}
             disabled={disabled}
             rows={1}
             className="flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500 disabled:opacity-50"
