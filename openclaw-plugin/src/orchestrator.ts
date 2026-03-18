@@ -69,6 +69,28 @@ const activeOrchestrations = new Map<
   }
 >();
 
+// ── Archetype-Specific Planning Guidance ──
+
+const ORCHESTRATION_ARCHETYPE_GUIDANCE: Record<string, string> = {
+  travel_planning: `This is a TRAVEL PLANNING task. Structure it as:
+1. researcher: Find real prices, availability, weather, activities, restaurants, transport options for the destination
+2. architect: Design the itinerary structure — day-by-day breakdown, budget allocation, logistics
+3. builder: Build a bespoke interactive travel planner app with day tabs, budget tracker, activity cards, and booking links
+The final deliverable MUST be an interactive itinerary experience, not a text report.`,
+
+  market_research: `This is a MARKET RESEARCH task. Structure it as:
+1. researcher: Gather market data — players, market size, growth rates, trends, analyst opinions, financial metrics
+2. architect: Synthesize findings into a structured market map with competitive positioning
+3. builder: Build a bespoke market intelligence dashboard with player profiles, market share charts, trend lines, and forecasts
+The final deliverable MUST be an interactive dashboard, not a text report.`,
+
+  creative_project: `This is a CREATIVE PROJECT. Structure it as:
+1. researcher: Gather inspiration, reference materials, best practices, trends in the creative domain
+2. architect: Develop creative direction with options, mood/style specifications, and rationale
+3. builder: Build a bespoke creative presentation/management app with galleries, option comparisons, and specifications
+The final deliverable MUST be an interactive creative experience, not a text brief.`,
+};
+
 // ── Role Prompts ──
 
 const ROLE_PROMPTS: Record<AgentRole, string> = {
@@ -629,6 +651,14 @@ function buildPlanningPrompt(
     `- Builder task descriptions MUST include: "Build a reusable, general-purpose [category] app with at least 4 tools"`,
     `- Study openclaw-plugin/apps/media_gallery/ as the gold standard (7 tools, parameterized, multi-view template)`,
     ``,
+    // Inject archetype-specific planning guidance when available
+    ...(classification.archetype && classification.archetype !== "general" ? [
+      `## Archetype Guidance: ${classification.archetype}`,
+      ORCHESTRATION_ARCHETYPE_GUIDANCE[classification.archetype as keyof typeof ORCHESTRATION_ARCHETYPE_GUIDANCE] ?? "",
+      ``,
+      `CRITICAL: The final task in the plan MUST produce a bespoke interactive experience — either an Enso app (builder role) or a custom .orchestration-ui.jsx file. Never end with just a text report.`,
+      ``,
+    ] : []),
     `## Output Format`,
     `Write a JSON file to: ${planFilePath}`,
     ``,

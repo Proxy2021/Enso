@@ -1136,7 +1136,26 @@ export async function startEnsoServer(opts: {
                   userMessage: msg.text,
                   conversationHistory: [],
                   geminiApiKey: account.geminiApiKey,
+                  mediaUrls: msg.mediaUrls,
                 });
+
+                // Focused archetype — single Claude Code session that builds bespoke interactive UI
+                if (classification.archetypeRouting === "focused" && classification.archetype
+                    && (classification.complexity === "orchestrated" || classification.complexity === "one-off")) {
+                  runtime.log?.(`[enso] task-router: focused archetype "${classification.archetype}" → "${msg.text.slice(0, 60)}" (recurring=${classification.isRecurring ?? false})`);
+                  const { handleFocusedArchetype } = await import("./archetype-builder.js");
+                  handleFocusedArchetype({
+                    userMessage: msg.text,
+                    classification,
+                    mediaUrls: msg.mediaUrls,
+                    client,
+                    account,
+                  }).catch((err) => {
+                    logError("archetype-builder", "Focused archetype failed", err);
+                    runtime.error?.(`[enso] archetype-builder error: ${err instanceof Error ? err.message : String(err)}`);
+                  });
+                  break;
+                }
 
                 if (classification.complexity === "orchestrated") {
                   runtime.log?.(`[enso] task-router: orchestrated → "${msg.text.slice(0, 60)}"`);

@@ -625,17 +625,20 @@ function ViewToggle({ card }: { card: Card }) {
   const familyLabel = family ? family.replace(/_/g, " ") : "App";
   const isBuilding = card.deepResearchStatus === "building";
 
-  // Deep research toggle: show "Standard" / "✨ Deep" instead of "Original" / "App"
+  // Deep research / archetype toggle labels
+  const isFocusedArchetype = isBuilding || family === "archetype" ||
+    card.appCardMode?.signatureId === "focused_archetype_custom";
   const isDeepResearch = isBuilding || (family === "researcher" && (
     card.appCardMode?.signatureId === "deep_research_custom" ||
     (card.appData as Record<string, unknown>)?.metadata &&
     ((card.appData as Record<string, unknown>)?.metadata as Record<string, unknown>)?.isDeepResearch
   ));
-  const originalLabel = isDeepResearch ? "Standard" : "Original";
-  const originalLabelShort = isDeepResearch ? "Std" : "Text";
-  const appLabel = isDeepResearch ? "Deep" : familyLabel;
-  const appLabelShort = isDeepResearch ? "Deep" : "App";
-  const appIcon = isDeepResearch ? "✨" : familyIcon;
+  const isBespokeView = isDeepResearch || isFocusedArchetype;
+  const originalLabel = isBespokeView ? "Standard" : "Original";
+  const originalLabelShort = isBespokeView ? "Std" : "Text";
+  const appLabel = isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
+  const appLabelShort = isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
+  const appIcon = isBespokeView ? "✨" : familyIcon;
 
   return (
     <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">

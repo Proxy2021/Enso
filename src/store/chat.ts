@@ -1867,7 +1867,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
             };
           }
           // Deep research building phase — show terminal in app view, clear overlay
-          const isDeepBuildStart = msg.enhanceResult.cardMode?.signatureId === "deep_research_building";
+          const isDeepBuildStart = msg.enhanceResult.cardMode?.signatureId === "deep_research_building"
+            || msg.enhanceResult.cardMode?.signatureId === "focused_archetype_building";
           if (isDeepBuildStart) {
             return {
               cards: {

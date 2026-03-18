@@ -17,6 +17,18 @@ import { getMemoryContext } from "./memory-bridge.js";
 
 export type TaskComplexity = "simple" | "research" | "one-off" | "orchestrated";
 
+export type TaskArchetype =
+  | "data_analysis"
+  | "travel_planning"
+  | "competitive_analysis"
+  | "document_processing"
+  | "project_planning"
+  | "market_research"
+  | "creative_project"
+  | "general";
+
+export type ArchetypeRouting = "focused" | "orchestrated";
+
 export interface TaskClassification {
   complexity: TaskComplexity;
   reasoning: string;
@@ -25,6 +37,11 @@ export interface TaskClassification {
   directAction?: string;     // For one-off: what to do
   researchTopic?: string;    // For research: extracted topic to pass to researcher
   researchDepth?: "quick" | "standard" | "deep";  // For research: suggested depth
+  // Archetype fields — for one-off and orchestrated tasks
+  archetype?: TaskArchetype;
+  archetypeRouting?: ArchetypeRouting;  // "focused" = single session bespoke UI, "orchestrated" = full DAG
+  archetypeHints?: Record<string, string>;  // Domain-specific metadata
+  isRecurring?: boolean;     // True if the task implies repeated future use → build reusable app
 }
 
 // ── Classifier ──
@@ -73,15 +90,35 @@ Examples:
 - For RESEARCH: extract the core topic and suggest a depth (quick/standard/deep).
 - IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
 
+## ARCHETYPE (for ONE-OFF and ORCHESTRATED only)
+When classifying as one-off or orchestrated, also identify the task archetype and whether it has recurring usage potential:
+
+| Archetype | When to use | Routing |
+|-----------|-------------|---------|
+| data_analysis | Analyze data files, find patterns, build dashboards, visualize statistics | focused |
+| competitive_analysis | Compare products, companies, technologies, investment options | focused |
+| document_processing | Extract data from documents, review contracts, parse invoices | focused |
+| project_planning | Plan projects, create roadmaps, break down tasks, estimate timelines | focused |
+| travel_planning | Plan trips, compare destinations, build itineraries with budgets | orchestrated |
+| market_research | Industry analysis, market sizing, trend analysis, sector deep-dives | orchestrated |
+| creative_project | Design work, content creation, branding, artistic direction | orchestrated |
+| general | Everything else that doesn't fit a specific archetype | orchestrated |
+
+"focused" = single Claude Code session that researches + builds a bespoke interactive UI (fast, custom-fit).
+"orchestrated" = full multi-step planning + execution across workstreams.
+
+Set "isRecurring": true ONLY when the user's request implies they'll do this task repeatedly ("every week", "track my X", "monthly report", "daily standup", "whenever I get"). Most tasks are one-off (false).
+
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only, be helpful and complete)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only"}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeRouting":"focused|orchestrated","archetypeHints":{"key":"value"},"isRecurring":false}`;
 
 export async function classifyTask(params: {
   userMessage: string;
   conversationHistory: string[];
   geminiApiKey: string;
+  mediaUrls?: string[];
 }): Promise<TaskClassification> {
-  const { userMessage, conversationHistory, geminiApiKey } = params;
+  const { userMessage, conversationHistory, geminiApiKey, mediaUrls } = params;
 
   // Quick heuristics for obvious cases — skip the LLM call entirely
   const quick = quickClassify(userMessage);
@@ -106,7 +143,18 @@ export async function classifyTask(params: {
     ? `\n${memoryContext}\nUse the above context about the user to personalize your answers when relevant.\n`
     : "";
 
-  const fullPrompt = `${CLASSIFIER_PROMPT}\n${memoryBlock}${recentContext}\nUser message: "${userMessage}"`;
+  // When files are attached, add media context to bias classification
+  const mediaBlock = mediaUrls?.length
+    ? `\nAttached files: ${mediaUrls.map(u => {
+        const ext = u.split(".").pop()?.toLowerCase() ?? "";
+        if ([".csv", ".json", ".xlsx", ".xls", ".tsv"].some(e => u.toLowerCase().endsWith(e))) return `data file (${ext})`;
+        if ([".pdf", ".doc", ".docx"].some(e => u.toLowerCase().endsWith(e))) return `document (${ext})`;
+        if ([".jpg", ".jpeg", ".png", ".gif", ".webp"].some(e => u.toLowerCase().endsWith(e))) return `image (${ext})`;
+        return `file (${ext})`;
+      }).join(", ")}\nWhen data files are attached, bias toward data_analysis archetype. When documents are attached, bias toward document_processing.\n`
+    : "";
+
+  const fullPrompt = `${CLASSIFIER_PROMPT}\n${memoryBlock}${recentContext}${mediaBlock}\nUser message: "${userMessage}"`;
 
   try {
     const raw = await callGeminiLLMWithRetry(fullPrompt, geminiApiKey, GEMINI_MODEL_FAST);
@@ -304,6 +352,28 @@ function quickClassify(message: string): TaskClassification | null {
       researchTopic: trimmed,
       researchDepth: "standard",
     };
+  }
+
+  // ── Archetype heuristics — detect specific task patterns ──
+  // "plan a trip / travel / itinerary / vacation"
+  if (/\b(plan\s+(a\s+)?(trip|travel|vacation|holiday|itinerary|visit))\b/i.test(lower) && wordCount >= 5) {
+    return null; // Let LLM classify with archetype hints
+  }
+  // "analyze (this|the|my) data/file/csv/spreadsheet"
+  if (/\b(analyze|analyse)\s+(this|the|my|a)?\s*(data|file|csv|spreadsheet|dataset|numbers|sales|spending|transactions)\b/i.test(lower)) {
+    return null; // Let LLM classify — likely data_analysis archetype
+  }
+  // "compare X and Y" / "X vs Y" for investment/business (long messages)
+  if (/\b(compare|evaluate|assess)\b/i.test(lower) && wordCount >= 8 && /\b(invest|business|company|stock|product|option|alternative)\b/i.test(lower)) {
+    return null; // Let LLM classify — likely competitive_analysis archetype
+  }
+  // "review (this|the|my) contract/document/invoice/agreement"
+  if (/\b(review|extract|parse|process)\s+(this|the|my|a)?\s*(contract|document|invoice|agreement|lease|report|receipt)\b/i.test(lower)) {
+    return null; // Let LLM classify — likely document_processing archetype
+  }
+  // "plan (this|the|my|a) project/roadmap/sprint"
+  if (/\b(plan|break\s+down|decompose|organize)\s+(this|the|my|a)?\s*(project|roadmap|sprint|initiative|launch|release)\b/i.test(lower)) {
+    return null; // Let LLM classify — likely project_planning archetype
   }
 
   // Pure questions that start with question words
