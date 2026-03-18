@@ -11,7 +11,8 @@
  */
 
 import { logAction, logError } from "./action-log.js";
-import type { ConnectedClient, ResolvedEnsoAccount } from "./types.js";
+import type { ConnectedClient } from "./server.js";
+import type { ResolvedEnsoAccount } from "./accounts.js";
 import { handleOrchestration } from "./orchestrator.js";
 
 // ── Persona Definitions ──
@@ -181,8 +182,7 @@ const PERSONAS: Persona[] = [
 
 // ── Planning Prompt Builder ──
 
-const PLUGIN_DIR = new URL(".", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1").replace(/\/$/, "");
-const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
+// No PROJECT_ROOT needed — planFilePath comes from orchestrator via builder callback
 
 function buildEvolutionPlanningPrompt(
   goal: string,
