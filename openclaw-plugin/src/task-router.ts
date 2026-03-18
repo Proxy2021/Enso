@@ -268,6 +268,10 @@ function quickClassify(message: string): TaskClassification | null {
 
   for (const pat of explicitResearchPatterns) {
     if (pat.test(lower) || pat.test(trimmed)) {
+      // Long messages with analyze/explore/examine may be archetype candidates — let LLM decide
+      if (wordCount >= 12 && /^(explore|analyze|examine)\s/i.test(lower)) {
+        return null;
+      }
       // Extract topic by removing the trigger phrase
       const topic = trimmed
         .replace(/^(research\s+this\s*[:;]?\s*|research|deep\s*dive\s*(into)?|investigate|look\s*(in)?to|tell\s+me\s+(everything|all)\s+(about|regarding)|what\s+(should\s+I\s+know|do\s+I\s+need\s+to\s+know)\s+about|(find|gather)\s+(information|info|details|data)\s+(on|about)|(explore|analyze|examine))\s*/i, "")
