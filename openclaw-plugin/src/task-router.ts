@@ -73,15 +73,28 @@ Examples:
 - "Write a Python script to scrape product prices"
 
 ## ORCHESTRATED
-A complex, multi-faceted goal requiring planning AND execution across multiple workstreams.
+A task that benefits from deep research + producing a BESPOKE INTERACTIVE EXPERIENCE (dashboard, comparison tool, planner, analysis board) — not just a text summary. Also for complex multi-faceted goals requiring planning across multiple workstreams.
+
+**CRITICAL: Choose ORCHESTRATED over RESEARCH when the task involves:**
+- Detailed multi-entity comparisons with evaluation criteria (→ interactive comparison dashboard)
+- Data analysis or visualization requests (→ interactive charts and tables)
+- Planning tasks with timelines, budgets, or breakdowns (→ interactive planner)
+- Market/industry analysis (→ interactive dashboard)
+- Any request where an interactive app would serve better than a text report
+
 Examples:
-- "Build a complete freelance photography management system"
-- "Help me launch my startup's MVP — landing page, auth, payments, admin"
+- "Compare Tesla Model Y vs BYD Seal U vs Hyundai Ioniq 5 — evaluate price, range, safety, cargo" → archetype: competitive_analysis
+- "Plan a 5-day Tokyo trip under $3000 with daily activities and budget" → archetype: travel_planning
+- "Break down my mobile app project into phases with timeline and resource estimates" → archetype: project_planning
+- "Analyze the EV market — key players, market share, growth trends, outlook" → archetype: market_research
+- "Build a complete freelance photography management system" → archetype: general
+- "Help me launch my startup's MVP — landing page, auth, payments, admin" → archetype: general
 
 ## Rules
 - **SIMPLE always includes an answer.** You are the AI — answer the user directly.
-- **RESEARCH is for questions that need current web data or multiple source perspectives.** If the answer depends on recent events, market conditions, scientific consensus, or would benefit from citing sources, choose RESEARCH.
-- If in doubt between SIMPLE and RESEARCH, choose RESEARCH — better to over-research than give a shallow answer.
+- **RESEARCH is for straightforward information gathering** — quick facts, opinions, "what is X", "what's happening with Y". Text-based answers suffice.
+- **ORCHESTRATED is for tasks that deserve an interactive experience** — comparisons, analyses, planners, dashboards. When the result would be MUCH BETTER as an interactive app than a text report, choose ORCHESTRATED.
+- If in doubt between RESEARCH and ORCHESTRATED, consider: would an interactive dashboard/comparison/planner serve the user better than a text summary? If yes → ORCHESTRATED.
 - ONE-OFF requires explicit action intent (fix, create, write code, build, convert, deploy, refactor).
 - For RESEARCH: extract the core topic and suggest a depth (quick/standard/deep).
 - IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
@@ -298,8 +311,10 @@ function quickClassify(message: string): TaskClassification | null {
   }
 
   // ── Research intent — comparison/analysis patterns ──
-  // "pros and cons of X", "compare X vs Y", "X vs Y", "best X for Y"
+  // Complex comparisons with evaluation criteria → let LLM decide (may be competitive_analysis archetype)
+  // Simple comparisons → research
   if (/\b(pros?\s+and\s+cons?|advantages?\s+and\s+disadvantages?)\b/i.test(lower) && wordCount >= 5) {
+    if (wordCount >= 15) return null; // Complex — let LLM classify with archetype
     return {
       complexity: "research",
       reasoning: "Comparison/analysis pattern detected",
@@ -309,6 +324,7 @@ function quickClassify(message: string): TaskClassification | null {
   }
 
   if (/\bcompare\b/i.test(lower) && wordCount >= 4) {
+    if (wordCount >= 12) return null; // Detailed comparison — let LLM classify with archetype
     return {
       complexity: "research",
       reasoning: "Comparison request detected",
@@ -318,6 +334,7 @@ function quickClassify(message: string): TaskClassification | null {
   }
 
   if (/\bvs\.?\b/i.test(lower) && wordCount >= 4 && !/\b(fix|build|create|write|code)\b/i.test(lower)) {
+    if (wordCount >= 12) return null; // Detailed vs — let LLM classify with archetype
     return {
       complexity: "research",
       reasoning: "Versus comparison detected",
