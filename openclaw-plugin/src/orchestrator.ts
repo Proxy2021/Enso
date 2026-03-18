@@ -403,6 +403,12 @@ export async function handleOrchestrationApprove(params: {
 
     orch.executionSessionId = sessionId;
 
+    // Check for bespoke one-off UI (.orchestration-ui.jsx)
+    const bespokeUIPath = join(PROJECT_ROOT, ".orchestration-ui.jsx");
+    if (existsSync(bespokeUIPath)) {
+      await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
+    }
+
     // Post-session: detect and register any built apps
     await postOrchestrationRegistration(orch, preExistingFamilies, buildStartTime);
 
@@ -522,6 +528,13 @@ export async function handleOrchestrationResume(params: {
     });
 
     orch.executionSessionId = sessionId;
+
+    // Check for bespoke one-off UI (.orchestration-ui.jsx)
+    const bespokeUIPath = join(PROJECT_ROOT, ".orchestration-ui.jsx");
+    if (existsSync(bespokeUIPath)) {
+      await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
+    }
+
     await postOrchestrationRegistration(orch, preExistingFamilies, buildStartTime);
     finalizeOrchestration(orch);
     cleanupOrchestrationTempFiles(orch.plan);
@@ -1300,6 +1313,103 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration finished: ${completed} completed, ${failed} failed` });
   }
   // If tasks are still pending, leave status as "executing" (shouldn't happen)
+}
+
+// ── Bespoke UI Delivery ──
+
+/**
+ * Read, compile-check, and deliver a .orchestration-ui.jsx as generatedUI on the orchestration card.
+ * This is the one-off bespoke UI path — no app registration needed.
+ */
+async function deliverBespokeOrchestrationUI(
+  orch: {
+    plan: OrchestrationPlan;
+    client: ConnectedClient;
+    bootstrapCardId: string;
+    terminalCardId: string;
+    executionSessionId?: string;
+  },
+  filePath: string,
+): Promise<void> {
+  try {
+    let templateJSX = readFileSync(filePath, "utf-8").trim();
+    unlinkSync(filePath); // Clean up
+
+    if (!templateJSX || templateJSX.length < 100) {
+      logError("orchestrator", "Bespoke UI file too small or empty", undefined);
+      return;
+    }
+
+    // Compile-check with Sucrase
+    try {
+      const { transform } = await import("sucrase");
+      transform(templateJSX, { transforms: ["jsx"], jsxRuntime: "classic" });
+      logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: `Bespoke orchestration UI compile check: OK (${templateJSX.length} chars)` });
+    } catch (compileErr) {
+      logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: "Bespoke UI compile error, attempting auto-fix" });
+
+      if (orch.executionSessionId) {
+        writeFileSync(filePath, templateJSX);
+        const fixPrompt = [
+          "The .orchestration-ui.jsx you just created has a compile error:",
+          "```",
+          String(compileErr),
+          "```",
+          "Fix the file. Common issues: unclosed JSX tags, invalid expressions, missing parentheses.",
+          "Remember: no imports allowed. All hooks at top level. Use EnsoUI.Tooltip (not Tooltip). Use var (not const/let).",
+        ].join("\n");
+
+        try {
+          const { runClaudeCode: runCC } = await import("./claude-code.js");
+          await runCC({
+            prompt: fixPrompt,
+            cwd: PROJECT_ROOT,
+            toolSessionId: orch.executionSessionId,
+            client: orch.client,
+            runId: randomUUID(),
+            targetCardId: orch.terminalCardId,
+            skipPersist: true,
+          });
+
+          if (existsSync(filePath)) {
+            templateJSX = readFileSync(filePath, "utf-8").trim();
+            unlinkSync(filePath);
+            const { transform } = await import("sucrase");
+            transform(templateJSX, { transforms: ["jsx"], jsxRuntime: "classic" });
+            logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: "Bespoke UI auto-fix: OK" });
+          } else {
+            return;
+          }
+        } catch (fixErr) {
+          logError("orchestrator", "Bespoke UI auto-fix failed", fixErr);
+          try { unlinkSync(filePath); } catch { /* ignore */ }
+          return;
+        }
+      } else {
+        return;
+      }
+    }
+
+    // Deliver as generatedUI on the bootstrap card
+    orch.client.send({
+      id: randomUUID(),
+      runId: randomUUID(),
+      sessionKey: orch.client.sessionKey,
+      seq: 0,
+      timestamp: Date.now(),
+      state: "final",
+      targetCardId: orch.bootstrapCardId,
+      enhanceResult: {
+        data: { tool: "orchestration_bespoke", phase: "complete" },
+        generatedUI: templateJSX,
+        cardMode: { appId: "archetype", toolFamily: "archetype", signatureId: "focused_archetype_custom" },
+      },
+    } as ServerMessage);
+
+    logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: `Bespoke orchestration UI delivered (${templateJSX.length} chars)` });
+  } catch (err) {
+    logError("orchestrator", "Failed to deliver bespoke orchestration UI", err);
+  }
 }
 
 // ── DAG Utilities (moved from orchestrator-engine.ts) ──
