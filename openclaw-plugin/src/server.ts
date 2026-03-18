@@ -265,31 +265,32 @@ async function analyzeImageForResearch(params: {
 }): Promise<{ topic: string; depth: "quick" | "standard" }> {
   const { callGeminiVision } = await import("./ui-generator.js");
 
-  const prompt = `Analyze this image and extract a clear research topic from it.
+  const prompt = `Analyze this image and identify what it shows. Then produce a specific research topic about it.
 
-The user wants to research what they see in this image.
 ${params.userText ? `The user added this context: "${params.userText}"` : "No additional context was provided — infer the best research topic from the image content."}
 
-Respond with ONLY valid JSON (no markdown fences):
-{
-  "topic": "A clear, specific research topic derived from the image (e.g., 'Gothic cathedral architecture and structural innovations', 'Tesla Model 3 performance and market comparison 2025', 'Japanese ramen varieties and regional styles')",
-  "description": "Brief one-line description of what's in the image"
-}`;
+Reply with ONLY the research topic as a single line of plain text (no JSON, no markdown, no quotes). Examples:
+- Nike Air Force 1 x Carhartt WIP collaboration sneaker design and features
+- Gothic cathedral architecture and structural innovations
+- Japanese ramen varieties and regional cooking styles`;
 
   const raw = await callGeminiVision({
     imagePath: params.imagePath,
     prompt,
     apiKey: params.apiKey,
-    maxOutputTokens: 512,
+    maxOutputTokens: 256,
   });
 
-  const cleaned = raw.replace(/```json\s*/g, "").replace(/```/g, "").trim();
-  const parsed = JSON.parse(cleaned);
+  // Extract a clean single-line topic from the response
+  const lines = raw.trim().split("\n").map(l => l.trim()).filter(Boolean);
+  // Take the first substantive line (skip any "Topic:" or "Research topic:" prefixes)
+  let topic = lines[0] || "Analyze this image";
+  topic = topic.replace(/^(research\s*topic|topic)\s*[:：]\s*/i, "").replace(/^["']|["']$/g, "");
 
   // If user provided text, combine with vision analysis
-  const topic = params.userText
-    ? `${parsed.topic} — ${params.userText}`
-    : parsed.topic;
+  if (params.userText) {
+    topic = `${topic} — ${params.userText}`;
+  }
 
   return { topic, depth: "standard" };
 }
@@ -1128,46 +1129,6 @@ export async function startEnsoServer(opts: {
                   category: "debug-report",
                 });
               }
-            } else if (msg.intent === "image_research" && msg.mediaUrls?.length && account.geminiApiKey) {
-              // Image-to-research: analyze image with vision, then route to research pipeline
-              runtime.log?.(`[enso] image-research: analyzing image for research topic`);
-              try {
-                const imagePath = msg.mediaUrls[0];
-                const { topic, depth } = await analyzeImageForResearch({
-                  imagePath,
-                  userText: msg.text || "",
-                  apiKey: account.geminiApiKey,
-                });
-                runtime.log?.(`[enso] image-research: topic="${topic.slice(0, 80)}" depth=${depth}`);
-                await routeToResearch({
-                  topic,
-                  depth,
-                  originalText: msg.text || topic,
-                  sessionKey,
-                  client,
-                  account,
-                  config,
-                  runtime,
-                  connectionId,
-                });
-              } catch (err) {
-                logError("image-research", "Image analysis failed, falling through to agent", err);
-                runtime.log?.(`[enso] image-research failed, falling through to agent`);
-                await handleEnsoInbound({
-                  message: {
-                    messageId: randomUUID(),
-                    sessionId: sessionKey,
-                    senderNick: `user_${connectionId}`,
-                    text: msg.text || "Analyze this image",
-                    mediaUrls: msg.mediaUrls,
-                    timestamp: Date.now(),
-                  },
-                  account,
-                  config,
-                  runtime,
-                  client,
-                });
-              }
             } else if (msg.text && account.geminiApiKey && !msg.routing && account.mode !== "im") {
               // Smart task routing — auto-classify message complexity
               try {
@@ -1347,6 +1308,68 @@ export async function startEnsoServer(opts: {
               });
             }
             break;
+
+          case "image_research": {
+            // Dedicated image-to-research route — completely bypasses chat.send / task-router / agent pipeline
+            if (!msg.mediaUrls?.length) {
+              send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                text: "No image was attached. Please try again with a photo.", timestamp: Date.now() });
+              break;
+            }
+            // Persist user bubble with image
+            const irUserCardId = randomUUID();
+            persistCard(clientId, {
+              id: irUserCardId, runId: irUserCardId, type: "user-bubble", role: "user",
+              text: msg.text || "", mediaUrls: msg.mediaUrls, timestamp: Date.now(),
+            });
+
+            runtime.log?.(`[enso] image-research: analyzing image for research topic`);
+            try {
+              const imagePath = msg.mediaUrls[0];
+              const { topic, depth } = await analyzeImageForResearch({
+                imagePath,
+                userText: msg.text || "",
+                apiKey: account.geminiApiKey,
+              });
+              runtime.log?.(`[enso] image-research: topic="${topic.slice(0, 80)}" depth=${depth}`);
+              await routeToResearch({
+                topic,
+                depth,
+                originalText: msg.text || topic,
+                sessionKey,
+                client,
+                account,
+                config,
+                runtime,
+                connectionId,
+              });
+            } catch (err) {
+              logError("image-research", "Image analysis failed", err);
+              // On error, still try research with user text or generic topic — never fall through to agent
+              const fallbackTopic = msg.text || "Analyze this image";
+              runtime.log?.(`[enso] image-research: vision failed, using fallback topic: "${fallbackTopic}"`);
+              try {
+                await routeToResearch({
+                  topic: fallbackTopic,
+                  depth: "standard",
+                  originalText: fallbackTopic,
+                  sessionKey,
+                  client,
+                  account,
+                  config,
+                  runtime,
+                  connectionId,
+                });
+              } catch (fallbackErr) {
+                logError("image-research", "Fallback research also failed", fallbackErr);
+                send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  text: "Sorry, I couldn't analyze this image. Please try again or describe what you'd like to research.",
+                  timestamp: Date.now() });
+              }
+            }
+            break;
+          }
+
           case "card.action":
             if (account.mode === "im") {
               send({

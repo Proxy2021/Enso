@@ -202,13 +202,13 @@ export interface ClientMessage {
     | "orchestration.modify"
     | "orchestration.cancel"
     | "orchestration.message"
+    | "image_research"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;
   claudeThinking?: "adaptive" | "disabled";
   text?: string;
   mediaUrls?: string[];
-  intent?: "image_research";
   sessionKey?: string;
   uiAction?: {
     componentId: string;

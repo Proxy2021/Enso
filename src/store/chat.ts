@@ -470,10 +470,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
       isWaiting: true,
     }));
     get()._wsClient?.send({
-      type: "chat.send",
+      type: intent === "image_research" ? "image_research" : "chat.send",
       text,
       mediaUrls: serverPaths,
-      ...(intent ? { intent } : {}),
     });
   },
 
