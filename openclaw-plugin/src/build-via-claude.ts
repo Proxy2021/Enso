@@ -534,7 +534,9 @@ function buildDeepResearchUIPrompt(topic: string, language: string): string {
   lines.push(`6. Use EnsoUI.Tooltip for tooltips (not Tooltip which is Recharts)`);
   lines.push(`7. Embed your research data directly as \`var\` declarations at the top of the function`);
   lines.push(`8. \`onAction(name, payload)\` for user interactions — e.g., \`onAction("open_url", { url: "https://..." })\` to open links`);
-  lines.push(`9. Use Tabs component for multi-view navigation — aim for 3-6 tabs`);
+  lines.push(`9. Use Tabs component for multi-view navigation — aim for 3-6 tabs. CRITICAL: Tabs uses a RENDER FUNCTION as children, NOT plain JSX children:`);
+  lines.push(`   CORRECT: <Tabs tabs={[{value:"overview",label:"Overview"},{value:"details",label:"Details"}]} defaultValue="overview" variant="underline">{(activeTab) => activeTab === "overview" ? <OverviewContent /> : <DetailsContent />}</Tabs>`);
+  lines.push(`   WRONG: <Tabs tabs={[...]}><div>content</div></Tabs> — this will NOT switch tabs!`);
   lines.push(`10. Videos: use EnsoUI.VideoPlayer for YouTube embeds`);
   lines.push(`11. The \`data\` prop will be \`{ tool: "enso_researcher_search", phase: "app_built", topic: "${topic}" }\` — you can ignore it and use your embedded data`);
   lines.push(``);

@@ -964,6 +964,7 @@ function buildExecutionPrompt(plan: OrchestrationPlan, completedTaskIds?: string
       parts.push(`- Write template.jsx FIRST, then app.json, then executors`);
       parts.push(`- Use var (not const/let) in executors, no imports`);
       parts.push(`- Use EnsoUI.Tooltip (not Tooltip which conflicts with Recharts)`);
+      parts.push(`- Tabs uses a RENDER FUNCTION: <Tabs tabs={[{value:"a",label:"A"},{value:"b",label:"B"}]} defaultValue="a" variant="underline">{(tab) => tab === "a" ? <ViewA /> : <ViewB />}</Tabs>`);
       parts.push(`- DO NOT restart the server — the system auto-detects new apps`);
       parts.push(``);
       parts.push(`If the task description mentions specific data, treat it as a TEST CASE, not the app's sole purpose.`);
