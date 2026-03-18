@@ -94,6 +94,7 @@ function getFileExt(file: File): string {
 export default function ChatInput() {
   const [text, setText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [imageResearchMode, setImageResearchMode] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export default function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const imageResearchRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
 
   const disabled = connectionState !== "connected";
@@ -169,13 +171,19 @@ export default function ChatInput() {
     }
 
     if (attachedFiles.length > 0) {
-      await sendMessageWithMedia(trimmed, attachedFiles);
+      const hasImage = attachedFiles.some((f) => f.type.startsWith("image/"));
+      await sendMessageWithMedia(
+        trimmed,
+        attachedFiles,
+        imageResearchMode && hasImage ? "image_research" : undefined,
+      );
     } else {
       sendMessage(trimmed);
     }
 
     setText("");
     setAttachedFiles([]);
+    setImageResearchMode(false);
     setSelectedIndex(0);
     textareaRef.current?.focus();
   }
@@ -235,12 +243,20 @@ export default function ChatInput() {
     const files = Array.from(e.target.files ?? []);
     if (files.length > 0) {
       setAttachedFiles((prev) => [...prev, ...files]);
+      // If from the image-research button, activate research mode
+      if (e.target === imageResearchRef.current) {
+        setImageResearchMode(true);
+      }
     }
     e.target.value = "";
   }
 
   function removeFile(index: number) {
-    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    setAttachedFiles((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (next.length === 0) setImageResearchMode(false);
+      return next;
+    });
   }
 
   function handleCategorySelect(cat: (typeof ATTACH_CATEGORIES)[number]) {
@@ -397,6 +413,15 @@ export default function ChatInput() {
             className="hidden"
             onChange={handleFileSelect}
           />
+          {/* Image-research input: camera on mobile, image picker on web */}
+          <input
+            ref={imageResearchRef}
+            type="file"
+            accept="image/*"
+            {...(isNative ? { capture: "environment" as const } : {})}
+            className="hidden"
+            onChange={handleFileSelect}
+          />
 
           {/* Attachment menu */}
           <div ref={attachMenuRef} className="relative">
@@ -438,12 +463,39 @@ export default function ChatInput() {
             )}
           </div>
 
+          {/* Image-to-Research button */}
+          <button
+            onClick={() => imageResearchRef.current?.click()}
+            disabled={disabled}
+            className={`px-3 py-2.5 rounded-xl text-sm transition-colors disabled:opacity-50 ${
+              imageResearchMode
+                ? "bg-indigo-600/20 text-indigo-300 ring-1 ring-indigo-500/40"
+                : "bg-gray-800 hover:bg-gray-700 text-indigo-400 hover:text-indigo-300"
+            }`}
+            title="Take photo or upload image to research"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+          </button>
+
           <textarea
             ref={textareaRef}
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : "Message..."}
+            placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : imageResearchMode ? "Add context or tap Send to research..." : "Message..."}
             disabled={disabled}
             rows={1}
             className="flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500 disabled:opacity-50"

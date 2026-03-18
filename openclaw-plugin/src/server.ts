@@ -132,6 +132,131 @@ function scanProjects(): Array<{ name: string; path: string }> {
   return projects;
 }
 
+/**
+ * Route a topic to the research pipeline — creates researcher card and triggers search.
+ * Used by both the task-router research path and image-research intent.
+ */
+async function routeToResearch(params: {
+  topic: string;
+  depth: "quick" | "standard";
+  originalText: string;
+  sessionKey: string;
+  client: ConnectedClient;
+  account: ResolvedEnsoAccount;
+  config: CoreConfig;
+  runtime: RuntimeEnv;
+  connectionId: string;
+}): Promise<void> {
+  const { topic, depth, originalText, sessionKey, client, account, config, runtime, connectionId } = params;
+  const send = (m: ServerMessage) => client.send(m);
+
+  const { setLastUserMessage } = await import("./researcher-tools.js");
+  setLastUserMessage(originalText);
+
+  const { executeToolDirect, getToolTemplateCode, getToolTemplate } = await import("./native-tools/registry.js");
+  const { getApp } = await import("./app-catalog.js");
+  const { registerCardContext } = await import("./outbound.js");
+
+  const cap = getApp("researcher");
+  if (!cap) throw new Error("Researcher app not found in catalog");
+
+  const welcomeResult = await executeToolDirect(cap.primaryTool, {});
+  const template = getToolTemplate(cap.appId, cap.signatureId);
+  const generatedUI = template ? getToolTemplateCode(template) : undefined;
+
+  const cardId = randomUUID();
+  const handlerPrefix = cap.primaryTool.replace(/_search$/, "_");
+
+  registerCardContext(cardId, {
+    cardId,
+    originalPrompt: originalText,
+    originalResponse: "",
+    currentData: structuredClone(welcomeResult.success ? welcomeResult.data : {}),
+    geminiApiKey: account.geminiApiKey,
+    account,
+    mode: "full",
+    actionHistory: [],
+    appToolHint: {
+      toolName: cap.primaryTool,
+      params: {},
+      handlerPrefix,
+    },
+    interactionMode: "tool",
+    toolFamily: cap.appId,
+    signatureId: cap.signatureId,
+    coverageStatus: "covered",
+  });
+
+  send({
+    id: cardId,
+    runId: randomUUID(),
+    sessionKey,
+    seq: 0,
+    state: "final",
+    data: welcomeResult.success ? welcomeResult.data : {},
+    generatedUI,
+    cardMode: {
+      interactionMode: "tool",
+      toolFamily: cap.appId,
+      signatureId: cap.signatureId,
+      coverageStatus: "covered",
+    },
+    targetCardId: undefined,
+    timestamp: Date.now(),
+  });
+
+  handlePluginCardAction({
+    cardId,
+    action: "search",
+    payload: { topic, depth },
+    mode: "full",
+    client,
+    config,
+    runtime,
+  }).catch((err) => {
+    logError("task-router", "Research action failed", err, { topic });
+  });
+}
+
+/**
+ * Analyze an image with Gemini Vision and extract a research topic.
+ */
+async function analyzeImageForResearch(params: {
+  imagePath: string;
+  userText: string;
+  apiKey: string;
+}): Promise<{ topic: string; depth: "quick" | "standard" }> {
+  const { callGeminiVision } = await import("./ui-generator.js");
+
+  const prompt = `Analyze this image and extract a clear research topic from it.
+
+The user wants to research what they see in this image.
+${params.userText ? `The user added this context: "${params.userText}"` : "No additional context was provided — infer the best research topic from the image content."}
+
+Respond with ONLY valid JSON (no markdown fences):
+{
+  "topic": "A clear, specific research topic derived from the image (e.g., 'Gothic cathedral architecture and structural innovations', 'Tesla Model 3 performance and market comparison 2025', 'Japanese ramen varieties and regional styles')",
+  "description": "Brief one-line description of what's in the image"
+}`;
+
+  const raw = await callGeminiVision({
+    imagePath: params.imagePath,
+    prompt,
+    apiKey: params.apiKey,
+    maxOutputTokens: 512,
+  });
+
+  const cleaned = raw.replace(/```json\s*/g, "").replace(/```/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+
+  // If user provided text, combine with vision analysis
+  const topic = params.userText
+    ? `${parsed.topic} — ${params.userText}`
+    : parsed.topic;
+
+  return { topic, depth: "standard" };
+}
+
 export async function startEnsoServer(opts: {
   account: ResolvedEnsoAccount;
   config: CoreConfig;
@@ -956,6 +1081,46 @@ export async function startEnsoServer(opts: {
                   category: "debug-report",
                 });
               }
+            } else if (msg.intent === "image_research" && msg.mediaUrls?.length && account.geminiApiKey) {
+              // Image-to-research: analyze image with vision, then route to research pipeline
+              runtime.log?.(`[enso] image-research: analyzing image for research topic`);
+              try {
+                const imagePath = msg.mediaUrls[0];
+                const { topic, depth } = await analyzeImageForResearch({
+                  imagePath,
+                  userText: msg.text || "",
+                  apiKey: account.geminiApiKey,
+                });
+                runtime.log?.(`[enso] image-research: topic="${topic.slice(0, 80)}" depth=${depth}`);
+                await routeToResearch({
+                  topic,
+                  depth,
+                  originalText: msg.text || topic,
+                  sessionKey,
+                  client,
+                  account,
+                  config,
+                  runtime,
+                  connectionId,
+                });
+              } catch (err) {
+                logError("image-research", "Image analysis failed, falling through to agent", err);
+                runtime.log?.(`[enso] image-research failed, falling through to agent`);
+                await handleEnsoInbound({
+                  message: {
+                    messageId: randomUUID(),
+                    sessionId: sessionKey,
+                    senderNick: `user_${connectionId}`,
+                    text: msg.text || "Analyze this image",
+                    mediaUrls: msg.mediaUrls,
+                    timestamp: Date.now(),
+                  },
+                  account,
+                  config,
+                  runtime,
+                  client,
+                });
+              }
             } else if (msg.text && account.geminiApiKey && !msg.routing && account.mode !== "im") {
               // Smart task routing — auto-classify message complexity
               try {
@@ -986,80 +1151,20 @@ export async function startEnsoServer(opts: {
                   const depth = (classification.researchDepth === "quick" ? "quick" : "standard") as "quick" | "standard";
                   runtime.log?.(`[enso] task-router: research → "${topic.slice(0, 60)}" (depth=${depth})`);
 
-                  // Store original user message for language detection (agent may translate topic to English)
-                  const { setLastUserMessage } = await import("./researcher-tools.js");
-                  setLastUserMessage(msg.text);
-
                   try {
-                    const { executeToolDirect, getToolTemplateCode, getToolTemplate } = await import("./native-tools/registry.js");
-                    const { getApp } = await import("./app-catalog.js");
-                    const { registerCardContext } = await import("./outbound.js");
-
-                    // 1. Create researcher card with welcome state
-                    const cap = getApp("researcher");
-                    if (!cap) throw new Error("Researcher app not found in catalog");
-
-                    const welcomeResult = await executeToolDirect(cap.primaryTool, {});
-                    const template = getToolTemplate(cap.appId, cap.signatureId);
-                    const generatedUI = template ? getToolTemplateCode(template) : undefined;
-
-                    const cardId = randomUUID();
-                    const handlerPrefix = cap.primaryTool.replace(/_search$/, "_");
-
-                    registerCardContext(cardId, {
-                      cardId,
-                      originalPrompt: msg.text,
-                      originalResponse: "",
-                      currentData: structuredClone(welcomeResult.success ? welcomeResult.data : {}),
-                      geminiApiKey: account.geminiApiKey,
-                      account,
-                      mode: "full",
-                      actionHistory: [],
-                      appToolHint: {
-                        toolName: cap.primaryTool,
-                        params: {},
-                        handlerPrefix,
-                      },
-                      interactionMode: "tool",
-                      toolFamily: cap.appId,
-                      signatureId: cap.signatureId,
-                      coverageStatus: "covered",
-                    });
-
-                    // 2. Send card to client (shows welcome/loading state)
-                    send({
-                      id: cardId,
-                      runId: randomUUID(),
+                    await routeToResearch({
+                      topic,
+                      depth,
+                      originalText: msg.text,
                       sessionKey,
-                      seq: 0,
-                      state: "final",
-                      data: welcomeResult.success ? welcomeResult.data : {},
-                      generatedUI,
-                      cardMode: {
-                        interactionMode: "tool",
-                        toolFamily: cap.appId,
-                        signatureId: cap.signatureId,
-                        coverageStatus: "covered",
-                      },
-                      targetCardId: undefined,
-                      timestamp: Date.now(),
-                    });
-
-                    // 3. Trigger the search action on the card (fires async — progressive updates stream to client)
-                    handlePluginCardAction({
-                      cardId,
-                      action: "search",
-                      payload: { topic, depth },
-                      mode: "full",
                       client,
+                      account,
                       config,
                       runtime,
-                    }).catch((err) => {
-                      logError("task-router", "Research action failed", err, { topic });
+                      connectionId,
                     });
                   } catch (researchErr) {
                     logError("task-router", "Research routing failed, falling through to agent", researchErr);
-                    // Don't break — fall through to normal agent as fallback
                     runtime.log?.(`[enso] task-router: research routing failed, falling through`);
                     await handleEnsoInbound({
                       message: {

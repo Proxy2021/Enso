@@ -208,6 +208,7 @@ export interface ClientMessage {
   claudeThinking?: "adaptive" | "disabled";
   text?: string;
   mediaUrls?: string[];
+  intent?: "image_research";
   sessionKey?: string;
   uiAction?: {
     componentId: string;
