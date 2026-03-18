@@ -1513,7 +1513,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
           } else if (planStatus === "executing") {
             viewMode = "app"; // Show terminal during execution
           } else if (planStatus === "completed" || planStatus === "failed") {
-            viewMode = "original"; // Show completion/error summary
+            // If bespoke UI was already delivered (enhanceStatus === "ready"),
+            // stay on "app" view to show the result. Otherwise show plan summary.
+            const hasBespokeUI = existingCard?.enhanceStatus === "ready" && existingCard?.appGeneratedUI;
+            viewMode = hasBespokeUI ? "app" : "original";
           }
 
           const updatedCard = {
