@@ -3,6 +3,7 @@ import type { RuntimeEnv } from "openclaw/plugin-sdk";
 import type { ConnectedClient } from "../server.js";
 import { getActiveAccount } from "../server.js";
 import type { CardModeDetail, CoreConfig, OperationStage, ServerMessage } from "../types.js";
+import { persistCard } from "../memory-bridge.js";
 import { APP_CATALOG } from "../app-catalog.js";
 import {
   inferToolTemplate,
@@ -574,6 +575,18 @@ export async function handlePluginCardAction(params: {
         signatureId: ctx.signatureId,
         coverageStatus: ctx.coverageStatus,
       });
+
+      // Persist the new card to history
+      persistCard(client.id, {
+        id: newCardId,
+        runId: "",
+        type: "dynamic-ui",
+        role: "assistant",
+        data: resultData,
+        generatedUI,
+        cardMode: cardModeFromContext(ctx),
+        timestamp: Date.now(),
+      });
     } else {
       // Full mode: in-place update
       client.send({
@@ -592,6 +605,18 @@ export async function handlePluginCardAction(params: {
           label: "Action complete",
           cancellable: false,
         },
+        timestamp: Date.now(),
+      });
+
+      // Persist card update to history (merges with existing record)
+      persistCard(client.id, {
+        id: cardId,
+        runId: "",
+        type: "dynamic-ui",
+        role: "assistant",
+        data: resultData,
+        generatedUI,
+        cardMode: cardModeFromContext(ctx),
         timestamp: Date.now(),
       });
     }
@@ -869,6 +894,21 @@ export async function handlePluginCardAction(params: {
                   signatureId: "deep_research_custom",
                 },
               },
+              timestamp: Date.now(),
+            });
+
+            // Persist both standard and deep research data to card history
+            persistCard(client.id, {
+              id: cardId,
+              runId: "",
+              type: "dynamic-ui",
+              role: "assistant",
+              data: standardData,
+              generatedUI: templateCode ?? undefined,
+              cardMode: cardModeFromContext(ctx),
+              appData: result.data,
+              appGeneratedUI: customUI,
+              appCardMode: { ...cardModeFromContext(ctx), signatureId: "deep_research_custom" },
               timestamp: Date.now(),
             });
             return;

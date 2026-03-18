@@ -118,7 +118,8 @@ function Tabs({
   variant?: "pills" | "underline" | "boxed";
   className?: string;
 }) {
-  const [internalValue, setInternalValue] = useState(defaultValue ?? tabs[0]?.value ?? "");
+  const safeTabs = Array.isArray(tabs) ? tabs : [];
+  const [internalValue, setInternalValue] = useState(defaultValue ?? safeTabs[0]?.value ?? "");
   const activeTab = controlledValue ?? internalValue;
 
   const handleTabClick = useCallback(
@@ -155,7 +156,7 @@ function Tabs({
   return (
     <div className={className}>
       <div className={tabBarStyles[variant] ?? tabBarStyles.pills}>
-        {tabs.map((tab) => (
+        {safeTabs.map((tab) => (
           <button
             key={tab.value}
             onClick={() => handleTabClick(tab.value)}

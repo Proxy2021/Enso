@@ -40,11 +40,32 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
     const fnName = fnMatch?.[1] ?? "GeneratedUI";
 
     // Destructure Recharts, React hooks, and EnsoUI so generated code can use names directly
+    // Dynamically destructure all Lucide icon components so templates can use <Atom />, <Monitor />, etc.
+    // Lucide icons are forwardRef objects (not functions), exclude *Icon duplicates to keep it manageable
+    // Exclude names already declared by Recharts/React/EnsoUI destructures to avoid "already declared" errors
+    const reservedNames = new Set([
+      "useState", "useEffect", "useMemo", "useCallback", "useRef", "Fragment",
+      "BarChart", "LineChart", "PieChart", "AreaChart", "RadarChart", "Bar", "Line", "Pie", "Area", "Radar",
+      "XAxis", "YAxis", "CartesianGrid", "Tooltip", "Legend", "ResponsiveContainer", "Cell",
+      "PolarGrid", "PolarAngleAxis", "PolarRadiusAxis", "ComposedChart", "Scatter",
+      "RadialBarChart", "RadialBar", "Treemap", "Funnel", "FunnelChart",
+      "Tabs", "Button", "Badge", "UICard", "Select", "Input", "Switch", "Slider",
+      "Progress", "Accordion", "Dialog", "DataTable", "Stat", "Separator", "EmptyState",
+      "Icons",
+    ]);
+    const lucideDestructure = Object.keys(LucideReact)
+      .filter(k => /^[A-Z]/.test(k) && k !== "Icon"
+        && !reservedNames.has(k)
+        && typeof (LucideReact as Record<string, { render?: unknown }>)[k]?.render === "function")
+      .join(", ");
+
     const preamble = [
       "const { useState, useEffect, useMemo, useCallback, useRef, Fragment } = React;",
       "const { BarChart, LineChart, PieChart, AreaChart, RadarChart, Bar, Line, Pie, Area, Radar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ComposedChart, Scatter, RadialBarChart, RadialBar, Treemap, Funnel, FunnelChart } = Recharts;",
       "const { Tabs, Button, Badge, Card: UICard, Select, Input, Switch, Slider, Progress, Accordion, Dialog, DataTable, Stat, Separator, EmptyState } = EnsoUI;",
-    ].join("\n");
+      "const Icons = LucideReact;",
+      lucideDestructure ? `const { ${lucideDestructure} } = LucideReact;` : "",
+    ].filter(Boolean).join("\n");
 
     const wrappedCode = `${preamble}\n${code}\nreturn ${fnName};`;
 

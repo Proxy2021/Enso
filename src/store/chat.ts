@@ -488,6 +488,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }
 
     // Optimistic loading state with action label
+    // For deep research: eagerly snapshot standard data BEFORE any backend response
+    // can overwrite card.data with interim "building" state.
+    // The Deep button uses action "search" with depth:"deep", not "deep_dive"
+    const isDeepDive = action === "deep_dive"
+      || (action === "search" && (payload as Record<string, unknown>)?.depth === "deep");
     set((s) => ({
       cards: {
         ...s.cards,
@@ -498,6 +503,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
           operation: card.operation
             ? { ...card.operation, stage: "processing", label: "Processing action", cancellable: false }
             : undefined,
+          ...(isDeepDive ? {
+            standardDataSnapshot: card.data,
+            standardGeneratedUISnapshot: card.generatedUI,
+          } : {}),
           updatedAt: Date.now(),
         },
       },
@@ -1865,6 +1874,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
                   enhanceStatus: "ready",
                   deepResearchStatus: "building",
                   buildTerminalText: "",
+                  // Preserve existing snapshot (saved eagerly in sendCardAction before
+                  // backend progress messages could overwrite card.data)
+                  standardDataSnapshot: card.standardDataSnapshot ?? card.data,
+                  standardGeneratedUISnapshot: card.standardGeneratedUISnapshot ?? card.generatedUI,
                   status: "complete",       // clear "streaming" so CardLoadingOverlay disappears
                   viewMode: "app",          // auto-switch to app view to show build terminal
                   operation: undefined,
@@ -1938,6 +1951,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
 
         const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready";
+        const isDeepBuild = card.deepResearchStatus === "building";
         const updatedCard: Card = {
           ...card,
           text: msg.text ?? card.text,
@@ -1945,7 +1959,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
             msg.state === "error"
               ? "error"
               : msg.state === "delta"
-                ? "streaming"
+                ? (isDeepBuild ? card.status : "streaming")  // Don't change status during deep build
                 : "complete",
           pendingAction: msg.state === "delta" ? card.pendingAction : undefined,
           operation:
@@ -1957,7 +1971,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
           updatedAt: now,
         };
 
-        if (isAppView) {
+        if (isDeepBuild) {
+          // During deep research build, protect standard data from being overwritten
+          // by the deep_dive action's progress/result updates.
+          // Standard data is preserved in the snapshot fields.
+          // Only update app-side fields.
+          if (msg.data != null) updatedCard.appData = msg.data;
+          if (msg.generatedUI != null) updatedCard.appGeneratedUI = msg.generatedUI;
+          if (msg.cardMode != null) updatedCard.appCardMode = msg.cardMode;
+          // Keep card.data and card.generatedUI untouched (standard research)
+        } else if (isAppView) {
           if (msg.data != null) updatedCard.appData = msg.data;
           if (msg.generatedUI != null) updatedCard.appGeneratedUI = msg.generatedUI;
           if (msg.cardMode != null) updatedCard.appCardMode = msg.cardMode;
@@ -2209,3 +2232,4 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 }));
+

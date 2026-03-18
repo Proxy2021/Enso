@@ -873,14 +873,25 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
 
   // Build a synthetic card for app view rendering
   const renderCard = useMemo<Card>(() => {
-    if (!isAppView) return card;
+    if (!isAppView) {
+      // During/after deep research build, use snapshot of standard data
+      // so the Standard view shows original research, not deep_dive interim data
+      if ((isDeepBuilding || card.standardDataSnapshot) && card.standardDataSnapshot != null) {
+        return {
+          ...card,
+          data: card.standardDataSnapshot,
+          generatedUI: card.standardGeneratedUISnapshot ?? card.generatedUI,
+        };
+      }
+      return card;
+    }
     return {
       ...card,
       data: card.appData,
       generatedUI: card.appGeneratedUI,
       cardMode: card.appCardMode,
     };
-  }, [card, isAppView]);
+  }, [card, isAppView, isDeepBuilding]);
 
   if (!registration) {
     return (

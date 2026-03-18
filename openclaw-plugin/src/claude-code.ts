@@ -92,6 +92,7 @@ export async function runClaudeCode(params: {
   targetCardId?: string;
   model?: string;
   thinking?: "adaptive" | "disabled";
+  skipPersist?: boolean;
 }): Promise<{ sessionId: string }> {
   const { prompt: rawPrompt, cwd, toolSessionId, client, runId, targetCardId } = params;
 
@@ -250,20 +251,23 @@ export async function runClaudeCode(params: {
     });
 
     // Persist terminal card to history (truncate to avoid bloating journal)
-    const maxPersistLen = 8000;
-    const textForHistory = accumulatedText.length > maxPersistLen
-      ? accumulatedText.slice(0, maxPersistLen) + "\n... (truncated)"
-      : accumulatedText;
-    if (textForHistory.trim()) {
-      persistCard(client.id, {
-        id: targetCardId ?? `${runId}-0`,
-        runId,
-        type: "terminal",
-        role: "assistant",
-        text: textForHistory,
-        toolMeta: toolMeta(),
-        timestamp: Date.now(),
-      });
+    // Skip persistence when caller handles it (e.g. deep research builds)
+    if (!params.skipPersist) {
+      const maxPersistLen = 8000;
+      const textForHistory = accumulatedText.length > maxPersistLen
+        ? accumulatedText.slice(0, maxPersistLen) + "\n... (truncated)"
+        : accumulatedText;
+      if (textForHistory.trim()) {
+        persistCard(client.id, {
+          id: targetCardId ?? `${runId}-0`,
+          runId,
+          type: "terminal",
+          role: "assistant",
+          text: textForHistory,
+          toolMeta: toolMeta(),
+          timestamp: Date.now(),
+        });
+      }
     }
   };
 

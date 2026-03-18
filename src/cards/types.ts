@@ -53,6 +53,9 @@ export interface Card {
   // Deep research build in progress (terminal streams into app view)
   deepResearchStatus?: "building";
   buildTerminalText?: string;
+  // Snapshot of standard data/template before deep research overwrites them
+  standardDataSnapshot?: unknown;
+  standardGeneratedUISnapshot?: string;
 
   // Auto-heal status
   autoHealStatus?: "fixing" | "fixed" | "failed";

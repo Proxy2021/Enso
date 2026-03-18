@@ -83,6 +83,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
       client,
       runId,
       targetCardId: buildTerminalCardId,
+      skipPersist: true,
     });
     sessionId = result.sessionId;
   } catch (err) {
@@ -125,6 +126,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
           client,
           runId: randomUUID(),
           targetCardId: buildTerminalCardId,
+          skipPersist: true,
         });
         // Re-scan and re-deliver after fix
         await postBuildRegistration(params, send, preExistingFamilies, buildStartTime);
@@ -363,6 +365,7 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
       client,
       runId,
       targetCardId: cardId,
+      skipPersist: true, // Deep research results persisted by card-actions completion handler
     });
     sessionId = result.sessionId;
   } catch (err) {
@@ -418,7 +421,8 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
           toolSessionId: sessionId,
           client,
           runId: randomUUID(),
-          targetCardId: buildTerminalCardId,
+          targetCardId: cardId,
+          skipPersist: true,
         });
 
         if (existsSync(outputFile)) {

@@ -198,6 +198,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       targetCardId: terminalCardId,
       model: "claude-sonnet-4-6",
       thinking: "disabled",
+      skipPersist: true,
     });
 
     // Step 5: Read and parse the plan
@@ -356,6 +357,7 @@ export async function handleOrchestrationApprove(params: {
       client: wrappedClient,
       runId: executionRunId,
       targetCardId: orch.terminalCardId,
+      skipPersist: true,
     });
 
     orch.executionSessionId = sessionId;
@@ -475,6 +477,7 @@ export async function handleOrchestrationResume(params: {
       runId: executionRunId,
       targetCardId: orch.terminalCardId,
       ...(orch.executionSessionId ? { toolSessionId: orch.executionSessionId } : {}),
+      skipPersist: true,
     });
 
     orch.executionSessionId = sessionId;
