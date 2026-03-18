@@ -504,7 +504,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
             ? { ...card.operation, stage: "processing", label: "Processing action", cancellable: false }
             : undefined,
           ...(isDeepDive ? {
-            standardDataSnapshot: card.data,
+            // Snapshot standard data with hasDeepResearch flag so the Deep button
+            // is greyed out / hidden when viewing Standard during/after deep build
+            standardDataSnapshot: card.data && typeof card.data === "object"
+              ? { ...(card.data as Record<string, unknown>), hasDeepResearch: true }
+              : card.data,
             standardGeneratedUISnapshot: card.generatedUI,
           } : {}),
           updatedAt: Date.now(),
@@ -1875,8 +1879,14 @@ export const useChatStore = create<CardStore>((set, get) => ({
                   deepResearchStatus: "building",
                   buildTerminalText: "",
                   // Preserve existing snapshot (saved eagerly in sendCardAction before
-                  // backend progress messages could overwrite card.data)
-                  standardDataSnapshot: card.standardDataSnapshot ?? card.data,
+                  // backend progress messages could overwrite card.data).
+                  // Flag hasDeepResearch so the Deep button hides in Standard view.
+                  standardDataSnapshot: (() => {
+                    const snap = card.standardDataSnapshot ?? card.data;
+                    return snap && typeof snap === "object"
+                      ? { ...(snap as Record<string, unknown>), hasDeepResearch: true }
+                      : snap;
+                  })(),
                   standardGeneratedUISnapshot: card.standardGeneratedUISnapshot ?? card.generatedUI,
                   status: "complete",       // clear "streaming" so CardLoadingOverlay disappears
                   viewMode: "app",          // auto-switch to app view to show build terminal
