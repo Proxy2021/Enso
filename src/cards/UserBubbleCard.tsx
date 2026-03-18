@@ -1,8 +1,14 @@
+import { useMemo } from "react";
 import MediaGallery from "../components/MediaGallery";
+import { resolveMediaUrl } from "../lib/connection";
 import type { CardRendererProps } from "./types";
 
 export default function UserBubbleCard({ card }: CardRendererProps) {
-  const hasMedia = Boolean(card.mediaUrls?.length);
+  const resolvedMediaUrls = useMemo(
+    () => card.mediaUrls?.map((u) => resolveMediaUrl(u)) ?? [],
+    [card.mediaUrls],
+  );
+  const hasMedia = resolvedMediaUrls.length > 0;
 
   return (
     <div className="flex justify-end mb-3">
@@ -12,7 +18,7 @@ export default function UserBubbleCard({ card }: CardRendererProps) {
             {card.text}
           </p>
         )}
-        {hasMedia && <MediaGallery urls={card.mediaUrls!} />}
+        {hasMedia && <MediaGallery urls={resolvedMediaUrls} />}
       </div>
     </div>
   );
