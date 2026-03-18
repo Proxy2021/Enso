@@ -390,14 +390,9 @@ export async function handleOrchestrationApprove(params: {
 
     orch.executionSessionId = sessionId;
 
-    // Check for bespoke one-off UI (.orchestration-ui.jsx) — Claude Code may write
-    // to project root OR openclaw-plugin/ depending on how it resolves relative paths
-    const bespokeUICandidates = [
-      join(PROJECT_ROOT, ".orchestration-ui.jsx"),
-      join(PROJECT_ROOT, "openclaw-plugin", ".orchestration-ui.jsx"),
-      join(PLUGIN_DIR, "..", ".orchestration-ui.jsx"),
-    ];
-    const bespokeUIPath = bespokeUICandidates.find(p => existsSync(p));
+    // Check for bespoke one-off UI — Claude Code may write as .orchestration-ui.jsx
+    // or with ID like .orchestration-<id>.orchestration-ui.jsx or similar patterns
+    const bespokeUIPath = findBespokeUIFile(orchestrationId);
     if (bespokeUIPath) {
       await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
     }
@@ -527,13 +522,7 @@ export async function handleOrchestrationResume(params: {
     orch.executionSessionId = sessionId;
 
     // Check for bespoke one-off UI (.orchestration-ui.jsx) — Claude Code may write
-    // to project root OR openclaw-plugin/ depending on how it resolves relative paths
-    const bespokeUICandidates = [
-      join(PROJECT_ROOT, ".orchestration-ui.jsx"),
-      join(PROJECT_ROOT, "openclaw-plugin", ".orchestration-ui.jsx"),
-      join(PLUGIN_DIR, "..", ".orchestration-ui.jsx"),
-    ];
-    const bespokeUIPath = bespokeUICandidates.find(p => existsSync(p));
+    const bespokeUIPath = findBespokeUIFile(orchestrationId);
     if (bespokeUIPath) {
       await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
     }
@@ -1329,6 +1318,35 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
  * Read, compile-check, and deliver a .orchestration-ui.jsx as generatedUI on the orchestration card.
  * This is the one-off bespoke UI path — no app registration needed.
  */
+/**
+ * Search for bespoke orchestration UI file across multiple patterns and locations.
+ * Claude Code may write it as .orchestration-ui.jsx, or with the ID in the name.
+ */
+function findBespokeUIFile(orchestrationId: string): string | undefined {
+  // Exact filename candidates
+  const exactCandidates = [
+    join(PROJECT_ROOT, ".orchestration-ui.jsx"),
+    join(PROJECT_ROOT, "openclaw-plugin", ".orchestration-ui.jsx"),
+    join(PLUGIN_DIR, "..", ".orchestration-ui.jsx"),
+  ];
+  const exact = exactCandidates.find(p => existsSync(p));
+  if (exact) return exact;
+
+  // ID-based filename patterns — Claude sometimes includes the ID
+  const searchDirs = [PROJECT_ROOT, join(PROJECT_ROOT, "openclaw-plugin"), join(PLUGIN_DIR, "..")];
+  for (const dir of searchDirs) {
+    try {
+      const files = readdirSync(dir);
+      // Match patterns like .orchestration-<id>.orchestration-ui.jsx or .orchestration-<id>-ui.jsx
+      const match = files.find(f =>
+        f.includes("orchestration") && f.endsWith("-ui.jsx") && f.startsWith(".")
+      );
+      if (match) return join(dir, match);
+    } catch { /* dir not readable */ }
+  }
+  return undefined;
+}
+
 async function deliverBespokeOrchestrationUI(
   orch: {
     plan: OrchestrationPlan;
@@ -1345,6 +1363,13 @@ async function deliverBespokeOrchestrationUI(
 
     if (!templateJSX || templateJSX.length < 100) {
       logError("orchestrator", "Bespoke UI file too small or empty", undefined);
+      return;
+    }
+
+    // Cap at 500KB — larger files will crash the sandbox
+    const MAX_BESPOKE_SIZE = 500_000;
+    if (templateJSX.length > MAX_BESPOKE_SIZE) {
+      logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: `Bespoke UI too large (${(templateJSX.length / 1024).toFixed(0)}KB > 500KB limit), skipping` });
       return;
     }
 
