@@ -38,7 +38,6 @@ export interface TaskClassification {
   // Archetype fields — for one-off and orchestrated tasks
   archetype?: TaskArchetype;
   archetypeHints?: Record<string, string>;  // Domain-specific metadata
-  isRecurring?: boolean;     // True if the task implies repeated future use → build reusable app
 }
 
 // ── Classifier ──
@@ -101,10 +100,8 @@ When classifying as one-off or orchestrated, also identify the task archetype an
 | creative_project | Design work, content creation, branding, artistic direction |
 | general | Everything else that doesn't fit a specific archetype |
 
-Set "isRecurring": true ONLY when the user's request implies they'll do this task repeatedly ("every week", "track my X", "monthly report", "daily standup", "whenever I get"). Most tasks are one-off (false).
-
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeHints":{"key":"value"},"isRecurring":false}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeHints":{"key":"value"}}`;
 
 export async function classifyTask(params: {
   userMessage: string;
