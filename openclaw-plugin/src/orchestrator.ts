@@ -159,8 +159,8 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
   const { userMessage, classification, client, account } = params;
   const orchestrationId = randomUUID();
   const runId = randomUUID();
-  const terminalCardId = randomUUID();
   const bootstrapCardId = randomUUID();
+  const terminalCardId = bootstrapCardId; // Single card — terminal embeds inside orchestration
 
   logAction({
     ts: Date.now(),
@@ -211,20 +211,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
     },
   });
 
-  // Step 2: Create terminal card for the planning Claude Code session
-  send({
-    text: "",
-    toolMeta: { toolId: "claude-code", cwd: PROJECT_ROOT },
-    targetCardId: terminalCardId,
-    operation: {
-      operationId: runId,
-      stage: "processing",
-      label: "Planning mission...",
-      cancellable: true,
-    },
-  });
-
-  // Step 3: Build the planning prompt
+  // Step 2: Build the planning prompt
   const planFilePath = join(PROJECT_ROOT, `openclaw-plugin/.orchestration-${orchestrationId}.json`);
   const planningPrompt = buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath);
 

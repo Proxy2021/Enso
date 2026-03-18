@@ -127,7 +127,7 @@ function PlanningPhase({ goal }: { goal?: string }) {
       <p className="text-[11px] text-gray-500 mt-2">
         Decomposing into tasks and assigning agent roles.
         <br />
-        The planning session is visible in the terminal card below. This typically takes 10–20 seconds.
+        Toggle to Terminal view to see live planning output. This typically takes 10–20 seconds.
       </p>
     </div>
   );

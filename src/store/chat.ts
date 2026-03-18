@@ -1499,6 +1499,23 @@ export const useChatStore = create<CardStore>((set, get) => ({
           const now = Date.now();
           const existingCard = s.cards[targetId];
           const existingData = (existingCard?.data as any) || {};
+
+          // Auto-switch viewMode based on orchestration phase
+          const progress = msg.orchestrationProgress;
+          const planStatus = progress?.plan?.status || msg.orchestrationPlan?.status;
+          let viewMode = existingCard?.viewMode;
+          let buildTerminalText = existingCard?.buildTerminalText;
+          if (planStatus === "planning") {
+            viewMode = "app"; // Show terminal during planning
+          } else if (planStatus === "reviewing") {
+            viewMode = "original"; // Show plan review
+            buildTerminalText = ""; // Reset for execution phase
+          } else if (planStatus === "executing") {
+            viewMode = "app"; // Show terminal during execution
+          } else if (planStatus === "completed" || planStatus === "failed") {
+            viewMode = "original"; // Show completion/error summary
+          }
+
           const updatedCard = {
             ...(existingCard || {
               id: targetId,
@@ -1514,6 +1531,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
               ...(msg.orchestrationProgress ? { orchestrationProgress: msg.orchestrationProgress } : {}),
             },
             status: (msg.state === "final" ? "complete" : "streaming") as any,
+            viewMode,
+            buildTerminalText,
             updatedAt: now,
           };
           return {
@@ -1616,6 +1635,24 @@ export const useChatStore = create<CardStore>((set, get) => ({
               },
             };
           }
+        }
+
+        // ── Orchestration: accumulate claude-code terminal text inline ──
+        if (card?.type === "orchestration" && msg.toolMeta?.toolId === "claude-code") {
+          if (msg.state === "delta") {
+            return {
+              cards: {
+                ...state.cards,
+                [msg.targetCardId]: {
+                  ...card,
+                  buildTerminalText: (card.buildTerminalText ?? "") + (msg.text ?? ""),
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+          // final/error — keep buildTerminalText, don't change orchestration status
+          return state;
         }
 
         // Auto-create terminal card if it doesn't exist yet (e.g. build-via-claude)
@@ -1901,6 +1938,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
           // Deep research complete — clear building state, show real UI
           const wasBuilding = card.deepResearchStatus === "building";
+          const isOrchestration = card.type === "orchestration";
 
           // Auto-switch to app view only for the fast enhance path (enhanceStatus was "loading").
           // Background builds keep the current viewMode — user will be notified via buildComplete.
@@ -1917,8 +1955,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 enhanceStatus: "ready",
                 status: "complete",
                 deepResearchStatus: undefined,
-                buildTerminalText: undefined,
-                viewMode: wasBuilding ? "app" : (wasLoading ? "app" : (card.viewMode ?? "app")),
+                buildTerminalText: isOrchestration ? card.buildTerminalText : undefined,
+                viewMode: (wasBuilding || isOrchestration) ? "app" : (wasLoading ? "app" : (card.viewMode ?? "app")),
                 operation: undefined,
                 pendingAction: undefined,
                 updatedAt: now,

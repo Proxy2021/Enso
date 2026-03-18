@@ -617,6 +617,21 @@ function DeepResearchBuildView({ text }: { text: string }) {
   );
 }
 
+function OrchestrationTerminalView({ text, isComplete }: { text: string; isComplete?: boolean }) {
+  return (
+    <div className="bg-[#0d1117] rounded-lg border border-gray-800 overflow-hidden">
+      <TerminalContent
+        text={text}
+        status={isComplete ? "complete" : "streaming"}
+        accentColor="green"
+        showHeader
+        headerLabel="Orchestration"
+        maxHeightClass="max-h-[500px]"
+      />
+    </div>
+  );
+}
+
 function ViewToggle({ card }: { card: Card }) {
   const toggleCardView = useChatStore((s) => s.toggleCardView);
   const viewMode = card.viewMode ?? "original";
@@ -625,7 +640,9 @@ function ViewToggle({ card }: { card: Card }) {
   const familyLabel = family ? family.replace(/_/g, " ") : "App";
   const isBuilding = card.deepResearchStatus === "building";
 
-  // Deep research / archetype toggle labels
+  // Deep research / archetype / orchestration toggle labels
+  const isOrchestration = card.type === "orchestration";
+  const orchHasBespokeUI = isOrchestration && !!card.appGeneratedUI && card.enhanceStatus === "ready";
   const isFocusedArchetype = isBuilding || family === "archetype" ||
     card.appCardMode?.signatureId === "focused_archetype_custom";
   const isDeepResearch = isBuilding || (family === "researcher" && (
@@ -633,12 +650,16 @@ function ViewToggle({ card }: { card: Card }) {
     (card.appData as Record<string, unknown>)?.metadata &&
     ((card.appData as Record<string, unknown>)?.metadata as Record<string, unknown>)?.isDeepResearch
   ));
-  const isBespokeView = isDeepResearch || isFocusedArchetype;
-  const originalLabel = isBespokeView ? "Standard" : "Original";
-  const originalLabelShort = isBespokeView ? "Std" : "Text";
-  const appLabel = isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
-  const appLabelShort = isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
-  const appIcon = isBespokeView ? "✨" : familyIcon;
+  const isBespokeView = isDeepResearch || isFocusedArchetype || isOrchestration;
+  const originalLabel = isOrchestration ? "Plan" : isBespokeView ? "Standard" : "Original";
+  const originalLabelShort = isOrchestration ? "Plan" : isBespokeView ? "Std" : "Text";
+  const appLabel = isOrchestration
+    ? (orchHasBespokeUI ? "✨ Result" : "⚡ Terminal")
+    : isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
+  const appLabelShort = isOrchestration
+    ? (orchHasBespokeUI ? "Result" : "Term")
+    : isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
+  const appIcon = isOrchestration ? null : isBespokeView ? "✨" : familyIcon;
 
   return (
     <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
@@ -857,6 +878,11 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const isCollapsed = card.display === "collapsed";
   const isDeepBuilding = card.deepResearchStatus === "building";
   const isDeepBuildAppView = isDeepBuilding && card.viewMode === "app";
+  const isOrchestration = card.type === "orchestration";
+  const orchHasTerminal = isOrchestration && !!card.buildTerminalText;
+  const orchHasBespokeUI = isOrchestration && !!card.appGeneratedUI && card.enhanceStatus === "ready";
+  const orchShowTerminal = isOrchestration && card.viewMode === "app" && !orchHasBespokeUI && orchHasTerminal;
+  const orchShowBespoke = isOrchestration && card.viewMode === "app" && orchHasBespokeUI;
   const isAppView = (card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI) || isDeepBuildAppView;
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
   const isShareable = isAppView || isDynamicCard;
@@ -928,7 +954,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     );
   }
 
-  const isLoading = (card.status === "streaming" || card.enhanceStatus === "loading") && !isDeepBuilding;
+  const isLoading = (card.status === "streaming" || card.enhanceStatus === "loading") && !isDeepBuilding && !isOrchestration;
   const loadingLabel = card.enhanceStatus === "loading"
     ? "Enhancing to app"
     : card.operation?.label ?? card.pendingAction;
@@ -1230,7 +1256,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
               {isShareable && card.status === "complete" && <ExportButton card={card} />}
               {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
-              {(card.enhanceStatus === "ready" || isDeepBuilding) && <ViewToggle card={card} />}
+              {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasTerminal || orchHasBespokeUI) && <ViewToggle card={card} />}
               {canEnhance && <EnhanceButton card={card} />}
               {statusLabel !== "ready" && (
                 <div className={`text-[10px] uppercase tracking-wide px-1.5 sm:px-2 py-0.5 rounded-full border ${statusTone}`}>
@@ -1241,6 +1267,17 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           </div>
           {isDeepBuildAppView ? (
             <DeepResearchBuildView text={card.buildTerminalText ?? ""} />
+          ) : orchShowTerminal ? (
+            <OrchestrationTerminalView
+              text={card.buildTerminalText ?? ""}
+              isComplete={(card.data as any)?.orchestrationProgress?.plan?.status === "completed" || (card.data as any)?.orchestrationProgress?.plan?.status === "failed"}
+            />
+          ) : orchShowBespoke ? (
+            <Renderer
+              card={{ ...card, data: card.appData, generatedUI: card.appGeneratedUI, cardMode: card.appCardMode }}
+              isActive={isActive}
+              onAction={handleAction}
+            />
           ) : (
             <Renderer
               card={renderCard}
