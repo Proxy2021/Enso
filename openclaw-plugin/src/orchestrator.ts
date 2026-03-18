@@ -390,9 +390,15 @@ export async function handleOrchestrationApprove(params: {
 
     orch.executionSessionId = sessionId;
 
-    // Check for bespoke one-off UI (.orchestration-ui.jsx)
-    const bespokeUIPath = join(PROJECT_ROOT, ".orchestration-ui.jsx");
-    if (existsSync(bespokeUIPath)) {
+    // Check for bespoke one-off UI (.orchestration-ui.jsx) — Claude Code may write
+    // to project root OR openclaw-plugin/ depending on how it resolves relative paths
+    const bespokeUICandidates = [
+      join(PROJECT_ROOT, ".orchestration-ui.jsx"),
+      join(PROJECT_ROOT, "openclaw-plugin", ".orchestration-ui.jsx"),
+      join(PLUGIN_DIR, "..", ".orchestration-ui.jsx"),
+    ];
+    const bespokeUIPath = bespokeUICandidates.find(p => existsSync(p));
+    if (bespokeUIPath) {
       await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
     }
 
@@ -520,9 +526,15 @@ export async function handleOrchestrationResume(params: {
 
     orch.executionSessionId = sessionId;
 
-    // Check for bespoke one-off UI (.orchestration-ui.jsx)
-    const bespokeUIPath = join(PROJECT_ROOT, ".orchestration-ui.jsx");
-    if (existsSync(bespokeUIPath)) {
+    // Check for bespoke one-off UI (.orchestration-ui.jsx) — Claude Code may write
+    // to project root OR openclaw-plugin/ depending on how it resolves relative paths
+    const bespokeUICandidates = [
+      join(PROJECT_ROOT, ".orchestration-ui.jsx"),
+      join(PROJECT_ROOT, "openclaw-plugin", ".orchestration-ui.jsx"),
+      join(PLUGIN_DIR, "..", ".orchestration-ui.jsx"),
+    ];
+    const bespokeUIPath = bespokeUICandidates.find(p => existsSync(p));
+    if (bespokeUIPath) {
       await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
     }
 
