@@ -226,6 +226,15 @@ function quickClassify(message: string): TaskClassification | null {
         researchDepth: "standard",
       };
     }
+    // Short "X vs Y" should be research, not simple
+    if (/\bvs\.?\b/i.test(lower)) {
+      return {
+        complexity: "research",
+        reasoning: "Short versus comparison",
+        researchTopic: trimmed,
+        researchDepth: "quick",
+      };
+    }
     return {
       complexity: "simple",
       reasoning: "Short message — likely a greeting or command",
@@ -268,8 +277,10 @@ function quickClassify(message: string): TaskClassification | null {
 
   for (const pat of explicitResearchPatterns) {
     if (pat.test(lower) || pat.test(trimmed)) {
-      // Long messages with analyze/explore/examine may be archetype candidates — let LLM decide
-      if (wordCount >= 12 && /^(explore|analyze|examine)\s/i.test(lower)) {
+      // Long messages starting with research/analyze/explore keywords may be archetype candidates
+      // (e.g., "Research the plant-based meat industry — market size, companies, trends...")
+      // Let the LLM classify these so it can detect market_research, data_analysis, etc.
+      if (wordCount >= 12 && /^(explore|analyze|examine|research)\s/i.test(lower)) {
         return null;
       }
       // Extract topic by removing the trigger phrase
