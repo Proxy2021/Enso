@@ -1516,14 +1516,22 @@ export async function startEnsoServer(opts: {
           }
           case "evolution.start": {
             runtime.log?.(`[enso] evolution sprint start`);
-            const { handleEvolutionSprint } = await import("./evolution.js");
-            handleEvolutionSprint({
-              goal: msg.evolutionGoal,
-              client,
-              account,
-            }).catch((err) => {
-              logError("evolution", "Unhandled evolution start error", err);
-            });
+            try {
+              const { handleEvolutionSprint } = await import("./evolution.js");
+              runtime.log?.(`[enso] evolution module imported OK`);
+              handleEvolutionSprint({
+                goal: msg.evolutionGoal,
+                client,
+                account,
+              }).catch((err) => {
+                logError("evolution", "Unhandled evolution start error", err);
+                runtime.log?.(`[enso] evolution sprint error: ${err?.message || err}`);
+              });
+            } catch (importErr: any) {
+              logError("evolution", "Failed to import evolution module", importErr);
+              runtime.log?.(`[enso] evolution import error: ${importErr?.message || importErr}`);
+              client.send({ type: "chat.send", state: "error", text: `Evolution failed: ${importErr?.message}` } as any);
+            }
             break;
           }
           case "apps.list": {

@@ -694,14 +694,14 @@ function buildPlanningPrompt(
     `The final builder task MUST produce an interactive experience. Choose the right output mode:`,
     ``,
     `**Bespoke one-off UI (DEFAULT):** Most tasks are one-off. The builder writes a single file named EXACTLY \`.orchestration-ui.jsx\` (in the current working directory) with all data embedded as \`var\` declarations — no app registration, no executors. Use this for specific analyses, comparisons, plans, reports. CRITICAL: the filename MUST be exactly \`.orchestration-ui.jsx\` — do NOT include the orchestration ID or any other prefix in the filename. The file must be under 500KB total — if the raw data is large, summarize/aggregate it before embedding.`,
-    \`\`,
-    \`## NULL SAFETY — CRITICAL\`,
-    \`ALL generated JSX MUST be defensively coded. Data values may be undefined/null.\`,
-    \`- NEVER call .toUpperCase(), .toLowerCase(), .trim(), .split(), .map(), .filter(), .length on a value without guarding: (val || "").toUpperCase(), (arr || []).map(), (str ?? "").split()\`,
-    \`- ALWAYS use optional chaining: item?.category?.toUpperCase() NOT item.category.toUpperCase()\`,
-    \`- ALWAYS provide fallbacks for display: {item.name || "Unknown"}, {item.count ?? 0}\`,
-    \`- NEVER assume array items have all fields — use ?. and ?? throughout\`,
-    \`- Tabs render function pattern: <Tabs tabs={[...]}>{(tab) => tab === "x" ? <A/> : <B/>}</Tabs>\`,
+    ``,
+    `## NULL SAFETY — CRITICAL`,
+    `ALL generated JSX MUST be defensively coded. Data values may be undefined/null.`,
+    `- NEVER call .toUpperCase(), .toLowerCase(), .trim(), .split(), .map(), .filter(), .length on a value without guarding: (val || "").toUpperCase(), (arr || []).map(), (str ?? "").split()`,
+    `- ALWAYS use optional chaining: item?.category?.toUpperCase() NOT item.category.toUpperCase()`,
+    `- ALWAYS provide fallbacks for display: {item.name || "Unknown"}, {item.count ?? 0}`,
+    `- NEVER assume array items have all fields — use ?. and ?? throughout`,
+    `- Tabs render function pattern: <Tabs tabs={[...]}>{(tab) => tab === "x" ? <A/> : <B/>}</Tabs>`,
     `Examples: "Compare Tesla vs Rivian", "Plan a Tokyo trip", "Analyze Q3 sales data"`,
     ``,
     `**Reusable registered app:** ONLY when the user's goal clearly implies REPEATED future use. The builder creates a full app (app.json + template.jsx + executors/) registered in the tool system. Use this when the user says things like "build me a tool", "I need this every week", "track my X", "whenever I get a new invoice".`,
@@ -1385,6 +1385,12 @@ async function deliverBespokeOrchestrationUI(
       logAction({ ts: Date.now(), type: "build", category: "orchestrator", message: `Bespoke UI too large (${(templateJSX.length / 1024).toFixed(0)}KB > 500KB limit), skipping` });
       return;
     }
+
+    // Strip import statements — sandbox doesn't support them
+    templateJSX = templateJSX
+      .replace(/^\s*import\s+.*?['";]\s*$/gm, "// [import stripped]")
+      .replace(/^\s*import\s*\{[^}]*\}\s*from\s*['"].*?['"];?\s*$/gm, "// [import stripped]")
+      .replace(/^\s*import\s+\*\s+as\s+\w+\s+from\s+['"].*?['"];?\s*$/gm, "// [import stripped]");
 
     // Compile-check with Sucrase
     try {
