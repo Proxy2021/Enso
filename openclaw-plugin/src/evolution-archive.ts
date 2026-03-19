@@ -71,16 +71,30 @@ export function archiveEvolutionSprint(
     let hasReview = false;
     let hasDashboard = false;
 
-    // Scan project root for evolution artifacts
-    const rootFiles = readdirSync(projectRoot).filter(f =>
-      f.startsWith(".evolution-") ||
-      f === ".orchestration-ui.jsx" ||
-      f.startsWith("retest-persona-") ||
-      f.startsWith(".orchestration-output-")
-    );
+    // Scan project root AND common subdirectories for evolution artifacts
+    // Claude Code may write files in the project root or in openclaw-plugin/ subdirectory
+    const dirsToScan = [projectRoot];
+    const subDirs = ["openclaw-plugin", "src", "backend", "server"];
+    for (const sub of subDirs) {
+      const subPath = join(projectRoot, sub);
+      if (existsSync(subPath)) dirsToScan.push(subPath);
+    }
 
-    for (const file of rootFiles) {
-      const srcPath = join(projectRoot, file);
+    const allRootFiles: { file: string; srcDir: string }[] = [];
+    for (const dir of dirsToScan) {
+      try {
+        const files = readdirSync(dir).filter(f =>
+          f.startsWith(".evolution-") ||
+          f === ".orchestration-ui.jsx" ||
+          f.startsWith("retest-persona-") ||
+          f.startsWith(".orchestration-output-")
+        );
+        for (const f of files) allRootFiles.push({ file: f, srcDir: dir });
+      } catch { /* skip unreadable dirs */ }
+    }
+
+    for (const { file, srcDir } of allRootFiles) {
+      const srcPath = join(srcDir, file);
       if (!existsSync(srcPath)) continue;
 
       // Skip directories and non-files
@@ -220,11 +234,21 @@ export function cleanEvolutionTempFiles(projectRoot: string): void {
       /^retest-persona-.*\.mjs$/,
       /^retest-persona-.*\.md$/,
     ];
-    const files = readdirSync(projectRoot);
-    for (const file of files) {
-      if (patterns.some(p => p.test(file))) {
-        try { unlinkSync(join(projectRoot, file)); } catch { /* skip */ }
-      }
+    // Clean project root + common subdirs
+    const dirsToClean = [projectRoot];
+    for (const sub of ["openclaw-plugin", "src", "backend", "server"]) {
+      const subPath = join(projectRoot, sub);
+      if (existsSync(subPath)) dirsToClean.push(subPath);
+    }
+    for (const dir of dirsToClean) {
+      try {
+        const files = readdirSync(dir);
+        for (const file of files) {
+          if (patterns.some(p => p.test(file))) {
+            try { unlinkSync(join(dir, file)); } catch { /* skip */ }
+          }
+        }
+      } catch { /* skip */ }
     }
     // Clean evolution-screenshots dir
     const screenshotsDir = join(projectRoot, "evolution-screenshots");
