@@ -1306,7 +1306,7 @@ async function postOrchestrationRegistration(
  * Finalize orchestration after the execution session completes.
  * Checks task statuses and sets the final plan status.
  */
-function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId: string }): void {
+function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId: string; onComplete?: (orchestrationId: string, status: "completed" | "failed") => void }): void {
   const orchId = orch.plan.orchestrationId;
 
   // Mark any "running" tasks that weren't explicitly completed as failed
