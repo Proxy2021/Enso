@@ -68,7 +68,7 @@ const activeOrchestrations = new Map<
     // Multi-session parallel execution
     taskRunIds: Map<string, string>; // taskId → runId (for cancellation)
     taskSessionIds: Map<string, string>; // taskId → sessionId
-    maxConcurrency: number; // default 2
+    maxConcurrency: number; // default 4
     onComplete?: (orchestrationId: string, status: "completed" | "failed") => void;
   }
 >();
@@ -268,7 +268,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       aborted: false,
       taskRunIds: new Map(),
       taskSessionIds: new Map(),
-      maxConcurrency: 2,
+      maxConcurrency: 4,
       onComplete: params.onComplete,
     });
 
@@ -886,6 +886,11 @@ function buildTaskPrompt(
     `- NEVER push to git (git push) or create git commits (git commit)`,
     `- NEVER run destructive git operations (git reset, git checkout --)`,
     ``,
+    `## Diagram Generation`,
+    `When the task involves architecture, flows, processes, or relationships, generate Mermaid diagrams using \`\`\`mermaid code blocks.`,
+    `Supported types: flowchart, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie, mindmap, timeline.`,
+    `Do NOT include CSS styling directives in Mermaid blocks.`,
+    ``,
   ];
 
   // Dependency context — read completed task outputs
@@ -995,6 +1000,11 @@ function buildExecutionPrompt(plan: OrchestrationPlan, completedTaskIds?: string
     `- NEVER push to git (git push) or create git commits (git commit)`,
     `- NEVER run destructive git operations (git reset, git checkout --)`,
     `These rules exist because the orchestration runs INSIDE the gateway process. Killing it kills the sprint.`,
+    ``,
+    `## Diagram Generation`,
+    `When a task involves architecture, flows, processes, or relationships, generate Mermaid diagrams using \`\`\`mermaid code blocks.`,
+    `Supported types: flowchart, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie, mindmap, timeline.`,
+    `Do NOT include CSS styling directives in Mermaid blocks.`,
     ``,
     `## Progress Markers (CRITICAL — you MUST emit these exactly as shown)`,
     `Before starting each task, print this exact line:`,

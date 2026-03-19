@@ -40,54 +40,38 @@ function buildEvolutionPlanningPrompt(
 ): string {
   const { personas, teamAgents, validationPersonaIds } = project;
 
-  // Build persona task blocks
-  const personaBlocks = personas.map((p, i) => {
-    const isNonBrowser = p.id === "ai-technology-strategist";
-    const role = isNonBrowser ? "researcher" : "coder";
+  // Build persona CATALOG — the Project Leader will choose which to involve
+  const testUrl = project.testUrl || "http://localhost:5173";
+  const personaCatalog = personas.map((p) => {
     const scenarioList = p.testScenarios.map((s, j) => `  ${j + 1}. ${s}`).join("\n");
-
-    const testUrl = project.testUrl || "http://localhost:5173";
-    const browserInstructions = isNonBrowser
-      ? [
-          `**Instructions for this task:** This persona does NOT use the browser. Instead:`,
-          `1. Read the project's documentation/README to understand current architecture`,
-          `2. Perform 5-8 web searches on latest trends relevant to this project`,
-          `3. Identify specific gaps between the project's current state and the frontier`,
-          `4. Write findings to \`.evolution-persona-${p.id}.md\``,
-        ].join("\n")
-      : [
-          `**Instructions for this task:**`,
-          `1. Write a Node.js script \`test-persona-${p.id}.mjs\` using Puppeteer (already installed in node_modules) that:`,
-          `   - Launches a headless browser and navigates to ${testUrl}`,
-          `   - Waits for the page to load`,
-          `   - For each test scenario: types the message, clicks Send, waits for response (10-30s), takes a screenshot`,
-          `   - Saves screenshots to ./evolution-screenshots/`,
-          `   - Outputs a JSON summary of each scenario result`,
-          `2. Execute the script: \`node test-persona-${p.id}.mjs\``,
-          `3. Analyze the screenshots and results from ${p.name}'s perspective`,
-          `4. Write a detailed report to \`.evolution-persona-${p.id}.md\` with:`,
-          `   - Each scenario: what was tried, what happened, assessment`,
-          `   - Ratings (1-10): ease_of_use, speed, quality, delight, discoverability`,
-          `   - Top 3 friction points`,
-          `   - Top 3 enhancement suggestions from this persona's perspective`,
-          `   - Overall assessment quote in character`,
-        ].join("\n");
-
     return [
-      `### Customer Persona ${i + 1}: ${p.name} (${p.role})`,
-      `- **Task ID:** persona-${p.id}`,
-      `- **Agent role:** ${role}`,
-      `- **Dependencies:** none`,
-      `- **Background:** ${p.background}`,
-      `- **Goals:** ${p.goals.join("; ")}`,
-      `- **Frustrations:** ${p.frustrations.join("; ")}`,
-      ``,
-      `**Test scenarios:**`,
+      `  - **${p.name}** (${p.role}, ID: ${p.id})`,
+      `    Background: ${p.background}`,
+      `    Goals: ${p.goals.join("; ")}`,
+      `    Frustrations: ${p.frustrations.join("; ")}`,
+      `    Test scenarios:`,
       scenarioList,
-      ``,
-      browserInstructions,
     ].join("\n");
   });
+
+  // Browser testing instructions template (referenced in persona tasks)
+  const browserTestTemplate = [
+    `**Instructions for browser-based persona testing:**`,
+    `1. Write a Node.js script \`test-persona-<PERSONA_ID>.mjs\` using Puppeteer (already installed in node_modules) that:`,
+    `   - Launches a headless browser and navigates to ${testUrl}`,
+    `   - Waits for the page to load`,
+    `   - For each test scenario: types the message, clicks Send, waits for response (10-30s), takes a screenshot`,
+    `   - Saves screenshots to ./evolution-screenshots/`,
+    `   - Outputs a JSON summary of each scenario result`,
+    `2. Execute the script: \`node test-persona-<PERSONA_ID>.mjs\``,
+    `3. Analyze the screenshots and results from the persona's perspective`,
+    `4. Write a detailed report to \`.evolution-persona-<PERSONA_ID>.md\` with:`,
+    `   - Each scenario: what was tried, what happened, assessment`,
+    `   - Ratings (1-10): ease_of_use, speed, quality, delight, discoverability`,
+    `   - Top 3 friction points`,
+    `   - Top 3 enhancement suggestions from this persona's perspective`,
+    `   - Overall assessment quote in character`,
+  ].join("\n");
 
   // Build team agent task blocks
   const teamBlocks = teamAgents.map((agent, i) => {
@@ -129,11 +113,8 @@ function buildEvolutionPlanningPrompt(
     ].join("\n");
   });
 
-  // Validation personas
-  const validationPersonas = personas.filter(p => validationPersonaIds.includes(p.id));
-  const allPersonaIds = personas.map(p => `persona-${p.id}`);
+  // Validation — Project Leader chooses which personas re-test too
   const allTeamIds = teamAgents.map(a => `team-${a.id}`);
-  const allTestingIds = [...allPersonaIds, ...allTeamIds];
 
   const lines = [
     `You are the Evolution Sprint Planner for the "${project.name}" project.`,
@@ -161,16 +142,28 @@ function buildEvolutionPlanningPrompt(
     ``,
     ...teamBlocks,
     ``,
-    `## Phase 2: Customer Persona Testing`,
+    `## Phase 2: Customer Persona Testing (Project Leader decides)`,
     ``,
-    ...personaBlocks,
+    `The Project Leader (${teamAgents.find(a => a.id === "project-leader")?.name || "Project Leader"}) determines which personas to involve in THIS sprint based on the sprint's focus area. The planner should:`,
+    `- Select 2-4 personas most relevant to the sprint focus`,
+    `- May use existing personas from the catalog below`,
+    `- May CREATE new personas if the sprint needs perspectives not in the catalog (e.g., "Enterprise IT Admin" for security features, "Non-English Speaker" for i18n)`,
+    `- Each selected persona gets a browser-based testing task using the template below`,
+    ``,
+    `### Available Persona Catalog`,
+    ``,
+    ...personaCatalog,
+    ``,
+    `### Browser Testing Template (for each selected persona)`,
+    ``,
+    browserTestTemplate,
     ``,
     `## Phase 3: Synthesis + Discussion`,
     ``,
     `### Synthesis`,
     `- **Task ID:** synthesis`,
     `- **Agent role:** architect`,
-    `- **Dependencies:** ${allTestingIds.join(", ")}`,
+    `- **Dependencies:** ALL team-* tasks AND ALL persona-* tasks (the planner must list every task ID from phases 1 and 2)`,
     `- **Instructions:** Read ALL \`.evolution-persona-*.md\` and \`.evolution-team-*.md\` files. Identify common themes across BOTH customer personas AND team agents. Categorize: UX Issues, Missing Features, Performance Issues, Bugs, Strategic Gaps, Capability Gaps (tools team agents need). Rank by cross-report impact. Write \`.evolution-synthesis.md\` with TOP 5 ACTIONABLE ENHANCEMENTS.`,
     ``,
     `### Product Discussion`,
@@ -217,24 +210,22 @@ function buildEvolutionPlanningPrompt(
     ``,
     `## Phase 5: Validation Re-Testing`,
     ``,
-    ...validationPersonas.map(p => [
-      `### Re-Test as ${p.name}`,
-      `- **Task ID:** retest-${p.id}`,
-      `- **Agent role:** coder`,
-      `- **Dependencies:** review`,
-      `- **Instructions:** Re-test as ${p.name} (${p.role}). Code changes were made but server NOT restarted. Focus on verifying CODE QUALITY of changes and testing existing behavior.`,
-      `  1. Read \`.evolution-implementation.md\` and the changed source files`,
-      `  2. Read original report \`.evolution-persona-${p.id}.md\` for baseline`,
-      `  3. Write Puppeteer re-test script and execute it`,
-      `  4. Write \`.evolution-retest-${p.id}.md\` with before/after comparison`,
-    ].join("\n")),
+    `The planner should select 1-2 of the personas from Phase 2 to re-test. These should be the personas most affected by the implemented changes. Each re-test task:`,
+    `- **Task ID:** retest-<persona-id>`,
+    `- **Agent role:** coder`,
+    `- **Dependencies:** review`,
+    `- **Instructions:** Re-test as the persona. Code changes were made but server NOT restarted. Focus on verifying CODE QUALITY of changes and testing existing behavior.`,
+    `  1. Read \`.evolution-implementation.md\` and the changed source files`,
+    `  2. Read original report \`.evolution-persona-<persona-id>.md\` for baseline`,
+    `  3. Write Puppeteer re-test script and execute it`,
+    `  4. Write \`.evolution-retest-<persona-id>.md\` with before/after comparison`,
     ``,
     `## Phase 6: Evolution Report`,
     ``,
     `### Build Evolution Dashboard`,
     `- **Task ID:** build-dashboard`,
     `- **Agent role:** builder`,
-    `- **Dependencies:** ${validationPersonas.map(p => `retest-${p.id}`).join(", ")}`,
+    `- **Dependencies:** ALL retest-* tasks from Phase 5`,
     `- **Instructions:** Read ALL evolution files. Build a BESPOKE interactive dashboard. Write EXACTLY \`.orchestration-ui.jsx\`. Under 500KB. NO import statements. Use var (not const/let). All hooks at top level. Use EnsoUI components + Recharts.`,
     `  Tabs: Overview | Team | Personas | Implementation | Validation | Backlog`,
     ``,

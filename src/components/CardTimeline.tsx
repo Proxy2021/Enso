@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
+import { isOrchestrationCardData } from "@shared/types";
 import CardContainer from "./CardContainer";
 import WelcomeCard from "./WelcomeCard";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
@@ -113,8 +114,9 @@ export default function CardTimeline() {
 
     // Detect orchestration card in executing/paused state followed by its terminal card
     if (card.type === "orchestration") {
-      const progress = (card.data as any)?.orchestrationProgress;
-      const plan = progress?.plan || (card.data as any)?.orchestrationPlan;
+      const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
+      const progress = orchData?.orchestrationProgress;
+      const plan = progress?.plan || orchData?.orchestrationPlan;
       const isExecuting = plan?.status === "executing" || plan?.status === "paused";
 
       if (isExecuting) {

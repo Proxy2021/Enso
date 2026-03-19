@@ -3,6 +3,7 @@ import { cardRegistry } from "../cards";
 import type { Card } from "../cards/types";
 import { useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useElapsedTime, formatElapsed, estimateDuration } from "../lib/useElapsedTime";
+import { isOrchestrationCardData } from "@shared/types";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
 import { CodeInvestigateDialog } from "./CodeInvestigateDialog";
@@ -971,6 +972,54 @@ function CardContextMenu({ x, y, onRemove, onClose, cardText }: { x: number; y: 
   );
 }
 
+function CapabilityDiscoveryBar({ card }: { card: Card }) {
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const cards = useChatStore((s) => s.cards);
+  const cardOrder = useChatStore((s) => s.cardOrder);
+
+  const userQuery = useMemo(() => {
+    const thisIdx = cardOrder.indexOf(card.id);
+    if (thisIdx < 0) return null;
+    for (let i = thisIdx - 1; i >= 0; i--) {
+      const c = cards[cardOrder[i]];
+      if (c?.role === "user" && c.text) return c.text.trim();
+    }
+    return null;
+  }, [card.id, cardOrder, cards]);
+
+  if (!userQuery) return null;
+  const isSlashCommand = userQuery.startsWith("/");
+  if ((card.text?.length ?? 0) < 100) return null;
+
+  const buttons: Array<{ label: string; icon: string; prefix: string }> = [];
+  if (!isSlashCommand || !userQuery.startsWith("/research")) {
+    buttons.push({ label: "Deep Research", icon: "\uD83D\uDD0D", prefix: "/research " });
+  }
+  if (!isSlashCommand || !userQuery.startsWith("/orchestrate")) {
+    buttons.push({ label: "Orchestrate", icon: "\u26A1", prefix: "/orchestrate " });
+  }
+  if (!isSlashCommand || !userQuery.startsWith("/code")) {
+    buttons.push({ label: "Write Code", icon: "\uD83D\uDCBB", prefix: "/code " });
+  }
+  if (buttons.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap px-3 pb-2 pt-1 border-t border-gray-700/30">
+      <span className="text-[10px] text-gray-600 mr-0.5">Try:</span>
+      {buttons.map((btn) => (
+        <button
+          key={btn.prefix}
+          onClick={() => sendMessage(btn.prefix + userQuery)}
+          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-gray-600/40 bg-gray-800/40 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 hover:bg-gray-700/40 active:bg-gray-600/40 active:scale-[0.96] transition-all duration-150"
+        >
+          <span>{btn.icon}</span>
+          <span>{btn.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function CardContainer({ card, isActive }: CardContainerProps) {
   const collapseCard = useChatStore((s) => s.collapseCard);
   const expandCard = useChatStore((s) => s.expandCard);
@@ -994,6 +1043,11 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const orchHasBespokeUI = isOrchestration && !!card.appGeneratedUI && card.enhanceStatus === "ready";
   const orchShowTerminal = isOrchestration && card.viewMode === "app" && !orchHasBespokeUI && orchHasTerminal;
   const orchShowBespoke = isOrchestration && card.viewMode === "app" && orchHasBespokeUI;
+  const orchComplete = (() => {
+    if (!isOrchestrationCardData(card.data)) return false;
+    const s = card.data.orchestrationProgress?.plan?.status;
+    return s === "completed" || s === "failed";
+  })();
   const isAppView = (card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI) || isDeepBuildAppView;
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
   const isShareable = isAppView || isDynamicCard;
@@ -1174,14 +1228,14 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           const { blob, filename } = await shareResearchAsPDF({
             topic,
             summary: typeof p?.summary === "string" ? p.summary : "",
-            keyFindings: Array.isArray(p?.keyFindings) ? p.keyFindings as any[] : [],
-            sections: Array.isArray(p?.sections) ? p.sections as any[] : [],
-            sources: Array.isArray(p?.sources) ? p.sources as any[] : [],
+            keyFindings: Array.isArray(p?.keyFindings) ? p.keyFindings : [],
+            sections: Array.isArray(p?.sections) ? p.sections : [],
+            sources: Array.isArray(p?.sources) ? p.sources : [],
             narrative: typeof p?.narrative === "string" ? p.narrative : "",
-            videos: Array.isArray(p?.videos) ? p.videos as any[] : [],
-            books: Array.isArray(p?.books) ? p.books as any[] : [],
-            movies: Array.isArray(p?.movies) ? p.movies as any[] : [],
-            contradictions: Array.isArray(p?.contradictions) ? p.contradictions as any[] : [],
+            videos: Array.isArray(p?.videos) ? p.videos : [],
+            books: Array.isArray(p?.books) ? p.books : [],
+            movies: Array.isArray(p?.movies) ? p.movies : [],
+            contradictions: Array.isArray(p?.contradictions) ? p.contradictions : [],
           });
 
           // Native app: share PDF via Android share sheet
@@ -1222,6 +1276,24 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           console.error("[share_research_pdf] generation failed:", err);
         }
       })();
+      return;
+    }
+    // Client-side copy text to clipboard (for citation export and other template actions)
+    if (action === "__copy_text") {
+      const p = payload as Record<string, unknown> | undefined;
+      const text = typeof p?.text === "string" ? p.text : "";
+      if (text) {
+        navigator.clipboard.writeText(text).catch(() => {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        });
+      }
       return;
     }
     // Client-side photo upload — opens file picker, uploads to server, then triggers backend action
@@ -1384,7 +1456,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           ) : orchShowTerminal ? (
             <OrchestrationTerminalView
               text={card.buildTerminalText ?? ""}
-              isComplete={(card.data as any)?.orchestrationProgress?.plan?.status === "completed" || (card.data as any)?.orchestrationProgress?.plan?.status === "failed"}
+              isComplete={orchComplete}
             />
           ) : orchShowBespoke ? (
             <Renderer
@@ -1407,6 +1479,9 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           )}
           {card.steps && card.steps.length > 1 && (
             <AgentSteps steps={card.steps} />
+          )}
+          {card.role === "assistant" && card.status === "complete" && card.type === "chat" && !card.generatedUI && !isAppView && !isLoading && (
+            <CapabilityDiscoveryBar card={card} />
           )}
           {isAppView && !isLoading && (
             <RefineFooter

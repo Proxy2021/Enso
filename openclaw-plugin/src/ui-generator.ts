@@ -155,7 +155,22 @@ INTERACTION POLISH (MOBILE-FIRST — users may have NO hover, only touch):
 ACCESSIBILITY:
 - Include aria-label for icon-only buttons
 - Use semantic headings and role-safe controls
-- Never rely on color alone for status; include text labels/badges`;
+- Never rely on color alone for status; include text labels/badges
+
+VISUAL OUTPUT RULES — when to produce charts instead of text:
+When the content involves data analysis, comparisons, metrics, dashboards, KPIs, trends, benchmarks, or any visualization request:
+- ALWAYS produce Recharts components (BarChart, LineChart, PieChart, RadarChart, AreaChart) with data embedded directly in the component
+- Use representative/sample data if exact numbers are not provided — label it clearly: "(sample data — replace with your actuals)"
+- Prefer VISUAL components over prose descriptions of what a chart "would" look like
+- For comparison requests (X vs Y): use grouped BarChart or RadarChart
+- For trend/timeline data: use LineChart or AreaChart with clear x-axis labels
+- For composition/breakdown (market share, budget allocation): use PieChart with Cell colors
+- For multi-metric dashboards: use a grid of Stat components with small inline charts
+- For ranking/scores: use horizontal BarChart sorted by value
+- NEVER write prose like "A bar chart would show..." — render the actual <BarChart> component
+- Combine charts with Stat cards for a dashboard-quality layout
+- Use ResponsiveContainer with width="100%" and height={200-300} for all charts
+- Apply distinct Cell fill colors from the palette: #6366f1, #10b981, #f59e0b, #ef4444, #8b5cf6, #06b6d4, #f97316, #ec4899`;
 
 const TEXT_ANALYSIS_SYSTEM_PROMPT = `You are Enso — you turn AI responses into apps. Not cards. Not summaries. Apps.
 
@@ -336,6 +351,20 @@ ACCESSIBILITY & LEGIBILITY:
 - Use tabular numbers for metrics (font-variant-numeric: tabular-nums)
 - Keep section headings clear and scannable
 - Add aria-label on icon-only buttons
+
+VISUAL OUTPUT PRIORITY:
+When the text response contains data, comparisons, metrics, rankings, or analysis:
+- Extract the data as structured arrays suitable for Recharts
+- ALWAYS render visual components — charts, stat grids, progress bars — alongside or instead of text
+- Comparison data → BarChart or RadarChart
+- Time series → LineChart or AreaChart
+- Proportions → PieChart with distinct Cell colors
+- KPI/metrics → Stat components in a responsive grid
+- Rankings → sorted horizontal BarChart
+- Multi-dimensional → Tabs with different chart types per view
+- NEVER describe what a chart "would look like" — build the actual <BarChart>, <LineChart>, etc.
+- Use representative sample data if the text is qualitative; label clearly "(illustrative data)"
+- Color palette for charts: #6366f1 (indigo), #10b981 (emerald), #f59e0b (amber), #ef4444 (rose), #8b5cf6 (purple), #06b6d4 (cyan), #f97316 (orange), #ec4899 (pink)
 
 Output ONLY the JSON object (or __NO_UI__). No markdown fences. No explanation.`;
 

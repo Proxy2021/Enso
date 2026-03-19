@@ -13,25 +13,25 @@ const TEMPLATES: Template[] = [
   {
     icon: "\uD83D\uDD0D",
     title: "Researcher",
-    description: "25+ source deep research with citations",
+    description: "Research any topic with live web sources and citations",
     toolFamily: "researcher",
   },
   {
     icon: "\uD83D\uDCBB",
     title: "Code Assistant",
-    description: "Write, run & debug code live",
+    description: "Write, run, and debug code with an AI engineer",
     prompt: "/code",
   },
   {
     icon: "\u26A1",
     title: "Orchestrate",
-    description: "Multi-agent projects with DAG execution",
+    description: "Break big goals into parallel AI workflows",
     prompt: "/orchestrate",
   },
   {
     icon: "\uD83D\uDCC1",
     title: "Browse Files",
-    description: "Explore & manage your filesystem",
+    description: "Browse, manage, and organize your files",
     toolFamily: "filesystem",
   },
   {
@@ -49,13 +49,13 @@ const TEMPLATES: Template[] = [
   {
     icon: "\uD83D\uDCC1",
     title: "Projects",
-    description: "Manage AI teams & evolution",
+    description: "Launch AI teams on projects and evolve the platform",
     prompt: "/projects",
   },
   {
     icon: "\uD83D\uDDA5\uFE0F",
     title: "Terminal",
-    description: "Remote shell access",
+    description: "Full terminal access to this machine",
     prompt: "/shell",
   },
 ];
@@ -99,9 +99,9 @@ export default function WelcomeCard() {
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-4">
       <div className="text-center mb-6">
-        <h2 className="text-lg font-semibold text-gray-200 mb-1">Welcome to Enso</h2>
-        <p className="text-sm text-gray-400 max-w-md">
-          Your AI workspace — research with live sources, build interactive apps, write &amp; debug code, and orchestrate multi-agent tasks.
+        <h2 className="text-lg font-semibold text-gray-200 mb-1">Every answer is an app</h2>
+        <p className="text-sm text-gray-400 max-w-lg">
+          Ask anything. Get interactive software — research dashboards, project trackers, data visualizations, and custom tools — built on the fly by AI agents.
         </p>
       </div>
 
@@ -148,7 +148,7 @@ export default function WelcomeCard() {
       </div>
 
       <p className="text-[10px] text-gray-600 mt-4">
-        Type / for commands &middot; Attach files with + &middot; Build apps from any response
+        Type / for slash commands &middot; Attach files with + &middot; Every response can become an app
       </p>
     </div>
   );

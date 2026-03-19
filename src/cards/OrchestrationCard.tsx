@@ -3,6 +3,9 @@ import { useChatStore } from "../store/chat";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import TerminalContent from "../components/TerminalContent";
 import type { CardRendererProps } from "./types";
+import {
+  isOrchestrationCardData,
+} from "@shared/types";
 import type {
   OrchestrationPlan,
   OrchestrationProgress,
@@ -29,8 +32,9 @@ const ROLE_LABELS: Record<AgentRole, string> = {
 };
 
 export default function OrchestrationCard({ card }: CardRendererProps) {
-  const plan = (card.data as any)?.orchestrationPlan as OrchestrationPlan | undefined;
-  const progress = (card.data as any)?.orchestrationProgress as OrchestrationProgress | undefined;
+  const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
+  const plan = orchData?.orchestrationPlan;
+  const progress = orchData?.orchestrationProgress;
   const phase = derivedPhase(progress, plan);
   const currentPlan = progress?.plan || plan;
   const taskTerminals = card.taskTerminals;

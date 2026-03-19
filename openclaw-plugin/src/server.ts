@@ -1204,9 +1204,16 @@ export async function startEnsoServer(opts: {
             } else if (msg.text && account.geminiApiKey && !msg.routing && account.mode !== "im") {
               // Smart task routing — auto-classify message complexity
               try {
+                // Build recent conversation context for the classifier
+                const recentCards = loadCardHistory(clientId, 10);
+                const recentHistory = recentCards
+                  .filter((c) => c.text)
+                  .slice(-5)
+                  .map((c) => `${c.role}: ${c.text!.slice(0, 300)}`);
+
                 const classification = await classifyTask({
                   userMessage: msg.text,
-                  conversationHistory: [],
+                  conversationHistory: recentHistory,
                   geminiApiKey: account.geminiApiKey,
                   mediaUrls: msg.mediaUrls,
                 });

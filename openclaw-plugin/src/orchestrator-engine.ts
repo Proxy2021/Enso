@@ -76,7 +76,7 @@ export interface DAGExecutorParams {
  * with a concurrency semaphore. Each task gets its own Claude Code session.
  */
 export async function executeDAG(params: DAGExecutorParams): Promise<void> {
-  const { plan, orch, buildTaskPrompt, onTaskStart, onTaskDone, onTaskFail, cwd, maxConcurrency = 2 } = params;
+  const { plan, orch, buildTaskPrompt, onTaskStart, onTaskDone, onTaskFail, cwd, maxConcurrency = 4 } = params;
 
   const semaphore = new Semaphore(maxConcurrency);
   const completedSet = new Set<string>();

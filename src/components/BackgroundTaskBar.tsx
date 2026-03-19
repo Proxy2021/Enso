@@ -9,6 +9,7 @@
  */
 
 import { useChatStore } from "../store/chat";
+import { isOrchestrationCardData } from "@shared/types";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 
 type BackgroundTask = {
@@ -45,11 +46,11 @@ function useBackgroundTasks(): BackgroundTask[] {
 
     // Orchestration card (executing/planning)
     if (card.type === "orchestration") {
-      const plan = (card.data as any)?.orchestrationProgress?.plan
-        || (card.data as any)?.orchestrationPlan;
+      const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
+      const plan = orchData?.orchestrationProgress?.plan || orchData?.orchestrationPlan;
       const status = plan?.status;
       if (status === "executing" || status === "planning" || status === "paused") {
-        const completed = plan?.tasks?.filter((t: any) => t.status === "completed").length ?? 0;
+        const completed = plan?.tasks?.filter((t) => t.status === "completed").length ?? 0;
         const total = plan?.tasks?.length ?? 0;
         tasks.push({
           cardId: id,

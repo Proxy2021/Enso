@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
-import type { AppInfo, ClientMessage, ServerMessage, ToolRouting } from "@shared/types";
+import type { AppInfo, ClientMessage, OrchestrationCardData, ServerMessage, ToolRouting } from "@shared/types";
 import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
 import { shellWriters } from "../cards/ShellCard";
@@ -681,13 +681,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
           [cardId]: {
             ...card,
             data: {
-              ...((card.data as any) || {}),
+              ...(card.data && typeof card.data === "object" ? card.data : {}),
               orchestrationProgress: {
                 orchestrationId: "",
                 eventType: "plan_ready",
                 plan: { orchestrationId: "", goal, tasks: [], agents: [], status: "planning" },
               },
-            },
+            } as OrchestrationCardData,
             updatedAt: Date.now(),
           },
         },
@@ -1582,7 +1582,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
         set((s) => {
           const now = Date.now();
           const existingCard = s.cards[targetId];
-          const existingData = (existingCard?.data as any) || {};
+          const existingData = (existingCard?.data && typeof existingCard.data === "object"
+            ? existingCard.data : {}) as Record<string, unknown>;
 
           // Auto-switch viewMode based on orchestration phase
           const progress = msg.orchestrationProgress;
@@ -2362,7 +2363,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
         const type = msg.cardType ?? cardRegistry.resolve(msg, "assistant");
 
         // Browser notification for research results (skip simple chat / fast enhance)
-        const toolName = (msg.data as any)?.tool as string | undefined;
+        const toolName = (msg.data && typeof msg.data === "object" && "tool" in msg.data)
+          ? (msg.data as { tool?: string }).tool
+          : undefined;
         if (toolName?.includes("research")) {
           notifyTaskComplete({
             type: "research",

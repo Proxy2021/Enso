@@ -333,3 +333,58 @@ export interface OrchestrationProgress {
   error?: string;
   dashboardCardId?: string;
 }
+
+// ── Card Data Types ──
+
+/** Data shape for research cards (researcher tool output) */
+export interface ResearchCardData {
+  tool?: string;
+  topic?: string;
+  depth?: string;
+  phase?: string;
+  summary?: string;
+  narrative?: string;
+  keyFindings?: Array<{
+    title: string;
+    description: string;
+    type?: string;
+    confidence?: string;
+    priority?: string;
+  }>;
+  sections?: Array<{ title: string; content: string }>;
+  sources?: Array<{ url: string; title?: string; snippet?: string; fullText?: string }>;
+  videos?: Array<{ url: string; title?: string; duration?: string }>;
+  books?: Array<{ title: string; author?: string; url?: string }>;
+  movies?: Array<{ title: string; year?: string; url?: string }>;
+  contradictions?: Array<{ claim: string; counter: string }>;
+  images?: Array<{ url: string; pageUrl?: string; alt?: string }>;
+  audioUrl?: string;
+  podcastScript?: string;
+  searchHistory?: Array<{ topic: string; timestamp: number }>;
+}
+
+/** Data shape for orchestration cards */
+export interface OrchestrationCardData {
+  orchestrationPlan?: OrchestrationPlan;
+  orchestrationProgress?: OrchestrationProgress;
+}
+
+/** Discriminated union for all known card data shapes */
+export type CardData =
+  | ResearchCardData
+  | OrchestrationCardData
+  | Record<string, unknown>;
+
+// ── Type Guards ──
+
+export function isOrchestrationCardData(data: unknown): data is OrchestrationCardData {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  return "orchestrationPlan" in d || "orchestrationProgress" in d;
+}
+
+export function isResearchCardData(data: unknown): data is ResearchCardData {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  return "keyFindings" in d || "sources" in d || "sections" in d || "topic" in d;
+}

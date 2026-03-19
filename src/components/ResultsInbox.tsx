@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
+import { isOrchestrationCardData } from "@shared/types";
 import { formatElapsed } from "../lib/useElapsedTime";
 
 // ── Seen tracking (persisted to localStorage) ──
@@ -47,8 +48,8 @@ function isLongRunningResult(card: Card): boolean {
 
   // Orchestration
   if (card.type === "orchestration") {
-    const plan = (card.data as any)?.orchestrationProgress?.plan
-      || (card.data as any)?.orchestrationPlan;
+    const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
+    const plan = orchData?.orchestrationProgress?.plan || orchData?.orchestrationPlan;
     return plan?.status === "completed" || plan?.status === "failed";
   }
 
@@ -56,7 +57,9 @@ function isLongRunningResult(card: Card): boolean {
   if (card.appGeneratedUI && card.standardDataSnapshot) return true;
 
   // Research with data
-  const toolName = (card.data as any)?.tool as string | undefined;
+  const toolName = (card.data && typeof card.data === "object" && "tool" in card.data)
+    ? (card.data as { tool?: string }).tool
+    : undefined;
   if (toolName?.includes("research") && card.generatedUI) return true;
 
   return false;
@@ -83,8 +86,8 @@ function deriveResults(
       subtitle = card.toolMeta?.cwd || "";
     } else if (card.type === "orchestration") {
       type = "orchestration";
-      const plan = (card.data as any)?.orchestrationProgress?.plan
-        || (card.data as any)?.orchestrationPlan;
+      const oData = isOrchestrationCardData(card.data) ? card.data : undefined;
+      const plan = oData?.orchestrationProgress?.plan || oData?.orchestrationPlan;
       title = "Mission";
       subtitle = plan?.goal ? (plan.goal.length > 60 ? plan.goal.slice(0, 57) + "..." : plan.goal) : "";
       success = plan?.status === "completed";

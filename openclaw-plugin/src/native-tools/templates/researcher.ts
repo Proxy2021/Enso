@@ -1187,6 +1187,42 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                       onChange={(val) => setSourceFilter(val)}
                       icon={<LucideReact.Filter className="w-3.5 h-3.5" />}
                     />
+                    <div className="flex gap-1.5 mb-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          var bibEntries = sources.map(function(s, i) {
+                            var key = "source" + (i + 1);
+                            var title = String(s.title || s.url || "").replace(/[{}]/g, "");
+                            var domain = String(s.domain || "");
+                            var year = new Date().getFullYear();
+                            var accessed = new Date().toISOString().slice(0, 10);
+                            return "@online{" + key + ",\\n  title = {" + title + "},\\n  url = {" + s.url + "},\\n  urldate = {" + accessed + "},\\n  year = {" + year + "},\\n  note = {" + domain + "}\\n}";
+                          }).join("\\n\\n");
+                          onAction("__copy_text", { text: bibEntries, label: "BibTeX" });
+                        }}
+                        icon={<LucideReact.Copy className="w-3 h-3" />}
+                      >
+                        Copy BibTeX
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          var apaEntries = sources.map(function(s) {
+                            var title = String(s.title || s.url || "");
+                            var domain = String(s.domain || "");
+                            var accessed = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+                            return domain + ". (n.d.). " + title + ". Retrieved " + accessed + ", from " + s.url;
+                          }).join("\\n\\n");
+                          onAction("__copy_text", { text: apaEntries, label: "APA" });
+                        }}
+                        icon={<LucideReact.Copy className="w-3 h-3" />}
+                      >
+                        Copy APA
+                      </Button>
+                    </div>
                     <div className="space-y-1">
                       {filteredSources.slice(0, 25).map((s, i) => {
                         const isExpanded = expandedSource === i;

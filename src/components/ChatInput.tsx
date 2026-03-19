@@ -240,6 +240,12 @@ export default function ChatInput() {
         setSelectedIndex(0);
         return;
       }
+    } else if (e.key === "Escape" && activeShellSessionId) {
+      e.preventDefault();
+      const wsClient = useChatStore.getState()._wsClient;
+      if (wsClient) {
+        wsClient.send({ type: "shell.destroy", shellSessionId: activeShellSessionId });
+      }
     } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -395,6 +401,34 @@ export default function ChatInput() {
           </div>
         )}
 
+        {/* Shell mode indicator banner */}
+        {activeShellSessionId && (
+          <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-600/50">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+              </span>
+              <span className="text-xs text-amber-200 font-medium">SHELL MODE</span>
+              <span className="text-[10px] text-amber-400/70 hidden sm:inline">— commands execute in terminal</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] text-amber-500/60 hidden sm:inline">Esc to exit</span>
+              <button
+                onClick={() => {
+                  const wsClient = useChatStore.getState()._wsClient;
+                  if (wsClient && activeShellSessionId) {
+                    wsClient.send({ type: "shell.destroy", shellSessionId: activeShellSessionId });
+                  }
+                }}
+                className="text-[10px] px-2 py-0.5 rounded-md border border-amber-600/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 active:bg-amber-500/30 active:scale-[0.95] transition-all duration-150"
+              >
+                Exit Shell
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Slash command autocomplete menu */}
         {showMenu && (
           <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 border border-gray-600/60 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.4)] overflow-hidden z-50 max-h-[60vh] overflow-y-auto">
@@ -531,7 +565,11 @@ export default function ChatInput() {
             placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : "Message..."}
             disabled={disabled}
             rows={1}
-            className="flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500 disabled:opacity-50"
+            className={`flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none placeholder-gray-500 disabled:opacity-50 ${
+              activeShellSessionId
+                ? "ring-2 ring-amber-500/60 focus:ring-amber-500"
+                : "focus:ring-2 focus:ring-indigo-500"
+            }`}
           />
           {speechSupported && (
             <button

@@ -221,6 +221,20 @@ function getDefaultEnsoProject(): Project {
         perspective: "Does this actually work? What edge cases are we missing? Is quality improving?",
         agentRole: "reviewer",
       },
+      {
+        id: "ai-technology-strategist",
+        name: "Dr. Riya Nakamura",
+        role: "AI Technology Strategist",
+        responsibilities: "Internal AI technology expert. Constantly evaluates the latest AI technology available in the industry. Works with the team to determine if there are latest tech/ideas that can be leveraged to enhance Enso. Researches frontier AI capabilities (new model features, agent architectures, multimodal advances, tool use patterns) and proposes concrete adoption plans.",
+        goals: [
+          "Identify the most impactful emerging AI capabilities Enso should adopt",
+          "Propose architectural improvements based on latest agent research",
+          "Evaluate Enso against state-of-the-art AI agent platforms",
+          "Recommend technology integrations that would leapfrog competitors",
+        ],
+        perspective: "What new AI tech exists that we are not leveraging? How do we stay ahead of the curve?",
+        agentRole: "researcher",
+      },
     ],
 
     personas: [
@@ -347,31 +361,6 @@ function getDefaultEnsoProject(): Project {
           "Try: 'Research the latest content marketing trends for B2B SaaS'",
           "Ask for a 30-day content calendar with post ideas and hashtags",
           "Try the photo gallery or media features if available",
-        ],
-      },
-      {
-        id: "ai-technology-strategist",
-        name: "Dr. Riya Nakamura",
-        role: "AI Technology Strategist",
-        background: "Former ML researcher at a top AI lab, now advises companies on AI strategy. Deep expertise in LLM capabilities, agent architectures, multimodal AI, and emerging AI tools. Always at the cutting edge of what's possible.",
-        goals: [
-          "Identify the most impactful emerging AI capabilities Enso should adopt",
-          "Propose architectural improvements based on latest agent research",
-          "Evaluate Enso against state-of-the-art AI agent platforms",
-          "Recommend technology integrations that would leapfrog competitors",
-        ],
-        frustrations: [
-          "AI products that use yesterday's techniques for tomorrow's problems",
-          "Missed opportunities to leverage new model capabilities",
-          "Lack of agentic depth — tools that chat but don't act",
-          "No systematic way to absorb emerging AI advances",
-        ],
-        testScenarios: [
-          "Review Enso's CLAUDE.md to understand current architecture and capabilities",
-          "Research the latest agentic AI patterns: tool use, multi-agent orchestration, memory systems, and browser automation trends in 2026",
-          "Evaluate emerging capabilities: real-time collaboration, voice interfaces, persistent agent memory, code generation quality improvements",
-          "Compare Enso's approach against Manus AI, Devin, OpenAI Operator, Google Mariner, and other frontier agent platforms",
-          "Identify 5 specific technology adoptions that would make Enso dramatically more capable",
         ],
       },
     ],
