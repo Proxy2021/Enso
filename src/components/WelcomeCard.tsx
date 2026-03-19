@@ -97,7 +97,7 @@ export default function WelcomeCard() {
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-4">
+    <div className="flex flex-col items-center justify-center min-h-full px-4 py-4">
       <div className="text-center mb-6">
         <h2 className="text-lg font-semibold text-gray-200 mb-1">Welcome to Enso</h2>
         <p className="text-sm text-gray-400 max-w-md">

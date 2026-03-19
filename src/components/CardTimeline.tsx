@@ -92,7 +92,11 @@ export default function CardTimeline() {
   });
 
   if (cardOrder.length === 0) {
-    return <WelcomeCard />;
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <WelcomeCard />
+      </div>
+    );
   }
 
   // Build render items: detect orchestration+terminal pairs for side-by-side layout
