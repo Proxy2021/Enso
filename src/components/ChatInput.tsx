@@ -17,6 +17,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { command: "/research ", label: "/research <topic>", description: "Deep research on a topic", icon: "\uD83D\uDD0D" },
   { command: "/orchestrate", label: "/orchestrate", description: "Launch multi-agent orchestrator", icon: "\u26A1" },
   { command: "/evolve", label: "/evolve", description: "Run an evolution sprint", icon: "\uD83E\uDDEC" },
+  { command: "/projects", label: "/projects", description: "Manage projects and AI teams", icon: "\uD83D\uDCC1" },
   { command: "/evolution-history", label: "/evolution-history", description: "Browse past evolution sprints", icon: "\uD83D\uDCCA" },
   { command: "/shell", label: "/shell", description: "Open a remote terminal", icon: "\uD83D\uDDA5\uFE0F" },
   { command: "/tool enso", label: "/tool enso", description: "Open the tool console", icon: "\uD83D\uDD27" },

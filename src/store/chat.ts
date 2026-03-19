@@ -325,12 +325,28 @@ export const useChatStore = create<CardStore>((set, get) => ({
         return;
       }
 
+      // "/projects" command — open projects manager
+      if (text.trim() === "/projects") {
+        const id = uuidv4();
+        const now = Date.now();
+        const card: Card = {
+          id, runId: id, type: "projects", role: "assistant",
+          status: "complete", display: "expanded", createdAt: now, updatedAt: now,
+        };
+        set((s) => ({
+          cardOrder: [...s.cardOrder, id],
+          cards: { ...s.cards, [id]: card },
+        }));
+        return;
+      }
+
       // "/evolve" command — launch evolution sprint
       if (text.trim().startsWith("/evolve")) {
         const goal = text.trim().slice(7).trim();
         get()._wsClient?.send({
           type: "evolution.start",
           evolutionGoal: goal || undefined,
+          projectId: localStorage.getItem("enso-active-project") || "enso",
         } as any);
         return;
       }

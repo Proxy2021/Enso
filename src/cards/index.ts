@@ -6,13 +6,20 @@ import ShellCard from "./ShellCard";
 import DynamicUICard from "./DynamicUICard";
 import OrchestrationCard from "./OrchestrationCard";
 import EvolutionHistoryCard from "./EvolutionHistoryCard";
+import ProjectsCard from "./ProjectsCard";
 
 // Register built-in card types (order matters — first match wins in resolve)
 
 cardRegistry.register({
+  type: "projects",
+  renderer: ProjectsCard,
+  match: () => false,
+});
+
+cardRegistry.register({
   type: "evolution-history",
   renderer: EvolutionHistoryCard,
-  match: () => false, // created explicitly via /evolution-history command
+  match: () => false,
 });
 
 cardRegistry.register({

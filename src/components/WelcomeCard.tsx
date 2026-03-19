@@ -47,16 +47,10 @@ const TEMPLATES: Template[] = [
     toolFamily: "remote_desktop",
   },
   {
-    icon: "\uD83E\uDDEC",
-    title: "Evolve",
-    description: "AI self-improvement sprint",
-    prompt: "/evolve",
-  },
-  {
-    icon: "\uD83D\uDCCA",
-    title: "Evolution History",
-    description: "Browse past sprint results",
-    prompt: "/evolution-history",
+    icon: "\uD83D\uDCC1",
+    title: "Projects",
+    description: "Manage AI teams & evolution",
+    prompt: "/projects",
   },
   {
     icon: "\uD83D\uDDA5\uFE0F",

@@ -1,16 +1,8 @@
 /**
  * Evolution Sprint Archive — persists evolution sprint artifacts to disk.
  *
- * Storage: ~/.openclaw/enso-evolution/<sprintId>/
- *   meta.json           — sprint metadata + file inventory
- *   personas/            — persona test reports (.md)
- *   synthesis.md         — synthesized findings
- *   discussion.md        — product team discussion
- *   design.md            — technical design
- *   implementation.md    — implementation log
- *   review.md            — code review results
- *   validation/           — re-test reports
- *   dashboard-ui.jsx     — bespoke interactive dashboard
+ * Project-scoped storage: ~/.enso/projects/<projectId>/sprints/<sprintId>/
+ * Legacy fallback: ~/.openclaw/enso-evolution/<sprintId>/
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync } from "fs";
@@ -18,7 +10,8 @@ import { join, basename } from "path";
 import { logAction, logError } from "./action-log.js";
 
 const HOME = process.env.HOME || process.env.USERPROFILE || "";
-const EVOLUTION_DIR = join(HOME, ".openclaw", "enso-evolution");
+const PROJECTS_DIR = join(HOME, ".enso", "projects");
+const LEGACY_EVOLUTION_DIR = join(HOME, ".openclaw", "enso-evolution");
 
 // ── Types ──
 
@@ -38,7 +31,12 @@ export interface EvolutionSprintMeta {
     validation: { count: number; files: string[] };
     dashboard: boolean;
   };
+  projectId: string;
   files: string[];  // all file paths relative to sprint dir
+}
+
+function getSprintsDir(projectId: string): string {
+  return join(PROJECTS_DIR, projectId, "sprints");
 }
 
 // ── Archive ──
@@ -51,12 +49,14 @@ export function archiveEvolutionSprint(
   sprintId: string,
   goal: string,
   projectRoot: string,
+  projectId: string = "enso",
 ): EvolutionSprintMeta | null {
   try {
-    // Ensure base dir exists
-    mkdirSync(EVOLUTION_DIR, { recursive: true });
+    // Ensure project sprints dir exists
+    const baseDir = getSprintsDir(projectId);
+    mkdirSync(baseDir, { recursive: true });
 
-    const sprintDir = join(EVOLUTION_DIR, sprintId);
+    const sprintDir = join(baseDir, sprintId);
     mkdirSync(sprintDir, { recursive: true });
     mkdirSync(join(sprintDir, "personas"), { recursive: true });
     mkdirSync(join(sprintDir, "validation"), { recursive: true });
@@ -154,9 +154,25 @@ export function archiveEvolutionSprint(
       } catch { /* skip */ }
     }
 
+    // Also check for team agent reports (.evolution-team-*.md)
+    const teamFiles: string[] = [];
+    mkdirSync(join(sprintDir, "team"), { recursive: true });
+    for (const file of rootFiles) {
+      if (file.startsWith(".evolution-team-")) {
+        const srcPath = join(projectRoot, file);
+        const destName = file.replace(".evolution-", "");
+        try {
+          copyFileSync(srcPath, join(sprintDir, "team", destName));
+          teamFiles.push(`team/${destName}`);
+          allFiles.push(`team/${destName}`);
+        } catch { /* skip */ }
+      }
+    }
+
     // Build meta
     const meta: EvolutionSprintMeta = {
       sprintId,
+      projectId,
       goal,
       createdAt: Date.now(), // approximate — could be improved
       completedAt: Date.now(),
@@ -225,53 +241,82 @@ export function cleanEvolutionTempFiles(projectRoot: string): void {
 // ── Query ──
 
 /**
- * List all archived evolution sprints, newest first.
+ * List all archived evolution sprints for a project, newest first.
+ * Also checks legacy location for backward compatibility.
  */
-export function listEvolutionSprints(): EvolutionSprintMeta[] {
-  try {
-    if (!existsSync(EVOLUTION_DIR)) return [];
-    const dirs = readdirSync(EVOLUTION_DIR).filter(d => {
-      const metaPath = join(EVOLUTION_DIR, d, "meta.json");
-      return existsSync(metaPath);
-    });
-    const sprints: EvolutionSprintMeta[] = [];
-    for (const dir of dirs) {
-      try {
-        const raw = readFileSync(join(EVOLUTION_DIR, dir, "meta.json"), "utf-8");
-        sprints.push(JSON.parse(raw));
-      } catch { /* skip corrupt entries */ }
-    }
-    // Sort newest first
-    sprints.sort((a, b) => b.completedAt - a.completedAt);
-    return sprints;
-  } catch {
-    return [];
+export function listEvolutionSprints(projectId: string = "enso"): EvolutionSprintMeta[] {
+  const sprints: EvolutionSprintMeta[] = [];
+
+  // Check project-scoped path
+  const projectSprintsDir = getSprintsDir(projectId);
+  if (existsSync(projectSprintsDir)) {
+    try {
+      for (const dir of readdirSync(projectSprintsDir)) {
+        const metaPath = join(projectSprintsDir, dir, "meta.json");
+        if (existsSync(metaPath)) {
+          try {
+            sprints.push(JSON.parse(readFileSync(metaPath, "utf-8")));
+          } catch { /* skip corrupt */ }
+        }
+      }
+    } catch { /* skip */ }
   }
+
+  // Also check legacy location for the "enso" project
+  if (projectId === "enso" && existsSync(LEGACY_EVOLUTION_DIR)) {
+    try {
+      for (const dir of readdirSync(LEGACY_EVOLUTION_DIR)) {
+        const metaPath = join(LEGACY_EVOLUTION_DIR, dir, "meta.json");
+        if (existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+            // Avoid duplicates
+            if (!sprints.some(s => s.sprintId === meta.sprintId)) {
+              sprints.push(meta);
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  sprints.sort((a, b) => b.completedAt - a.completedAt);
+  return sprints;
 }
 
 /**
  * Load a single evolution sprint's metadata.
  */
-export function loadEvolutionSprint(sprintId: string): EvolutionSprintMeta | null {
-  try {
-    const metaPath = join(EVOLUTION_DIR, sprintId, "meta.json");
-    if (!existsSync(metaPath)) return null;
-    return JSON.parse(readFileSync(metaPath, "utf-8"));
-  } catch {
-    return null;
+export function loadEvolutionSprint(sprintId: string, projectId: string = "enso"): EvolutionSprintMeta | null {
+  // Check project-scoped path first
+  const projectPath = join(getSprintsDir(projectId), sprintId, "meta.json");
+  if (existsSync(projectPath)) {
+    try { return JSON.parse(readFileSync(projectPath, "utf-8")); } catch { /* skip */ }
   }
+  // Fallback to legacy
+  const legacyPath = join(LEGACY_EVOLUTION_DIR, sprintId, "meta.json");
+  if (existsSync(legacyPath)) {
+    try { return JSON.parse(readFileSync(legacyPath, "utf-8")); } catch { /* skip */ }
+  }
+  return null;
 }
 
 /**
  * Read a specific file from an archived sprint.
  */
-export function getEvolutionFile(sprintId: string, filename: string): string | null {
-  try {
-    // Sanitize path to prevent directory traversal
-    const safe = filename.replace(/\.\./g, "").replace(/\\/g, "/");
-    const filePath = join(EVOLUTION_DIR, sprintId, safe);
-    if (!existsSync(filePath)) return null;
-    return readFileSync(filePath, "utf-8");
+export function getEvolutionFile(sprintId: string, filename: string, projectId: string = "enso"): string | null {
+  const safe = filename.replace(/\.\./g, "").replace(/\\/g, "/");
+  // Check project-scoped path first
+  const projectPath = join(getSprintsDir(projectId), sprintId, safe);
+  if (existsSync(projectPath)) {
+    try { return readFileSync(projectPath, "utf-8"); } catch { /* skip */ }
+  }
+  // Fallback to legacy
+  const legacyPath = join(LEGACY_EVOLUTION_DIR, sprintId, safe);
+    if (existsSync(legacyPath)) {
+      try { return readFileSync(legacyPath, "utf-8"); } catch { /* skip */ }
+    }
+    return null;
   } catch {
     return null;
   }

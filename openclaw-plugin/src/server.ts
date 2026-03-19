@@ -717,24 +717,69 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
-  // ── Evolution Sprint History API ──
-  app.get("/api/evolution-sprints", async (_req, res) => {
+  // ── Projects API ──
+  app.get("/api/projects", async (_req, res) => {
+    const { listProjects } = await import("./project-manager.js");
+    res.json({ projects: listProjects() });
+  });
+
+  app.get("/api/projects/:id", async (req, res) => {
+    const { loadProject } = await import("./project-manager.js");
+    const project = loadProject(req.params.id);
+    if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+    res.json(project);
+  });
+
+  app.post("/api/projects", express.json({ limit: "1mb" }), async (req, res) => {
+    const { saveProject } = await import("./project-manager.js");
+    try {
+      const project = req.body;
+      if (!project.id || !project.name) { res.status(400).json({ error: "id and name required" }); return; }
+      project.createdAt = project.createdAt || Date.now();
+      project.updatedAt = Date.now();
+      saveProject(project);
+      res.json({ ok: true, project });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/projects/:id", express.json({ limit: "1mb" }), async (req, res) => {
+    const { loadProject, saveProject } = await import("./project-manager.js");
+    const existing = loadProject(req.params.id);
+    if (!existing) { res.status(404).json({ error: "Project not found" }); return; }
+    const updated = { ...existing, ...req.body, id: req.params.id };
+    saveProject(updated);
+    res.json({ ok: true, project: updated });
+  });
+
+  app.delete("/api/projects/:id", async (req, res) => {
+    const { deleteProject } = await import("./project-manager.js");
+    if (req.params.id === "enso") { res.status(403).json({ error: "Cannot delete default Enso project" }); return; }
+    const ok = deleteProject(req.params.id);
+    res.json({ ok });
+  });
+
+  // ── Evolution Sprint History API (project-scoped) ──
+  app.get("/api/evolution-sprints", async (req, res) => {
     const { listEvolutionSprints } = await import("./evolution-archive.js");
-    res.json({ sprints: listEvolutionSprints() });
+    const projectId = (req.query.projectId as string) || "enso";
+    res.json({ sprints: listEvolutionSprints(projectId) });
   });
 
   app.get("/api/evolution-sprints/:id", async (req, res) => {
     const { loadEvolutionSprint } = await import("./evolution-archive.js");
-    const sprint = loadEvolutionSprint(req.params.id);
+    const projectId = (req.query.projectId as string) || "enso";
+    const sprint = loadEvolutionSprint(req.params.id, projectId);
     if (!sprint) { res.status(404).json({ error: "Sprint not found" }); return; }
     res.json(sprint);
   });
 
   app.get("/api/evolution-sprints/:id/file/*", async (req, res) => {
     const { getEvolutionFile } = await import("./evolution-archive.js");
-    // Extract filename from wildcard path after /file/
+    const projectId = (req.query.projectId as string) || "enso";
     const filename = req.params[0] || "";
-    const content = getEvolutionFile(req.params.id, filename);
+    const content = getEvolutionFile(req.params.id, filename, projectId);
     if (content === null) { res.status(404).json({ error: "File not found" }); return; }
     if (filename.endsWith(".jsx")) {
       res.setHeader("Content-Type", "application/javascript; charset=utf-8");
@@ -1569,6 +1614,7 @@ export async function startEnsoServer(opts: {
               const { handleEvolutionSprint } = await import("./evolution.js");
               runtime.log?.(`[enso] evolution module imported OK`);
               handleEvolutionSprint({
+                projectId: (msg as any).projectId,
                 goal: msg.evolutionGoal,
                 client,
                 account,
@@ -2207,6 +2253,11 @@ export async function startEnsoServer(opts: {
 
       // Migrate card journals from old ~/.openclaw/enso-cards/ to ~/.enso/cards/
       try { migrateCardJournals(); } catch { /* best-effort */ }
+
+      // Ensure default Enso project exists
+      try {
+        import("./project-manager.js").then(m => m.ensureDefaultProject()).catch(() => {});
+      } catch { /* best-effort */ }
 
       // Prune stale card history files on startup
       try { pruneStaleJournals(); } catch { /* best-effort */ }
