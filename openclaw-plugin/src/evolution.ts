@@ -446,30 +446,30 @@ export async function handleEvolutionSprint(params: {
       account,
       planningPromptBuilder: (orchestrationId, planFilePath) =>
         buildEvolutionPlanningPrompt(goal || "", orchestrationId, planFilePath),
+      onComplete: (_orchId, status) => {
+        // Archive all evolution artifacts AFTER orchestration fully completes
+        try {
+          const meta = archiveEvolutionSprint(
+            sprintId,
+            goal || "Full product assessment",
+            PROJECT_ROOT,
+          );
+          if (meta) {
+            logAction({
+              ts: Date.now(),
+              type: "action",
+              category: "evolution",
+              message: `Sprint archived (${status}): ${meta.files.length} files, ${meta.phases.personas.count} personas, dashboard: ${meta.phases.dashboard}`,
+            });
+            // Clean temp files from project root
+            cleanEvolutionTempFiles(PROJECT_ROOT);
+          }
+        } catch (err) {
+          logError("evolution", "Failed to archive sprint", err);
+        }
+      },
     });
-
-    // Archive all evolution artifacts after orchestration completes
-    const meta = archiveEvolutionSprint(
-      sprintId,
-      goal || "Full product assessment",
-      PROJECT_ROOT,
-    );
-    if (meta) {
-      logAction({
-        ts: Date.now(),
-        type: "action",
-        category: "evolution",
-        message: `Sprint archived: ${meta.files.length} files, dashboard: ${meta.phases.dashboard}`,
-      });
-      // Clean temp files from project root
-      cleanEvolutionTempFiles(PROJECT_ROOT);
-    }
   } catch (err) {
-    // Still try to archive whatever we have
-    try {
-      archiveEvolutionSprint(sprintId, goal || "Full product assessment (failed)", PROJECT_ROOT);
-      cleanEvolutionTempFiles(PROJECT_ROOT);
-    } catch { /* best effort */ }
     logError("evolution", "Evolution sprint failed", err);
   }
 }

@@ -66,6 +66,7 @@ const activeOrchestrations = new Map<
     aborted: boolean;
     executionRunId?: string; // For cancellation via cancelClaudeCodeRun()
     executionSessionId?: string; // For session resume
+    onComplete?: (orchestrationId: string, status: "completed" | "failed") => void;
   }
 >();
 
@@ -147,6 +148,8 @@ export interface OrchestrationStartParams {
   /** Override the auto-generated planning prompt (used by evolution sprints, etc.)
    *  Receives (orchestrationId, planFilePath) so it can reference the correct paths. */
   planningPromptBuilder?: (orchestrationId: string, planFilePath: string) => string;
+  /** Called when the orchestration completes (all tasks done). */
+  onComplete?: (orchestrationId: string, status: "completed" | "failed") => void;
 }
 
 /**
@@ -248,7 +251,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       goal: userMessage,
       tasks: normalizeTasks(parsedPlan.tasks || [], orchestrationId),
       agents: buildAgentRoster(parsedPlan.tasks || []),
-      status: "reviewing",
+      status: "executing",
     };
 
     // Store in active orchestrations
@@ -260,6 +263,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       bootstrapCardId,
       terminalCardId,
       aborted: false,
+      onComplete: params.onComplete,
     });
 
     // Persist to disk
@@ -269,12 +273,12 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       ts: Date.now(),
       type: "action",
       category: "orchestrator",
-      message: `Plan ready: ${plan.tasks.length} tasks, ${plan.agents.length} agents`,
+      message: `Plan ready (auto-executing): ${plan.tasks.length} tasks, ${plan.agents.length} agents`,
     });
 
-    // Step 6: Send plan to client for review
-    sendFinal({
-      text: `Mission planned: ${plan.tasks.length} tasks across ${plan.agents.length} agents.\n\nReview the plan and approve to begin execution.`,
+    // Step 6: Send plan to client and auto-execute (no approval gate)
+    send({
+      text: `Mission planned: ${plan.tasks.length} tasks across ${plan.agents.length} agents. Executing...`,
       targetCardId: bootstrapCardId,
       orchestrationPlan: plan,
       orchestrationProgress: {
@@ -282,6 +286,15 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
         eventType: "plan_ready",
         plan,
       },
+    });
+
+    // Auto-execute immediately
+    handleOrchestrationApprove({
+      orchestrationId,
+      client,
+      account,
+    }).catch((err) => {
+      logError("orchestrator", "Auto-execution failed", err, { orchestrationId });
     });
   } catch (err) {
     logError("orchestrator", "Planning failed", err, { orchestrationId });
@@ -1314,13 +1327,16 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     orch.plan.status = "completed";
     updateOrchestrationProgress(orchId, "completed");
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration completed: ${orchId}` });
+    try { orch.onComplete?.(orchId, "completed"); } catch { /* best effort */ }
   } else if (allDone && anyFailed) {
     // Some tasks failed but the session finished
     const completed = orch.plan.tasks.filter(t => t.status === "completed").length;
     const failed = orch.plan.tasks.filter(t => t.status === "failed").length;
-    orch.plan.status = completed > 0 ? "completed" : "failed";
-    updateOrchestrationProgress(orchId, completed > 0 ? "completed" : "failed");
+    const status = completed > 0 ? "completed" : "failed";
+    orch.plan.status = status;
+    updateOrchestrationProgress(orchId, status);
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration finished: ${completed} completed, ${failed} failed` });
+    try { orch.onComplete?.(orchId, status as "completed" | "failed"); } catch { /* best effort */ }
   }
   // If tasks are still pending, leave status as "executing" (shouldn't happen)
 }
