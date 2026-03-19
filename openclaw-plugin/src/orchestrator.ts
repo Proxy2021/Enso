@@ -1383,12 +1383,16 @@ async function deliverBespokeOrchestrationUI(
     bootstrapCardId: string;
     terminalCardId: string;
     executionSessionId?: string;
+    onComplete?: (orchestrationId: string, status: "completed" | "failed") => void;
   },
   filePath: string,
 ): Promise<void> {
   try {
     let templateJSX = readFileSync(filePath, "utf-8").trim();
-    unlinkSync(filePath); // Clean up
+    // If onComplete is set (e.g., evolution sprint), keep the file for archiving
+    if (!orch.onComplete) {
+      unlinkSync(filePath); // Clean up
+    }
 
     if (!templateJSX || templateJSX.length < 100) {
       logError("orchestrator", "Bespoke UI file too small or empty", undefined);
