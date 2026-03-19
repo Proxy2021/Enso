@@ -171,6 +171,22 @@ export default function ShellCard({ card }: CardRendererProps) {
     };
   }, [card.id]);
 
+  // Auto-execute initial command when shell session is ready (from /shell <command>)
+  useEffect(() => {
+    if (!shellSessionId) return;
+    const initCmd = (card.data as Record<string, unknown> | undefined)?.initialCommand;
+    if (typeof initCmd === "string" && initCmd.trim()) {
+      const timer = setTimeout(() => {
+        wsClient?.send({
+          type: "shell.input",
+          shellSessionId,
+          shellInput: initCmd + "\r",
+        });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [shellSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Re-fit when card display changes (collapse/expand)
   useEffect(() => {
     if (card.display === "expanded") {

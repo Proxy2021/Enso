@@ -107,6 +107,8 @@ export default function ChatInput() {
   const sendShellInput = useChatStore((s) => s.sendShellInput);
   const activeShellSessionId = useChatStore((s) => s.getActiveShellSessionId());
   const connectionState = useChatStore((s) => s.connectionState);
+  const hasActiveBackgroundTask = useChatStore((s) => s.hasActiveBackgroundTask);
+  const [queueToast, setQueueToast] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +116,13 @@ export default function ChatInput() {
   const attachMenuRef = useRef<HTMLDivElement>(null);
 
   const disabled = connectionState !== "connected";
+
+  // Auto-dismiss queue toast after 4 seconds
+  useEffect(() => {
+    if (!queueToast) return;
+    const timer = setTimeout(() => setQueueToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [queueToast]);
 
   // Speech-to-text — native uses MediaRecorder + server transcription, web uses Web Speech API
   const handleTranscript = useCallback((transcript: string) => {
@@ -178,6 +187,11 @@ export default function ChatInput() {
       await sendMessageWithMedia(trimmed, attachedFiles);
     } else {
       sendMessage(trimmed);
+    }
+
+    // Show queue toast if a background task is active
+    if (hasActiveBackgroundTask()) {
+      setQueueToast("Message sent. A task is running in the background — response may take a moment.");
     }
 
     setText("");
@@ -359,6 +373,25 @@ export default function ChatInput() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Queue visibility toast */}
+        {queueToast && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 z-40 flex justify-center pointer-events-none">
+            <div className="bg-gray-800/95 border border-gray-600/50 rounded-lg px-4 py-2 shadow-lg flex items-center gap-2 max-w-md pointer-events-auto">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+              </span>
+              <span className="text-xs text-gray-300">{queueToast}</span>
+              <button
+                onClick={() => setQueueToast(null)}
+                className="text-gray-500 hover:text-gray-300 text-xs ml-1 shrink-0"
+              >
+                &times;
+              </button>
+            </div>
           </div>
         )}
 

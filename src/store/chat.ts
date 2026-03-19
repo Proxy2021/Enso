@@ -77,9 +77,10 @@ interface CardStore {
   promoteApp: (appId: string) => void;
   restartServer: () => void;
   launchEnsoCode: (instruction?: string) => void;
-  launchShell: () => void;
+  launchShell: (initialCommand?: string) => void;
   sendShellInput: (text: string) => void;
   getActiveShellSessionId: () => string | null;
+  hasActiveBackgroundTask: () => boolean;
   sendDebugReport: (description: string, imagePaths: string[]) => void;
   codeInvestigate: (cardId: string, instruction: string) => void;
   launchSystemEnhance: (instruction: string) => void;
@@ -352,8 +353,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
 
       // "/shell" command — launch remote terminal
-      if (text.trim() === "/shell") {
-        get().launchShell();
+      // "/shell <command>" — launch terminal and auto-execute command
+      if (text.trim() === "/shell" || text.trim().startsWith("/shell ")) {
+        const shellCommand = text.trim().startsWith("/shell ") ? text.trim().slice(7).trim() : undefined;
+        get().launchShell(shellCommand);
         return;
       }
 
@@ -879,7 +882,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }));
   },
 
-  launchShell: () => {
+  launchShell: (initialCommand?: string) => {
     const id = uuidv4();
     const now = Date.now();
     const card: Card = {
@@ -890,6 +893,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "streaming",
       display: "expanded",
       toolMeta: { toolId: "shell" },
+      data: initialCommand ? { initialCommand } : undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -921,6 +925,18 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
     }
     return null;
+  },
+
+  hasActiveBackgroundTask: () => {
+    const { cardOrder, cards } = get();
+    for (const id of cardOrder) {
+      const c = cards[id];
+      if (!c || c.status !== "streaming") continue;
+      if (c.type === "terminal" || c.type === "shell" || c.type === "orchestration" || c.deepResearchStatus === "building") {
+        return true;
+      }
+    }
+    return false;
   },
 
   sendDebugReport: (description: string, imagePaths: string[]) => {

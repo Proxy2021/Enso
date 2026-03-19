@@ -103,11 +103,18 @@ Examples:
 ## FORMATTING GUIDELINES (CRITICAL — follow these for SIMPLE answers)
 When writing your SIMPLE answer, use the BEST format for the content type:
 - **Comparisons** (X vs Y, pros/cons, feature comparison): ALWAYS use a markdown table with columns for each option and rows for criteria.
-- **Architecture / System Design / Workflows**: Include a Mermaid diagram using \`\`\`mermaid code blocks. Use flowchart TD, sequenceDiagram, or classDiagram as appropriate.
+- **Architecture / System Design / Workflows / Diagrams**: ALWAYS include a Mermaid diagram using \`\`\`mermaid code blocks when the user asks about architecture, flows, processes, or relationships. The frontend renders these as interactive SVG visualizations. Supported types: flowchart TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie. Example:
+\`\`\`mermaid
+graph TD
+    A[Client] --> B[API Gateway]
+    B --> C[Auth Service]
+    B --> D[User Service]
+\`\`\`
+Always pair the diagram with a text explanation. When the user asks for any visual representation, flowchart, process flow, architecture diagram, state machine, ER diagram, or sequence diagram, generate Mermaid syntax.
 - **Plans / Timelines / Roadmaps**: Use numbered phases with **bold milestones** and specific timeframes.
 - **Analysis / Strategy**: Use ## headers for sections, bullet points for key findings, and tables for data.
 - **Creative content** (campaigns, calendars, content plans): Use markdown tables for schedules and calendars, numbered lists for options.
-- **Technical explanations**: Use code blocks for code examples, and Mermaid diagrams for architecture.
+- **Technical explanations**: Use code blocks for code examples, and Mermaid diagrams for architecture or flow visualization.
 - **Lists of options/recommendations**: Use a comparison table, not just bullet points.
 
 ## ENSO TOOL AWARENESS (mention relevant tools when helpful)
