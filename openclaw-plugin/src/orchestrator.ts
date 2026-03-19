@@ -18,6 +18,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, statSync } from "fs";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
+import { executeDAG, cancelAllRunningTasks } from "./orchestrator-engine.js";
 import {
   loadAllApps,
   registerLoadedApp,
@@ -64,8 +65,10 @@ const activeOrchestrations = new Map<
     bootstrapCardId: string;
     terminalCardId: string; // Reused across planning + execution sessions
     aborted: boolean;
-    executionRunId?: string; // For cancellation via cancelClaudeCodeRun()
-    executionSessionId?: string; // For session resume
+    // Multi-session parallel execution
+    taskRunIds: Map<string, string>; // taskId → runId (for cancellation)
+    taskSessionIds: Map<string, string>; // taskId → sessionId
+    maxConcurrency: number; // default 2
     onComplete?: (orchestrationId: string, status: "completed" | "failed") => void;
   }
 >();
@@ -263,6 +266,9 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       bootstrapCardId,
       terminalCardId,
       aborted: false,
+      taskRunIds: new Map(),
+      taskSessionIds: new Map(),
+      maxConcurrency: 2,
       onComplete: params.onComplete,
     });
 
@@ -362,54 +368,40 @@ export async function handleOrchestrationApprove(params: {
   const preExistingFamilies = new Set(APP_CATALOG.map((c) => c.appId));
   const buildStartTime = Date.now();
 
-  // Build the single execution mega-prompt
-  const executionPrompt = buildExecutionPrompt(orch.plan);
-
-  // Wrap client.send to intercept text deltas and parse progress markers
-  const originalSend = orch.client.send.bind(orch.client);
-  let markerBuffer = ""; // Buffer for incomplete marker lines
-  const wrappedClient: ConnectedClient = {
-    ...orch.client,
-    send: (msg: ServerMessage) => {
-      originalSend(msg);
-      // Only intercept text deltas targeting our terminal card
-      if (msg.text && msg.targetCardId === orch.terminalCardId) {
-        markerBuffer += msg.text;
-        // Only parse COMPLETE lines (ending with \n) to avoid firing on partial markers
-        const lastNewline = markerBuffer.lastIndexOf("\n");
-        if (lastNewline >= 0) {
-          const completedLines = markerBuffer.slice(0, lastNewline + 1);
-          markerBuffer = markerBuffer.slice(lastNewline + 1);
-          parseOrchestrationMarkers(completedLines, orch);
-        }
-        // Prevent unbounded growth
-        if (markerBuffer.length > 2000) markerBuffer = markerBuffer.slice(-500);
-      }
-    },
-  };
-
-  // Create the execution run
-  const executionRunId = randomUUID();
-  orch.executionRunId = executionRunId;
-
   // Mark all pending tasks as ready
   updateOrchestrationProgress(orchestrationId, "task_started");
 
   try {
-    // Run a SINGLE Claude Code session on the SAME terminal card as planning
-    const { sessionId } = await runClaudeCode({
-      prompt: executionPrompt,
+    // Execute tasks in parallel waves using the DAG executor
+    await executeDAG({
+      plan: orch.plan,
+      orch: {
+        plan: orch.plan,
+        client: orch.client,
+        sharedContext: orch.sharedContext,
+        bootstrapCardId: orch.bootstrapCardId,
+        terminalCardId: orch.terminalCardId,
+        aborted: orch.aborted,
+        taskRunIds: orch.taskRunIds,
+        taskSessionIds: orch.taskSessionIds,
+        maxConcurrency: orch.maxConcurrency,
+        get onComplete() { return orch.onComplete; },
+      },
+      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx),
+      onTaskStart: (taskId) => {
+        updateOrchestrationProgress(orchestrationId, "task_started", taskId);
+      },
+      onTaskDone: (taskId, summary) => {
+        updateOrchestrationProgress(orchestrationId, "task_completed", taskId);
+      },
+      onTaskFail: (taskId, error) => {
+        updateOrchestrationProgress(orchestrationId, "task_failed", taskId, error);
+      },
       cwd: PROJECT_ROOT,
-      client: wrappedClient,
-      runId: executionRunId,
-      targetCardId: orch.terminalCardId,
-      skipPersist: true,
+      maxConcurrency: orch.maxConcurrency,
     });
 
-    orch.executionSessionId = sessionId;
-
     // Check for bespoke one-off UI — Claude Code may write as .orchestration-ui.jsx
-    // or with ID like .orchestration-<id>.orchestration-ui.jsx or similar patterns
     const bespokeUIPath = findBespokeUIFile(orchestrationId);
     if (bespokeUIPath) {
       await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
@@ -429,7 +421,7 @@ export async function handleOrchestrationApprove(params: {
     cleanupOrchestrationTempFiles(orch.plan);
 
   } catch (err) {
-    logError("orchestrator", "Execution session error", err, { orchestrationId });
+    logError("orchestrator", "DAG execution error", err, { orchestrationId });
 
     // If aborted (pause/cancel), don't mark as failed
     if (!orch.aborted) {
@@ -437,8 +429,6 @@ export async function handleOrchestrationApprove(params: {
       updateOrchestrationProgress(orchestrationId, "failed", undefined,
         err instanceof Error ? err.message : String(err));
     }
-  } finally {
-    orch.executionRunId = undefined;
   }
 }
 
@@ -451,10 +441,8 @@ export function handleOrchestrationPause(orchestrationId: string): void {
   orch.plan.status = "paused";
   orch.aborted = true;
 
-  // Abort the running Claude Code session
-  if (orch.executionRunId) {
-    cancelClaudeCodeRun(orch.executionRunId);
-  }
+  // Abort ALL running Claude Code sessions
+  cancelAllRunningTasks(orch as any);
 
   persistOrchestration(orchestrationId, orch.plan);
 
@@ -486,60 +474,47 @@ export async function handleOrchestrationResume(params: {
   orch.account = account;
   persistOrchestration(orchestrationId, orch.plan);
 
-  // Build a continuation prompt that lists completed tasks and resumes
-  const completedTasks = orch.plan.tasks.filter(t => t.status === "completed");
-  const pendingTasks = orch.plan.tasks.filter(t => t.status === "pending" || t.status === "running");
-
   // Reset "running" tasks back to pending (they were interrupted)
   for (const task of orch.plan.tasks) {
     if (task.status === "running") task.status = "pending";
   }
 
-  const resumePrompt = buildExecutionPrompt(orch.plan, completedTasks.map(t => t.taskId));
-
   // Snapshot app families for post-build detection
   const preExistingFamilies = new Set(APP_CATALOG.map((c) => c.appId));
   const buildStartTime = Date.now();
 
-  // Wrap client.send for marker parsing
-  const originalSend = client.send.bind(client);
-  let markerBuffer = "";
-  const wrappedClient: ConnectedClient = {
-    ...client,
-    send: (msg: ServerMessage) => {
-      originalSend(msg);
-      if (msg.text && msg.targetCardId === orch.terminalCardId) {
-        markerBuffer += msg.text;
-        const lastNewline = markerBuffer.lastIndexOf("\n");
-        if (lastNewline >= 0) {
-          const completedLines = markerBuffer.slice(0, lastNewline + 1);
-          markerBuffer = markerBuffer.slice(lastNewline + 1);
-          parseOrchestrationMarkers(completedLines, orch);
-        }
-        if (markerBuffer.length > 2000) markerBuffer = markerBuffer.slice(-500);
-      }
-    },
-  };
-
-  const executionRunId = randomUUID();
-  orch.executionRunId = executionRunId;
-
   updateOrchestrationProgress(orchestrationId, "resumed");
 
   try {
-    const { sessionId } = await runClaudeCode({
-      prompt: resumePrompt,
+    // Re-enter DAG executor — it skips completed tasks automatically
+    await executeDAG({
+      plan: orch.plan,
+      orch: {
+        plan: orch.plan,
+        client: orch.client,
+        sharedContext: orch.sharedContext,
+        bootstrapCardId: orch.bootstrapCardId,
+        terminalCardId: orch.terminalCardId,
+        aborted: orch.aborted,
+        taskRunIds: orch.taskRunIds,
+        taskSessionIds: orch.taskSessionIds,
+        maxConcurrency: orch.maxConcurrency,
+        get onComplete() { return orch.onComplete; },
+      },
+      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx),
+      onTaskStart: (taskId) => {
+        updateOrchestrationProgress(orchestrationId, "task_started", taskId);
+      },
+      onTaskDone: (taskId, summary) => {
+        updateOrchestrationProgress(orchestrationId, "task_completed", taskId);
+      },
+      onTaskFail: (taskId, error) => {
+        updateOrchestrationProgress(orchestrationId, "task_failed", taskId, error);
+      },
       cwd: PROJECT_ROOT,
-      client: wrappedClient,
-      runId: executionRunId,
-      targetCardId: orch.terminalCardId,
-      ...(orch.executionSessionId ? { toolSessionId: orch.executionSessionId } : {}),
-      skipPersist: true,
+      maxConcurrency: orch.maxConcurrency,
     });
 
-    orch.executionSessionId = sessionId;
-
-    // Check for bespoke one-off UI (.orchestration-ui.jsx) — Claude Code may write
     const bespokeUIPath = findBespokeUIFile(orchestrationId);
     if (bespokeUIPath) {
       await deliverBespokeOrchestrationUI(orch, bespokeUIPath);
@@ -559,8 +534,6 @@ export async function handleOrchestrationResume(params: {
       updateOrchestrationProgress(orchestrationId, "failed", undefined,
         err instanceof Error ? err.message : String(err));
     }
-  } finally {
-    orch.executionRunId = undefined;
   }
 }
 
@@ -573,10 +546,8 @@ export function handleOrchestrationCancel(orchestrationId: string): void {
   orch.plan.status = "failed";
   orch.aborted = true;
 
-  // Abort the running Claude Code session
-  if (orch.executionRunId) {
-    cancelClaudeCodeRun(orch.executionRunId);
-  }
+  // Abort ALL running Claude Code sessions
+  cancelAllRunningTasks(orch as any);
 
   persistOrchestration(orchestrationId, orch.plan);
   activeOrchestrations.delete(orchestrationId);
@@ -887,13 +858,118 @@ export function buildAgentPrompt(
   return parts.join("\n");
 }
 
-// ── Execution Prompt Builder ──
+// ── Per-Task Prompt Builder (for parallel DAG executor) ──
+
+/**
+ * Build a focused prompt for a single task's Claude Code session.
+ * Each task gets its own session with role context, dependency outputs, and output instructions.
+ */
+function buildTaskPrompt(
+  task: OrchestrationTask,
+  plan: OrchestrationPlan,
+  completedContext: Map<string, string>,
+): string {
+  const parts: string[] = [
+    `You are a ${task.agentRole.charAt(0).toUpperCase() + task.agentRole.slice(1)} Agent working on a larger orchestrated goal.`,
+    ``,
+    ROLE_PROMPTS[task.agentRole],
+    ``,
+    `## Overall Goal: "${plan.goal}"`,
+    ``,
+    `## SAFETY RULES (violating these CRASHES the sprint)`,
+    `- NEVER modify package.json, package-lock.json, or any lock files`,
+    `- NEVER bump version numbers (version/versionCode)`,
+    `- NEVER restart, stop, or kill any server/gateway process`,
+    `- NEVER run restart scripts (restart.ps1, restart.sh)`,
+    `- NEVER use Stop-Process, taskkill, kill, pkill on any process`,
+    `- NEVER run npm install, npm update, npx cap sync`,
+    `- NEVER push to git (git push) or create git commits (git commit)`,
+    `- NEVER run destructive git operations (git reset, git checkout --)`,
+    ``,
+  ];
+
+  // Dependency context — read completed task outputs
+  if (task.dependsOn.length > 0) {
+    parts.push(`## Context from Completed Tasks`);
+    for (const depId of task.dependsOn) {
+      const dep = plan.tasks.find(t => t.taskId === depId);
+      const summary = completedContext.get(depId) || "Completed";
+      parts.push(`- **${dep?.title || depId}**: ${summary}`);
+      parts.push(`  Read full output: openclaw-plugin/.orchestration-output-${depId}.md or openclaw-plugin/.orchestration-research-${depId}.md`);
+    }
+    parts.push(``);
+  }
+
+  // Task instructions
+  parts.push(`## Your Task: ${task.title}`);
+  parts.push(task.description);
+  parts.push(``);
+
+  // Output instructions based on type
+  if (task.outputType === "app") {
+    parts.push(`## App Building Instructions`);
+    parts.push(`First, read the file CLAUDE-REFERENCE.md to understand Enso's app format.`);
+    parts.push(`Then study openclaw-plugin/apps/media_gallery/ as the GOLD STANDARD for reusable apps.`);
+    parts.push(``);
+    parts.push(`Build a GENERAL-PURPOSE, REUSABLE Enso app:`);
+    parts.push(`- Write files to: openclaw-plugin/apps/<family_name>/`);
+    parts.push(`- Family name must be a generic category`);
+    parts.push(`- Aim for 4-7 tools, every executor parameterized`);
+    parts.push(`- Template must use data.tool branching for polymorphic views`);
+    parts.push(`- Required files: app.json, template.jsx, executors/<suffix>.js`);
+    parts.push(`- Use var (not const/let) in executors, no imports`);
+    parts.push(`- Tabs uses RENDER FUNCTION: <Tabs tabs={[...]}>{(tab) => ...}</Tabs>`);
+    parts.push(`- DO NOT restart the server`);
+    parts.push(``);
+  }
+
+  if (task.outputType === "research") {
+    parts.push(`## Output`);
+    parts.push(`Write your research findings to: openclaw-plugin/.orchestration-research-${task.taskId}.md`);
+    parts.push(`Structure the file with clear sections and data.`);
+  }
+
+  if (task.outputType === "decision" || task.outputType === "document") {
+    parts.push(`## Output`);
+    parts.push(`Write your output to: openclaw-plugin/.orchestration-output-${task.taskId}.md`);
+  }
+
+  if (task.outputType === "review") {
+    parts.push(`## Output`);
+    parts.push(`Write your review findings to: openclaw-plugin/.orchestration-output-${task.taskId}.md`);
+    parts.push(`Include: issues found, suggestions for improvement, and an overall assessment.`);
+  }
+
+  if (task.outputType === "code") {
+    parts.push(`## Output`);
+    parts.push(`Write your code/scripts to appropriate files in the project.`);
+    parts.push(`Also write a summary to: openclaw-plugin/.orchestration-output-${task.taskId}.md`);
+  }
+
+  // Bespoke UI instructions for builder tasks
+  const isBespokeBuilder = task.agentRole === "builder" && task.outputType !== "app";
+  if (isBespokeBuilder) {
+    parts.push(`## Bespoke UI Instructions`);
+    parts.push(`Write a single interactive JSX file named EXACTLY \`.orchestration-ui.jsx\` in the current working directory.`);
+    parts.push(`Embed all data as \`var\` declarations. Use EnsoUI components, Recharts, Lucide icons.`);
+    parts.push(`NULL SAFETY: use optional chaining (?.) and fallbacks (??, ||) everywhere.`);
+    parts.push(`Tabs: <Tabs tabs={[...]}>{(tab) => tab === "a" ? <A/> : <B/>}</Tabs>`);
+  }
+
+  parts.push(``);
+  parts.push(`Begin now. Focus entirely on this task.`);
+
+  return parts.join("\n");
+}
+
+// ── Legacy Execution Prompt Builder (kept for reference) ──
 
 /**
  * Build a mega-prompt for the single execution session.
  * Contains all tasks in dependency order with role-specific instructions.
  * If `completedTaskIds` is provided, those tasks are listed as already done
  * and execution resumes from the next pending task.
+ * @deprecated Use buildTaskPrompt() with executeDAG() for parallel execution
  */
 function buildExecutionPrompt(plan: OrchestrationPlan, completedTaskIds?: string[]): string {
   const completed = new Set(completedTaskIds || []);

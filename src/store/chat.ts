@@ -1742,7 +1742,50 @@ export const useChatStore = create<CardStore>((set, get) => ({
           }
         }
 
-        // ── Orchestration: accumulate claude-code terminal text inline ──
+        // ── Parallel orchestration: route virtual task card IDs to taskTerminals ──
+        if (!card && msg.targetCardId.includes(":task:") && msg.toolMeta?.toolId === "claude-code") {
+          const sepIdx = msg.targetCardId.indexOf(":task:");
+          const parentCardId = msg.targetCardId.slice(0, sepIdx);
+          const taskId = msg.targetCardId.slice(sepIdx + 6); // after ":task:"
+          const parentCard = state.cards[parentCardId];
+          if (parentCard?.type === "orchestration") {
+            const prevTerminals = parentCard.taskTerminals ?? {};
+            const prevTask = prevTerminals[taskId] ?? { text: "", status: "streaming" };
+            if (msg.state === "delta") {
+              return {
+                cards: {
+                  ...state.cards,
+                  [parentCardId]: {
+                    ...parentCard,
+                    taskTerminals: {
+                      ...prevTerminals,
+                      [taskId]: { text: prevTask.text + (msg.text ?? ""), status: "streaming" },
+                    },
+                    updatedAt: now,
+                  },
+                },
+              };
+            }
+            if (msg.state === "final" || msg.state === "error") {
+              return {
+                cards: {
+                  ...state.cards,
+                  [parentCardId]: {
+                    ...parentCard,
+                    taskTerminals: {
+                      ...prevTerminals,
+                      [taskId]: { ...prevTask, status: msg.state === "error" ? "error" : "complete" },
+                    },
+                    updatedAt: now,
+                  },
+                },
+              };
+            }
+            return state;
+          }
+        }
+
+        // ── Orchestration: accumulate claude-code terminal text inline (legacy single-session) ──
         if (card?.type === "orchestration" && msg.toolMeta?.toolId === "claude-code") {
           if (msg.state === "delta") {
             return {

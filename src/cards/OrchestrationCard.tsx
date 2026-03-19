@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
+import TerminalContent from "../components/TerminalContent";
 import type { CardRendererProps } from "./types";
 import type {
   OrchestrationPlan,
@@ -32,13 +33,14 @@ export default function OrchestrationCard({ card }: CardRendererProps) {
   const progress = (card.data as any)?.orchestrationProgress as OrchestrationProgress | undefined;
   const phase = derivedPhase(progress, plan);
   const currentPlan = progress?.plan || plan;
+  const taskTerminals = card.taskTerminals;
 
   return (
     <div className="px-4 py-3">
       {phase === "input" && <InputPhase cardId={card.id} />}
       {phase === "planning" && <PlanningPhase goal={currentPlan?.goal} />}
       {phase === "review" && currentPlan && <ReviewPhase plan={currentPlan} />}
-      {phase === "executing" && currentPlan && <ExecutingPhase plan={currentPlan} />}
+      {phase === "executing" && currentPlan && <ExecutingPhase plan={currentPlan} taskTerminals={taskTerminals} />}
       {phase === "complete" && currentPlan && <CompletePhase plan={currentPlan} />}
       {phase === "error" && <ErrorPhase error={progress?.error} plan={currentPlan} />}
     </div>
@@ -196,7 +198,7 @@ function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
 
 // ── Phase: Executing ──
 
-function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
+function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskTerminals?: Record<string, { text: string; status: string }> }) {
   const approveOrchestration = useChatStore((s) => s.approveOrchestration);
   const pauseOrchestration = useChatStore((s) => s.pauseOrchestration);
   const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
@@ -250,10 +252,15 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
         </div>
       )}
 
-      {/* Compact task pipeline */}
+      {/* Compact task pipeline with expandable terminals */}
       <div className="space-y-0.5">
         {plan.tasks.map((task, i) => (
-          <CompactTaskRow key={task.taskId} task={task} index={i} />
+          <CompactTaskRow
+            key={task.taskId}
+            task={task}
+            index={i}
+            terminalData={taskTerminals?.[task.taskId]}
+          />
         ))}
       </div>
 
@@ -279,31 +286,68 @@ function ExecutingPhase({ plan }: { plan: OrchestrationPlan }) {
   );
 }
 
-/** Compact task row for the sidebar panel (minimal width) */
-function CompactTaskRow({ task, index }: { task: OrchestrationTask; index: number }) {
+/** Compact task row with expandable terminal content for parallel tasks */
+function CompactTaskRow({ task, index, terminalData }: {
+  task: OrchestrationTask;
+  index: number;
+  terminalData?: { text: string; status: string };
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasTerminal = !!terminalData?.text;
+  const isRunning = task.status === "running";
+
+  // Auto-expand running tasks that have terminal data
+  useEffect(() => {
+    if (isRunning && hasTerminal && !expanded) setExpanded(true);
+  }, [isRunning, hasTerminal]);
+
   return (
-    <div className={`flex items-center gap-1.5 py-1 px-1.5 rounded text-[10px] ${
-      task.status === "running" ? "bg-blue-500/10 text-gray-200" :
-      task.status === "completed" ? "text-gray-400" :
-      task.status === "failed" ? "text-red-400/80" :
-      task.status === "blocked" ? "opacity-30 text-gray-500" :
-      "text-gray-500"
-    }`}>
-      <span className="flex-shrink-0 w-3.5 text-center">
-        {task.status === "completed" ? (
-          <span className="text-green-400">{"\u2713"}</span>
-        ) : task.status === "failed" ? (
-          <span className="text-red-400">{"\u2717"}</span>
-        ) : task.status === "running" ? (
-          <Spinner size="sm" />
-        ) : task.status === "blocked" ? (
-          <span>{"\u2298"}</span>
-        ) : (
-          <span>{index + 1}</span>
+    <div>
+      <div
+        className={`flex items-center gap-1.5 py-1 px-1.5 rounded text-[10px] ${
+          hasTerminal ? "cursor-pointer hover:bg-gray-700/30" : ""
+        } ${
+          task.status === "running" ? "bg-blue-500/10 text-gray-200" :
+          task.status === "completed" ? "text-gray-400" :
+          task.status === "failed" ? "text-red-400/80" :
+          task.status === "blocked" ? "opacity-30 text-gray-500" :
+          "text-gray-500"
+        }`}
+        onClick={() => hasTerminal && setExpanded(!expanded)}
+      >
+        <span className="flex-shrink-0 w-3.5 text-center">
+          {task.status === "completed" ? (
+            <span className="text-green-400">{"\u2713"}</span>
+          ) : task.status === "failed" ? (
+            <span className="text-red-400">{"\u2717"}</span>
+          ) : task.status === "running" ? (
+            <Spinner size="sm" />
+          ) : task.status === "blocked" ? (
+            <span>{"\u2298"}</span>
+          ) : (
+            <span>{index + 1}</span>
+          )}
+        </span>
+        <span className="flex-shrink-0">{ROLE_EMOJI[task.agentRole]}</span>
+        <span className="truncate flex-1">{task.title}</span>
+        {hasTerminal && (
+          <span className="flex-shrink-0 text-[8px] text-gray-500 ml-1">
+            {expanded ? "\u25BC" : "\u25B6"}
+          </span>
         )}
-      </span>
-      <span className="flex-shrink-0">{ROLE_EMOJI[task.agentRole]}</span>
-      <span className="truncate">{task.title}</span>
+      </div>
+      {/* Expandable terminal content */}
+      {expanded && hasTerminal && (
+        <div className="ml-5 mt-0.5 mb-1 rounded-lg border border-gray-700/50 overflow-hidden">
+          <TerminalContent
+            text={terminalData.text}
+            status={terminalData.status === "streaming" ? "streaming" : "complete"}
+            accentColor="violet"
+            maxHeightClass="max-h-[300px]"
+            showHeader={false}
+          />
+        </div>
+      )}
     </div>
   );
 }

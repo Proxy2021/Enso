@@ -61,6 +61,9 @@ export interface Card {
   autoHealStatus?: "fixing" | "fixed" | "failed";
   autoHealError?: string;
 
+  // Parallel orchestration task terminals
+  taskTerminals?: Record<string, { text: string; status: string }>;
+
   // Timestamps
   createdAt: number;
   updatedAt: number;
