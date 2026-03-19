@@ -1,0 +1,237 @@
+{
+  "version": 1,
+  "createdAt": 1710864000000,
+  "spec": {
+    "toolFamily": "project_planner",
+    "toolPrefix": "enso_project_planner_",
+    "description": "Project planning with phases, milestones, deliverables, risk matrices, and team assignments",
+    "signatureId": "project_plan_timeline",
+    "tools": [
+      {
+        "suffix": "create",
+        "description": "Create a project plan with phases, milestones, deliverables, and team assignments for any topic or goal",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "topic": {
+              "type": "string",
+              "description": "The project topic or goal to plan (e.g., 'product launch', 'office relocation', 'app development')"
+            },
+            "duration": {
+              "type": "number",
+              "description": "Total duration in days (default: 90)"
+            },
+            "teams": {
+              "type": "string",
+              "description": "Comma-separated list of team/owner names to assign deliverables to"
+            }
+          },
+          "required": ["topic"]
+        },
+        "sampleParams": { "topic": "product launch", "duration": 90 },
+        "sampleData": {
+          "tool": "enso_project_planner_create",
+          "planId": "plan-001",
+          "planName": "Product Launch Plan",
+          "topic": "product launch",
+          "totalDays": 90,
+          "phases": [
+            { "id": "planning", "label": "Planning", "days": "Days 1-30", "pct": 33 },
+            { "id": "execution", "label": "Execution", "days": "Days 31-60", "pct": 34 },
+            { "id": "review", "label": "Review", "days": "Days 61-90", "pct": 33 }
+          ],
+          "milestones": [
+            {
+              "id": "m1", "phase": "planning", "name": "Requirements Finalized", "dayRange": "Days 1-10", "owner": "Product", "status": "Planned",
+              "deliverables": [
+                { "title": "Requirements document", "owner": "Product", "day": 5 },
+                { "title": "Stakeholder sign-off", "owner": "Product", "day": 10 }
+              ]
+            },
+            {
+              "id": "m2", "phase": "execution", "name": "Build Complete", "dayRange": "Days 31-50", "owner": "Engineering", "status": "Planned",
+              "deliverables": [
+                { "title": "Feature implementation", "owner": "Engineering", "day": 45 },
+                { "title": "QA testing", "owner": "Engineering", "day": 50 }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "planName", "phases", "milestones"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "timeline",
+        "description": "View the full project timeline with all phases, milestones, and deliverables",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "planId": {
+              "type": "string",
+              "description": "Plan ID to view"
+            }
+          },
+          "required": ["planId"]
+        },
+        "sampleParams": { "planId": "plan-001" },
+        "sampleData": {
+          "tool": "enso_project_planner_timeline",
+          "planId": "plan-001",
+          "planName": "Product Launch Plan",
+          "totalDays": 90,
+          "phases": [
+            { "id": "planning", "label": "Planning", "days": "Days 1-30", "pct": 33 }
+          ],
+          "milestones": [
+            {
+              "id": "m1", "phase": "planning", "name": "Requirements Finalized", "dayRange": "Days 1-10", "owner": "Product", "status": "Planned",
+              "deliverables": [
+                { "title": "Requirements document", "owner": "Product", "day": 5 }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "planId", "milestones"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "add_milestone",
+        "description": "Add a new milestone with deliverables to an existing project plan",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "planId": {
+              "type": "string",
+              "description": "Plan ID to add milestone to"
+            },
+            "name": {
+              "type": "string",
+              "description": "Milestone name"
+            },
+            "phase": {
+              "type": "string",
+              "description": "Phase ID this milestone belongs to"
+            },
+            "dayRange": {
+              "type": "string",
+              "description": "Day range (e.g., 'Days 15-25')"
+            },
+            "owner": {
+              "type": "string",
+              "description": "Team or person responsible"
+            },
+            "deliverables": {
+              "type": "string",
+              "description": "Comma-separated list of deliverable titles"
+            }
+          },
+          "required": ["planId", "name", "phase"]
+        },
+        "sampleParams": { "planId": "plan-001", "name": "Beta Launch", "phase": "execution", "owner": "Product" },
+        "sampleData": {
+          "tool": "enso_project_planner_add_milestone",
+          "planId": "plan-001",
+          "milestone": { "id": "m3", "name": "Beta Launch", "phase": "execution", "dayRange": "Days 35-40", "owner": "Product" }
+        },
+        "requiredDataKeys": ["tool", "planId", "milestone"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "update",
+        "description": "Update the status of a milestone (Planned, In Progress, Complete, At Risk)",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "planId": {
+              "type": "string",
+              "description": "Plan ID"
+            },
+            "milestoneId": {
+              "type": "string",
+              "description": "Milestone ID to update"
+            },
+            "status": {
+              "type": "string",
+              "description": "New status: Planned, In Progress, Complete, or At Risk"
+            }
+          },
+          "required": ["planId", "milestoneId", "status"]
+        },
+        "sampleParams": { "planId": "plan-001", "milestoneId": "m1", "status": "Complete" },
+        "sampleData": {
+          "tool": "enso_project_planner_update",
+          "planId": "plan-001",
+          "milestoneId": "m1",
+          "itemName": "Requirements Finalized",
+          "newStatus": "Complete"
+        },
+        "requiredDataKeys": ["tool", "planId", "newStatus"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "risks",
+        "description": "View the project risk matrix organized by likelihood and impact",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "planId": {
+              "type": "string",
+              "description": "Plan ID to view risks for"
+            }
+          },
+          "required": ["planId"]
+        },
+        "sampleParams": { "planId": "plan-001" },
+        "sampleData": {
+          "tool": "enso_project_planner_risks",
+          "planId": "plan-001",
+          "risks": [
+            { "name": "Scope creep", "likelihood": "high", "impact": "high", "phase": "planning" },
+            { "name": "Key person leaves", "likelihood": "low", "impact": "high", "phase": "execution" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "planId", "risks"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "summary",
+        "description": "Get a summary dashboard with completion stats, phase breakdown, and progress",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "planId": {
+              "type": "string",
+              "description": "Plan ID to summarize"
+            }
+          },
+          "required": ["planId"]
+        },
+        "sampleParams": { "planId": "plan-001" },
+        "sampleData": {
+          "tool": "enso_project_planner_summary",
+          "planId": "plan-001",
+          "stats": {
+            "totalMilestones": 8,
+            "totalDeliverables": 24,
+            "completedMilestones": 2,
+            "risksCount": 5,
+            "completionPct": 25
+          },
+          "phaseBreakdown": [
+            { "phase": "Planning", "milestones": 3, "deliverables": 8, "completed": 2, "status": "Complete" },
+            { "phase": "Execution", "milestones": 3, "deliverables": 10, "completed": 0, "status": "In Progress" },
+            { "phase": "Review", "milestones": 2, "deliverables": 6, "completed": 0, "status": "Planned" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "planId", "stats"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "createdAt": 1710864000000,
+  "spec": {
+    "toolFamily": "market_intelligence",
+    "toolPrefix": "enso_market_intelligence_",
+    "description": "Market intelligence dashboard for researching market size, segments, regional breakdown, top players, and trends for any industry",
+    "signatureId": "market_intelligence_overview",
+    "tools": [
+      {
+        "suffix": "overview",
+        "description": "Get a high-level market overview with key metrics, regional preview chart, and highlights for any market or industry",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The market or industry to research (e.g., 'global e-commerce', 'AI chips', 'electric vehicles')"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "global e-commerce 2026" },
+        "sampleData": {
+          "tool": "enso_market_intelligence_overview",
+          "title": "Global E-Commerce Market 2026",
+          "subtitle": "Market intelligence overview",
+          "query": "global e-commerce 2026",
+          "year": 2026,
+          "metrics": {
+            "metric1Label": "Market Size",
+            "metric1Value": "$6.88T",
+            "metric1Change": "+7.2% YoY",
+            "metric2Label": "CAGR",
+            "metric2Value": "18.9%",
+            "metric2Change": "2024-2030",
+            "metric3Label": "Digital Buyers",
+            "metric3Value": "2.86B",
+            "metric3Change": "Growing",
+            "metric4Label": "Retail Share",
+            "metric4Value": "21.1%",
+            "metric4Change": "Of total retail"
+          },
+          "regionalPreview": [
+            { "region": "APAC", "marketSize": 4860 },
+            { "region": "N. America", "marketSize": 1450 },
+            { "region": "Europe", "marketSize": 1150 },
+            { "region": "LATAM", "marketSize": 215 },
+            { "region": "MEA", "marketSize": 177 }
+          ],
+          "highlights": [
+            "Asia-Pacific dominates with 47% of global retail e-commerce",
+            "Social commerce is the fastest-growing segment at 29% CAGR",
+            "B2B e-commerce is 5x larger than B2C"
+          ],
+          "source": "Data from Statista, Grand View Research, eMarketer"
+        },
+        "requiredDataKeys": ["tool", "title"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "regions",
+        "description": "Get detailed regional market breakdown with market size, growth rates, share percentages, and key markets per region",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The market or industry to analyze regionally"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "global e-commerce 2026" },
+        "sampleData": {
+          "tool": "enso_market_intelligence_regions",
+          "query": "global e-commerce 2026",
+          "year": 2026,
+          "regions": [
+            { "region": "Asia-Pacific", "marketSize": 4860, "share": 47, "growth": 20.2, "keyMarkets": "China, India, SE Asia" },
+            { "region": "North America", "marketSize": 1450, "share": 21, "growth": 16.4, "keyMarkets": "USA, Canada" },
+            { "region": "Europe", "marketSize": 1150, "share": 17, "growth": 19.4, "keyMarkets": "UK, Germany, France" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "regions"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "segments",
+        "description": "Analyze market segments with size, share, and growth rates including pie chart visualization",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The market or industry to segment"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "global e-commerce 2026" },
+        "sampleData": {
+          "tool": "enso_market_intelligence_segments",
+          "query": "global e-commerce 2026",
+          "year": 2026,
+          "segments": [
+            { "name": "B2C Retail", "value": 6880, "share": 28, "growth": 7.2, "color": "#6366f1" },
+            { "name": "B2B", "value": 36160, "share": 58, "growth": 14.5, "color": "#3b82f6" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "segments"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "players",
+        "description": "Research top companies and players in a market with revenue, GMV, market share, and growth data",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The market or industry to find top players for"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of players to return (default: 15)"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "global e-commerce 2026" },
+        "sampleData": {
+          "tool": "enso_market_intelligence_players",
+          "query": "global e-commerce 2026",
+          "year": 2026,
+          "players": [
+            { "rank": 1, "name": "Amazon", "hq": "USA", "gmv": "$790.3B", "revenue": "$801.3B", "marketShare": "40% (US)", "yoyGrowth": 12 },
+            { "rank": 2, "name": "Alibaba", "hq": "China", "gmv": "$723.8B", "revenue": "$1.1T ecosystem", "marketShare": "44% (China)", "yoyGrowth": 5 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "players"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "trends",
+        "description": "Identify key growth drivers, headwinds, and emerging trends for a market or industry",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The market or industry to analyze trends for"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "global e-commerce 2026" },
+        "sampleData": {
+          "tool": "enso_market_intelligence_trends",
+          "query": "global e-commerce 2026",
+          "year": 2026,
+          "drivers": [
+            { "title": "AI & Personalization", "desc": "Hyper-personalized recommendations and agentic AI shopping", "impact": "high" }
+          ],
+          "headwinds": [
+            { "title": "Regulatory Pressure", "desc": "EU DPP, DSA/DMA, GDPR expansion", "severity": "high" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "drivers"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "search",
+        "description": "Search across market data for specific companies, regions, segments, or trends",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query for market intelligence"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "Amazon market share" },
+        "sampleData": {
+          "tool": "enso_market_intelligence_search",
+          "query": "Amazon market share",
+          "results": [
+            { "type": "company", "title": "Amazon", "summary": "Largest e-commerce platform globally with $790.3B GMV", "metrics": { "Market Share": "40% (US)", "GMV": "$790.3B" } }
+          ]
+        },
+        "requiredDataKeys": ["tool", "query", "results"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

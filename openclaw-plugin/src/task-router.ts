@@ -46,72 +46,97 @@ const CLASSIFIER_PROMPT = `You are a smart router for Enso, an AI assistant that
 
 Classify the user's message into exactly ONE of these four categories:
 
-## SIMPLE
-Anything you can answer directly from your knowledge — factual questions, greetings, explanations, opinions, creative writing, translations, code help, casual chat. You MUST provide the answer yourself. Be helpful, concise, and accurate.
+## SIMPLE (default — use this for MOST messages)
+Anything you can answer directly from your knowledge — factual questions, greetings, explanations, opinions, creative writing, translations, code help, casual chat, comparisons from general knowledge, templates, frameworks, strategies, plans, and outlines. You MUST provide the answer yourself. Be helpful, thorough, and well-structured. Use markdown formatting (headers, bullet points, tables, numbered lists) for longer answers.
 Examples:
 - "What is the capital of France?" → answer: "The capital of France is Paris."
 - "Hi, how are you?" → answer: "Hey! I'm doing great. What can I help you with?"
 - "Explain how React hooks work" → answer: "React hooks are functions that let you use state and lifecycle features in functional components..."
 - "Write me a haiku about rain" → answer: "Gentle drops descend / Puddles mirror clouded skies / Earth drinks deeply now"
-- "What does HTML stand for?" → answer: "HTML stands for HyperText Markup Language."
-- "Translate 'hello' to Japanese" → answer: "こんにちは (Konnichiwa)"
+- "Compare React Server Components vs traditional SSR" → answer with detailed comparison table
+- "Generate 10 tagline options for a sustainability brand" → answer with creative taglines organized by tone
+- "Create a social media campaign strategy for a fintech app" → answer with structured strategy (platform mix, content pillars, posting schedule, sample posts)
+- "Create an executive summary template for a board presentation" → answer with professional template
+- "Plan a product launch timeline with milestones for 90 days" → answer with phased timeline
+- "Compare Salesforce vs HubSpot vs Pipedrive for a small startup" → answer with comparison table covering pricing, features, pros/cons
+- "Design a customer segmentation framework" → answer with RFM methodology and segment definitions
+- "Explain transformer attention mechanisms" → answer with detailed technical explanation
+- "What are the pros and cons of subscription vs one-time pricing?" → answer with structured comparison
+- "Create a 30-day content calendar for a tech blog" → answer with calendar table
 
 ## RESEARCH
-The user wants to investigate, explore, compare, or understand a topic in depth using current web data. This includes current events, multi-source comparisons, analysis, recommendations, trends, and anything that benefits from searching the web for up-to-date information from multiple sources.
+The user wants current, real-time information that requires searching the web. Use this when the answer depends on data you might not have — recent events, latest statistics, current prices, 2025-2026 developments, or when the user explicitly says "research" or "find out."
 Examples:
-- "What are the pros and cons of nuclear vs solar energy?"
-- "Research quantum computing breakthroughs in 2025"
-- "Best programming languages for AI development and why"
-- "What's happening with AI regulation in the EU?"
-- "Is intermittent fasting actually healthy?"
+- "Research quantum computing breakthroughs in 2026"
+- "What are the latest Series A funding trends in 2026?"
+- "What's happening with AI regulation in the EU right now?"
+- "Find the current pricing for AWS vs Azure vs GCP"
+- "Latest news on CRISPR applications in agriculture"
 
 ## ONE-OFF
-A single concrete task that requires code execution, file manipulation, scripting, a bug fix, or creating something. The user wants something DONE, not discussed.
+A single concrete task that requires code execution, file manipulation, scripting, a bug fix, or creating something technical. The user wants something DONE, not discussed.
 Examples:
 - "Fix the bug in server.ts where the API returns 500"
 - "Build me a todo app"
 - "Write a Python script to scrape product prices"
 
 ## ORCHESTRATED
-A task that benefits from deep research + producing a BESPOKE INTERACTIVE EXPERIENCE (dashboard, comparison tool, planner, analysis board) — not just a text summary. Also for complex multi-faceted goals requiring planning across multiple workstreams.
+ONLY for complex, multi-step projects that genuinely require building a software application, system, or executing coordinated workstreams. This is the heaviest option — use it sparingly.
 
-**CRITICAL: Choose ORCHESTRATED over RESEARCH when the task involves:**
-- Detailed multi-entity comparisons with evaluation criteria (→ interactive comparison dashboard)
-- Data analysis or visualization requests (→ interactive charts and tables)
-- Planning tasks with timelines, budgets, or breakdowns (→ interactive planner)
-- Market/industry analysis (→ interactive dashboard)
-- Any request where an interactive app would serve better than a text report
+**Use ORCHESTRATED only when ALL of these are true:**
+1. The task requires building actual software/apps OR coordinating multiple dependent workstreams
+2. A simple text answer or web research would be clearly insufficient
+3. The task has multiple phases that need separate agent roles (researcher, coder, reviewer)
 
 Examples:
-- "Compare Tesla Model Y vs BYD Seal U vs Hyundai Ioniq 5 — evaluate price, range, safety, cargo" → archetype: competitive_analysis
-- "Plan a 5-day Tokyo trip under $3000 with daily activities and budget" → archetype: travel_planning
-- "Break down my mobile app project into phases with timeline and resource estimates" → archetype: project_planning
-- "Analyze the EV market — key players, market share, growth trends, outlook" → archetype: market_research
 - "Build a complete freelance photography management system" → archetype: general
 - "Help me launch my startup's MVP — landing page, auth, payments, admin" → archetype: general
+- "Create a full data pipeline from CSV ingestion to dashboard deployment" → archetype: data_analysis
+
+**NOT orchestrated (these are SIMPLE or RESEARCH instead):**
+- "Compare 3 CRM platforms" → SIMPLE (comparison table)
+- "Analyze the EV market" → RESEARCH (web data needed)
+- "Plan a 5-day Tokyo trip" → SIMPLE (structured itinerary from knowledge)
+- "Create a campaign strategy" → SIMPLE (structured plan)
+- "Design an architecture diagram" → SIMPLE (text-based architecture description)
+
+## FORMATTING GUIDELINES (CRITICAL — follow these for SIMPLE answers)
+When writing your SIMPLE answer, use the BEST format for the content type:
+- **Comparisons** (X vs Y, pros/cons, feature comparison): ALWAYS use a markdown table with columns for each option and rows for criteria.
+- **Architecture / System Design / Workflows**: Include a Mermaid diagram using \`\`\`mermaid code blocks. Use flowchart TD, sequenceDiagram, or classDiagram as appropriate.
+- **Plans / Timelines / Roadmaps**: Use numbered phases with **bold milestones** and specific timeframes.
+- **Analysis / Strategy**: Use ## headers for sections, bullet points for key findings, and tables for data.
+- **Creative content** (campaigns, calendars, content plans): Use markdown tables for schedules and calendars, numbered lists for options.
+- **Technical explanations**: Use code blocks for code examples, and Mermaid diagrams for architecture.
+- **Lists of options/recommendations**: Use a comparison table, not just bullet points.
+
+## ENSO TOOL AWARENESS (mention relevant tools when helpful)
+Enso has powerful built-in tools. When relevant, briefly mention them:
+- **Deep Research** — mention when the user might benefit from live web research (e.g., "For the latest data, try asking me to research this topic")
+- **Build App** — mention when the response could become an interactive tool (e.g., "You can click '+ Build App' to turn this into an interactive dashboard")
+- **Code Assistant** — mention for coding tasks (e.g., "Use /code to have me write and run this directly")
+- **Orchestrate** — mention for complex multi-step projects (e.g., "For a full implementation, try /orchestrate")
+Do NOT mention tools in every response — only when genuinely useful for the user's specific request.
 
 ## Rules
-- **SIMPLE always includes an answer.** You are the AI — answer the user directly.
-- **RESEARCH is for straightforward information gathering** — quick facts, opinions, "what is X", "what's happening with Y". Text-based answers suffice.
-- **ORCHESTRATED is for tasks that deserve an interactive experience** — comparisons, analyses, planners, dashboards. When the result would be MUCH BETTER as an interactive app than a text report, choose ORCHESTRATED.
-- If in doubt between RESEARCH and ORCHESTRATED, consider: would an interactive dashboard/comparison/planner serve the user better than a text summary? If yes → ORCHESTRATED.
-- ONE-OFF requires explicit action intent (fix, create, write code, build, convert, deploy, refactor).
+- **Default to SIMPLE.** Most questions, comparisons, plans, templates, strategies, creative content, and explanations should be SIMPLE with a direct answer. Give thorough, well-formatted answers.
+- **SIMPLE always includes an answer.** You are the AI — answer the user directly. Use markdown tables for comparisons, numbered lists for plans, and clear structure for strategies.
+- **RESEARCH is ONLY for queries needing current web data** — recent events, latest prices, 2025-2026 statistics, news. If the answer doesn't require live data, use SIMPLE instead.
+- **ORCHESTRATED is RARE** — only for building software systems or complex multi-agent projects. Never for comparisons, analyses, planning, creative content, or explanations.
+- **If in doubt, choose SIMPLE over RESEARCH, and RESEARCH over ORCHESTRATED.**
+- ONE-OFF requires explicit action intent (fix, create, write code, build, convert, deploy, refactor) for a technical coding task.
 - For RESEARCH: extract the core topic and suggest a depth (quick/standard/deep).
 - IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
 
 ## ARCHETYPE (for ONE-OFF and ORCHESTRATED only)
-When classifying as one-off or orchestrated, also identify the task archetype and whether it has recurring usage potential. The archetype guides how the orchestrator decomposes the task:
+When classifying as one-off or orchestrated, also identify the task archetype:
 
 | Archetype | When to use |
 |-----------|-------------|
-| data_analysis | Analyze data files, find patterns, build dashboards, visualize statistics |
-| competitive_analysis | Compare products, companies, technologies, investment options |
+| data_analysis | Process actual data files, build data pipelines |
 | document_processing | Extract data from documents, review contracts, parse invoices |
-| project_planning | Plan projects, create roadmaps, break down tasks, estimate timelines |
-| travel_planning | Plan trips, compare destinations, build itineraries with budgets |
-| market_research | Industry analysis, market sizing, trend analysis, sector deep-dives |
-| creative_project | Design work, content creation, branding, artistic direction |
-| general | Everything else that doesn't fit a specific archetype |
+| travel_planning | Build interactive trip planners with booking integration |
+| general | Everything else (most one-off and orchestrated tasks) |
 
 Respond with ONLY a JSON object (no markdown, no explanation):
 {"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeHints":{"key":"value"}}`;
@@ -181,16 +206,73 @@ export async function classifyTask(params: {
 
     return parsed;
   } catch (err) {
-    logError("task-router", "Classification failed, defaulting to simple", err, {
+    logError("task-router", "Classification failed, using heuristic fallback", err, {
       userMessage: userMessage.slice(0, 200),
     });
 
-    // Safe fallback — normal agent handles it
+    // Heuristic fallback — try to classify based on keywords
+    const heuristicResult = heuristicFallbackClassify(userMessage);
+    if (heuristicResult) {
+      logAction({
+        ts: Date.now(),
+        type: "action",
+        category: "task-router",
+        message: `Heuristic fallback classified as "${heuristicResult.complexity}": ${userMessage.slice(0, 80)}`,
+      });
+      return heuristicResult;
+    }
+
+    // Ultimate fallback — route to normal agent (NOT simple with a visible error message)
+    // Return simple with no answer so server.ts routes to handleEnsoInbound
     return {
       complexity: "simple",
-      reasoning: "Classification failed, falling through to normal agent",
+      reasoning: "Routed to assistant for response",
     };
   }
+}
+
+// ── Heuristic Fallback (used when LLM classification fails) ──
+
+/**
+ * Keyword-based fallback classifier for when the Gemini Flash LLM call fails.
+ * Catches common query patterns so users get useful routing even without the LLM.
+ * Returns null if no pattern matches (caller should use ultimate fallback).
+ */
+function heuristicFallbackClassify(message: string): TaskClassification | null {
+  const lower = message.toLowerCase();
+
+  // Research indicators — needs web data
+  if (/\b(research|latest|2026|2025|current|trending|news|recent)\b/i.test(lower) &&
+      !/\b(build|create|deploy|code)\b/i.test(lower)) {
+    const topic = message.replace(/^(research|find|search)\s*/i, "").trim();
+    return {
+      complexity: "research",
+      reasoning: "Heuristic fallback: research keywords detected",
+      researchTopic: topic || message,
+      researchDepth: "standard",
+    };
+  }
+
+  // Strategy/planning/analysis queries — handle as simple (direct AI answer)
+  if (/\b(design|plan|create|analyze|compare|strategy|campaign|framework|template|outline|calendar|segmentation|summary)\b/i.test(lower) &&
+      !/\b(app|application|system|software|server|database|deploy|code|script)\b/i.test(lower)) {
+    return {
+      complexity: "simple",
+      reasoning: "Heuristic fallback: strategy/planning/analysis request",
+    };
+  }
+
+  // Code/build tasks
+  if (/\b(fix|build|implement|deploy|refactor|debug|code|script|api)\b/i.test(lower)) {
+    return {
+      complexity: "one-off",
+      reasoning: "Heuristic fallback: code/build task detected",
+      directAction: message,
+    };
+  }
+
+  // No pattern matched
+  return null;
 }
 
 // ── Quick Heuristics ──
@@ -338,23 +420,21 @@ function quickClassify(message: string): TaskClassification | null {
     };
   }
 
-  if (/\bcompare\b/i.test(lower) && wordCount >= 4) {
-    if (wordCount >= 12) return null; // Detailed comparison — let LLM classify with archetype
+  if (/\bcompare\b/i.test(lower) && wordCount >= 4 && !/\b(build|create|deploy|code)\b/i.test(lower)) {
     return {
       complexity: "research",
       reasoning: "Comparison request detected",
       researchTopic: trimmed,
-      researchDepth: "standard",
+      researchDepth: wordCount >= 15 ? "standard" : "quick",
     };
   }
 
   if (/\bvs\.?\b/i.test(lower) && wordCount >= 4 && !/\b(fix|build|create|write|code)\b/i.test(lower)) {
-    if (wordCount >= 12) return null; // Detailed vs — let LLM classify with archetype
     return {
       complexity: "research",
       reasoning: "Versus comparison detected",
       researchTopic: trimmed,
-      researchDepth: "standard",
+      researchDepth: wordCount >= 15 ? "standard" : "quick",
     };
   }
 
@@ -377,26 +457,46 @@ function quickClassify(message: string): TaskClassification | null {
     };
   }
 
+  // ── Creative generation & template requests → simple (direct answer, no LLM call needed) ──
+  if (/^(generate|create|write|draft|come up with|give me|list|make|suggest|propose)\b/i.test(lower) &&
+      /\b(tagline|slogan|headline|name|title|idea|concept|tip|suggestion|example|template|outline|framework|strategy|plan|calendar|schedule|campaign|post|copy|bio|pitch|summary|overview)\b/i.test(lower) &&
+      !/\b(app|application|system|software|code|script|api|database|server|deploy)\b/i.test(lower) &&
+      wordCount <= 35) {
+    return {
+      complexity: "simple",
+      reasoning: "Creative generation / template request — direct answer",
+    };
+  }
+
+  // ── Technical explanations → simple (no web data needed) ──
+  if (/^(explain|describe|what\s+is|what\s+are|how\s+does|how\s+do|tell\s+me\s+about|walk\s+me\s+through)\b/i.test(lower) &&
+      !/\b(latest|current|2026|2025|recent|news|happening|trending)\b/i.test(lower) &&
+      wordCount <= 40) {
+    return {
+      complexity: "simple",
+      reasoning: "Technical explanation — direct answer from knowledge",
+    };
+  }
+
+  // ── Comparison/analysis without needing live data → simple ──
+  if (/^(compare|contrast|what\s+are\s+the\s+(pros|differences?|advantages?))\b/i.test(lower) &&
+      !/\b(latest|current|2026|2025|price|pricing|cost)\b/i.test(lower) &&
+      !/\b(app|application|system|software|build|deploy)\b/i.test(lower) &&
+      wordCount <= 35) {
+    return {
+      complexity: "simple",
+      reasoning: "Comparison from general knowledge — direct answer",
+    };
+  }
+
   // ── Archetype heuristics — detect specific task patterns ──
-  // "plan a trip / travel / itinerary / vacation"
-  if (/\b(plan\s+(a\s+)?(trip|travel|vacation|holiday|itinerary|visit))\b/i.test(lower) && wordCount >= 5) {
-    return null; // Let LLM classify with archetype hints
-  }
-  // "analyze (this|the|my) data/file/csv/spreadsheet"
-  if (/\b(analyze|analyse)\s+(this|the|my|a)?\s*(data|file|csv|spreadsheet|dataset|numbers|sales|spending|transactions)\b/i.test(lower)) {
+  // "analyze (this|the|my) data/file/csv/spreadsheet" — actual data processing
+  if (/\b(analyze|analyse)\s+(this|the|my|a)?\s*(data|file|csv|spreadsheet|dataset)\b/i.test(lower)) {
     return null; // Let LLM classify — likely data_analysis archetype
-  }
-  // "compare X and Y" / "X vs Y" for investment/business (long messages)
-  if (/\b(compare|evaluate|assess)\b/i.test(lower) && wordCount >= 8 && /\b(invest|business|company|stock|product|option|alternative)\b/i.test(lower)) {
-    return null; // Let LLM classify — likely competitive_analysis archetype
   }
   // "review (this|the|my) contract/document/invoice/agreement"
   if (/\b(review|extract|parse|process)\s+(this|the|my|a)?\s*(contract|document|invoice|agreement|lease|report|receipt)\b/i.test(lower)) {
     return null; // Let LLM classify — likely document_processing archetype
-  }
-  // "plan (this|the|my|a) project/roadmap/sprint"
-  if (/\b(plan|break\s+down|decompose|organize)\s+(this|the|my|a)?\s*(project|roadmap|sprint|initiative|launch|release)\b/i.test(lower)) {
-    return null; // Let LLM classify — likely project_planning archetype
   }
 
   // Pure questions that start with question words
@@ -405,8 +505,8 @@ function quickClassify(message: string): TaskClassification | null {
     if (/^(can|could|would|will)\s+you\s+(help|please)\b/i.test(lower) && wordCount > 10) {
       return null; // Let LLM decide — likely an action request
     }
-    // Messages with code/build action verbs → let LLM decide (might be one-off)
-    if (/\b(build|create|make|set up|implement|write|develop|design|process|organize|convert|transform|generate|deploy|configure|refactor|launch)\b/i.test(lower) && wordCount > 8) {
+    // Messages with explicit build/code action verbs → let LLM decide (might be one-off)
+    if (/\b(build|set up|implement|develop|deploy|configure|refactor)\b/i.test(lower) && wordCount > 8) {
       return null; // Let LLM decide
     }
     // All question-word messages → let LLM decide (may be direct, research, or simple)

@@ -1249,26 +1249,48 @@ export async function startEnsoServer(opts: {
                 }
 
                 // "simple" — router provides the answer directly
-                runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
-                const answerCardId = randomUUID();
-                const answerRunId = randomUUID();
-                send({
-                  id: answerCardId,
-                  runId: answerRunId,
-                  sessionKey,
-                  seq: 0,
-                  state: "final",
-                  text: classification.answer ?? classification.reasoning,
-                  timestamp: Date.now(),
-                });
-                persistCard(clientId, {
-                  id: answerCardId,
-                  runId: answerRunId,
-                  type: "chat",
-                  role: "assistant",
-                  text: classification.answer ?? classification.reasoning,
-                  timestamp: Date.now(),
-                });
+                if (classification.answer) {
+                  // Classification produced a direct answer — send it
+                  runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
+                  const answerCardId = randomUUID();
+                  const answerRunId = randomUUID();
+                  send({
+                    id: answerCardId,
+                    runId: answerRunId,
+                    sessionKey,
+                    seq: 0,
+                    state: "final",
+                    text: classification.answer,
+                    timestamp: Date.now(),
+                  });
+                  persistCard(clientId, {
+                    id: answerCardId,
+                    runId: answerRunId,
+                    type: "chat",
+                    role: "assistant",
+                    text: classification.answer,
+                    timestamp: Date.now(),
+                  });
+                } else {
+                  // No answer (classification fallback or heuristic) — route to normal agent for a real response
+                  runtime.log?.(`[enso] task-router: simple with no answer → routing to agent`);
+                  await handleEnsoInbound({
+                    message: {
+                      messageId: randomUUID(),
+                      sessionId: sessionKey,
+                      senderNick: `user_${connectionId}`,
+                      text: msg.text,
+                      mediaUrls: msg.mediaUrls,
+                      timestamp: Date.now(),
+                    },
+                    account,
+                    config,
+                    runtime,
+                    client,
+                    routing: msg.routing,
+                    statusSink,
+                  });
+                }
               } catch (routerErr) {
                 // Router failed — fall through to agent as last resort
                 runtime.log?.(`[enso] task-router failed, falling through to agent: ${String(routerErr)}`);

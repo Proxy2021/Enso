@@ -36,15 +36,26 @@ function TypingIndicator() {
   const elapsed = useElapsedTime();
   return (
     <div className="flex justify-start mb-4">
-      <div className="bg-gray-900/80 border border-gray-700/70 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-          <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
-        </span>
-        {elapsed >= 3 && (
-          <span className="text-[11px] text-gray-500 tabular-nums">{formatElapsed(elapsed)}</span>
-        )}
+      <div className="w-full max-w-2xl bg-gray-900/80 border border-gray-700/70 rounded-2xl px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:0ms]" />
+            <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:150ms]" />
+            <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:300ms]" />
+          </span>
+          <span className="text-xs text-gray-400">
+            {elapsed < 2 ? "Thinking..." : elapsed < 6 ? "Working on it..." : elapsed < 15 ? "Researching..." : "Still working — complex tasks take longer"}
+          </span>
+          {elapsed >= 2 && (
+            <span className="text-[11px] text-gray-500 tabular-nums ml-auto">{formatElapsed(elapsed)}</span>
+          )}
+        </div>
+        {/* Skeleton lines */}
+        <div className="space-y-2.5">
+          <div className="h-3 bg-gray-700/50 rounded-full w-[85%] animate-pulse" />
+          <div className="h-3 bg-gray-700/50 rounded-full w-[70%] animate-pulse [animation-delay:75ms]" />
+          <div className="h-3 bg-gray-700/50 rounded-full w-[55%] animate-pulse [animation-delay:150ms]" />
+        </div>
       </div>
     </div>
   );

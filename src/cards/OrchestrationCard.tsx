@@ -53,7 +53,7 @@ function derivedPhase(progress?: OrchestrationProgress, plan?: OrchestrationPlan
 
   switch (currentPlan.status) {
     case "planning": return "planning";
-    case "reviewing": return "review";
+    case "reviewing": return "executing"; // Auto-execute: skip review phase
     case "executing": return "executing";
     case "paused":
       return "executing";
