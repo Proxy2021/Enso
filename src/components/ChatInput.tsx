@@ -8,16 +8,19 @@ interface SlashCommand {
   command: string;
   label: string;
   description: string;
+  icon?: string;
 }
 
 const SLASH_COMMANDS: SlashCommand[] = [
-  { command: "/code", label: "/code", description: "Open Claude Code project picker" },
-  { command: "/code ", label: "/code <prompt>", description: "Send a prompt to Claude Code" },
-  { command: "/orchestrate", label: "/orchestrate", description: "Launch multi-agent orchestrator" },
-  { command: "/evolve", label: "/evolve", description: "Start an evolution sprint — AI personas test Enso and propose enhancements" },
-  { command: "/shell", label: "/shell", description: "Open a remote terminal" },
-  { command: "/tool enso", label: "/tool enso", description: "Open the tool console" },
-  { command: "/delete-apps", label: "/delete-apps", description: "Delete all dynamically created apps" },
+  { command: "/code", label: "/code", description: "Open Claude Code project picker", icon: "\uD83D\uDCBB" },
+  { command: "/code ", label: "/code <prompt>", description: "Send a prompt to Claude Code", icon: "\uD83D\uDCBB" },
+  { command: "/research ", label: "/research <topic>", description: "Deep research on a topic", icon: "\uD83D\uDD0D" },
+  { command: "/orchestrate", label: "/orchestrate", description: "Launch multi-agent orchestrator", icon: "\u26A1" },
+  { command: "/evolve", label: "/evolve", description: "Run an evolution sprint", icon: "\uD83E\uDDEC" },
+  { command: "/evolution-history", label: "/evolution-history", description: "Browse past evolution sprints", icon: "\uD83D\uDCCA" },
+  { command: "/shell", label: "/shell", description: "Open a remote terminal", icon: "\uD83D\uDDA5\uFE0F" },
+  { command: "/tool enso", label: "/tool enso", description: "Open the tool console", icon: "\uD83D\uDD27" },
+  { command: "/delete-apps", label: "/delete-apps", description: "Delete all dynamic apps", icon: "\uD83D\uDDD1\uFE0F" },
 ];
 
 const ATTACH_CATEGORIES = [
@@ -360,24 +363,27 @@ export default function ChatInput() {
 
         {/* Slash command autocomplete menu */}
         {showMenu && (
-          <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 border border-gray-600/60 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+          <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 border border-gray-600/60 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.4)] overflow-hidden z-50 max-h-[60vh] overflow-y-auto">
             {filteredCommands.map((cmd, idx) => (
               <button
                 key={cmd.command}
                 onClick={() => selectCommand(cmd)}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                className={`w-full text-left px-3 py-3 sm:py-2 flex items-center gap-3 transition-all duration-150 ${
+                className={`w-full text-left px-3 py-3 sm:py-2.5 flex items-center gap-3 transition-all duration-150 ${
                   idx === selectedIndex
                     ? "bg-indigo-600/30 text-gray-100"
                     : "text-gray-300 hover:bg-gray-700/50 active:bg-gray-600/50"
                 }`}
               >
-                <span className="text-xs font-mono text-indigo-400 min-w-[120px]">{cmd.label}</span>
-                <span className="text-xs text-gray-400">{cmd.description}</span>
+                {cmd.icon && <span className="text-base flex-shrink-0 w-6 text-center">{cmd.icon}</span>}
+                <span className="text-xs font-mono text-indigo-400 min-w-[100px] sm:min-w-[120px]">{cmd.label}</span>
+                <span className="text-xs text-gray-400 truncate">{cmd.description}</span>
               </button>
             ))}
-            <div className="px-3 py-1.5 border-t border-gray-700/50 text-[10px] text-gray-500">
-              ↑↓ navigate · Enter or Tab to select · Esc to dismiss
+            <div className="px-3 py-1.5 border-t border-gray-700/50 text-[10px] text-gray-500 flex justify-between">
+              <span>{"\u2191\u2193"} navigate</span>
+              <span>Enter or Tab to select</span>
+              <span>Esc to dismiss</span>
             </div>
           </div>
         )}

@@ -717,6 +717,33 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
+  // ── Evolution Sprint History API ──
+  app.get("/api/evolution-sprints", async (_req, res) => {
+    const { listEvolutionSprints } = await import("./evolution-archive.js");
+    res.json({ sprints: listEvolutionSprints() });
+  });
+
+  app.get("/api/evolution-sprints/:id", async (req, res) => {
+    const { loadEvolutionSprint } = await import("./evolution-archive.js");
+    const sprint = loadEvolutionSprint(req.params.id);
+    if (!sprint) { res.status(404).json({ error: "Sprint not found" }); return; }
+    res.json(sprint);
+  });
+
+  app.get("/api/evolution-sprints/:id/file/*", async (req, res) => {
+    const { getEvolutionFile } = await import("./evolution-archive.js");
+    // Extract filename from wildcard path after /file/
+    const filename = req.params[0] || "";
+    const content = getEvolutionFile(req.params.id, filename);
+    if (content === null) { res.status(404).json({ error: "File not found" }); return; }
+    if (filename.endsWith(".jsx")) {
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    } else {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    }
+    res.send(content);
+  });
+
   // ── Memory API — Enso's local memory (ENSO_USER.md + ENSO_MEMORY.md) ──
   app.get("/api/memory", (_req, res) => {
     res.json(readEnsoMemory());

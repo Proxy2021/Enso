@@ -16,10 +16,17 @@
  *   5. Evolution Report — bespoke dashboard with before/after + next iteration backlog
  */
 
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { logAction, logError } from "./action-log.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import { handleOrchestration } from "./orchestrator.js";
+import { archiveEvolutionSprint, cleanEvolutionTempFiles } from "./evolution-archive.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const PLUGIN_DIR = dirname(__filename);
+const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
 
 // ── Persona Definitions ──
 
@@ -426,6 +433,8 @@ export async function handleEvolutionSprint(params: {
     message: `Evolution sprint start: ${goal || "Full product assessment"}`,
   });
 
+  const sprintId = `sprint-${Date.now()}`;
+
   try {
     await handleOrchestration({
       userMessage: `Evolution Sprint: ${goal || "Test Enso from multiple persona perspectives, implement top enhancements, and validate improvements"}`,
@@ -438,7 +447,29 @@ export async function handleEvolutionSprint(params: {
       planningPromptBuilder: (orchestrationId, planFilePath) =>
         buildEvolutionPlanningPrompt(goal || "", orchestrationId, planFilePath),
     });
+
+    // Archive all evolution artifacts after orchestration completes
+    const meta = archiveEvolutionSprint(
+      sprintId,
+      goal || "Full product assessment",
+      PROJECT_ROOT,
+    );
+    if (meta) {
+      logAction({
+        ts: Date.now(),
+        type: "action",
+        category: "evolution",
+        message: `Sprint archived: ${meta.files.length} files, dashboard: ${meta.phases.dashboard}`,
+      });
+      // Clean temp files from project root
+      cleanEvolutionTempFiles(PROJECT_ROOT);
+    }
   } catch (err) {
+    // Still try to archive whatever we have
+    try {
+      archiveEvolutionSprint(sprintId, goal || "Full product assessment (failed)", PROJECT_ROOT);
+      cleanEvolutionTempFiles(PROJECT_ROOT);
+    } catch { /* best effort */ }
     logError("evolution", "Evolution sprint failed", err);
   }
 }

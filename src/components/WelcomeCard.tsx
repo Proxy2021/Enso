@@ -47,6 +47,12 @@ const TEMPLATES: Template[] = [
     prompt: "/evolve",
   },
   {
+    icon: "\uD83D\uDCCA",
+    title: "Evolution History",
+    description: "Browse past sprints",
+    prompt: "/evolution-history",
+  },
+  {
     icon: "\uD83D\uDCBB",
     title: "Code Assistant",
     description: "Open Claude Code",

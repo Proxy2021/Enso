@@ -310,6 +310,21 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
 
 
+      // "/evolution-history" command — browse past evolution sprints
+      if (text.trim() === "/evolution-history") {
+        const id = uuidv4();
+        const now = Date.now();
+        const card: Card = {
+          id, runId: id, type: "evolution-history", role: "assistant",
+          status: "complete", display: "expanded", createdAt: now, updatedAt: now,
+        };
+        set((s) => ({
+          cardOrder: [...s.cardOrder, id],
+          cards: { ...s.cards, [id]: card },
+        }));
+        return;
+      }
+
       // "/evolve" command — launch evolution sprint
       if (text.trim().startsWith("/evolve")) {
         const goal = text.trim().slice(7).trim();
@@ -1545,7 +1560,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           if (planStatus === "planning") {
             viewMode = "app"; // Show terminal during planning
           } else if (planStatus === "reviewing") {
-            viewMode = "original"; // Show plan review
+            viewMode = "app"; // Auto-execute: stay on terminal view
             buildTerminalText = ""; // Reset for execution phase
           } else if (planStatus === "executing") {
             viewMode = "app"; // Show terminal during execution
