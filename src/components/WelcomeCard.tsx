@@ -116,7 +116,7 @@ export default function WelcomeCard() {
               disabled={disabled}
               className="text-left px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-900/30 hover:bg-gray-800/60 hover:border-indigo-500/40 active:bg-gray-800 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 group"
             >
-              <span className="text-xs text-gray-300 group-hover:text-gray-100 line-clamp-1">
+              <span className="text-xs text-gray-300 group-hover:text-gray-100 line-clamp-2">
                 <span className="mr-1.5">{p.icon}</span>{p.text}
               </span>
             </button>
@@ -139,7 +139,7 @@ export default function WelcomeCard() {
               <div className="text-[11px] font-medium text-gray-200 mt-1">
                 {t.title}
               </div>
-              <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">
+              <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-2">
                 {t.description}
               </div>
             </button>
