@@ -179,6 +179,48 @@ function getDefaultEnsoProject(): Project {
         agentRole: "researcher",
         painPoints: [],
       },
+      {
+        id: "architect",
+        name: "Elena Vasquez",
+        role: "Software Architect",
+        responsibilities: "Owns Enso's technical architecture. Reviews system design, identifies technical debt, ensures scalability and maintainability. Evaluates new feature proposals for architectural fit. Designs solutions for complex cross-cutting concerns (performance, security, data flow). Produces architecture decision records and system design docs.",
+        goals: [
+          "Keep Enso's architecture clean, modular, and extensible",
+          "Prevent technical debt from accumulating across evolution sprints",
+          "Ensure new features integrate cleanly with existing systems",
+          "Design for scale — what works at 10 users must work at 10,000",
+        ],
+        perspective: "Is this architecturally sound? Will it scale? Are we creating tech debt?",
+        agentRole: "architect",
+      },
+      {
+        id: "engineering-manager",
+        name: "David Park",
+        role: "Engineering Manager",
+        responsibilities: "Manages engineering execution quality. Reviews code changes from evolution sprints for correctness, completeness, and adherence to conventions. Ensures build passes, no regressions introduced, error handling is robust. Coordinates between architect's designs and coder's implementations. Produces engineering quality reports.",
+        goals: [
+          "Ensure every evolution sprint produces production-quality code",
+          "Maintain code consistency and convention adherence across the codebase",
+          "Catch bugs and regressions before they reach users",
+          "Improve developer experience for both human and AI contributors",
+        ],
+        perspective: "Is this code production-ready? Are conventions followed? Will it break anything?",
+        agentRole: "reviewer",
+      },
+      {
+        id: "test-manager",
+        name: "Aisha Rahman",
+        role: "QA & Test Manager",
+        responsibilities: "Owns testing strategy and quality assurance. Designs test scenarios that cover edge cases and real user workflows. Validates that implemented features actually work end-to-end, not just compile. Identifies gaps in test coverage. Produces test plans, bug reports, and quality metrics.",
+        goals: [
+          "Ensure every feature works end-to-end in real user scenarios",
+          "Design test scenarios that catch the bugs evolution sprints miss",
+          "Build a regression testing framework that prevents recurring issues",
+          "Track quality metrics across evolution sprints to measure improvement",
+        ],
+        perspective: "Does this actually work? What edge cases are we missing? Is quality improving?",
+        agentRole: "reviewer",
+      },
     ],
 
     personas: [
