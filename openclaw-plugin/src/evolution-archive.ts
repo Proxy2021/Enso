@@ -313,11 +313,8 @@ export function getEvolutionFile(sprintId: string, filename: string, projectId: 
   }
   // Fallback to legacy
   const legacyPath = join(LEGACY_EVOLUTION_DIR, sprintId, safe);
-    if (existsSync(legacyPath)) {
-      try { return readFileSync(legacyPath, "utf-8"); } catch { /* skip */ }
-    }
-    return null;
-  } catch {
-    return null;
+  if (existsSync(legacyPath)) {
+    try { return readFileSync(legacyPath, "utf-8"); } catch { /* skip */ }
   }
+  return null;
 }
