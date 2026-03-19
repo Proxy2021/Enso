@@ -156,6 +156,63 @@ Enso is pre-configured as the default project with:
 - techStack: TypeScript/React 19/Node.js/Vite
 - testUrl: http://localhost:5173
 
+## Deliverables
+
+Team agents don't just evaluate — they produce **real deliverables** that the project can use:
+
+### Deliverable Types
+
+| Agent | Deliverable Examples |
+|-------|---------------------|
+| **Project Leader** | Product roadmap, sprint priorities doc, team performance review, vision statement |
+| **Marketing Director** | Landing page copy, feature announcement drafts, competitive positioning doc, brand guidelines, social media content calendar, press release templates |
+| **Sales Director** | Pricing strategy doc, customer pitch deck outline, ROI calculator inputs, objection handling guide, partnership proposal templates, case study drafts |
+| **AI Strategist** | Technology adoption roadmap, architecture improvement proposals, competitive analysis matrix |
+| **Engineers** | Code changes, test suites, documentation, API specs |
+
+### Storage
+
+Deliverables are stored per-project, organized by agent and sprint:
+
+```
+~/.enso/projects/<projectId>/
+├── deliverables/
+│   ├── marketing/
+│   │   ├── landing-page-copy-v1.md
+│   │   ├── feature-announcement-2026-03.md
+│   │   ├── social-media-calendar-q2.md
+│   │   └── competitive-positioning.md
+│   ├── sales/
+│   │   ├── pricing-strategy-v2.md
+│   │   ├── enterprise-pitch-outline.md
+│   │   └── roi-calculator-inputs.json
+│   ├── leadership/
+│   │   ├── product-roadmap-q2.md
+│   │   ├── sprint-3-retrospective.md
+│   │   └── vision-statement-v3.md
+│   └── engineering/
+│       ├── api-spec-v2.md
+│       └── architecture-decision-records/
+├── project.json
+└── sprints/
+```
+
+### Deliverable Lifecycle
+
+1. **Creation**: Team agents create deliverables during evolution sprints (or on-demand via orchestration)
+2. **Review**: Project Leader reviews and approves deliverables
+3. **Iteration**: Deliverables evolve across sprints — v1 → v2 → v3 as the product matures
+4. **Access**: Browsable from the Enso UI via the Projects card — view, download, share
+
+### In Evolution Sprints
+
+During a sprint, team agents are instructed to produce deliverables alongside their evaluation:
+- Marketing Director: "In addition to your evaluation, draft a feature announcement for the enhancements implemented this sprint"
+- Sales Director: "Update the pricing strategy doc if the new features change the value proposition"
+- Project Leader: "Update the product roadmap based on this sprint's outcomes"
+
+Deliverables accumulate across sprints, creating a growing body of project assets that compound in value.
+
 ## Safety Rules
 
 During evolution sprints, engineering agents MUST NOT:
