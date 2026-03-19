@@ -1,8 +1,8 @@
 {
   "name": "enso",
   "private": true,
-  "version": "0.3.18",
-  "versionCode": 120,
+  "version": "0.3.19",
+  "versionCode": 121,
   "description": "Claude Code-powered AI agent — answers any question with the best interactive experience, tackles any task with full engineering team capability",
   "type": "module",
   "scripts": {
