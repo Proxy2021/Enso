@@ -10,6 +10,7 @@ Enso is a **Claude Code-powered AI agent** that answers any question with the be
 - **Best experience for every answer** — Responses flow through a deterministic tool-to-UI pipeline, delivering rich interactive React apps (research boards, file managers, photo studios) instead of plain text. No LLM call needed for rendering.
 - **Full engineering team for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
 - **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
+- **AI-native project management** — Each project has a team of AI agents (Project Leader, Architect, Engineer, QA, Marketing, Sales, AI Strategist) and customer personas that autonomously evolve the project through iterative sprints with real browser testing, code implementation, and validation cycles.
 
 ## Architecture Overview
 
@@ -52,6 +53,8 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
     ├── orchestrator-engine.ts # DAG execution engine with parallel agents
     ├── build-via-claude.ts   # Build App via Claude Code session
     ├── mission-planner.ts    # Mission analysis + sequential app building
+    ├── evolution.ts          # Self-evolution sprint system with AI persona agents
+    ├── project-manager.ts    # Project CRUD, team agents, personas, sprint history
     ├── app-persistence.ts    # Save/load dynamic apps from disk
     ├── claude-code.ts        # Claude Code CLI integration
     ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
@@ -121,6 +124,77 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 - Approved apps built sequentially via `handleBuildAppViaClaude`
 - Progress tracked via `missionProgress` messages (analyzing → proposing → building → complete)
 - Key files: `mission-planner.ts` (backend), `MissionCard.tsx` (frontend), card type `"mission"`
+
+### Projects & Self-Evolution System
+
+Enso supports a **Projects abstraction** where each project has its own team of AI agents and customer personas. Projects can be any software product — Enso itself is just one project that Enso helps build and evolve.
+
+#### Project Structure
+
+Each project is stored at `~/.enso/projects/<projectId>/`:
+- `project.json` — Project definition (vision, team agents, personas, goals)
+- `sprints/` — Sprint history with full reports, dashboards, and deliverables
+- `deliverables/` — Accumulated outputs (marketing materials, architecture docs, etc.)
+
+#### Project Definition (`project.json`)
+
+```json
+{
+  "id": "enso",
+  "name": "Enso",
+  "vision": "Every answer is an app...",
+  "codebasePath": "D:/Github/Enso",
+  "testUrl": "http://localhost:5173",
+  "teamAgents": [...],     // Internal team (Project Leader, Architect, etc.)
+  "personas": [...],       // Customer personas for testing
+  "validationPersonaIds": ["startup-founder", "student-researcher"]
+}
+```
+
+#### Team Agents (Internal Team)
+
+Each project has a team of AI agents with specialized roles:
+
+| Agent | Role | agentRole | What They Do |
+|-------|------|-----------|-------------|
+| **Project Leader** | Meta-controller | architect | Defines vision, sets sprint focus, chooses personas, reviews all outputs |
+| **Marketing Director** | Brand & messaging | researcher | Evaluates positioning, creates marketing deliverables |
+| **Sales Director** | Commercialization | researcher | Pricing models, customer acquisition, ROI narratives |
+| **Software Architect** | Technical design | architect | Architecture reviews, tech debt tracking, scalability |
+| **Engineering Manager** | Code quality | reviewer | Convention adherence, regression prevention, build validation |
+| **QA & Test Manager** | Quality assurance | reviewer | Test scenarios, edge cases, quality metrics |
+| **AI Technology Strategist** | Frontier tech | researcher | Evaluates latest AI tech, recommends adoptions to stay ahead |
+
+#### Customer Personas
+
+Personas represent real user archetypes who test the product through actual browser automation (Puppeteer). Each persona has: background, goals, frustrations, and test scenarios.
+
+The **Project Leader decides which personas to involve per sprint** based on the sprint focus. They can select from existing personas or create new ones on-the-fly for specific testing needs.
+
+#### Evolution Sprint (`/evolve`)
+
+- **Trigger**: `/evolve` command or "Evolve" tile on WelcomeCard
+- **Sprint phases** (6 phases, 15-25 tasks, ~60-90 min):
+  1. **Team Evaluation** — All team agents evaluate from their perspectives (architecture, marketing, sales, QA, AI tech)
+  2. **Persona Testing** — Project Leader-selected personas test through real Puppeteer browser automation
+  3. **Synthesis + Discussion** — Cross-report analysis → product team roundtable → prioritized backlog
+  4. **Engineering Implementation** — Architect designs → Coder implements → Reviewer validates (real code changes!)
+  5. **Validation Re-Testing** — Personas re-test changed areas to verify improvements
+  6. **Evolution Report** — Interactive dashboard + Project Leader meta-review
+
+- **Key innovation**: Claude Code ACTUALLY implements enhancements in the codebase during each sprint. The system evolves itself.
+- **Sprint persistence**: Full reports, screenshots, dashboards saved to `~/.enso/projects/<id>/sprints/sprint-<timestamp>/`
+- **DAG execution**: Tasks run with up to 4 concurrent Claude Code sessions for performance
+- **Safety rules**: Implementation tasks are forbidden from restarting servers, pushing to git, or modifying versions
+
+#### Architecture
+
+- `evolution.ts` — Sprint planning prompt builder, lifecycle management, sprint persistence
+- `project-manager.ts` — Project CRUD, default Enso project definition, `ensureDefaultProject()`
+- Builds on top of the orchestrator's DAG engine (`orchestrator-engine.ts`) for parallel execution
+- Each sprint creates an orchestration with the evolution-specific planning prompt
+- Sprint results delivered as bespoke interactive JSX dashboard on the orchestration card
+- Key files: `evolution.ts`, `project-manager.ts` (backend), WelcomeCard `/evolve` tile (frontend)
 
 ### Deep Research Pipeline
 
