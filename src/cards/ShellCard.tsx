@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { useChatStore } from "../store/chat";
+import { isLikelyNaturalLanguage } from "../utils/nlDetection";
 import type { CardRendererProps } from "./types";
 
 /**
@@ -136,16 +137,67 @@ export default function ShellCard({ card }: CardRendererProps) {
       }
     });
 
-    // Forward keystrokes to backend PTY
+    // Line buffer for NL detection on Enter
+    const lineBuffer = { current: "" };
+
+    // Forward keystrokes to backend PTY — with NL interception on Enter
     terminal.onData((data: string) => {
       const sid = sessionIdRef.current;
-      if (sid) {
+      if (!sid) return;
+
+      // Enter key: check accumulated line for natural language
+      if (data === "\r" || data === "\n") {
+        const line = lineBuffer.current.trim();
+        lineBuffer.current = "";
+
+        if (line && isLikelyNaturalLanguage(line)) {
+          // NL detected — cancel shell input and route to AI
+          // Send Ctrl+C to cancel the partial input echoed to PTY
+          wsClient?.send({
+            type: "shell.input",
+            shellSessionId: sid,
+            shellInput: "\x03",
+          });
+          // Route the text to AI via the store
+          const store = useChatStore.getState();
+          // Destroy the shell session to exit shell mode
+          wsClient?.send({ type: "shell.destroy", shellSessionId: sid });
+          // Show NL interception toast
+          useChatStore.setState({ _nlInterceptionToast: "Switched to AI \u2014 your question was sent to the assistant" });
+          // Send the NL text as an AI message
+          setTimeout(() => store.sendMessage(line), 100);
+          return;
+        }
+
+        // Not NL — forward Enter to PTY normally
         wsClient?.send({
           type: "shell.input",
           shellSessionId: sid,
           shellInput: data,
         });
+        return;
       }
+
+      // Backspace: trim line buffer
+      if (data === "\x7f") {
+        lineBuffer.current = lineBuffer.current.slice(0, -1);
+      }
+      // Ctrl+C: clear line buffer
+      else if (data === "\x03") {
+        lineBuffer.current = "";
+      }
+      // Printable characters: append to line buffer
+      else if (data.length === 1 && data.charCodeAt(0) >= 32) {
+        lineBuffer.current += data;
+      }
+      // Special sequences (arrows, tab, escape): don't buffer
+
+      // Always forward raw keystroke to PTY (echo + execution)
+      wsClient?.send({
+        type: "shell.input",
+        shellSessionId: sid,
+        shellInput: data,
+      });
     });
 
     return () => {

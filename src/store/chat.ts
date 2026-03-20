@@ -53,6 +53,7 @@ interface CardStore {
   _activeTerminalCardId: string | null;
   _pendingCodeText: string | null;
   _thinkingCardId: string | null;
+  _nlInterceptionToast: string | null;
 
   // Pinning
   pinnedCards: string[];
@@ -213,6 +214,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _activeTerminalCardId: null,
   _pendingCodeText: null as string | null,
   _thinkingCardId: null as string | null,
+  _nlInterceptionToast: null as string | null,
   pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
   showSidebar: false,
 
@@ -434,6 +436,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
               status: "complete",
               display: "expanded",
               toolMeta: { toolId: "claude-code" },
+              data: displayText ? { pendingCodeText: displayText } : undefined,
               createdAt: now,
               updatedAt: now,
             };

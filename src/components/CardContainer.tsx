@@ -603,6 +603,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
 function ContentExportMenu({ card }: { card: Card }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [justCompleted, setJustCompleted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const text = card.text ?? "";
   const hasTables = hasMarkdownTables(text);
@@ -616,6 +617,15 @@ function ContentExportMenu({ card }: { card: Card }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Flash the export button when card first completes
+  useEffect(() => {
+    if (card.status === "complete") {
+      setJustCompleted(true);
+      const timer = setTimeout(() => setJustCompleted(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [card.status]);
+
   const title = (() => {
     const firstLine = text.split("\n").find(l => l.trim());
     if (!firstLine) return "Enso Export";
@@ -626,7 +636,7 @@ function ContentExportMenu({ card }: { card: Card }) {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1"
+        className={`text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1 ${justCompleted ? "ring-2 ring-indigo-400/50 animate-pulse" : ""}`}
         title="Export content"
       >
         <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -634,7 +644,7 @@ function ContentExportMenu({ card }: { card: Card }) {
           <polyline points="7 10 12 15 17 10" />
           <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
-        <span className="hidden sm:inline">Export</span>
+        <span className="text-[10px]">Export</span>
       </button>
       {open && (
         <div className="absolute bottom-full right-0 mb-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] z-[200]">

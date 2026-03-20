@@ -3,6 +3,7 @@ import { useChatStore } from "../store/chat";
 import { useSpeechRecognition } from "../lib/use-speech-recognition";
 import { useVoiceRecorder } from "../lib/use-voice-recorder";
 import { isNative } from "../lib/platform";
+import { isLikelyNaturalLanguage } from "../utils/nlDetection";
 
 interface SlashCommand {
   command: string;
@@ -111,6 +112,7 @@ export default function ChatInput() {
   const hasCards = useChatStore((s) => s.cardOrder.length > 0);
   const clearConversation = useChatStore((s) => s.clearConversation);
   const [queueToast, setQueueToast] = useState<string | null>(null);
+  const nlInterceptionToast = useChatStore((s) => s._nlInterceptionToast);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +127,13 @@ export default function ChatInput() {
     const timer = setTimeout(() => setQueueToast(null), 4000);
     return () => clearTimeout(timer);
   }, [queueToast]);
+
+  // Auto-dismiss NL interception toast after 3 seconds
+  useEffect(() => {
+    if (!nlInterceptionToast) return;
+    const timer = setTimeout(() => useChatStore.setState({ _nlInterceptionToast: null }), 3000);
+    return () => clearTimeout(timer);
+  }, [nlInterceptionToast]);
 
   // Speech-to-text — native uses MediaRecorder + server transcription, web uses Web Speech API
   const handleTranscript = useCallback((transcript: string) => {
@@ -168,20 +177,6 @@ export default function ChatInput() {
   }, [text]);
 
   const showMenu = filteredCommands.length > 0;
-
-  function isLikelyNaturalLanguage(input: string): boolean {
-    const trimmed = input.trim();
-    const words = trimmed.split(/\s+/);
-    if (words.length <= 2) return false;
-    if (trimmed.includes("?")) return true;
-    const nlStarters = /^(what|how|why|when|where|who|which|can|could|would|should|is|are|was|were|do|does|did|explain|describe|compare|tell|help|write|create|build|design|show|give|list|summarize|analyze|suggest|recommend)\b/i;
-    if (nlStarters.test(trimmed)) return true;
-    if (words.length >= 6) {
-      const hasShellIndicators = /[|><&;`$\\]|--\w|\/\w+\//.test(trimmed);
-      if (!hasShellIndicators) return true;
-    }
-    return false;
-  }
 
   async function handleSend() {
     const trimmed = text.trim();
@@ -450,31 +445,42 @@ export default function ChatInput() {
           </div>
         )}
 
-        {/* Shell mode indicator banner */}
+        {/* NL interception toast — shown when shell input was auto-routed to AI */}
+        {nlInterceptionToast && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 z-40 flex justify-center pointer-events-none">
+            <div className="bg-emerald-900/90 border border-emerald-500/50 rounded-lg px-4 py-2 shadow-lg flex items-center gap-2 max-w-md pointer-events-auto">
+              <svg className="h-3.5 w-3.5 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span className="text-xs text-emerald-200">{nlInterceptionToast}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Shell mode indicator banner — enhanced for visibility */}
         {activeShellSessionId && (
-          <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-900/40 border border-amber-600/50">
+          <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2.5 rounded-lg bg-amber-900/50 border-2 border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.15)]">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="relative flex h-2 w-2 shrink-0">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
               </span>
-              <span className="text-xs text-amber-200 font-medium">SHELL MODE</span>
-              <span className="text-[10px] text-amber-400/70 hidden sm:inline">— commands execute in terminal</span>
+              <span className="text-xs text-amber-200 font-semibold tracking-wide">SHELL MODE</span>
+              <span className="text-[10px] text-amber-300/80">
+                — type commands or press <kbd className="px-1 py-0.5 rounded bg-amber-800/50 border border-amber-600/50 text-amber-200 font-mono text-[9px]">Esc</kbd> to return to AI
+              </span>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[10px] text-amber-500/60 hidden sm:inline">Esc to exit</span>
-              <button
-                onClick={() => {
-                  const wsClient = useChatStore.getState()._wsClient;
-                  if (wsClient && activeShellSessionId) {
-                    wsClient.send({ type: "shell.destroy", shellSessionId: activeShellSessionId });
-                  }
-                }}
-                className="text-[10px] px-2 py-0.5 rounded-md border border-amber-600/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 active:bg-amber-500/30 active:scale-[0.95] transition-all duration-150"
-              >
-                Exit Shell
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                const wsClient = useChatStore.getState()._wsClient;
+                if (wsClient && activeShellSessionId) {
+                  wsClient.send({ type: "shell.destroy", shellSessionId: activeShellSessionId });
+                }
+              }}
+              className="text-[10px] px-2.5 py-1 rounded-md border border-amber-500/60 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 active:bg-amber-500/35 active:scale-[0.95] transition-all duration-150 font-medium"
+            >
+              Exit Shell
+            </button>
           </div>
         )}
 

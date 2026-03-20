@@ -18,7 +18,7 @@ export { TOOL_ICONS } from "../components/TerminalContent";
 
 // ── Project Picker ──
 
-function ProjectPicker({ projects, cardId }: { projects: ProjectInfo[]; cardId?: string }) {
+function ProjectPicker({ projects, cardId, pendingCodeText }: { projects: ProjectInfo[]; cardId?: string; pendingCodeText?: string }) {
   const setCodeSessionCwd = useChatStore((s) => s.setCodeSessionCwd);
   const switchTerminalProject = useChatStore((s) => s.switchTerminalProject);
   const fetchProjects = useChatStore((s) => s.fetchProjects);
@@ -53,6 +53,14 @@ function ProjectPicker({ projects, cardId }: { projects: ProjectInfo[]; cardId?:
           </button>
         ))}
       </div>
+      {pendingCodeText && (
+        <div className="mt-2 px-3 py-2 rounded-md bg-gray-800/60 border border-gray-700/50">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Queued prompt</span>
+          <p className="text-xs text-gray-300 mt-1 font-mono truncate">
+            {pendingCodeText}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -443,7 +451,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
             showSessionPicker ? (
               <SessionPicker cardId={card.id} onDismiss={() => setShowSessionPicker(false)} />
             ) : (
-              <ProjectPicker projects={projects} cardId={card.id} />
+              <ProjectPicker projects={projects} cardId={card.id} pendingCodeText={(card.data as Record<string, unknown> | undefined)?.pendingCodeText as string | undefined} />
             )
           ) : showSessionPicker ? (
             <SessionPicker cardId={card.id} onDismiss={() => setShowSessionPicker(false)} />

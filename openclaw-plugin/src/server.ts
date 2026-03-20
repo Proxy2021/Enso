@@ -1203,6 +1203,22 @@ export async function startEnsoServer(opts: {
               }
             } else if (msg.text && account.geminiApiKey && !msg.routing && account.mode !== "im") {
               // Smart task routing — auto-classify message complexity
+              const processingRunId = randomUUID();
+              // Emit initial processing status
+              send({
+                id: randomUUID(),
+                runId: processingRunId,
+                sessionKey,
+                seq: 0,
+                state: "delta",
+                operation: {
+                  operationId: processingRunId,
+                  stage: "processing",
+                  label: "Understanding your request...",
+                  cancellable: false,
+                },
+                timestamp: Date.now(),
+              });
               try {
                 // Build recent conversation context for the classifier
                 const recentCards = loadCardHistory(clientId, 10);
@@ -1216,6 +1232,28 @@ export async function startEnsoServer(opts: {
                   conversationHistory: recentHistory,
                   geminiApiKey: account.geminiApiKey,
                   mediaUrls: msg.mediaUrls,
+                });
+
+                // Emit classification result status
+                send({
+                  id: randomUUID(),
+                  runId: processingRunId,
+                  sessionKey,
+                  seq: 1,
+                  state: "delta",
+                  operation: {
+                    operationId: processingRunId,
+                    stage: "processing",
+                    label: classification.complexity === "research"
+                      ? "Searching for information..."
+                      : classification.complexity === "orchestrated"
+                      ? "Planning a multi-step approach..."
+                      : classification.complexity === "one-off"
+                      ? "Preparing to work on your task..."
+                      : "Composing a response...",
+                    cancellable: false,
+                  },
+                  timestamp: Date.now(),
                 });
 
                 if (classification.complexity === "orchestrated") {
@@ -1238,6 +1276,22 @@ export async function startEnsoServer(opts: {
                   // Deep research is only triggered via ✨ button on completed cards, never from initial classification
                   const depth = (classification.researchDepth === "quick" ? "quick" : "standard") as "quick" | "standard";
                   runtime.log?.(`[enso] task-router: research → "${topic.slice(0, 60)}" (depth=${depth})`);
+
+                  // Emit research-specific status
+                  send({
+                    id: randomUUID(),
+                    runId: processingRunId,
+                    sessionKey,
+                    seq: 2,
+                    state: "delta",
+                    operation: {
+                      operationId: processingRunId,
+                      stage: "processing",
+                      label: "Researching your topic...",
+                      cancellable: false,
+                    },
+                    timestamp: Date.now(),
+                  });
 
                   try {
                     await routeToResearch({
