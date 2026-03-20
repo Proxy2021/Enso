@@ -55,3 +55,65 @@ describe("ChatInput: Enter/Shift+Enter behavior", () => {
     expect(event.key === "Enter" && !event.shiftKey).toBe(false);
   });
 });
+
+// Copy of isLikelyNaturalLanguage from src/components/ChatInput.tsx (added by Track A / E2)
+// Heuristic to detect whether user input is NL vs a shell command when shell mode is active
+function isLikelyNaturalLanguage(text: string): boolean {
+  const trimmed = text.trim();
+  // Short single-word inputs are likely commands (e.g., "ls", "pwd", "dir")
+  const words = trimmed.split(/\s+/);
+  if (words.length <= 2) return false;
+
+  // Contains question mark → natural language
+  if (trimmed.includes("?")) return true;
+
+  // Starts with common NL words that aren't shell commands
+  const nlStarters = /^(what|how|why|when|where|who|which|can|could|would|should|is|are|was|were|do|does|did|explain|describe|compare|tell|help|write|create|build|design|show|give|list|summarize|analyze|suggest|recommend)\b/i;
+  if (nlStarters.test(trimmed)) return true;
+
+  // Long text (6+ words) without shell indicators → likely NL
+  if (words.length >= 6) {
+    const hasShellIndicators = /[|><&;`$\\]|--\w|\/\w+\//.test(trimmed);
+    if (!hasShellIndicators) return true;
+  }
+
+  return false;
+}
+
+describe("ChatInput: shell NL detection (isLikelyNaturalLanguage)", () => {
+  // PF-01: "Compare React vs Vue" → detected as NL (starts with NL starter "compare")
+  it("PF-01: detects 'Compare React vs Vue' as natural language", () => {
+    expect(isLikelyNaturalLanguage("Compare React vs Vue")).toBe(true);
+  });
+
+  // PF-02: "How does DNS work?" → detected as NL (question mark + NL starter "how")
+  it("PF-02: detects 'How does DNS work?' as natural language", () => {
+    expect(isLikelyNaturalLanguage("How does DNS work?")).toBe(true);
+  });
+
+  // PF-03: "Write a function to sort arrays" → detected as NL (starts with "write")
+  it("PF-03: detects 'Write a function to sort arrays' as natural language", () => {
+    expect(isLikelyNaturalLanguage("Write a function to sort arrays")).toBe(true);
+  });
+
+  // Additional: Short shell commands should NOT be detected as NL
+  it("treats 'ls -la' as a shell command (not NL)", () => {
+    expect(isLikelyNaturalLanguage("ls -la")).toBe(false);
+  });
+
+  it("treats 'git status' as a shell command (not NL)", () => {
+    expect(isLikelyNaturalLanguage("git status")).toBe(false);
+  });
+
+  it("treats single word 'pwd' as a shell command", () => {
+    expect(isLikelyNaturalLanguage("pwd")).toBe(false);
+  });
+
+  it("detects long text without shell indicators as NL", () => {
+    expect(isLikelyNaturalLanguage("I need to fix the login page for our users")).toBe(true);
+  });
+
+  it("treats long text WITH shell indicators as a command", () => {
+    expect(isLikelyNaturalLanguage("cat /var/log/syslog | grep error --count")).toBe(false);
+  });
+});

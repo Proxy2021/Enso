@@ -1098,6 +1098,10 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const Renderer = registration.renderer;
   const icon = TYPE_ICONS[effectiveType] ?? "\uD83D\uDCCB";
 
+  if (card.type === "thinking") {
+    return <Renderer card={card} isActive={isActive} onAction={handleAction} />;
+  }
+
   if (card.type === "user-bubble") {
     return (
       <div onContextMenu={handleContextMenu} className="relative">

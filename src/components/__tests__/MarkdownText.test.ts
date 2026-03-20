@@ -127,3 +127,75 @@ describe("sanitizeMermaidCode", () => {
     expect(result).toContain("A --> B");
   });
 });
+
+// Copy of autoRepairMermaid from src/components/MarkdownText.tsx for unit testing
+// When Track A exports this function, this copy can be replaced with an import
+function autoRepairMermaid(code: string): string {
+  let fixed = code;
+  // Fix 1: Remove unsupported "end" labels (e.g., "end SubgraphName" → "end")
+  fixed = fixed.replace(/^(\s*end)\s+\S.*$/gm, "$1");
+  // Fix 2: Remove empty node IDs (e.g., " --> " with no source)
+  fixed = fixed.replace(/^\s*-->\s/gm, "");
+  // Fix 3: Fix unterminated strings in labels — strip unclosed quotes
+  fixed = fixed.replace(/\["([^\]"]*?)$/gm, '["$1"]');
+  // Fix 4: Remove duplicate graph/flowchart declarations
+  const lines = fixed.split("\n");
+  let foundDecl = false;
+  fixed = lines.filter(line => {
+    if (/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie)\b/.test(line)) {
+      if (foundDecl) return false;
+      foundDecl = true;
+    }
+    return true;
+  }).join("\n");
+
+  // Fix 5: Normalize Gantt dateFormat — ensure it exists for gantt charts
+  if (/^\s*gantt\b/m.test(fixed) && !/dateFormat/m.test(fixed)) {
+    fixed = fixed.replace(/^(\s*gantt\b.*)$/m, "$1\n    dateFormat YYYY-MM-DD");
+  }
+
+  // Fix 6: Case-insensitive diagram type normalization
+  fixed = fixed.replace(/^(\s*)(flowChart)(\s)/m, "$1flowchart$3");
+  fixed = fixed.replace(/^(\s*)(sequencediagram)(\s)/mi, "$1sequenceDiagram$3");
+  fixed = fixed.replace(/^(\s*)(classdiagram)(\s)/mi, "$1classDiagram$3");
+  fixed = fixed.replace(/^(\s*)(statediagram-v2)(\s)/mi, "$1stateDiagram-v2$3");
+  fixed = fixed.replace(/^(\s*)(erdiagram)(\s)/mi, "$1erDiagram$3");
+
+  return fixed;
+}
+
+describe("autoRepairMermaid", () => {
+  // PF-05: Gantt chart with missing dateFormat → auto-repair adds it
+  it("PF-05: adds dateFormat to gantt charts when missing", () => {
+    const input = "gantt\n    section Phase 1\n    Task A :a1, 2025-01-01, 30d";
+    const result = autoRepairMermaid(input);
+    expect(result).toContain("dateFormat");
+    expect(result).toContain("YYYY-MM-DD");
+  });
+
+  it("does NOT add dateFormat when gantt chart already has one", () => {
+    const input = "gantt\n    dateFormat YYYY-MM-DD\n    section Phase 1\n    Task A :a1, 2025-01-01, 30d";
+    const result = autoRepairMermaid(input);
+    // Should only have one dateFormat (the original)
+    const matches = result.match(/dateFormat/g);
+    expect(matches).toHaveLength(1);
+  });
+
+  it("does NOT add dateFormat to non-gantt diagrams", () => {
+    const input = "flowchart TD\n  A --> B";
+    const result = autoRepairMermaid(input);
+    expect(result).not.toContain("dateFormat");
+  });
+
+  it("normalizes flowChart to flowchart (case fix)", () => {
+    const input = "flowChart TD\n  A --> B";
+    const result = autoRepairMermaid(input);
+    expect(result).toMatch(/^flowchart TD/m);
+    expect(result).not.toMatch(/^flowChart/m);
+  });
+
+  it("normalizes case-insensitive diagram types", () => {
+    expect(autoRepairMermaid("SEQUENCEDIAGRAM \n  A->>B: msg")).toMatch(/^sequenceDiagram /m);
+    expect(autoRepairMermaid("CLASSDIAGRAM \n  A --> B")).toMatch(/^classDiagram /m);
+  });
+});

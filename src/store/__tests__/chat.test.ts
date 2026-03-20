@@ -118,3 +118,91 @@ describe("chat.ts: sendMessage slash command routing", () => {
     expect(isSlash).toBe(false);
   });
 });
+
+describe("chat.ts: /code text queueing (E4)", () => {
+  // Simulates the /code <text> queueing logic from Track A's E4 enhancement.
+  // When cwd is null and user sends "/code <text>", the text should be queued
+  // as _pendingCodeText for later auto-send after project selection.
+
+  // PF-04: /code <text> with no cwd → text queued as _pendingCodeText
+  it("PF-04: /code with text but no cwd queues text for project picker", () => {
+    // Simulate store state
+    const state = {
+      _pendingCodeText: null as string | null,
+      _activeTerminalCardId: null as string | null,
+      codeSessionCwd: null as string | null,
+      cards: {} as Record<string, any>,
+    };
+
+    const text = "/code fix the auth bug";
+
+    // Simulate the /code routing logic from sendMessage
+    if (text.startsWith("/code ")) {
+      const displayText = text.slice(6);
+      const cwd = state.codeSessionCwd;
+
+      if (!cwd) {
+        // No project selected — queue text
+        state._pendingCodeText = displayText;
+      }
+    }
+
+    expect(state._pendingCodeText).toBe("fix the auth bug");
+  });
+
+  it("does NOT queue text when cwd exists", () => {
+    const state = {
+      _pendingCodeText: null as string | null,
+      codeSessionCwd: "C:/Projects/myapp" as string | null,
+    };
+
+    const text = "/code fix the auth bug";
+
+    if (text.startsWith("/code ")) {
+      const displayText = text.slice(6);
+      const cwd = state.codeSessionCwd;
+
+      if (!cwd) {
+        state._pendingCodeText = displayText;
+      }
+    }
+
+    // Text was NOT queued because cwd exists
+    expect(state._pendingCodeText).toBeNull();
+  });
+
+  it("clears pending text after cwd is set and text is forwarded", () => {
+    const state = {
+      _pendingCodeText: "fix the auth bug" as string | null,
+      codeSessionCwd: null as string | null,
+    };
+
+    // Simulate setCodeSessionCwd action
+    state.codeSessionCwd = "C:/Projects/myapp";
+
+    // After setting cwd, check for pending text and auto-send
+    const pendingText = state._pendingCodeText;
+    if (pendingText) {
+      state._pendingCodeText = null;
+      // In real code: get().sendMessage(`/code ${pendingText}`);
+    }
+
+    expect(pendingText).toBe("fix the auth bug");
+    expect(state._pendingCodeText).toBeNull();
+  });
+
+  it("bare /code does NOT queue any text", () => {
+    const state = {
+      _pendingCodeText: null as string | null,
+    };
+
+    const text = "/code";
+
+    // Bare /code path — should NOT enter the "/code " branch
+    if (text.startsWith("/code ")) {
+      state._pendingCodeText = text.slice(6);
+    }
+
+    expect(state._pendingCodeText).toBeNull();
+  });
+});

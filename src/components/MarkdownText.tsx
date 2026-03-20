@@ -170,6 +170,8 @@ function sanitizeMermaidCode(code: string): string {
   clean = clean.replace(/^\s*linkStyle\s+.+$/gm, "");
   // 8. Strip `click` event handlers (e.g., "click nodeA callback")
   clean = clean.replace(/^\s*click\s+\S+\s+.+$/gm, "");
+  // 8.5. Strip inline CSS class application (e.g., "A:::errorClass")
+  clean = clean.replace(/:::\w+/g, "");
   // 9. Remove 'direction' keyword inside subgraphs (mermaid 11.x doesn't support this)
   clean = clean.replace(
     /(subgraph\s[^\n]*\n)([\s\S]*?)(end\b)/g,
@@ -202,8 +204,20 @@ function autoRepairMermaid(code: string): string {
     }
     return true;
   }).join("\n");
+  // Fix 5: Normalize Gantt dateFormat — ensure it exists for gantt charts
+  if (/^\s*gantt\b/m.test(fixed) && !/dateFormat/m.test(fixed)) {
+    fixed = fixed.replace(/^(\s*gantt\b.*)$/m, "$1\n    dateFormat YYYY-MM-DD");
+  }
+  // Fix 6: Case-insensitive diagram type normalization
+  fixed = fixed.replace(/^(\s*)(flowChart)(\s)/m, "$1flowchart$3");
+  fixed = fixed.replace(/^(\s*)(sequencediagram)(\s)/mi, "$1sequenceDiagram$3");
+  fixed = fixed.replace(/^(\s*)(classdiagram)(\s)/mi, "$1classDiagram$3");
+  fixed = fixed.replace(/^(\s*)(statediagram-v2)(\s)/mi, "$1stateDiagram-v2$3");
+  fixed = fixed.replace(/^(\s*)(erdiagram)(\s)/mi, "$1erDiagram$3");
   return fixed;
 }
+
+export { sanitizeMermaidCode, autoRepairMermaid };
 
 let mermaidIdCounter = 0;
 function MermaidDiagram({ code }: { code: string }) {

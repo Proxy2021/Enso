@@ -51,6 +51,8 @@ interface CardStore {
 
   // Internal: active terminal card
   _activeTerminalCardId: string | null;
+  _pendingCodeText: string | null;
+  _thinkingCardId: string | null;
 
   // Pinning
   pinnedCards: string[];
@@ -209,6 +211,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   claudeModel: localStorage.getItem("enso_claude_model") || "claude-opus-4-6",
   claudeThinking: (localStorage.getItem("enso_claude_thinking") as "adaptive" | "disabled") || "adaptive",
   _activeTerminalCardId: null,
+  _pendingCodeText: null as string | null,
+  _thinkingCardId: null as string | null,
   pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
   showSidebar: false,
 
@@ -413,6 +417,35 @@ export const useChatStore = create<CardStore>((set, get) => ({
         const termCard = termId ? get().cards[termId] : null;
         const cwd = termCard?.toolMeta?.cwd ?? get().codeSessionCwd;
         const toolSessionId = termCard?.toolMeta?.toolSessionId ?? get().codeSessionId;
+
+        if (!cwd) {
+          // No project selected — queue text and show project picker
+          set({ _pendingCodeText: displayText });
+          get().fetchProjects();
+          const existingTermId = get()._activeTerminalCardId;
+          if (!existingTermId || !get().cards[existingTermId]) {
+            const id = uuidv4();
+            const now = Date.now();
+            const card: Card = {
+              id,
+              runId: id,
+              type: "terminal",
+              role: "assistant",
+              status: "complete",
+              display: "expanded",
+              toolMeta: { toolId: "claude-code" },
+              createdAt: now,
+              updatedAt: now,
+            };
+            set((s) => ({
+              cardOrder: [...s.cardOrder, id],
+              cards: { ...s.cards, [id]: card },
+              _activeTerminalCardId: id,
+            }));
+          }
+          return;
+        }
+
         finalRouting = {
           mode: "direct_tool",
           toolId: "claude-code",
@@ -490,9 +523,36 @@ export const useChatStore = create<CardStore>((set, get) => ({
       updatedAt: now,
     };
 
+    // Remove any existing thinking card before creating a new one
+    const oldThinkingId = get()._thinkingCardId;
+    if (oldThinkingId) {
+      set((s) => {
+        const { [oldThinkingId]: _, ...remainingCards } = s.cards;
+        return {
+          cardOrder: s.cardOrder.filter(cid => cid !== oldThinkingId),
+          cards: remainingCards,
+          _thinkingCardId: null,
+        };
+      });
+    }
+
+    const thinkingId = uuidv4();
+    const thinkingCard: Card = {
+      id: thinkingId,
+      runId: thinkingId,
+      type: "thinking",
+      role: "assistant",
+      status: "streaming",
+      display: "expanded",
+      text: "Processing your request...",
+      createdAt: now,
+      updatedAt: now,
+    };
+
     set((s) => ({
-      cardOrder: [...s.cardOrder, id],
-      cards: { ...s.cards, [id]: card },
+      cardOrder: [...s.cardOrder, id, thinkingId],
+      cards: { ...s.cards, [id]: card, [thinkingId]: thinkingCard },
+      _thinkingCardId: thinkingId,
       isWaiting: true,
     }));
     get()._wsClient?.send({ type: "chat.send", text: displayText, routing: finalRouting });
@@ -1193,6 +1253,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }
 
     set(updates as Partial<CardStore>);
+
+    // After setting cwd, check for pending /code text
+    const pendingText = get()._pendingCodeText;
+    if (pendingText) {
+      set({ _pendingCodeText: null });
+      get().sendMessage(`/code ${pendingText}`);
+    }
   },
 
   switchTerminalProject: (cardId: string, cwd: string) => {
@@ -1383,6 +1450,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cards: {},
       isWaiting: false,
       _activeTerminalCardId: null,
+      _pendingCodeText: null,
+      _thinkingCardId: null,
       pinnedCards: [],
     });
     localStorage.removeItem("enso_pinned_cards");
@@ -2367,6 +2436,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
           createdAt: now,
           updatedAt: now,
         };
+        // Remove thinking placeholder when first real assistant card arrives
+        const thinkingId = state._thinkingCardId;
+        if (thinkingId) {
+          const { [thinkingId]: _, ...cardsWithoutThinking } = state.cards;
+          return {
+            cardOrder: [...state.cardOrder.filter(cid => cid !== thinkingId), cardId],
+            cards: { ...cardsWithoutThinking, [cardId]: card },
+            _thinkingCardId: null,
+          };
+        }
         return {
           cardOrder: [...state.cardOrder, cardId],
           cards: { ...state.cards, [cardId]: card },

@@ -7,6 +7,7 @@ import DynamicUICard from "./DynamicUICard";
 import OrchestrationCard from "./OrchestrationCard";
 import EvolutionHistoryCard from "./EvolutionHistoryCard";
 import ProjectsCard from "./ProjectsCard";
+import { ThinkingCard } from "../components/ThinkingCard";
 
 // Register built-in card types (order matters — first match wins in resolve)
 
@@ -44,6 +45,12 @@ cardRegistry.register({
   type: "dynamic-ui",
   renderer: DynamicUICard,
   match: (msg) => Boolean(msg.generatedUI),
+});
+
+cardRegistry.register({
+  type: "thinking",
+  renderer: ThinkingCard,
+  match: () => false, // client-only optimistic card
 });
 
 cardRegistry.register({
