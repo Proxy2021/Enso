@@ -138,8 +138,8 @@ export function archiveEvolutionSprint(
       } else if (file === ".evolution-design.md") {
         destName = "design.md";
         hasDesign = true;
-      } else if (file === ".evolution-implementation.md") {
-        destName = "implementation.md";
+      } else if (file === ".evolution-implementation.md" || file.startsWith(".evolution-implementation-")) {
+        destName = file.replace(".evolution-", "");
         hasImplementation = true;
       } else if (file === ".evolution-review.md") {
         destName = "review.md";
