@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import TerminalContent from "../components/TerminalContent";
@@ -45,7 +45,7 @@ export default function OrchestrationCard({ card }: CardRendererProps) {
       {phase === "planning" && <PlanningPhase goal={currentPlan?.goal} />}
       {phase === "review" && currentPlan && <ReviewPhase plan={currentPlan} />}
       {phase === "executing" && currentPlan && <ExecutingPhase plan={currentPlan} taskTerminals={taskTerminals} />}
-      {phase === "complete" && currentPlan && <CompletePhase plan={currentPlan} />}
+      {phase === "complete" && currentPlan && <CompletePhase plan={currentPlan} taskTerminals={taskTerminals} />}
       {phase === "error" && <ErrorPhase error={progress?.error} plan={currentPlan} />}
     </div>
   );
@@ -207,10 +207,15 @@ function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
 
 // ── Phase: Executing ──
 
+type ExecutingView = "tasks" | "terminals";
+
 function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskTerminals?: Record<string, { text: string; status: string }> }) {
   const approveOrchestration = useChatStore((s) => s.approveOrchestration);
   const pauseOrchestration = useChatStore((s) => s.pauseOrchestration);
   const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
+
+  const [view, setView] = useState<ExecutingView>("tasks");
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
 
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const running = plan.tasks.filter((t) => t.status === "running").length;
@@ -221,9 +226,32 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
   const pct = total > 0 ? Math.round(((completed + running * 0.5) / total) * 100) : 0;
   const elapsed = useElapsedTime();
 
+  // Collect tasks that have terminal data, sorted: running first, then by plan order
+  const terminalTasks = plan.tasks.filter((t) => taskTerminals?.[t.taskId]?.text);
+  const runningTerminals = terminalTasks.filter((t) => t.status === "running");
+  const doneTerminals = terminalTasks.filter((t) => t.status !== "running");
+  const orderedTerminals = [...runningTerminals, ...doneTerminals];
+
+  // Auto-select the first running terminal, or the latest one
+  useEffect(() => {
+    if (view !== "terminals") return;
+    if (runningTerminals.length > 0) {
+      // If current selection isn't running, switch to a running one
+      const currentIsRunning = runningTerminals.some((t) => t.taskId === activeTerminalId);
+      if (!currentIsRunning) {
+        setActiveTerminalId(runningTerminals[0].taskId);
+      }
+    } else if (!activeTerminalId && orderedTerminals.length > 0) {
+      setActiveTerminalId(orderedTerminals[0].taskId);
+    }
+  }, [view, runningTerminals.length, orderedTerminals.length]);
+
+  const activeTerminal = activeTerminalId ? taskTerminals?.[activeTerminalId] : null;
+  const activeTask = activeTerminalId ? plan.tasks.find((t) => t.taskId === activeTerminalId) : null;
+
   return (
     <div>
-      {/* Compact header */}
+      {/* Compact header with view toggle */}
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-sm">{"\u26A1"}</span>
         <h3 className="text-[11px] font-semibold text-gray-200 truncate">
@@ -231,6 +259,29 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
         </h3>
         <span className="text-[9px] text-gray-500 tabular-nums">{formatElapsed(elapsed)}</span>
         <span className="text-[9px] text-gray-500 ml-auto whitespace-nowrap">{completed}/{total}</span>
+
+        {/* View toggle: Tasks | Terminals */}
+        <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5 ml-1.5">
+          <button
+            onClick={() => setView("tasks")}
+            className={`text-[9px] px-2 py-0.5 rounded-full transition-all duration-150 ${
+              view === "tasks" ? "bg-gray-600/60 text-gray-200" : "text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            Tasks
+          </button>
+          <button
+            onClick={() => setView("terminals")}
+            className={`text-[9px] px-2 py-0.5 rounded-full transition-all duration-150 flex items-center gap-1 ${
+              view === "terminals" ? "bg-violet-500/30 text-violet-200" : "text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            Terminals
+            {runningTerminals.length > 0 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -261,17 +312,87 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
         </div>
       )}
 
-      {/* Compact task pipeline with expandable terminals */}
-      <div className="space-y-0.5">
-        {plan.tasks.map((task, i) => (
-          <CompactTaskRow
-            key={task.taskId}
-            task={task}
-            index={i}
-            terminalData={taskTerminals?.[task.taskId]}
-          />
-        ))}
-      </div>
+      {/* Tasks View: compact pipeline with expandable terminals */}
+      {view === "tasks" && (
+        <div className="space-y-0.5">
+          {plan.tasks.map((task, i) => (
+            <CompactTaskRow
+              key={task.taskId}
+              task={task}
+              index={i}
+              terminalData={taskTerminals?.[task.taskId]}
+              onOpenTerminal={(taskId) => {
+                setActiveTerminalId(taskId);
+                setView("terminals");
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Terminals View: tabbed terminal sessions */}
+      {view === "terminals" && (
+        <div>
+          {orderedTerminals.length === 0 ? (
+            <div className="text-center py-6 text-xs text-gray-500">
+              No active sessions yet. Waiting for tasks to start...
+            </div>
+          ) : (
+            <>
+              {/* Terminal tab bar — scrollable */}
+              <div className="flex gap-0.5 overflow-x-auto pb-1 mb-1 scrollbar-none">
+                {orderedTerminals.map((task) => {
+                  const isActive = task.taskId === activeTerminalId;
+                  const isTaskRunning = task.status === "running";
+                  return (
+                    <button
+                      key={task.taskId}
+                      onClick={() => setActiveTerminalId(task.taskId)}
+                      className={`flex items-center gap-1 whitespace-nowrap px-2 py-1 rounded-t-lg text-[9px] transition-all duration-150 flex-shrink-0 ${
+                        isActive
+                          ? "bg-[#0d1117] text-gray-200 border border-b-0 border-gray-700/60"
+                          : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/40"
+                      }`}
+                    >
+                      {isTaskRunning && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse flex-shrink-0" />}
+                      {!isTaskRunning && task.status === "completed" && <span className="text-green-400 flex-shrink-0">{"\u2713"}</span>}
+                      {!isTaskRunning && task.status === "failed" && <span className="text-red-400 flex-shrink-0">{"\u2717"}</span>}
+                      <span>{ROLE_EMOJI[task.agentRole]}</span>
+                      <span className="max-w-[120px] truncate">{shortTitle(task.title)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active terminal content */}
+              {activeTerminal && activeTask && (
+                <div className="rounded-lg border border-gray-700/50 overflow-hidden bg-[#0d1117]">
+                  <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-700/40 bg-gray-800/30">
+                    <span className="text-[10px]">{ROLE_EMOJI[activeTask.agentRole]}</span>
+                    <span className="text-[10px] text-gray-300 truncate flex-1">{activeTask.title}</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                      activeTask.status === "running"
+                        ? "bg-blue-500/20 text-blue-300"
+                        : activeTask.status === "completed"
+                          ? "bg-green-500/15 text-green-400"
+                          : "bg-red-500/15 text-red-400"
+                    }`}>
+                      {activeTask.status === "running" ? "live" : activeTask.status}
+                    </span>
+                  </div>
+                  <TerminalContent
+                    text={activeTerminal.text}
+                    status={activeTerminal.status === "streaming" ? "streaming" : "complete"}
+                    accentColor="violet"
+                    maxHeightClass="max-h-[400px]"
+                    showHeader={false}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Compact control */}
       <div className="mt-2 pt-1.5 border-t border-gray-700/30">
@@ -296,19 +417,15 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
 }
 
 /** Compact task row with expandable terminal content for parallel tasks */
-function CompactTaskRow({ task, index, terminalData }: {
+function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
   task: OrchestrationTask;
   index: number;
   terminalData?: { text: string; status: string };
+  onOpenTerminal?: (taskId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasTerminal = !!terminalData?.text;
   const isRunning = task.status === "running";
-
-  // Auto-expand running tasks that have terminal data
-  useEffect(() => {
-    if (isRunning && hasTerminal && !expanded) setExpanded(true);
-  }, [isRunning, hasTerminal]);
 
   return (
     <div>
@@ -322,7 +439,9 @@ function CompactTaskRow({ task, index, terminalData }: {
           task.status === "blocked" ? "opacity-30 text-gray-500" :
           "text-gray-500"
         }`}
-        onClick={() => hasTerminal && setExpanded(!expanded)}
+        onClick={() => {
+          if (hasTerminal) setExpanded(!expanded);
+        }}
       >
         <span className="flex-shrink-0 w-3.5 text-center">
           {task.status === "completed" ? (
@@ -340,12 +459,23 @@ function CompactTaskRow({ task, index, terminalData }: {
         <span className="flex-shrink-0">{ROLE_EMOJI[task.agentRole]}</span>
         <span className="truncate flex-1">{task.title}</span>
         {hasTerminal && (
-          <span className="flex-shrink-0 text-[8px] text-gray-500 ml-1">
-            {expanded ? "\u25BC" : "\u25B6"}
+          <span className="flex-shrink-0 flex items-center gap-1">
+            {onOpenTerminal && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpenTerminal(task.taskId); }}
+                className="text-[8px] text-gray-500 hover:text-violet-300 px-1 rounded transition-colors"
+                title="Open in terminal view"
+              >
+                {"\u2197"}
+              </button>
+            )}
+            <span className="text-[8px] text-gray-500">
+              {expanded ? "\u25BC" : "\u25B6"}
+            </span>
           </span>
         )}
       </div>
-      {/* Expandable terminal content */}
+      {/* Expandable inline terminal preview */}
       {expanded && hasTerminal && (
         <div className="ml-5 mt-0.5 mb-1 rounded-lg border border-gray-700/50 overflow-hidden">
           <TerminalContent
@@ -363,10 +493,14 @@ function CompactTaskRow({ task, index, terminalData }: {
 
 // ── Phase: Complete ──
 
-function CompletePhase({ plan }: { plan: OrchestrationPlan }) {
+function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskTerminals?: Record<string, { text: string; status: string }> }) {
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const failed = plan.tasks.filter((t) => t.status === "failed").length;
   const appTasks = plan.tasks.filter((t) => t.outputType === "app" && t.status === "completed");
+  const [showTerminals, setShowTerminals] = useState(false);
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+
+  const terminalTasks = plan.tasks.filter((t) => taskTerminals?.[t.taskId]?.text);
 
   return (
     <div>
@@ -408,6 +542,56 @@ function CompletePhase({ plan }: { plan: OrchestrationPlan }) {
           <TaskRow key={task.taskId} task={task} index={i} />
         ))}
       </div>
+
+      {/* Terminal history toggle */}
+      {terminalTasks.length > 0 && (
+        <div className="mt-3 pt-2 border-t border-gray-700/30">
+          <button
+            onClick={() => {
+              setShowTerminals(!showTerminals);
+              if (!activeTerminalId && terminalTasks.length > 0) {
+                setActiveTerminalId(terminalTasks[0].taskId);
+              }
+            }}
+            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            {showTerminals ? "\u25BC" : "\u25B6"} {terminalTasks.length} session log{terminalTasks.length !== 1 ? "s" : ""}
+          </button>
+
+          {showTerminals && (
+            <div className="mt-2">
+              <div className="flex gap-0.5 overflow-x-auto pb-1 mb-1 scrollbar-none">
+                {terminalTasks.map((task) => (
+                  <button
+                    key={task.taskId}
+                    onClick={() => setActiveTerminalId(task.taskId)}
+                    className={`flex items-center gap-1 whitespace-nowrap px-2 py-1 rounded-t-lg text-[9px] transition-all duration-150 flex-shrink-0 ${
+                      task.taskId === activeTerminalId
+                        ? "bg-[#0d1117] text-gray-200 border border-b-0 border-gray-700/60"
+                        : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/40"
+                    }`}
+                  >
+                    <span className="text-green-400">{"\u2713"}</span>
+                    <span>{ROLE_EMOJI[task.agentRole]}</span>
+                    <span className="max-w-[120px] truncate">{shortTitle(task.title)}</span>
+                  </button>
+                ))}
+              </div>
+              {activeTerminalId && taskTerminals?.[activeTerminalId] && (
+                <div className="rounded-lg border border-gray-700/50 overflow-hidden bg-[#0d1117]">
+                  <TerminalContent
+                    text={taskTerminals[activeTerminalId].text}
+                    status="complete"
+                    accentColor="violet"
+                    maxHeightClass="max-h-[400px]"
+                    showHeader={false}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -515,6 +699,25 @@ function TaskRow({ task, index, showDescription }: { task: OrchestrationTask; in
       </div>
     </div>
   );
+}
+
+// ── Helpers ──
+
+/** Shorten task titles for terminal tabs */
+function shortTitle(title: string): string {
+  // Strip "Phase N: " prefix
+  const stripped = title.replace(/^Phase \d+:\s*/, "");
+  // Strip long agent name prefixes like "James Rodriguez (Project Leader) — "
+  const dashIdx = stripped.indexOf(" \u2014 ");
+  if (dashIdx > 0 && dashIdx < 50) return stripped.slice(dashIdx + 3);
+  // Shorten common prefixes
+  return stripped
+    .replace(/^(Elena Vasquez|David Park|Aisha Rahman|James Rodriguez|Jordan Kim|Alex Chen|Sarah Thompson|Maya Patel)\s*(\([^)]*\))?\s*[\u2014\-]\s*/i, "")
+    .replace(/^(Re-Test|Retest)\s+/, "\u21BB ")
+    .replace(/^Build Evolution Dashboard.*/, "Dashboard")
+    .replace(/^Synthesis \+ Discussion.*/, "Synthesis")
+    .replace(/^Implementation Track\s*/, "Impl ")
+    .replace(/^Review & Validate.*/, "Review");
 }
 
 // ── Shared: Spinner ──

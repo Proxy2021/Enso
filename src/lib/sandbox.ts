@@ -20,6 +20,32 @@ interface CompileError {
   error: string;
 }
 
+/**
+ * Scan transformed code for top-level `var`, `const`, `let`, `function`, `class` declarations
+ * so we can skip them in the preamble and avoid "Identifier already declared" errors.
+ */
+function findDeclaredNames(code: string): Set<string> {
+  const names = new Set<string>();
+  // Match: var/const/let NAME, function NAME, class NAME (top-level-ish)
+  const re = /\b(?:var|const|let)\s+(?:\{[^}]*\}|(\w+))|(?:function|class)\s+(\w+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    if (m[1]) names.add(m[1]);
+    if (m[2]) names.add(m[2]);
+  }
+  // Also catch destructured names: var { Foo, Bar } = ...
+  const destructRe = /\b(?:var|const|let)\s+\{([^}]+)\}/g;
+  while ((m = destructRe.exec(code)) !== null) {
+    for (const part of m[1].split(",")) {
+      // Handle `Card: UICard` → UICard, or just `Badge` → Badge
+      const alias = part.includes(":") ? part.split(":")[1] : part;
+      const name = alias.trim();
+      if (/^\w+$/.test(name)) names.add(name);
+    }
+  }
+  return names;
+}
+
 export function compileComponent(jsxCode: string): CompileResult | CompileError {
   try {
     // Transform JSX to JS using Sucrase
@@ -39,6 +65,9 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
     const fnMatch = jsxCode.match(/function\s+(\w+)\s*\(/);
     const fnName = fnMatch?.[1] ?? "GeneratedUI";
 
+    // Scan the template code for names it already declares, so we skip them in preamble
+    const templateNames = findDeclaredNames(code);
+
     // Destructure Recharts, React hooks, and EnsoUI so generated code can use names directly
     // Dynamically destructure all Lucide icon components so templates can use <Atom />, <Monitor />, etc.
     // Lucide icons are forwardRef objects (not functions), exclude *Icon duplicates to keep it manageable
@@ -56,14 +85,45 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
     const lucideDestructure = Object.keys(LucideReact)
       .filter(k => /^[A-Z]/.test(k) && k !== "Icon"
         && !reservedNames.has(k)
+        && !templateNames.has(k)
         && typeof (LucideReact as Record<string, { render?: unknown }>)[k]?.render === "function")
       .join(", ");
 
+    // Build EnsoUI destructure, skipping any names the template already declares
+    const ensoUINames: Array<{ source: string; local: string }> = [
+      { source: "Tabs", local: "Tabs" },
+      { source: "Button", local: "Button" },
+      { source: "Badge", local: "Badge" },
+      { source: "Card", local: "UICard" },
+      { source: "Select", local: "Select" },
+      { source: "Input", local: "Input" },
+      { source: "Switch", local: "Switch" },
+      { source: "Slider", local: "Slider" },
+      { source: "Progress", local: "Progress" },
+      { source: "Accordion", local: "Accordion" },
+      { source: "Dialog", local: "Dialog" },
+      { source: "DataTable", local: "DataTable" },
+      { source: "Stat", local: "Stat" },
+      { source: "Separator", local: "Separator" },
+      { source: "EmptyState", local: "EmptyState" },
+    ];
+    const filteredEnsoUI = ensoUINames
+      .filter(({ local }) => !templateNames.has(local))
+      .map(({ source, local }) => source === local ? source : `${source}: ${local}`)
+      .join(", ");
+
+    // Similarly filter React hooks and Recharts
+    const reactNames = ["useState", "useEffect", "useMemo", "useCallback", "useRef", "Fragment"];
+    const filteredReact = reactNames.filter(n => !templateNames.has(n)).join(", ");
+
+    const rechartsNames = ["BarChart", "LineChart", "PieChart", "AreaChart", "RadarChart", "Bar", "Line", "Pie", "Area", "Radar", "XAxis", "YAxis", "CartesianGrid", "Tooltip", "Legend", "ResponsiveContainer", "Cell", "PolarGrid", "PolarAngleAxis", "PolarRadiusAxis", "ComposedChart", "Scatter", "RadialBarChart", "RadialBar", "Treemap", "Funnel", "FunnelChart"];
+    const filteredRecharts = rechartsNames.filter(n => !templateNames.has(n)).join(", ");
+
     const preamble = [
-      "const { useState, useEffect, useMemo, useCallback, useRef, Fragment } = React;",
-      "const { BarChart, LineChart, PieChart, AreaChart, RadarChart, Bar, Line, Pie, Area, Radar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ComposedChart, Scatter, RadialBarChart, RadialBar, Treemap, Funnel, FunnelChart } = Recharts;",
-      "const { Tabs, Button, Badge, Card: UICard, Select, Input, Switch, Slider, Progress, Accordion, Dialog, DataTable, Stat, Separator, EmptyState } = EnsoUI;",
-      "const Icons = LucideReact;",
+      filteredReact ? `const { ${filteredReact} } = React;` : "",
+      filteredRecharts ? `const { ${filteredRecharts} } = Recharts;` : "",
+      filteredEnsoUI ? `const { ${filteredEnsoUI} } = EnsoUI;` : "",
+      !templateNames.has("Icons") ? "const Icons = LucideReact;" : "",
       lucideDestructure ? `const { ${lucideDestructure} } = LucideReact;` : "",
     ].filter(Boolean).join("\n");
 

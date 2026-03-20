@@ -1049,9 +1049,9 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const isDeepBuilding = card.deepResearchStatus === "building";
   const isDeepBuildAppView = isDeepBuilding && card.viewMode === "app";
   const isOrchestration = card.type === "orchestration";
-  const orchHasTerminal = isOrchestration && !!card.buildTerminalText;
+  const orchHasTerminal = false; // Terminal tabs now built into OrchestrationCard itself
   const orchHasBespokeUI = isOrchestration && !!card.appGeneratedUI && card.enhanceStatus === "ready";
-  const orchShowTerminal = isOrchestration && card.viewMode === "app" && !orchHasBespokeUI && orchHasTerminal;
+  const orchShowTerminal = false; // Removed: OrchestrationCard has internal terminal tab view
   const orchShowBespoke = isOrchestration && card.viewMode === "app" && orchHasBespokeUI;
   const orchComplete = (() => {
     if (!isOrchestrationCardData(card.data)) return false;
@@ -1456,7 +1456,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
               {isShareable && card.status === "complete" && <ExportButton card={card} />}
               {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
-              {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasTerminal || orchHasBespokeUI) && <ViewToggle card={card} />}
+              {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasBespokeUI) && <ViewToggle card={card} />}
               {canEnhance && <EnhanceButton card={card} />}
               {statusLabel !== "ready" && (
                 <div className={`text-[10px] uppercase tracking-wide px-1.5 sm:px-2 py-0.5 rounded-full border ${statusTone}`}>
