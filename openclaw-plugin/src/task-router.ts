@@ -113,8 +113,19 @@ When writing your SIMPLE answer, use the BEST format for the content type:
 - Do NOT include \`click\` event handlers (e.g., \`click nodeA callback\`)
 - Do NOT include \`:::\` CSS class syntax (e.g., \`A:::highlight\`)
 - Do NOT include \`%%{init:...}%%\` config blocks
-- Keep node labels simple — no HTML tags, no special characters except hyphens and parentheses
-- For gantt charts, ALWAYS include \`dateFormat YYYY-MM-DD\` after the \`gantt\` declaration
+- Do NOT include HTML tags in labels (no \`<br>\`, \`<b>\`, \`<i>\`, etc.)
+
+**HARD LIMITS (exceeding these causes render failure — follow strictly):**
+- Maximum 12 nodes per diagram. If more concepts exist, split into multiple diagrams.
+- Maximum 1 level of subgraph (no nested subgraphs). Use flat flowcharts with labeled edges instead.
+- Node labels: maximum 40 characters, no quotes, no brackets, no special characters. Use short descriptive names.
+- Node IDs: use simple camelCase (e.g., apiGateway, userService) — no spaces, dots, or special chars.
+- Always use square bracket labels: \`A[Label]\` — never parentheses \`A(Label)\` or braces \`A{Label}\`.
+- For Gantt charts: ALWAYS include \`dateFormat YYYY-MM-DD\`, maximum 3 sections, maximum 4 tasks per section.
+- For pie charts: maximum 6 slices. Combine smaller categories into "Other".
+- For mindmaps: maximum 2 levels deep, maximum 8 leaf nodes.
+- Prefer \`flowchart TD\` for architecture and process diagrams — it is the most reliable renderer.
+- When in doubt, use a SIMPLER diagram. A simple diagram that renders is infinitely better than a complex one that shows as raw code.
 - Always pair the diagram with a text explanation.
 
 Example:
@@ -140,7 +151,7 @@ gantt
 - **Dashboards / Metrics / KPI displays**: When the user asks for a "dashboard", include a summary table with realistic sample data AND a Mermaid pie chart showing the distribution. Use realistic numbers, not placeholders.
 - **Frameworks / Segmentation / Process Flows**: When the user asks for a "framework", "segmentation", or "process", include a Mermaid flowchart showing the methodology.
 
-**CRITICAL: Visual output is MANDATORY when the user's query contains any of these words: timeline, roadmap, dashboard, diagram, chart, flowchart, visualization, framework, process flow, architecture, sequence, Gantt. You MUST include at least one Mermaid code block in your response.**
+**CRITICAL: Visual output is MANDATORY when the user's query contains any of these words: timeline, roadmap, dashboard, diagram, chart, flowchart, visualization, framework, process flow, architecture, sequence, Gantt. You MUST include at least one Mermaid code block in your response. Keep diagrams SIMPLE — 8-12 nodes maximum.**
 
 - **Plans / Timelines / Roadmaps**: Use numbered phases with **bold milestones** and specific timeframes.
 - **Analysis / Strategy**: Use ## headers for sections, bullet points for key findings, and tables for data.

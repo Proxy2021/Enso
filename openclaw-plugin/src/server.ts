@@ -1201,6 +1201,36 @@ export async function startEnsoServer(opts: {
                   category: "debug-report",
                 });
               }
+            // Direct researcher routing — /research slash command
+            } else if (msg.routing?.toolId === "researcher" && msg.text) {
+              runtime.log?.(`[enso] direct researcher: "${msg.text.slice(0, 60)}"`);
+              try {
+                await routeToResearch({
+                  topic: msg.text,
+                  depth: "standard",
+                  originalText: msg.text,
+                  sessionKey,
+                  client,
+                  account,
+                  config,
+                  runtime,
+                  connectionId,
+                });
+              } catch (researchErr) {
+                logError("task-router", "/research direct routing failed, falling through to agent", researchErr);
+                await handleEnsoInbound({
+                  message: {
+                    messageId: randomUUID(),
+                    sessionId: sessionKey,
+                    senderNick: `user_${connectionId}`,
+                    text: msg.text,
+                    mediaUrls: msg.mediaUrls,
+                    timestamp: Date.now(),
+                  },
+                  account, config, runtime, client,
+                  routing: msg.routing,
+                });
+              }
             } else if (msg.text && account.geminiApiKey && !msg.routing && account.mode !== "im") {
               // Smart task routing — auto-classify message complexity
               const processingRunId = randomUUID();

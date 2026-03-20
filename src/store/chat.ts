@@ -290,6 +290,37 @@ export const useChatStore = create<CardStore>((set, get) => ({
     // (e.g. terminal input sends with claude-code routing — text should
     // go to Claude Code as-is, not be intercepted as a slash command)
     if (!finalRouting) {
+      // "/help" command — show available commands locally
+      if (text.trim() === "/help") {
+        const id = uuidv4();
+        const now = Date.now();
+        const card: Card = {
+          id, runId: id, type: "chat", role: "assistant",
+          status: "complete", display: "expanded",
+          text: `## Available Commands
+
+| Command | Description |
+|---------|-------------|
+| **/research** <topic> | Deep research with live web sources |
+| **/code** [prompt] | Launch Claude Code AI engineer |
+| **/shell** | Open a remote terminal |
+| **/orchestrate** | Multi-agent parallel workflows |
+| **/projects** | Manage projects and AI teams |
+| **/evolve** | Run an evolution sprint |
+| **/tool enso** | Open the tool console |
+| **/evolution-history** | Browse past evolution sprints |
+| **/help** | Show this help card |
+
+**Tips:** Type / to see autocomplete suggestions. Attach files with +. Every response can become an app.`,
+          createdAt: now, updatedAt: now,
+        };
+        set((s) => ({
+          cardOrder: [...s.cardOrder, id],
+          cards: { ...s.cards, [id]: card },
+        }));
+        return;
+      }
+
       // "/delete-apps" command — delete all dynamically created apps
       if (text.trim() === "/delete-apps") {
         get().deleteAllApps();

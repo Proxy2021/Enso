@@ -1,37 +1,5 @@
 import { describe, it, expect } from "vitest";
-
-// Copy of sanitizeMermaidCode from src/components/MarkdownText.tsx for unit testing
-// Must match production code — includes E1 enhancement (CSS directive stripping)
-function sanitizeMermaidCode(code: string): string {
-  let clean = code;
-  // 1. Strip %%{init:...}%% directives (CSS themes, config overrides) — multiline-safe
-  clean = clean.replace(/%%\{init:[\s\S]*?\}%%/g, "");
-  // 2. Replace ALL <br> variants (case-insensitive, with/without slash/space)
-  clean = clean.replace(/<br\s*\/?>/gi, "\n");
-  // 3. Strip remaining HTML tags from node labels
-  clean = clean.replace(/<\/?[a-z][^>]*>/gi, "");
-  // 4. Strip CSS `style` directives (e.g., "style nodeA fill:#f9f,stroke:#333")
-  clean = clean.replace(/^\s*style\s+\S+\s+.+$/gm, "");
-  // 5. Strip `classDef` directives (e.g., "classDef error fill:#f99")
-  clean = clean.replace(/^\s*classDef\s+.+$/gm, "");
-  // 6. Strip `class` assignments (e.g., "class nodeA,nodeB error")
-  clean = clean.replace(/^\s*class\s+\S+[\s,]+\S+\s*$/gm, "");
-  // 7. Strip `linkStyle` directives (e.g., "linkStyle 0 stroke:#ff3")
-  clean = clean.replace(/^\s*linkStyle\s+.+$/gm, "");
-  // 8. Strip `click` event handlers (e.g., "click nodeA callback")
-  clean = clean.replace(/^\s*click\s+\S+\s+.+$/gm, "");
-  // 9. Remove 'direction' keyword inside subgraphs (mermaid 11.x doesn't support this)
-  clean = clean.replace(
-    /(subgraph\s[^\n]*\n)([\s\S]*?)(end\b)/g,
-    (match, open, body, close) => {
-      const cleanBody = body.replace(/^\s*direction\s+(TB|BT|LR|RL)\s*$/gm, "");
-      return open + cleanBody + close;
-    }
-  );
-  // 10. Trim whitespace per line, trim overall
-  clean = clean.split("\n").map(l => l.trimEnd()).join("\n").trim();
-  return clean;
-}
+import { sanitizeMermaidCode, autoRepairMermaid, extractMermaidOutline, checkMermaidComplexity, simplifyMermaidDiagram } from "../MarkdownText";
 
 describe("sanitizeMermaidCode", () => {
   it("passes through simple flowcharts unchanged", () => {
@@ -200,42 +168,6 @@ describe("sanitizeMermaidCode", () => {
   });
 });
 
-// Copy of autoRepairMermaid from src/components/MarkdownText.tsx for unit testing
-// When Track A exports this function, this copy can be replaced with an import
-function autoRepairMermaid(code: string): string {
-  let fixed = code;
-  // Fix 1: Remove unsupported "end" labels (e.g., "end SubgraphName" → "end")
-  fixed = fixed.replace(/^(\s*end)\s+\S.*$/gm, "$1");
-  // Fix 2: Remove empty node IDs (e.g., " --> " with no source)
-  fixed = fixed.replace(/^\s*-->\s/gm, "");
-  // Fix 3: Fix unterminated strings in labels — strip unclosed quotes
-  fixed = fixed.replace(/\["([^\]"]*?)$/gm, '["$1"]');
-  // Fix 4: Remove duplicate graph/flowchart declarations
-  const lines = fixed.split("\n");
-  let foundDecl = false;
-  fixed = lines.filter(line => {
-    if (/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie)\b/.test(line)) {
-      if (foundDecl) return false;
-      foundDecl = true;
-    }
-    return true;
-  }).join("\n");
-
-  // Fix 5: Normalize Gantt dateFormat — ensure it exists for gantt charts
-  if (/^\s*gantt\b/m.test(fixed) && !/dateFormat/m.test(fixed)) {
-    fixed = fixed.replace(/^(\s*gantt\b.*)$/m, "$1\n    dateFormat YYYY-MM-DD");
-  }
-
-  // Fix 6: Case-insensitive diagram type normalization
-  fixed = fixed.replace(/^(\s*)(flowChart)(\s)/m, "$1flowchart$3");
-  fixed = fixed.replace(/^(\s*)(sequencediagram)(\s)/mi, "$1sequenceDiagram$3");
-  fixed = fixed.replace(/^(\s*)(classdiagram)(\s)/mi, "$1classDiagram$3");
-  fixed = fixed.replace(/^(\s*)(statediagram-v2)(\s)/mi, "$1stateDiagram-v2$3");
-  fixed = fixed.replace(/^(\s*)(erdiagram)(\s)/mi, "$1erDiagram$3");
-
-  return fixed;
-}
-
 describe("autoRepairMermaid", () => {
   // PF-05: Gantt chart with missing dateFormat → auto-repair adds it
   it("PF-05: adds dateFormat to gantt charts when missing", () => {
@@ -280,5 +212,252 @@ describe("autoRepairMermaid", () => {
     const repaired = autoRepairMermaid(source);
     expect(repaired).toContain("dateFormat");
     expect(repaired).toContain("gantt");
+  });
+
+  // E1 Sprint 12: Mind map repair strips wrapping delimiters
+  it("strips wrapping delimiters from mindmap labels", () => {
+    const input = `mindmap\n  root((Project))\n    Planning\n    Development`;
+    const result = autoRepairMermaid(input);
+    expect(result).toContain("mindmap");
+    expect(result).not.toContain("((");
+    expect(result).not.toContain("))");
+    expect(result).toContain("Project");
+  });
+
+  // E1 Sprint 12: Timeline auto-adds title
+  it("adds title to timeline when missing", () => {
+    const input = `timeline\n    2026-Q1 : MVP Launch\n    2026-Q2 : Beta`;
+    const result = autoRepairMermaid(input);
+    expect(result).toContain("title Timeline");
+    expect(result).toContain("timeline");
+  });
+
+  it("does NOT add title to timeline when already present", () => {
+    const input = `timeline\n    title My Timeline\n    2026-Q1 : MVP`;
+    const result = autoRepairMermaid(input);
+    const matches = result.match(/title/g);
+    expect(matches).toHaveLength(1);
+  });
+});
+
+// ── Parse-Validation Tests (E4): validate sanitized output is syntactically correct ──
+
+describe("sanitizeMermaidCode — diagram type coverage", () => {
+  it("MR-01: flowchart with CSS styles produces clean output", () => {
+    const input = `flowchart TD\n    A-->B\n    style A fill:#f9f,stroke:#333,stroke-width:2px`;
+    const result = sanitizeMermaidCode(input);
+    expect(result).toContain("flowchart TD");
+    expect(result).toContain("A-->B");
+    expect(result).not.toMatch(/style\s+\S+\s+fill/);
+  });
+
+  it("MR-02: architecture diagram with subgraphs + style directives sanitizes cleanly", () => {
+    const input = `flowchart TD
+    subgraph API["API Layer"]
+        A[Gateway] --> B[Auth]
+        A --> C[Users]
+    end
+    style A fill:#f9f,stroke:#333
+    classDef highlight fill:#f96
+    class B highlight`;
+    const result = sanitizeMermaidCode(input);
+    expect(result).toContain("subgraph");
+    expect(result).toContain("A[Gateway] --> B[Auth]");
+    expect(result).not.toMatch(/^\s*style\s/m);
+    expect(result).not.toMatch(/^\s*classDef\s/m);
+    expect(result).not.toMatch(/^\s*class\s/m);
+  });
+
+  it("MR-03: mindmap passes through with labels intact", () => {
+    const input = `mindmap\n  root((Project))\n    Planning\n    Development`;
+    const result = sanitizeMermaidCode(input);
+    expect(result).toContain("mindmap");
+    expect(result.split("\n").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("MR-04: pie chart with style directive strips CSS, preserves data", () => {
+    const input = `pie title Budget\n    "Engineering" : 45\n    "Marketing" : 30\n    style a1 fill:#f88`;
+    const result = sanitizeMermaidCode(input);
+    expect(result).toContain("pie title Budget");
+    expect(result).toContain('"Engineering" : 45');
+    expect(result).not.toMatch(/style\s+\S+\s+fill/);
+  });
+
+  it("MR-05: sequenceDiagram passes through unchanged", () => {
+    const input = `sequenceDiagram\n    A->>B: Hello\n    B-->>A: Hi`;
+    const result = sanitizeMermaidCode(input);
+    expect(result).toBe(input);
+  });
+
+  it("MR-06: gantt without dateFormat gets auto-repaired", () => {
+    const input = `gantt\n    section Phase 1\n    Task :a1, 2025-01-01, 30d`;
+    const result = autoRepairMermaid(sanitizeMermaidCode(input));
+    expect(result).toContain("dateFormat YYYY-MM-DD");
+  });
+
+  it("MR-07: flowChart (wrong case) gets normalized", () => {
+    const input = `flowChart TD\n    A-->B`;
+    const result = autoRepairMermaid(sanitizeMermaidCode(input));
+    expect(result).toMatch(/^flowchart TD/m);
+  });
+
+  it("MR-08: %%{init}%% theme directive is stripped", () => {
+    const input = `%%{init: {'theme':'dark'}}%%\nflowchart TD\n    A-->B`;
+    const result = sanitizeMermaidCode(input);
+    expect(result).not.toContain("%%{init");
+    expect(result).toContain("flowchart TD");
+    expect(result).toContain("A-->B");
+  });
+
+  it("MR-09: :::className inline styling is stripped", () => {
+    const input = `flowchart TD\n    A:::highlight --> B`;
+    const result = sanitizeMermaidCode(input);
+    expect(result).not.toContain(":::");
+    expect(result).toContain("A");
+    expect(result).toContain("B");
+  });
+
+  it("MR-10: empty mermaid code handled gracefully", () => {
+    const result = sanitizeMermaidCode("");
+    expect(result).toBeDefined();
+    expect(typeof result).toBe("string");
+  });
+});
+
+// ── E2: extractMermaidOutline tests ──
+
+describe("extractMermaidOutline", () => {
+  it("extracts node labels from a flowchart", () => {
+    const code = `flowchart TD\n    A[Gateway]\n    B[Auth Service]\n    C[Database]\n    A --> B\n    B --> C`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.title).toBe("Flowchart Overview");
+    expect(outline.items).toContain("Gateway");
+    expect(outline.items).toContain("Auth Service");
+    expect(outline.items).toContain("Database");
+  });
+
+  it("extracts subgraph labels", () => {
+    const code = `flowchart TD\n    subgraph "API Layer"\n        A[Gateway]\n    end`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.items).toContain("[API Layer]");
+  });
+
+  it("extracts pie chart labels", () => {
+    const code = `pie title Budget\n    "Engineering" : 45\n    "Marketing" : 30`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.title).toBe("Budget");
+    expect(outline.items).toContain("Engineering");
+    expect(outline.items).toContain("Marketing");
+  });
+
+  it("extracts Gantt section headers", () => {
+    const code = `gantt\n    dateFormat YYYY-MM-DD\n    section Planning\n    Requirements :a1, 2025-01-01, 30d`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.items).toContain("**Planning**");
+  });
+
+  it("extracts timeline events", () => {
+    const code = `timeline\n    title Product Roadmap\n    2026-Q1 : MVP Launch\n    2026-Q2 : Beta Release`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.title).toBe("Product Roadmap");
+    expect(outline.items.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("returns empty items for unrecognizable content", () => {
+    const code = `flowchart TD`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.items).toHaveLength(0);
+  });
+
+  it("deduplicates labels", () => {
+    const code = `flowchart TD\n    A[Gateway] --> B[Service]\n    C[Gateway] --> D[Other]`;
+    const outline = extractMermaidOutline(code);
+    const gatewayCount = outline.items.filter(i => i === "Gateway").length;
+    expect(gatewayCount).toBeLessThanOrEqual(1);
+  });
+
+  it("caps output at 20 items", () => {
+    const nodes = Array.from({ length: 30 }, (_, i) => `    N${i}[Node ${i} Label]`).join("\n");
+    const code = `flowchart TD\n${nodes}`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.items.length).toBeLessThanOrEqual(20);
+  });
+
+  it("uses title line when present in non-pie diagram", () => {
+    const code = `gantt\n    title Sprint Plan\n    dateFormat YYYY-MM-DD`;
+    const outline = extractMermaidOutline(code);
+    expect(outline.title).toBe("Sprint Plan");
+  });
+});
+
+// ── E4: checkMermaidComplexity tests ──
+
+describe("checkMermaidComplexity", () => {
+  it("counts nodes in a simple flowchart", () => {
+    const code = `flowchart TD\n    A[Start] --> B[End]`;
+    const result = checkMermaidComplexity(code);
+    expect(result.nodes).toBeGreaterThanOrEqual(2);
+    expect(result.edges).toBeGreaterThanOrEqual(1);
+    expect(result.overBudget).toBe(false);
+  });
+
+  it("detects overBudget for >20 nodes", () => {
+    const nodes = Array.from({ length: 25 }, (_, i) => `    N${i}[Node${i}]`).join("\n");
+    const code = `flowchart TD\n${nodes}`;
+    const result = checkMermaidComplexity(code);
+    expect(result.nodes).toBeGreaterThan(20);
+    expect(result.overBudget).toBe(true);
+  });
+
+  it("detects overBudget for >3 subgraphs", () => {
+    const code = `flowchart TD\n    subgraph A\n        a1[X]\n    end\n    subgraph B\n        b1[Y]\n    end\n    subgraph C\n        c1[Z]\n    end\n    subgraph D\n        d1[W]\n    end`;
+    const result = checkMermaidComplexity(code);
+    expect(result.subgraphs).toBe(4);
+    expect(result.overBudget).toBe(true);
+  });
+
+  it("passes diagrams under budget through", () => {
+    const code = `flowchart TD\n    A[One] --> B[Two] --> C[Three]`;
+    const result = checkMermaidComplexity(code);
+    expect(result.overBudget).toBe(false);
+  });
+
+  it("counts edge-only referenced nodes", () => {
+    const code = `flowchart TD\n    A --> B\n    B --> C`;
+    const result = checkMermaidComplexity(code);
+    expect(result.nodes).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ── E4: simplifyMermaidDiagram tests ──
+
+describe("simplifyMermaidDiagram", () => {
+  it("removes nested subgraphs", () => {
+    const code = `flowchart TD\n    subgraph Outer\n        subgraph Inner\n            A[Node]\n        end\n    end`;
+    const result = simplifyMermaidDiagram(code);
+    expect(result).toContain("subgraph Outer");
+    expect(result).not.toContain("subgraph Inner");
+  });
+
+  it("preserves diagram type declaration", () => {
+    const nodes = Array.from({ length: 25 }, (_, i) => `    N${i}[Node${i}]`).join("\n");
+    const code = `flowchart TD\n${nodes}`;
+    const result = simplifyMermaidDiagram(code);
+    expect(result).toContain("flowchart TD");
+  });
+
+  it("truncates to at most 18 body lines", () => {
+    const nodes = Array.from({ length: 25 }, (_, i) => `    N${i}[Node${i}]`).join("\n");
+    const code = `flowchart TD\n${nodes}`;
+    const result = simplifyMermaidDiagram(code);
+    const bodyLines = result.split("\n").filter(l => !l.trim().startsWith("flowchart"));
+    expect(bodyLines.length).toBeLessThanOrEqual(18);
+  });
+
+  it("passes small diagrams through mostly unchanged", () => {
+    const code = `flowchart TD\n    A[Start] --> B[End]`;
+    const result = simplifyMermaidDiagram(code);
+    expect(result).toContain("A[Start]");
+    expect(result).toContain("B[End]");
   });
 });

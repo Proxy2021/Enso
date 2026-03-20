@@ -23,6 +23,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { command: "/shell", label: "/shell", description: "Open a remote terminal", icon: "\uD83D\uDDA5\uFE0F" },
   { command: "/tool enso", label: "/tool enso", description: "Open the tool console", icon: "\uD83D\uDD27" },
   { command: "/delete-apps", label: "/delete-apps", description: "Delete all dynamic apps", icon: "\uD83D\uDDD1\uFE0F" },
+  { command: "/help", label: "/help", description: "Show available commands and features", icon: "\u2753" },
 ];
 
 const ATTACH_CATEGORIES = [

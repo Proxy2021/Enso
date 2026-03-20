@@ -147,9 +147,20 @@ export default function WelcomeCard() {
         </div>
       </div>
 
-      <p className="text-[10px] text-gray-600 mt-4">
-        Type / for slash commands &middot; Attach files with + &middot; Every response can become an app
-      </p>
+      <div className="mt-4 px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 max-w-lg w-full">
+        <p className="text-xs text-gray-400 text-center">
+          <span className="text-gray-300 font-medium">/research</span> deep research
+          <span className="mx-1.5 text-gray-600">&middot;</span>
+          <span className="text-gray-300 font-medium">/code</span> AI engineer
+          <span className="mx-1.5 text-gray-600">&middot;</span>
+          <span className="text-gray-300 font-medium">/shell</span> terminal
+          <span className="mx-1.5 text-gray-600">&middot;</span>
+          <span className="text-gray-300 font-medium">/orchestrate</span> multi-agent
+        </p>
+        <p className="text-[10px] text-gray-500 text-center mt-1">
+          Type / to see all commands &middot; Attach files with +
+        </p>
+      </div>
     </div>
   );
 }

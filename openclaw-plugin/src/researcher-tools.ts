@@ -949,6 +949,82 @@ function deduplicateAndScore(batches: BraveWebResult[][]): Source[] {
   }).sort((a, b) => b.relevance - a.relevance);
 }
 
+// ── Content-level deduplication (post-synthesis) ──
+
+const DEDUP_SIMILARITY_THRESHOLD = 0.7;
+
+/** Build word trigrams from text */
+export function buildTrigrams(text: string): Set<string> {
+  const words = text.replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
+  const trigrams = new Set<string>();
+  for (let i = 0; i <= words.length - 3; i++) {
+    trigrams.add(words.slice(i, i + 3).join(" "));
+  }
+  return trigrams;
+}
+
+/** Jaccard similarity between two trigram sets */
+export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 0;
+  let intersection = 0;
+  for (const trigram of a) {
+    if (b.has(trigram)) intersection++;
+  }
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
+ * Post-synthesis content deduplication.
+ * Detects and removes duplicate sections when Phase A narrative and Phase B sections overlap.
+ * Uses word trigram Jaccard similarity to detect near-duplicates.
+ */
+export function deduplicateSynthesisContent(
+  narrative: string,
+  sections: Array<{ title: string; summary: string; bullets: string[]; sourceRefs: number[] }>
+): Array<{ title: string; summary: string; bullets: string[]; sourceRefs: number[] }> {
+  if (!narrative || sections.length === 0) return sections;
+
+  // Build trigrams from narrative paragraphs
+  const narrativeParagraphs = narrative.split(/\n\n+/).filter(p => p.trim().length > 50);
+  const narrativeTrigrams = narrativeParagraphs.map(p => buildTrigrams(p.toLowerCase()));
+
+  // Check each section for overlap with narrative
+  const dedupedSections = sections.filter(section => {
+    const sectionText = [section.summary, ...section.bullets].join(" ").toLowerCase();
+    if (sectionText.length < 50) return true; // Keep short sections
+
+    const sectionTrigrams = buildTrigrams(sectionText);
+
+    // Check against each narrative paragraph
+    for (const narTrigrams of narrativeTrigrams) {
+      const similarity = jaccardSimilarity(sectionTrigrams, narTrigrams);
+      if (similarity > DEDUP_SIMILARITY_THRESHOLD) return false; // Drop near-duplicate section
+    }
+    return true;
+  });
+
+  // Also deduplicate sections against each other
+  const finalSections: typeof sections = [];
+  for (const section of dedupedSections) {
+    const sectionText = [section.title, section.summary, ...section.bullets].join(" ").toLowerCase();
+    const sectionTrigrams = buildTrigrams(sectionText);
+
+    let isDupe = false;
+    for (const existing of finalSections) {
+      const existingText = [existing.title, existing.summary, ...existing.bullets].join(" ").toLowerCase();
+      const existingTrigrams = buildTrigrams(existingText);
+      if (jaccardSimilarity(sectionTrigrams, existingTrigrams) > DEDUP_SIMILARITY_THRESHOLD) {
+        isDupe = true;
+        break;
+      }
+    }
+    if (!isDupe) finalSections.push(section);
+  }
+
+  return finalSections;
+}
+
 // ── LLM Synthesis prompts ──
 
 /** Build shared source context string for both synthesis phases */
@@ -1837,7 +1913,13 @@ If the research is already comprehensive, return: { "gaps": [] }`;
         sourceRefs: clampRefs(c.sourceRefs),
       }));
 
-    // Push complete results with all Phase B data
+    // Deduplicate sections against narrative before pushing
+    const dedupedSections = deduplicateSynthesisContent(
+      typedA.narrative ?? "",
+      sections
+    );
+
+    // Push complete results with deduplicated Phase B data
     pushProgress({
       tool: "enso_researcher_search",
       topic,
@@ -1847,7 +1929,7 @@ If the research is already comprehensive, return: { "gaps": [] }`;
       summary: typedA.summary ?? "",
       narrative: typedA.narrative ?? "",
       keyFindings,
-      sections,
+      sections: dedupedSections,
       sources: sources.slice(0, 25),
       images,
       videos,
@@ -1961,6 +2043,12 @@ Only include genuinely new information. If gap sources don't add meaningful new 
       mark("gap_done");
     }
 
+    // Re-deduplicate sections after gap merge may have updated narrative
+    const finalSections = deduplicateSynthesisContent(
+      typedA.narrative ?? "",
+      sections
+    );
+
     const result = {
       tool: "enso_researcher_search",
       topic,
@@ -1969,7 +2057,7 @@ Only include genuinely new information. If gap sources don't add meaningful new 
       summary: typedA.summary ?? "",
       narrative: typedA.narrative ?? "",
       keyFindings,
-      sections,
+      sections: finalSections,
       sources: sources.slice(0, 25),
       images,
       videos,

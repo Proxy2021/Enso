@@ -198,7 +198,7 @@ function autoRepairMermaid(code: string): string {
   const lines = fixed.split("\n");
   let foundDecl = false;
   fixed = lines.filter(line => {
-    if (/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie)\b/.test(line)) {
+    if (/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|quadrantChart|block-beta)\b/.test(line)) {
       if (foundDecl) return false;
       foundDecl = true;
     }
@@ -214,10 +214,169 @@ function autoRepairMermaid(code: string): string {
   fixed = fixed.replace(/^(\s*)(classdiagram)(\s)/mi, "$1classDiagram$3");
   fixed = fixed.replace(/^(\s*)(statediagram-v2)(\s)/mi, "$1stateDiagram-v2$3");
   fixed = fixed.replace(/^(\s*)(erdiagram)(\s)/mi, "$1erDiagram$3");
+
+  // Fix 7: Mind map repairs — strip special characters from labels, fix indentation
+  if (/^\s*mindmap\b/m.test(fixed)) {
+    fixed = fixed.split("\n").map(line => {
+      // Strip characters that break mindmap parser: (), [], {}, <>, `, #, @
+      if (!/^\s*mindmap\b/.test(line) && line.trim().length > 0) {
+        // Preserve indentation, clean label text
+        const indent = line.match(/^(\s*)/)?.[1] ?? "";
+        let label = line.trim();
+        // Remove wrapping delimiters that confuse mindmap: ((text)), [text], {text}
+        label = label.replace(/^\(\((.+?)\)\)$/, "$1");
+        label = label.replace(/^\[(.+?)\]$/, "$1");
+        label = label.replace(/^\{(.+?)\}$/, "$1");
+        // Strip remaining special chars that crash parser
+        label = label.replace(/[`#@<>{}[\]()]/g, "");
+        // Collapse multiple spaces
+        label = label.replace(/\s{2,}/g, " ").trim();
+        return label ? indent + label : "";
+      }
+      return line;
+    }).filter(l => l.trim().length > 0 || /^\s*mindmap\b/.test(l)).join("\n");
+  }
+
+  // Fix 8: Timeline repairs — ensure title exists
+  if (/^\s*timeline\b/m.test(fixed) && !/^\s*title\b/m.test(fixed)) {
+    fixed = fixed.replace(/^(\s*timeline\b.*)$/m, "$1\n    title Timeline");
+  }
+
+  // Fix 9: Pie chart repairs — validate label:value pairs, strip style lines
+  if (/^\s*pie\b/m.test(fixed)) {
+    fixed = fixed.split("\n").map(line => {
+      // Fix pie data lines: ensure "Label" : value format
+      const pieDataMatch = line.match(/^\s*"([^"]+)"\s*:\s*(\d+(?:\.\d+)?)/);
+      if (pieDataMatch) return `    "${pieDataMatch[1]}" : ${pieDataMatch[2]}`;
+      return line;
+    }).join("\n");
+  }
+
   return fixed;
 }
 
 export { sanitizeMermaidCode, autoRepairMermaid };
+
+/** Extract a human-readable outline from Mermaid diagram source code */
+function extractMermaidOutline(code: string): { title: string; items: string[] } {
+  const lines = code.split("\n").map(l => l.trim()).filter(Boolean);
+  const typeMatch = lines[0]?.match(/^\s*(flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|quadrantChart)/);
+  const diagramType = typeMatch?.[1] ?? "Diagram";
+  const titleLine = lines.find(l => /^\s*title\s+/i.test(l)) ?? lines.find(l => /^\s*pie\s+title\s+/i.test(l));
+  const title = titleLine
+    ? titleLine.replace(/^\s*(?:pie\s+)?title\s+/i, "").trim()
+    : `${diagramType.charAt(0).toUpperCase() + diagramType.slice(1)} Overview`;
+
+  const items: string[] = [];
+  for (const line of lines) {
+    // Extract node labels: A["Label"], A[Label], A(Label), A{Label}
+    const nodeMatch = line.match(/\w+\s*[\[("{\(]+"?([^"\]\)}>]+)"?\s*[\]"\)}>]/);
+    if (nodeMatch && nodeMatch[1]?.trim()) {
+      const label = nodeMatch[1].trim();
+      if (label.length > 2 && label.length < 80 && !items.includes(label)) {
+        items.push(label);
+      }
+    }
+    // Extract subgraph labels: subgraph "Label" or subgraph Label
+    const subMatch = line.match(/^\s*subgraph\s+"?([^"\n]+)"?\s*$/);
+    if (subMatch && subMatch[1]?.trim()) {
+      items.push(`[${subMatch[1].trim()}]`);
+    }
+    // Extract Gantt task labels
+    const ganttMatch = line.match(/^\s*([^:]+?)\s*:[^,]*,/);
+    if (ganttMatch && diagramType === "gantt" && ganttMatch[1]?.trim().length > 2) {
+      const label = ganttMatch[1].trim();
+      if (!label.startsWith("section") && !items.includes(label)) {
+        items.push(label);
+      }
+    }
+    // Extract section headers for Gantt
+    const sectionMatch = line.match(/^\s*section\s+(.+)$/);
+    if (sectionMatch) {
+      items.push(`**${sectionMatch[1].trim()}**`);
+    }
+    // Extract timeline events
+    if (diagramType === "timeline" && !line.startsWith("timeline") && !line.startsWith("title")) {
+      const timelineLabel = line.replace(/^\s*/, "").trim();
+      if (timelineLabel.length > 2) items.push(timelineLabel);
+    }
+    // Extract pie labels
+    const pieMatch = line.match(/^\s*"([^"]+)"\s*:/);
+    if (pieMatch && diagramType === "pie") {
+      items.push(pieMatch[1].trim());
+    }
+  }
+  return { title, items: items.slice(0, 20) };
+}
+
+/** Count nodes and edges in a Mermaid diagram to assess render complexity */
+function checkMermaidComplexity(code: string): { nodes: number; edges: number; subgraphs: number; overBudget: boolean } {
+  const lines = code.split("\n");
+  let nodes = 0, edges = 0, subgraphs = 0;
+  const seenIds = new Set<string>();
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^subgraph\b/.test(trimmed)) { subgraphs++; continue; }
+    if (/-->|==>|-\.->|---/.test(trimmed)) edges++;
+    const nodeMatch = trimmed.match(/^(\w+)\s*[\[("{\(]/);
+    if (nodeMatch && !seenIds.has(nodeMatch[1])) {
+      seenIds.add(nodeMatch[1]);
+      nodes++;
+    }
+    const edgeNodes = trimmed.match(/(\w+)\s*(?:-->|==>|-\.->)/g);
+    if (edgeNodes) {
+      for (const m of edgeNodes) {
+        const id = m.replace(/\s*(?:-->|==>|-\.->)/, "").trim();
+        if (id && !seenIds.has(id)) { seenIds.add(id); nodes++; }
+      }
+    }
+    // Also capture destination nodes after arrows
+    const destNodes = trimmed.match(/(?:-->|==>|-\.->)\s*(?:\|[^|]*\|)?\s*(\w+)/g);
+    if (destNodes) {
+      for (const m of destNodes) {
+        const id = m.replace(/(?:-->|==>|-\.->)\s*(?:\|[^|]*\|)?\s*/, "").trim();
+        if (id && !seenIds.has(id)) { seenIds.add(id); nodes++; }
+      }
+    }
+  }
+
+  const MAX_NODES = 20;
+  const MAX_SUBGRAPHS = 3;
+  const overBudget = nodes > MAX_NODES || subgraphs > MAX_SUBGRAPHS;
+
+  return { nodes, edges, subgraphs, overBudget };
+}
+
+/** Auto-simplify a Mermaid diagram by removing nested subgraphs and truncating */
+function simplifyMermaidDiagram(code: string): string {
+  let lines = code.split("\n");
+
+  // Step 1: Remove nested subgraphs (keep only top-level)
+  let depth = 0;
+  lines = lines.filter(line => {
+    const trimmed = line.trim();
+    if (/^subgraph\b/.test(trimmed)) {
+      depth++;
+      return depth <= 1;
+    }
+    if (trimmed === "end" && depth > 0) {
+      const keep = depth <= 1;
+      depth--;
+      return keep;
+    }
+    return true;
+  });
+
+  // Step 2: Limit to first 18 meaningful lines (nodes + edges)
+  const header = lines.filter(l => /^\s*(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline)\b/.test(l.trim()));
+  const body = lines.filter(l => !header.includes(l) && l.trim().length > 0);
+  const truncated = [...header, ...body.slice(0, 18)];
+
+  return truncated.join("\n");
+}
+
+export { extractMermaidOutline, checkMermaidComplexity, simplifyMermaidDiagram };
 
 let mermaidIdCounter = 0;
 function MermaidDiagram({ code }: { code: string }) {
@@ -240,25 +399,51 @@ function MermaidDiagram({ code }: { code: string }) {
         document.body.appendChild(tempContainer);
         try {
           const sanitized = sanitizeMermaidCode(code);
+          // Pre-render complexity check
+          const complexity = checkMermaidComplexity(sanitized);
+          let renderCode = sanitized;
+          if (complexity.overBudget) {
+            renderCode = simplifyMermaidDiagram(sanitized);
+          }
           // Pre-validate syntax before rendering
           try {
-            await m.parse(sanitized);
+            await m.parse(renderCode);
           } catch (parseErr: any) {
             // Attempt auto-repair: common LLM mistakes
-            const repaired = autoRepairMermaid(sanitized);
-            if (repaired !== sanitized) {
+            const repaired = autoRepairMermaid(renderCode);
+            if (repaired !== renderCode) {
               try {
                 await m.parse(repaired);
                 const { svg } = await m.render(id, repaired);
                 if (!cancelled) setSvgHtml(svg);
                 return;
               } catch {
-                // Repair didn't help — fall through to original error
+                // Repair didn't help — fall through to fallback
+              }
+            }
+            // Try converting failed mindmap to a simple flowchart as fallback
+            if (/^\s*mindmap\b/m.test(renderCode)) {
+              try {
+                const mindmapLines = renderCode.split("\n").filter(l => l.trim() && !/^\s*mindmap\b/.test(l));
+                const sanitizeLabel = (s: string) => s.replace(/["[\]]/g, "'");
+                const root = mindmapLines[0]?.trim() ?? "Root";
+                const children = mindmapLines.slice(1).map(l => l.trim()).filter(Boolean);
+                let fallback = `flowchart TD\n    ROOT["${sanitizeLabel(root)}"]`;
+                children.forEach((child, i) => {
+                  fallback += `\n    N${i}["${sanitizeLabel(child)}"]`;
+                  fallback += `\n    ROOT --> N${i}`;
+                });
+                await m.parse(fallback);
+                const { svg } = await m.render(id, fallback);
+                if (!cancelled) setSvgHtml(svg);
+                return;
+              } catch {
+                // Fallback also failed — continue to error display
               }
             }
             throw parseErr;
           }
-          const { svg } = await m.render(id, sanitized);
+          const { svg } = await m.render(id, renderCode);
           if (!cancelled) setSvgHtml(svg);
         } catch (e: any) {
           if (!cancelled) setError(e?.message || "Diagram render failed");
@@ -274,10 +459,11 @@ function MermaidDiagram({ code }: { code: string }) {
   }, [code]);
 
   if (error) {
+    const outline = extractMermaidOutline(code);
     return (
       <div className="bg-gray-900 rounded-md my-1.5 border border-gray-700/50 overflow-hidden">
         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800/60 border-b border-gray-700/50">
-          <span className="text-[10px] text-gray-500">Diagram (render failed)</span>
+          <span className="text-[10px] text-gray-500">{outline.title}</span>
           <button
             onClick={() => navigator.clipboard.writeText(code)}
             className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors"
@@ -285,9 +471,20 @@ function MermaidDiagram({ code }: { code: string }) {
             Copy Mermaid
           </button>
         </div>
-        <pre className="px-3 py-2 text-xs overflow-x-auto text-gray-300">
-          <code>{code}</code>
-        </pre>
+        {outline.items.length > 0 ? (
+          <ul className="px-3 py-2 text-xs text-gray-300 space-y-0.5">
+            {outline.items.map((item, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <span className="text-gray-600 mt-0.5 shrink-0">•</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <pre className="px-3 py-2 text-xs overflow-x-auto text-gray-300">
+            <code>{code}</code>
+          </pre>
+        )}
       </div>
     );
   }
