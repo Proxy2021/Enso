@@ -290,7 +290,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
 
       // "/orchestrate" command — launch orchestrator
-      if (text.trim() === "/orchestrate") {
+      // "/orchestrate <goal>" — launch with pre-populated goal
+      if (text.trim() === "/orchestrate" || text.trim().startsWith("/orchestrate ")) {
+        const goal = text.trim().startsWith("/orchestrate ")
+          ? text.trim().slice("/orchestrate ".length).trim()
+          : "";
         const id = uuidv4();
         const now = Date.now();
         const card: Card = {
@@ -302,6 +306,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           display: "expanded",
           createdAt: now,
           updatedAt: now,
+          data: goal ? { orchestrationGoal: goal } : undefined,
         };
         set((s) => ({
           cardOrder: [...s.cardOrder, id],
@@ -359,6 +364,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
         get().launchShell(shellCommand);
         return;
       }
+
+      // "/research <topic>" — route directly to researcher tool
+      if (text.trim().startsWith("/research ")) {
+        const topic = text.trim().slice("/research ".length).trim();
+        if (topic) {
+          displayText = topic;
+          finalRouting = { mode: "direct_tool", toolId: "researcher" };
+        }
+      }
+      // bare "/research" with no topic falls through to normal message path
 
       // Bare "/code" opens project picker
       if (text.trim() === "/code") {

@@ -5,7 +5,7 @@
  * Legacy fallback: ~/.openclaw/enso-evolution/<sprintId>/
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync, rmSync } from "fs";
 import { join, basename } from "path";
 import { logAction, logError } from "./action-log.js";
 
@@ -40,6 +40,19 @@ function getSprintsDir(projectId: string): string {
 }
 
 // ── Archive ──
+
+function determineSprintStatus(
+  allFiles: string[],
+  hasSynthesis: boolean,
+  hasImplementation: boolean,
+  hasReview: boolean,
+): "completed" | "failed" | "partial" {
+  if (allFiles.length === 0) return "failed";
+  // Core engineering phases must all complete for "completed" status
+  if (hasSynthesis && hasImplementation && hasReview) return "completed";
+  // Some files exist but key phases missing
+  return "partial";
+}
 
 /**
  * Archive an evolution sprint — copies all `.evolution-*` and `.orchestration-ui.jsx`
@@ -90,7 +103,7 @@ export function archiveEvolutionSprint(
           f.startsWith(".orchestration-output-")
         );
         for (const f of files) allRootFiles.push({ file: f, srcDir: dir });
-      } catch { /* skip unreadable dirs */ }
+      } catch (err) { logError("evolution-archive", "Failed to scan directory " + dir, err); }
     }
 
     for (const { file, srcDir } of allRootFiles) {
@@ -100,7 +113,7 @@ export function archiveEvolutionSprint(
       // Skip directories and non-files
       try {
         if (!statSync(srcPath).isFile()) continue;
-      } catch { continue; }
+      } catch (err) { logError("evolution-archive", "Failed to stat " + file, err); continue; }
 
       // Determine destination
       let destName: string;
@@ -165,21 +178,23 @@ export function archiveEvolutionSprint(
         copyFileSync(srcPath, destPath);
         validationFiles.push(`validation/${destName}`);
         allFiles.push(`validation/${destName}`);
-      } catch { /* skip */ }
+      } catch (err) { logError("evolution-archive", "Failed to copy retest file " + file, err); }
     }
 
     // Also check for team agent reports (.evolution-team-*.md)
     const teamFiles: string[] = [];
     mkdirSync(join(sprintDir, "team"), { recursive: true });
-    for (const file of rootFiles) {
+    for (const { file, srcDir } of allRootFiles) {
       if (file.startsWith(".evolution-team-")) {
-        const srcPath = join(projectRoot, file);
+        const srcPath = join(srcDir, file);
         const destName = file.replace(".evolution-", "");
         try {
           copyFileSync(srcPath, join(sprintDir, "team", destName));
           teamFiles.push(`team/${destName}`);
           allFiles.push(`team/${destName}`);
-        } catch { /* skip */ }
+        } catch (err) {
+          logError("evolution-archive", `Failed to copy team report ${file}`, err);
+        }
       }
     }
 
@@ -190,7 +205,7 @@ export function archiveEvolutionSprint(
       goal,
       createdAt: Date.now(), // approximate — could be improved
       completedAt: Date.now(),
-      status: allFiles.length > 0 ? "completed" : "partial",
+      status: determineSprintStatus(allFiles, hasSynthesis, hasImplementation, hasReview),
       phases: {
         personas: { count: personaFiles.length, files: personaFiles },
         synthesis: hasSynthesis,
@@ -245,21 +260,21 @@ export function cleanEvolutionTempFiles(projectRoot: string): void {
         const files = readdirSync(dir);
         for (const file of files) {
           if (patterns.some(p => p.test(file))) {
-            try { unlinkSync(join(dir, file)); } catch { /* skip */ }
+            try { unlinkSync(join(dir, file)); } catch (err) { logError("evolution-archive", "Failed to delete " + file, err); }
           }
         }
-      } catch { /* skip */ }
+      } catch (err) { logError("evolution-archive", "Failed to scan dir for cleanup: " + dir, err); }
     }
     // Clean evolution-screenshots dir
     const screenshotsDir = join(projectRoot, "evolution-screenshots");
     if (existsSync(screenshotsDir)) {
       const shots = readdirSync(screenshotsDir);
       for (const f of shots) {
-        try { unlinkSync(join(screenshotsDir, f)); } catch { /* skip */ }
+        try { unlinkSync(join(screenshotsDir, f)); } catch (err) { logError("evolution-archive", "Failed to delete screenshot " + f, err); }
       }
-      try { require("fs").rmdirSync(screenshotsDir); } catch { /* skip */ }
+      try { rmSync(screenshotsDir, { recursive: true, force: true }); } catch (err) { logError("evolution-archive", "Failed to remove screenshots dir", err); }
     }
-  } catch { /* best effort */ }
+  } catch (err) { logError("evolution-archive", "Failed to clean evolution temp files", err); }
 }
 
 // ── Query ──
@@ -280,10 +295,10 @@ export function listEvolutionSprints(projectId: string = "enso"): EvolutionSprin
         if (existsSync(metaPath)) {
           try {
             sprints.push(JSON.parse(readFileSync(metaPath, "utf-8")));
-          } catch { /* skip corrupt */ }
+          } catch (err) { logError("evolution-archive", "Failed to parse sprint meta: " + metaPath, err); }
         }
       }
-    } catch { /* skip */ }
+    } catch (err) { logError("evolution-archive", "Failed to read sprints dir", err); }
   }
 
   // Also check legacy location for the "enso" project
@@ -298,10 +313,10 @@ export function listEvolutionSprints(projectId: string = "enso"): EvolutionSprin
             if (!sprints.some(s => s.sprintId === meta.sprintId)) {
               sprints.push(meta);
             }
-          } catch { /* skip */ }
+          } catch (err) { logError("evolution-archive", "Failed to parse sprint meta: " + metaPath, err); }
         }
       }
-    } catch { /* skip */ }
+    } catch (err) { logError("evolution-archive", "Failed to read legacy sprints dir", err); }
   }
 
   sprints.sort((a, b) => b.completedAt - a.completedAt);
@@ -315,12 +330,12 @@ export function loadEvolutionSprint(sprintId: string, projectId: string = "enso"
   // Check project-scoped path first
   const projectPath = join(getSprintsDir(projectId), sprintId, "meta.json");
   if (existsSync(projectPath)) {
-    try { return JSON.parse(readFileSync(projectPath, "utf-8")); } catch { /* skip */ }
+    try { return JSON.parse(readFileSync(projectPath, "utf-8")); } catch (err) { logError("evolution-archive", "Failed to parse sprint meta: " + projectPath, err); }
   }
   // Fallback to legacy
   const legacyPath = join(LEGACY_EVOLUTION_DIR, sprintId, "meta.json");
   if (existsSync(legacyPath)) {
-    try { return JSON.parse(readFileSync(legacyPath, "utf-8")); } catch { /* skip */ }
+    try { return JSON.parse(readFileSync(legacyPath, "utf-8")); } catch (err) { logError("evolution-archive", "Failed to parse sprint meta: " + legacyPath, err); }
   }
   return null;
 }
@@ -333,12 +348,12 @@ export function getEvolutionFile(sprintId: string, filename: string, projectId: 
   // Check project-scoped path first
   const projectPath = join(getSprintsDir(projectId), sprintId, safe);
   if (existsSync(projectPath)) {
-    try { return readFileSync(projectPath, "utf-8"); } catch { /* skip */ }
+    try { return readFileSync(projectPath, "utf-8"); } catch (err) { logError("evolution-archive", "Failed to read evolution file: " + projectPath, err); }
   }
   // Fallback to legacy
   const legacyPath = join(LEGACY_EVOLUTION_DIR, sprintId, safe);
   if (existsSync(legacyPath)) {
-    try { return readFileSync(legacyPath, "utf-8"); } catch { /* skip */ }
+    try { return readFileSync(legacyPath, "utf-8"); } catch (err) { logError("evolution-archive", "Failed to read evolution file: " + legacyPath, err); }
   }
   return null;
 }

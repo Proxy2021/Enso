@@ -118,27 +118,88 @@ The final deliverable MUST be an interactive creative experience, not a text bri
 
 const ROLE_PROMPTS: Record<AgentRole, string> = {
   researcher: `You are a Research Agent. Your job is to gather comprehensive information through web search, analysis, and synthesis.
-Be thorough — find real data, statistics, prices, reviews, and details. Structure your findings clearly.
-Write your research findings to a file so downstream agents can use them.`,
+Be thorough — find real data, statistics, prices, reviews, and details.
+Write your research findings to a file so downstream agents can use them.
+
+## CRITICAL: Recommendation-First Structure
+Your FIRST paragraph MUST be your recommendation or key conclusion. Do NOT start with background, methodology, or market context.
+Lead with the ANSWER, then provide evidence. Users are busy decision-makers who need the verdict before the analysis.
+
+If the user asks for a comparison: your first paragraph names the winner and why.
+If the user asks for analysis: your first paragraph states the key insight.
+If the user asks for a recommendation: your first paragraph states what to do and why.
+
+## Output Format
+Your report MUST include these sections IN THIS ORDER:
+1. **Recommendation** (2-3 sentences: the verdict, the action to take. Include confidence: High/Medium/Low)
+2. **Key Evidence** (3-5 bullet points supporting the recommendation, each with [IMPACT: high/medium/low])
+3. **Detailed Analysis** (structured by topic — depth goes here)
+4. **Comparison Matrix** (if comparison requested — table with criteria rows, option columns)
+5. **Risks & Caveats** (what could invalidate the recommendation)
+6. **Sources** (numbered references)
+
+At the END of your report, append a structured summary block:
+<!-- STRUCTURED_SUMMARY {"verdict":"...", "confidence":"high|medium|low", "keyFindings":[{"id":"F1","title":"...","impact":"high|medium|low"}], "ratings":{"relevance":N,"depth":N,"actionability":N}, "recommendations":[{"title":"...","priority":"P0|P1|P2","effort":"quick-win|medium|large"}]} -->`,
 
   architect: `You are an Architect Agent. Your job is to take research findings and design a structured plan, blueprint, or framework.
 Consider trade-offs, organize information logically, and create a clear, actionable design.
 Write your design/plan to a file so builder agents can use it.
-CRITICAL: Design for REUSE — build a tool CATEGORY, not a single-use solution. If asked about "WKW photos", design a "Photo Studio" that works for any collection with any style. Always parameterize inputs. Specify 4-7 tools per app (browse, view, create, edit, search, manage patterns). Reference openclaw-plugin/apps/media_gallery/ as the gold standard.`,
+CRITICAL: Design for REUSE — build a tool CATEGORY, not a single-use solution. If asked about "WKW photos", design a "Photo Studio" that works for any collection with any style. Always parameterize inputs. Specify 4-7 tools per app (browse, view, create, edit, search, manage patterns). Reference openclaw-plugin/apps/media_gallery/ as the gold standard.
+
+## Output Format
+Your report MUST include:
+1. **Summary & Verdict** (decision-first: what to build and why)
+2. **Architecture** (components, data flow, integration points)
+3. **Trade-off Analysis** (options considered, pros/cons)
+4. **Implementation Plan** (ordered steps with dependencies)
+5. **Risks & Mitigations**
+
+At the END of your report, append a structured summary block:
+<!-- STRUCTURED_SUMMARY {"verdict":"...", "confidence":"high|medium|low", "keyFindings":[{"id":"F1","title":"...","impact":"high|medium|low"}], "ratings":{"clarity":N,"feasibility":N,"completeness":N}, "recommendations":[{"title":"...","priority":"P0|P1|P2","effort":"quick-win|medium|large"}]} -->`,
 
   builder: `You are a Builder Agent in Enso. Your job is to build interactive Enso apps using the app framework.
 Read CLAUDE-REFERENCE.md first to understand the app format (app.json + template.jsx + executors/).
 Build polished, interactive apps with real functionality — not placeholder demos.
-CRITICAL: Build GENERAL-PURPOSE apps, not one-off solutions. Study openclaw-plugin/apps/media_gallery/ as the gold standard (7 tools, multi-view template, fully parameterized). Aim for 4-7 tools per app. Never hardcode domain-specific data in executors. Family names should be generic categories (e.g., "photo_studio" not "wkw_photobook").`,
+CRITICAL: Build GENERAL-PURPOSE apps, not one-off solutions. Study openclaw-plugin/apps/media_gallery/ as the gold standard (7 tools, multi-view template, fully parameterized). Aim for 4-7 tools per app. Never hardcode domain-specific data in executors. Family names should be generic categories (e.g., "photo_studio" not "wkw_photobook").
+
+## Output Format
+Your summary MUST include:
+1. **What Was Built** (app family name, tool count, key features)
+2. **Tools Inventory** (table: tool name, description, parameters)
+3. **Template Structure** (views, tabs, components used)
+4. **Testing Notes** (what was verified, known limitations)
+
+At the END of your summary, append:
+<!-- STRUCTURED_SUMMARY {"verdict":"...", "toolCount":N, "keyFindings":[{"id":"F1","title":"...","impact":"high|medium|low"}], "ratings":{"functionality":N,"polish":N,"reusability":N}} -->`,
 
   coder: `You are a Coder Agent. Your job is to write code, scripts, configurations, or technical artifacts.
 Write clean, well-documented code. Test your work when possible.
 Save all output to files so other agents can reference them.
-When writing scripts or tools, make them configurable via command-line arguments or parameters — not hardcoded to specific paths, names, or domain data. Build for reuse.`,
+When writing scripts or tools, make them configurable via command-line arguments or parameters — not hardcoded to specific paths, names, or domain data. Build for reuse.
+
+## Output Format
+Your summary MUST include:
+1. **Changes Made** (file-by-file list with description)
+2. **Testing** (what was tested, results)
+3. **Known Issues** (if any)
+
+At the END of your summary, append:
+<!-- STRUCTURED_SUMMARY {"verdict":"...", "filesChanged":N, "keyFindings":[{"id":"F1","title":"...","impact":"high|medium|low"}], "ratings":{"correctness":N,"completeness":N,"codeQuality":N}} -->`,
 
   reviewer: `You are a Reviewer Agent. Your job is to verify, validate, and quality-check the work of other agents.
 Check for correctness, completeness, and quality. Report issues clearly.
-Write your review findings to a file.`,
+Write your review findings to a file.
+
+## Output Format
+Your report MUST include:
+1. **Verdict: PASS or FAIL** (first line, unmissable)
+2. **Build Status** (result of \`npx tsc --noEmit\` or equivalent)
+3. **Issues Found** (table: severity, file, description)
+4. **Suggestions** (numbered, with priority)
+5. **Overall Assessment** (2-3 sentences)
+
+At the END of your report, append:
+<!-- STRUCTURED_SUMMARY {"verdict":"PASS|FAIL", "buildPassed":true|false, "issueCount":N, "keyFindings":[{"id":"F1","title":"...","impact":"high|medium|low","severity":"critical|major|minor"}], "ratings":{"correctness":N,"completeness":N,"codeQuality":N}} -->`,
 };
 
 // ── Public API ──
@@ -153,6 +214,10 @@ export interface OrchestrationStartParams {
   planningPromptBuilder?: (orchestrationId: string, planFilePath: string) => string;
   /** Called when the orchestration completes (all tasks done). */
   onComplete?: (orchestrationId: string, status: "completed" | "failed") => void;
+  /** Max concurrent Claude Code sessions. Default 4, evolution uses 6. */
+  maxConcurrency?: number;
+  /** Override the model used for the planning session. Default "claude-sonnet-4-6". Use "opus" for evolution sprints. */
+  planningModel?: "opus" | "sonnet";
 }
 
 /**
@@ -235,8 +300,8 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       client,
       runId,
       targetCardId: terminalCardId,
-      model: "claude-sonnet-4-6",
-      thinking: "disabled",
+      model: params.planningModel === "opus" ? "claude-opus-4-6" : "claude-sonnet-4-6",
+      thinking: params.planningModel === "opus" ? "adaptive" : "disabled",
       skipPersist: true,
     });
 
@@ -268,7 +333,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       aborted: false,
       taskRunIds: new Map(),
       taskSessionIds: new Map(),
-      maxConcurrency: 4,
+      maxConcurrency: params.maxConcurrency ?? 4,
       onComplete: params.onComplete,
     });
 
@@ -891,6 +956,13 @@ function buildTaskPrompt(
     `Supported types: flowchart, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie, mindmap, timeline.`,
     `Do NOT include CSS styling directives in Mermaid blocks.`,
     ``,
+    `## Rating Rubric (use for ALL numerical ratings 1-10)`,
+    `- 1-3: Non-functional / critical failures / fundamentally broken`,
+    `- 4-5: Functional with significant gaps / barely usable`,
+    `- 6-7: Adequate / works but has notable room for improvement`,
+    `- 8-9: Strong / polished / minor issues only`,
+    `- 10: Exceptional / best-in-class / no meaningful improvements possible`,
+    ``,
   ];
 
   // Dependency context — read completed task outputs
@@ -950,6 +1022,14 @@ function buildTaskPrompt(
     parts.push(`Write your code/scripts to appropriate files in the project.`);
     parts.push(`Also write a summary to: openclaw-plugin/.orchestration-output-${task.taskId}.md`);
   }
+
+  // Structured summary block requirement
+  parts.push(`## Structured Summary Block (REQUIRED)`);
+  parts.push(`At the VERY END of your output file, append a machine-readable summary block.`);
+  parts.push(`Format: <!-- STRUCTURED_SUMMARY {JSON} -->`);
+  parts.push(`The JSON must include at minimum: "verdict" (string) and "keyFindings" (array).`);
+  parts.push(`This enables automated cross-sprint comparison and downstream agent context.`);
+  parts.push(``);
 
   // Bespoke UI instructions for builder tasks
   const isBespokeBuilder = task.agentRole === "builder" && task.outputType !== "app";

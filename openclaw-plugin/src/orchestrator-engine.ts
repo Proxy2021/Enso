@@ -7,6 +7,8 @@
  */
 
 import { randomUUID } from "crypto";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
 import type { OrchestrationPlan, OrchestrationTask } from "@shared/types.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { logAction, logError } from "./action-log.js";
@@ -177,6 +179,38 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
             category: "orchestrator",
             message: `DAG: task ${task.taskId} completed — ${summary.slice(0, 100)}`,
           });
+
+          // ── Fix-Verify Loop: Check for FAIL verdict on review tasks ──
+          if (task.taskId === "review" || task.agentRole === "reviewer") {
+            const verdict = extractVerdict(task.taskId);
+            if (verdict === "FAIL" && !plan.tasks.some(t => t.taskId === "fix-cycle")) {
+              // Inject a fix task into the plan
+              const fixTask: OrchestrationTask = {
+                taskId: "fix-cycle",
+                title: "Fix Build Issues (automated fix cycle)",
+                description: buildFixTaskDescription(task.taskId),
+                agentRole: "coder",
+                dependsOn: [task.taskId],
+                outputType: "code",
+                status: "pending",
+              };
+              plan.tasks.push(fixTask);
+
+              // Re-point downstream tasks that depended on "review" to now depend on "fix-cycle"
+              for (const t of plan.tasks) {
+                if (t.taskId !== "fix-cycle" && t.dependsOn.includes(task.taskId)) {
+                  t.dependsOn = t.dependsOn.map(d => d === task.taskId ? "fix-cycle" : d);
+                }
+              }
+
+              logAction({
+                ts: Date.now(),
+                type: "action",
+                category: "orchestrator",
+                message: `Fix-verify loop: FAIL verdict detected, injecting fix-cycle task`,
+              });
+            }
+          }
         } catch (err) {
           if (orch.aborted) return;
 
@@ -265,23 +299,29 @@ function blockDependents(
   failedTaskId: string,
   blockedSet: Set<string>,
 ): void {
-  for (const task of plan.tasks) {
-    if (task.status === "completed" || task.status === "failed") continue;
-    if (task.dependsOn.includes(failedTaskId) || task.dependsOn.some((d) => blockedSet.has(d))) {
-      task.status = "blocked";
-      blockedSet.add(task.taskId);
+  blockedSet.add(failedTaskId);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const task of plan.tasks) {
+      if (task.status === "completed" || task.status === "failed") continue;
+      if (blockedSet.has(task.taskId)) continue;
+      if (task.dependsOn.some((d) => blockedSet.has(d))) {
+        task.status = "blocked";
+        blockedSet.add(task.taskId);
+        changed = true;
+      }
     }
   }
 }
 
 /**
  * Try to read the task's output file for a summary.
+ * If a STRUCTURED_SUMMARY block exists, parse it and return a compact string.
+ * Otherwise, extract first meaningful lines up to 500 chars.
  */
 function readTaskSummary(taskId: string): string | null {
-  const { readFileSync, existsSync } = require("fs");
-  const { join } = require("path");
 
-  // Check multiple possible output locations
   const candidates = [
     join(process.cwd(), `openclaw-plugin/.orchestration-output-${taskId}.md`),
     join(process.cwd(), `openclaw-plugin/.orchestration-research-${taskId}.md`),
@@ -291,9 +331,37 @@ function readTaskSummary(taskId: string): string | null {
     if (existsSync(filePath)) {
       try {
         const content = readFileSync(filePath, "utf-8");
-        // Extract first meaningful line as summary
-        const lines = content.split("\n").filter((l: string) => l.trim() && !l.startsWith("#"));
-        return lines[0]?.trim().slice(0, 200) || `Output written to ${filePath}`;
+
+        // Try to parse structured summary block first
+        const structuredMatch = content.match(
+          /<!--\s*STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})\s*-->/
+        );
+        if (structuredMatch) {
+          try {
+            const parsed = JSON.parse(structuredMatch[1]);
+            const verdict = parsed.verdict || "completed";
+            const findings = (parsed.keyFindings || [])
+              .slice(0, 3)
+              .map((f: any) => f.title || f)
+              .join("; ");
+            const ratingsStr = parsed.ratings
+              ? Object.entries(parsed.ratings)
+                  .map(([k, v]) => `${k}:${v}`)
+                  .join(", ")
+              : "";
+            return `[${verdict}] ${findings}${ratingsStr ? ` | Ratings: ${ratingsStr}` : ""}`
+              .slice(0, 500);
+          } catch {
+            // JSON parse failed — fall through to plain text extraction
+          }
+        }
+
+        // Fallback: extract first meaningful lines up to 500 chars
+        const lines = content.split("\n").filter(
+          (l: string) => l.trim() && !l.startsWith("#")
+        );
+        return lines.slice(0, 5).join(" ").trim().slice(0, 500)
+          || `Output written to ${filePath}`;
       } catch {
         return `Output written to ${filePath}`;
       }
@@ -301,4 +369,61 @@ function readTaskSummary(taskId: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Extract VERDICT: PASS/FAIL from a review task's output file.
+ */
+function extractVerdict(taskId: string): "PASS" | "FAIL" | null {
+
+  const candidates = [
+    join(process.cwd(), `openclaw-plugin/.orchestration-output-${taskId}.md`),
+    join(process.cwd(), `openclaw-plugin/.evolution-review.md`),
+  ];
+
+  for (const filePath of candidates) {
+    if (existsSync(filePath)) {
+      try {
+        const content = readFileSync(filePath, "utf-8");
+        // Check structured summary first
+        const structMatch = content.match(/STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})/);
+        if (structMatch) {
+          try {
+            const parsed = JSON.parse(structMatch[1]);
+            if (parsed.verdict === "PASS" || parsed.verdict === "FAIL") {
+              return parsed.verdict;
+            }
+          } catch { /* fall through */ }
+        }
+        // Check for explicit VERDICT line
+        const verdictMatch = content.match(/VERDICT:\s*(PASS|FAIL)/i);
+        if (verdictMatch) {
+          return verdictMatch[1].toUpperCase() as "PASS" | "FAIL";
+        }
+      } catch { /* skip */ }
+    }
+  }
+  return null;
+}
+
+/**
+ * Build the description for a dynamically injected fix task.
+ */
+function buildFixTaskDescription(reviewTaskId: string): string {
+  return [
+    `A review task found build errors or critical issues. Your job is to fix them.`,
+    ``,
+    `1. Read the review output: openclaw-plugin/.orchestration-output-${reviewTaskId}.md`,
+    `   (or openclaw-plugin/.evolution-review.md)`,
+    `2. Identify ALL issues marked as FAIL or critical`,
+    `3. Fix each issue in the actual source code`,
+    `4. Run \`npx tsc --noEmit\` to verify the build passes`,
+    `5. Write a summary of all fixes to: openclaw-plugin/.orchestration-output-fix-cycle.md`,
+    ``,
+    `SAFETY RULES (same as all sprint tasks):`,
+    `- NEVER modify package.json, package-lock.json, or any lock files`,
+    `- NEVER restart, stop, or kill any server/gateway process`,
+    `- NEVER run npm install, npm update, npx cap sync`,
+    `- NEVER push to git`,
+  ].join("\n");
 }

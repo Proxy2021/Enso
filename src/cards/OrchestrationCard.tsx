@@ -72,7 +72,12 @@ function derivedPhase(progress?: OrchestrationProgress, plan?: OrchestrationPlan
 // ── Phase: Input ──
 
 function InputPhase({ cardId }: { cardId: string }) {
-  const [text, setText] = useState("");
+  const orchGoal = useChatStore((s) => {
+    const card = s.cards[cardId];
+    const d = card?.data as Record<string, unknown> | undefined;
+    return (d?.orchestrationGoal as string) || "";
+  });
+  const [text, setText] = useState(orchGoal);
   const startOrchestration = useChatStore((s) => s.startOrchestration);
 
   function handleSubmit() {

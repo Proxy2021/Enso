@@ -151,6 +151,20 @@ function loadMermaid(): Promise<any> {
   return mermaidLoadPromise;
 }
 
+/** Pre-process AI-generated Mermaid code to strip features that crash the parser */
+function sanitizeMermaidCode(code: string): string {
+  let clean = code;
+  // Strip %%{init:...}%% directives (CSS themes, config overrides)
+  clean = clean.replace(/%%\{init:[\s\S]*?\}%%/g, "");
+  // Replace HTML <br/> tags with Mermaid newline escape
+  clean = clean.replace(/<br\s*\/?>/gi, "\\n");
+  // Strip remaining HTML tags from labels
+  clean = clean.replace(/<\/?[a-z][^>]*>/gi, "");
+  // Trim trailing whitespace per line, trim overall
+  clean = clean.split("\n").map(l => l.trimEnd()).join("\n").trim();
+  return clean;
+}
+
 let mermaidIdCounter = 0;
 function MermaidDiagram({ code }: { code: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -163,11 +177,22 @@ function MermaidDiagram({ code }: { code: string }) {
       .then(async (m) => {
         if (cancelled) return;
         const id = `mermaid-${++mermaidIdCounter}`;
+        // Create a temporary offscreen container for rendering
+        // This prevents mermaid from injecting error SVGs into the visible DOM
+        const tempContainer = document.createElement("div");
+        tempContainer.id = id;
+        tempContainer.style.position = "absolute";
+        tempContainer.style.left = "-9999px";
+        document.body.appendChild(tempContainer);
         try {
-          const { svg } = await m.render(id, code);
+          const sanitized = sanitizeMermaidCode(code);
+          const { svg } = await m.render(id, sanitized);
           if (!cancelled) setSvgHtml(svg);
         } catch (e: any) {
           if (!cancelled) setError(e?.message || "Diagram render failed");
+        } finally {
+          // Clean up temp container (removes any error SVGs mermaid injected)
+          tempContainer.remove();
         }
       })
       .catch(() => {
@@ -178,9 +203,20 @@ function MermaidDiagram({ code }: { code: string }) {
 
   if (error) {
     return (
-      <pre className="bg-gray-900 rounded-md px-3 py-2 my-1.5 text-xs overflow-x-auto text-gray-300 border border-gray-700/50">
-        <code>{code}</code>
-      </pre>
+      <div className="bg-gray-900 rounded-md my-1.5 border border-gray-700/50 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800/60 border-b border-gray-700/50">
+          <span className="text-[10px] text-gray-500">Diagram (render failed)</span>
+          <button
+            onClick={() => navigator.clipboard.writeText(code)}
+            className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors"
+          >
+            Copy Mermaid
+          </button>
+        </div>
+        <pre className="px-3 py-2 text-xs overflow-x-auto text-gray-300">
+          <code>{code}</code>
+        </pre>
+      </div>
     );
   }
 
