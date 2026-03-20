@@ -85,6 +85,30 @@ describe("quickClassify", () => {
     expect(result).not.toBeNull();
     expect(result!.complexity).toBe("research");
   });
+
+  // VA-01: Dashboard request should defer to LLM (not classify as simple)
+  it("defers dashboard request to LLM", () => {
+    const result = quickClassify("give me an executive dashboard showing key SaaS metrics: MRR, churn, CAC, LTV");
+    expect(result?.complexity).not.toBe("simple");
+  });
+
+  // VA-02: Chart request should defer to LLM
+  it("defers chart visualization request to LLM", () => {
+    const result = quickClassify("create a dashboard comparing quarterly revenue, customer acquisition cost, and churn rate");
+    expect(result).toBeNull();
+  });
+
+  // VA-03: Show data in charts should defer to LLM
+  it("defers 'show me data in charts' to LLM", () => {
+    const result = quickClassify("analyze the e-commerce market size and growth trends — show me the data in charts");
+    expect(result).toBeNull();
+  });
+
+  // VA-04: Simple diagram request stays as is (content creation signal)
+  it("defers diagram request to LLM (content creation)", () => {
+    const result = quickClassify("create a visual diagram of our microservices architecture");
+    expect(result).toBeNull();
+  });
 });
 
 describe("qualityGate", () => {
@@ -117,6 +141,28 @@ describe("qualityGate", () => {
   it("passes a long structured comparison", () => {
     const answer = "## CRM Comparison\n\n| Feature | Salesforce | HubSpot | Pipedrive |\n|---------|-----------|---------|----------|\n| Pricing | $25/user | Free tier | $15/user |\n| Ease of Use | Complex | Easy | Easy |\n| Integrations | 3000+ | 1000+ | 400+ |\n| Best For | Enterprise | SMB | Sales teams |\n\n### Recommendation\nFor a small startup, HubSpot offers the best value with its free tier and easy setup.";
     const result = qualityGate(answer, "compare CRM platforms");
+    expect(result.pass).toBe(true);
+  });
+
+  // QG-06: Catches [YEAR] and [Concern] placeholders (Sarah's scenario)
+  it("fails executive summary with [YEAR] and [Concern] placeholders", () => {
+    const answer = "## Q1 Performance Summary\n\n### Key Concerns & Mitigation\n- [Concern 1]: [Brief description of a significant concern identified in Q1]\n  - Impact: [High/Medium/Low]\n  - Mitigation: [Describe mitigation strategy]\n\n### Next Quarter Outlook\nQ2 [YEAR] will focus on [Objective 1]: [Specific, measurable goal for Q2.]\n\nThe team delivered strong results across all key performance indicators. Revenue grew by a significant margin compared to the previous quarter. Customer satisfaction scores improved across all segments and regions.";
+    const result = qualityGate(answer, "write an executive summary for a board presentation about Q1 performance");
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe("template_detected");
+  });
+
+  // QG-07: Passes legitimate code with bracket syntax
+  it("passes code blocks with legitimate bracket syntax", () => {
+    const answer = "## Array Destructuring in TypeScript\n\nTypeScript supports destructuring for arrays and objects, making it easy to extract values.\n\n### Array Destructuring\n```typescript\nconst [first, ...rest] = items;\nconst [val, setter] = useState(0);\n```\n\n### Object Destructuring\n```typescript\nconst { label, count, email } = user;\n```\n\nThis pattern is commonly used in React hooks like `useState` and `useReducer`. The square brackets indicate array destructuring while curly braces are for objects. Both patterns support default values and renaming.";
+    const result = qualityGate(answer, "explain destructuring in TypeScript");
+    expect(result.pass).toBe(true);
+  });
+
+  // QG-08: Passes fully-filled executive summary with realistic data
+  it("passes fully-filled executive summary with realistic data", () => {
+    const answer = "## Q1 2026 Performance Summary\n\n### Key Metrics\n- Revenue: $4.2M (+12% QoQ)\n- MRR: $350K (target: $340K)\n- Churn Rate: 3.2% (down from 4.1%)\n- CAC: $420 (target: below $500)\n- LTV/CAC Ratio: 4.8x\n\n### Highlights\n1. Enterprise tier launched successfully with 15 initial customers generating $180K ARR\n2. Platform uptime maintained at 99.97% across all regions\n3. Engineering velocity increased 22% with new CI/CD pipeline\n\n### Concerns\n1. Sales cycle lengthening from 45 to 62 days due to increased enterprise deal complexity\n2. Support ticket volume up 28% driven by new feature onboarding\n\n### Q2 2026 Outlook\nFocus on sales enablement tooling to reduce cycle length and self-service onboarding to contain support volume.";
+    const result = qualityGate(answer, "write executive summary for Q1 board presentation");
     expect(result.pass).toBe(true);
   });
 });

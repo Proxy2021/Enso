@@ -1256,6 +1256,38 @@ export async function startEnsoServer(opts: {
                   timestamp: Date.now(),
                 });
 
+                // Post-classification visualization intent override
+                // When Gemini classifies as "simple" but user clearly wants a
+                // dashboard/chart/visualization, re-route to Claude agent
+                const vizKeywords = /\b(dashboard|chart|graph|visualize|visualization|KPI\s*(board|display|view)|metrics?\s+(display|board|view|visual)|show\s+(me\s+)?(the\s+)?data\s+in\s+(chart|graph|visual)|interactive\s+(chart|graph|dashboard))\b/i;
+                const vizModifiers = /\b(executive|quarterly|monthly|annual|real-?time|live)\b/i;
+
+                if (
+                  classification.complexity === "simple" &&
+                  vizKeywords.test(msg.text) &&
+                  (vizModifiers.test(msg.text) ||
+                   /\b(showing|display|create|build|generate)\b/i.test(msg.text))
+                ) {
+                  runtime.log?.(`[enso] viz-override: reclassifying "${msg.text.slice(0, 60)}" from simple to agent`);
+                  await handleEnsoInbound({
+                    message: {
+                      messageId: randomUUID(),
+                      sessionId: sessionKey,
+                      senderNick: `user_${connectionId}`,
+                      text: msg.text,
+                      mediaUrls: msg.mediaUrls,
+                      timestamp: Date.now(),
+                    },
+                    account,
+                    config,
+                    runtime,
+                    client,
+                    routing: msg.routing,
+                    statusSink,
+                  });
+                  break;
+                }
+
                 if (classification.complexity === "orchestrated") {
                   runtime.log?.(`[enso] task-router: orchestrated → "${msg.text.slice(0, 60)}"`);
                   const { handleOrchestration } = await import("./orchestrator.js");
@@ -1380,11 +1412,27 @@ export async function startEnsoServer(opts: {
                     runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
                     const answerCardId = randomUUID();
                     const answerRunId = randomUUID();
+
+                    // Headline-first: send first paragraph as delta for perceived speed
+                    const firstParaEnd = classification.answer.indexOf("\n\n");
+                    if (firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50) {
+                      send({
+                        id: answerCardId,
+                        runId: answerRunId,
+                        sessionKey,
+                        seq: 0,
+                        state: "delta",
+                        text: classification.answer.slice(0, firstParaEnd),
+                        timestamp: Date.now(),
+                      });
+                      await new Promise(r => setTimeout(r, 100));
+                    }
+
                     send({
                       id: answerCardId,
                       runId: answerRunId,
                       sessionKey,
-                      seq: 0,
+                      seq: firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50 ? 1 : 0,
                       state: "final",
                       text: classification.answer,
                       timestamp: Date.now(),

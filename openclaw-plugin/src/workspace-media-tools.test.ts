@@ -1,6 +1,17 @@
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("openclaw/plugin-sdk", () => ({}));
+vi.mock("./server.js", () => ({
+  toMediaUrl: (p: string) => `http://localhost:3001/media/${Buffer.from(p).toString("base64url")}`,
+  MAX_MEDIA_FILE_SIZE: 300 * 1024 * 1024,
+}));
+vi.mock("./action-log.js", () => ({
+  logAction: vi.fn(),
+  logError: vi.fn(),
+}));
+
 import { createMediaTools } from "./media-tools";
 
 function parseText(result: { content: Array<{ type: string; text?: string }> }): string {

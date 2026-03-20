@@ -126,6 +126,78 @@ describe("sanitizeMermaidCode", () => {
     expect(result).toContain("flowchart TD");
     expect(result).toContain("A --> B");
   });
+
+  // MS-12: Pie chart with CSS directives stripped
+  it("strips CSS from pie chart without breaking structure", () => {
+    const source = `pie title Budget Allocation
+    "Engineering" : 45
+    "Marketing" : 25
+    "Sales" : 20
+    "Operations" : 10
+  style a1 fill:#f88,stroke:#333,stroke-width:2px`;
+    const sanitized = sanitizeMermaidCode(source);
+    expect(sanitized).not.toContain("style a1");
+    expect(sanitized).toContain('"Engineering" : 45');
+    expect(sanitized).toContain("pie title");
+  });
+
+  // MS-14: Sequence diagram passes through unchanged
+  it("preserves valid sequence diagram", () => {
+    const source = `sequenceDiagram
+    Alice->>Bob: Hello Bob
+    Bob-->>Alice: Hi Alice
+    Alice->>Bob: How are you?`;
+    const sanitized = sanitizeMermaidCode(source);
+    expect(sanitized).toContain("Alice->>Bob: Hello Bob");
+    expect(sanitized).toContain("sequenceDiagram");
+  });
+
+  // MS-15: Complex flowchart with mixed CSS leaks
+  it("sanitizes competitive landscape diagram with style and classDef leaks", () => {
+    const source = `flowchart TD
+    A[AI Agent Market] --> B[Foundation Models]
+    A --> C[Consumer AI]
+    B --> B1(OpenAI)
+    B --> B2(Google DeepMind)
+    B --> B3(Anthropic - Claude)
+    style B fill:#4a90d9
+    classDef highlight fill:#f9f,stroke:#333
+    class B1 highlight`;
+    const sanitized = sanitizeMermaidCode(source);
+    expect(sanitized).not.toContain("style B fill");
+    expect(sanitized).not.toContain("classDef");
+    expect(sanitized).not.toContain("class B1");
+    expect(sanitized).toContain("B3(Anthropic - Claude)");
+    expect(sanitized).toContain("flowchart TD");
+  });
+
+  // MS-16: Mindmap passes through (no CSS usually)
+  it("preserves valid mindmap diagram", () => {
+    const source = `mindmap
+  root((Project))
+    Planning
+      Requirements
+      Timeline
+    Development
+      Frontend
+      Backend
+    Testing`;
+    const sanitized = sanitizeMermaidCode(source);
+    expect(sanitized).toContain("mindmap");
+    expect(sanitized).toContain("root((Project))");
+  });
+
+  // MS-17: Timeline diagram passes through
+  it("preserves valid timeline diagram", () => {
+    const source = `timeline
+    title Product Milestones
+    2026-Q1 : MVP Launch
+    2026-Q2 : Beta Release
+    2026-Q3 : GA Release`;
+    const sanitized = sanitizeMermaidCode(source);
+    expect(sanitized).toContain("timeline");
+    expect(sanitized).toContain("MVP Launch");
+  });
 });
 
 // Copy of autoRepairMermaid from src/components/MarkdownText.tsx for unit testing
@@ -197,5 +269,16 @@ describe("autoRepairMermaid", () => {
   it("normalizes case-insensitive diagram types", () => {
     expect(autoRepairMermaid("SEQUENCEDIAGRAM \n  A->>B: msg")).toMatch(/^sequenceDiagram /m);
     expect(autoRepairMermaid("CLASSDIAGRAM \n  A --> B")).toMatch(/^classDiagram /m);
+  });
+
+  // MS-13: Gantt chart auto-repair adds missing dateFormat
+  it("auto-repairs gantt chart missing dateFormat", () => {
+    const source = `gantt
+    title Quarterly Churn Rate Trend
+    section Q1
+    Churn 5.2% :a1, 2024-01-01, 90d`;
+    const repaired = autoRepairMermaid(source);
+    expect(repaired).toContain("dateFormat");
+    expect(repaired).toContain("gantt");
   });
 });

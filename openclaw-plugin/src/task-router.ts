@@ -47,7 +47,7 @@ const CLASSIFIER_PROMPT = `You are a smart router for Enso, an AI assistant that
 Classify the user's message into exactly ONE of these four categories:
 
 ## SIMPLE (default — use this for MOST messages)
-Anything you can answer directly from your knowledge — factual questions, greetings, explanations, opinions, creative writing, translations, code help, casual chat, comparisons from general knowledge, templates, frameworks, strategies, plans, and outlines. You MUST provide the answer yourself. Be helpful, thorough, and well-structured. Use markdown formatting (headers, bullet points, tables, numbered lists) for longer answers.
+Anything you can answer directly from your knowledge — factual questions, greetings, explanations, opinions, creative writing, translations, code help, casual chat, comparisons from general knowledge, templates, frameworks, strategies, plans, and outlines. You MUST provide the answer yourself. Be helpful, thorough, and well-structured. Use markdown formatting (headers, bullet points, tables, numbered lists) for longer answers. Start your response with a **1-2 sentence headline** that directly answers the user's question or gives your recommendation. Then provide detailed analysis, comparisons, or explanation below. The headline should give the user immediate value within seconds.
 Examples:
 - "What is the capital of France?" → answer: "The capital of France is Paris."
 - "Hi, how are you?" → answer: "Hey! I'm doing great. What can I help you with?"
@@ -103,14 +103,28 @@ Examples:
 ## FORMATTING GUIDELINES (CRITICAL — follow these for SIMPLE answers)
 When writing your SIMPLE answer, use the BEST format for the content type:
 - **Comparisons** (X vs Y, pros/cons, feature comparison): You MUST use a markdown table with columns for each option and rows for criteria. Include at least 5 comparison rows.
-- **Architecture / System Design / Workflows / Diagrams**: ALWAYS include a Mermaid diagram using \`\`\`mermaid code blocks when the user asks about architecture, flows, processes, or relationships. The frontend renders these as interactive SVG visualizations. Supported types: flowchart TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie. Example:
+- **Architecture / System Design / Workflows / Diagrams**: ALWAYS include a Mermaid diagram using \`\`\`mermaid code blocks when the user asks about architecture, flows, processes, or relationships. The frontend renders these as interactive SVG visualizations. Supported types: flowchart TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie, mindmap, timeline.
+
+**CRITICAL Mermaid syntax rules (MUST follow — violations cause render failures):**
+- Do NOT include \`style\` directives (e.g., \`style nodeA fill:#f9f\`)
+- Do NOT include \`classDef\` directives (e.g., \`classDef error fill:#f99\`)
+- Do NOT include \`class\` assignments (e.g., \`class nodeA error\`)
+- Do NOT include \`linkStyle\` directives (e.g., \`linkStyle 0 stroke:#ff3\`)
+- Do NOT include \`click\` event handlers (e.g., \`click nodeA callback\`)
+- Do NOT include \`:::\` CSS class syntax (e.g., \`A:::highlight\`)
+- Do NOT include \`%%{init:...}%%\` config blocks
+- Keep node labels simple — no HTML tags, no special characters except hyphens and parentheses
+- For gantt charts, ALWAYS include \`dateFormat YYYY-MM-DD\` after the \`gantt\` declaration
+- Always pair the diagram with a text explanation.
+
+Example:
 \`\`\`mermaid
-graph TD
+flowchart TD
     A[Client] --> B[API Gateway]
     B --> C[Auth Service]
     B --> D[User Service]
 \`\`\`
-Always pair the diagram with a text explanation. When the user asks for any visual representation, flowchart, process flow, architecture diagram, state machine, ER diagram, or sequence diagram, generate Mermaid syntax.
+
 - **Timelines / Roadmaps / Launch Plans**: When the user asks for a "timeline", "roadmap", "launch plan", "milestone plan", or "Gantt chart", you MUST include a Mermaid gantt or timeline diagram. Example:
 \`\`\`mermaid
 gantt
@@ -123,7 +137,7 @@ gantt
     Beta Launch        :b1, after a2, 14d
     Iteration          :b2, after b1, 30d
 \`\`\`
-- **Dashboards / Metrics / KPI displays**: When the user asks for a "dashboard", include a summary table with sample data AND a Mermaid pie or bar-style diagram showing the distribution. At minimum, provide a structured table with placeholder data the user can fill in.
+- **Dashboards / Metrics / KPI displays**: When the user asks for a "dashboard", include a summary table with realistic sample data AND a Mermaid pie chart showing the distribution. Use realistic numbers, not placeholders.
 - **Frameworks / Segmentation / Process Flows**: When the user asks for a "framework", "segmentation", or "process", include a Mermaid flowchart showing the methodology.
 
 **CRITICAL: Visual output is MANDATORY when the user's query contains any of these words: timeline, roadmap, dashboard, diagram, chart, flowchart, visualization, framework, process flow, architecture, sequence, Gantt. You MUST include at least one Mermaid code block in your response.**
@@ -148,6 +162,7 @@ Do NOT mention tools in every response — only when genuinely useful for the us
 - **RESEARCH is ONLY for queries needing current web data** — recent events, latest prices, 2025-2026 statistics, news. If the answer doesn't require live data, use SIMPLE instead.
 - **ORCHESTRATED is RARE** — only for building software systems or complex multi-agent projects. Never for comparisons, analyses, planning, creative content, or explanations.
 - **If in doubt, choose SIMPLE over RESEARCH, and RESEARCH over ORCHESTRATED.**
+- **NEVER use bracketed placeholders** like [Company Name], [INSERT], [YOUR X], [Concern 1], [YEAR], [TBD], [Brief description], or [High/Medium/Low]. Always generate realistic sample data, specific examples, and concrete numbers. If you don't know the user's specifics, use plausible realistic examples (e.g., "$4.2M revenue" not "[Revenue]").
 - ONE-OFF requires explicit action intent (fix, create, write code, build, convert, deploy, refactor) for a technical coding task.
 - For RESEARCH: extract the core topic and suggest a depth (quick/standard/deep).
 - IMPORTANT: Keep researchTopic AND answer in the SAME LANGUAGE as the user's message.
@@ -604,7 +619,7 @@ export function qualityGate(answer: string, userMessage: string): QualityGateRes
   }
 
   // 2. Template pattern detection — catch placeholder output
-  const templatePatterns = /\[X\]%|\[INSERT\]|\[YOUR[_ ]|\[NAME\b|\[COMPANY\b|\[DATE\b|\[NUMBER\b|___+|\bTBD\b|\bTODO\b|\[PLACEHOLDER\b/i;
+  const templatePatterns = /\[X\]%|\[INSERT\]|\[YOUR[_ ]|\[NAME\b|\[COMPANY\b|\[DATE\b|\[NUMBER\b|___+|\bTBD\b|\bTODO\b|\[PLACEHOLDER\b|\[YEAR\]|\[Concern\b|\[Brief\b|\[Describe\b|\[Specific\b|\[High\/Medium\/Low\]|\[Objective\b|\[Add\s|\[Revenue\b|\[Metric\b|\[Target\b|\[Action\b/i;
   if (templatePatterns.test(answer)) {
     return { pass: false, reason: "template_detected" };
   }
