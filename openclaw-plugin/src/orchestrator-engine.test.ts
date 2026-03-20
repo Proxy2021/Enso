@@ -352,10 +352,6 @@ describe("Failure Handling", () => {
   });
 
   it("independent branches continue when sibling fails", async () => {
-    mockRunClaudeCode
-      .mockRejectedValueOnce(new Error("B failed"))
-      .mockResolvedValue({ sessionId: "mock-session" });
-
     const plan = makePlan([
       { taskId: "a", dependsOn: [] },
       { taskId: "b", dependsOn: ["a"] },
@@ -363,6 +359,7 @@ describe("Failure Handling", () => {
     ]);
 
     // A succeeds, B fails, C should still succeed since it only depends on A
+    mockRunClaudeCode.mockReset();
     mockRunClaudeCode
       .mockResolvedValueOnce({ sessionId: "mock-session" }) // A
       .mockRejectedValueOnce(new Error("B failed")) // B

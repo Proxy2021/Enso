@@ -106,6 +106,7 @@ function Tabs({
   value: controlledValue,
   defaultValue,
   onChange,
+  onValueChange,
   children,
   variant = "pills",
   className = "",
@@ -114,6 +115,7 @@ function Tabs({
   value?: string;
   defaultValue?: string;
   onChange?: (value: string) => void;
+  onValueChange?: (value: string) => void;
   children: React.ReactNode | ((activeTab: string) => React.ReactNode);
   variant?: "pills" | "underline" | "boxed";
   className?: string;
@@ -121,13 +123,14 @@ function Tabs({
   const safeTabs = Array.isArray(tabs) ? tabs : [];
   const [internalValue, setInternalValue] = useState(defaultValue ?? safeTabs[0]?.value ?? "");
   const activeTab = controlledValue ?? internalValue;
+  const changeHandler = onChange ?? onValueChange;
 
   const handleTabClick = useCallback(
     (v: string) => {
       if (controlledValue === undefined) setInternalValue(v);
-      onChange?.(v);
+      changeHandler?.(v);
     },
-    [controlledValue, onChange],
+    [controlledValue, changeHandler],
   );
 
   const tabBarStyles: Record<string, string> = {

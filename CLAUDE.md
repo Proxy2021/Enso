@@ -153,48 +153,103 @@ Each project is stored at `~/.enso/projects/<projectId>/`:
 
 #### Team Agents (Internal Team)
 
-Each project has a team of AI agents with specialized roles:
+Each project has a team of AI agents with specialized roles, split into **core** (always participate) and **optional** (Project Leader decides per sprint):
 
-| Agent | Role | agentRole | What They Do |
-|-------|------|-----------|-------------|
-| **Project Leader** | Meta-controller | architect | Defines vision, sets sprint focus, chooses personas, reviews all outputs |
-| **Marketing Director** | Brand & messaging | researcher | Evaluates positioning, creates marketing deliverables |
-| **Sales Director** | Commercialization | researcher | Pricing models, customer acquisition, ROI narratives |
-| **Software Architect** | Technical design | architect | Architecture reviews, tech debt tracking, scalability |
-| **Engineering Manager** | Code quality | reviewer | Convention adherence, regression prevention, build validation |
-| **QA & Test Manager** | Quality assurance | reviewer | Test scenarios, edge cases, quality metrics |
-| **AI Technology Strategist** | Frontier tech | researcher | Evaluates latest AI tech, recommends adoptions to stay ahead |
+| Agent | Role | agentRole | Core? | What They Do |
+|-------|------|-----------|:-----:|-------------|
+| **Project Leader** | Meta-controller | architect | Always | Defines vision, sets sprint focus, selects personas, triages findings, reviews all outputs |
+| **Software Architect** | Technical design | architect | Core | Architecture reviews, ADRs, tech debt tracking, scalability |
+| **Engineering Manager** | Code quality | reviewer | Core | Convention adherence, regression prevention, build validation |
+| **QA & Test Manager** | Quality assurance | reviewer | Core | Test scenarios, edge cases, quality metrics, test infrastructure |
+| **Marketing Director** | Brand & messaging | researcher | Optional | Evaluates positioning, creates marketing deliverables |
+| **Sales Director** | Commercialization | researcher | Optional | Pricing models, customer acquisition, ROI narratives |
+| **AI Technology Strategist** | Frontier tech | researcher | Optional | Evaluates latest AI tech, recommends adoptions (scope-constrained by PL) |
+
+**Design rationale**: Running all 7 agents on every sprint is wasteful for purely technical sprints. The PL triage gate (Phase 2) lets the Project Leader decide which optional agents add value based on actual persona feedback. Over 6 sprints, Marketing/Sales were excluded from technical sprints with no loss in quality.
 
 #### Customer Personas
 
 Personas represent real user archetypes who test the product through actual browser automation (Puppeteer). Each persona has: background, goals, frustrations, and test scenarios.
 
-The **Project Leader decides which personas to involve per sprint** based on the sprint focus. They can select from existing personas or create new ones on-the-fly for specific testing needs.
+The **Project Leader decides which personas to involve per sprint** based on the sprint focus. They can select from existing personas or create new ones on-the-fly for specific testing needs. Typical selection: 2-3 personas chosen for diagnostic value, continuity, or rotation.
 
 #### Evolution Sprint (`/evolve`)
 
 - **Trigger**: `/evolve` command or "Evolve" tile on WelcomeCard
-- **Sprint phases** (6 phases, 15-25 tasks, ~60-90 min):
-  1. **Team Evaluation** — All team agents evaluate from their perspectives (architecture, marketing, sales, QA, AI tech)
-  2. **Persona Testing** — Project Leader-selected personas test through real Puppeteer browser automation
-  3. **Synthesis + Discussion** — Cross-report analysis → product team roundtable → prioritized backlog
-  4. **Engineering Implementation** — Architect designs → Coder implements → Reviewer validates (real code changes!)
-  5. **Validation Re-Testing** — Personas re-test changed areas to verify improvements
-  6. **Evolution Report** — Interactive dashboard + Project Leader meta-review
+- **Planner**: Claude Opus with adaptive thinking — produces higher-quality DAG structures than Sonnet
+- **Concurrency**: Up to 6 parallel Claude Code sessions
+- **Duration**: ~55-65 minutes (17 tasks typical)
+- **Sprint phases** (7 phases):
 
-- **Key innovation**: Claude Code ACTUALLY implements enhancements in the codebase during each sprint. The system evolves itself.
-- **Sprint persistence**: Full reports, screenshots, dashboards saved to `~/.enso/projects/<id>/sprints/sprint-<timestamp>/`
-- **DAG execution**: Tasks run with up to 4 concurrent Claude Code sessions for performance
+| Phase | Tasks | Parallelism | What Happens |
+|-------|:-----:|:-----------:|-------------|
+| **0. PL Meta-Evaluation** | 1 | — | Project Leader reviews all prior sprint artifacts, sets priorities, selects personas |
+| **1. Persona Testing** | 2-3 | All parallel | Personas test the product via real Puppeteer browser automation (BEFORE team agents) |
+| **2. PL Triage** | 1 | — | Project Leader reviews persona findings, ranks pain points, selects which team agents to involve |
+| **3. Team Evaluation** | 3-4 | All parallel | Core agents (Architect, Eng Manager, QA) always run; optional agents by PL's choice |
+| **4. Synthesis + Design** | 1 | — | Merged cross-report analysis + prioritized backlog + technical architecture (was 3 separate tasks) |
+| **5. Implementation** | 2-3 | Tracks parallel | Parallel frontend/backend implementation tracks, then Review with fix-verify loop |
+| **6. Final Phase** | 3-4 | All parallel | Validation re-tests + interactive dashboard + PL meta-review (all concurrent) |
+
+**Key design decisions** (learned from 6 sprint iterations):
+
+- **Personas test FIRST** (Phase 1 before Phase 3) — team agents produce better evaluations when grounded in real user feedback rather than evaluating in a vacuum
+- **PL Triage gate** (Phase 2) — prevents wasteful agent runs; PL reads persona pain points and decides which specialists matter for this sprint
+- **Merged synthesis-and-design** (Phase 4) — eliminates 2 unnecessary handoff phases (old structure had separate synthesis, discussion, and design tasks)
+- **Parallel final phase** (Phase 6) — retests, dashboard, and meta-review run concurrently instead of serially, saving ~15 minutes
+- **Fix-verify loop** — if the review task returns a FAIL verdict, the engine auto-injects a `fix-cycle` task and re-runs review
+
+**Context propagation**: Each task writes a `<!-- STRUCTURED_SUMMARY {JSON} -->` block at the end of its output. The DAG engine's `readTaskSummary()` parses these blocks to inject compact, machine-readable context (verdict, key findings, ratings) into downstream tasks — enabling inter-agent knowledge transfer without copying full reports.
+
 - **Safety rules**: Implementation tasks are forbidden from restarting servers, pushing to git, or modifying versions
+- **Sprint persistence**: Full reports, screenshots, dashboards saved to `~/.enso/projects/<id>/sprints/sprint-<timestamp>/`
+
+#### Running & Monitoring Evolution Sprints
+
+**Prerequisites**:
+- OpenClaw gateway running with Enso plugin
+- Vite dev server running on `localhost:5173` (personas test against this)
+- Fresh tsx cache (see restart procedure below)
+
+**Launching**: Type `/evolve` in Enso chat, or send `evolution.start` via WebSocket. The sprint auto-plans (Opus, ~2-3 min) and presents the task DAG for approval. Approve to start execution.
+
+**Monitoring progress**:
+- **Enso UI**: OrchestrationCard shows live task graph with status, agent names, and progress bar
+- **Action log API**: `GET /api/action-log?count=50` — watch for `DAG: launching task` and `DAG: task X completed` entries
+- **Output files**: `openclaw-plugin/.orchestration-output-*.md` appear as each task completes (cleaned up on sprint completion)
+- **Sprint archive**: After completion, all artifacts archived to `~/.enso/projects/<id>/sprints/sprint-<timestamp>/`
+
+**Viewing sprint history**: Type `/evolution-history` to browse all past sprints with interactive dashboards, persona reports, implementation details, and validation results across 6 tabs.
+
+**Evaluating sprint quality**:
+- **Sprint score** (in meta-review): PL's overall assessment (target: 8.0+)
+- **Persona score deltas**: Before/after ratings from re-tests — the only objective measure of improvement
+- **Build status**: Must PASS (TypeScript clean, zero errors)
+- **Review verdict**: PASS/FAIL from the reviewer agent
+- **Enhancement hit rate**: % of planned enhancements actually implemented
+
+**Gateway restart procedure** (required after plugin source changes):
+```bash
+# All 3 steps required — skipping any step may load stale code
+taskkill //F //IM node.exe          # 1. Kill ALL node processes
+rm -rf "C:/Users/Administrator/AppData/Local/Temp/tsx-Administrator"  # 2. Clear tsx cache
+openclaw gateway start              # 3. Restart gateway
+```
+
+**Known limitations**:
+- Backend changes (task-router, researcher-tools) cannot be validated by personas without a gateway restart mid-sprint
+- Personas may capture stale context from prior test sessions — a "New Conversation" button helps but session isolation is still imperfect
+- The sprint cannot restart the gateway itself (safety rule), so accumulated backend fixes are only verifiable in the NEXT sprint
 
 #### Architecture
 
-- `evolution.ts` — Sprint planning prompt builder, lifecycle management, sprint persistence
+- `evolution.ts` — Sprint planning prompt builder (streamlined 7-phase structure), lifecycle management, sprint persistence. Passes `maxConcurrency: 6` and `planningModel: "opus"` to orchestrator
+- `evolution-archive.ts` — Sprint archival (`archiveEvolutionSprint`), history listing, file retrieval, meta.json generation
 - `project-manager.ts` — Project CRUD, default Enso project definition, `ensureDefaultProject()`
-- Builds on top of the orchestrator's DAG engine (`orchestrator-engine.ts`) for parallel execution
-- Each sprint creates an orchestration with the evolution-specific planning prompt
+- `orchestrator-engine.ts` — DAG executor: Kahn's algorithm with semaphore-based concurrency, `readTaskSummary()` for structured context propagation, `extractVerdict()` for fix-verify loop, `blockDependents()` for failure cascading
+- `orchestrator.ts` — Planning session (Claude Code), plan parsing, lifecycle. Threads `maxConcurrency` and `planningModel` to engine
 - Sprint results delivered as bespoke interactive JSX dashboard on the orchestration card
-- Key files: `evolution.ts`, `project-manager.ts` (backend), WelcomeCard `/evolve` tile (frontend)
+- Key files: `evolution.ts`, `evolution-archive.ts`, `project-manager.ts`, `orchestrator-engine.ts` (backend); `OrchestrationCard.tsx`, `EvolutionHistoryCard.tsx` (frontend)
 
 ### Deep Research Pipeline
 

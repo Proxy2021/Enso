@@ -170,18 +170,18 @@ describe("Sprint Status", () => {
 });
 
 describe("Error Handling", () => {
-  it("logs errors instead of silently swallowing (BUG-007 regression)", () => {
+  it("logs errors instead of silently swallowing (BUG-007 regression)", async () => {
     const projectRoot = "/test/project";
     mockDirs[projectRoot] = [".evolution-team-architect.md"];
     mockFs[join(projectRoot, ".evolution-team-architect.md")] = "# Team";
 
-    // Make copyFileSync throw for team report
-    const fs = require("fs");
-    fs.copyFileSync.mockImplementation((src: string, dest: string) => {
-      if (dest.includes("team/")) {
+    // Make copyFileSync throw for team report (use regex for cross-platform path sep)
+    const fsMock = await import("fs");
+    (fsMock.copyFileSync as unknown as ReturnType<typeof vi.fn>).mockImplementation((src: string, dest: string) => {
+      if (/[/\\]team[/\\]/.test(dest as string)) {
         throw new Error("Permission denied");
       }
-      copiedFiles.push({ src, dest });
+      copiedFiles.push({ src: src as string, dest: dest as string });
     });
 
     const meta = archiveEvolutionSprint("sprint-010", "test", projectRoot, "test-project");
@@ -192,10 +192,10 @@ describe("Error Handling", () => {
     expect(logError).toHaveBeenCalled();
   });
 
-  it("returns null on catastrophic failure without crashing", () => {
+  it("returns null on catastrophic failure without crashing", async () => {
     // Provide a projectRoot that makes mkdirSync fail
-    const fs = require("fs");
-    fs.mkdirSync.mockImplementation(() => {
+    const { mkdirSync } = await import("fs");
+    vi.mocked(mkdirSync).mockImplementation(() => {
       throw new Error("EACCES");
     });
 

@@ -102,7 +102,7 @@ Examples:
 
 ## FORMATTING GUIDELINES (CRITICAL — follow these for SIMPLE answers)
 When writing your SIMPLE answer, use the BEST format for the content type:
-- **Comparisons** (X vs Y, pros/cons, feature comparison): ALWAYS use a markdown table with columns for each option and rows for criteria.
+- **Comparisons** (X vs Y, pros/cons, feature comparison): You MUST use a markdown table with columns for each option and rows for criteria. Include at least 5 comparison rows.
 - **Architecture / System Design / Workflows / Diagrams**: ALWAYS include a Mermaid diagram using \`\`\`mermaid code blocks when the user asks about architecture, flows, processes, or relationships. The frontend renders these as interactive SVG visualizations. Supported types: flowchart TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, erDiagram, gantt, pie. Example:
 \`\`\`mermaid
 graph TD
@@ -111,6 +111,23 @@ graph TD
     B --> D[User Service]
 \`\`\`
 Always pair the diagram with a text explanation. When the user asks for any visual representation, flowchart, process flow, architecture diagram, state machine, ER diagram, or sequence diagram, generate Mermaid syntax.
+- **Timelines / Roadmaps / Launch Plans**: When the user asks for a "timeline", "roadmap", "launch plan", "milestone plan", or "Gantt chart", you MUST include a Mermaid gantt or timeline diagram. Example:
+\`\`\`mermaid
+gantt
+    title Product Launch Timeline
+    dateFormat YYYY-MM-DD
+    section Phase 1
+    Market Research    :a1, 2026-01-01, 30d
+    MVP Development    :a2, after a1, 45d
+    section Phase 2
+    Beta Launch        :b1, after a2, 14d
+    Iteration          :b2, after b1, 30d
+\`\`\`
+- **Dashboards / Metrics / KPI displays**: When the user asks for a "dashboard", include a summary table with sample data AND a Mermaid pie or bar-style diagram showing the distribution. At minimum, provide a structured table with placeholder data the user can fill in.
+- **Frameworks / Segmentation / Process Flows**: When the user asks for a "framework", "segmentation", or "process", include a Mermaid flowchart showing the methodology.
+
+**CRITICAL: Visual output is MANDATORY when the user's query contains any of these words: timeline, roadmap, dashboard, diagram, chart, flowchart, visualization, framework, process flow, architecture, sequence, Gantt. You MUST include at least one Mermaid code block in your response.**
+
 - **Plans / Timelines / Roadmaps**: Use numbered phases with **bold milestones** and specific timeframes.
 - **Analysis / Strategy**: Use ## headers for sections, bullet points for key findings, and tables for data.
 - **Creative content** (campaigns, calendars, content plans): Use markdown tables for schedules and calendars, numbered lists for options.
@@ -269,11 +286,21 @@ function heuristicFallbackClassify(message: string): TaskClassification | null {
     };
   }
 
-  // Code/build tasks
-  if (/\b(fix|build|implement|deploy|refactor|debug|code|script|api)\b/i.test(lower)) {
+  // Code/build tasks — more conservative: require action verb + specific target
+  if (/\b(fix|deploy|refactor|debug)\b/i.test(lower) &&
+      /\b(bug|error|issue|server|app|file|module|function|component|endpoint|database)\b/i.test(lower)) {
     return {
       complexity: "one-off",
-      reasoning: "Heuristic fallback: code/build task detected",
+      reasoning: "Heuristic fallback: specific code fix task",
+      directAction: message,
+    };
+  }
+  if (/\b(build|implement|scaffold|create)\b/i.test(lower) &&
+      /\b(app|application|system|server|api|pipeline|service|project|tool|bot|scraper|script)\b/i.test(lower) &&
+      !/\b(diagram|chart|flowchart|template|checklist|outline|example)\b/i.test(lower)) {
+    return {
+      complexity: "one-off",
+      reasoning: "Heuristic fallback: build task with specific deliverable",
       directAction: message,
     };
   }
@@ -282,13 +309,16 @@ function heuristicFallbackClassify(message: string): TaskClassification | null {
   return null;
 }
 
+// ── Data-seeking keywords that signal the query needs live web data ──
+const DATA_SEEKING_PATTERN = /\b(market\s+size|growth\s+(projections?|rate|forecast)|key\s+metrics|benchmark|statistics|data\s+points?|industry\s+(analysis|report|size)|revenue|valuation|funding|investment\s+trends?|market\s+share|pricing\s+(comparison|data)|salary|compensation|adoption\s+rate|roi\s+data|case\s+stud(y|ies))\b/i;
+
 // ── Quick Heuristics ──
 
 /**
  * Fast heuristic-based classification for obvious cases.
  * Returns null if the message needs LLM classification.
  */
-function quickClassify(message: string): TaskClassification | null {
+export function quickClassify(message: string): TaskClassification | null {
   const trimmed = message.trim();
   const lower = trimmed.toLowerCase();
   const wordCount = trimmed.split(/\s+/).length;
@@ -328,6 +358,32 @@ function quickClassify(message: string): TaskClassification | null {
       complexity: "simple",
       reasoning: "Short message — likely a greeting or command",
     };
+  }
+
+  // Explanatory/educational queries — should be SIMPLE even if they mention code terms
+  // "What is an API?" "How do REST APIs work?" "Explain debugging techniques"
+  if (/^(what|how|why|explain|describe|tell\s+me|can\s+you\s+explain)\b/i.test(lower) &&
+      !/\b(fix|build|create|deploy|implement|refactor)\b/i.test(lower)) {
+    return null; // Let LLM decide — but signal it's likely SIMPLE, not ONE-OFF
+  }
+
+  // Content generation queries that mention "code" but don't want execution
+  // "Create a Mermaid diagram" "Show me a Python example" "Write a code review checklist"
+  const contentCreationSignals = [
+    /\b(diagram|chart|flowchart|mermaid|visualization)\b/i,
+    /\b(example|template|checklist|outline|sample)\b/i,
+    /\b(explain|describe|compare|analyze|summarize)\b/i,
+  ];
+  const executionSignals = [
+    /\b(fix|deploy|install|run|execute|build\s+(me\s+)?a\s+(todo|app|system|server|api|project))\b/i,
+    /\b(refactor|debug|migrate|convert|scaffold)\b/i,
+    /\b(in\s+my\s+(project|repo|codebase|file))\b/i,
+  ];
+  const hasContentSignal = contentCreationSignals.some(p => p.test(lower));
+  const hasExecutionSignal = executionSignals.some(p => p.test(lower));
+
+  if (hasContentSignal && !hasExecutionSignal) {
+    return null; // Let LLM classify — won't hit the bad heuristic fallback for these
   }
 
   // Greetings
@@ -467,6 +523,7 @@ function quickClassify(message: string): TaskClassification | null {
   // ── Creative generation & template requests → simple (direct answer, no LLM call needed) ──
   if (/^(generate|create|write|draft|come up with|give me|list|make|suggest|propose)\b/i.test(lower) &&
       /\b(tagline|slogan|headline|name|title|idea|concept|tip|suggestion|example|template|outline|framework|strategy|plan|calendar|schedule|campaign|post|copy|bio|pitch|summary|overview)\b/i.test(lower) &&
+      !DATA_SEEKING_PATTERN.test(lower) &&
       !/\b(app|application|system|software|code|script|api|database|server|deploy)\b/i.test(lower) &&
       wordCount <= 35) {
     return {
@@ -478,6 +535,7 @@ function quickClassify(message: string): TaskClassification | null {
   // ── Technical explanations → simple (no web data needed) ──
   if (/^(explain|describe|what\s+is|what\s+are|how\s+does|how\s+do|tell\s+me\s+about|walk\s+me\s+through)\b/i.test(lower) &&
       !/\b(latest|current|2026|2025|recent|news|happening|trending)\b/i.test(lower) &&
+      !DATA_SEEKING_PATTERN.test(lower) &&
       wordCount <= 40) {
     return {
       complexity: "simple",
@@ -488,6 +546,7 @@ function quickClassify(message: string): TaskClassification | null {
   // ── Comparison/analysis without needing live data → simple ──
   if (/^(compare|contrast|what\s+are\s+the\s+(pros|differences?|advantages?))\b/i.test(lower) &&
       !/\b(latest|current|2026|2025|price|pricing|cost)\b/i.test(lower) &&
+      !DATA_SEEKING_PATTERN.test(lower) &&
       !/\b(app|application|system|software|build|deploy)\b/i.test(lower) &&
       wordCount <= 35) {
     return {
@@ -522,4 +581,39 @@ function quickClassify(message: string): TaskClassification | null {
 
   // Let LLM handle everything else
   return null;
+}
+
+// ── Quality Gate ──
+
+export interface QualityGateResult {
+  pass: boolean;
+  reason?: "too_short" | "template_detected" | "no_substance";
+}
+
+/**
+ * Validates a classifier-generated answer before sending to user.
+ * Returns { pass: false } if the answer should be escalated to the full agent pipeline.
+ */
+export function qualityGate(answer: string, userMessage: string): QualityGateResult {
+  // 1. Minimum length — answer should be at least 3x the question length (in words)
+  const answerWords = answer.split(/\s+/).length;
+  const questionWords = userMessage.split(/\s+/).length;
+  const minWords = Math.max(30, questionWords * 3);
+  if (answerWords < minWords) {
+    return { pass: false, reason: "too_short" };
+  }
+
+  // 2. Template pattern detection — catch placeholder output
+  const templatePatterns = /\[X\]%|\[INSERT\]|\[YOUR[_ ]|\[NAME\b|\[COMPANY\b|\[DATE\b|\[NUMBER\b|___+|\bTBD\b|\bTODO\b|\[PLACEHOLDER\b/i;
+  if (templatePatterns.test(answer)) {
+    return { pass: false, reason: "template_detected" };
+  }
+
+  // 3. Substance check — longer questions need structured answers
+  const hasStructure = /^#{1,4}\s|^\s*[-*]\s|^\|.*\|/m.test(answer);
+  if (questionWords > 10 && !hasStructure && answerWords < 100) {
+    return { pass: false, reason: "no_substance" };
+  }
+
+  return { pass: true };
 }

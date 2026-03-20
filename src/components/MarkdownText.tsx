@@ -154,15 +154,55 @@ function loadMermaid(): Promise<any> {
 /** Pre-process AI-generated Mermaid code to strip features that crash the parser */
 function sanitizeMermaidCode(code: string): string {
   let clean = code;
-  // Strip %%{init:...}%% directives (CSS themes, config overrides)
+  // 1. Strip %%{init:...}%% directives (CSS themes, config overrides) — multiline-safe
   clean = clean.replace(/%%\{init:[\s\S]*?\}%%/g, "");
-  // Replace HTML <br/> tags with Mermaid newline escape
+  // 2. Replace HTML <br/> tags with Mermaid newline escape
   clean = clean.replace(/<br\s*\/?>/gi, "\\n");
-  // Strip remaining HTML tags from labels
+  // 3. Strip remaining HTML tags from labels
   clean = clean.replace(/<\/?[a-z][^>]*>/gi, "");
-  // Trim trailing whitespace per line, trim overall
+  // 4. Strip CSS `style` directives (e.g., "style nodeA fill:#f9f,stroke:#333")
+  clean = clean.replace(/^\s*style\s+\S+\s+.+$/gm, "");
+  // 5. Strip `classDef` directives (e.g., "classDef error fill:#f99")
+  clean = clean.replace(/^\s*classDef\s+.+$/gm, "");
+  // 6. Strip `class` assignments (e.g., "class nodeA,nodeB error")
+  clean = clean.replace(/^\s*class\s+\S+[\s,]+\S+\s*$/gm, "");
+  // 7. Strip `linkStyle` directives (e.g., "linkStyle 0 stroke:#ff3")
+  clean = clean.replace(/^\s*linkStyle\s+.+$/gm, "");
+  // 8. Strip `click` event handlers (e.g., "click nodeA callback")
+  clean = clean.replace(/^\s*click\s+\S+\s+.+$/gm, "");
+  // 9. Remove 'direction' keyword inside subgraphs (mermaid 11.x doesn't support this)
+  clean = clean.replace(
+    /(subgraph\s[^\n]*\n)([\s\S]*?)(end\b)/g,
+    (match, open, body, close) => {
+      const cleanBody = body.replace(/^\s*direction\s+(TB|BT|LR|RL)\s*$/gm, "");
+      return open + cleanBody + close;
+    }
+  );
+  // 10. Trim trailing whitespace per line, trim overall
   clean = clean.split("\n").map(l => l.trimEnd()).join("\n").trim();
   return clean;
+}
+
+/** Attempt to auto-repair common LLM Mermaid syntax mistakes */
+function autoRepairMermaid(code: string): string {
+  let fixed = code;
+  // Fix 1: Remove unsupported "end" labels (e.g., "end SubgraphName" → "end")
+  fixed = fixed.replace(/^(\s*end)\s+\S.*$/gm, "$1");
+  // Fix 2: Remove empty node IDs (e.g., " --> " with no source)
+  fixed = fixed.replace(/^\s*-->\s/gm, "");
+  // Fix 3: Fix unterminated strings in labels — strip unclosed quotes
+  fixed = fixed.replace(/\["([^\]"]*?)$/gm, '["$1"]');
+  // Fix 4: Remove duplicate graph/flowchart declarations
+  const lines = fixed.split("\n");
+  let foundDecl = false;
+  fixed = lines.filter(line => {
+    if (/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie)\b/.test(line)) {
+      if (foundDecl) return false;
+      foundDecl = true;
+    }
+    return true;
+  }).join("\n");
+  return fixed;
 }
 
 let mermaidIdCounter = 0;
@@ -186,6 +226,24 @@ function MermaidDiagram({ code }: { code: string }) {
         document.body.appendChild(tempContainer);
         try {
           const sanitized = sanitizeMermaidCode(code);
+          // Pre-validate syntax before rendering
+          try {
+            await m.parse(sanitized);
+          } catch (parseErr: any) {
+            // Attempt auto-repair: common LLM mistakes
+            const repaired = autoRepairMermaid(sanitized);
+            if (repaired !== sanitized) {
+              try {
+                await m.parse(repaired);
+                const { svg } = await m.render(id, repaired);
+                if (!cancelled) setSvgHtml(svg);
+                return;
+              } catch {
+                // Repair didn't help — fall through to original error
+              }
+            }
+            throw parseErr;
+          }
           const { svg } = await m.render(id, sanitized);
           if (!cancelled) setSvgHtml(svg);
         } catch (e: any) {

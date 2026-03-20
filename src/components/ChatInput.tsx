@@ -108,6 +108,8 @@ export default function ChatInput() {
   const activeShellSessionId = useChatStore((s) => s.getActiveShellSessionId());
   const connectionState = useChatStore((s) => s.connectionState);
   const hasActiveBackgroundTask = useChatStore((s) => s.hasActiveBackgroundTask);
+  const hasCards = useChatStore((s) => s.cardOrder.length > 0);
+  const clearConversation = useChatStore((s) => s.clearConversation);
   const [queueToast, setQueueToast] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -197,18 +199,28 @@ export default function ChatInput() {
     setText("");
     setAttachedFiles([]);
     setSelectedIndex(0);
+    requestAnimationFrame(() => autoResize());
     textareaRef.current?.focus();
   }
 
   function selectCommand(cmd: SlashCommand) {
-    // If the command ends with a space (like "/code "), just fill it in for the user to continue typing
+    // Capture trailing text the user typed after the command prefix
+    const currentText = text.trim();
+    const trailingText = currentText.startsWith(cmd.command.trimEnd())
+      ? currentText.slice(cmd.command.trimEnd().length).trim()
+      : "";
+
     if (cmd.command.endsWith(" ")) {
-      setText(cmd.command);
+      // Commands that expect inline arguments (e.g. "/code ")
+      // Pre-fill with command + any trailing text the user already typed
+      setText(trailingText ? `${cmd.command}${trailingText}` : cmd.command);
     } else {
-      setText(cmd.command);
-      // Auto-send commands that don't need arguments
+      // Auto-send commands (e.g. "/orchestrate", "/shell")
+      // Send the FULL text including trailing arguments
+      const fullText = trailingText ? `${cmd.command} ${trailingText}` : cmd.command;
+      setText(fullText);
       setTimeout(() => {
-        sendMessage(cmd.command);
+        sendMessage(fullText);
         setText("");
         setSelectedIndex(0);
       }, 0);
@@ -231,7 +243,19 @@ export default function ChatInput() {
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
         e.preventDefault();
         const cmd = filteredCommands[selectedIndex];
-        if (cmd) selectCommand(cmd);
+        if (cmd) {
+          // If the user has typed text BEYOND the command prefix,
+          // send directly instead of selecting the autocomplete item
+          const trimmed = text.trim();
+          const hasTrailingText = cmd.command.endsWith(" ")
+            ? trimmed.length > cmd.command.trimEnd().length + 1
+            : trimmed.length > cmd.command.length;
+          if (e.key === "Enter" && hasTrailingText) {
+            handleSend();
+          } else {
+            selectCommand(cmd);
+          }
+        }
         return;
       }
       if (e.key === "Escape") {
@@ -252,9 +276,17 @@ export default function ChatInput() {
     }
   }
 
+  const autoResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }, []);
+
   function handleTextChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setText(e.target.value);
     setSelectedIndex(0);
+    requestAnimationFrame(() => autoResize());
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -429,6 +461,16 @@ export default function ChatInput() {
           </div>
         )}
 
+        {/* New Conversation button — only show when cards exist */}
+        {hasCards && !activeShellSessionId && (
+          <button
+            onClick={clearConversation}
+            className="text-[10px] px-2 py-1 rounded-md border border-gray-700/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-indigo-500/40 transition-colors mb-2"
+          >
+            New Conversation
+          </button>
+        )}
+
         {/* Slash command autocomplete menu */}
         {showMenu && (
           <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 border border-gray-600/60 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.4)] overflow-hidden z-50 max-h-[60vh] overflow-y-auto">
@@ -565,11 +607,12 @@ export default function ChatInput() {
             placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : "Message..."}
             disabled={disabled}
             rows={1}
-            className={`flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none placeholder-gray-500 disabled:opacity-50 ${
+            className={`flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none placeholder-gray-500 disabled:opacity-50 overflow-y-auto ${
               activeShellSessionId
                 ? "ring-2 ring-amber-500/60 focus:ring-amber-500"
                 : "focus:ring-2 focus:ring-indigo-500"
             }`}
+            style={{ maxHeight: "200px" }}
           />
           {speechSupported && (
             <button

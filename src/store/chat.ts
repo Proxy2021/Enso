@@ -101,6 +101,7 @@ interface CardStore {
   removeCard: (cardId: string) => void;
   pinCard: (cardId: string) => void;
   unpinCard: (cardId: string) => void;
+  clearConversation: () => void;
   toggleSidebar: () => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
@@ -1375,6 +1376,17 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   toggleSidebar: () => set((s) => ({ showSidebar: !s.showSidebar })),
+
+  clearConversation: () => {
+    set({
+      cardOrder: [],
+      cards: {},
+      isWaiting: false,
+      _activeTerminalCardId: null,
+      pinnedCards: [],
+    });
+    localStorage.removeItem("enso_pinned_cards");
+  },
 
   _handleServerMessage: (msg: ServerMessage) => {
     // Handle settings messages (mode + tool families)

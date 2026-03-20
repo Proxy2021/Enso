@@ -988,6 +988,8 @@ Return valid JSON (no markdown fences):
 Rules:
 - The narrative is the PRIMARY output — comprehensive, engaging, covering ALL important material
 - Write like a magazine feature: strong hook, thematic paragraphs, forward-looking close
+- RECOMMENDATION-FIRST: Your narrative MUST start with the key finding or recommendation in the first paragraph. If the user is asking "what should I use/do?", answer that question FIRST, then provide supporting evidence.
+- If the topic appears to be a comparison (mentions "vs", "versus", "compare", "which", "better than", "pros and cons"), your first paragraph MUST state your recommendation and the comparison entities' relative positions. Then provide evidence.
 - Generate 6-10 key findings. Mix fact, trend, insight, warning types
 - sourceRefs: valid 0-indexed integers from 0 to ${sourceCount - 1}
 - CRITICAL: Return ONLY valid JSON. No markdown fences, no comments`;
@@ -1068,6 +1070,8 @@ Return valid JSON (no markdown fences) with this exact structure:
 
 Rules:
 - The "narrative" is the PRIMARY output users will read — it must be comprehensive, engaging, and cover ALL important material
+- RECOMMENDATION-FIRST: Your narrative MUST start with the key finding or recommendation in the first paragraph. If the user is asking "what should I use/do?", answer that question FIRST, then provide supporting evidence.
+- If the topic appears to be a comparison (mentions "vs", "versus", "compare", "which", "better than", "pros and cons"), your first paragraph MUST state your recommendation and the comparison entities' relative positions. Then provide evidence.
 - Write the narrative like a well-crafted magazine feature or intelligence briefing: strong opening that hooks the reader and establishes why this topic matters now, body paragraphs each exploring a distinct angle or theme, closing with forward-looking perspective or implications
 - Each narrative paragraph should be 3-5 sentences of flowing, connected prose
 - Generate 6-10 key findings covering the most important discoveries. Mix fact, trend, insight, and warning types
