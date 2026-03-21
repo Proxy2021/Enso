@@ -20,7 +20,7 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync } from "fs";
-import { join, basename } from "path";
+import { join, basename, resolve } from "path";
 import { logAction, logError } from "./action-log.js";
 
 const HOME = process.env.HOME || process.env.USERPROFILE || "";
@@ -94,14 +94,9 @@ export function archiveDiscoveryResults(
       let destName: string | null = null;
       let destSubdir = "";
 
-      // Phase 1: Sourcing reports
-      if (file === "opportunity-synthesis.md" || file === "tech-due-diligence.md" || file === "business-due-diligence.md") {
-        destName = file;
-        destSubdir = "sourcing";
-      }
-      // Also match .orchestration-output files that look like sourcing
-      else if (file.startsWith(".orchestration-output-") && file.includes("sourcing")) {
-        destName = file.replace(".orchestration-output-", "sourcing-");
+      // Phase 1: Sourcing reports (match actual orchestrator output names)
+      if (file.startsWith(".orchestration-output-") && file.includes("sourcing")) {
+        destName = file.replace(".orchestration-output-", "");
         destSubdir = "sourcing";
       }
       // Phase 2: Partner pitches
@@ -109,9 +104,13 @@ export function archiveDiscoveryResults(
         destName = file;
         destSubdir = "pitches";
       }
-      // Phase 3: Committee challenge & recommendation
+      // Phase 3: Committee challenge & recommendation (single or multi-critic)
       else if (file === "investment-recommendation.md") {
         destName = file;
+        destSubdir = "committee";
+      }
+      else if (file.startsWith(".orchestration-output-committee-")) {
+        destName = file.replace(".orchestration-output-", "");
         destSubdir = "committee";
       }
       // Phase 4: Deliverables
@@ -190,14 +189,12 @@ export function archiveDiscoveryResults(
  */
 export function cleanDiscoveryTempFiles(projectRoot: string): void {
   const patterns = [
-    /^opportunity-synthesis\.md$/,
-    /^tech-due-diligence\.md$/,
-    /^business-due-diligence\.md$/,
     /^investment-pitch-.*\.md$/,
     /^investment-recommendation\.md$/,
     /^investment-memo\.md$/,
     /^\.orchestration-ui\.jsx$/,
     /^\.orchestration-output-/,
+    /^committee-.*\.md$/,
   ];
   const dirsToClean = [projectRoot];
   for (const sub of ["server", "src"]) {
@@ -257,9 +254,11 @@ export function loadDiscoveryResult(discoveryId: string): DiscoveryMeta | null {
  * Read a specific file from an archived discovery.
  */
 export function getDiscoveryFile(discoveryId: string, filename: string): string | null {
-  const safe = filename.replace(/\.\./g, "").replace(/\\/g, "/");
-  const filePath = join(DISCOVERIES_DIR, discoveryId, safe);
-  if (!existsSync(filePath)) return null;
-  try { return readFileSync(filePath, "utf-8"); }
-  catch (err) { logError("discovery-archive", "Failed to read discovery file: " + filePath, err); return null; }
+  const safeId = discoveryId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const resolved = resolve(DISCOVERIES_DIR, safeId, filename);
+  const discoveryRoot = resolve(DISCOVERIES_DIR, safeId);
+  if (!resolved.startsWith(discoveryRoot)) return null;
+  if (!existsSync(resolved)) return null;
+  try { return readFileSync(resolved, "utf-8"); }
+  catch (err) { logError("discovery-archive", "Failed to read discovery file: " + resolved, err); return null; }
 }
