@@ -121,13 +121,35 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             <h3 className="text-sm font-semibold text-gray-200">Projects</h3>
             <span className="text-xs text-gray-500">{projects.length} project{projects.length !== 1 ? "s" : ""}</span>
           </div>
-          <button
-            onClick={() => setView("import")}
-            className="px-2.5 py-1 text-[10px] font-medium bg-violet-600 hover:bg-violet-500 text-white rounded-md transition-colors"
-          >
-            + Import Project
-          </button>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => sendMessage("/discover")}
+              className="px-2.5 py-1 text-[10px] font-medium bg-amber-600 hover:bg-amber-500 text-white rounded-md transition-colors"
+            >
+              Discover
+            </button>
+            <button
+              onClick={() => setView("import")}
+              className="px-2.5 py-1 text-[10px] font-medium bg-violet-600 hover:bg-violet-500 text-white rounded-md transition-colors"
+            >
+              + Import
+            </button>
+          </div>
         </div>
+
+        {/* Discover banner */}
+        <button
+          onClick={() => sendMessage("/discover")}
+          className="w-full text-left bg-gradient-to-r from-amber-500/10 to-orange-500/10 hover:from-amber-500/15 hover:to-orange-500/15 border border-amber-500/20 hover:border-amber-500/30 rounded-lg p-3 transition-all duration-150 active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm">💡</span>
+            <span className="text-xs font-medium text-amber-300">AI VC Discovery</span>
+          </div>
+          <div className="text-[10px] text-gray-400">
+            AI investment team researches market opportunities, pitches recommendations, and runs rigorous due diligence. Type a focus area or leave blank for general discovery.
+          </div>
+        </button>
 
         {loading && <div className="text-center py-8 text-gray-500 text-xs">Loading projects...</div>}
 
@@ -135,9 +157,14 @@ export default function ProjectsCard({ card }: CardRendererProps) {
           <div className="text-center py-8 space-y-2">
             <div className="text-2xl">📁</div>
             <div className="text-gray-400 text-sm">No projects yet</div>
-            <button onClick={() => setView("import")} className="text-violet-400 text-xs hover:text-violet-300">
-              Import your first project →
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => sendMessage("/discover")} className="text-amber-400 text-xs hover:text-amber-300">
+                Discover opportunities →
+              </button>
+              <button onClick={() => setView("import")} className="text-violet-400 text-xs hover:text-violet-300">
+                Import existing project →
+              </button>
+            </div>
           </div>
         )}
 
