@@ -1154,6 +1154,17 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Client-side WS debug log (HTTP POST, no WS needed) ──
+  app.post("/api/ws-debug", express.json(), (req, res) => {
+    const entries: Array<{ event: string; ts: number; detail?: string }> = req.body?.entries;
+    if (Array.isArray(entries)) {
+      for (const e of entries) {
+        runtime.log?.(`[enso:ws-client] ${e.event} clientId=${req.body?.clientId ?? '?'} ${e.detail ?? ''} (client-ts=${new Date(e.ts).toISOString()})`);
+      }
+    }
+    res.json({ ok: true });
+  });
+
   // ── SPA fallback (must be after all API routes) ──
   if (existsSync(distDir) && existsSync(join(distDir, "index.html"))) {
     app.get("/{*path}", (_req, res) => {
@@ -1180,8 +1191,12 @@ export async function startEnsoServer(opts: {
   const pingInterval = setInterval(() => {
     for (const client of clients.values()) {
       const { ws: clientWs } = client;
-      if (clientWs.readyState !== WebSocket.OPEN) continue;
+      if (clientWs.readyState !== WebSocket.OPEN) {
+        runtime.log?.(`[enso:ws-debug] client=${client.id} skip ping readyState=${clientWs.readyState}`);
+        continue;
+      }
       const missed = ((clientWs as any)._ensoMissedPongs as number) ?? 0;
+      runtime.log?.(`[enso:ws-debug] PING client=${client.id} missed=${missed}`);
       if (missed >= WS_MAX_MISSED_PONGS) {
         runtime.log?.(`[enso] ping timeout for ${client.id} (${missed} missed pongs), terminating`);
         (clientWs as any)._ensoMissedPongs = 0;
@@ -1195,7 +1210,8 @@ export async function startEnsoServer(opts: {
 
   wss.on("connection", (ws, req) => {
     // Reset pong flag on each pong received
-    ws.on("pong", () => { (ws as any)._ensoMissedPongs = 0; });
+    ws.on("pong", () => { runtime.log?.(`[enso:ws-debug] PONG from ${clientId}`); (ws as any)._ensoMissedPongs = 0; });
+    ws.on("error", (err) => { runtime.log?.(`[enso:ws-debug] ERROR client=${clientId}: ${err.message}`); });
     // ── WebSocket token auth ──
     const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
     if (accessToken) {
@@ -2763,8 +2779,8 @@ export async function startEnsoServer(opts: {
         runtime.log?.(`[enso] stale ws close for ${clientId} (already reconnected), ignoring`);
         return;
       }
-      runtime.log?.(`[enso] client disconnected: ${clientId}`);
-      logAction({ ts: Date.now(), type: "system", category: "system:disconnect", message: `Client disconnected: ${clientId}` });
+      runtime.log?.(`[enso] client disconnected: ${clientId} code=${code} reason="${reason?.toString() || ''}" missed=${(ws as any)._ensoMissedPongs ?? '?'}`);
+      logAction({ ts: Date.now(), type: "system", category: "system:disconnect", message: `Client disconnected: ${clientId} code=${code}` });
       // Delay cleanup — the client may reconnect (especially on mobile where
       // backgrounding kills the WS).  Use a longer timeout (10 min) so Claude
       // Code output is buffered and replayed when the user returns.
