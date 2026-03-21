@@ -43,6 +43,7 @@ const _debugLog: Array<{ event: string; ts: number; detail?: string }> = [];
 let _debugFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let _debugBaseUrl = "";
 let _debugClientId = "";
+let _debugToken = "";
 
 function wsDebug(event: string, detail?: string) {
   _debugLog.push({ event, ts: Date.now(), detail });
@@ -55,9 +56,11 @@ function flushDebugLog() {
   if (_debugLog.length === 0 || !_debugBaseUrl) return;
   const entries = _debugLog.splice(0);
   const url = `${_debugBaseUrl}/api/ws-debug`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (_debugToken) headers["Authorization"] = `Bearer ${_debugToken}`;
   fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ clientId: _debugClientId, entries }),
   }).catch(() => { /* best-effort */ });
 }
@@ -70,11 +73,12 @@ export function createWSClient(options: WSClientOptions): WSClient {
   let hasConnectedBefore = false;
   let connectAttempt = 0;
 
-  // Derive HTTP base URL for debug endpoint from the WS URL
+  // Derive HTTP base URL + auth token for debug endpoint from the WS URL
   const clientId = getClientId();
   _debugClientId = clientId;
   try {
     const parsed = new URL(options.url, location.href);
+    _debugToken = parsed.searchParams.get("token") ?? "";
     parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
     parsed.pathname = "";
     parsed.search = "";

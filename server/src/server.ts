@@ -909,6 +909,11 @@ export async function startEnsoServer(opts: {
     res.send(content);
   });
 
+  // ── Growth Marketing & Sales API ──
+
+  const growthRouter = (await import("./growth-api.js")).default;
+  app.use("/api/growth", growthRouter);
+
   // ── Discovery History API ──
 
   app.get("/api/discovery-results", async (_req, res) => {
