@@ -1216,7 +1216,13 @@ export async function startEnsoServer(opts: {
       // Reconnect — swap ws and send on the existing object so all captured
       // references (runClaudeCode, orchestrator, build-via-claude) automatically
       // route to the new socket.
+      const oldWs = existing.ws;
       existing.ws = ws;
+      // Terminate the old socket so its close handler (which checks client.ws !== ws)
+      // fires harmlessly, and the ping loop stops pinging the stale socket.
+      if (oldWs !== ws && oldWs.readyState <= WebSocket.OPEN) {
+        oldWs.terminate();
+      }
       existing.send = (msg: ServerMessage) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify(msg));
@@ -2747,7 +2753,16 @@ export async function startEnsoServer(opts: {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reason) => {
+      // If the client already reconnected with a new socket, this close event
+      // is from the stale/old socket — ignore it completely.  Without this
+      // guard, the stale close fires *after* the reconnect, starting a cleanup
+      // timer that races with the live connection (causing spurious disconnect/
+      // reconnect churn visible on mobile).
+      if (client.ws !== ws) {
+        runtime.log?.(`[enso] stale ws close for ${clientId} (already reconnected), ignoring`);
+        return;
+      }
       runtime.log?.(`[enso] client disconnected: ${clientId}`);
       logAction({ ts: Date.now(), type: "system", category: "system:disconnect", message: `Client disconnected: ${clientId}` });
       // Delay cleanup — the client may reconnect (especially on mobile where
