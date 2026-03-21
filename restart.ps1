@@ -129,29 +129,11 @@ if (-not (Test-Path $nullInput)) { [System.IO.File]::WriteAllText($nullInput, ""
 $serverLog    = Join-Path $env:TEMP "enso-server.log"
 $serverErrLog = Join-Path $env:TEMP "enso-server-err.log"
 
-# Find npx to launch tsx
-$npxCmd = Get-Command npx -ErrorAction SilentlyContinue
-$tsxArgs = if ($npxCmd) {
-    # Use npx tsx
-    $npxPath = $npxCmd.Source
-    @($npxPath, "tsx", "server/standalone.ts")
-} else {
-    # Fallback: direct tsx
-    $tsxCmd = Get-Command tsx -ErrorAction SilentlyContinue
-    if ($tsxCmd) {
-        @($tsxCmd.Source, "server/standalone.ts")
-    } else {
-        @("C:\Program Files\nodejs\node_modules\npm\bin\npx-cli.js", "tsx", "server/standalone.ts")
-    }
-}
-
-$serverProc = Start-Process -FilePath $nodeExe `
-    -ArgumentList $tsxArgs `
+# Use cmd /c to launch npx tsx (handles paths with spaces correctly)
+$serverProc = Start-Process -FilePath "cmd.exe" `
+    -ArgumentList "/c", "npx tsx server/standalone.ts > `"$serverLog`" 2> `"$serverErrLog`"" `
     -WorkingDirectory $EnsoDir `
     -WindowStyle Hidden `
-    -RedirectStandardInput $nullInput `
-    -RedirectStandardOutput $serverLog `
-    -RedirectStandardError $serverErrLog `
     -PassThru
 
 # Wait for server to be ready

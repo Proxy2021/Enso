@@ -15,7 +15,7 @@ import { runClaudeCode } from "./claude-code.js";
 import {
   loadAllApps,
   registerLoadedApp,
-  CODEBASE_APPS_DIR,
+  SHIPPED_APPS_DIR,
   generateSkillMd,
   type LoadedApp,
 } from "./app-persistence.js";
@@ -164,7 +164,7 @@ async function postBuildRegistration(
   // Also check for modified existing apps (file mtime after build start)
   if (freshApps.length === 0) {
     for (const app of allApps) {
-      for (const dir of [CODEBASE_APPS_DIR, join(process.env.HOME || process.env.USERPROFILE || "", ".enso", "apps")]) {
+      for (const dir of [SHIPPED_APPS_DIR, join(process.env.HOME || process.env.USERPROFILE || "", ".enso", "apps")]) {
         const manifestPath = join(dir, app.spec.toolFamily, "app.json");
         try {
           const stat = statSync(manifestPath);
@@ -212,7 +212,7 @@ async function postBuildRegistration(
   // Generate SKILL.md if Claude Code didn't create one
   try {
     const { writeFileSync } = await import("fs");
-    const skillPath = join(CODEBASE_APPS_DIR, spec.toolFamily, "SKILL.md");
+    const skillPath = join(SHIPPED_APPS_DIR, spec.toolFamily, "SKILL.md");
     if (!existsSync(skillPath)) {
       const skillMd = generateSkillMd(spec, buildAppDefinition);
       writeFileSync(skillPath, skillMd);
@@ -702,7 +702,7 @@ async function recoverIncompleteApps(
   let recovered = false;
   const userAppsDir = join(process.env.HOME || process.env.USERPROFILE || "", ".enso", "apps");
 
-  for (const dir of [CODEBASE_APPS_DIR, userAppsDir]) {
+  for (const dir of [SHIPPED_APPS_DIR, userAppsDir]) {
     if (!existsSync(dir)) continue;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
