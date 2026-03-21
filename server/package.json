@@ -30,5 +30,8 @@
     "openclaw": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
   }
 }

@@ -1,8 +1,51 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Component, type ErrorInfo, type ReactNode } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import type { CardRendererProps } from "./types";
+
+// ── Error Boundary for dynamic dashboard rendering ──
+
+class DashboardErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean; error: string | null }
+> {
+  state = { hasError: false, error: null as string | null };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Dashboard render error:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300">
+          Dashboard render error: {this.state.error}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── Scoring data parser for committee output ──
+
+interface DiscoveryScoring {
+  projects: Array<{
+    name: string;
+    verdict: string;
+    scores: Record<string, number>;
+    investmentRange?: string;
+    rank?: number;
+  }>;
+}
+
+function parseScoring(content: string): DiscoveryScoring | null {
+  const match = content.match(/<!--\s*SCORING\s+(\{[\s\S]*?\})\s*-->/);
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
 
 interface DiscoveryMeta {
   discoveryId: string;
@@ -30,6 +73,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [DashboardComp, setDashboardComp] = useState<any>(null);
   const [dashError, setDashError] = useState<string | null>(null);
+  const [scoringData, setScoringData] = useState<DiscoveryScoring | null>(null);
 
   const baseUrl = getBackendBaseUrl();
   const headers = useMemo(() => authHeaders(), []);
@@ -83,6 +127,20 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
       });
     }
   }, [activeTab, selected]);
+
+  // Load scoring data when a discovery is selected
+  useEffect(() => {
+    if (!selected) { setScoringData(null); return; }
+    const committeeFiles = selected.phases.committee.files;
+    if (committeeFiles.length > 0) {
+      fetchFile(selected.discoveryId, committeeFiles[0]).then(content => {
+        if (content) setScoringData(parseScoring(content));
+        else setScoringData(null);
+      });
+    } else {
+      setScoringData(null);
+    }
+  }, [selected]);
 
   // Load file content when tabs are selected
   useEffect(() => {
@@ -230,43 +288,61 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
       <div className="min-h-[200px]">
         {activeTab === "overview" && (
           <div className="space-y-3">
-            {/* Phase timeline */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { label: "Deal Sourcing", done: d.phases.sourcing.count > 0, detail: `${d.phases.sourcing.count} reports` },
-                { label: "Pitches", done: d.phases.pitches.count > 0, detail: `${d.phases.pitches.count} pitched` },
-                { label: "IC Challenge", done: d.phases.committee.count > 0, detail: d.phases.committee.count > 0 ? "Reviewed" : "\u2014" },
-                { label: "Dashboard", done: d.phases.deliverables.dashboard, detail: d.phases.deliverables.dashboard ? "Built" : "\u2014" },
-                { label: "Memo", done: d.phases.deliverables.memo, detail: d.phases.deliverables.memo ? "Written" : "\u2014" },
-              ].map(phase => (
-                <div key={phase.label} className={`p-2 rounded-lg border text-xs ${
-                  phase.done ? "bg-indigo-500/5 border-indigo-500/30" : "bg-gray-800/50 border-gray-700"
-                }`}>
-                  <div className="flex items-center gap-1">
-                    <span>{phase.done ? "\u2705" : "\u2B1C"}</span>
-                    <span className={phase.done ? "text-indigo-400" : "text-gray-500"}>{phase.label}</span>
+            {/* Verdict Banner — if scoring data available */}
+            {scoringData && scoringData.projects.length > 0 && (
+              <div className="bg-gray-800/80 rounded-lg border border-gray-700 p-3">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  {scoringData.projects
+                    .sort((a, b) => (a.rank || 99) - (b.rank || 99))
+                    .map(p => (
+                      <span key={p.name} className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        p.verdict.includes("BUY") ? "bg-emerald-500/20 text-emerald-400" :
+                        p.verdict === "HOLD" ? "bg-amber-500/20 text-amber-400" :
+                        "bg-red-500/20 text-red-400"
+                      }`}>
+                        {p.verdict}: {p.name}
+                      </span>
+                    ))}
+                </div>
+                {scoringData.projects[0] && (
+                  <div className="text-xs text-gray-400">
+                    Top recommendation: <span className="text-white font-medium">{scoringData.projects[0].name}</span>
+                    {scoringData.projects[0].investmentRange && (
+                      <span className="ml-2 text-indigo-400">{scoringData.projects[0].investmentRange}</span>
+                    )}
                   </div>
-                  <div className="text-gray-500 mt-0.5">{phase.detail}</div>
+                )}
+              </div>
+            )}
+
+            {/* Phase timeline */}
+            <div className="grid grid-cols-5 gap-1.5">
+              {[
+                { label: "Sourcing", done: d.phases.sourcing.count > 0, detail: `${d.phases.sourcing.count}` },
+                { label: "Pitches", done: d.phases.pitches.count > 0, detail: `${d.phases.pitches.count}` },
+                { label: "Committee", done: d.phases.committee.count > 0, detail: d.phases.committee.count > 0 ? "\u2713" : "\u2014" },
+                { label: "Dashboard", done: d.phases.deliverables.dashboard, detail: d.phases.deliverables.dashboard ? "\u2713" : "\u2014" },
+                { label: "Memo", done: d.phases.deliverables.memo, detail: d.phases.deliverables.memo ? "\u2713" : "\u2014" },
+              ].map(phase => (
+                <div key={phase.label} className={`p-1.5 rounded border text-center text-[10px] ${
+                  phase.done ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" : "bg-gray-800/50 border-gray-700 text-gray-500"
+                }`}>
+                  <div>{phase.label}</div>
+                  <div className="font-medium">{phase.detail}</div>
                 </div>
               ))}
             </div>
 
-            {/* File count + shortcuts */}
-            <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-2.5 text-xs text-gray-400">
-              <span className="text-gray-200 font-medium">{d.files.length}</span> artifacts archived
+            {/* Quick actions */}
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-gray-400"><span className="text-gray-200 font-medium">{d.files.length}</span> artifacts</span>
               {d.phases.deliverables.dashboard && (
-                <button
-                  onClick={() => setActiveTab("dashboard")}
-                  className="ml-3 text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
+                <button onClick={() => setActiveTab("dashboard")} className="text-indigo-400 hover:text-indigo-300">
                   View Dashboard {"\u2192"}
                 </button>
               )}
               {d.phases.deliverables.memo && (
-                <button
-                  onClick={() => setActiveTab("deliverables")}
-                  className="ml-3 text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
+                <button onClick={() => setActiveTab("deliverables")} className="text-indigo-400 hover:text-indigo-300">
                   Read Memo {"\u2192"}
                 </button>
               )}
@@ -333,6 +409,29 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
 
         {activeTab === "deliverables" && (
           <div className="space-y-3">
+            {d.phases.deliverables.memo && (
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${baseUrl}/api/discovery-results/${did}/pptx`, { headers });
+                      if (!res.ok) throw new Error("Failed to generate");
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `discovery-${did}.pptx`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch { /* ignore */ }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  Download PPT
+                </button>
+              </div>
+            )}
             {d.phases.deliverables.memo && (() => {
               const key = `${did}/investment-memo.md`;
               const content = fileContent[key];
@@ -358,9 +457,15 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
               </div>
             )}
             {DashboardComp && (
-              <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
-                <DashboardComp data={{ tool: "discovery_dashboard" }} onAction={() => {}} />
-              </div>
+              <DashboardErrorBoundary fallback={
+                <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300">
+                  Dashboard crashed during rendering. Try refreshing the page.
+                </div>
+              }>
+                <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+                  <DashboardComp data={{ tool: "discovery_dashboard" }} onAction={() => {}} />
+                </div>
+              </DashboardErrorBoundary>
             )}
             {!DashboardComp && !dashError && (
               <div className="text-center py-8 text-gray-500 text-xs">Loading dashboard...</div>

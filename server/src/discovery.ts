@@ -11,6 +11,7 @@
  * Uses the orchestration engine (same DAG executor as evolution sprints).
  */
 
+import { randomUUID } from "crypto";
 import { handleOrchestration } from "./orchestrator.js";
 import { logAction, logError } from "./action-log.js";
 import { archiveDiscoveryResults, cleanDiscoveryTempFiles } from "./discovery-archive.js";
@@ -54,6 +55,16 @@ const VC_TEAM = {
     title: "Head of Investment Intelligence",
     focus: "Synthesizes all partner pitches and committee deliberations into final investment recommendation deliverables",
   },
+  techChallenger: {
+    name: "Dr. Raj Mehta",
+    title: "Investment Committee — Technical Feasibility Challenger",
+    focus: "Evaluates technical architecture, infrastructure costs, build complexity, and realistic MVP scope",
+  },
+  financialRealist: {
+    name: "Sarah Park",
+    title: "Investment Committee — Financial Realist",
+    focus: "Evaluates unit economics, revenue projections, churn assumptions, and opportunity cost analysis",
+  },
 };
 
 // ── Discovery Orchestration ──
@@ -87,7 +98,7 @@ export async function handleDiscovery(params: DiscoveryParams): Promise<void> {
         });
         // Archive discovery artifacts
         try {
-          const discoveryId = `discovery-${Date.now()}`;
+          const discoveryId = `discovery-${Date.now()}-${randomUUID().slice(0, 8)}`;
           const meta = archiveDiscoveryResults(discoveryId, focusLabel, PROJECT_ROOT);
           if (meta) {
             logAction({
@@ -127,6 +138,12 @@ function buildDiscoveryPlanningPrompt(
   lines.push(`**Focus area:** ${focus}`);
   lines.push(``);
 
+  // Focus diversity guard — prevent echo-chamber when focus is broad
+  if (focus.includes("general") || focus.length < 15) {
+    lines.push(`**DIVERSITY REQUIREMENT**: Since the focus is broad, ensure your sourcing produces opportunities across AT LEAST 2 different industry verticals (e.g., healthcare + fintech, or education + logistics). Do NOT let all 3 sourcing lenses converge on the same narrow domain (e.g., all developer tools). Diversity of opportunity set is critical for portfolio decisions.`);
+    lines.push(``);
+  }
+
   // ── Enso context ──
   lines.push(`## About Enso (the builder)`);
   lines.push(``);
@@ -150,7 +167,7 @@ function buildDiscoveryPlanningPrompt(
   lines.push(``);
 
   // ── Phase structure ──
-  lines.push(`## Required Task DAG Structure (5 Phases)`);
+  lines.push(`## Required Task DAG Structure (5 Phases, 11 Tasks)`);
   lines.push(``);
 
   // Phase 1
@@ -166,20 +183,46 @@ function buildDiscoveryPlanningPrompt(
   lines.push(``);
   lines.push(`- **sourcing-competitive-gaps** (${VC_TEAM.partnerC.name} — Competitive Gap Analyst): Source by mapping COMPETITIVE WHITESPACE. Research existing products in the "${focus}" space — their pricing, reviews, limitations, customer complaints. Find markets where incumbents are complacent, overpriced, or technically outdated. Identify 2-3 product opportunities in underserved segments or where a 10x better product is possible. Your edge: you find opportunities others miss because you see where existing players are vulnerable.`);
   lines.push(``);
-  lines.push(`Each partner's task description MUST instruct them to:`);
-  lines.push(`1. Do at least 7 real web searches using their specific sourcing lens`);
-  lines.push(`2. Read actual web pages, articles, forums, and product reviews`);
-  lines.push(`3. Propose 2-3 candidate opportunities (can be in ANY domain — not restricted). For each:`);
+  lines.push(`Each partner's task description MUST instruct them to execute an ITERATIVE RESEARCH LOOP (Agentic RAG pattern):`);
+  lines.push(``);
+  lines.push(`CYCLE 1 — Initial Exploration:`);
+  lines.push(`  a. PLAN: Identify 3 specific search queries based on your sourcing lens`);
+  lines.push(`  b. SEARCH: Execute searches and read key results thoroughly`);
+  lines.push(`  c. REFLECT: After reading results, ask yourself:`);
+  lines.push(`     - Are my sources diverse (research firms, news, forums, vendor sites, academic)?`);
+  lines.push(`     - Do I have conflicting data that needs resolution?`);
+  lines.push(`     - Are there obvious coverage gaps?`);
+  lines.push(`     - Am I finding opportunities across different verticals, or am I in an echo chamber?`);
+  lines.push(`  d. ADJUST: Based on reflection, generate 2-3 targeted follow-up queries addressing gaps`);
+  lines.push(``);
+  lines.push(`CYCLE 2 — Deepening:`);
+  lines.push(`  a. SEARCH: Execute follow-up queries`);
+  lines.push(`  b. REFLECT: Evaluate whether findings are now sufficient`);
+  lines.push(`  c. VERIFY: Cross-check key claims against a second independent source`);
+  lines.push(`  d. ADJUST: If gaps remain, generate 1-2 more targeted queries`);
+  lines.push(``);
+  lines.push(`CYCLE 3 — Validation:`);
+  lines.push(`  a. SEARCH: Final targeted searches to resolve any contradictions`);
+  lines.push(`  b. SYNTHESIZE: Combine all findings, noting confidence level per claim:`);
+  lines.push(`     - HIGH: Multiple credible sources agree`);
+  lines.push(`     - MEDIUM: Single credible source or partial agreement`);
+  lines.push(`     - LOW: No direct source; inferred from adjacent data`);
+  lines.push(``);
+  lines.push(`Minimum: 3 search-reflect cycles. Target: 10-15 total searches.`);
+  lines.push(`Think step-by-step between each web search — reason about what you learned and what you still need before searching again.`);
+  lines.push(``);
+  lines.push(`After completing research cycles, propose 2-3 candidate opportunities (can be in ANY domain — not restricted). For each:`);
   lines.push(`   - **Product concept**: One-paragraph description of what to build`);
-  lines.push(`   - **Problem validation**: Evidence that this problem is real (user complaints, forum threads, market data)`);
+  lines.push(`   - **Problem validation**: Evidence that this problem is real (user complaints, forum threads, market data) with confidence level (HIGH/MEDIUM/LOW)`);
   lines.push(`   - **Market sizing**: TAM/SAM with real numbers and sources`);
   lines.push(`   - **Existing competition**: Who already does this? Where do they fall short?`);
   lines.push(`   - **Why now?**: What changed recently that makes this the right time?`);
   lines.push(`   - **Why Enso?**: Why is an AI-managed project the right approach vs traditional development?`);
   lines.push(`   - **Revenue model**: How would this make money?`);
   lines.push(`   - **Build estimate**: Rough scope (MVP in X weeks/sprints), tech stack recommendation`);
-  lines.push(`4. Write findings to a .md file with full SOURCES section`);
-  lines.push(`5. End with <!-- STRUCTURED_SUMMARY --> block`);
+  lines.push(`   - **Source quality**: List every URL cited with credibility rating (HIGH/MEDIUM/LOW)`);
+  lines.push(`Write findings to a .md file with full SOURCES section.`);
+  lines.push(`End with <!-- STRUCTURED_SUMMARY --> block.`);
   lines.push(``);
 
   // Phase 2
@@ -207,61 +250,131 @@ function buildDiscoveryPlanningPrompt(
   lines.push(`10. **Investment Ask**: Estimated token cost for MVP, monthly evolution cost, expected time to market`);
   lines.push(``);
 
-  // Phase 3
-  lines.push(`### Phase 3: Investment Committee Challenge (1 architect task, depends on ALL Phase 2)`);
+  // Phase 3: Multi-Critic Investment Committee
+  lines.push(`### Phase 3: Investment Committee Challenge (4 tasks: 3 parallel critics + 1 synthesis)`);
   lines.push(``);
-  lines.push(`**${VC_TEAM.managingPartner.name}** (Managing Partner) chairs the Investment Committee session. She reads all 3 partner pitches and conducts a rigorous challenge debate. This is the MOST CRITICAL phase — the quality gate that separates good ideas from investable opportunities.`);
+  lines.push(`The Investment Committee uses a STRUCTURED DEBATE PROTOCOL. Three specialized critics independently evaluate all pitches from different adversarial lenses. A synthesis chair then aggregates their critiques into final verdicts.`);
   lines.push(``);
-  lines.push(`The committee MUST evaluate each pitched project against these HARD QUESTIONS:`);
+  lines.push(`**Phase 3a: 3 PARALLEL Critic Tasks (each depends on ALL Phase 2 tasks)**`);
   lines.push(``);
-  lines.push(`**A. Market Timing & Prospect (Why now? Why is this a winner?)**`);
-  lines.push(`- Is the market growing fast enough to support a new entrant?`);
-  lines.push(`- Is this riding a tailwind (regulatory change, technology shift, behavioral change) or fighting headwinds?`);
-  lines.push(`- What's the realistic customer acquisition path? Who are the first 100 users?`);
-  lines.push(`- Is there evidence of willingness-to-pay at the proposed price point?`);
+  lines.push(`- **committee-market-skeptic** (${VC_TEAM.managingPartner.name} — Market Skeptic, architect role):`);
+  lines.push(`  Read all 3 partner pitches. Challenge EXCLUSIVELY from a market/commercial lens:`);
+  lines.push(`  - Is the market timing right? Is this riding a tailwind or fighting headwinds?`);
+  lines.push(`  - Who are the first 100 customers? Is there evidence of willingness-to-pay?`);
+  lines.push(`  - What's the realistic customer acquisition path?`);
+  lines.push(`  - Are the market size figures credible? (Do your own web research to verify)`);
+  lines.push(`  - What competitors already have traction that the pitches understated?`);
+  lines.push(`  Output: Per-project market critique + 6-axis SCORING block.`);
   lines.push(``);
-  lines.push(`**B. Enso Competitive Advantage (Why will Enso's approach win against strong incumbents?)**`);
-  lines.push(`- Named competitors already exist with funding, users, and teams. Why would an AI-built product beat them?`);
-  lines.push(`- What specific advantage does Enso's AI team model provide? (Speed? Cost? Iteration velocity? Personalization? Multi-agent quality?)`);
-  lines.push(`- Where does Enso's approach FAIL compared to a well-funded startup with human engineers?`);
-  lines.push(`- Is the moat in the product itself, or in Enso's ability to evolve it faster than competitors?`);
-  lines.push(`- Could an incumbent simply copy the features faster than Enso can build market share?`);
+  lines.push(`- **committee-tech-feasibility** (${VC_TEAM.techChallenger.name} — Technical Feasibility Challenger, architect role):`);
+  lines.push(`  Read all 3 partner pitches. Challenge EXCLUSIVELY from a technical/feasibility lens:`);
+  lines.push(`  - Can Claude Code agents actually build this? What are the hardest technical challenges?`);
+  lines.push(`  - Are the infrastructure cost estimates realistic? (Do your own research on API costs, hosting)`);
+  lines.push(`  - What's the realistic MVP scope — cut the aspirational features, what ACTUALLY ships in 4-8 weeks?`);
+  lines.push(`  - What are the integration dependencies and failure modes?`);
+  lines.push(`  - Are the tech stack recommendations sound?`);
+  lines.push(`  Output: Per-project technical critique + 6-axis SCORING block.`);
   lines.push(``);
-  lines.push(`**C. Realistic Feasibility (Can we actually build this?)**`);
-  lines.push(`- What are the hardest technical challenges? Can Claude Code agents solve them?`);
-  lines.push(`- Does this require capabilities Enso doesn't have yet? (e.g., real-time data, hardware integration, regulatory compliance)`);
-  lines.push(`- What's the realistic MVP scope — not aspirational, but what can actually ship in 4-8 weeks of evolution sprints?`);
-  lines.push(`- What are the integration dependencies? (APIs, data sources, third-party services)`);
-  lines.push(`- What's the testing strategy? How do we validate the product works before shipping?`);
+  lines.push(`- **committee-financial-realist** (${VC_TEAM.financialRealist.name} — Financial Realist, architect role):`);
+  lines.push(`  Read all 3 partner pitches. Challenge EXCLUSIVELY from a financial/unit economics lens:`);
+  lines.push(`  - Are the revenue projections realistic? What are comparable SaaS benchmarks?`);
+  lines.push(`  - What's the real LTV/CAC ratio? Use churn benchmarks from LiveX AI, ProfitWell, etc.`);
+  lines.push(`  - At what user count does this break even on token costs?`);
+  lines.push(`  - What's the opportunity cost — what else could those tokens build?`);
+  lines.push(`  - Are the pricing assumptions defensible? (Research competitor pricing)`);
+  lines.push(`  Output: Per-project financial critique + 6-axis SCORING block.`);
   lines.push(``);
-  lines.push(`**D. Cost of Going In (What's the real investment?)**`);
-  lines.push(`- Estimated token cost for MVP development (planning + implementation + evolution sprints)`);
-  lines.push(`- Monthly ongoing token cost for continuous evolution after launch`);
-  lines.push(`- Infrastructure/hosting costs if applicable (servers, APIs, databases)`);
-  lines.push(`- Third-party API costs (data feeds, external services)`);
-  lines.push(`- Opportunity cost — what else could those tokens be spent on?`);
-  lines.push(`- Time cost — how many calendar weeks from start to usable MVP?`);
-  lines.push(`- Break-even analysis — at what user/revenue level does the project pay for its own tokens?`);
+  lines.push(`Each critic MUST:`);
+  lines.push(`1. Do independent web research to validate or challenge claims`);
+  lines.push(`2. Rate confidence per challenge (HIGH/MEDIUM/LOW)`);
+  lines.push(`3. End with a per-project verdict: STRONG BUY / BUY / HOLD / PASS`);
+  lines.push(`4. Include a <!-- SCORING {...} --> block with 6-axis scores per project (see format below)`);
   lines.push(``);
-  lines.push(`**Output format**: For each of the 3 pitched projects, write:`);
-  lines.push(`1. **Committee Verdict**: STRONG BUY / BUY / HOLD / PASS`);
-  lines.push(`2. **Strengths** (what the committee found compelling)`);
-  lines.push(`3. **Challenges** (what concerns were raised)`);
-  lines.push(`4. **Conditions** (what must be true for this to succeed)`);
-  lines.push(`5. **Final Ranking** with justification`);
-  lines.push(`6. Do additional web research if needed to validate or challenge partner claims`);
+  lines.push(`**Phase 3b: 1 Synthesis Task (depends on ALL 3 critic tasks)**`);
+  lines.push(``);
+  lines.push(`- **committee-synthesis** (${VC_TEAM.managingPartner.name} — Investment Committee Chair, architect role):`);
+  lines.push(`  Read all 3 critic reports. Produce the FINAL committee verdict:`);
+  lines.push(`  1. For each project, aggregate the 3 critics' scores using MAJORITY VOTING:`);
+  lines.push(`     - If 2+ critics say BUY/STRONG BUY → verdict is BUY (or STRONG BUY if unanimous)`);
+  lines.push(`     - If 2+ critics say HOLD/PASS → verdict is HOLD or PASS`);
+  lines.push(`     - Capture dissenting views explicitly`);
+  lines.push(`  2. Produce a unified SCORING block with averaged scores across critics`);
+  lines.push(`  3. Rank all projects by composite score`);
+  lines.push(`  4. Write "Dissenting Views" section capturing where critics disagreed`);
+  lines.push(`  5. Include final <!-- SCORING {...} --> and <!-- PROJECT_SCAFFOLD {...} --> blocks`);
+  lines.push(``);
+  lines.push(`**MANDATORY: Structured Scoring Block**`);
+  lines.push(`For EACH evaluated project, every critic and the synthesis MUST include a machine-readable scoring block:`);
+  lines.push(``);
+  lines.push(`<!-- SCORING {`);
+  lines.push(`  "projects": [`);
+  lines.push(`    {`);
+  lines.push(`      "name": "Project Name",`);
+  lines.push(`      "verdict": "STRONG BUY | BUY | HOLD | PASS",`);
+  lines.push(`      "scores": {`);
+  lines.push(`        "marketTiming": <1-10>,`);
+  lines.push(`        "ensoAdvantage": <1-10>,`);
+  lines.push(`        "feasibility": <1-10>,`);
+  lines.push(`        "revenuePotential": <1-10>,`);
+  lines.push(`        "moatStrength": <1-10>,`);
+  lines.push(`        "costEfficiency": <1-10>`);
+  lines.push(`      },`);
+  lines.push(`      "investmentRange": "$X-$Y",`);
+  lines.push(`      "estimatedROI": "Nx-Mx",`);
+  lines.push(`      "rank": <1|2|3>`);
+  lines.push(`    }`);
+  lines.push(`  ]`);
+  lines.push(`} -->`);
+  lines.push(``);
+  lines.push(`Score Calibration (apply consistently):`);
+  lines.push(`- 1-3: Fundamentally broken / critical failure / non-viable`);
+  lines.push(`- 4-5: Significant concerns / barely viable`);
+  lines.push(`- 6-7: Adequate / viable with conditions`);
+  lines.push(`- 8-9: Strong / compelling / minor concerns only`);
+  lines.push(`- 10: Exceptional / best-in-class`);
+  lines.push(``);
+  lines.push(`This scoring block enables the dashboard builder to render actual comparison charts, radar visualizations, and data-driven rankings. Do NOT skip it.`);
+  lines.push(``);
+  lines.push(`**MANDATORY: Project Scaffold Block (for BUY/STRONG BUY only)**`);
+  lines.push(`For each project with a BUY or STRONG BUY verdict, the synthesis MUST include:`);
+  lines.push(``);
+  lines.push(`<!-- PROJECT_SCAFFOLD {`);
+  lines.push(`  "name": "Suggested Project Name",`);
+  lines.push(`  "tagline": "One-line description",`);
+  lines.push(`  "techStack": "React, Node.js, PostgreSQL, etc.",`);
+  lines.push(`  "teamComposition": ["Project Leader", "Backend Architect", "Frontend Builder", "QA Engineer", "Domain Specialist"],`);
+  lines.push(`  "mvpScope": "3-sentence description of MVP",`);
+  lines.push(`  "estimatedSprints": <number>,`);
+  lines.push(`  "monthlyTokenBudget": "$X",`);
+  lines.push(`  "firstSprintGoal": "What the first evolution sprint should accomplish"`);
+  lines.push(`} -->`);
   lines.push(``);
 
   // Phase 4
-  lines.push(`### Phase 4: Investment Recommendation Deliverables (1 builder task, depends on Phase 3)`);
+  lines.push(`### Phase 4: Investment Recommendation Deliverables (1 builder task, depends on Phase 3b)`);
   lines.push(``);
   lines.push(`**${VC_TEAM.pitchArchitect.name}** (Head of Investment Intelligence) creates TWO deliverables:`);
   lines.push(``);
   lines.push(`#### Deliverable 1: Interactive Investment Dashboard`);
   lines.push(`Write a bespoke React JSX dashboard to exactly \`.orchestration-ui.jsx\` (this filename triggers rendering in the UI).`);
   lines.push(``);
+  lines.push(`**AVAILABLE LIBRARIES**: React 19, Recharts (import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'), lucide-react icons. Use ResponsiveContainer for all charts. Use Tooltip on every chart for hover interactivity.`);
+  lines.push(``);
+  lines.push(`**CRITICAL REQUIREMENTS for Dashboard:**`);
+  lines.push(`- Front-load the verdict: The FIRST thing visible must be verdict badges (BUY/HOLD/PASS) with key metrics (investment range, ROI, risk level). Users must understand the outcome in 5 seconds.`);
+  lines.push(`- Use Recharts library for all charts — it's available in the sandbox. Include: RadarChart with tooltips, BarChart with hover effects, responsive containers.`);
+  lines.push(`- Every data point in charts must have a Tooltip component showing context on hover.`);
+  lines.push(`- Include a "Recommended Next Steps" section with: sprint plan, team composition, estimated cost, and timeline.`);
+  lines.push(`- Include a "Comparison Matrix" tab with sortable data and color-coded scoring (green ≥7, yellow 4-6, red ≤3).`);
+  lines.push(``);
+  lines.push(`The FIRST section of the dashboard (above the fold) MUST be:`);
+  lines.push(`- A row of VerdictBadge components showing each project's verdict (BUY/HOLD/PASS) with colored backgrounds`);
+  lines.push(`- A row of StatBox components: Total Opportunities Sourced, Total Web Searches, Total Sources Cited, Committee Score Range`);
+  lines.push(`- A 1-sentence portfolio recommendation in bold`);
+  lines.push(`This must render in < 500px of vertical space so users see the decision immediately.`);
+  lines.push(``);
   lines.push(`The dashboard MUST include:`);
-  lines.push(`- **Executive Summary** tab: Discovery process overview, total research conducted, committee verdict summary`);
+  lines.push(`- **Executive Summary** tab: Front-loaded verdicts + stats + portfolio recommendation`);
   lines.push(`- **Per-Recommendation deep dive** (one per project, ordered by committee ranking):`);
   lines.push(`  - Project name, one-line pitch, committee verdict badge (STRONG BUY/BUY/HOLD/PASS)`);
   lines.push(`  - Problem → Solution → Why AI → Why Now narrative`);
@@ -273,40 +386,52 @@ function buildDiscoveryPlanningPrompt(
   lines.push(`  - Cost breakdown (tokens, infrastructure, APIs, timeline)`);
   lines.push(`  - Radar chart comparing scores (market-timing, enso-advantage, feasibility, revenue-potential, moat-strength, cost-efficiency)`);
   lines.push(`  - Risk factors with mitigation strategies`);
-  lines.push(`  - Committee strengths/challenges/conditions`);
-  lines.push(`- **Comparison Matrix** tab: Side-by-side scoring table of all candidates`);
+  lines.push(`  - Committee strengths/challenges/conditions + dissenting views`);
+  lines.push(`- **Comparison Matrix** tab: Side-by-side scoring table with color-coded cells (green ≥7, yellow 4-6, red ≤3)`);
+  lines.push(`- **Recommended Next Steps** tab:`);
+  lines.push(`  - For each BUY project: "Create [ProjectName] Project" CTA text, suggested team composition, first sprint goal, estimated token investment`);
+  lines.push(`  - Timeline: "Week 1: MVP sprint. Week 2-3: Evolution sprints. Week 4: User testing."`);
+  lines.push(`  - Token cost breakdown: planning tokens + implementation tokens + evolution tokens`);
   lines.push(`- **Research Trail** tab: All URLs, citations, and data sources from the entire discovery process`);
   lines.push(`- **VC Process** tab: Summary of how the discovery was conducted — phases, participants, methodology`);
   lines.push(``);
   lines.push(`#### Deliverable 2: Investment Memo (PPT-style document)`);
   lines.push(`Write a comprehensive investment memo to \`investment-memo.md\` structured as a presentation deck:`);
   lines.push(``);
+  lines.push(`**CRITICAL REQUIREMENTS for Investment Memo:**`);
+  lines.push(`- Start with a 1-page EXECUTIVE SUMMARY (Slide 0) that fits on a single screen: verdict badges, key metrics table, top 3 risks, recommended action. This is the "board slide."`);
+  lines.push(`- Every factual claim MUST include an inline citation: [claim text](source_url). Do NOT use bibliography-only citations. Inline links are mandatory.`);
+  lines.push(`- Add a "Decision Matrix" slide mapping each opportunity against Enso-specific criteria: build complexity, evolution sprint suitability, token cost efficiency, time-to-revenue.`);
+  lines.push(`- Add confidence badges per section: "Data Confidence: HIGH/MEDIUM/LOW" based on source quality.`);
+  lines.push(`- Slides should use tables and bold formatting for scanability — this should read like a Goldman Sachs investment memo.`);
+  lines.push(``);
   lines.push(`Slide structure:`);
+  lines.push(`0. **Executive Summary (Board Slide)**: Verdict badges, key metrics table, top 3 risks, recommended action — MUST fit on one screen`);
   lines.push(`1. **Title Slide**: "AI VC Discovery — ${focus}" + date + VC team names`);
-  lines.push(`2. **Executive Summary**: Key findings in 3 bullets`);
-  lines.push(`3. **Discovery Process**: How we researched (phases, agents, total searches, sources analyzed)`);
-  lines.push(`4. **Market Landscape**: Overview of the ${focus} market with key data points`);
-  lines.push(`5-7. **Project Deep Dives** (one per recommended project):`);
-  lines.push(`   - The Opportunity (problem + market)`);
+  lines.push(`2. **Discovery Process**: How we researched (phases, agents, total searches, sources analyzed)`);
+  lines.push(`3. **Market Landscape**: Overview of the ${focus} market with key data points + inline citations`);
+  lines.push(`4-6. **Project Deep Dives** (one per recommended project):`);
+  lines.push(`   - The Opportunity (problem + market) with inline citations`);
   lines.push(`   - The Solution (what to build + why AI)`);
   lines.push(`   - Competitive Position (vs named competitors with strengths/weaknesses table)`);
   lines.push(`   - Why Enso Wins (specific advantages)`);
   lines.push(`   - Build Plan (MVP scope, timeline, tech stack)`);
   lines.push(`   - Financial Model (cost to build, revenue projection, break-even)`);
-  lines.push(`   - Risk Assessment`);
-  lines.push(`8. **Comparison & Ranking**: All projects scored side-by-side`);
+  lines.push(`   - Risk Assessment with confidence badges`);
+  lines.push(`7. **Decision Matrix**: All projects vs Enso-specific criteria (build complexity, sprint suitability, token efficiency, time-to-revenue)`);
+  lines.push(`8. **Comparison & Ranking**: All projects scored side-by-side with dissenting views`);
   lines.push(`9. **Investment Committee Verdict**: Final recommendations with conditions`);
   lines.push(`10. **Next Steps**: What happens if approved (Enso project creation, team assembly, first sprint)`);
   lines.push(`11. **Appendix**: Full research sources, raw data tables, methodology notes`);
   lines.push(``);
-  lines.push(`Format each slide as a markdown section with \`---\` separators. Use tables, bullet points, and bold formatting for scanability. This should read like a Goldman Sachs investment memo — data-rich, rigorous, and actionable.`);
+  lines.push(`Format each slide as a markdown section with \`---\` separators. Use tables, bullet points, and bold formatting for scanability.`);
   lines.push(``);
 
   // Agent roles
   lines.push(`## Agent Roles Available`);
   lines.push(``);
   lines.push(`- \`researcher\` — Can search the web, read pages, analyze data. Use for Phase 1 sourcing.`);
-  lines.push(`- \`architect\` — Can synthesize, design, make strategic decisions. Use for Phase 2 pitches and Phase 3 committee.`);
+  lines.push(`- \`architect\` — Can synthesize, design, make strategic decisions. Use for Phase 2 pitches, Phase 3a critics, and Phase 3b synthesis.`);
   lines.push(`- \`builder\` — Can build bespoke UIs and write structured documents. Use for Phase 4 deliverables.`);
   lines.push(`- \`reviewer\` — Can evaluate and validate. Available if needed.`);
   lines.push(`- \`coder\` — Can write code. Available if needed.`);
@@ -317,24 +442,28 @@ function buildDiscoveryPlanningPrompt(
   lines.push(``);
   lines.push(`Write a JSON plan to: ${planFilePath}`);
   lines.push(``);
-  lines.push(`The JSON must have this exact structure:`);
+  lines.push(`The JSON must have this exact structure (11 tasks total):`);
   lines.push(`\`\`\`json`);
   lines.push(`{`);
   lines.push(`  "orchestrationId": "${orchestrationId}",`);
   lines.push(`  "goal": "AI VC Discovery: ${focus}",`);
   lines.push(`  "tasks": [`);
-  lines.push(`    {`);
-  lines.push(`      "taskId": "sourcing-demand-signals",`);
-  lines.push(`      "title": "Deal Sourcing: Demand Signals — Daniel Okafor",`);
-  lines.push(`      "description": "FULL agent instructions...",`);
-  lines.push(`      "agentRole": "researcher",`);
-  lines.push(`      "dependsOn": [],`);
-  lines.push(`      "outputType": "research"`);
-  lines.push(`    },`);
-  lines.push(`    ...more tasks`);
+  lines.push(`    { "taskId": "sourcing-demand-signals", "agentRole": "researcher", "dependsOn": [] },`);
+  lines.push(`    { "taskId": "sourcing-tech-timing", "agentRole": "researcher", "dependsOn": [] },`);
+  lines.push(`    { "taskId": "sourcing-competitive-gaps", "agentRole": "researcher", "dependsOn": [] },`);
+  lines.push(`    { "taskId": "pitch-demand", "agentRole": "architect", "dependsOn": ["sourcing-demand-signals","sourcing-tech-timing","sourcing-competitive-gaps"] },`);
+  lines.push(`    { "taskId": "pitch-tech", "agentRole": "architect", "dependsOn": ["sourcing-demand-signals","sourcing-tech-timing","sourcing-competitive-gaps"] },`);
+  lines.push(`    { "taskId": "pitch-gaps", "agentRole": "architect", "dependsOn": ["sourcing-demand-signals","sourcing-tech-timing","sourcing-competitive-gaps"] },`);
+  lines.push(`    { "taskId": "committee-market-skeptic", "agentRole": "architect", "dependsOn": ["pitch-demand","pitch-tech","pitch-gaps"] },`);
+  lines.push(`    { "taskId": "committee-tech-feasibility", "agentRole": "architect", "dependsOn": ["pitch-demand","pitch-tech","pitch-gaps"] },`);
+  lines.push(`    { "taskId": "committee-financial-realist", "agentRole": "architect", "dependsOn": ["pitch-demand","pitch-tech","pitch-gaps"] },`);
+  lines.push(`    { "taskId": "committee-synthesis", "agentRole": "architect", "dependsOn": ["committee-market-skeptic","committee-tech-feasibility","committee-financial-realist"] },`);
+  lines.push(`    { "taskId": "deliverables", "agentRole": "builder", "dependsOn": ["committee-synthesis"] }`);
   lines.push(`  ]`);
   lines.push(`}`);
   lines.push(`\`\`\``);
+  lines.push(``);
+  lines.push(`Each task object must also include "title", "description" (FULL agent instructions), and "outputType" fields. The above shows the required taskIds, roles, and dependency graph.`);
   lines.push(``);
 
   // Rules
@@ -342,16 +471,19 @@ function buildDiscoveryPlanningPrompt(
   lines.push(``);
   lines.push(`1. Phase 1 (sourcing): 3 parallel tasks, NO dependencies`);
   lines.push(`2. Phase 2 (pitches): 3 parallel tasks, each depends on ALL 3 Phase 1 tasks (so each partner reads everyone's research)`);
-  lines.push(`3. Phase 3 (committee): 1 task, depends on ALL 3 Phase 2 tasks`);
-  lines.push(`4. Phase 4 (deliverables): 1 task, depends on Phase 3`);
-  lines.push(`5. Task descriptions must be COMPLETE and SELF-CONTAINED — agents only see their own task description`);
-  lines.push(`6. Every task must end with a <!-- STRUCTURED_SUMMARY {JSON} --> block`);
-  lines.push(`7. Phase 4 builder MUST write dashboard to exactly \`.orchestration-ui.jsx\` AND memo to \`investment-memo.md\``);
-  lines.push(`8. Research tasks must include SPECIFIC web search queries — don't be vague`);
-  lines.push(`9. All monetary figures in USD`);
-  lines.push(`10. Recommendations must be ACTIONABLE — specific enough that we can immediately create an Enso project and start building`);
-  lines.push(`11. The committee challenge (Phase 3) must be GENUINELY RIGOROUS — not rubber-stamping. Kill weak ideas. Challenge assumptions. Be skeptical.`);
-  lines.push(`12. Every recommendation must answer: "Why would someone choose this over [named competitor X]?" with a specific answer, not hand-waving`);
+  lines.push(`3. Phase 3a (critics): 3 parallel tasks, each depends on ALL 3 Phase 2 tasks`);
+  lines.push(`4. Phase 3b (synthesis): 1 task, depends on ALL 3 Phase 3a tasks`);
+  lines.push(`5. Phase 4 (deliverables): 1 task, depends on Phase 3b`);
+  lines.push(`6. Task descriptions must be COMPLETE and SELF-CONTAINED — agents only see their own task description`);
+  lines.push(`7. Every task must end with a <!-- STRUCTURED_SUMMARY {JSON} --> block`);
+  lines.push(`8. Phase 4 builder MUST write dashboard to exactly \`.orchestration-ui.jsx\` AND memo to \`investment-memo.md\``);
+  lines.push(`9. Research tasks must include SPECIFIC web search queries — don't be vague`);
+  lines.push(`10. All monetary figures in USD`);
+  lines.push(`11. Recommendations must be ACTIONABLE — specific enough that we can immediately create an Enso project and start building`);
+  lines.push(`12. The committee critics (Phase 3a) must be GENUINELY ADVERSARIAL — each critic attacks from their specific lens. Do NOT rubber-stamp. Kill weak ideas. Challenge assumptions. Be skeptical.`);
+  lines.push(`13. Every recommendation must answer: "Why would someone choose this over [named competitor X]?" with a specific answer, not hand-waving`);
+  lines.push(`14. Every critic and the synthesis MUST include a <!-- SCORING {...} --> block. The dashboard builder depends on this data.`);
+  lines.push(`15. The synthesis (Phase 3b) MUST include <!-- PROJECT_SCAFFOLD {...} --> for every BUY/STRONG BUY verdict.`);
 
   return lines.join("\n");
 }

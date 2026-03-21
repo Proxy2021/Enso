@@ -922,6 +922,19 @@ export async function startEnsoServer(opts: {
     res.json(result);
   });
 
+  app.get("/api/discovery-results/:id/pptx", async (req, res) => {
+    try {
+      const { generateDiscoveryPptx } = await import("./discovery-pptx.js");
+      const buf = await generateDiscoveryPptx(req.params.id);
+      if (!buf) { res.status(404).json({ error: "Discovery not found or no memo available" }); return; }
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="discovery-${req.params.id}.pptx"`);
+      res.send(buf);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to generate PPTX" });
+    }
+  });
+
   app.get("/api/discovery-results/:id/file/*", async (req, res) => {
     const { getDiscoveryFile } = await import("./discovery-archive.js");
     const filename = req.params[0] || "";
