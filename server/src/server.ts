@@ -432,6 +432,17 @@ export async function startEnsoServer(opts: {
     }
   }
 
+  // ── Client-side WS debug log (unauthenticated — must work even when auth fails) ──
+  app.post("/api/ws-debug", express.json(), (req, res) => {
+    const entries: Array<{ event: string; ts: number; detail?: string }> = req.body?.entries;
+    if (Array.isArray(entries)) {
+      for (const e of entries) {
+        runtime.log?.(`[enso:ws-client] ${e.event} clientId=${req.body?.clientId ?? '?'} ${e.detail ?? ''} (client-ts=${new Date(e.ts).toISOString()})`);
+      }
+    }
+    res.json({ ok: true });
+  });
+
   // ── Health endpoint (unauthenticated — used for connection testing) ──
   const accessToken = account.accessToken;
   app.get("/health", (_req, res) => {
@@ -1157,17 +1168,6 @@ export async function startEnsoServer(opts: {
       logError("upload", "Audio transcription failed", err);
       res.status(500).json({ error: "Transcription failed" });
     }
-  });
-
-  // ── Client-side WS debug log (HTTP POST, no WS needed) ──
-  app.post("/api/ws-debug", express.json(), (req, res) => {
-    const entries: Array<{ event: string; ts: number; detail?: string }> = req.body?.entries;
-    if (Array.isArray(entries)) {
-      for (const e of entries) {
-        runtime.log?.(`[enso:ws-client] ${e.event} clientId=${req.body?.clientId ?? '?'} ${e.detail ?? ''} (client-ts=${new Date(e.ts).toISOString()})`);
-      }
-    }
-    res.json({ ok: true });
   });
 
   // ── SPA fallback (must be after all API routes) ──
