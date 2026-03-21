@@ -766,6 +766,65 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Path 1b: Cross-app navigation ──
+  // Handles __cross_app actions dispatched from templates to switch between apps
+  // (e.g. "Style in Photo Studio" from Media Gallery, "View in Gallery" from Photo Studio).
+  if (action === "__cross_app" && payload && (payload as Record<string, unknown>).target) {
+    const crossPayload = payload as Record<string, unknown>;
+    const targetFamily = String(crossPayload.target);
+    const targetToolSuffix = String(crossPayload.tool || "");
+    const targetParams = (crossPayload.params || {}) as Record<string, unknown>;
+
+    // Find target app in catalog
+    const targetCap = APP_CATALOG.find((c) => c.appId === targetFamily);
+    if (targetCap) {
+      // Derive tool prefix: convention is "enso_{toolFamily}_"
+      const derivedPrefix = `enso_${targetFamily}_`;
+      // Determine the full tool name
+      const toolName = targetToolSuffix
+        ? `${derivedPrefix}${targetToolSuffix}`
+        : targetCap.primaryTool;
+
+      if (isToolRegistered(toolName)) {
+        logAction({ ts: Date.now(), type: "action", category: "action:cross-app", message: `Cross-app: ${ctx.toolFamily ?? "?"} → ${targetFamily}, tool=${toolName}`, cardId });
+        sendOperation("calling_tool", `Navigating to ${targetFamily}`);
+
+        try {
+          const result = await executeToolDirect(toolName, targetParams);
+
+          if (result.success && result.data != null) {
+            // Update card context to the target app
+            ctx.toolFamily = targetFamily;
+            ctx.signatureId = targetCap.signatureId;
+            ctx.appToolHint = {
+              toolName,
+              params: targetParams,
+              handlerPrefix: derivedPrefix,
+            };
+            ctx.currentData = structuredClone(result.data);
+
+            // Get the target app's template
+            const targetTemplate = getGeneratedTemplateCodeBySignature(targetCap.signatureId);
+
+            if (targetTemplate) {
+              sendActionResult(result.data, targetTemplate);
+            } else {
+              // Fallback: send data with current template
+              sendActionResult(result.data, ctx.signatureId
+                ? (getGeneratedTemplateCodeBySignature(ctx.signatureId) ?? "")
+                : "");
+            }
+            return;
+          }
+        } catch (crossErr) {
+          logError("action:cross-app", `Cross-app navigation failed: ${targetFamily}/${targetToolSuffix}`, crossErr, { cardId });
+        }
+      }
+    }
+    // Fall through to normal action handling if cross-app fails
+    logAction({ ts: Date.now(), type: "action", category: "action:cross-app", message: `Cross-app fallback: target=${targetFamily} not resolved, falling through`, cardId });
+  }
+
   // ── Path 2: Native tool invocation ──
   // If the card was produced by a tool from a co-loaded OpenClaw plugin,
   // try to handle the action by calling the tool directly via the registry.

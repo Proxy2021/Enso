@@ -28,23 +28,52 @@ if (!viewResult.success) {
 
 var photo = viewResult.data;
 
-// Collect adjustment values from params
+// Collect adjustment values from params (clamp to valid ranges)
+function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
 var adjustments = {
-  brightness: typeof params.brightness === "number" ? params.brightness : 0,
-  contrast: typeof params.contrast === "number" ? params.contrast : 0,
-  saturation: typeof params.saturation === "number" ? params.saturation : 0,
-  temperature: typeof params.temperature === "number" ? params.temperature : 0,
-  grain: typeof params.grain === "number" ? params.grain : 0,
-  vignette: typeof params.vignette === "number" ? params.vignette : 0,
-  fade: typeof params.fade === "number" ? params.fade : 0
+  brightness: typeof params.brightness === "number" ? clamp(params.brightness, -100, 100) : 0,
+  contrast: typeof params.contrast === "number" ? clamp(params.contrast, -100, 100) : 0,
+  saturation: typeof params.saturation === "number" ? clamp(params.saturation, -100, 100) : 0,
+  temperature: typeof params.temperature === "number" ? clamp(params.temperature, -100, 100) : 0,
+  grain: typeof params.grain === "number" ? clamp(params.grain, 0, 100) : 0,
+  vignette: typeof params.vignette === "number" ? clamp(params.vignette, 0, 100) : 0,
+  fade: typeof params.fade === "number" ? clamp(params.fade, 0, 100) : 0
 };
 
 // Store adjustments for this photo
 var storeKey = "adjustments:" + photoPath;
 await ctx.store.set(storeKey, JSON.stringify(adjustments));
 
-// Use AI to describe the adjustment effect
+// Check if any adjustments are non-zero — if so, apply them via the processing engine
 var nonZero = Object.entries(adjustments).filter(function(e) { return e[1] !== 0; });
+var outputMediaUrl = photo.mediaUrl || photoPath;
+var outputPath = photoPath;
+var outputWidth = photo.width || 0;
+var outputHeight = photo.height || 0;
+
+if (nonZero.length > 0) {
+  // Apply adjustments using the processing engine with a "custom" style + adjustment overrides
+  try {
+    var processResult = await ctx.callTool("enso_media_process_single_photo", {
+      inputFile: photoPath,
+      style: "custom",
+      adjustments: adjustments
+    });
+
+    if (processResult && processResult.success) {
+      var procData = processResult.data || processResult;
+      if (typeof procData === "string") {
+        try { procData = JSON.parse(procData); } catch(e) { procData = {}; }
+      }
+      outputMediaUrl = procData.mediaUrl || procData.thumbUrl || outputMediaUrl;
+      outputPath = procData.outputFile || outputPath;
+      outputWidth = procData.width || outputWidth;
+      outputHeight = procData.height || outputHeight;
+    }
+  } catch(e) { console.warn("[adjust] processing failed:", e?.message || e); /* fall through to return current photo with adjustments metadata */ }
+}
+
+// Use AI to describe the adjustment effect
 var desc = "";
 if (nonZero.length > 0) {
   var adjDesc = nonZero.map(function(e) { return e[0] + ": " + (e[1] > 0 ? "+" : "") + e[1]; }).join(", ");
@@ -60,12 +89,13 @@ return {
     text: JSON.stringify({
       tool: "enso_photo_studio_adjust",
       path: photoPath,
-      outputPath: photo.mediaUrl || photoPath,
+      outputPath: outputPath,
       name: photo.name,
-      mediaUrl: photo.mediaUrl,
-      width: photo.width || 0,
-      height: photo.height || 0,
+      mediaUrl: outputMediaUrl,
+      width: outputWidth,
+      height: outputHeight,
       adjustments: adjustments,
+      applied: nonZero.length > 0,
       description: desc
     })
   }]

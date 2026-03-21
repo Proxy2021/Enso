@@ -40,7 +40,7 @@ function WelcomeStep({ onSetup, onManual }: { onSetup: () => void; onManual: () 
       <div>
         <h1 className="text-2xl font-bold text-white">Welcome to Enso</h1>
         <p className="text-gray-400 mt-2 text-sm leading-relaxed max-w-xs mx-auto">
-          Every answer is an app. Set up your Enso server to get started.
+          An AI sandbox that generates complete solutions. Set up your Enso server to get started.
         </p>
       </div>
 

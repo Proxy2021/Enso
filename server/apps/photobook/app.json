@@ -1,0 +1,304 @@
+{
+  "version": 1,
+  "createdAt": 1711036800000,
+  "spec": {
+    "toolFamily": "photobook",
+    "toolPrefix": "enso_photobook_",
+    "description": "Digital photobook creator and viewer — browse photos, create themed photobooks with 6 professional layout templates, view page-by-page with navigation, edit pages, rearrange content, change visual styles, and export",
+    "signatureId": "photobook_browse",
+    "tools": [
+      {
+        "suffix": "browse",
+        "description": "Browse existing photobooks or photo sources to create new books from",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory path to browse for photos (defaults to ~/Pictures)"
+            },
+            "sortBy": {
+              "type": "string",
+              "description": "Sort: name, date, size (default: date)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photobook_browse",
+          "books": [
+            {
+              "id": "book-1",
+              "title": "California Coast",
+              "subtitle": "September 2024",
+              "style": "warm",
+              "accentColor": "#C4785B",
+              "pageCount": 12,
+              "photoCount": 11,
+              "coverUrl": "https://picsum.photos/seed/coast/400/400",
+              "createdAt": "2024-09-20T10:00:00Z"
+            }
+          ],
+          "photoSources": [
+            { "name": "Camera Roll", "path": "~/Pictures/Camera", "count": 342 },
+            { "name": "Downloads", "path": "~/Downloads", "count": 28 }
+          ]
+        },
+        "requiredDataKeys": ["tool"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "create",
+        "description": "Create a new photobook from selected photos with title, style preset, accent color, and font pair",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Book title"
+            },
+            "subtitle": {
+              "type": "string",
+              "description": "Subtitle or date range"
+            },
+            "style": {
+              "type": "string",
+              "description": "Style preset: warm, pure, moody (default: warm)"
+            },
+            "accentColor": {
+              "type": "string",
+              "description": "Hex accent color (default: #C4785B)"
+            },
+            "fontPair": {
+              "type": "string",
+              "description": "Font pair: lato-opensans, inter-inter, playfair-lato, montserrat-opensans"
+            },
+            "photoPaths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Array of photo file paths"
+            }
+          },
+          "required": ["title"]
+        },
+        "sampleParams": { "title": "California Coast", "subtitle": "September 2024", "style": "warm" },
+        "sampleData": {
+          "tool": "enso_photobook_create",
+          "bookId": "book-new-1",
+          "title": "California Coast",
+          "subtitle": "September 2024",
+          "style": "warm",
+          "accentColor": "#C4785B",
+          "fontPair": "lato-opensans",
+          "pageCount": 12,
+          "pages": [
+            { "pageNumber": 0, "templateId": "cover", "photoCount": 1 },
+            { "pageNumber": 1, "templateId": "hero", "photoCount": 1 },
+            { "pageNumber": 2, "templateId": "centered", "photoCount": 1 },
+            { "pageNumber": 3, "templateId": "text", "photoCount": 0 },
+            { "pageNumber": 4, "templateId": "duo", "photoCount": 2 },
+            { "pageNumber": 5, "templateId": "trio", "photoCount": 3 }
+          ],
+          "message": "Photobook created with 12 pages from 11 photos"
+        },
+        "requiredDataKeys": ["tool", "bookId", "title"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "view",
+        "description": "View a photobook page-by-page with full layout rendering and navigation",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bookId": {
+              "type": "string",
+              "description": "Photobook ID"
+            },
+            "page": {
+              "type": "number",
+              "description": "Starting page number (default: 0)"
+            }
+          },
+          "required": ["bookId"]
+        },
+        "sampleParams": { "bookId": "book-1" },
+        "sampleData": {
+          "tool": "enso_photobook_view",
+          "bookId": "book-1",
+          "title": "California Coast",
+          "subtitle": "September 2024",
+          "style": "warm",
+          "accentColor": "#C4785B",
+          "fontPair": "lato-opensans",
+          "currentPage": 0,
+          "totalPages": 12,
+          "pages": [
+            {
+              "pageNumber": 0, "templateId": "cover",
+              "photos": [{ "id": "p1", "url": "https://picsum.photos/seed/coast/800/800", "caption": "Morning coastline", "location": "Big Sur" }],
+              "textContent": { "heading": "California Coast", "subtitle": "September 2024" }
+            },
+            {
+              "pageNumber": 1, "templateId": "hero",
+              "photos": [{ "id": "p2", "url": "https://picsum.photos/seed/forest/800/800", "caption": "Misty redwoods" }]
+            },
+            {
+              "pageNumber": 2, "templateId": "centered",
+              "photos": [{ "id": "p3", "url": "https://picsum.photos/seed/bridge/800/800", "caption": "Golden Gate at dusk", "location": "San Francisco" }]
+            },
+            {
+              "pageNumber": 3, "templateId": "text",
+              "textContent": { "heading": "The City", "subtitle": "Sep 16 · San Francisco" }
+            },
+            {
+              "pageNumber": 4, "templateId": "duo",
+              "photos": [
+                { "id": "p4", "url": "https://picsum.photos/seed/market/800/800", "caption": "Farmer's market" },
+                { "id": "p5", "url": "https://picsum.photos/seed/coffee/800/800", "caption": "Afternoon espresso" }
+              ]
+            },
+            {
+              "pageNumber": 5, "templateId": "trio",
+              "photos": [
+                { "id": "p6", "url": "https://picsum.photos/seed/sunset/800/800", "caption": "Pacific sunset" },
+                { "id": "p7", "url": "https://picsum.photos/seed/waves/800/800", "caption": "Baker Beach waves" },
+                { "id": "p8", "url": "https://picsum.photos/seed/trail/800/800", "caption": "Coastal trail" }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "bookId", "pages"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "edit",
+        "description": "Edit a photobook page — change layout template, swap photos, edit captions or text",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bookId": { "type": "string", "description": "Photobook ID" },
+            "page": { "type": "number", "description": "Page number to edit" },
+            "templateId": { "type": "string", "description": "New template: cover, hero, centered, duo, trio, text" },
+            "photoUpdates": { "type": "string", "description": "JSON: [{slotIndex, newPhotoPath}]" },
+            "textUpdates": { "type": "string", "description": "JSON: {heading, subtitle, body}" }
+          },
+          "required": ["bookId", "page"]
+        },
+        "sampleParams": { "bookId": "book-1", "page": 3, "templateId": "duo" },
+        "sampleData": {
+          "tool": "enso_photobook_edit",
+          "bookId": "book-1",
+          "page": 3,
+          "templateId": "duo",
+          "message": "Page 3 updated to duo layout",
+          "updatedPage": {
+            "pageNumber": 3, "templateId": "duo",
+            "photos": [
+              { "id": "p4", "url": "https://picsum.photos/seed/market/800/800", "caption": "Farmer's market" },
+              { "id": "p5", "url": "https://picsum.photos/seed/coffee/800/800", "caption": "Espresso" }
+            ]
+          }
+        },
+        "requiredDataKeys": ["tool", "bookId", "page"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "arrange",
+        "description": "Reorder, add, or remove pages in a photobook",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bookId": { "type": "string", "description": "Photobook ID" },
+            "action": { "type": "string", "description": "Action: move, add, remove, duplicate" },
+            "fromPage": { "type": "number", "description": "Source page number" },
+            "toPage": { "type": "number", "description": "Destination (for move)" },
+            "templateId": { "type": "string", "description": "Template for new page (for add)" }
+          },
+          "required": ["bookId", "action"]
+        },
+        "sampleParams": { "bookId": "book-1", "action": "move", "fromPage": 5, "toPage": 3 },
+        "sampleData": {
+          "tool": "enso_photobook_arrange",
+          "bookId": "book-1",
+          "action": "move",
+          "fromPage": 5,
+          "toPage": 3,
+          "totalPages": 12,
+          "message": "Page 5 moved to position 3",
+          "pageOrder": [
+            { "pageNumber": 0, "templateId": "cover" },
+            { "pageNumber": 1, "templateId": "hero" },
+            { "pageNumber": 2, "templateId": "centered" },
+            { "pageNumber": 3, "templateId": "trio" },
+            { "pageNumber": 4, "templateId": "text" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "bookId", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "style",
+        "description": "Change the visual style of a photobook — style preset, accent color, font pair",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bookId": { "type": "string", "description": "Photobook ID" },
+            "styleId": { "type": "string", "description": "Style preset: warm, pure, moody" },
+            "accentColor": { "type": "string", "description": "Hex accent color" },
+            "fontPair": { "type": "string", "description": "Font pair ID" }
+          },
+          "required": ["bookId"]
+        },
+        "sampleParams": { "bookId": "book-1", "styleId": "moody", "accentColor": "#708090" },
+        "sampleData": {
+          "tool": "enso_photobook_style",
+          "bookId": "book-1",
+          "style": "moody",
+          "accentColor": "#708090",
+          "fontPair": "lato-opensans",
+          "bgPrimary": "#2C2C2C",
+          "bgSecondary": "#404040",
+          "textColor": "#E8E4DF",
+          "message": "Style updated to moody with slate accent"
+        },
+        "requiredDataKeys": ["tool", "bookId", "style"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "export",
+        "description": "Export a photobook as PDF or image sequence",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bookId": { "type": "string", "description": "Photobook ID" },
+            "format": { "type": "string", "description": "Export format: pdf or images" },
+            "quality": { "type": "string", "description": "Quality: standard or high" }
+          },
+          "required": ["bookId"]
+        },
+        "sampleParams": { "bookId": "book-1", "format": "pdf" },
+        "sampleData": {
+          "tool": "enso_photobook_export",
+          "bookId": "book-1",
+          "format": "pdf",
+          "quality": "standard",
+          "title": "California Coast",
+          "pageCount": 12,
+          "message": "Export ready — 12 pages as PDF",
+          "exportPath": "~/Documents/California_Coast.pdf",
+          "estimatedSize": "24.5 MB"
+        },
+        "requiredDataKeys": ["tool", "bookId", "format"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

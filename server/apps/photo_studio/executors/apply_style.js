@@ -78,26 +78,43 @@ try {
   }
 } catch(e) {}
 
-// Auto-add processed photo to "Recent" collection
+// Save styled version for compare_versions lookup
 var outputFile = data.outputFile || "";
 if (outputFile) {
   try {
-    var colStored = await ctx.store.get("collections");
-    var collections = {};
-    if (colStored) {
-      try { collections = JSON.parse(colStored); } catch(e) { collections = {}; }
+    var versionsKey = "styles:" + photoPath;
+    var versionsStored = await ctx.store.get(versionsKey);
+    var versionsList = [];
+    if (versionsStored) {
+      try { versionsList = JSON.parse(versionsStored); } catch(e) { versionsList = []; }
     }
-    if (!collections["Recent"]) {
-      collections["Recent"] = { name: "Recent", photoPaths: [], createdAt: new Date().toISOString() };
-    }
-    var paths = collections["Recent"].photoPaths || [];
-    if (paths.indexOf(outputFile) === -1) {
-      paths.unshift(outputFile);  // newest first
-      if (paths.length > 200) paths = paths.slice(0, 200);  // cap at 200
-      collections["Recent"].photoPaths = paths;
-      await ctx.store.set("collections", JSON.stringify(collections));
-    }
-  } catch(e) { /* silently skip */ }
+    versionsList.push({
+      style: style,
+      styleName: styleName,
+      mediaUrl: data.mediaUrl || "",
+      thumbUrl: data.thumbUrl || "",
+      outputFile: outputFile,
+      width: data.width || 0,
+      height: data.height || 0,
+      createdAt: new Date().toISOString()
+    });
+    await ctx.store.set(versionsKey, JSON.stringify(versionsList));
+  } catch(e) { console.warn("[apply_style] version storage failed:", e?.message || e); }
+}
+
+// Auto-add processed photo to "Recent" collection via native tool (unified storage)
+if (outputFile) {
+  try {
+    await ctx.callTool("enso_media_manage_collection", {
+      action: "create",
+      collectionName: "Recent"
+    });
+    await ctx.callTool("enso_media_manage_collection", {
+      action: "add",
+      collectionName: "Recent",
+      photoPath: outputFile
+    });
+  } catch(e) { /* silently skip collection save errors */ }
 }
 
 return {

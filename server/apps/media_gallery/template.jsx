@@ -32,11 +32,26 @@ export default function GeneratedUI({ data, onAction }) {
   const [favOnly, setFavOnly] = useState(false);
   const [createInput, setCreateInput] = useState(null);
   const [searchInput, setSearchInput] = useState("");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(new Set());
   const lbRef = useRef(null);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [lbZoom, setLbZoom] = useState(1);
+  const [lbPan, setLbPan] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (lightboxIdx >= 0 && lbRef.current) lbRef.current.focus();
   }, [lightboxIdx]);
+
+  useEffect(() => {
+    setLbZoom(1);
+    setLbPan({ x: 0, y: 0 });
+  }, [lightboxIdx]);
+
+  useEffect(() => {
+    if (!selectMode) setSelected(new Set());
+  }, [selectMode]);
 
   // ── Detect view type ──
   const tool = data?.tool || "";
@@ -167,7 +182,7 @@ export default function GeneratedUI({ data, onAction }) {
             </div>
           </div>
           <button onClick={() => onAction("favorite", { path: data.path })}
-            className={"p-2 rounded-xl cursor-pointer transition-all " + (data.isFavorite ? "text-rose-400 bg-rose-500/10" : "text-gray-500 hover:text-rose-300 hover:bg-gray-800")}>
+            className={"p-2.5 rounded-xl cursor-pointer transition-all " + (data.isFavorite ? "text-rose-400 bg-rose-500/10" : "text-gray-500 hover:text-rose-300 hover:bg-gray-800")}>
             {data.isFavorite ? <LucideReact.Heart className="w-4 h-4 fill-current" /> : <LucideReact.Heart className="w-4 h-4" />}
           </button>
         </div>
@@ -224,6 +239,18 @@ export default function GeneratedUI({ data, onAction }) {
               </div>
             ),
           }]} />
+        )}
+
+        {/* Cross-app navigation — edit in Photo Studio */}
+        {data.type === "image" && (
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => onAction("__cross_app", { target: "photo_studio", tool: "preview_styles", params: { photoPath: data.path } })}>
+              <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Style in Photo Studio
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => onAction("__cross_app", { target: "photo_studio", tool: "adjust", params: { path: data.path } })}>
+              <LucideReact.SlidersHorizontal className="w-3.5 h-3.5 mr-1" /> Adjust
+            </Button>
+          </div>
         )}
       </div>
     );
@@ -489,6 +516,13 @@ export default function GeneratedUI({ data, onAction }) {
             <LucideReact.List className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        <button onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+          className={"p-1.5 rounded-lg cursor-pointer transition-all " +
+            (selectMode ? "bg-blue-500/15 text-blue-300" : "text-gray-500 hover:text-gray-300 hover:bg-gray-800")}
+          title={selectMode ? "Cancel selection" : "Select multiple"}>
+          <LucideReact.CheckSquare className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* ── Subdirectories ── */}
@@ -527,8 +561,29 @@ export default function GeneratedUI({ data, onAction }) {
             const hasThumb = isImage || (isVideo && item.thumbnailUrl);
             return (
               <button key={item.path || idx}
-                onClick={() => { if (isImage || isVideo) setLightboxIdx(idx); else onAction("view", { path: item.path }); }}
-                className="relative group bg-gray-800/50 rounded-lg overflow-hidden border border-gray-700/30 hover:border-blue-500/40 cursor-pointer text-left transition-all">
+                onClick={() => {
+                  if (selectMode) {
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(item.path)) next.delete(item.path);
+                      else next.add(item.path);
+                      return next;
+                    });
+                  } else {
+                    if (isImage || isVideo) setLightboxIdx(idx);
+                    else onAction("view", { path: item.path });
+                  }
+                }}
+                className={"relative group bg-gray-800/50 rounded-lg overflow-hidden border cursor-pointer text-left transition-all " +
+                  (selectMode && selected.has(item.path) ? "border-blue-500/60 ring-1 ring-blue-500/30" : "border-gray-700/30 hover:border-blue-500/40")}>
+                {selectMode && (
+                  <div className="absolute top-1.5 left-1.5 z-10">
+                    <div className={"w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all " +
+                      (selected.has(item.path) ? "bg-blue-500 border-blue-500" : "border-white/50 bg-black/30")}>
+                      {selected.has(item.path) && <LucideReact.Check className="w-3 h-3 text-white" />}
+                    </div>
+                  </div>
+                )}
                 {hasThumb ? (
                   <div style={{ position: "relative", width: "100%", height: "110px" }}>
                     <img src={isVideo ? item.thumbnailUrl : item.mediaUrl} alt={item.name} loading="lazy"
@@ -553,9 +608,30 @@ export default function GeneratedUI({ data, onAction }) {
                     <LucideReact.Heart className="w-3 h-3 text-rose-400 fill-current drop-shadow" />
                   </div>
                 )}
+                {item.rating > 0 && (
+                  <div className="absolute top-1 left-1 flex gap-px">
+                    {Array.from({ length: item.rating }, (_, i) => (
+                      <div key={i} className="w-1 h-1 rounded-full bg-amber-400" />
+                    ))}
+                  </div>
+                )}
                 <div className="px-1.5 py-1">
                   <div className="text-[10px] text-gray-300 truncate">{item.name}</div>
                 </div>
+                {/* Quick-rate overlay */}
+                {item.type === "image" && (
+                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-0.5 py-1 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                    style={{ touchAction: "none" }}
+                    onClick={(e) => e.stopPropagation()}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button key={star}
+                        onClick={(e) => { e.stopPropagation(); onAction("rate", { path: item.path, rating: item.rating === star ? 0 : star }); }}
+                        className={"cursor-pointer transition-all p-0.5 " + (star <= (item.rating || 0) ? "text-amber-400" : "text-white/40 hover:text-amber-300")}>
+                        <LucideReact.Star className={"w-3 h-3" + (star <= (item.rating || 0) ? " fill-current" : "")} />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -600,15 +676,60 @@ export default function GeneratedUI({ data, onAction }) {
         </div>
       )}
 
+      {/* Floating selection action bar */}
+      {selectMode && selected.size > 0 && (
+        <div className="sticky bottom-0 z-50 bg-gray-800/95 backdrop-blur-sm rounded-xl border border-gray-700/60 p-2 flex items-center gap-2 shadow-xl">
+          <span className="text-xs text-gray-300 font-medium px-2">{selected.size} selected</span>
+          <div className="flex-1" />
+          <Button size="sm" variant="ghost" onClick={() => {
+            const paths = Array.from(selected);
+            paths.forEach((p) => onAction("favorite", { path: p }));
+          }}>
+            <LucideReact.Heart className="w-3.5 h-3.5 mr-1" /> Favorite
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => {
+            onAction("__cross_app", {
+              target: "photo_studio",
+              tool: "batch_process",
+              params: { paths: Array.from(selected) }
+            });
+            setSelectMode(false); setSelected(new Set());
+          }}>
+            <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Style All
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>
+            <LucideReact.X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
+
       {/* ── Lightbox ── */}
       {lightboxIdx >= 0 && lightboxIdx < filtered.length && (() => {
         const photo = filtered[lightboxIdx];
         return (
           <div ref={lbRef} tabIndex={0}
             onKeyDown={(e) => {
-              if (e.key === "Escape") setLightboxIdx(-1);
+              if (e.key === "Escape") { setLightboxIdx(-1); setLbZoom(1); setLbPan({ x: 0, y: 0 }); }
               if (e.key === "ArrowLeft" && lightboxIdx > 0) setLightboxIdx(lightboxIdx - 1);
               if (e.key === "ArrowRight" && lightboxIdx < filtered.length - 1) setLightboxIdx(lightboxIdx + 1);
+            }}
+            onTouchStart={(e) => {
+              if (lbZoom > 1) return;
+              setTouchEnd(null);
+              setTouchStart(e.targetTouches[0].clientX);
+            }}
+            onTouchMove={(e) => {
+              if (lbZoom > 1) return;
+              setTouchEnd(e.targetTouches[0].clientX);
+            }}
+            onTouchEnd={() => {
+              if (!touchStart || !touchEnd || lbZoom > 1) return;
+              const dist = touchStart - touchEnd;
+              const minSwipe = 50;
+              if (dist > minSwipe && lightboxIdx < filtered.length - 1) setLightboxIdx(lightboxIdx + 1);
+              if (dist < -minSwipe && lightboxIdx > 0) setLightboxIdx(lightboxIdx - 1);
+              setTouchStart(null);
+              setTouchEnd(null);
             }}
             style={{
               position: "fixed", inset: 0, zIndex: 200,
@@ -619,7 +740,7 @@ export default function GeneratedUI({ data, onAction }) {
             {/* Close */}
             <button onClick={() => setLightboxIdx(-1)}
               style={{ position: "absolute", top: 12, right: 16, zIndex: 210 }}
-              className="text-white/60 hover:text-white cursor-pointer p-1.5 rounded-lg hover:bg-white/10 transition-all">
+              className="text-white/60 hover:text-white cursor-pointer p-2.5 rounded-lg hover:bg-white/10 transition-all">
               <LucideReact.X className="w-5 h-5" />
             </button>
 
@@ -633,7 +754,7 @@ export default function GeneratedUI({ data, onAction }) {
             {lightboxIdx > 0 && (
               <button onClick={(e) => { e.stopPropagation(); setLightboxIdx(lightboxIdx - 1); }}
                 style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", zIndex: 210 }}
-                className="text-white/40 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-all">
+                className="text-white/40 hover:text-white cursor-pointer p-3 rounded-full hover:bg-white/10 transition-all">
                 <LucideReact.ChevronLeft className="w-6 h-6" />
               </button>
             )}
@@ -645,14 +766,22 @@ export default function GeneratedUI({ data, onAction }) {
                 onClick={(e) => e.stopPropagation()} />
             ) : (
               <img src={photo.mediaUrl} alt={photo.name}
-                style={{ maxWidth: "92vw", maxHeight: "82vh", objectFit: "contain", borderRadius: "4px" }} />
+                onDoubleClick={() => {
+                  if (lbZoom > 1) { setLbZoom(1); setLbPan({ x: 0, y: 0 }); }
+                  else setLbZoom(2);
+                }}
+                style={{
+                  maxWidth: "92vw", maxHeight: "82vh", objectFit: "contain", borderRadius: "4px",
+                  transform: `scale(${lbZoom}) translate(${lbPan.x}px, ${lbPan.y}px)`,
+                  transition: "transform 0.2s ease",
+                }} />
             )}
 
             {/* Next */}
             {lightboxIdx < filtered.length - 1 && (
               <button onClick={(e) => { e.stopPropagation(); setLightboxIdx(lightboxIdx + 1); }}
                 style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", zIndex: 210 }}
-                className="text-white/40 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-all">
+                className="text-white/40 hover:text-white cursor-pointer p-3 rounded-full hover:bg-white/10 transition-all">
                 <LucideReact.ChevronRight className="w-6 h-6" />
               </button>
             )}
@@ -673,12 +802,26 @@ export default function GeneratedUI({ data, onAction }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-3">
+                  {photo.type === "image" && (
+                    <button onClick={(e) => { e.stopPropagation(); setLightboxIdx(-1); onAction("__cross_app", { target: "photo_studio", tool: "preview_styles", params: { photoPath: photo.path } }); }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 cursor-pointer transition-all text-xs"
+                      title="Style in Photo Studio">
+                      <LucideReact.Palette className="w-3.5 h-3.5" /> Edit
+                    </button>
+                  )}
                   <button onClick={(e) => { e.stopPropagation(); onAction("favorite", { path: photo.path }); }}
-                    className={"p-2 rounded-lg cursor-pointer transition-all " + (photo.isFavorite ? "text-rose-400" : "text-white/40 hover:text-white")}>
+                    className={"p-2.5 rounded-lg cursor-pointer transition-all " + (photo.isFavorite ? "text-rose-400" : "text-white/40 hover:text-white")}>
                     <LucideReact.Heart className={"w-4 h-4" + (photo.isFavorite ? " fill-current" : "")} />
                   </button>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button key={star}
+                      onClick={(e) => { e.stopPropagation(); onAction("rate", { path: photo.path, rating: photo.rating === star ? 0 : star }); }}
+                      className={"cursor-pointer transition-all p-0.5 " + (star <= (photo.rating || 0) ? "text-amber-400" : "text-white/30 hover:text-amber-300")}>
+                      <LucideReact.Star className={"w-3.5 h-3.5" + (star <= (photo.rating || 0) ? " fill-current" : "")} />
+                    </button>
+                  ))}
                   <button onClick={(e) => { e.stopPropagation(); setLightboxIdx(-1); onAction("view", { path: photo.path }); }}
-                    className="p-2 rounded-lg text-white/40 hover:text-white cursor-pointer transition-all">
+                    className="p-2.5 rounded-lg text-white/40 hover:text-white cursor-pointer transition-all">
                     <LucideReact.Info className="w-4 h-4" />
                   </button>
                 </div>

@@ -1,8 +1,10 @@
 # Enso
 
-**A Claude Code-powered AI agent that answers any question with the best interactive experience and tackles any task with full engineering team capability.**
+**An AI sandbox that generates complete solutions. It discovers project opportunities, assembles AI teams to build, self-evolves, and ships products.**
 
-Enso is an AI agent built on [OpenClaw](https://github.com/nicepkg/openclaw) and powered by [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview). It doesn't just chat — it **does things**. Ask a question and get a rich interactive experience with research boards, data visualizations, and media. Give it a complex task and it deploys a full engineering team of specialized agents — researchers, architects, builders, coders, reviewers — working in parallel to deliver results.
+**Enso — 生成完整解决方案的 AI 沙盒。发现机会，组建 AI 团队，自我进化，交付产品。**
+
+Enso is an AI sandbox powered by [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview). It doesn't just chat — it **builds**. Ask a question and get the most useful format for that answer — research boards, data visualizations, interactive tools. Give it a complex goal and it assembles a full AI team — researchers, architects, builders, coders, reviewers — to plan, build, test, and ship. Give it a project and it evolves it autonomously, sprint after sprint.
 
 ---
 

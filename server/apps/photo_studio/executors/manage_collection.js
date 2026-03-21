@@ -3,135 +3,61 @@ var name = (params.name || "").trim();
 var newName = (params.newName || "").trim();
 var photoPath = (params.photoId || "").trim();
 
-// Load collections (store file paths instead of IDs)
-var colStored = await ctx.store.get("collections");
-var collections = {};
-if (colStored) {
-  try { collections = JSON.parse(colStored); } catch(e) { collections = {}; }
+// ── One-time migration from ctx.store to native tool ──
+var migrated = await ctx.store.get("collections_migrated");
+if (!migrated) {
+  var legacyStored = await ctx.store.get("collections");
+  if (legacyStored) {
+    try {
+      var legacy = JSON.parse(legacyStored);
+      var legacyKeys = Object.keys(legacy);
+      for (var i = 0; i < legacyKeys.length; i++) {
+        var col = legacy[legacyKeys[i]];
+        await ctx.callTool("enso_media_manage_collection", {
+          action: "create",
+          collectionName: col.name
+        });
+        var paths = col.photoPaths || col.photoIds || [];
+        for (var j = 0; j < paths.length; j++) {
+          await ctx.callTool("enso_media_manage_collection", {
+            action: "add",
+            collectionName: col.name,
+            photoPath: paths[j]
+          });
+        }
+      }
+    } catch(e) { /* migration best-effort */ }
+  }
+  await ctx.store.set("collections_migrated", "true");
 }
 
-var message = "";
+// ── Delegate to native tool ──
+var nativeParams = { action: action };
+if (name) nativeParams.collectionName = name;
+if (newName) nativeParams.newName = newName;
+if (photoPath) nativeParams.photoPath = photoPath;
 
-if (action === "create") {
-  if (!name) {
-    return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_photo_studio_manage_collection", error: "Collection name is required" }) }] };
-  }
-  if (collections[name]) {
-    message = "Collection '" + name + "' already exists.";
-  } else {
-    collections[name] = { name: name, photoPaths: [], createdAt: new Date().toISOString() };
-    await ctx.store.set("collections", JSON.stringify(collections));
-    message = "Collection '" + name + "' created.";
-  }
-  action = "list";
-}
+var result = await ctx.callTool("enso_media_manage_collection", nativeParams);
 
-if (action === "rename") {
-  if (collections[name] && newName) {
-    collections[newName] = collections[name];
-    collections[newName].name = newName;
-    delete collections[name];
-    await ctx.store.set("collections", JSON.stringify(collections));
-    message = "Renamed '" + name + "' to '" + newName + "'.";
-  }
-  action = "list";
-}
-
-if (action === "delete") {
-  if (collections[name]) {
-    delete collections[name];
-    await ctx.store.set("collections", JSON.stringify(collections));
-    message = "Collection '" + name + "' deleted.";
-  }
-  action = "list";
-}
-
-if (action === "add") {
-  if (collections[name] && photoPath) {
-    var paths = collections[name].photoPaths || collections[name].photoIds || [];
-    if (paths.indexOf(photoPath) === -1) {
-      paths.push(photoPath);
-      collections[name].photoPaths = paths;
-      await ctx.store.set("collections", JSON.stringify(collections));
-      message = "Photo added to '" + name + "'.";
-    }
-  }
-  action = "list";
-}
-
-if (action === "remove") {
-  if (collections[name] && photoPath) {
-    var paths = collections[name].photoPaths || collections[name].photoIds || [];
-    var idx = paths.indexOf(photoPath);
-    if (idx !== -1) {
-      paths.splice(idx, 1);
-      collections[name].photoPaths = paths;
-      await ctx.store.set("collections", JSON.stringify(collections));
-      message = "Photo removed from '" + name + "'.";
-    }
-  }
-  action = "list";
-}
-
-if (action === "view" && name && collections[name]) {
-  var col = collections[name];
-  var photoPaths = col.photoPaths || col.photoIds || [];
-  var items = [];
-  for (var i = 0; i < photoPaths.length; i++) {
-    var viewResult = await ctx.callTool("enso_media_view_photo", { path: photoPaths[i] });
-    if (viewResult.success && viewResult.data) {
-      items.push({
-        id: photoPaths[i],
-        name: viewResult.data.name,
-        url: viewResult.data.mediaUrl,
-        path: photoPaths[i],
-        size: viewResult.data.size
-      });
-    }
-  }
+if (!result || !result.success) {
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_manage_collection",
-        action: "view",
-        name: name,
-        items: items
+        error: (result && result.error) || "Collection operation failed",
+        action: action
       })
     }]
   };
 }
 
-// List view
-var colList = [];
-var colKeys = Object.keys(collections);
-for (var c = 0; c < colKeys.length; c++) {
-  var col = collections[colKeys[c]];
-  var photoPaths = col.photoPaths || col.photoIds || [];
-  var coverUrl = "";
-  // Get cover from first photo in collection
-  if (photoPaths.length > 0) {
-    var coverResult = await ctx.callTool("enso_media_view_photo", { path: photoPaths[0] });
-    if (coverResult.success && coverResult.data) {
-      coverUrl = coverResult.data.mediaUrl || "";
-    }
-  }
-  colList.push({
-    name: col.name,
-    count: photoPaths.length,
-    coverUrl: coverUrl,
-    createdAt: col.createdAt || ""
-  });
+var data = result.data;
+if (typeof data === "string") {
+  try { data = JSON.parse(data); } catch(e) { data = {}; }
 }
 
-return {
-  content: [{
-    type: "text",
-    text: JSON.stringify({
-      tool: "enso_photo_studio_manage_collection",
-      action: "list",
-      message: message,
-      collections: colList
-    })
-  }]
-};
+// Ensure the tool identity is preserved for template routing
+data.tool = "enso_photo_studio_manage_collection";
+
+return { content: [{ type: "text", text: JSON.stringify(data) }] };

@@ -16,6 +16,16 @@ export default function GeneratedUI({ data, onAction }) {
   const [galleryLang, setGalleryLang] = useState("en");
   const [galleryTab, setGalleryTab] = useState("all");
   const [galleryAccordion, setGalleryAccordion] = useState(null);
+  const lightboxRef = React.useRef(null);
+  const [pendingAdj, setPendingAdj] = useState(null);
+  const adjTimerRef = React.useRef(null);
+
+  // ── Focus lightbox overlay for keyboard navigation ──
+  React.useEffect(function() {
+    if (lightboxUrl && lightboxRef.current) {
+      lightboxRef.current.focus();
+    }
+  }, [lightboxUrl]);
 
   // ── Detect tool view ──
   const tool = data?.tool || "";
@@ -41,7 +51,7 @@ export default function GeneratedUI({ data, onAction }) {
   // ── Safety timeout: clear processing overlay after 10 minutes ──
   useEffect(() => {
     if (isProcessing) {
-      var timer = setTimeout(function() { setIsProcessing(false); }, 600000);
+      const timer = setTimeout(function() { setIsProcessing(false); }, 600000);
       return function() { clearTimeout(timer); };
     }
   }, [isProcessing]);
@@ -51,13 +61,16 @@ export default function GeneratedUI({ data, onAction }) {
   useEffect(() => {
     if (isProcessing) {
       setProcessingElapsed(0);
-      var interval = setInterval(function() { setProcessingElapsed(function(e) { return e + 1; }); }, 1000);
+      const interval = setInterval(function() { setProcessingElapsed(function(e) { return e + 1; }); }, 1000);
       return function() { clearInterval(interval); };
     }
   }, [isProcessing]);
-  var elapsedMin = Math.floor(processingElapsed / 60);
-  var elapsedSec = processingElapsed % 60;
-  var elapsedStr = elapsedMin > 0 ? elapsedMin + "m " + elapsedSec + "s" : elapsedSec + "s";
+  const elapsedMin = Math.floor(processingElapsed / 60);
+  const elapsedSec = processingElapsed % 60;
+  const elapsedStr = elapsedMin > 0 ? elapsedMin + "m " + elapsedSec + "s" : elapsedSec + "s";
+
+  // ── Clear pending adjustment when server data arrives ──
+  useEffect(() => { setPendingAdj(null); }, [data?.adjustments]);
 
   // ── Helpers ──
   const getIcon = (name) => {
@@ -74,9 +87,13 @@ export default function GeneratedUI({ data, onAction }) {
 
   // ── Lightbox overlay (full-view photo) ──
   var lightbox = lightboxUrl ? (
-    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: "rgba(0,0,0,0.95)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    <div ref={lightboxRef} tabIndex={-1}
+      onKeyDown={function(e) {
+        if (e.key === "Escape") { setLightboxUrl(null); }
+      }}
+      style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: "rgba(0,0,0,0.95)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, outline: "none" }}
       onClick={function() { setLightboxUrl(null); }}>
-      <button onClick={function() { setLightboxUrl(null); }} style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", padding: 8, zIndex: 10 }}>
+      <button onClick={function() { setLightboxUrl(null); }} style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", padding: 12, zIndex: 10 }}>
         <LucideReact.X className="w-7 h-7 text-white/70 hover:text-white" />
       </button>
       <img src={lightboxUrl} alt={lightboxName} style={{ maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100vh - 80px)", objectFit: "contain", borderRadius: 8 }} onClick={function(e) { e.stopPropagation(); }} />
@@ -122,22 +139,38 @@ export default function GeneratedUI({ data, onAction }) {
           </div>
         </div>
         <div className="text-center space-y-1">
-          <div className="text-xs text-gray-200 font-medium">Applying {processingStyle.replace(/_/g, " ")} style</div>
+          <div className="text-xs text-gray-200 font-medium">
+            Applying {processingStyle.replace(/_/g, " ")} style
+          </div>
           <div className="text-[11px] text-gray-500">Each photo is being professionally graded...</div>
         </div>
         <div className="w-full space-y-1">
-          <div className="h-1.5 bg-gray-700/40 rounded-full overflow-hidden relative">
-            <div style={{
-              position: "absolute", top: 0, bottom: 0, width: "30%", borderRadius: 9999,
-              background: "linear-gradient(90deg, transparent, #8b5cf6, #d946ef, #8b5cf6, transparent)",
-              animation: "enso-slide 2s ease-in-out infinite"
-            }} />
-          </div>
-          <style>{`@keyframes enso-slide { 0% { left: -30%; } 50% { left: 100%; } 100% { left: -30%; } }`}</style>
-          <div className="text-[10px] text-gray-500 text-center">
-            {processingCount > 2 ? "Processing " + processingCount + " photos at full quality — " : "Full-quality processing — "}
-            {elapsedStr} elapsed
-          </div>
+          {processingCount > 0 && (data?.completed || 0) > 0 ? (
+            <>
+              <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-full bg-violet-500 rounded-full transition-all duration-500"
+                  style={{ width: Math.min(100, ((data?.completed || 0) / processingCount) * 100) + "%" }} />
+              </div>
+              <div className="text-[10px] text-gray-500 text-center">
+                {data?.completed || 0} of {processingCount} photos — {elapsedStr} elapsed
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="h-1.5 bg-gray-700/40 rounded-full overflow-hidden relative">
+                <div style={{
+                  position: "absolute", top: 0, bottom: 0, width: "30%", borderRadius: 9999,
+                  background: "linear-gradient(90deg, transparent, #8b5cf6, #d946ef, #8b5cf6, transparent)",
+                  animation: "enso-slide 2s ease-in-out infinite"
+                }} />
+              </div>
+              <style>{`@keyframes enso-slide { 0% { left: -30%; } 50% { left: 100%; } 100% { left: -30%; } }`}</style>
+              <div className="text-[10px] text-gray-500 text-center">
+                {processingCount > 2 ? "Processing " + processingCount + " photos at full quality — " : "Full-quality processing — "}
+                {elapsedStr} elapsed
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -343,17 +376,17 @@ export default function GeneratedUI({ data, onAction }) {
                         <div className="text-[10px] text-gray-300 truncate">{item.name}</div>
                         <div className="text-[9px] text-gray-500">{formatSize(item.size)}</div>
                       </div>
-                      <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute top-1 right-1 flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button onClick={function(e) { e.stopPropagation(); onAction("analyze_photo", { path: item.path }); }}
-                          className="p-1 rounded-md bg-black/60 text-amber-300 hover:text-amber-200 cursor-pointer backdrop-blur-sm" title="AI Recommend">
+                          className="p-1.5 rounded-md bg-black/60 text-amber-300 hover:text-amber-200 cursor-pointer backdrop-blur-sm" title="AI Recommend">
                           <LucideReact.Sparkles className="w-3 h-3" />
                         </button>
                         <button onClick={function(e) { e.stopPropagation(); onAction("preview_styles", { photoPath: item.path }); }}
-                          className="p-1 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
+                          className="p-1.5 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
                           <LucideReact.Palette className="w-3 h-3" />
                         </button>
                         <button onClick={function(e) { e.stopPropagation(); if (item.mediaUrl) { setLightboxUrl(item.mediaUrl); setLightboxName(item.name); } }}
-                          className="p-1 rounded-md bg-black/60 text-gray-300 hover:text-white cursor-pointer backdrop-blur-sm">
+                          className="p-1.5 rounded-md bg-black/60 text-gray-300 hover:text-white cursor-pointer backdrop-blur-sm">
                           <LucideReact.Maximize2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -378,11 +411,11 @@ export default function GeneratedUI({ data, onAction }) {
                         <div className="text-[10px] text-gray-500">{formatSize(item.size)} · {item.ext}</div>
                       </div>
                       <button onClick={() => onAction("analyze_photo", { path: item.path })}
-                        className="p-1.5 rounded-lg bg-gray-700/40 hover:bg-amber-500/20 cursor-pointer transition-all opacity-0 group-hover:opacity-100" title="AI Recommend">
+                        className="p-2 rounded-lg bg-gray-700/40 hover:bg-amber-500/20 cursor-pointer transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100" title="AI Recommend">
                         <LucideReact.Sparkles className="w-3.5 h-3.5 text-amber-400" />
                       </button>
                       <button onClick={() => onAction("preview_styles", { photoPath: item.path })}
-                        className="p-1.5 rounded-lg bg-gray-700/40 hover:bg-violet-500/20 cursor-pointer transition-all opacity-0 group-hover:opacity-100">
+                        className="p-2 rounded-lg bg-gray-700/40 hover:bg-violet-500/20 cursor-pointer transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
                         <LucideReact.Palette className="w-3.5 h-3.5 text-violet-400" />
                       </button>
                     </div>
@@ -1135,8 +1168,8 @@ export default function GeneratedUI({ data, onAction }) {
                 </div>
               )}
               {photo.originalUrl && (
-                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <LucideReact.Maximize2 className="w-5 h-5 text-white drop-shadow" />
+                <div className="absolute bottom-1 right-1 p-1.5 rounded bg-black/50 text-white/70 group-hover:text-white transition-colors">
+                  <LucideReact.Maximize2 className="w-3.5 h-3.5 drop-shadow" />
                 </div>
               )}
             </div>
@@ -1153,8 +1186,8 @@ export default function GeneratedUI({ data, onAction }) {
                 </div>
               )}
               {(result.thumbUrl || result.mediaUrl) && (
-                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <LucideReact.Maximize2 className="w-5 h-5 text-white drop-shadow" />
+                <div className="absolute bottom-1 right-1 p-1.5 rounded bg-black/50 text-white/70 group-hover:text-white transition-colors">
+                  <LucideReact.Maximize2 className="w-3.5 h-3.5 drop-shadow" />
                 </div>
               )}
             </div>
@@ -1174,11 +1207,17 @@ export default function GeneratedUI({ data, onAction }) {
           <Button size="sm" variant="outline" onClick={() => onAction("preview_styles", { photoPath: photo.path || photo.id })}>
             <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Try Other Styles
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => onAction("adjust", { path: result.outputFile || photo.path })}>
+            <LucideReact.SlidersHorizontal className="w-3.5 h-3.5 mr-1" /> Fine Tune
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => onAction("compare_versions", { photoId: photo.path || photo.id })}>
             <LucideReact.Columns className="w-3.5 h-3.5 mr-1" /> Compare
           </Button>
           <Button size="sm" variant="ghost" onClick={function() { onAction("manage_collection", { action: "add", collectionName: "Latest Edits", photoPath: result.outputFile }); }}>
             <LucideReact.FolderPlus className="w-3.5 h-3.5 mr-1" /> Save to Collection
+          </Button>
+          <Button size="sm" variant="ghost" onClick={function() { onAction("__cross_app", { target: "media_gallery", tool: "view", params: { path: photo.path || photo.id } }); }}>
+            <LucideReact.Images className="w-3.5 h-3.5 mr-1" /> View in Gallery
           </Button>
         </div>
       </div>
@@ -1214,6 +1253,23 @@ export default function GeneratedUI({ data, onAction }) {
             )}
           </Badge>
         </div>
+
+        {/* Stats bar */}
+        {data.status === "complete" && (
+          <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1 text-emerald-400">
+              <LucideReact.CheckCircle className="w-3.5 h-3.5" />
+              <span>{completed - failedCount} success</span>
+            </div>
+            {failedCount > 0 && (
+              <div className="flex items-center gap-1 text-rose-400">
+                <LucideReact.XCircle className="w-3.5 h-3.5" />
+                <span>{failedCount} failed</span>
+              </div>
+            )}
+            <div className="text-gray-500">{batchStyle.replace(/_/g, " ")}</div>
+          </div>
+        )}
 
         {/* Progress bar */}
         <div className="bg-gray-800/40 rounded-xl p-3 border border-gray-700/40 space-y-2">
@@ -1262,10 +1318,10 @@ export default function GeneratedUI({ data, onAction }) {
                     {item.status === "error" && (
                       <div className="absolute top-1 right-1"><LucideReact.XCircle className="w-4 h-4 text-rose-400 drop-shadow" /></div>
                     )}
-                    {/* Full view hint on hover */}
+                    {/* Full view hint — always visible on touch */}
                     {item.styledUrl && (
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <LucideReact.Maximize2 className="w-5 h-5 text-white drop-shadow" />
+                      <div className="absolute bottom-1 right-1 p-0.5 rounded bg-black/50 text-white/70 group-hover:text-white transition-colors">
+                        <LucideReact.Maximize2 className="w-3 h-3 drop-shadow" />
                       </div>
                     )}
                   </div>
@@ -1293,6 +1349,18 @@ export default function GeneratedUI({ data, onAction }) {
             )}
             <Button size="sm" variant="ghost" onClick={() => onAction("import_photos", { path: data.collection })}>
               <LucideReact.FolderOpen className="w-3 h-3 mr-1" /> Browse Folder
+            </Button>
+          </div>
+        )}
+
+        {/* Cross-app navigation */}
+        {data.status === "complete" && (
+          <div className="flex gap-2 flex-wrap pt-2 border-t border-gray-700/40">
+            <Button size="sm" variant="ghost" onClick={() => onAction("__cross_app", { target: "media_gallery", tool: "browse", params: { path: data.outputDir || data.inputDir } })}>
+              <LucideReact.Images className="w-3.5 h-3.5 mr-1" /> View in Gallery
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => onAction("import_photos", {})}>
+              <LucideReact.ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back to Studio
             </Button>
           </div>
         )}
@@ -1632,22 +1700,57 @@ export default function GeneratedUI({ data, onAction }) {
         <div className="space-y-2.5">
           {adjParams.map(function(adj) {
             var IconComp = LucideReact[adj.icon] || LucideReact.Circle;
-            var val = data.adjustments ? (data.adjustments[adj.key] || 0) : 0;
+            var val = pendingAdj ? (pendingAdj[adj.key] !== undefined ? pendingAdj[adj.key] : 0) : (data.adjustments ? (data.adjustments[adj.key] || 0) : 0);
             return (
               <div key={adj.key} className="space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-gray-400 flex items-center gap-1"><IconComp className="w-3 h-3" /> {adj.label}</span>
                   <span className="text-gray-200 font-medium">{val}</span>
                 </div>
-                <Progress value={((val - adj.min) / (adj.max - adj.min)) * 100} max={100} />
+                <input
+                  type="range"
+                  min={adj.min}
+                  max={adj.max}
+                  value={val}
+                  onChange={function(e) {
+                    var newParams = { path: data.path };
+                    if (data.adjustments) {
+                      Object.keys(data.adjustments).forEach(function(k) { newParams[k] = data.adjustments[k]; });
+                    }
+                    newParams[adj.key] = parseInt(e.target.value, 10);
+                    setPendingAdj(newParams);
+                    if (adjTimerRef.current) clearTimeout(adjTimerRef.current);
+                    adjTimerRef.current = setTimeout(function() {
+                      onAction("adjust", newParams);
+                      adjTimerRef.current = null;
+                    }, 400);
+                  }}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                  style={{
+                    background: "linear-gradient(to right, #8b5cf6 " + (((val - adj.min) / (adj.max - adj.min)) * 100) + "%, #374151 " + (((val - adj.min) / (adj.max - adj.min)) * 100) + "%)",
+                    accentColor: "#8b5cf6"
+                  }}
+                />
               </div>
             );
           })}
         </div>
 
-        <Button size="sm" className="w-full" onClick={() => onAction("preview_styles", { photoPath: data.path })}>
-          <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Apply Style Instead
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" className="flex-1" onClick={function() {
+            var resetParams = { path: data.path };
+            adjParams.forEach(function(adj) { resetParams[adj.key] = 0; });
+            onAction("adjust", resetParams);
+          }}>
+            <LucideReact.RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => onAction("preview_styles", { photoPath: data.path })}>
+            <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Styles
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onAction("__cross_app", { target: "media_gallery", tool: "view", params: { path: data.path } })}>
+            <LucideReact.Images className="w-3.5 h-3.5 mr-1" /> Gallery
+          </Button>
+        </div>
       </div>
     );
   }

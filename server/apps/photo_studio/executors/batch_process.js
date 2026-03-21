@@ -1,5 +1,17 @@
 var folderPath = (params.collection || "").trim();
-var style = (params.style || "").trim() || "wong_kar_wai";
+var style = (params.style || "").trim();
+
+if (!style) {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        tool: "enso_photo_studio_batch_process",
+        error: "Style is required. Use list_styles or style_gallery to browse available styles."
+      })
+    }]
+  };
+}
 
 // If no folder path, check stored last browsed folder
 if (!folderPath) {
@@ -68,29 +80,25 @@ var results = files.map(function(f) {
   };
 });
 
-// Auto-save processed photos to "Recent" collection
+// Auto-save processed photos to "Recent" collection via native tool (unified storage)
 var savedToCollection = false;
 if (results.length > 0) {
   try {
-    var colStored = await ctx.store.get("collections");
-    var collections = {};
-    if (colStored) {
-      try { collections = JSON.parse(colStored); } catch(e) { collections = {}; }
-    }
-    if (!collections["Recent"]) {
-      collections["Recent"] = { name: "Recent", photoPaths: [], createdAt: new Date().toISOString() };
-    }
-    var paths = collections["Recent"].photoPaths || [];
+    await ctx.callTool("enso_media_manage_collection", {
+      action: "create",
+      collectionName: "Recent"
+    });
     for (var ri = 0; ri < results.length; ri++) {
-      if (results[ri].id && paths.indexOf(results[ri].id) === -1) {
-        paths.unshift(results[ri].id);
+      if (results[ri].id) {
+        await ctx.callTool("enso_media_manage_collection", {
+          action: "add",
+          collectionName: "Recent",
+          photoPath: results[ri].id
+        });
       }
     }
-    if (paths.length > 200) paths = paths.slice(0, 200);
-    collections["Recent"].photoPaths = paths;
-    await ctx.store.set("collections", JSON.stringify(collections));
     savedToCollection = true;
-  } catch(e) { /* silently skip */ }
+  } catch(e) { /* silently skip collection save errors */ }
 }
 
 return {

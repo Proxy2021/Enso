@@ -99,9 +99,9 @@ export default function WelcomeCard() {
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-4">
       <div className="text-center mb-6">
-        <h2 className="text-lg font-semibold text-gray-200 mb-1">Every answer is an app</h2>
+        <h2 className="text-lg font-semibold text-gray-200 mb-1">An AI sandbox that ships</h2>
         <p className="text-sm text-gray-400 max-w-lg">
-          Ask anything. Get interactive software — research dashboards, project trackers, data visualizations, and custom tools — built on the fly by AI agents.
+          Ask anything. Build anything. AI teams that discover, build, evolve, and ship complete solutions.
         </p>
       </div>
 

@@ -295,6 +295,58 @@ Reply with ONLY the research topic as a single line of plain text (no JSON, no m
   return { topic, depth: "standard" };
 }
 
+// ── App Intent Matcher (E1: Chat-to-App Routing Fix) ──
+// Pre-classification check: does the user's message match a registered app?
+
+const APP_INTENT_PATTERNS: Array<{
+  pattern: RegExp;
+  toolFamily: string;
+  confidence: number;
+}> = [
+  // Media Gallery — browsing, viewing, organizing photos
+  { pattern: /\b(media\s+gallery|photo\s+gallery|browse\s+(my\s+)?photo|view\s+(my\s+)?photo|show\s+(me\s+)?(my\s+)?(favorite\s+|recent\s+)?photo|organize\s+photo|photo\s+collections?\b|my\s+gallery|open\s+(the\s+)?gallery)\b/i, toolFamily: "media_gallery", confidence: 0.9 },
+  { pattern: /\b(rate\s+(my\s+|this\s+)?photo|favorite\s+(my\s+)?photo|search\s+(my\s+)?photo|photo\s+search|find\s+(my\s+)?photo|my\s+photos|my\s+pictures|browse\s+photos|browse\s+pictures)\b/i, toolFamily: "media_gallery", confidence: 0.85 },
+  { pattern: /\b(show\s+(me\s+)?(my\s+)?collections|list\s+collections|open\s+gallery|view\s+gallery|show\s+gallery|browse\s+(my\s+)?gallery|browse\s+(the\s+)?pictures)\b/i, toolFamily: "media_gallery", confidence: 0.85 },
+
+  // Photo Studio — editing, styling, processing photos
+  { pattern: /\b(photo\s+studio|style\s+gallery|apply\s+(a\s+)?style|photo\s+processing|film\s+stock|cinematic\s+style|artistic\s+style|photo\s+style|open\s+(the\s+)?studio)\b/i, toolFamily: "photo_studio", confidence: 0.9 },
+  { pattern: /\b(batch\s+process|style\s+preview|portra\s+400|wong\s+kar[- ]?wai|blade\s+runner|nordic\s+noir|photo\s*book|create\s+(a\s+)?photo\s*book)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
+  { pattern: /\b(adjust\s+(a\s+|my\s+|this\s+)?photo|photo\s+adjust|increase\s+contrast|add\s+grain|edit\s+(my\s+|a\s+|this\s+)?photo|analyze\s+(this\s+|my\s+|a\s+)?photo|compare\s+(photo\s+)?versions|show\s+(me\s+)?(all\s+)?styles|list\s+styles|artistic\s+styles)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
+];
+
+function matchAppIntent(message: string): { appId: string; toolFamily: string; confidence: number } | null {
+  // Skip messages that are clearly about programming/research, not app usage
+  if (/\b(research|build|implement|code|script|deploy|write\s+a|help\s+me\s+write)\b/i.test(message) &&
+      !/\b(photo\s+studio|media\s+gallery|open|browse|show\s+me|launch)\b/i.test(message)) {
+    return null;
+  }
+
+  for (const { pattern, toolFamily, confidence } of APP_INTENT_PATTERNS) {
+    if (pattern.test(message)) {
+      return { appId: toolFamily, toolFamily, confidence };
+    }
+  }
+  return null;
+}
+
+function inferAppParams(message: string, primaryTool: any): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+
+  // Extract path hints from message
+  const pathMatch = message.match(/\b(~\/\S+|[A-Z]:\\[^\s,]+|\/[a-z][^\s,]+)\b/i);
+  if (pathMatch && primaryTool.parameters?.properties?.path) {
+    params.path = pathMatch[1];
+  }
+
+  // Extract style hints
+  const styleMatch = message.match(/\b(portra\s*400|ektar|tri-?x|wong\s+kar[- ]?wai|blade\s+runner|nordic\s+noir|moriyama|fan\s+ho|moody\s+natural|soft\s+film)\b/i);
+  if (styleMatch && primaryTool.parameters?.properties?.style) {
+    params.style = styleMatch[1].toLowerCase().replace(/[\s-]+/g, "_");
+  }
+
+  return params;
+}
+
 export async function startEnsoServer(opts: {
   account: ResolvedEnsoAccount;
   config: CoreConfig;
@@ -1257,6 +1309,97 @@ export async function startEnsoServer(opts: {
                   .slice(-5)
                   .map((c) => `${c.role}: ${c.text!.slice(0, 300)}`);
 
+                // ── Pre-classification: check for app intent (E1 routing fix) ──
+                const appIntent = matchAppIntent(msg.text);
+                if (appIntent && appIntent.confidence >= 0.85) {
+                  runtime.log?.(`[enso] app-intent: matched "${appIntent.toolFamily}" (confidence=${appIntent.confidence}) for: "${msg.text.slice(0, 60)}"`);
+                  // Dismiss the processing indicator
+                  send({
+                    id: randomUUID(),
+                    runId: processingRunId,
+                    sessionKey,
+                    seq: 99,
+                    state: "final",
+                    text: "",
+                    timestamp: Date.now(),
+                  });
+                  // Launch the matched app — same pattern as apps.run
+                  try {
+                    const { loadAllApps } = await import("./app-persistence.js");
+                    const { executeToolDirect } = await import("./native-tools/registry.js");
+                    const apps = loadAllApps();
+                    const app = apps.find((a) => a.spec.toolFamily === appIntent.toolFamily);
+
+                    if (app) {
+                      const primary = app.spec.tools.find((t: any) => t.isPrimary) ?? app.spec.tools[0];
+                      const primaryToolName = `${app.spec.toolPrefix}${primary.suffix}`;
+                      const inferredParams = inferAppParams(msg.text, primary);
+
+                      const result = await executeToolDirect(primaryToolName, { ...primary.sampleParams, ...inferredParams });
+                      const data = result.success && result.data != null ? result.data : primary.sampleData;
+
+                      const { registerCardContext } = await import("./outbound.js");
+                      const cardId = randomUUID();
+                      registerCardContext(cardId, {
+                        cardId,
+                        originalPrompt: msg.text,
+                        originalResponse: "",
+                        currentData: structuredClone(data),
+                        geminiApiKey: account.geminiApiKey,
+                        account,
+                        mode: "full",
+                        actionHistory: [],
+                        appToolHint: {
+                          toolName: primaryToolName,
+                          params: inferredParams,
+                          handlerPrefix: app.spec.toolPrefix,
+                        },
+                        interactionMode: "tool",
+                        toolFamily: app.spec.toolFamily,
+                        signatureId: app.spec.signatureId,
+                        coverageStatus: "covered",
+                      });
+
+                      const appCardMsg = {
+                        id: cardId,
+                        runId: randomUUID(),
+                        sessionKey,
+                        seq: 0,
+                        state: "final" as const,
+                        data,
+                        generatedUI: app.templateJSX,
+                        cardMode: {
+                          interactionMode: "tool" as const,
+                          toolFamily: app.spec.toolFamily,
+                          signatureId: app.spec.signatureId,
+                          coverageStatus: "covered" as const,
+                        },
+                        timestamp: Date.now(),
+                      };
+                      send(appCardMsg);
+
+                      persistCard(clientId, {
+                        id: cardId,
+                        runId: appCardMsg.runId,
+                        type: "dynamic-ui",
+                        role: "assistant",
+                        data,
+                        generatedUI: app.templateJSX,
+                        cardMode: appCardMsg.cardMode,
+                        timestamp: appCardMsg.timestamp,
+                      });
+
+                      break; // Exit the chat.send handler
+                    } else {
+                      const allFamilies = apps.map((a) => a.spec.toolFamily).join(", ");
+                      runtime.log?.(`[enso] app-intent: app "${appIntent.toolFamily}" not found among ${apps.length} loaded apps: [${allFamilies}]`);
+                    }
+                  } catch (appErr) {
+                    runtime.log?.(`[enso] app-intent: launch failed, falling through to classifier: ${String(appErr)}`);
+                    // Fall through to classifyTask
+                  }
+                }
+
                 const classification = await classifyTask({
                   userMessage: msg.text,
                   conversationHistory: recentHistory,
@@ -1330,6 +1473,91 @@ export async function startEnsoServer(opts: {
                     statusSink,
                   });
                   break;
+                }
+
+                // Post-classification app intent override (E1 routing fix)
+                // When Gemini classifies as "simple" or "one-off" but user clearly wants a media app,
+                // intercept and launch the matched app instead of routing to Claude Code Terminal.
+                if (
+                  (classification.complexity === "simple" || classification.complexity === "one-off") &&
+                  appIntent &&
+                  appIntent.confidence >= 0.7
+                ) {
+                  runtime.log?.(`[enso] app-override: reclassifying "${msg.text.slice(0, 60)}" from ${classification.complexity} to app (${appIntent.toolFamily})`);
+                  dismissProcessing();
+                  try {
+                    const { loadAllApps: loadApps2 } = await import("./app-persistence.js");
+                    const { executeToolDirect: execTool2 } = await import("./native-tools/registry.js");
+                    const apps2 = loadApps2();
+                    const app2 = apps2.find((a) => a.spec.toolFamily === appIntent.toolFamily);
+
+                    if (app2) {
+                      const primary2 = app2.spec.tools.find((t: any) => t.isPrimary) ?? app2.spec.tools[0];
+                      const toolName2 = `${app2.spec.toolPrefix}${primary2.suffix}`;
+                      const params2 = inferAppParams(msg.text, primary2);
+
+                      const result2 = await execTool2(toolName2, { ...primary2.sampleParams, ...params2 });
+                      const data2 = result2.success && result2.data != null ? result2.data : primary2.sampleData;
+
+                      const { registerCardContext: regCtx2 } = await import("./outbound.js");
+                      const cardId2 = randomUUID();
+                      regCtx2(cardId2, {
+                        cardId: cardId2,
+                        originalPrompt: msg.text,
+                        originalResponse: "",
+                        currentData: structuredClone(data2),
+                        geminiApiKey: account.geminiApiKey,
+                        account,
+                        mode: "full",
+                        actionHistory: [],
+                        appToolHint: {
+                          toolName: toolName2,
+                          params: params2,
+                          handlerPrefix: app2.spec.toolPrefix,
+                        },
+                        interactionMode: "tool",
+                        toolFamily: app2.spec.toolFamily,
+                        signatureId: app2.spec.signatureId,
+                        coverageStatus: "covered",
+                      });
+
+                      const overrideMsg = {
+                        id: cardId2,
+                        runId: randomUUID(),
+                        sessionKey,
+                        seq: 0,
+                        state: "final" as const,
+                        data: data2,
+                        generatedUI: app2.templateJSX,
+                        cardMode: {
+                          interactionMode: "tool" as const,
+                          toolFamily: app2.spec.toolFamily,
+                          signatureId: app2.spec.signatureId,
+                          coverageStatus: "covered" as const,
+                        },
+                        timestamp: Date.now(),
+                      };
+                      send(overrideMsg);
+
+                      persistCard(clientId, {
+                        id: cardId2,
+                        runId: overrideMsg.runId,
+                        type: "dynamic-ui",
+                        role: "assistant",
+                        data: data2,
+                        generatedUI: app2.templateJSX,
+                        cardMode: overrideMsg.cardMode,
+                        timestamp: overrideMsg.timestamp,
+                      });
+
+                      break;
+                    } else {
+                      runtime.log?.(`[enso] app-override: app "${appIntent.toolFamily}" not found among ${apps2.length} loaded apps`);
+                    }
+                  } catch (overrideErr) {
+                    runtime.log?.(`[enso] app-override: launch failed, continuing with classification: ${String(overrideErr)}`);
+                    // Fall through to normal classification handling
+                  }
                 }
 
                 if (classification.complexity === "orchestrated") {

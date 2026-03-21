@@ -128,8 +128,8 @@ function getDefaultEnsoProject(): Project {
   return {
     id: "enso",
     name: "Enso",
-    description: "Claude Code-powered AI agent that answers any question with the best interactive experience and tackles any task with full engineering team capability.",
-    vision: "Every answer is an app. Full engineering team for any task. Self-evolving platform that compounds with use.",
+    description: "An AI sandbox that generates complete solutions. It discovers project opportunities, assembles AI teams to build, self-evolves, and ships products.",
+    vision: "Enso — an AI sandbox that generates complete solutions. It discovers project opportunities, assembles AI teams to build, self-evolves, and ships products.",
     codebasePath: "D:/Github/Enso",
     techStack: "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
     testUrl: "http://localhost:5173",

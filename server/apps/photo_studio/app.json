@@ -9,7 +9,7 @@
     "tools": [
       {
         "suffix": "import_photos",
-        "description": "Browse the filesystem to find and select photos. Shows directories and image files with thumbnails. Navigate into folders to find your photos.",
+        "description": "Browse the filesystem to find and select photos. Use when the user says: 'open photo studio', 'browse photos for editing', 'import my photos', 'find photos to style'. Shows directories and image files with thumbnails. Navigate into folders to find your photos.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -62,7 +62,7 @@
       },
       {
         "suffix": "preview_styles",
-        "description": "Generate preview thumbnails of a photo in all 28 styles so the user can see what each style looks like before applying. Shows previews grouped by category: Film Stocks, Cinematic, Photographers, Trending.",
+        "description": "Generate preview thumbnails of a photo in all 28 styles so the user can see what each style looks like before applying. Use when the user says: 'preview styles on my photo', 'show me how styles look', 'try all styles on this photo'. Shows previews grouped by category: Film Stocks, Cinematic, Photographers, Trending.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -96,7 +96,7 @@
       },
       {
         "suffix": "apply_style",
-        "description": "Apply a photo processing style to a single photo. Performs real pixel-level processing using the recipe engine. Returns the processed image.",
+        "description": "Apply a photo processing style to a single photo. Use when the user says: 'apply style to my photo', 'apply Portra 400', 'style this photo', 'add a cinematic look'. Performs real pixel-level processing using the recipe engine. Returns the processed image.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -136,7 +136,7 @@
       },
       {
         "suffix": "batch_process",
-        "description": "Apply a photo processing style to all photos in a directory. 28 styles: Film Stocks (Portra, Ektar, Tri-X, etc.), Cinematic (Wong Kar-wai, Blade Runner, etc.), Photographers (Moriyama, Fan Ho, etc.), Trending (Moody Natural, Soft Film, etc.).",
+        "description": "Apply a photo processing style to all photos in a directory. Use when the user says: 'batch process my photos', 'style all photos in a folder', 'apply Portra 400 to all'. 28 styles: Film Stocks (Portra, Ektar, Tri-X, etc.), Cinematic (Wong Kar-wai, Blade Runner, etc.), Photographers (Moriyama, Fan Ho, etc.), Trending (Moody Natural, Soft Film, etc.).",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -175,7 +175,7 @@
       },
       {
         "suffix": "list_styles",
-        "description": "List all available photo processing styles grouped by category.",
+        "description": "List all available photo processing styles grouped by category. Use when the user says: 'what styles are available', 'list photo styles', 'show me all styles'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -230,7 +230,7 @@
       },
       {
         "suffix": "compare_versions",
-        "description": "Show original photo alongside all styled versions for side-by-side comparison",
+        "description": "Show original photo alongside all styled versions for side-by-side comparison. Use when the user says: 'compare styled versions', 'show before and after', 'compare photo versions'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -347,7 +347,7 @@
       },
       {
         "suffix": "analyze_photo",
-        "description": "Use AI vision to analyze a photo's content, recommend the best artistic style, and generate a creative caption for the result.",
+        "description": "Use AI vision to analyze a photo's content, recommend the best artistic style, and generate a creative caption for the result. Use when the user says: 'analyze this photo', 'what style fits this photo', 'describe this photo'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -376,7 +376,7 @@
       },
       {
         "suffix": "adjust",
-        "description": "Fine-tune photo processing parameters like brightness, contrast, saturation, temperature, grain, vignette, and fade.",
+        "description": "Fine-tune photo processing parameters like brightness, contrast, saturation, temperature, grain, vignette, and fade. Use when the user says: 'adjust a photo', 'increase contrast', 'edit photo settings', 'tune brightness'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -409,7 +409,7 @@
       },
       {
         "suffix": "style_gallery",
-        "description": "Browse the Style Gallery — rich bilingual descriptions, reference image galleries, and technical processing details for all artistic styles.",
+        "description": "Browse the Style Gallery — rich bilingual descriptions, reference image galleries, and technical processing details for all artistic styles. Use when the user says: 'show me photo styles', 'explore artistic styles', 'style gallery', 'film stock styles', 'cinematic styles'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,

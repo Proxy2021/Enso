@@ -167,6 +167,13 @@ Enso has powerful built-in tools. When relevant, briefly mention them:
 - **Orchestrate** — mention for complex multi-step projects (e.g., "For a full implementation, try /orchestrate")
 Do NOT mention tools in every response — only when genuinely useful for the user's specific request.
 
+## INSTALLED APP AWARENESS (CRITICAL — must follow)
+When the user's message is about browsing, viewing, editing, styling, organizing, or managing photos/media, you MUST classify as "simple" (NOT "one-off"). The system has a pre-classification layer that routes to installed apps directly. Classifying photo/media requests as "one-off" would bypass app routing and incorrectly open a code terminal.
+Apps include:
+- **Photo Studio** — For editing, styling, adjusting, batch processing photos (56 artistic styles)
+- **Media Gallery** — For browsing, viewing, searching, rating, organizing photos and videos
+If the user asks about photos, styles, galleries, or photo editing, classify as "simple" with reasoning noting the app match. Do NOT classify these as "one-off".
+
 ## Rules
 - **Default to SIMPLE.** Most questions, comparisons, plans, templates, strategies, creative content, and explanations should be SIMPLE with a direct answer. Give thorough, well-formatted answers.
 - **SIMPLE always includes an answer.** You are the AI — answer the user directly. Use markdown tables for comparisons, numbered lists for plans, and clear structure for strategies.
@@ -348,6 +355,18 @@ export function quickClassify(message: string): TaskClassification | null {
   const trimmed = message.trim();
   const lower = trimmed.toLowerCase();
   const wordCount = trimmed.split(/\s+/).length;
+
+  // ── Media app intent → always "simple" (app routing handled upstream) ──
+  // Catches: browse photos, show gallery, open photo studio, view pictures,
+  // edit photo, apply style, adjust photo, batch process, photobook, etc.
+  // Skip if message also contains programming keywords (e.g., "build a photo gallery app")
+  const hasCodeKeywords = /\b(build|implement|code|script|deploy|write\s+a|help\s+me\s+write|fix\s+the|debug|refactor)\b/i.test(lower);
+  if (!hasCodeKeywords && /\b(media\s+gallery|photo\s+gallery|photo\s+studio|style\s+gallery|browse\s+(my\s+)?photo|view\s+(my\s+)?photo|show\s+(me\s+)?(my\s+)?photo|my\s+photos|my\s+pictures|open\s+(the\s+)?gallery|open\s+(the\s+)?studio|browse\s+photos|browse\s+pictures|edit\s+(my\s+|a\s+|this\s+)?photo|adjust\s+(a\s+|my\s+|this\s+)?photo|apply\s+(a\s+)?style|batch\s+process|photo\s*book|rate\s+(my\s+|this\s+)?photo|favorite\s+photo|photo\s+collections?|show\s+(me\s+)?(all\s+)?styles|list\s+styles|artistic\s+styles|compare\s+(photo\s+)?versions)\b/i.test(lower)) {
+    return {
+      complexity: "simple",
+      reasoning: "Media app intent — routed to app via pre-classification layer",
+    };
+  }
 
   // Check for CJK characters — if present, skip the short-message heuristic
   // since CJK text doesn't use spaces between words

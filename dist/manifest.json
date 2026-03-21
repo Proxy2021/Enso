@@ -1,7 +1,7 @@
 {
   "name": "Enso",
   "short_name": "Enso",
-  "description": "A self-evolving AI app platform — every answer is an interactive app.",
+  "description": "An AI sandbox that generates complete solutions — discovers opportunities, assembles AI teams, self-evolves, and ships products.",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#030712",

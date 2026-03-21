@@ -4,13 +4,13 @@
 
 ## Vision
 
-Enso is a **Claude Code-powered AI agent** that answers any question with the best interactive experience and tackles any task with full engineering team capability. It can run standalone or as an OpenClaw channel plugin.
+**Enso — an AI sandbox that generates complete solutions. It discovers project opportunities, assembles AI teams to build, self-evolves, and ships products.** It can run standalone or as an OpenClaw channel plugin.
 
 **Core principles:**
-- **Best experience for every answer** — Responses flow through a deterministic tool-to-UI pipeline, delivering rich interactive React apps (research boards, file managers, photo studios) instead of plain text. No LLM call needed for rendering.
-- **Full engineering team for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
+- **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline, delivering the most useful format for each answer — interactive research boards, data visualizations, photo studios, file managers — not walls of text. No LLM call needed for rendering.
+- **AI teams for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
 - **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
-- **AI-native project management** — Each project has a team of AI agents (Project Leader, Architect, Engineer, QA, Marketing, Sales, AI Strategist) and customer personas that autonomously evolve the project through iterative sprints with real browser testing, code implementation, and validation cycles.
+- **AI-native project management** — Each project has a team of AI agents (Project Leader, Architect, Engineer, QA, Marketing, Sales, AI Strategist) and customer personas that autonomously discover, build, and evolve projects through iterative sprints with real browser testing, code implementation, and validation cycles.
 
 ## Architecture Overview
 
@@ -144,7 +144,7 @@ Each project is stored at `~/.enso/projects/<projectId>/`:
 {
   "id": "enso",
   "name": "Enso",
-  "vision": "Every answer is an app...",
+  "vision": "An AI sandbox that generates complete solutions...",
   "codebasePath": "D:/Github/Enso",
   "testUrl": "http://localhost:5173",
   "teamAgents": [...],     // Internal team (Project Leader, Architect, etc.)

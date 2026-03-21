@@ -9,7 +9,7 @@
     "tools": [
       {
         "suffix": "browse",
-        "description": "Browse a folder for photos and videos with sorting, filtering, and subfolder navigation",
+        "description": "Browse a folder for photos and videos with sorting, filtering, and subfolder navigation. Use when the user says: 'browse my photos', 'show me my gallery', 'open media gallery', 'view my pictures', 'what photos do I have'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -184,7 +184,7 @@
       },
       {
         "suffix": "view",
-        "description": "View a single photo or video with full EXIF metadata, AI description, and rating",
+        "description": "View a single photo or video with full EXIF metadata, AI description, and rating. Use when the user says: 'view this photo', 'show photo details', 'open this image'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -228,7 +228,7 @@
       },
       {
         "suffix": "favorite",
-        "description": "Toggle the favorite status of a photo",
+        "description": "Toggle the favorite status of a photo. Use when the user says: 'favorite this photo', 'mark as favorite', 'unfavorite this'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -259,7 +259,7 @@
       },
       {
         "suffix": "rate",
-        "description": "Set a 1-5 star rating on a photo (0 to clear the rating)",
+        "description": "Set a 1-5 star rating on a photo (0 to clear the rating). Use when the user says: 'rate this photo', 'give this 5 stars', 'rate my photos'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -290,7 +290,7 @@
       },
       {
         "suffix": "collection",
-        "description": "Manage photo collections: create, view, add/remove photos, rename, delete, or list all collections",
+        "description": "Manage photo collections: create, view, add/remove photos, rename, delete, or list all collections. Use when the user says: 'create a collection', 'organize my photos', 'add to collection', 'show my collections'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -329,7 +329,7 @@
       },
       {
         "suffix": "search",
-        "description": "Search photos by natural language query against AI descriptions and tags",
+        "description": "Search photos by natural language query against AI descriptions and tags. Use when the user says: 'find sunset photos', 'search for beach photos', 'find photos of food', 'search my gallery'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -388,7 +388,7 @@
       },
       {
         "suffix": "inspect",
-        "description": "Inspect detailed file metadata including EXIF data for a media file",
+        "description": "Inspect detailed file metadata including EXIF data for a media file. Use when the user says: 'show file info', 'inspect photo metadata', 'what camera was used'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,

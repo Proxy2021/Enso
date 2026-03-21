@@ -14,8 +14,8 @@ A project is any independent software product with its own codebase and identity
 Project = {
   id: "enso" | "acme-saas" | "mobile-game" | ...
   name: "Enso"
-  description: "Claude Code-powered AI agent platform"
-  vision: "Every answer is an app. Full engineering team for any task."
+  description: "An AI sandbox that generates complete solutions"
+  vision: "Discovers opportunities, assembles AI teams to build, self-evolves, and ships products."
   codebasePath: "D:/Github/Enso"          # Independent git repo
   techStack: "TypeScript/React/Node.js"    # Any stack
   testUrl: "http://localhost:5173"          # For Puppeteer testing (web apps)

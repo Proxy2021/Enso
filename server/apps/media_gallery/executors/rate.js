@@ -1,6 +1,11 @@
 var path = (params.path || "").trim();
 var rating = typeof params.rating === "number" ? params.rating : 0;
 
+// Clamp rating to valid 0-5 range
+if (rating < 0) rating = 0;
+if (rating > 5) rating = 5;
+rating = Math.round(rating);
+
 if (!path) {
   return {
     content: [{

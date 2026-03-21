@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.3.22",
   "versionCode": 124,
-  "description": "Claude Code-powered AI agent — answers any question with the best interactive experience, tackles any task with full engineering team capability",
+  "description": "An AI sandbox that generates complete solutions — discovers opportunities, assembles AI teams to build, self-evolves, and ships products",
   "type": "module",
   "scripts": {
     "dev": "vite",
