@@ -37,15 +37,17 @@ function getClientId(): string {
 }
 
 // ── HTTP-based WS debug logging ──
-// Sends WS lifecycle events via fetch() so they arrive even when WS is down.
-// Batches events and flushes every 2s or when buffer hits 10 entries.
+// Sends WS lifecycle events via fetch() POST to /api/ws-debug so they arrive
+// even when the WebSocket is down.  Enable by setting localStorage key
+// "enso-ws-debug" to "1".  Batches events and flushes every 2s.
 const _debugLog: Array<{ event: string; ts: number; detail?: string }> = [];
 let _debugFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let _debugBaseUrl = "";
 let _debugClientId = "";
-let _debugToken = "";
+let _debugEnabled = false;
 
 function wsDebug(event: string, detail?: string) {
+  if (!_debugEnabled) return;
   _debugLog.push({ event, ts: Date.now(), detail });
   if (_debugLog.length >= 10) flushDebugLog();
   else if (!_debugFlushTimer) _debugFlushTimer = setTimeout(flushDebugLog, 2000);
@@ -55,12 +57,9 @@ function flushDebugLog() {
   if (_debugFlushTimer) { clearTimeout(_debugFlushTimer); _debugFlushTimer = null; }
   if (_debugLog.length === 0 || !_debugBaseUrl) return;
   const entries = _debugLog.splice(0);
-  const url = `${_debugBaseUrl}/api/ws-debug`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (_debugToken) headers["Authorization"] = `Bearer ${_debugToken}`;
-  fetch(url, {
+  fetch(`${_debugBaseUrl}/api/ws-debug`, {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ clientId: _debugClientId, entries }),
   }).catch(() => { /* best-effort */ });
 }
@@ -71,14 +70,12 @@ export function createWSClient(options: WSClientOptions): WSClient {
   let reconnectDelay = 1000;
   let intentionalClose = false;
   let hasConnectedBefore = false;
-  let connectAttempt = 0;
 
-  // Derive HTTP base URL + auth token for debug endpoint from the WS URL
   const clientId = getClientId();
   _debugClientId = clientId;
+  _debugEnabled = localStorage.getItem("enso-ws-debug") === "1";
   try {
     const parsed = new URL(options.url, location.href);
-    _debugToken = parsed.searchParams.get("token") ?? "";
     parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
     parsed.pathname = "";
     parsed.search = "";
@@ -90,13 +87,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
   function connect() {
     intentionalClose = false;
     // Skip if already connected or connecting
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-      wsDebug("connect-skip", `readyState=${ws.readyState}`);
-      return;
-    }
-    connectAttempt++;
-    const attempt = connectAttempt;
-    wsDebug("connecting", `attempt=${attempt} delay=${reconnectDelay}`);
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     options.onStateChange("connecting", false);
 
     // Append persistent clientId so backend can swap WS on reconnect
@@ -108,7 +99,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
       const isReconnect = hasConnectedBefore;
       hasConnectedBefore = true;
       reconnectDelay = 1000;
-      wsDebug("open", `attempt=${attempt} isReconnect=${isReconnect}`);
+      wsDebug("open", `isReconnect=${isReconnect}`);
       options.onStateChange("connected", isReconnect);
     };
 
@@ -123,10 +114,9 @@ export function createWSClient(options: WSClientOptions): WSClient {
     };
 
     ws.onclose = (ev) => {
-      wsDebug("close", `attempt=${attempt} code=${ev.code} reason="${ev.reason}" wasClean=${ev.wasClean} intentional=${intentionalClose}`);
+      wsDebug("close", `code=${ev.code} reason="${ev.reason}" wasClean=${ev.wasClean}`);
       options.onStateChange("disconnected", false);
       if (!intentionalClose) {
-        wsDebug("scheduling-reconnect", `delay=${reconnectDelay}ms`);
         reconnectTimer = setTimeout(() => {
           reconnectDelay = Math.min(reconnectDelay * 2, 10_000);
           connect();
@@ -135,13 +125,12 @@ export function createWSClient(options: WSClientOptions): WSClient {
     };
 
     ws.onerror = () => {
-      wsDebug("error", `attempt=${attempt}`);
+      wsDebug("error");
       // onclose will fire after this
     };
   }
 
   function disconnect() {
-    wsDebug("disconnect-intentional");
     intentionalClose = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     ws?.close();
@@ -170,9 +159,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
   }
 
   window.addEventListener("online", onNetworkRecovery);
-  window.addEventListener("offline", () => wsDebug("offline"));
   document.addEventListener("visibilitychange", () => {
-    wsDebug("visibilitychange", `state=${document.visibilityState}`);
     if (document.visibilityState === "visible") onNetworkRecovery();
   });
 

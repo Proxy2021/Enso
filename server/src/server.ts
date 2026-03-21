@@ -1196,12 +1196,8 @@ export async function startEnsoServer(opts: {
   const pingInterval = setInterval(() => {
     for (const client of clients.values()) {
       const { ws: clientWs } = client;
-      if (clientWs.readyState !== WebSocket.OPEN) {
-        runtime.log?.(`[enso:ws-debug] client=${client.id} skip ping readyState=${clientWs.readyState}`);
-        continue;
-      }
+      if (clientWs.readyState !== WebSocket.OPEN) continue;
       const missed = ((clientWs as any)._ensoMissedPongs as number) ?? 0;
-      runtime.log?.(`[enso:ws-debug] PING client=${client.id} missed=${missed}`);
       if (missed >= WS_MAX_MISSED_PONGS) {
         runtime.log?.(`[enso] ping timeout for ${client.id} (${missed} missed pongs), terminating`);
         (clientWs as any)._ensoMissedPongs = 0;
@@ -1215,8 +1211,8 @@ export async function startEnsoServer(opts: {
 
   wss.on("connection", (ws, req) => {
     // Reset pong flag on each pong received
-    ws.on("pong", () => { runtime.log?.(`[enso:ws-debug] PONG from ${clientId}`); (ws as any)._ensoMissedPongs = 0; });
-    ws.on("error", (err) => { runtime.log?.(`[enso:ws-debug] ERROR client=${clientId}: ${err.message}`); });
+    ws.on("pong", () => { (ws as any)._ensoMissedPongs = 0; });
+    ws.on("error", (err) => { runtime.log?.(`[enso] ws error for ${clientId}: ${err.message}`); });
     // ── WebSocket token auth ──
     const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
     if (accessToken) {
