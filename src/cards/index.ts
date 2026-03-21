@@ -6,6 +6,7 @@ import ShellCard from "./ShellCard";
 import DynamicUICard from "./DynamicUICard";
 import OrchestrationCard from "./OrchestrationCard";
 import EvolutionHistoryCard from "./EvolutionHistoryCard";
+import DiscoveryHistoryCard from "./DiscoveryHistoryCard";
 import ProjectsCard from "./ProjectsCard";
 import { ThinkingCard } from "../components/ThinkingCard";
 
@@ -20,6 +21,12 @@ cardRegistry.register({
 cardRegistry.register({
   type: "evolution-history",
   renderer: EvolutionHistoryCard,
+  match: () => false,
+});
+
+cardRegistry.register({
+  type: "discovery-history",
+  renderer: DiscoveryHistoryCard,
   match: () => false,
 });
 

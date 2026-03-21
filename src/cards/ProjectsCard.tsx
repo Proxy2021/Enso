@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { compileComponent } from "../lib/sandbox";
+import MarkdownText from "../components/MarkdownText";
 import { useChatStore } from "../store/chat";
 import type { CardRendererProps } from "./types";
 
@@ -20,7 +22,42 @@ interface Project {
   createdAt: number; updatedAt: number;
 }
 
+interface SprintMeta {
+  sprintId: string;
+  goal: string;
+  createdAt: number;
+  completedAt: number;
+  status: "completed" | "failed" | "partial";
+  phases: {
+    personas: { count: number; files: string[] };
+    synthesis: boolean;
+    discussion: boolean;
+    design: boolean;
+    implementation: boolean;
+    review: boolean;
+    validation: { count: number; files: string[] };
+    dashboard: boolean;
+  };
+  files: string[];
+}
+
+interface DiscoveryMeta {
+  discoveryId: string;
+  focus: string;
+  createdAt: number;
+  completedAt: number;
+  status: "completed" | "failed" | "partial";
+  phases: {
+    sourcing: { count: number; files: string[] };
+    pitches: { count: number; files: string[] };
+    committee: { count: number; files: string[] };
+    deliverables: { dashboard: boolean; memo: boolean };
+  };
+  files: string[];
+}
+
 type View = "list" | "detail" | "import";
+type DetailTab = "overview" | "sprints" | "discoveries" | "team" | "personas";
 
 const ROLE_COLORS: Record<string, string> = {
   architect: "bg-amber-400",
@@ -40,6 +77,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Project | null>(null);
   const [view, setView] = useState<View>("list");
+  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [activeProject, setActiveProject] = useState(localStorage.getItem("enso-active-project") || "enso");
   const sendMessage = useChatStore(s => s.sendMessage);
 
@@ -48,8 +86,35 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   const [generating, setGenerating] = useState(false);
   const [importError, setImportError] = useState("");
 
+  // Launch prompt dialog state
+  const [promptDialog, setPromptDialog] = useState<{ type: "evolve" | "discover"; projectId?: string } | null>(null);
+  const [promptText, setPromptText] = useState("");
+
+  // Sprint / discovery data
+  const [sprints, setSprints] = useState<SprintMeta[]>([]);
+  const [sprintsLoading, setSprintsLoading] = useState(false);
+  const [discoveries, setDiscoveries] = useState<DiscoveryMeta[]>([]);
+  const [discoveriesLoading, setDiscoveriesLoading] = useState(false);
+
+  // Sprint detail state
+  const [selectedSprint, setSelectedSprint] = useState<SprintMeta | null>(null);
+  const [sprintFileContent, setSprintFileContent] = useState<Record<string, string>>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [SprintDashComp, setSprintDashComp] = useState<any>(null);
+  const [sprintDashError, setSprintDashError] = useState<string | null>(null);
+  const [sprintViewTab, setSprintViewTab] = useState<"overview" | "personas" | "implementation" | "validation" | "dashboard">("overview");
+
+  // Discovery detail state
+  const [selectedDiscovery, setSelectedDiscovery] = useState<DiscoveryMeta | null>(null);
+  const [discoveryFileContent, setDiscoveryFileContent] = useState<Record<string, string>>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [DiscoveryDashComp, setDiscoveryDashComp] = useState<any>(null);
+  const [discoveryDashError, setDiscoveryDashError] = useState<string | null>(null);
+  const [discoveryViewTab, setDiscoveryViewTab] = useState<"overview" | "sourcing" | "pitches" | "committee" | "deliverables" | "dashboard">("overview");
+
   const baseUrl = getBackendBaseUrl();
   const headers = useMemo(() => authHeaders({ "Content-Type": "application/json" }), []);
+  const headersPlain = useMemo(() => authHeaders(), []);
 
   const fetchProjects = useCallback(() => {
     setLoading(true);
@@ -61,17 +126,166 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
+  // Fetch sprints when sprints tab is selected
+  useEffect(() => {
+    if (view === "detail" && selected && detailTab === "sprints" && sprints.length === 0 && !sprintsLoading) {
+      setSprintsLoading(true);
+      fetch(`${baseUrl}/api/evolution-sprints?projectId=${selected.id}`, { headers: headersPlain })
+        .then(r => r.json())
+        .then(d => { setSprints(d.sprints || []); setSprintsLoading(false); })
+        .catch(() => setSprintsLoading(false));
+    }
+  }, [view, selected, detailTab]);
+
+  // Fetch discoveries when discoveries tab is selected
+  useEffect(() => {
+    if (view === "detail" && selected && detailTab === "discoveries" && discoveries.length === 0 && !discoveriesLoading) {
+      setDiscoveriesLoading(true);
+      fetch(`${baseUrl}/api/discovery-results`, { headers: headersPlain })
+        .then(r => r.json())
+        .then(d => { setDiscoveries(d.results || []); setDiscoveriesLoading(false); })
+        .catch(() => setDiscoveriesLoading(false));
+    }
+  }, [view, selected, detailTab]);
+
   const handleSetActive = (id: string) => {
     localStorage.setItem("enso-active-project", id);
     setActiveProject(id);
   };
 
   const handleEvolve = (projectId: string) => {
-    handleSetActive(projectId);
-    sendMessage("/evolve");
+    setPromptDialog({ type: "evolve", projectId });
+    setPromptText("");
+  };
+
+  const handleDiscover = () => {
+    setPromptDialog({ type: "discover" });
+    setPromptText("");
+  };
+
+  const handlePromptConfirm = () => {
+    if (!promptDialog) return;
+    if (promptDialog.type === "evolve" && promptDialog.projectId) {
+      handleSetActive(promptDialog.projectId);
+      sendMessage(promptText.trim() ? `/evolve ${promptText.trim()}` : "/evolve");
+    } else if (promptDialog.type === "discover") {
+      sendMessage(promptText.trim() ? `/discover ${promptText.trim()}` : "/discover");
+    }
+    setPromptDialog(null);
+    setPromptText("");
   };
 
   const fmtDate = (ts: number) => new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  const fmtDateTime = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
+      " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const fmtDuration = (start: number, end: number) => {
+    const mins = Math.round((end - start) / 60000);
+    return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  };
+
+  const statusBadge = (status: string) => {
+    const cls = status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
+      status === "failed" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400";
+    return <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${cls}`}>{status}</span>;
+  };
+
+  // ── Sprint file fetcher ──
+  const fetchSprintFile = useCallback(async (sprintId: string, filename: string, projectId: string) => {
+    const key = `sprint:${sprintId}/${filename}`;
+    if (sprintFileContent[key]) return sprintFileContent[key];
+    try {
+      const res = await fetch(`${baseUrl}/api/evolution-sprints/${sprintId}/file/${filename}?projectId=${projectId}`, { headers: headersPlain });
+      if (!res.ok) return null;
+      const text = await res.text();
+      setSprintFileContent(prev => ({ ...prev, [key]: text }));
+      return text;
+    } catch { return null; }
+  }, [baseUrl, headersPlain, sprintFileContent]);
+
+  // ── Discovery file fetcher ──
+  const fetchDiscoveryFile = useCallback(async (discoveryId: string, filename: string) => {
+    const key = `disc:${discoveryId}/${filename}`;
+    if (discoveryFileContent[key]) return discoveryFileContent[key];
+    try {
+      const res = await fetch(`${baseUrl}/api/discovery-results/${discoveryId}/file/${filename}`, { headers: headersPlain });
+      if (!res.ok) return null;
+      const text = await res.text();
+      setDiscoveryFileContent(prev => ({ ...prev, [key]: text }));
+      return text;
+    } catch { return null; }
+  }, [baseUrl, headersPlain, discoveryFileContent]);
+
+  // Load sprint dashboard when tab selected
+  useEffect(() => {
+    if (sprintViewTab === "dashboard" && selectedSprint?.phases.dashboard && selected) {
+      fetchSprintFile(selectedSprint.sprintId, "dashboard-ui.jsx", selected.id).then(jsx => {
+        if (jsx) {
+          try {
+            const result = compileComponent(jsx);
+            if ("Component" in result) { setSprintDashComp(() => result.Component); setSprintDashError(null); }
+            else { setSprintDashError(result.error); setSprintDashComp(null); }
+          } catch (err: any) { setSprintDashError(err.message); setSprintDashComp(null); }
+        }
+      });
+    }
+  }, [sprintViewTab, selectedSprint]);
+
+  // Load sprint file content when tabs are selected
+  useEffect(() => {
+    if (!selectedSprint || !selected) return;
+    const sid = selectedSprint.sprintId;
+    const pid = selected.id;
+    if (sprintViewTab === "personas") {
+      for (const f of selectedSprint.phases.personas.files) fetchSprintFile(sid, f, pid);
+    } else if (sprintViewTab === "validation") {
+      for (const f of selectedSprint.phases.validation.files) fetchSprintFile(sid, f, pid);
+    } else if (sprintViewTab === "implementation") {
+      const implFiles = selectedSprint.files.filter(f => f.includes("implementation") || f.includes("synthesis") || f.includes("review"));
+      for (const f of implFiles) fetchSprintFile(sid, f, pid);
+    }
+  }, [sprintViewTab, selectedSprint]);
+
+  // Load discovery dashboard when tab selected
+  useEffect(() => {
+    if (discoveryViewTab === "dashboard" && selectedDiscovery?.phases.deliverables.dashboard) {
+      fetchDiscoveryFile(selectedDiscovery.discoveryId, "dashboard-ui.jsx").then(jsx => {
+        if (jsx) {
+          try {
+            const result = compileComponent(jsx);
+            if ("Component" in result) { setDiscoveryDashComp(() => result.Component); setDiscoveryDashError(null); }
+            else { setDiscoveryDashError(result.error); setDiscoveryDashComp(null); }
+          } catch (err: any) { setDiscoveryDashError(err.message); setDiscoveryDashComp(null); }
+        }
+      });
+    }
+  }, [discoveryViewTab, selectedDiscovery]);
+
+  // Load discovery file content when tabs are selected
+  useEffect(() => {
+    if (!selectedDiscovery) return;
+    const did = selectedDiscovery.discoveryId;
+    if (discoveryViewTab === "sourcing") {
+      for (const f of selectedDiscovery.phases.sourcing.files) fetchDiscoveryFile(did, f);
+    } else if (discoveryViewTab === "pitches") {
+      for (const f of selectedDiscovery.phases.pitches.files) fetchDiscoveryFile(did, f);
+    } else if (discoveryViewTab === "committee") {
+      for (const f of selectedDiscovery.phases.committee.files) fetchDiscoveryFile(did, f);
+    } else if (discoveryViewTab === "deliverables") {
+      if (selectedDiscovery.phases.deliverables.memo) fetchDiscoveryFile(did, "investment-memo.md");
+    }
+  }, [discoveryViewTab, selectedDiscovery]);
+
+  const prettyFilename = (f: string) =>
+    f.replace(/^(sourcing|pitches|committee|outputs|personas|validation)\//,"")
+      .replace(/\.(md|jsx)$/,"")
+      .replace(/^\.?(evolution-|orchestration-)/,"")
+      .replace(/[-_]/g," ")
+      .replace(/\b\w/g, c => c.toUpperCase());
 
   // ── Import: create project with auto-generated team ──
   const handleImport = async () => {
@@ -103,6 +317,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
       fetchProjects();
       setSelected(data.project);
       setView("detail");
+      setDetailTab("overview");
       setImportForm({ name: "", codebasePath: "", description: "", vision: "", testUrl: "", testCommand: "" });
     } catch (err: any) {
       setImportError(err.message || "Failed to create project");
@@ -111,19 +326,89 @@ export default function ProjectsCard({ card }: CardRendererProps) {
     }
   };
 
+  const openDetail = (p: Project) => {
+    setSelected(p);
+    setView("detail");
+    setDetailTab("overview");
+    setSprints([]);
+    setDiscoveries([]);
+    setSelectedSprint(null);
+    setSelectedDiscovery(null);
+  };
+
+  // ── Prompt Dialog (intercepts before any view) ──
+  if (promptDialog) {
+    const isEvolve = promptDialog.type === "evolve";
+    return (
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setPromptDialog(null)} className="text-xs text-gray-400 hover:text-gray-200">{"\u2190"} Cancel</button>
+          <span className="text-gray-600">|</span>
+          <h3 className="text-sm font-semibold text-gray-200">
+            {isEvolve ? "\uD83E\uDDEC Launch Evolution Sprint" : "\uD83D\uDCA1 Launch Discovery Sprint"}
+          </h3>
+        </div>
+
+        <div className={`bg-gradient-to-r ${isEvolve ? "from-violet-500/10 to-blue-500/10 border-violet-500/20" : "from-amber-500/10 to-orange-500/10 border-amber-500/20"} border rounded-lg p-2.5`}>
+          <div className="text-xs text-gray-300">
+            {isEvolve
+              ? "Optionally specify what this evolution sprint should focus on. Leave blank to let the Project Leader decide based on the current state of the project."
+              : "Optionally specify a focus area for the AI VC team to investigate. Leave blank for a general market discovery."}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] text-gray-500 font-medium block mb-1">
+            {isEvolve ? "Sprint Focus" : "Discovery Focus"} <span className="text-gray-600">(optional)</span>
+          </label>
+          <textarea
+            value={promptText}
+            onChange={e => setPromptText(e.target.value)}
+            placeholder={isEvolve
+              ? "e.g., Improve onboarding flow and fix mobile layout issues"
+              : "e.g., AI-powered developer tools for code review"}
+            rows={2}
+            className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500 focus:outline-none resize-none"
+            autoFocus
+            onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handlePromptConfirm(); }
+            }}
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handlePromptConfirm}
+            className={`flex-1 px-3 py-2 ${isEvolve ? "bg-violet-600 hover:bg-violet-500" : "bg-amber-600 hover:bg-amber-500"} text-white text-xs font-medium rounded-lg transition-colors active:scale-[0.98]`}
+          >
+            {promptText.trim()
+              ? (isEvolve ? "\uD83E\uDDEC Start Sprint" : "\uD83D\uDCA1 Start Discovery")
+              : (isEvolve ? "\uD83E\uDDEC Start Sprint (auto-focus)" : "\uD83D\uDCA1 Start Discovery (general)")}
+          </button>
+          <button
+            onClick={() => setPromptDialog(null)}
+            className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── List View ──
   if (view === "list") {
     return (
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className="text-lg">📁</span>
+            <span className="text-lg">{"\uD83D\uDCC1"}</span>
             <h3 className="text-sm font-semibold text-gray-200">Projects</h3>
             <span className="text-xs text-gray-500">{projects.length} project{projects.length !== 1 ? "s" : ""}</span>
           </div>
           <div className="flex gap-1.5">
             <button
-              onClick={() => sendMessage("/discover")}
+              onClick={handleDiscover}
               className="px-2.5 py-1 text-[10px] font-medium bg-amber-600 hover:bg-amber-500 text-white rounded-md transition-colors"
             >
               Discover
@@ -139,11 +424,11 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
         {/* Discover banner */}
         <button
-          onClick={() => sendMessage("/discover")}
+          onClick={handleDiscover}
           className="w-full text-left bg-gradient-to-r from-amber-500/10 to-orange-500/10 hover:from-amber-500/15 hover:to-orange-500/15 border border-amber-500/20 hover:border-amber-500/30 rounded-lg p-3 transition-all duration-150 active:scale-[0.98]"
         >
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm">💡</span>
+            <span className="text-sm">{"\uD83D\uDCA1"}</span>
             <span className="text-xs font-medium text-amber-300">AI VC Discovery</span>
           </div>
           <div className="text-[10px] text-gray-400">
@@ -155,14 +440,14 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
         {!loading && projects.length === 0 && (
           <div className="text-center py-8 space-y-2">
-            <div className="text-2xl">📁</div>
+            <div className="text-2xl">{"\uD83D\uDCC1"}</div>
             <div className="text-gray-400 text-sm">No projects yet</div>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => sendMessage("/discover")} className="text-amber-400 text-xs hover:text-amber-300">
-                Discover opportunities →
+              <button onClick={handleDiscover} className="text-amber-400 text-xs hover:text-amber-300">
+                Discover opportunities {"\u2192"}
               </button>
               <button onClick={() => setView("import")} className="text-violet-400 text-xs hover:text-violet-300">
-                Import existing project →
+                Import existing project {"\u2192"}
               </button>
             </div>
           </div>
@@ -171,7 +456,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
         {projects.map(p => (
           <button
             key={p.id}
-            onClick={() => { setSelected(p); setView("detail"); }}
+            onClick={() => openDetail(p)}
             className="w-full text-left bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700 hover:border-gray-600 rounded-lg p-3 transition-all duration-150 active:scale-[0.98] group"
           >
             <div className="flex items-center justify-between mb-1">
@@ -189,9 +474,9 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             </div>
             <div className="text-[10px] text-gray-400 line-clamp-1 mb-1.5">{p.description}</div>
             <div className="flex items-center gap-3 text-[10px] text-gray-500">
-              <span>👥 {p.teamAgents?.length || 0} team</span>
-              <span>🧑‍💻 {p.personas?.length || 0} personas</span>
-              {p.techStack && <span>⚙️ {p.techStack.split("/")[0]}</span>}
+              <span>{"\uD83D\uDC65"} {p.teamAgents?.length || 0} team</span>
+              <span>{"\uD83E\uDDD1\u200D\uD83D\uDCBB"} {p.personas?.length || 0} personas</span>
+              {p.techStack && <span>{"\u2699\uFE0F"} {p.techStack.split("/")[0]}</span>}
             </div>
           </button>
         ))}
@@ -204,7 +489,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
     return (
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center gap-2">
-          <button onClick={() => { setView("list"); setImportError(""); }} className="text-xs text-gray-400 hover:text-gray-200">← Back</button>
+          <button onClick={() => { setView("list"); setImportError(""); }} className="text-xs text-gray-400 hover:text-gray-200">{"\u2190"} Back</button>
           <span className="text-gray-600">|</span>
           <h3 className="text-sm font-semibold text-gray-200">Import Project</h3>
         </div>
@@ -216,7 +501,6 @@ export default function ProjectsCard({ card }: CardRendererProps) {
         </div>
 
         <div className="space-y-2.5">
-          {/* Required fields */}
           <div>
             <label className="text-[10px] text-gray-500 font-medium block mb-1">Project Name *</label>
             <input
@@ -239,7 +523,6 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             />
           </div>
 
-          {/* Optional fields */}
           <div>
             <label className="text-[10px] text-gray-500 font-medium block mb-1">Description <span className="text-gray-600">(auto-detected if blank)</span></label>
             <textarea
@@ -323,20 +606,81 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   // ── Detail View ──
   if (view === "detail" && selected) {
     const p = selected;
+
+    // If viewing a sprint detail
+    if (selectedSprint) {
+      return renderSprintDetail(p);
+    }
+
+    // If viewing a discovery detail
+    if (selectedDiscovery) {
+      return renderDiscoveryDetail(p);
+    }
+
+    const detailTabs: { value: DetailTab; label: string }[] = [
+      { value: "overview", label: "Overview" },
+      { value: "sprints", label: "Sprints" },
+      { value: "discoveries", label: "Discoveries" },
+      { value: "team", label: `Team (${p.teamAgents?.length || 0})` },
+      { value: "personas", label: `Personas (${p.personas?.length || 0})` },
+    ];
+
     return (
       <div className="px-4 py-3 space-y-3">
         {/* Header */}
         <div className="flex items-center gap-2">
-          <button onClick={() => { setView("list"); setSelected(null); }} className="text-xs text-gray-400 hover:text-gray-200">← Back</button>
+          <button onClick={() => { setView("list"); setSelected(null); }} className="text-xs text-gray-400 hover:text-gray-200">{"\u2190"} Back</button>
           <span className="text-gray-600">|</span>
           <span className="text-xs text-gray-400">{fmtDate(p.updatedAt)}</span>
           {p.id === activeProject && (
             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">ACTIVE</span>
           )}
+          {p.id !== activeProject && (
+            <button
+              onClick={() => handleSetActive(p.id)}
+              className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors ml-auto"
+            >
+              Set Active
+            </button>
+          )}
         </div>
 
         <h3 className="text-sm font-semibold text-gray-200">{p.name}</h3>
 
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-gray-700 pb-1 overflow-x-auto">
+          {detailTabs.map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setDetailTab(tab.value)}
+              className={`px-2.5 py-1 text-xs rounded-t transition-colors whitespace-nowrap ${
+                detailTab === tab.value
+                  ? "bg-gray-700 text-white border-b-2 border-violet-400"
+                  : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div className="min-h-[200px]">
+          {detailTab === "overview" && renderOverviewTab(p)}
+          {detailTab === "sprints" && renderSprintsTab(p)}
+          {detailTab === "discoveries" && renderDiscoveriesTab()}
+          {detailTab === "team" && renderTeamTab(p)}
+          {detailTab === "personas" && renderPersonasTab(p)}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Tab Renderers ──
+
+  function renderOverviewTab(p: Project) {
+    return (
+      <div className="space-y-3">
         {/* Vision */}
         {p.vision && (
           <div className="bg-gradient-to-r from-violet-500/10 to-blue-500/10 border border-violet-500/20 rounded-lg p-2.5">
@@ -357,61 +701,30 @@ export default function ProjectsCard({ card }: CardRendererProps) {
           </div>
         </div>
 
-        {/* Team Agents */}
-        {p.teamAgents && p.teamAgents.length > 0 && (
-          <div>
-            <div className="text-[10px] text-gray-500 font-medium mb-1.5">TEAM ({p.teamAgents.length})</div>
-            <div className="space-y-1.5">
-              {p.teamAgents.map(agent => (
-                <details key={agent.id} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
-                  <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50 flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${agentDot(agent)}`} />
-                    {agent.name} — {agent.role}
-                    <span className="text-[9px] text-gray-600 ml-auto">{agent.agentRole}</span>
-                  </summary>
-                  <div className="px-3 py-2 border-t border-gray-700 text-[11px] text-gray-400 space-y-1">
-                    <div><span className="text-gray-500">Responsibilities:</span> {agent.responsibilities}</div>
-                    <div><span className="text-gray-500">Perspective:</span> {agent.perspective}</div>
-                    {agent.goals.length > 0 && (
-                      <div>
-                        <span className="text-gray-500">Goals:</span>
-                        <ul className="list-disc list-inside mt-0.5">
-                          {agent.goals.map((g, i) => <li key={i}>{g}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {agent.painPoints && agent.painPoints.length > 0 && (
-                      <div>
-                        <span className="text-red-400/70">Pain Points:</span>
-                        <ul className="list-disc list-inside mt-0.5">
-                          {agent.painPoints.map((pp, i) => <li key={i}>{pp}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </details>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Customer Personas */}
-        {p.personas && p.personas.length > 0 && (
-          <div>
-            <div className="text-[10px] text-gray-500 font-medium mb-1.5">CUSTOMER PERSONAS ({p.personas.length})</div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {p.personas.map(persona => (
-                <div key={persona.id} className="bg-gray-800/50 rounded-lg border border-gray-700 p-2 text-xs">
-                  <div className="font-medium text-gray-300 text-[11px]">{persona.name}</div>
-                  <div className="text-[10px] text-gray-500">{persona.role}</div>
-                  {p.validationPersonaIds?.includes(persona.id) && (
-                    <span className="text-[9px] text-cyan-400 mt-0.5 inline-block">🔄 validator</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Quick stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => setDetailTab("team")}
+            className="bg-gray-800/50 rounded-lg border border-gray-700 hover:border-gray-600 p-2 text-xs text-center transition-colors"
+          >
+            <div className="text-gray-200 font-medium">{p.teamAgents?.length || 0}</div>
+            <div className="text-[10px] text-gray-500">Team Agents</div>
+          </button>
+          <button
+            onClick={() => setDetailTab("personas")}
+            className="bg-gray-800/50 rounded-lg border border-gray-700 hover:border-gray-600 p-2 text-xs text-center transition-colors"
+          >
+            <div className="text-gray-200 font-medium">{p.personas?.length || 0}</div>
+            <div className="text-[10px] text-gray-500">Personas</div>
+          </button>
+          <button
+            onClick={() => setDetailTab("sprints")}
+            className="bg-gray-800/50 rounded-lg border border-gray-700 hover:border-gray-600 p-2 text-xs text-center transition-colors"
+          >
+            <div className="text-gray-200 font-medium">{"\uD83E\uDDEC"}</div>
+            <div className="text-[10px] text-gray-500">View Sprints</div>
+          </button>
+        </div>
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
@@ -419,15 +732,583 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             onClick={() => handleEvolve(p.id)}
             className="flex-1 px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors active:scale-[0.98]"
           >
-            🧬 Evolve {p.name}
+            {"\uD83E\uDDEC"} Evolve
           </button>
-          {p.id !== activeProject && (
+          <button
+            onClick={handleDiscover}
+            className="flex-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-lg transition-colors active:scale-[0.98]"
+          >
+            {"\uD83D\uDCA1"} Discover
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderSprintsTab(p: Project) {
+    if (sprintsLoading) {
+      return <div className="text-center py-8 text-gray-500 text-xs">Loading sprints...</div>;
+    }
+
+    if (sprints.length === 0) {
+      return (
+        <div className="text-center py-8 space-y-2">
+          <div className="text-2xl">{"\uD83E\uDDEC"}</div>
+          <div className="text-gray-400 text-sm">No evolution sprints yet</div>
+          <button
+            onClick={() => handleEvolve(p.id)}
+            className="text-violet-400 text-xs hover:text-violet-300"
+          >
+            Launch first sprint {"\u2192"}
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] text-gray-500">{sprints.length} sprint{sprints.length !== 1 ? "s" : ""}</span>
+          <button
+            onClick={() => handleEvolve(p.id)}
+            className="px-2 py-0.5 text-[10px] font-medium bg-violet-600 hover:bg-violet-500 text-white rounded transition-colors"
+          >
+            + New Sprint
+          </button>
+        </div>
+
+        {sprints.map(sprint => (
+          <button
+            key={sprint.sprintId}
+            onClick={() => {
+              setSelectedSprint(sprint);
+              setSprintViewTab("overview");
+              setSprintDashComp(null);
+              setSprintDashError(null);
+            }}
+            className="w-full text-left bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700 hover:border-gray-600 rounded-lg p-3 transition-all duration-150 active:scale-[0.98]"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-300 truncate flex-1">{sprint.goal}</span>
+              {statusBadge(sprint.status)}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] text-gray-500">
+              <span>{fmtDate(sprint.completedAt)}</span>
+              <span>{"\u00B7"}</span>
+              <span>{fmtDuration(sprint.createdAt, sprint.completedAt)}</span>
+              <span>{"\u00B7"}</span>
+              <span>{sprint.phases.personas.count} personas</span>
+              <span>{"\u00B7"}</span>
+              <span>{sprint.files.length} files</span>
+              {sprint.phases.dashboard && (
+                <>
+                  <span>{"\u00B7"}</span>
+                  <span className="text-violet-400">{"\uD83D\uDCCA"} dashboard</span>
+                </>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function renderDiscoveriesTab() {
+    if (discoveriesLoading) {
+      return <div className="text-center py-8 text-gray-500 text-xs">Loading discoveries...</div>;
+    }
+
+    if (discoveries.length === 0) {
+      return (
+        <div className="text-center py-8 space-y-2">
+          <div className="text-2xl">{"\uD83D\uDD0D"}</div>
+          <div className="text-gray-400 text-sm">No discovery sprints yet</div>
+          <button
+            onClick={handleDiscover}
+            className="text-amber-400 text-xs hover:text-amber-300"
+          >
+            Launch first discovery {"\u2192"}
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] text-gray-500">{discoveries.length} discovery{discoveries.length !== 1 ? " sprints" : " sprint"}</span>
+          <button
+            onClick={handleDiscover}
+            className="px-2 py-0.5 text-[10px] font-medium bg-amber-600 hover:bg-amber-500 text-white rounded transition-colors"
+          >
+            + New Discovery
+          </button>
+        </div>
+
+        {discoveries.map(disc => (
+          <button
+            key={disc.discoveryId}
+            onClick={() => {
+              setSelectedDiscovery(disc);
+              setDiscoveryViewTab("overview");
+              setDiscoveryDashComp(null);
+              setDiscoveryDashError(null);
+            }}
+            className="w-full text-left bg-gray-800/60 hover:bg-gray-700/60 border border-gray-700 hover:border-gray-600 rounded-lg p-3 transition-all duration-150 active:scale-[0.98]"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-300 truncate flex-1">{disc.focus}</span>
+              {statusBadge(disc.status)}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] text-gray-500">
+              <span>{fmtDate(disc.completedAt)}</span>
+              <span>{"\u00B7"}</span>
+              <span>{disc.phases.sourcing.count} sourcing</span>
+              <span>{"\u00B7"}</span>
+              <span>{disc.phases.pitches.count} pitches</span>
+              <span>{"\u00B7"}</span>
+              <span>{disc.files.length} files</span>
+              {disc.phases.deliverables.dashboard && (
+                <>
+                  <span>{"\u00B7"}</span>
+                  <span className="text-amber-400">{"\uD83D\uDCCA"} dashboard</span>
+                </>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function renderTeamTab(p: Project) {
+    if (!p.teamAgents || p.teamAgents.length === 0) {
+      return <div className="text-center py-8 text-gray-500 text-xs">No team agents configured</div>;
+    }
+
+    return (
+      <div className="space-y-1.5">
+        {p.teamAgents.map(agent => (
+          <details key={agent.id} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+            <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50 flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full ${agentDot(agent)}`} />
+              {agent.name} — {agent.role}
+              <span className="text-[9px] text-gray-600 ml-auto">{agent.agentRole}</span>
+            </summary>
+            <div className="px-3 py-2 border-t border-gray-700 text-[11px] text-gray-400 space-y-1">
+              <div><span className="text-gray-500">Responsibilities:</span> {agent.responsibilities}</div>
+              <div><span className="text-gray-500">Perspective:</span> {agent.perspective}</div>
+              {agent.goals.length > 0 && (
+                <div>
+                  <span className="text-gray-500">Goals:</span>
+                  <ul className="list-disc list-inside mt-0.5">
+                    {agent.goals.map((g, i) => <li key={i}>{g}</li>)}
+                  </ul>
+                </div>
+              )}
+              {agent.painPoints && agent.painPoints.length > 0 && (
+                <div>
+                  <span className="text-red-400/70">Pain Points:</span>
+                  <ul className="list-disc list-inside mt-0.5">
+                    {agent.painPoints.map((pp, i) => <li key={i}>{pp}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+    );
+  }
+
+  function renderPersonasTab(p: Project) {
+    if (!p.personas || p.personas.length === 0) {
+      return <div className="text-center py-8 text-gray-500 text-xs">No customer personas configured</div>;
+    }
+
+    return (
+      <div className="space-y-1.5">
+        {p.personas.map(persona => (
+          <details key={persona.id} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+            <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50 flex items-center gap-2">
+              {persona.name} — {persona.role}
+              {p.validationPersonaIds?.includes(persona.id) && (
+                <span className="text-[9px] text-cyan-400 ml-auto">{"\uD83D\uDD04"} validator</span>
+              )}
+            </summary>
+            <div className="px-3 py-2 border-t border-gray-700 text-[11px] text-gray-400 space-y-1">
+              <div><span className="text-gray-500">Background:</span> {persona.background}</div>
+              {persona.goals.length > 0 && (
+                <div>
+                  <span className="text-gray-500">Goals:</span>
+                  <ul className="list-disc list-inside mt-0.5">
+                    {persona.goals.map((g, i) => <li key={i}>{g}</li>)}
+                  </ul>
+                </div>
+              )}
+              {persona.frustrations.length > 0 && (
+                <div>
+                  <span className="text-red-400/70">Frustrations:</span>
+                  <ul className="list-disc list-inside mt-0.5">
+                    {persona.frustrations.map((f, i) => <li key={i}>{f}</li>)}
+                  </ul>
+                </div>
+              )}
+              {persona.testScenarios.length > 0 && (
+                <div>
+                  <span className="text-gray-500">Test Scenarios:</span>
+                  <ul className="list-disc list-inside mt-0.5">
+                    {persona.testScenarios.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Sprint Detail View (inline) ──
+  function renderSprintDetail(p: Project) {
+    const s = selectedSprint!;
+    const sid = s.sprintId;
+
+    const tabs = ([
+      { value: "overview" as const, label: "Overview", enabled: true },
+      { value: "personas" as const, label: `Personas (${s.phases.personas.count})`, enabled: s.phases.personas.count > 0 },
+      { value: "implementation" as const, label: "Implementation", enabled: s.phases.implementation },
+      { value: "validation" as const, label: `Validation (${s.phases.validation.count})`, enabled: s.phases.validation.count > 0 },
+      { value: "dashboard" as const, label: "Dashboard", enabled: s.phases.dashboard },
+    ]).filter(t => t.enabled);
+
+    return (
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSelectedSprint(null)}
+            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {"\u2190"} Sprints
+          </button>
+          <span className="text-gray-600">|</span>
+          <span className="text-xs text-gray-400">{fmtDateTime(s.completedAt)}</span>
+          <span className="text-xs text-gray-500">{"\u00B7"}</span>
+          <span className="text-xs text-gray-500">{fmtDuration(s.createdAt, s.completedAt)}</span>
+          {statusBadge(s.status)}
+        </div>
+
+        <h3 className="text-sm font-semibold text-gray-200">{s.goal}</h3>
+
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-gray-700 pb-1 overflow-x-auto">
+          {tabs.map(tab => (
             <button
-              onClick={() => handleSetActive(p.id)}
-              className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors"
+              key={tab.value}
+              onClick={() => setSprintViewTab(tab.value)}
+              className={`px-2.5 py-1 text-xs rounded-t transition-colors whitespace-nowrap ${
+                sprintViewTab === tab.value
+                  ? "bg-gray-700 text-white border-b-2 border-violet-400"
+                  : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+              }`}
             >
-              Set Active
+              {tab.label}
             </button>
+          ))}
+        </div>
+
+        <div className="min-h-[200px]">
+          {sprintViewTab === "overview" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: "Personas", done: s.phases.personas.count > 0, detail: `${s.phases.personas.count} tested` },
+                  { label: "Synthesis", done: s.phases.synthesis, detail: s.phases.synthesis ? "Done" : "\u2014" },
+                  { label: "Implementation", done: s.phases.implementation, detail: s.phases.implementation ? "Done" : "\u2014" },
+                  { label: "Review", done: s.phases.review, detail: s.phases.review ? "Reviewed" : "\u2014" },
+                  { label: "Validation", done: s.phases.validation.count > 0, detail: `${s.phases.validation.count} retests` },
+                  { label: "Dashboard", done: s.phases.dashboard, detail: s.phases.dashboard ? "Built" : "\u2014" },
+                ].map(phase => (
+                  <div key={phase.label} className={`p-2 rounded-lg border text-xs ${
+                    phase.done ? "bg-violet-500/5 border-violet-500/30" : "bg-gray-800/50 border-gray-700"
+                  }`}>
+                    <div className="flex items-center gap-1">
+                      <span>{phase.done ? "\u2705" : "\u2B1C"}</span>
+                      <span className={phase.done ? "text-violet-400" : "text-gray-500"}>{phase.label}</span>
+                    </div>
+                    <div className="text-gray-500 mt-0.5">{phase.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-2.5 text-xs text-gray-400">
+                <span className="text-gray-200 font-medium">{s.files.length}</span> artifacts archived
+                {s.phases.dashboard && (
+                  <button onClick={() => setSprintViewTab("dashboard")} className="ml-3 text-violet-400 hover:text-violet-300 transition-colors">
+                    View Dashboard {"\u2192"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {sprintViewTab === "personas" && (
+            <div className="space-y-3">
+              {s.phases.personas.files.map(file => {
+                const key = `sprint:${sid}/${file}`;
+                const content = sprintFileContent[key];
+                return (
+                  <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+                    <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
+                      {prettyFilename(file)}
+                    </summary>
+                    <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+
+          {sprintViewTab === "implementation" && (
+            <div className="space-y-3">
+              {s.files.filter(f => f.includes("implementation") || f.includes("synthesis") || f.includes("review")).map(file => {
+                const key = `sprint:${sid}/${file}`;
+                const content = sprintFileContent[key];
+                return (
+                  <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+                    <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
+                      {prettyFilename(file)}
+                    </summary>
+                    <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+
+          {sprintViewTab === "validation" && (
+            <div className="space-y-3">
+              {s.phases.validation.files.map(file => {
+                const key = `sprint:${sid}/${file}`;
+                const content = sprintFileContent[key];
+                return (
+                  <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+                    <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
+                      {prettyFilename(file)}
+                    </summary>
+                    <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+
+          {sprintViewTab === "dashboard" && (
+            <div>
+              {sprintDashError && (
+                <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300 mb-3">
+                  Compile error: {sprintDashError}
+                </div>
+              )}
+              {SprintDashComp && (
+                <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+                  <SprintDashComp data={{ tool: "evolution_dashboard" }} onAction={() => {}} />
+                </div>
+              )}
+              {!SprintDashComp && !sprintDashError && (
+                <div className="text-center py-8 text-gray-500 text-xs">Loading dashboard...</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Discovery Detail View (inline) ──
+  function renderDiscoveryDetail(p: Project) {
+    const d = selectedDiscovery!;
+    const did = d.discoveryId;
+
+    const tabs = ([
+      { value: "overview" as const, label: "Overview", enabled: true },
+      { value: "sourcing" as const, label: `Sourcing (${d.phases.sourcing.count})`, enabled: d.phases.sourcing.count > 0 },
+      { value: "pitches" as const, label: `Pitches (${d.phases.pitches.count})`, enabled: d.phases.pitches.count > 0 },
+      { value: "committee" as const, label: "Committee", enabled: d.phases.committee.count > 0 },
+      { value: "deliverables" as const, label: "Deliverables", enabled: d.phases.deliverables.memo },
+      { value: "dashboard" as const, label: "Dashboard", enabled: d.phases.deliverables.dashboard },
+    ]).filter(t => t.enabled);
+
+    return (
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSelectedDiscovery(null)}
+            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {"\u2190"} Discoveries
+          </button>
+          <span className="text-gray-600">|</span>
+          <span className="text-xs text-gray-400">{fmtDateTime(d.completedAt)}</span>
+          <span className="text-xs text-gray-500">{"\u00B7"}</span>
+          <span className="text-xs text-gray-500">{fmtDuration(d.createdAt, d.completedAt)}</span>
+          {statusBadge(d.status)}
+        </div>
+
+        <h3 className="text-sm font-semibold text-gray-200">{d.focus}</h3>
+
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-gray-700 pb-1 overflow-x-auto">
+          {tabs.map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setDiscoveryViewTab(tab.value)}
+              className={`px-2.5 py-1 text-xs rounded-t transition-colors whitespace-nowrap ${
+                discoveryViewTab === tab.value
+                  ? "bg-gray-700 text-white border-b-2 border-amber-400"
+                  : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-[200px]">
+          {discoveryViewTab === "overview" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: "Deal Sourcing", done: d.phases.sourcing.count > 0, detail: `${d.phases.sourcing.count} reports` },
+                  { label: "Pitches", done: d.phases.pitches.count > 0, detail: `${d.phases.pitches.count} pitched` },
+                  { label: "IC Challenge", done: d.phases.committee.count > 0, detail: d.phases.committee.count > 0 ? "Reviewed" : "\u2014" },
+                  { label: "Dashboard", done: d.phases.deliverables.dashboard, detail: d.phases.deliverables.dashboard ? "Built" : "\u2014" },
+                  { label: "Memo", done: d.phases.deliverables.memo, detail: d.phases.deliverables.memo ? "Written" : "\u2014" },
+                ].map(phase => (
+                  <div key={phase.label} className={`p-2 rounded-lg border text-xs ${
+                    phase.done ? "bg-amber-500/5 border-amber-500/30" : "bg-gray-800/50 border-gray-700"
+                  }`}>
+                    <div className="flex items-center gap-1">
+                      <span>{phase.done ? "\u2705" : "\u2B1C"}</span>
+                      <span className={phase.done ? "text-amber-400" : "text-gray-500"}>{phase.label}</span>
+                    </div>
+                    <div className="text-gray-500 mt-0.5">{phase.detail}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-2.5 text-xs text-gray-400">
+                <span className="text-gray-200 font-medium">{d.files.length}</span> artifacts archived
+                {d.phases.deliverables.dashboard && (
+                  <button onClick={() => setDiscoveryViewTab("dashboard")} className="ml-3 text-amber-400 hover:text-amber-300 transition-colors">
+                    View Dashboard {"\u2192"}
+                  </button>
+                )}
+                {d.phases.deliverables.memo && (
+                  <button onClick={() => setDiscoveryViewTab("deliverables")} className="ml-3 text-amber-400 hover:text-amber-300 transition-colors">
+                    Read Memo {"\u2192"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {discoveryViewTab === "sourcing" && (
+            <div className="space-y-3">
+              {d.phases.sourcing.files.map(file => {
+                const key = `disc:${did}/${file}`;
+                const content = discoveryFileContent[key];
+                return (
+                  <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+                    <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
+                      {prettyFilename(file)}
+                    </summary>
+                    <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+
+          {discoveryViewTab === "pitches" && (
+            <div className="space-y-3">
+              {d.phases.pitches.files.map(file => {
+                const key = `disc:${did}/${file}`;
+                const content = discoveryFileContent[key];
+                return (
+                  <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+                    <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
+                      {prettyFilename(file)}
+                    </summary>
+                    <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+
+          {discoveryViewTab === "committee" && (
+            <div className="space-y-3">
+              {d.phases.committee.files.map(file => {
+                const key = `disc:${did}/${file}`;
+                const content = discoveryFileContent[key];
+                return (
+                  <details key={file} open className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+                    <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
+                      {prettyFilename(file)}
+                    </summary>
+                    <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          )}
+
+          {discoveryViewTab === "deliverables" && (
+            <div className="space-y-3">
+              {d.phases.deliverables.memo && (() => {
+                const key = `disc:${did}/investment-memo.md`;
+                const content = discoveryFileContent[key];
+                return (
+                  <details open className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
+                    <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
+                      Investment Memo
+                    </summary>
+                    <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[600px]">
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    </div>
+                  </details>
+                );
+              })()}
+            </div>
+          )}
+
+          {discoveryViewTab === "dashboard" && (
+            <div>
+              {discoveryDashError && (
+                <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300 mb-3">
+                  Compile error: {discoveryDashError}
+                </div>
+              )}
+              {DiscoveryDashComp && (
+                <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+                  <DiscoveryDashComp data={{ tool: "discovery_dashboard" }} onAction={() => {}} />
+                </div>
+              )}
+              {!DiscoveryDashComp && !discoveryDashError && (
+                <div className="text-center py-8 text-gray-500 text-xs">Loading dashboard...</div>
+              )}
+            </div>
           )}
         </div>
       </div>

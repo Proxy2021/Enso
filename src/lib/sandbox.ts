@@ -61,9 +61,20 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
       .replace(/export\s+default\s+function\s+(\w+)/g, "function $1")
       .replace(/export\s+default\s+/, "");
 
-    // Find the component function name
-    const fnMatch = jsxCode.match(/function\s+(\w+)\s*\(/);
-    const fnName = fnMatch?.[1] ?? "GeneratedUI";
+    // Find the component function name.
+    // Prefer well-known main component names (App, Template, Dashboard, etc.),
+    // then fall back to the LAST function declaration (most likely the root component),
+    // then the first function as a last resort.
+    const MAIN_NAMES = /function\s+(App|Template|Dashboard|Component|Main|GeneratedUI)\s*\(/;
+    const mainMatch = jsxCode.match(MAIN_NAMES);
+    let fnName: string;
+    if (mainMatch) {
+      fnName = mainMatch[1];
+    } else {
+      // Use the last top-level function declaration (root component is usually defined last)
+      const allFns = [...jsxCode.matchAll(/function\s+(\w+)\s*\(/g)];
+      fnName = allFns.length > 0 ? allFns[allFns.length - 1][1] : "GeneratedUI";
+    }
 
     // Scan the template code for names it already declares, so we skip them in preamble
     const templateNames = findDeclaredNames(code);

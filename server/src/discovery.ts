@@ -13,8 +13,12 @@
 
 import { handleOrchestration } from "./orchestrator.js";
 import { logAction, logError } from "./action-log.js";
+import { archiveDiscoveryResults, cleanDiscoveryTempFiles } from "./discovery-archive.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
+
+// Resolve project root for archiving — same logic as orchestrator
+const PROJECT_ROOT = new URL("../..", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1");
 
 export interface DiscoveryParams {
   focus?: string;       // Optional focus area (e.g., "developer tools", "fintech", "healthcare")
@@ -81,6 +85,20 @@ export async function handleDiscovery(params: DiscoveryParams): Promise<void> {
           ts: Date.now(), type: "action", category: "discovery",
           message: `Discovery sprint ${orchId} ${status} — focus: ${focusLabel}`,
         });
+        // Archive discovery artifacts
+        try {
+          const discoveryId = `discovery-${Date.now()}`;
+          const meta = archiveDiscoveryResults(discoveryId, focusLabel, PROJECT_ROOT);
+          if (meta) {
+            logAction({
+              ts: Date.now(), type: "action", category: "discovery",
+              message: `Discovery archived (${status}): ${meta.files.length} files, dashboard: ${meta.phases.deliverables.dashboard}`,
+            });
+            cleanDiscoveryTempFiles(PROJECT_ROOT);
+          }
+        } catch (err) {
+          logError("discovery", "Failed to archive discovery results", err);
+        }
       },
     });
   } catch (err) {

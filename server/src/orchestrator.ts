@@ -664,12 +664,13 @@ export function updateOrchestrationProgress(
     error,
   };
 
+  const isFinal = eventType === "completed" || eventType === "failed";
   orch.client.send({
     id: randomUUID(),
     runId: orchestrationId,
     sessionKey: orch.client.sessionKey,
     seq: 0,
-    state: "delta",
+    state: isFinal ? "final" : "delta",
     targetCardId: orch.bootstrapCardId,
     orchestrationProgress: progress,
     timestamp: Date.now(),

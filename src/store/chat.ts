@@ -369,6 +369,21 @@ export const useChatStore = create<CardStore>((set, get) => ({
         return;
       }
 
+      // "/discovery-history" command — browse past AI VC discovery sprints
+      if (text.trim() === "/discovery-history") {
+        const id = uuidv4();
+        const now = Date.now();
+        const card: Card = {
+          id, runId: id, type: "discovery-history", role: "assistant",
+          status: "complete", display: "expanded", createdAt: now, updatedAt: now,
+        };
+        set((s) => ({
+          cardOrder: [...s.cardOrder, id],
+          cards: { ...s.cards, [id]: card },
+        }));
+        return;
+      }
+
       // "/projects" command — open projects manager
       if (text.trim() === "/projects") {
         const id = uuidv4();
@@ -1758,7 +1773,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
               ...(msg.orchestrationPlan ? { orchestrationPlan: msg.orchestrationPlan } : {}),
               ...(msg.orchestrationProgress ? { orchestrationProgress: msg.orchestrationProgress } : {}),
             },
-            status: (msg.state === "final" ? "complete" : "streaming") as any,
+            status: ((planStatus === "completed" || planStatus === "failed") ? "complete"
+              : msg.state === "final" ? "complete" : "streaming") as any,
             viewMode,
             buildTerminalText,
             updatedAt: now,

@@ -908,6 +908,33 @@ export async function startEnsoServer(opts: {
     res.send(content);
   });
 
+  // ── Discovery History API ──
+
+  app.get("/api/discovery-results", async (_req, res) => {
+    const { listDiscoveryResults } = await import("./discovery-archive.js");
+    res.json({ results: listDiscoveryResults() });
+  });
+
+  app.get("/api/discovery-results/:id", async (req, res) => {
+    const { loadDiscoveryResult } = await import("./discovery-archive.js");
+    const result = loadDiscoveryResult(req.params.id);
+    if (!result) { res.status(404).json({ error: "Discovery not found" }); return; }
+    res.json(result);
+  });
+
+  app.get("/api/discovery-results/:id/file/*", async (req, res) => {
+    const { getDiscoveryFile } = await import("./discovery-archive.js");
+    const filename = req.params[0] || "";
+    const content = getDiscoveryFile(req.params.id, filename);
+    if (content === null) { res.status(404).json({ error: "File not found" }); return; }
+    if (filename.endsWith(".jsx")) {
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    } else {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    }
+    res.send(content);
+  });
+
   // ── Memory API — Enso's local memory (ENSO_USER.md + ENSO_MEMORY.md) ──
   app.get("/api/memory", (_req, res) => {
     res.json(readEnsoMemory());
