@@ -100,7 +100,7 @@ function extractSection(md: string, heading: string, nextHeading?: string): stri
   const esc = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = nextHeading
     ? new RegExp(`#{1,4}\\s*${esc}[\\s\\S]*?(?=#{1,4}\\s*${nextHeading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|$)`, "i")
-    : new RegExp(`#{1,4}\\s*${esc}[\\s\\S]*?(?=\\r?\\n#{1,3}\\s|$)`, "i");
+    : new RegExp(`#{1,4}\\s*${esc}[\\s\\S]*?(?=\\n#{1,3}\\s|$)`, "i");
   const match = md.match(pattern);
   return match ? match[0] : "";
 }
@@ -115,7 +115,7 @@ function extractBullets(text: string): string[] {
 function extractRecommendation(md: string, num: number): Recommendation | null {
   // Find the recommendation block
   const recPattern = new RegExp(
-    `## Recommendation #${num}:\\s*(.+?)\\r?\\n###\\s*Committee Verdict:\\s*(.+?)\\|\\s*Pitched by:\\s*(.+?)\\r?\\n([\\s\\S]*?)(?=## Recommendation #${num + 1}|## Comparison|$)`,
+    `## Recommendation #${num}:\\s*(.+?)\\n###\\s*Committee Verdict:\\s*(.+?)\\|\\s*Pitched by:\\s*(.+?)\\n([\\s\\S]*?)(?=## Recommendation #${num + 1}|## Comparison|$)`,
     "i"
   );
   const match = md.match(recPattern);
