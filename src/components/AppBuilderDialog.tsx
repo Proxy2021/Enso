@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
 import { useVoiceInput } from "./VoiceMicButton";
+import { useT } from "../lib/i18n";
 
 
 interface AppBuilderDialogProps {
@@ -15,6 +16,7 @@ export function AppBuilderDialog({ cardId, cardText, defaultDefinition, onClose 
   const buildApp = useChatStore((s) => s.buildApp);
   const inputRef = useRef<HTMLInputElement>(null);
   const { VoiceMic } = useVoiceInput(setInstruction);
+  const { t } = useT();
 
   // Focus input on mount
   useEffect(() => {
@@ -44,9 +46,9 @@ export function AppBuilderDialog({ cardId, cardText, defaultDefinition, onClose 
     >
       <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.55)]">
         <div className="px-4 py-3 border-b border-gray-700/70">
-          <h3 className="text-sm font-semibold text-gray-100">Build App with Claude Code</h3>
+          <h3 className="text-sm font-semibold text-gray-100">{t("builder.title")}</h3>
           <p className="text-xs text-gray-400 mt-1">
-            Describe what app you want. Claude Code will design and build it in a live terminal session.
+            {t("builder.description")}
           </p>
         </div>
         <div className="px-4 py-3">
@@ -56,7 +58,7 @@ export function AppBuilderDialog({ cardId, cardText, defaultDefinition, onClose 
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="e.g., a weather dashboard with forecast charts, or a recipe browser with filters..."
+              placeholder={t("builder.placeholder")}
               className="flex-1 bg-gray-800 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500/50"
             />
             <VoiceMic />
@@ -67,14 +69,14 @@ export function AppBuilderDialog({ cardId, cardText, defaultDefinition, onClose 
             onClick={onClose}
             className="px-3 py-1.5 text-xs rounded-md border border-gray-600 text-gray-300 hover:bg-gray-800 transition-all duration-150"
           >
-            Cancel
+            {t("builder.cancel")}
           </button>
           <button
             onClick={handleSubmit}
             disabled={!instruction.trim()}
             className="px-3 py-1.5 text-xs rounded-md border border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Build App
+            {t("builder.buildApp")}
           </button>
         </div>
       </div>

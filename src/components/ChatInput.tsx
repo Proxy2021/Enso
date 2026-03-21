@@ -4,33 +4,34 @@ import { useSpeechRecognition } from "../lib/use-speech-recognition";
 import { useVoiceRecorder } from "../lib/use-voice-recorder";
 import { isNative } from "../lib/platform";
 import { isLikelyNaturalLanguage } from "../utils/nlDetection";
+import { useT } from "../lib/i18n";
 
 interface SlashCommand {
   command: string;
   label: string;
-  description: string;
+  descKey: string;
   icon?: string;
 }
 
 const SLASH_COMMANDS: SlashCommand[] = [
-  { command: "/code", label: "/code", description: "Open Claude Code project picker", icon: "\uD83D\uDCBB" },
-  { command: "/code ", label: "/code <prompt>", description: "Send a prompt to Claude Code", icon: "\uD83D\uDCBB" },
-  { command: "/research ", label: "/research <topic>", description: "Deep research on a topic", icon: "\uD83D\uDD0D" },
-  { command: "/orchestrate", label: "/orchestrate", description: "Launch multi-agent orchestrator", icon: "\u26A1" },
-  { command: "/evolve", label: "/evolve", description: "Run an evolution sprint", icon: "\uD83E\uDDEC" },
-  { command: "/projects", label: "/projects", description: "Manage projects and AI teams", icon: "\uD83D\uDCC1" },
-  { command: "/evolution-history", label: "/evolution-history", description: "Browse past evolution sprints", icon: "\uD83D\uDCCA" },
-  { command: "/discovery-history", label: "/discovery-history", description: "Browse past AI VC discovery sprints", icon: "\uD83D\uDD0D" },
-  { command: "/shell", label: "/shell", description: "Open a remote terminal", icon: "\uD83D\uDDA5\uFE0F" },
-  { command: "/tool enso", label: "/tool enso", description: "Open the tool console", icon: "\uD83D\uDD27" },
-  { command: "/delete-apps", label: "/delete-apps", description: "Delete all dynamic apps", icon: "\uD83D\uDDD1\uFE0F" },
-  { command: "/help", label: "/help", description: "Show available commands and features", icon: "\u2753" },
+  { command: "/code", label: "/code", descKey: "slash.code", icon: "\uD83D\uDCBB" },
+  { command: "/code ", label: "/code <prompt>", descKey: "slash.codePrompt", icon: "\uD83D\uDCBB" },
+  { command: "/research ", label: "/research <topic>", descKey: "slash.research", icon: "\uD83D\uDD0D" },
+  { command: "/orchestrate", label: "/orchestrate", descKey: "slash.orchestrate", icon: "\u26A1" },
+  { command: "/evolve", label: "/evolve", descKey: "slash.evolve", icon: "\uD83E\uDDEC" },
+  { command: "/projects", label: "/projects", descKey: "slash.projects", icon: "\uD83D\uDCC1" },
+  { command: "/evolution-history", label: "/evolution-history", descKey: "slash.evolutionHistory", icon: "\uD83D\uDCCA" },
+  { command: "/discovery-history", label: "/discovery-history", descKey: "slash.discoveryHistory", icon: "\uD83D\uDD0D" },
+  { command: "/shell", label: "/shell", descKey: "slash.shell", icon: "\uD83D\uDDA5\uFE0F" },
+  { command: "/tool enso", label: "/tool enso", descKey: "slash.toolEnso", icon: "\uD83D\uDD27" },
+  { command: "/delete-apps", label: "/delete-apps", descKey: "slash.deleteApps", icon: "\uD83D\uDDD1\uFE0F" },
+  { command: "/help", label: "/help", descKey: "slash.help", icon: "\u2753" },
 ];
 
 const ATTACH_CATEGORIES = [
   {
     id: "photos_videos",
-    label: "Photos & Videos",
+    labelKey: "attach.photosVideos",
     accept: "image/*,video/*",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -42,7 +43,7 @@ const ATTACH_CATEGORIES = [
   },
   {
     id: "documents",
-    label: "Documents",
+    labelKey: "attach.documents",
     accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.zip,.json,.xml,.md",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -53,7 +54,7 @@ const ATTACH_CATEGORIES = [
   },
   {
     id: "audio",
-    label: "Audio",
+    labelKey: "attach.audio",
     accept: "audio/*",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -65,7 +66,7 @@ const ATTACH_CATEGORIES = [
   },
   {
     id: "camera",
-    label: "Camera",
+    labelKey: "attach.camera",
     accept: "image/*",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -76,7 +77,7 @@ const ATTACH_CATEGORIES = [
   },
   {
     id: "location",
-    label: "Location",
+    labelKey: "attach.location",
     accept: null,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -113,6 +114,7 @@ export default function ChatInput() {
   const hasActiveBackgroundTask = useChatStore((s) => s.hasActiveBackgroundTask);
   const hasCards = useChatStore((s) => s.cardOrder.length > 0);
   const clearConversation = useChatStore((s) => s.clearConversation);
+  const { t } = useT();
   const [queueToast, setQueueToast] = useState<string | null>(null);
   const nlInterceptionToast = useChatStore((s) => s._nlInterceptionToast);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -151,7 +153,7 @@ export default function ChatInput() {
   const isListening = voice.isListening;
   const toggleListening = voice.toggleListening;
   const interimTranscript = isNative
-    ? (recorder.isTranscribing ? "Transcribing..." : (recorder.isListening ? "Recording..." : ""))
+    ? (recorder.isTranscribing ? t("chat.transcribing") : (recorder.isListening ? t("chat.recording") : ""))
     : speech.interimTranscript;
 
   // Close attach menu on click outside
@@ -207,7 +209,7 @@ export default function ChatInput() {
 
     // Show queue toast if a background task is active
     if (hasActiveBackgroundTask()) {
-      setQueueToast("Message sent. A task is running in the background — response may take a moment.");
+      setQueueToast(t("chat.queueToast"));
     }
 
     setText("");
@@ -340,7 +342,7 @@ export default function ChatInput() {
   async function handleLocationShare() {
     setLocationError(null);
     if (!navigator.geolocation) {
-      setLocationError("Location not available on this device.");
+      setLocationError(t("attach.locationUnavailable"));
       return;
     }
     try {
@@ -356,11 +358,11 @@ export default function ChatInput() {
     } catch (err) {
       const code = (err as GeolocationPositionError)?.code;
       if (code === 1 /* PERMISSION_DENIED */) {
-        setLocationError("Location permission denied. Please allow location access in your device settings.");
+        setLocationError(t("attach.locationDenied"));
       } else if (code === 3 /* TIMEOUT */) {
-        setLocationError("Could not get location — timed out. Try again.");
+        setLocationError(t("attach.locationTimeout"));
       } else {
-        setLocationError("Could not get location.");
+        setLocationError(t("attach.locationError"));
       }
     }
   }
@@ -512,7 +514,7 @@ export default function ChatInput() {
               >
                 {cmd.icon && <span className="text-base flex-shrink-0 w-6 text-center">{cmd.icon}</span>}
                 <span className="text-xs font-mono text-indigo-400 min-w-[100px] sm:min-w-[120px]">{cmd.label}</span>
-                <span className="text-xs text-gray-400 truncate">{cmd.description}</span>
+                <span className="text-xs text-gray-400 truncate">{t(cmd.descKey)}</span>
               </button>
             ))}
             <div className="px-3 py-1.5 border-t border-gray-700/50 text-[10px] text-gray-500 flex justify-between">
@@ -589,7 +591,7 @@ export default function ChatInput() {
                     className="w-full text-left px-3 py-3 sm:py-2.5 flex items-center gap-3 text-gray-300 hover:bg-gray-700/50 active:bg-gray-600/50 active:scale-[0.98] transition-all duration-150"
                   >
                     <span className="text-indigo-400 shrink-0">{cat.icon}</span>
-                    <span className="text-xs">{cat.label}</span>
+                    <span className="text-xs">{t(cat.labelKey)}</span>
                   </button>
                 ))}
               </div>

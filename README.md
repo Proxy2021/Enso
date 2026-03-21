@@ -138,6 +138,9 @@ Describe your interests → Enso proposes 2–5 custom apps → approve/edit eac
 ### 🛒 ClawHub Store
 Browse and install OpenClaw skills from the marketplace with one click.
 
+### 🌐 Multi-Language (i18n)
+Settings panel with language toggle. Switch between English and Chinese (中文) — all UI labels, tiles, prompts, hints, and status messages update instantly. Language preference persists across sessions via localStorage and syncs to the backend. Adding new languages requires only a new JSON translation file.
+
 ### ⚡ Long-Running Task UX
 Complex tasks (builds, orchestrations, deep research, Claude Code sessions) run in the background while you keep chatting. Progress bars with elapsed time and ETA, background task pills above the chat input, browser notifications (desktop) and haptic vibration (mobile) on completion, in-app toast banners, and a Results Inbox for catching up on completed work. Card contexts survive server restarts via journal-based recovery.
 

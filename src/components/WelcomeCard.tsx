@@ -1,78 +1,39 @@
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 
 interface Template {
   icon: string;
-  title: string;
-  description: string;
-  appId?: string;      // Direct app invocation (preferred)
-  toolFamily?: string; // Legacy alias for appId
-  prompt?: string;     // Fallback: send as chat message
+  titleKey: string;
+  descKey: string;
+  appId?: string;
+  toolFamily?: string;
+  prompt?: string;
 }
 
 const TEMPLATES: Template[] = [
-  {
-    icon: "\uD83D\uDD0D",
-    title: "Researcher",
-    description: "Research any topic with live web sources and citations",
-    toolFamily: "researcher",
-  },
-  {
-    icon: "\uD83D\uDCBB",
-    title: "Code Assistant",
-    description: "Write, run, and debug code with an AI engineer",
-    prompt: "/code",
-  },
-  {
-    icon: "\u26A1",
-    title: "Orchestrate",
-    description: "Break big goals into parallel AI workflows",
-    prompt: "/orchestrate",
-  },
-  {
-    icon: "\uD83D\uDCC1",
-    title: "Browse Files",
-    description: "Browse, manage, and organize your files",
-    toolFamily: "filesystem",
-  },
-  {
-    icon: "\uD83D\uDDBC\uFE0F",
-    title: "Photo Gallery",
-    description: "Browse, search & organize media",
-    toolFamily: "media_gallery",
-  },
-  {
-    icon: "\uD83D\uDDA5\uFE0F",
-    title: "Remote Desktop",
-    description: "Control this machine's screen",
-    toolFamily: "remote_desktop",
-  },
-  {
-    icon: "\uD83D\uDCC1",
-    title: "Projects",
-    description: "Discover opportunities, import projects, manage AI teams, evolve",
-    prompt: "/projects",
-  },
-  {
-    icon: "\uD83D\uDDA5\uFE0F",
-    title: "Terminal",
-    description: "Full terminal access to this machine",
-    prompt: "/shell",
-  },
+  { icon: "\uD83D\uDD0D", titleKey: "welcome.tile.researcher", descKey: "welcome.tile.researcher.desc", toolFamily: "researcher" },
+  { icon: "\uD83D\uDCBB", titleKey: "welcome.tile.codeAssistant", descKey: "welcome.tile.codeAssistant.desc", prompt: "/code" },
+  { icon: "\u26A1", titleKey: "welcome.tile.orchestrate", descKey: "welcome.tile.orchestrate.desc", prompt: "/orchestrate" },
+  { icon: "\uD83D\uDCC1", titleKey: "welcome.tile.browseFiles", descKey: "welcome.tile.browseFiles.desc", toolFamily: "filesystem" },
+  { icon: "\uD83D\uDDBC\uFE0F", titleKey: "welcome.tile.photoGallery", descKey: "welcome.tile.photoGallery.desc", toolFamily: "media_gallery" },
+  { icon: "\uD83D\uDDA5\uFE0F", titleKey: "welcome.tile.remoteDesktop", descKey: "welcome.tile.remoteDesktop.desc", toolFamily: "remote_desktop" },
+  { icon: "\uD83D\uDCC1", titleKey: "welcome.tile.projects", descKey: "welcome.tile.projects.desc", prompt: "/projects" },
+  { icon: "\uD83D\uDDA5\uFE0F", titleKey: "welcome.tile.terminal", descKey: "welcome.tile.terminal.desc", prompt: "/shell" },
 ];
 
 interface SuggestedPrompt {
-  category: string;
-  text: string;
+  categoryKey: string;
+  textKey: string;
   icon: string;
 }
 
 const SUGGESTED_PROMPTS: SuggestedPrompt[] = [
-  { category: "Research", icon: "\uD83D\uDD0D", text: "Research CRISPR gene editing breakthroughs in 2026" },
-  { category: "Compare", icon: "\uD83D\uDCCA", text: "Compare Salesforce vs HubSpot vs Pipedrive for startups" },
-  { category: "Build", icon: "\uD83D\uDEE0\uFE0F", text: "Build a project tracker app with drag-and-drop" },
-  { category: "Diagram", icon: "\uD83D\uDD17", text: "Design a microservices architecture diagram for e-commerce" },
-  { category: "Create", icon: "\u2728", text: "Create a 30-day social media content calendar" },
-  { category: "Explain", icon: "\uD83C\uDF93", text: "Explain how React Server Components work vs SSR" },
+  { categoryKey: "welcome.category.research", icon: "\uD83D\uDD0D", textKey: "welcome.prompt.research" },
+  { categoryKey: "welcome.category.compare", icon: "\uD83D\uDCCA", textKey: "welcome.prompt.compare" },
+  { categoryKey: "welcome.category.build", icon: "\uD83D\uDEE0\uFE0F", textKey: "welcome.prompt.build" },
+  { categoryKey: "welcome.category.diagram", icon: "\uD83D\uDD17", textKey: "welcome.prompt.diagram" },
+  { categoryKey: "welcome.category.create", icon: "\u2728", textKey: "welcome.prompt.create" },
+  { categoryKey: "welcome.category.explain", icon: "\uD83C\uDF93", textKey: "welcome.prompt.explain" },
 ];
 
 export default function WelcomeCard() {
@@ -80,6 +41,7 @@ export default function WelcomeCard() {
   const runApp = useChatStore((s) => s.runApp);
   const connectionState = useChatStore((s) => s.connectionState);
   const disabled = connectionState !== "connected";
+  const { t } = useT();
 
   function handleClick(template: Template) {
     if (disabled) return;
@@ -91,33 +53,33 @@ export default function WelcomeCard() {
     }
   }
 
-  function handlePromptClick(prompt: SuggestedPrompt) {
+  function handlePromptClick(textKey: string) {
     if (disabled) return;
-    sendMessage(prompt.text);
+    sendMessage(t(textKey));
   }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-4">
       <div className="text-center mb-6">
-        <h2 className="text-lg font-semibold text-gray-200 mb-1">An AI sandbox that ships</h2>
+        <h2 className="text-lg font-semibold text-gray-200 mb-1">{t("welcome.tagline")}</h2>
         <p className="text-sm text-gray-400 max-w-lg">
-          Ask anything. Build anything. AI teams that discover, build, evolve, and ship complete solutions.
+          {t("welcome.subtitle")}
         </p>
       </div>
 
       {/* Suggested prompts */}
       <div className="w-full max-w-lg mb-6">
-        <p className="text-xs text-gray-500 mb-2 px-1">Try asking:</p>
+        <p className="text-xs text-gray-500 mb-2 px-1">{t("welcome.tryAsking")}</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {SUGGESTED_PROMPTS.map((p) => (
             <button
-              key={p.text}
-              onClick={() => handlePromptClick(p)}
+              key={p.textKey}
+              onClick={() => handlePromptClick(p.textKey)}
               disabled={disabled}
               className="text-left px-3 py-2.5 rounded-lg border border-gray-700/50 bg-gray-900/30 hover:bg-gray-800/60 hover:border-indigo-500/40 active:bg-gray-800 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 group"
             >
               <span className="text-xs text-gray-300 group-hover:text-gray-100 line-clamp-2">
-                <span className="mr-1.5">{p.icon}</span>{p.text}
+                <span className="mr-1.5">{p.icon}</span>{t(p.textKey)}
               </span>
             </button>
           ))}
@@ -126,21 +88,21 @@ export default function WelcomeCard() {
 
       {/* Feature tiles */}
       <div className="w-full max-w-lg">
-        <p className="text-xs text-gray-500 mb-2 px-1">Or launch a tool:</p>
+        <p className="text-xs text-gray-500 mb-2 px-1">{t("welcome.launchTool")}</p>
         <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
-          {TEMPLATES.map((t) => (
+          {TEMPLATES.map((tmpl) => (
             <button
-              key={t.title}
-              onClick={() => handleClick(t)}
+              key={tmpl.titleKey}
+              onClick={() => handleClick(tmpl)}
               disabled={disabled}
               className="text-left p-2.5 rounded-xl border border-gray-700/70 bg-gray-900/50 hover:bg-gray-800/70 hover:border-gray-600 active:bg-gray-800 active:scale-[0.96] active:border-gray-500 transition-all duration-150 disabled:opacity-50"
             >
-              <span className="text-lg">{t.icon}</span>
+              <span className="text-lg">{tmpl.icon}</span>
               <div className="text-[11px] font-medium text-gray-200 mt-1">
-                {t.title}
+                {t(tmpl.titleKey)}
               </div>
               <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-2">
-                {t.description}
+                {t(tmpl.descKey)}
               </div>
             </button>
           ))}
@@ -149,16 +111,16 @@ export default function WelcomeCard() {
 
       <div className="mt-4 px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 max-w-lg w-full">
         <p className="text-xs text-gray-400 text-center">
-          <span className="text-gray-300 font-medium">/research</span> deep research
+          <span className="text-gray-300 font-medium">/research</span> {t("welcome.hint.research")}
           <span className="mx-1.5 text-gray-600">&middot;</span>
-          <span className="text-gray-300 font-medium">/code</span> AI engineer
+          <span className="text-gray-300 font-medium">/code</span> {t("welcome.hint.code")}
           <span className="mx-1.5 text-gray-600">&middot;</span>
-          <span className="text-gray-300 font-medium">/shell</span> terminal
+          <span className="text-gray-300 font-medium">/shell</span> {t("welcome.hint.shell")}
           <span className="mx-1.5 text-gray-600">&middot;</span>
-          <span className="text-gray-300 font-medium">/orchestrate</span> multi-agent
+          <span className="text-gray-300 font-medium">/orchestrate</span> {t("welcome.hint.orchestrate")}
         </p>
         <p className="text-[10px] text-gray-500 text-center mt-1">
-          Type / to see all commands &middot; Attach files with +
+          {t("welcome.hint.slashCommands")} &middot; {t("welcome.hint.attachFiles")}
         </p>
       </div>
     </div>

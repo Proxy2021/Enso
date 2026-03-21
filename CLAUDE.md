@@ -282,6 +282,15 @@ Standard research uses a two-phase streaming pipeline (Phase A: summary + findin
 - **Topic-adaptive design**: Historical topics get timeline explorers, comparison topics get side-by-side panels with radar charts, location topics get area guides with ratings — each UI is custom-designed
 - Key files: `build-via-claude.ts` (`handleDeepResearchBuild`, `buildDeepResearchUIPrompt`), `researcher-tools.ts` (deep research trigger), `card-actions.ts` (launcher setup + `_generatedUI` interception), `delivery.ts` (`_generatedUI` in auto-enhance)
 
+### Multi-Language (i18n)
+
+- **Locale state**: Stored in Zustand (`language: "en" | "zh"`), persisted to `localStorage("enso_language")`, synced to backend via `settings.set_language` WS message
+- **Translation files**: `src/lib/i18n/en.json` and `zh.json` — flat key-value dictionaries (~100 keys each)
+- **Core module**: `src/lib/i18n/index.ts` — `t(key)` function, `useT()` React hook (uses `useSyncExternalStore`), `_setLocale()` for store sync
+- **Settings UI**: `SettingsPanel.tsx` — consolidated gear icon dropdown with Language toggle (EN | 中文) + Claude Code Model picker (replaces old ModelPicker)
+- **Components translated**: WelcomeCard, ChatInput, CardTimeline, BackgroundTaskBar, AppBuilderDialog, DynamicUICard
+- **Adding a new language**: Create `src/lib/i18n/<code>.json`, add to `SUPPORTED_LOCALES` and `LOCALE_LABELS` in index.ts, add validation in `server.ts` settings handler
+
 ### Claude Code Integration
 
 - Trigger: `/code` opens project picker, then `/code <prompt>` sends prompts

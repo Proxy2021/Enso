@@ -11,6 +11,7 @@
 import { useChatStore } from "../store/chat";
 import { isOrchestrationCardData } from "@shared/types";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
+import { t as translate } from "../lib/i18n";
 
 type BackgroundTask = {
   cardId: string;
@@ -32,7 +33,7 @@ function useBackgroundTasks(): BackgroundTask[] {
     if (card.type === "terminal" && card.toolMeta?.toolId === "claude-code") {
       tasks.push({
         cardId: id,
-        label: card.operation?.label || "Claude Code",
+        label: card.operation?.label || translate("task.claudeCode"),
         type: "claude_code",
       });
       continue;
@@ -40,7 +41,7 @@ function useBackgroundTasks(): BackgroundTask[] {
 
     // Shell card
     if (card.type === "shell") {
-      tasks.push({ cardId: id, label: "Shell", type: "shell" });
+      tasks.push({ cardId: id, label: translate("task.shell"), type: "shell" });
       continue;
     }
 
@@ -54,7 +55,7 @@ function useBackgroundTasks(): BackgroundTask[] {
         const total = plan?.tasks?.length ?? 0;
         tasks.push({
           cardId: id,
-          label: status === "planning" ? "Planning..." : `Mission ${completed}/${total}`,
+          label: status === "planning" ? translate("task.planning") : `${translate("task.mission")} ${completed}/${total}`,
           type: "orchestration",
         });
       }
@@ -65,7 +66,7 @@ function useBackgroundTasks(): BackgroundTask[] {
     if (card.deepResearchStatus === "building") {
       tasks.push({
         cardId: id,
-        label: "Deep research",
+        label: translate("task.deepResearch"),
         type: "deep_research",
       });
       continue;

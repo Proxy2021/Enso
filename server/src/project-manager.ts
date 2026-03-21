@@ -363,9 +363,41 @@ function getDefaultEnsoProject(): Project {
           "Try the photo gallery or media features if available",
         ],
       },
+      {
+        id: "photographer-blogger",
+        name: "Wei Liang (魏亮)",
+        role: "Professional Photographer & Visual Storyteller",
+        background:
+          "Beijing-based travel and lifestyle photographer with 50TB photo archive spanning 8 years. Publishes weekly visual essays on Xiaohongshu (小红书), Bilibili, and WeChat. Shoots 2,000+ photos per trip. Deeply technical about color science, lens optics, and post-processing. Early adopter of AI tools for culling, retouching, and upscaling. Revenue from print sales, brand partnerships, and online photography courses. Prefers working in Chinese and expects tools to support his native language natively — not as an afterthought.",
+        goals: [
+          "Use Enso entirely in Chinese — UI, research results, and generated content all in native language",
+          "Manage and organize massive photo libraries with smart tagging and duplicate detection",
+          "Batch-process RAW files with consistent color grading and AI-assisted retouching",
+          "Research and compare camera gear, lenses, and editing software with real-world data",
+          "Use AI for intelligent photo culling, subject recognition, and metadata enrichment",
+          "Create polished visual content — blog layouts, comparison galleries, before/after showcases",
+          "Stay current on AI photography tools — generative fill, upscaling, noise reduction, sky replacement",
+        ],
+        frustrations: [
+          "AI tools that only work well in English — poor Chinese support or mixed-language UI",
+          "UI that mixes Chinese and English inconsistently, breaking the immersive experience",
+          "File management tools that can't handle large volumes or understand EXIF/RAW metadata",
+          "AI tools that over-process images and destroy natural skin tones or fine detail",
+          "No good way to visually compare gear specs alongside real sample images",
+          "Platforms that treat photos as flat images instead of rich assets with metadata, GPS, and edit history",
+        ],
+        testScenarios: [
+          "Switch Enso to Chinese (中文) — verify all UI labels, buttons, and prompts display in Chinese",
+          "Search in Chinese: '对比索尼A7RV和佳能R5 II的风光摄影表现' — expect Chinese research results",
+          "Browse and manage a folder of photos — check if EXIF data, thumbnails, and sorting work well",
+          "Ask Enso to research 'best AI photo editing tools 2026' in Chinese and compare features",
+          "Upload photos and test any available processing, gallery, or media features",
+          "Try: '研究AI图像放大工具 — Real-ESRGAN vs Topaz vs Magnific 对比' with interactive comparison",
+        ],
+      },
     ],
 
-    validationPersonaIds: ["startup-founder", "student-researcher"],
+    validationPersonaIds: ["startup-founder", "student-researcher", "photographer-blogger"],
 
     createdAt: Date.now(),
     updatedAt: Date.now(),

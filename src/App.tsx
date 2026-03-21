@@ -12,7 +12,7 @@ import { isNative } from "./lib/platform";
 import { initDeepLinkListener } from "./lib/deep-link-handler";
 import UpdateBanner from "./components/UpdateBanner";
 import DebugReporter from "./components/DebugReporter";
-import ModelPicker from "./components/ModelPicker";
+import SettingsPanel from "./components/SettingsPanel";
 import ToastContainer from "./components/ToastContainer";
 import BackgroundTaskBar from "./components/BackgroundTaskBar";
 import ResultsInbox, { useUnseenCount } from "./components/ResultsInbox";
@@ -193,7 +193,7 @@ export default function App() {
         <header className="sticky top-0 z-20 flex items-center justify-between px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
           <h1 className="text-base font-semibold tracking-tight">Enso</h1>
           <div className="flex items-center gap-1.5">
-            <ModelPicker />
+            <SettingsPanel />
             <DebugReporter />
             <AppsMenu />
             <ResultsButton onClick={() => setShowResults(true)} />

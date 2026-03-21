@@ -19,6 +19,7 @@ import {
   setActiveBackend,
   type BackendConfig,
 } from "../lib/connection";
+import { _setLocale, type Locale } from "../lib/i18n";
 
 export interface ProjectInfo {
   name: string;
@@ -48,6 +49,7 @@ interface CardStore {
   codeSessionId: string | null;
   claudeModel: string;
   claudeThinking: "adaptive" | "disabled";
+  language: "en" | "zh";
 
   // Internal: active terminal card
   _activeTerminalCardId: string | null;
@@ -92,6 +94,7 @@ interface CardStore {
   switchTerminalProject: (cardId: string, cwd: string) => void;
   resumeSessionOnCard: (cardId: string, sessionId: string, cwd: string) => void;
   setClaudeModel: (model: string, thinking?: "adaptive" | "disabled") => void;
+  setLanguage: (language: "en" | "zh") => void;
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
@@ -211,6 +214,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   codeSessionId: localStorage.getItem("enso_code_session_id") || null,
   claudeModel: localStorage.getItem("enso_claude_model") || "claude-opus-4-6",
   claudeThinking: (localStorage.getItem("enso_claude_thinking") as "adaptive" | "disabled") || "adaptive",
+  language: (localStorage.getItem("enso_language") as Locale) || "en",
   _activeTerminalCardId: null,
   _pendingCodeText: null as string | null,
   _thinkingCardId: null as string | null,
@@ -1371,6 +1375,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }
   },
 
+  setLanguage: (language: "en" | "zh") => {
+    set({ language });
+    localStorage.setItem("enso_language", language);
+    _setLocale(language);
+    const ws = get()._wsClient;
+    if (ws) {
+      ws.send({ type: "settings.set_language", language } as import("@shared/types").ClientMessage);
+    }
+  },
+
   setShowConnectionPicker: (show: boolean) => {
     set({ showConnectionPicker: show });
   },
@@ -1529,6 +1543,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (msg.settings.claudeThinking) {
         patch.claudeThinking = msg.settings.claudeThinking;
         localStorage.setItem("enso_claude_thinking", msg.settings.claudeThinking);
+      }
+      if (msg.settings.language) {
+        patch.language = msg.settings.language as Locale;
+        localStorage.setItem("enso_language", msg.settings.language);
+        _setLocale(msg.settings.language as Locale);
       }
       if (Object.keys(patch).length > 0) set(patch);
 

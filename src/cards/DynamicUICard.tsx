@@ -4,6 +4,7 @@ import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
 import { resolveMediaUrl } from "../lib/connection";
 import { reportError } from "../lib/error-reporter";
+import { t } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
 /** Server-relative path prefixes that need resolving for remote backends. */
@@ -42,7 +43,7 @@ function FixButton({
           <polyline points="16 18 22 12 16 6" />
           <polyline points="8 6 2 12 8 18" />
         </svg>
-        Fix with Code
+        {t("card.fixWithCode")}
       </button>
     </div>
   );
@@ -71,7 +72,7 @@ class UIErrorBoundary extends React.Component<
     if (this.state.error) {
       return (
         <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-sm text-red-300">
-          <strong>Render error:</strong> {this.state.error}
+          <strong>{t("card.renderError")}</strong> {this.state.error}
           <FixButton
             error={this.state.error}
             errorType="runtime"

@@ -5,6 +5,7 @@ import { isOrchestrationCardData } from "@shared/types";
 import CardContainer from "./CardContainer";
 import WelcomeCard from "./WelcomeCard";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
+import { useT } from "../lib/i18n";
 
 /**
  * Returns true when the only streaming activity is background tasks
@@ -35,6 +36,7 @@ function hasOnlyBackgroundTasks(
 
 function TypingIndicator() {
   const elapsed = useElapsedTime();
+  const { t } = useT();
   return (
     <div className="flex justify-start mb-4">
       <div className="w-full max-w-2xl bg-gray-900/80 border border-gray-700/70 rounded-2xl px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
@@ -45,7 +47,7 @@ function TypingIndicator() {
             <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:300ms]" />
           </span>
           <span className="text-xs text-gray-400">
-            {elapsed < 2 ? "Thinking..." : elapsed < 6 ? "Working on it..." : elapsed < 15 ? "Researching..." : "Still working — complex tasks take longer"}
+            {elapsed < 2 ? t("chat.thinking") : elapsed < 6 ? t("chat.working") : elapsed < 15 ? t("chat.researching") : t("chat.stillWorking")}
           </span>
           {elapsed >= 2 && (
             <span className="text-[11px] text-gray-500 tabular-nums ml-auto">{formatElapsed(elapsed)}</span>

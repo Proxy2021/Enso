@@ -33,6 +33,8 @@ export type ConnectedClient = {
   claudeModel?: string;
   /** User-selected thinking mode. */
   claudeThinking?: "adaptive" | "disabled";
+  /** User-selected UI language. */
+  language?: string;
 };
 
 /** All connected browser clients, keyed by connection id. */
@@ -2686,6 +2688,23 @@ export async function startEnsoServer(opts: {
               settings: { mode: account.mode, claudeModel: client.claudeModel, claudeThinking: client.claudeThinking },
               timestamp: Date.now(),
             });
+            break;
+          }
+          case "settings.set_language": {
+            const validLanguages = ["en", "zh"] as const;
+            if (msg.language && validLanguages.includes(msg.language as typeof validLanguages[number])) {
+              client.language = msg.language;
+              runtime.log?.(`[enso] language changed to: ${client.language}`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                settings: { mode: account.mode, language: client.language },
+                timestamp: Date.now(),
+              });
+            }
             break;
           }
           case "shell.create": {
