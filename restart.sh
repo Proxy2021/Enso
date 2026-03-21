@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# restart.sh — Kill and restart OpenClaw gateway + Enso Vite dev server + Cloudflare Tunnel
+# restart.sh — Kill and restart Enso server + Vite dev server + Cloudflare Tunnel
 set -euo pipefail
 
 ENSO_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLIST="$HOME/Library/LaunchAgents/ai.openclaw.gateway.plist"
-LABEL="ai.openclaw.gateway"
-WATCHDOG_LABEL="ai.openclaw.enso-watchdog"
+WATCHDOG_LABEL="ai.enso.watchdog"
 UID_NUM="$(id -u)"
 
 echo "=== Restarting Enso services ==="
@@ -34,41 +32,33 @@ else
   echo "[vite] Not running"
 fi
 
-# ── 2. Stop OpenClaw gateway ──
-echo "[openclaw] Stopping gateway service"
-launchctl bootout "gui/$UID_NUM/$LABEL" 2>/dev/null || true
-launchctl bootout "gui/$UID_NUM" "$PLIST" 2>/dev/null || true
-
-# Fallback: kill lingering gateway processes if launchctl bootout misses any
-GW_PIDS=$(pgrep -f 'openclaw-gateway|openclaw gateway|gateway serve' 2>/dev/null || true)
-if [ -n "$GW_PIDS" ]; then
-  echo "[openclaw] Killing lingering gateway process(es): $GW_PIDS"
-  kill $GW_PIDS 2>/dev/null || true
+# ── 2. Stop Enso server ──
+echo "[enso] Stopping server"
+ENSO_PIDS=$(pgrep -f 'server/standalone\.ts|enso.*server' 2>/dev/null || true)
+if [ -n "$ENSO_PIDS" ]; then
+  echo "[enso] Killing server process(es): $ENSO_PIDS"
+  kill $ENSO_PIDS 2>/dev/null || true
   sleep 1
-  GW_PIDS_FORCE=$(pgrep -f 'openclaw-gateway|openclaw gateway|gateway serve' 2>/dev/null || true)
-  if [ -n "$GW_PIDS_FORCE" ]; then
-    echo "[openclaw] Force killing remaining process(es): $GW_PIDS_FORCE"
-    kill -9 $GW_PIDS_FORCE 2>/dev/null || true
+  ENSO_PIDS_FORCE=$(pgrep -f 'server/standalone\.ts|enso.*server' 2>/dev/null || true)
+  if [ -n "$ENSO_PIDS_FORCE" ]; then
+    echo "[enso] Force killing remaining process(es): $ENSO_PIDS_FORCE"
+    kill -9 $ENSO_PIDS_FORCE 2>/dev/null || true
   fi
 else
-  echo "[openclaw] No lingering gateway process found"
+  echo "[enso] No server process found"
 fi
 sleep 1
 
-# ── 3. Start OpenClaw gateway ──
-echo "[openclaw] Starting gateway"
-if [ -f "$PLIST" ]; then
-  launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>/dev/null || true
-else
-  openclaw gateway install >/dev/null 2>&1 || true
-fi
-launchctl kickstart -k "gui/$UID_NUM/$LABEL" 2>/dev/null || true
+# ── 3. Start Enso server ──
+echo "[enso] Starting server"
+cd "$ENSO_DIR"
+nohup npx tsx server/standalone.ts > /tmp/enso-server.log 2>&1 &
+SERVER_PID=$!
 
-# Wait for gateway + Enso plugin server
-echo -n "[openclaw] Waiting for plugin server"
+echo -n "[enso] Waiting for server"
 for i in $(seq 1 15); do
   if curl -sf http://localhost:3001/health &>/dev/null; then
-    echo " ready"
+    echo " ready (PID: $SERVER_PID)"
     break
   fi
   echo -n "."
@@ -119,7 +109,7 @@ if [ -f "$WATCHDOG_PLIST" ]; then
   launchctl bootstrap "gui/$UID_NUM" "$WATCHDOG_PLIST" 2>/dev/null || true
   launchctl kickstart "gui/$UID_NUM/$WATCHDOG_LABEL" 2>/dev/null || true
 else
-  echo "[watchdog] Not installed (run install-watchdog.sh to enable)"
+  echo "[watchdog] Not installed"
 fi
 
 # ── Summary ──
@@ -128,16 +118,13 @@ echo "=== Services ==="
 echo "  Enso UI:  http://localhost:5173"
 IP=$(ipconfig getifaddr en0 2>/dev/null || echo "unknown")
 echo "  Network:  http://$IP:5173"
-echo "  Plugin:   http://localhost:3001/health"
+echo "  Server:   http://localhost:3001/health"
 # Show tunnel URL if config exists
 if [ -f "$HOME/.cloudflared/config.yml" ]; then
   TUNNEL_HOST=$(grep 'hostname:' "$HOME/.cloudflared/config.yml" | head -1 | awk '{print $3}')
   [ -n "$TUNNEL_HOST" ] && echo "  Tunnel:   https://$TUNNEL_HOST"
 fi
-echo "  Vite log: /tmp/enso-vite.log"
+echo "  Logs:"
+echo "    Server: /tmp/enso-server.log"
+echo "    Vite:   /tmp/enso-vite.log"
 echo ""
-echo "=== TUI Tips ==="
-echo "  Fresh session:"
-echo "    openclaw tui --session \"scratch-\$(date +%s)\" --history-limit 0"
-echo "  Reuse current session with minimal history:"
-echo "    openclaw tui --session main --history-limit 10"

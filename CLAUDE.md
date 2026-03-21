@@ -4,7 +4,7 @@
 
 ## Vision
 
-Enso is a **Claude Code-powered AI agent** that answers any question with the best interactive experience and tackles any task with full engineering team capability. It's built as an OpenClaw channel plugin.
+Enso is a **Claude Code-powered AI agent** that answers any question with the best interactive experience and tackles any task with full engineering team capability. It can run standalone or as an OpenClaw channel plugin.
 
 **Core principles:**
 - **Best experience for every answer** — Responses flow through a deterministic tool-to-UI pipeline, delivering rich interactive React apps (research boards, file managers, photo studios) instead of plain text. No LLM call needed for rendering.
@@ -17,12 +17,14 @@ Enso is a **Claude Code-powered AI agent** that answers any question with the be
 Enso has two layers:
 
 1. **React Frontend** — Browser-based chat UI (Vite + React 19 + Tailwind CSS 4 + Zustand)
-2. **OpenClaw Plugin** — Channel integration that routes messages through OpenClaw's agent pipeline, runs the Express + WS server, and provides deterministic tool-to-template rendering + Claude Code integration
+2. **Enso Server (Backend)** — Express + WS server providing deterministic tool-to-template rendering + Claude Code integration. Can run standalone or as an OpenClaw channel plugin for agent routing and tool sharing.
+
+> **Standalone mode**: Enso can run its backend server independently via `npm run dev:server`, without requiring an OpenClaw gateway. In standalone mode, chat is handled directly (no agent pipeline), but all other features — Claude Code, apps, orchestration, evolution — work identically.
 
 ### Data Flow
 
-- **Normal chat (Q&A)**: Browser → WS → OpenClaw Plugin → Agent → text response → `deliverEnsoReply` → text card
-- **Normal chat (tool use)**: Browser → WS → OpenClaw Plugin → Agent calls registered tool → `after_tool_call` hook captures result → `deliverEnsoReply` → text card + auto-enhance via `consumeRecentToolCall()` → app card rendered alongside text (no LLM call needed)
+- **Normal chat (Q&A)**: Browser → WS → Enso Server → Agent → text response → `deliverEnsoReply` → text card
+- **Normal chat (tool use)**: Browser → WS → Enso Server → Agent calls registered tool → `after_tool_call` hook captures result → `deliverEnsoReply` → text card + auto-enhance via `consumeRecentToolCall()` → app card rendered alongside text (no LLM call needed)
 - **Claude Code**: Browser → WS → `server.ts` → spawn `claude.exe` (NDJSON stream) → streaming terminal card + interactive questions
 
 ## Project Structure
@@ -36,8 +38,8 @@ src/                          # React frontend (Vite entry)
 ├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components), connection manager, notifications, useElapsedTime
 └── types.ts
 
-openclaw-plugin/              # OpenClaw channel plugin (the backend)
-├── index.ts                  # Plugin entry
+server/                       # Enso server (the backend)
+├── index.ts                  # Server/plugin entry
 ├── apps/                     # Shipped apps (checked into git)
 │   └── <appId>/              # app.json + template.jsx + executors/*.js
 └── src/
@@ -64,7 +66,7 @@ openclaw-plugin/              # OpenClaw channel plugin (the backend)
         ├── registry.ts       # App tool discovery + template registry
         └── templates/        # Pre-built JSX templates per app
 
-shared/types.ts               # Protocol types shared between frontend and plugin
+shared/types.ts               # Protocol types shared between frontend and server
 ```
 
 ## Key Concepts
@@ -119,7 +121,7 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 
 - Trigger: `/mission` command or "Mission Planner" tile on WelcomeCard
 - User describes interests/goals → Claude Code analyzes and proposes 2–5 apps
-- Plan written to `openclaw-plugin/.mission-plan.json`, parsed, sent as `missionPlan` to client
+- Plan written to `server/.mission-plan.json`, parsed, sent as `missionPlan` to client
 - User reviews proposals in MissionCard (approve/skip/edit each app)
 - Approved apps built sequentially via `handleBuildAppViaClaude`
 - Progress tracked via `missionProgress` messages (analyzing → proposing → building → complete)
@@ -216,7 +218,7 @@ The **Project Leader decides which personas to involve per sprint** based on the
 **Monitoring progress**:
 - **Enso UI**: OrchestrationCard shows live task graph with status, agent names, and progress bar
 - **Action log API**: `GET /api/action-log?count=50` — watch for `DAG: launching task` and `DAG: task X completed` entries
-- **Output files**: `openclaw-plugin/.orchestration-output-*.md` appear as each task completes (cleaned up on sprint completion)
+- **Output files**: `server/.orchestration-output-*.md` appear as each task completes (cleaned up on sprint completion)
 - **Sprint archive**: After completion, all artifacts archived to `~/.enso/projects/<id>/sprints/sprint-<timestamp>/`
 
 **Viewing sprint history**: Type `/evolution-history` to browse all past sprints with interactive dashboards, persona reports, implementation details, and validation results across 6 tabs.
@@ -292,7 +294,7 @@ Long-running tasks (builds, orchestrations, deep research, Claude Code sessions)
 - **In-app toast banners**: `ToastContainer` component shows slide-down toast for all completions on both platforms. Auto-dismiss 5-8s, tap to dismiss.
 - **Results inbox**: Slide-up sheet (`ResultsInbox`) accessible from header button with unseen badge count. Lists all completed long-running tasks with seen/unseen tracking (persisted to localStorage). One-tap scroll-to-card navigation.
 - **Card context recovery**: After server restart, `tryReconstructContext()` in card-actions.ts recovers card contexts from the JSONL journal (`loadCardHistory`) — historical cards become interactive again without re-running the app.
-- Key files: `src/lib/notifications.ts`, `src/lib/useElapsedTime.ts`, `src/components/ToastContainer.tsx`, `src/components/BackgroundTaskBar.tsx`, `src/components/ResultsInbox.tsx`, `openclaw-plugin/src/outbound/card-actions.ts`
+- Key files: `src/lib/notifications.ts`, `src/lib/useElapsedTime.ts`, `src/components/ToastContainer.tsx`, `src/components/BackgroundTaskBar.tsx`, `src/components/ResultsInbox.tsx`, `server/src/outbound/card-actions.ts`
 
 ### App Action Bridge + Dispatch
 
@@ -311,7 +313,7 @@ Four-path dispatch (first match wins):
 | Location | Path | Purpose |
 |----------|------|---------|
 | **User apps** | `~/.openclaw/enso-apps/<family>/` | Created by Build App pipeline |
-| **Shipped apps** | `openclaw-plugin/apps/<family>/` | Promoted via Apps menu |
+| **Shipped apps** | `server/apps/<family>/` | Promoted via Apps menu |
 
 Three creation methods: **(1) Build from Enso UI** (recommended), **(2) Via Code button** (Claude Code), **(3) Manual** file creation.
 
@@ -345,7 +347,7 @@ Apps render in two styles:
 
 ## Tech Stack
 
-Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + xterm.js + Vite 6. Backend: Express 4 + ws 8 + node-pty (started by OpenClaw). Language: TypeScript 5.7 strict, ESM. LLM: Gemini (via API key).
+Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + xterm.js + Vite 6. Backend: Express 4 + ws 8 + node-pty (standalone or started by OpenClaw). Language: TypeScript 5.7 strict, ESM. LLM: Gemini (via API key).
 
 ## Development
 
@@ -353,10 +355,13 @@ Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + 
 
 ```bash
 npm run dev          # Frontend dev server (Vite :5173)
+npm run dev:server   # Standalone backend server (Express + WS :3001)
 npm run build        # Production build
 ```
 
-Requires a running OpenClaw gateway with Enso plugin enabled. Plugin starts Express + WS on port 3001. Vite proxies `/ws`, `/media`, `/upload` to localhost:3001.
+The backend server runs on port 3001. Vite proxies `/ws`, `/media`, `/upload` to localhost:3001. Two modes:
+- **Standalone**: Run `npm run dev:server` directly — no OpenClaw gateway needed.
+- **OpenClaw plugin**: Run via `openclaw gateway start` with Enso plugin enabled — adds agent routing and tool sharing.
 
 Dev commands: `/delete-apps` — clear all dynamically created apps.
 
@@ -389,7 +394,7 @@ Backend returns relative `/media/...` URLs. `DynamicUICard` recursively resolves
 
 ### Exposing to Internet
 
-Recommended: **Cloudflare Tunnel** — each machine gets a fixed subdomain (e.g., `app.yourdomain.com`). See `openclaw-plugin/SETUP.md` for full setup instructions.
+Recommended: **Cloudflare Tunnel** — each machine gets a fixed subdomain (e.g., `app.yourdomain.com`). See `server/SETUP.md` for full setup instructions.
 
 ### PWA
 
@@ -414,7 +419,7 @@ Enso is installable as a Progressive Web App — `public/manifest.json`, `public
 - State flows: WebSocket → Zustand store → React components
 - Generated components are self-contained (no imports, deps injected via scope)
 - Dark theme UI (Tailwind classes)
-- Plugin and client share types via `shared/types.ts`
+- Server and client share types via `shared/types.ts`
 - Server logs use `[enso:inbound/outbound/enhance/action/build]` prefixes
 
 ## Logging & Error Tracking
@@ -427,7 +432,7 @@ Enso uses a centralized NDJSON log for all significant operations, errors, and f
 - `~/.openclaw/enso-action.log` — NDJSON, rotates at 1000 lines (keeps 800)
 - `~/.openclaw/enso-fixes.json` — JSON array of bug fix records with acknowledgement tracking
 
-**Implementation:** `openclaw-plugin/src/action-log.ts`
+**Implementation:** `server/src/action-log.ts`
 
 ### Log Entry Types
 

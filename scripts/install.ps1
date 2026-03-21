@@ -6,10 +6,10 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoDir = Split-Path -Parent $ScriptDir
-$OpenClawDir = Join-Path $env:USERPROFILE ".openclaw"
-$OpenClawJson = Join-Path $OpenClawDir "openclaw.json"
-$SetupJson = Join-Path $OpenClawDir "enso-setup.json"
-$PluginDir = Join-Path $RepoDir "openclaw-plugin"
+$EnsoDir = Join-Path $env:USERPROFILE ".enso"
+$SetupJson = Join-Path $EnsoDir "enso-setup.json"
+$ServerDir = Join-Path $RepoDir "server"
+$EnvFile = Join-Path $ServerDir ".env"
 $Port = 3001
 
 Write-Host ""
@@ -43,114 +43,74 @@ if ($nodeMajor -lt 22) {
 }
 Write-Host "  OK Node.js $(node --version)" -ForegroundColor Green
 
-# ── 2. Check OpenClaw ────────────────────────────────────────────────
-Write-Host "# Checking OpenClaw..." -ForegroundColor Yellow
-$ocCmd = Get-Command openclaw -ErrorAction SilentlyContinue
-if (-not $ocCmd) {
-    Write-Host "  Installing OpenClaw..." -ForegroundColor Cyan
-    npm install -g openclaw
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-}
-
-$ocCmd = Get-Command openclaw -ErrorAction SilentlyContinue
-if ($ocCmd) {
-    Write-Host "  OK OpenClaw installed" -ForegroundColor Green
-} else {
-    Write-Host "  X Failed to install OpenClaw. Run manually: npm install -g openclaw" -ForegroundColor Red
-    exit 1
-}
-
-# ── 3. npm install ───────────────────────────────────────────────────
+# ── 2. npm install ───────────────────────────────────────────────────
 Write-Host "# Installing dependencies..." -ForegroundColor Yellow
 Push-Location $RepoDir
 npm install --no-audit --no-fund 2>&1 | Select-Object -Last 1
 Write-Host "  OK Dependencies installed" -ForegroundColor Green
 
-# ── 4. OpenClaw Onboarding ─────────────────────────────────────────
+# ── 3. Configure .env ────────────────────────────────────────────────
 Write-Host ""
+Write-Host "# Configuring server..." -ForegroundColor Yellow
 
-# Escape backslashes for JSON/Node (needed early for onboarding check)
-$OpenClawJsonEscaped = $OpenClawJson -replace '\\', '\\\\'
-
-$Onboarded = node -e @"
-const fs = require('fs');
-try {
-  const cfg = JSON.parse(fs.readFileSync('$OpenClawJsonEscaped', 'utf-8'));
-  console.log(cfg.wizard && cfg.wizard.lastRunAt ? 'yes' : 'no');
-} catch { console.log('no'); }
-"@
-
-if ($Onboarded.Trim() -ne "yes") {
-    Write-Host "# Running OpenClaw first-time setup..." -ForegroundColor Yellow
-    Write-Host "  This will guide you through picking an AI model, entering your API key,"
-    Write-Host "  and configuring the gateway."
-    Write-Host ""
-    openclaw onboard
-    Write-Host ""
-    Write-Host "  OK OpenClaw onboarding complete" -ForegroundColor Green
-} else {
-    Write-Host "# OpenClaw already configured - skipping onboarding" -ForegroundColor Yellow
-}
-
-# ── 5. Generate openclaw.json ────────────────────────────────────────
-Write-Host ""
-Write-Host "# Configuring OpenClaw..." -ForegroundColor Yellow
-if (-not (Test-Path $OpenClawDir)) {
-    New-Item -ItemType Directory -Path $OpenClawDir -Force | Out-Null
+if (-not (Test-Path $EnsoDir)) {
+    New-Item -ItemType Directory -Path $EnsoDir -Force | Out-Null
 }
 
 $AccessToken = [guid]::NewGuid().ToString()
 $MachineName = $env:COMPUTERNAME
 
-# Escape backslashes for JSON/Node (OpenClawJsonEscaped already set in step 4)
-$PluginDirEscaped = $PluginDir -replace '\\', '\\\\'
-$SetupJsonEscaped = $SetupJson -replace '\\', '\\\\'
-$RepoDirEscaped = $RepoDir -replace '\\', '\\\\'
+if (Test-Path $EnvFile) {
+    Write-Host "  OK server\.env already exists - preserving" -ForegroundColor Green
+    # Read existing token if available
+    $envContent = Get-Content $EnvFile -Raw
+    if ($envContent -match '(?m)^ENSO_ACCESS_TOKEN=(.+)$') {
+        $AccessToken = $Matches[1].Trim()
+    }
+} else {
+    Write-Host ""
+    Write-Host "  Enso uses the Gemini API for chat and UI generation." -ForegroundColor White
+    Write-Host "  Get a free API key at: https://aistudio.google.com/apikey" -ForegroundColor Cyan
+    Write-Host ""
+    $GeminiKey = Read-Host "  Enter your Gemini API key (or press Enter to skip)"
+    Write-Host ""
 
-node -e @"
-const fs = require('fs');
-const path = '$OpenClawJsonEscaped';
-const pluginDir = '$PluginDirEscaped';
-const token = '$AccessToken';
-
-let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(path, 'utf-8')); } catch {}
-
-if (!cfg.plugins) cfg.plugins = {};
-if (!cfg.plugins.load) cfg.plugins.load = {};
-if (!Array.isArray(cfg.plugins.load.paths)) cfg.plugins.load.paths = [];
-if (!cfg.plugins.load.paths.includes(pluginDir)) cfg.plugins.load.paths.push(pluginDir);
-if (!cfg.plugins.entries) cfg.plugins.entries = {};
-cfg.plugins.entries.enso = { enabled: true };
-
-if (!cfg.channels) cfg.channels = {};
-if (!cfg.channels.enso) cfg.channels.enso = {};
-cfg.channels.enso.port = cfg.channels.enso.port || $Port;
-cfg.channels.enso.dmPolicy = cfg.channels.enso.dmPolicy || 'open';
-if (!cfg.channels.enso.accessToken) cfg.channels.enso.accessToken = token;
-
-fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
-console.log('  OK Config written to ' + path);
+    $envContent = @"
+GEMINI_API_KEY=$GeminiKey
+ENSO_ACCESS_TOKEN=$AccessToken
+ENSO_MACHINE_NAME=$MachineName
 "@
+    Set-Content -Path $EnvFile -Value $envContent -Encoding UTF8
+    Write-Host "  OK Config written to server\.env" -ForegroundColor Green
 
-# Read back actual token
-$AccessToken = node -e @"
-const fs = require('fs');
-const cfg = JSON.parse(fs.readFileSync('$OpenClawJsonEscaped', 'utf-8'));
-console.log(cfg.channels.enso.accessToken);
-"@
+    if ([string]::IsNullOrWhiteSpace($GeminiKey)) {
+        Write-Host "  ! No Gemini API key set. Chat will not work until you add it to server\.env" -ForegroundColor DarkYellow
+    }
+}
 
-# ── 6. Build frontend ───────────────────────────────────────────────
+# Read back actual token from .env
+$envContent = Get-Content $EnvFile -Raw -ErrorAction SilentlyContinue
+if ($envContent -match '(?m)^ENSO_ACCESS_TOKEN=(.+)$') {
+    $AccessToken = $Matches[1].Trim()
+} else {
+    # Token not in .env, append it
+    Add-Content -Path $EnvFile -Value "`nENSO_ACCESS_TOKEN=$AccessToken"
+}
+
+# ── 4. Build frontend ───────────────────────────────────────────────
 Write-Host ""
 Write-Host "# Building frontend..." -ForegroundColor Yellow
 npm run build 2>&1 | Select-Object -Last 1
 Write-Host "  OK Frontend built" -ForegroundColor Green
 
-# ── 7. Start gateway ────────────────────────────────────────────────
+# ── 5. Start server ─────────────────────────────────────────────────
 Write-Host ""
-Write-Host "# Starting OpenClaw gateway..." -ForegroundColor Yellow
-try { openclaw gateway start 2>$null } catch {}
+Write-Host "# Starting Enso server..." -ForegroundColor Yellow
+$serverJob = Start-Job -ScriptBlock {
+    param($repoDir)
+    Set-Location $repoDir
+    npx tsx server/standalone.ts 2>&1
+} -ArgumentList $RepoDir
 
 Write-Host -NoNewline "  Waiting for server"
 $ready = $false
@@ -169,10 +129,10 @@ Write-Host ""
 if ($ready) {
     Write-Host "  OK Server is running on port $Port" -ForegroundColor Green
 } else {
-    Write-Host "  ! Server did not respond within 30s. Check: openclaw logs" -ForegroundColor DarkYellow
+    Write-Host "  ! Server did not respond within 30s. Check terminal output." -ForegroundColor DarkYellow
 }
 
-# ── 8. Display QR code ──────────────────────────────────────────────
+# ── 6. Display QR code ──────────────────────────────────────────────
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Setup complete!" -ForegroundColor Cyan
@@ -198,9 +158,14 @@ $EncodedName = [System.Uri]::EscapeDataString($MachineName)
 $DeepLink = "enso://connect?backend=http://${PrimaryIp}:${Port}&token=${EncodedToken}&name=${EncodedName}"
 
 # Save setup info
+$EnsoJsonEscaped = $SetupJson -replace '\\', '\\\\'
+$RepoDirEscaped = $RepoDir -replace '\\', '\\\\'
+
 node -e @"
 const fs = require('fs');
-fs.writeFileSync('$SetupJsonEscaped', JSON.stringify({
+const dir = '$($EnsoDir -replace '\\', '\\\\')';
+if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+fs.writeFileSync('$EnsoJsonEscaped', JSON.stringify({
   installPath: '$RepoDirEscaped',
   accessToken: '$AccessToken',
   machineName: '$MachineName',
@@ -229,6 +194,11 @@ Write-Host "    Token: ${AccessToken}" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  To show this QR code again later:" -ForegroundColor DarkGray
 Write-Host "    node $RepoDir\scripts\show-qr.js" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  Next steps:" -ForegroundColor White
+Write-Host "    - For development: npm run dev (starts Vite on :5173)" -ForegroundColor Gray
+Write-Host "    - For remote access: see SETUP.md (Cloudflare Tunnel)" -ForegroundColor Gray
+Write-Host "    - For Claude Code: npm install -g @anthropic-ai/claude-code" -ForegroundColor Gray
 Write-Host ""
 
 Pop-Location

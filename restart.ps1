@@ -1,13 +1,12 @@
 <#
 .SYNOPSIS
-    Restart all Enso + OpenClaw services on Windows.
+    Restart all Enso services on Windows.
 
 .DESCRIPTION
-    1. Kills existing OpenClaw gateway + Enso dev processes
-    2. Rebuilds AlphaRank plugin (if source is newer than dist)
-    3. Starts OpenClaw gateway (which auto-starts the Enso WS server on :3001)
-    4. Starts the Enso Vite dev server on :5173
-    5. Restarts the Cloudflare tunnel (kills dupes, starts single instance)
+    1. Kills existing Enso server + Vite dev processes
+    2. Starts Enso standalone server on :3001
+    3. Starts the Enso Vite dev server on :5173
+    4. Restarts the Cloudflare tunnel
 
 .NOTES
     Run from any PowerShell terminal:
@@ -17,9 +16,7 @@
 #>
 
 param(
-    [switch]$SkipBuild,       # Skip AlphaRank rebuild check
     [switch]$NoDev,           # Don't start Vite dev server
-    [int]$GatewayPort = 18789,
     [int]$EnsoPort    = 3001,
     [int]$VitePort    = 5173
 )
@@ -28,9 +25,8 @@ $ErrorActionPreference = "Stop"
 
 # -- Paths -----------------------------------------------------------------
 $WatchdogTask = "Enso Watchdog"
-$EnsoDir      = "D:\Github\Enso"
-$AlphaRankDir = "D:\Github\AlphaRank\openclaw-plugin"
-$OpenClawDir  = "D:\Github\openclaw"
+$EnsoDir      = Split-Path -Parent $MyInvocation.MyCommand.Path
+$nodeExe      = "C:\Program Files\nodejs\node.exe"
 
 # -- Colors ----------------------------------------------------------------
 function Write-Step  ($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
@@ -63,7 +59,7 @@ foreach ($proc in $nodeProcs) {
     $cmd = $proc.CommandLine
     if (-not $cmd) { continue }
 
-    $isOurs = ($cmd -match "openclaw.*gateway") -or
+    $isOurs = ($cmd -match "standalone\.ts") -or
               ($cmd -match "Enso") -or
               ($cmd -match "concurrently") -or
               ($cmd -match "tsx\b.*watch") -or
@@ -90,7 +86,7 @@ if ($killed -eq 0) {
 Start-Sleep -Seconds 2
 
 # Verify ports are free
-$portsInUse = netstat -ano | Select-String "(:$GatewayPort|:$EnsoPort|:$VitePort).*LISTENING"
+$portsInUse = netstat -ano | Select-String "(:$EnsoPort|:$VitePort).*LISTENING"
 if ($portsInUse) {
     Write-Err "Ports still in use after kill:`n$portsInUse"
     Write-Host "   Waiting 3 more seconds..." -ForegroundColor Yellow
@@ -98,132 +94,92 @@ if ($portsInUse) {
 }
 
 # ==========================================================================
-#  STEP 2 -- Pull latest code for Enso and AlphaRank repos
+#  STEP 2 -- Pull latest code
 # ==========================================================================
 Write-Step "Pulling latest code..."
 
-foreach ($repoDir in @($EnsoDir, $AlphaRankDir, $OpenClawDir)) {
-    $repoName = Split-Path $repoDir -Leaf
-    if (Test-Path (Join-Path $repoDir ".git")) {
-        Push-Location $repoDir
-        try {
-            $pullOutput = git pull --ff-only 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Ok "$repoName -- $($pullOutput | Select-Object -Last 1)"
-            } else {
-                Write-Err "$repoName git pull failed: $pullOutput"
-            }
-        } catch {
-            Write-Err "$repoName git pull failed: $_"
-        } finally {
-            Pop-Location
-        }
-    } else {
-        Write-Skip "$repoName -- not a git repo at $repoDir"
-    }
-}
-
-# ==========================================================================
-#  STEP 3 -- Rebuild AlphaRank plugin (if needed)
-# ==========================================================================
-Write-Step "Checking AlphaRank plugin build..."
-
-if ($SkipBuild) {
-    Write-Skip "Build check skipped (-SkipBuild)"
-} else {
-    $srcFile  = Join-Path $AlphaRankDir "src\index.ts"
-    $distFile = Join-Path $AlphaRankDir "dist\index.js"
-
-    if ((Test-Path $srcFile) -and (Test-Path $distFile)) {
-        $srcTime  = (Get-Item $srcFile).LastWriteTime
-        $distTime = (Get-Item $distFile).LastWriteTime
-
-        if ($srcTime -gt $distTime) {
-            Write-Host "   Source newer than dist ($($srcTime.ToString('HH:mm:ss')) > $($distTime.ToString('HH:mm:ss')))" -ForegroundColor Yellow
-            Write-Host "   Building..." -ForegroundColor Yellow
-            Push-Location $AlphaRankDir
-            try {
-                npm run build 2>&1 | Out-Null
-                Write-Ok "AlphaRank plugin rebuilt"
-            } catch {
-                Write-Err "AlphaRank build failed: $_"
-            } finally {
-                Pop-Location
-            }
+if (Test-Path (Join-Path $EnsoDir ".git")) {
+    Push-Location $EnsoDir
+    try {
+        $pullOutput = git pull --ff-only 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "Enso -- $($pullOutput | Select-Object -Last 1)"
         } else {
-            Write-Ok "AlphaRank dist is up-to-date"
+            Write-Err "Enso git pull failed: $pullOutput"
         }
-    } elseif (Test-Path $srcFile) {
-        Write-Host "   No dist found, building..." -ForegroundColor Yellow
-        Push-Location $AlphaRankDir
-        try {
-            npm run build 2>&1 | Out-Null
-            Write-Ok "AlphaRank plugin built"
-        } catch {
-            Write-Err "AlphaRank build failed: $_"
-        } finally {
-            Pop-Location
-        }
-    } else {
-        Write-Skip "AlphaRank source not found at $srcFile"
+    } catch {
+        Write-Err "Enso git pull failed: $_"
+    } finally {
+        Pop-Location
     }
+} else {
+    Write-Skip "Not a git repo at $EnsoDir"
 }
 
 # ==========================================================================
-#  STEP 4 -- Start OpenClaw gateway (spawns Enso WS server on :3001)
+#  STEP 3 -- Start Enso standalone server on :3001
 # ==========================================================================
-Write-Step "Starting OpenClaw gateway on :$GatewayPort ..."
+Write-Step "Starting Enso server on :$EnsoPort ..."
 
 # Redirect stdin to an empty file so child node.exe processes don't inherit
 # the console's stdin handle (which would consume keystrokes from this terminal).
-$nullInput = Join-Path $env:TEMP "openclaw-null-input.txt"
+$nullInput = Join-Path $env:TEMP "enso-null-input.txt"
 if (-not (Test-Path $nullInput)) { [System.IO.File]::WriteAllText($nullInput, "") }
 
-$gatewayLog    = Join-Path $env:TEMP "openclaw-gateway.log"
-$gatewayErrLog = Join-Path $env:TEMP "openclaw-gateway-err.log"
+$serverLog    = Join-Path $env:TEMP "enso-server.log"
+$serverErrLog = Join-Path $env:TEMP "enso-server-err.log"
 
-# openclaw is an npm global script (.ps1 / .cmd wrapper) -- Start-Process
-# with -RedirectStandardOutput requires a real .exe, so we resolve the
-# underlying node entry point and launch via node.exe directly.
-$openclawMjs = "C:\Users\Administrator\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs"
-$nodeExe     = "C:\Program Files\nodejs\node.exe"
+# Find npx to launch tsx
+$npxCmd = Get-Command npx -ErrorAction SilentlyContinue
+$tsxArgs = if ($npxCmd) {
+    # Use npx tsx
+    $npxPath = $npxCmd.Source
+    @($npxPath, "tsx", "server/standalone.ts")
+} else {
+    # Fallback: direct tsx
+    $tsxCmd = Get-Command tsx -ErrorAction SilentlyContinue
+    if ($tsxCmd) {
+        @($tsxCmd.Source, "server/standalone.ts")
+    } else {
+        @("C:\Program Files\nodejs\node_modules\npm\bin\npx-cli.js", "tsx", "server/standalone.ts")
+    }
+}
 
-$gatewayProc = Start-Process -FilePath $nodeExe `
-    -ArgumentList "--disable-warning=ExperimentalWarning", $openclawMjs, "gateway", "--port", $GatewayPort `
-    -WorkingDirectory $OpenClawDir `
+$serverProc = Start-Process -FilePath $nodeExe `
+    -ArgumentList $tsxArgs `
+    -WorkingDirectory $EnsoDir `
     -WindowStyle Hidden `
     -RedirectStandardInput $nullInput `
-    -RedirectStandardOutput $gatewayLog `
-    -RedirectStandardError $gatewayErrLog `
+    -RedirectStandardOutput $serverLog `
+    -RedirectStandardError $serverErrLog `
     -PassThru
 
-# Wait for gateway + Enso server to be ready
+# Wait for server to be ready
 $ready = $false
-for ($i = 0; $i -lt 30; $i++) {
+for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Seconds 1
-    $gwUp   = netstat -ano | Select-String ":$GatewayPort.*LISTENING"
     $ensoUp = netstat -ano | Select-String ":$EnsoPort.*LISTENING"
-    if ($gwUp -and $ensoUp) {
+    if ($ensoUp) {
         $ready = $true
         break
-    }
-    if ($gwUp -and -not $ensoUp) {
-        Write-Host "   Gateway up, waiting for Enso server..." -ForegroundColor Yellow
     }
 }
 
 if ($ready) {
-    Write-Ok "OpenClaw gateway running (PID $($gatewayProc.Id)) -- :$GatewayPort (gateway) + :$EnsoPort (Enso)"
+    Write-Ok "Enso server running (PID $($serverProc.Id)) -- :$EnsoPort"
 } else {
-    Write-Err "Gateway did not start within 30s. Check $gatewayLog"
+    Write-Err "Server did not start within 20s. Check $serverLog"
     Write-Host "   Last 5 lines of log:" -ForegroundColor Yellow
-    if (Test-Path $gatewayLog) {
-        Get-Content $gatewayLog -Tail 5 | ForEach-Object { Write-Host "   $_" }
+    if (Test-Path $serverLog) {
+        Get-Content $serverLog -Tail 5 | ForEach-Object { Write-Host "   $_" }
+    }
+    if (Test-Path $serverErrLog) {
+        Get-Content $serverErrLog -Tail 5 | ForEach-Object { Write-Host "   $_" -ForegroundColor Red }
     }
 }
 
 # ==========================================================================
-#  STEP 5 -- Start Vite dev server
+#  STEP 4 -- Start Vite dev server
 # ==========================================================================
 if ($NoDev) {
     Write-Skip "Vite dev server skipped (-NoDev)"
@@ -262,7 +218,7 @@ if ($NoDev) {
 }
 
 # ==========================================================================
-#  STEP 6 -- Restart Cloudflare tunnel
+#  STEP 5 -- Restart Cloudflare tunnel
 # ==========================================================================
 Write-Step "Restarting Cloudflare tunnel..."
 
@@ -294,7 +250,7 @@ if (Test-Path $cloudflaredExe) {
 }
 
 # ==========================================================================
-#  STEP 7 -- Restart watchdog
+#  STEP 6 -- Restart watchdog
 # ==========================================================================
 Write-Step "Restarting watchdog..."
 $wdTask = Get-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
@@ -302,7 +258,7 @@ if ($wdTask) {
     Start-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
     Write-Ok "Watchdog restarted"
 } else {
-    Write-Skip "Watchdog not installed (run install-watchdog.ps1 to enable)"
+    Write-Skip "Watchdog not installed"
 }
 
 # ==========================================================================
@@ -311,14 +267,22 @@ if ($wdTask) {
 Write-Host "`n" -NoNewline
 Write-Host "===========================================" -ForegroundColor DarkGray
 Write-Host "  Services:" -ForegroundColor White
-Write-Host "    Gateway   -> http://localhost:$GatewayPort" -ForegroundColor Gray
-Write-Host "    Enso WS   -> http://localhost:$EnsoPort" -ForegroundColor Gray
+Write-Host "    Server    -> http://localhost:$EnsoPort" -ForegroundColor Gray
 if (-not $NoDev) {
     Write-Host "    Vite      -> http://localhost:$VitePort" -ForegroundColor Gray
 }
-Write-Host "    Tunnel    -> https://pc1.enso.net" -ForegroundColor Gray
+
+# Show tunnel URL from cloudflared config
+$cfConfig = Join-Path $env:USERPROFILE ".cloudflared\config.yml"
+if (Test-Path $cfConfig) {
+    $tunnelHost = Select-String -Path $cfConfig -Pattern "hostname:\s*(.+)" | ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() } | Select-Object -First 1
+    if ($tunnelHost) {
+        Write-Host "    Tunnel    -> https://$tunnelHost" -ForegroundColor Gray
+    }
+}
+
 Write-Host "  Logs:" -ForegroundColor White
-Write-Host "    Gateway   -> $gatewayLog" -ForegroundColor Gray
+Write-Host "    Server    -> $serverLog" -ForegroundColor Gray
 if (-not $NoDev) {
     Write-Host "    Vite      -> $viteLog" -ForegroundColor Gray
 }

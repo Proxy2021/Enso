@@ -8,7 +8,7 @@ const path = require("path");
 const os = require("os");
 const { execFileSync } = require("child_process");
 
-const setupPath = path.join(os.homedir(), ".openclaw", "enso-setup.json");
+const setupPath = path.join(os.homedir(), ".enso", "enso-setup.json");
 
 if (!fs.existsSync(setupPath)) {
   console.error("No setup info found at", setupPath);
@@ -32,15 +32,21 @@ function getLanIps() {
   return ips;
 }
 
-// Try to read access token from openclaw config
+// Try to read access token from server/.env
 function getAccessToken() {
   try {
-    const cfgPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
-    return cfg.channels?.enso?.accessToken || setup.accessToken || "";
+    // Look for server/.env relative to this script
+    const scriptDir = __dirname;
+    const repoDir = path.dirname(scriptDir);
+    const envPath = path.join(repoDir, "server", ".env");
+    const envContent = fs.readFileSync(envPath, "utf-8");
+    const match = envContent.match(/^ENSO_ACCESS_TOKEN=(.+)$/m);
+    if (match) return match[1].trim();
   } catch {
-    return setup.accessToken || "";
+    // Fall through
   }
+  // Fallback to setup.json token
+  return setup.accessToken || "";
 }
 
 const token = getAccessToken();
@@ -49,7 +55,7 @@ const port = setup.port || 3001;
 const name = setup.machineName || os.hostname();
 
 if (!token) {
-  console.error("Could not determine access token. Check ~/.openclaw/openclaw.json");
+  console.error("Could not determine access token. Check server/.env or re-run the install script.");
   process.exit(1);
 }
 

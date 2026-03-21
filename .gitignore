@@ -5,9 +5,9 @@ dist
 .claude
 tsconfig.tsbuildinfo
 .DS_Store
-openclaw-plugin/ui-cache/
-openclaw-plugin/.orchestration-*.json
-openclaw-plugin/.orchestration-*.md
+server/ui-cache/
+server/.orchestration-*.json
+server/.orchestration-*.md
 # Track install scripts but ignore any generated files in scripts/
 scripts/*.log
 

@@ -47,8 +47,8 @@
 ## Testing Expectations
 
 - Changes to tool routing/template detection require unit tests in:
-  - `openclaw-plugin/src/signature-path.test.ts`
-  - `openclaw-plugin/src/outbound.test.ts`
+  - `server/src/signature-path.test.ts`
+  - `server/src/outbound.test.ts`
 - New tool families require:
   - backend tool tests
   - template detection/normalization tests
@@ -56,5 +56,5 @@
 
 ## Cleanup and Hygiene
 
-- Do not reintroduce disk-based UI cache artifacts under `openclaw-plugin/ui-cache/`.
-- Keep docs in sync (`CLAUDE.md`, `openclaw-plugin/SETUP.md`) whenever tool families or runtime flows change.
+- Do not reintroduce disk-based UI cache artifacts under `server/ui-cache/`.
+- Keep docs in sync (`CLAUDE.md`, `server/SETUP.md`) whenever tool families or runtime flows change.

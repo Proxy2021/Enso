@@ -157,7 +157,7 @@ src/                          React frontend
 ├── store/chat.ts             Zustand state (cards, streaming, connections)
 └── lib/                      WS client, JSX sandbox (Sucrase), EnsoUI (17 components), connections
 
-openclaw-plugin/              OpenClaw channel plugin (backend)
+server/              OpenClaw channel plugin (backend)
 ├── apps/                     Shipped app packages (app.json + template.jsx + executors/)
 └── src/
     ├── server.ts             Express + WS server with auth
@@ -186,7 +186,7 @@ scripts/                      Install scripts, QR code tools
 
 Enso supports remote access across multiple machines. Each machine can be exposed via Cloudflare Tunnel with a fixed subdomain. The frontend includes a Connection Picker for switching between backends with token authentication.
 
-See **[openclaw-plugin/SETUP.md](openclaw-plugin/SETUP.md)** for Cloudflare Tunnel setup and multi-machine configuration.
+See **[server/SETUP.md](server/SETUP.md)** for Cloudflare Tunnel setup and multi-machine configuration.
 
 ---
 
@@ -206,7 +206,7 @@ Requires a running OpenClaw gateway with the Enso plugin enabled. Vite proxies `
 | Document | Contents |
 |----------|----------|
 | **[SETUP.md](SETUP.md)** | Installation, prerequisites, phone setup, troubleshooting |
-| **[openclaw-plugin/SETUP.md](openclaw-plugin/SETUP.md)** | Plugin configuration, remote access, Cloudflare Tunnel, multi-machine |
+| **[server/SETUP.md](server/SETUP.md)** | Plugin configuration, remote access, Cloudflare Tunnel, multi-machine |
 | **[CLAUDE-REFERENCE.md](CLAUDE-REFERENCE.md)** | App building API, ExecutorContext, template rules, EnsoUI components |
 | **[CLAUDE.md](CLAUDE.md)** | Full architecture reference for AI-assisted development |
 

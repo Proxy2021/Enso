@@ -1082,7 +1082,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       "     c. Commit version bump and push",
       "     d. Run `npm run android:build-apk` (use a 5 minute timeout)",
       "     e. Run `powershell -ExecutionPolicy Bypass -File D:\\Github\\Enso\\restart.ps1`",
-      "   - If ONLY backend files changed (`openclaw-plugin/`):",
+      "   - If ONLY backend files changed (`server/`):",
       "     a. Commit the fix and push",
       "     b. Run `powershell -ExecutionPolicy Bypass -File D:\\Github\\Enso\\restart.ps1`",
       "",
@@ -1152,7 +1152,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     if (activeAppId) {
       promptParts.push(
         `## App: ${activeAppId}`,
-        `Location: Look in ~/.openclaw/enso-apps/${activeAppId}/ or openclaw-plugin/apps/${activeAppId}/`,
+        `Location: Look in ~/.enso/apps/${activeAppId}/ or server/apps/${activeAppId}/`,
         `Read CLAUDE-REFERENCE.md for the app structure reference.`,
         "",
       );
@@ -1218,7 +1218,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       instruction,
       "",
       "## Instructions",
-      "Analyze the codebase deeply across both the frontend (src/) and backend (openclaw-plugin/src/).",
+      "Analyze the codebase deeply across both the frontend (src/) and backend (server/src/).",
       "Read CLAUDE.md and CLAUDE-REFERENCE.md for architecture context.",
       "Suggest the most impactful improvements for this area, then ask which ones to implement.",
     ].join("\n");
@@ -2516,6 +2516,19 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
 
         if (existing && existingId) {
+          // Dismiss processing indicator cards — remove cards that finalize with no content
+          const finalText = msg.text ?? existing.text ?? "";
+          const finalData = msg.data ?? existing.data;
+          const finalUI = msg.generatedUI ?? existing.generatedUI;
+          if (!finalText && !finalData && !finalUI && existing.type === "chat") {
+            const { [existingId]: _, ...remainingCards } = state.cards;
+            return {
+              ...storeUpdates,
+              cardOrder: state.cardOrder.filter(id => id !== existingId),
+              cards: remainingCards,
+            };
+          }
+
           return {
             ...storeUpdates,
             cards: {
