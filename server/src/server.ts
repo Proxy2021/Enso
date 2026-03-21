@@ -924,8 +924,10 @@ export async function startEnsoServer(opts: {
 
   // ── Growth Marketing & Sales API ──
 
-  const growthRouter = (await import("./growth-api.js")).default;
-  app.use("/api/growth", growthRouter);
+  try {
+    const growthRouter = (await import("./growth-api.js")).default;
+    app.use("/api/growth", growthRouter);
+  } catch { /* growth-api not yet implemented */ }
 
   // ── Discovery History API ──
 
