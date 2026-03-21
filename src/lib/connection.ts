@@ -98,8 +98,10 @@ export function buildWsUrl(config: BackendConfig | null): string {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${location.host}/ws`;
   }
-  // Remote mode: convert http(s) to ws(s)
-  const wsBase = config.url.replace(/^http/, "ws");
+  // Remote mode: ensure protocol, then convert http(s) to ws(s)
+  let normalized = config.url;
+  if (!/^https?:\/\//.test(normalized)) normalized = `https://${normalized}`;
+  const wsBase = normalized.replace(/^http/, "ws");
   const url = new URL("/ws", wsBase);
   if (config.token) url.searchParams.set("token", config.token);
   return url.toString();
@@ -108,7 +110,9 @@ export function buildWsUrl(config: BackendConfig | null): string {
 /** Get the base URL for HTTP API calls. Empty string = same-origin. */
 export function getBackendBaseUrl(): string {
   const config = getActiveBackend();
-  return config?.url || "";
+  if (!config?.url) return "";
+  // Ensure protocol prefix
+  return /^https?:\/\//.test(config.url) ? config.url : `https://${config.url}`;
 }
 
 /** Build auth headers for fetch calls. */
