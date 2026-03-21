@@ -894,11 +894,12 @@ export async function startEnsoServer(opts: {
     res.json(sprint);
   });
 
-  app.get("/api/evolution-sprints/:id/file/*", async (req, res) => {
+  app.get(/^\/api\/evolution-sprints\/([^/]+)\/file\/(.+)$/, async (req, res) => {
     const { getEvolutionFile } = await import("./evolution-archive.js");
     const projectId = (req.query.projectId as string) || "enso";
-    const filename = req.params[0] || "";
-    const content = getEvolutionFile(req.params.id, filename, projectId);
+    const sprintId = req.params[0] || "";
+    const filename = req.params[1] || "";
+    const content = getEvolutionFile(sprintId, filename, projectId);
     if (content === null) { res.status(404).json({ error: "File not found" }); return; }
     if (filename.endsWith(".jsx")) {
       res.setHeader("Content-Type", "application/javascript; charset=utf-8");
@@ -935,10 +936,11 @@ export async function startEnsoServer(opts: {
     }
   });
 
-  app.get("/api/discovery-results/:id/file/*", async (req, res) => {
+  app.get(/^\/api\/discovery-results\/([^/]+)\/file\/(.+)$/, async (req, res) => {
     const { getDiscoveryFile } = await import("./discovery-archive.js");
-    const filename = req.params[0] || "";
-    const content = getDiscoveryFile(req.params.id, filename);
+    const discoveryId = req.params[0] || "";
+    const filename = req.params[1] || "";
+    const content = getDiscoveryFile(discoveryId, filename);
     if (content === null) { res.status(404).json({ error: "File not found" }); return; }
     if (filename.endsWith(".jsx")) {
       res.setHeader("Content-Type", "application/javascript; charset=utf-8");
