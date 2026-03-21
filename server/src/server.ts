@@ -1173,25 +1173,29 @@ export async function startEnsoServer(opts: {
   // connection is never considered idle.  Browsers respond with pong
   // automatically at the protocol level.
   const WS_PING_INTERVAL_MS = 30_000;
-  const WS_PONG_TIMEOUT_MS = 10_000;
+  // Allow up to 2 missed pong responses (~60s) before terminating.
+  // Mobile networks (cellular, tunnels, network switches) can cause transient
+  // delays that exceed a single 30s cycle but recover within 60s.
+  const WS_MAX_MISSED_PONGS = 2;
   const pingInterval = setInterval(() => {
     for (const client of clients.values()) {
       const { ws: clientWs } = client;
       if (clientWs.readyState !== WebSocket.OPEN) continue;
-      // Mark as awaiting pong — if no pong arrives before next cycle, terminate.
-      if ((clientWs as any)._ensoAwaitingPong) {
-        runtime.log?.(`[enso] ping timeout for ${client.id}, terminating`);
+      const missed = ((clientWs as any)._ensoMissedPongs as number) ?? 0;
+      if (missed >= WS_MAX_MISSED_PONGS) {
+        runtime.log?.(`[enso] ping timeout for ${client.id} (${missed} missed pongs), terminating`);
+        (clientWs as any)._ensoMissedPongs = 0;
         clientWs.terminate();
         continue;
       }
-      (clientWs as any)._ensoAwaitingPong = true;
+      (clientWs as any)._ensoMissedPongs = missed + 1;
       clientWs.ping();
     }
   }, WS_PING_INTERVAL_MS);
 
   wss.on("connection", (ws, req) => {
     // Reset pong flag on each pong received
-    ws.on("pong", () => { (ws as any)._ensoAwaitingPong = false; });
+    ws.on("pong", () => { (ws as any)._ensoMissedPongs = 0; });
     // ── WebSocket token auth ──
     const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
     if (accessToken) {

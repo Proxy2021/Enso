@@ -1426,20 +1426,20 @@ export const useChatStore = create<CardStore>((set, get) => ({
     client.connect();
 
     // On mobile (Capacitor), manage WS lifecycle around app background/foreground.
-    // When the app backgrounds, the OS will kill the TCP socket after ~2 min anyway.
-    // By handling it proactively we ensure the backend starts buffering immediately.
+    // Don't disconnect immediately on background — let the OS/server ping timeout
+    // handle it naturally. This avoids unnecessary disconnect/reconnect churn for
+    // quick app switches (checking notifications, replying to a text, etc.).
+    // Only reconnect proactively when returning to foreground.
     if ((window as any).Capacitor?.isNativePlatform?.()) {
       import("@capacitor/app").then(({ App }) => {
         App.addListener("appStateChange", ({ isActive }) => {
-          if (!isActive) {
-            // App going to background — disconnect cleanly so the backend
-            // knows immediately and starts buffering Claude Code output.
-            client.disconnect();
-          } else {
-            // App returning to foreground — reconnect immediately.
+          if (isActive) {
+            // App returning to foreground — reconnect if needed.
             // The backend will replay any buffered messages.
             client.connect();
           }
+          // Background: do nothing — let OS/server timeout handle disconnect.
+          // Server buffers messages once the socket dies, so no output is lost.
         });
       }).catch(() => { /* not native — no-op */ });
     }

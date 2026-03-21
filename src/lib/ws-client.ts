@@ -75,7 +75,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
       options.onStateChange("disconnected", false);
       if (!intentionalClose) {
         reconnectTimer = setTimeout(() => {
-          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+          reconnectDelay = Math.min(reconnectDelay * 2, 10_000);
           connect();
         }, reconnectDelay);
       }
@@ -100,6 +100,23 @@ export function createWSClient(options: WSClientOptions): WSClient {
       console.warn("[WS] Message dropped — not connected. readyState:", ws?.readyState, "msg:", msg.type);
     }
   }
+
+  // ── Network & visibility recovery ──
+  // When the browser comes back online or the tab becomes visible again,
+  // attempt an immediate reconnect instead of waiting for the backoff timer.
+  function onNetworkRecovery() {
+    if (intentionalClose) return;
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+    // Clear any pending backoff timer — reconnect now
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    reconnectDelay = 1000;
+    connect();
+  }
+
+  window.addEventListener("online", onNetworkRecovery);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") onNetworkRecovery();
+  });
 
   return { connect, disconnect, send };
 }
