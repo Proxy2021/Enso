@@ -395,6 +395,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
         return;
       }
 
+      // "/discover" command — launch AI VC discovery sprint
+      if (text.trim().startsWith("/discover")) {
+        const focus = text.trim().slice(9).trim();
+        get()._wsClient?.send({
+          type: "discovery.start",
+          text: focus || undefined,
+        } as any);
+        return;
+      }
+
       // "/shell" command — launch remote terminal
       // "/shell <command>" — launch terminal and auto-execute command
       if (text.trim() === "/shell" || text.trim().startsWith("/shell ")) {

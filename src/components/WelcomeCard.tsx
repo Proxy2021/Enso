@@ -47,9 +47,15 @@ const TEMPLATES: Template[] = [
     toolFamily: "remote_desktop",
   },
   {
+    icon: "\uD83D\uDCA1",
+    title: "Discover",
+    description: "AI VC discovers high-potential project opportunities",
+    prompt: "/discover",
+  },
+  {
     icon: "\uD83D\uDCC1",
     title: "Projects",
-    description: "Launch AI teams on projects and evolve the platform",
+    description: "Import projects, manage AI teams, evolve the platform",
     prompt: "/projects",
   },
   {

@@ -127,9 +127,25 @@ Available methods in executor function bodies: `ctx.callTool(name, params)`, `ct
 - Progress tracked via `missionProgress` messages (analyzing → proposing → building → complete)
 - Key files: `mission-planner.ts` (backend), `MissionCard.tsx` (frontend), card type `"mission"`
 
+### AI VC Discovery (`/discover`)
+
+Enso includes an AI venture capital team that discovers high-potential project opportunities. The `/discover [focus]` command launches a 5-phase investment process: independent deal sourcing (3 partners with different lenses — demand signals, technology timing, competitive gaps) → pitch session → investment committee challenge (market timing, Enso advantage, feasibility, cost of entry) → deliverables (interactive dashboard + investment memo). Each recommendation receives a verdict: STRONG BUY / BUY / HOLD / PASS. Approved projects → import via Projects card → auto-generated AI team → evolution sprints. See [PROJECTS.md](PROJECTS.md) for full process.
+
+- Key files: `discovery.ts` (VC team + planning prompt), `orchestrator.ts` + `orchestrator-engine.ts` (execution)
+- Trigger: `/discover` command or "Discover" tile on WelcomeCard
+- Protocol: `discovery.start` client message type
+- Cost: ~$8-12 per discovery sprint, ~30 min runtime
+- Output: Interactive `.orchestration-ui.jsx` dashboard + `investment-memo.md`
+
 ### Projects & Self-Evolution System
 
-Enso supports a **Projects abstraction** where each project has its own team of AI agents and customer personas. Projects can be any software product — Enso itself is just one project that Enso helps build and evolve.
+Enso can **import and manage any existing software project** — not just projects it created. Point Enso at a codebase, it scans the project, auto-generates a domain-specific AI team and customer personas, then evolves the project through autonomous sprints. See [PROJECTS.md](PROJECTS.md) for full guide.
+
+#### Project Import & Team Generation
+
+- **UI**: Projects tile → "Import Project" → enter name + codebase path → auto-generates team
+- **API**: `POST /api/projects/create-with-team` with `projectId`, `projectName`, `codebasePath`
+- **Team generator** (`team-generator.ts`): scans codebase (README, deps, structure), detects domain, generates 4 core agents + 1-3 domain specialists + 3-5 user personas via Gemini
 
 #### Project Structure
 
@@ -142,14 +158,14 @@ Each project is stored at `~/.enso/projects/<projectId>/`:
 
 ```json
 {
-  "id": "enso",
-  "name": "Enso",
-  "vision": "An AI sandbox that generates complete solutions...",
-  "codebasePath": "D:/Github/Enso",
-  "testUrl": "http://localhost:5173",
-  "teamAgents": [...],     // Internal team (Project Leader, Architect, etc.)
-  "personas": [...],       // Customer personas for testing
-  "validationPersonaIds": ["startup-founder", "student-researcher"]
+  "id": "alpharank",
+  "name": "AlphaRank",
+  "vision": "AI-powered stock ranking system...",
+  "codebasePath": "D:/Github/AlphaRank",
+  "testCommand": "python -m pytest test/",
+  "teamAgents": [...],     // Auto-generated domain-specific team
+  "personas": [...],       // Auto-generated target user personas
+  "validationPersonaIds": ["quant-investor", "passive-investor"]
 }
 ```
 

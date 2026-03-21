@@ -1,234 +1,264 @@
-# Enso Projects — AI-Native Project Incubator & Evolution System
+# Enso Projects — AI Team Management & Autonomous Evolution
 
 ## Vision
 
-Enso is a **universal AI project incubator** — it can build, manage, and continuously evolve any software project through autonomous AI teams. Each project has its own git repository, technology stack, AI team, customer personas, and evolution loop. Enso itself is just one project that uses this same system for self-evolution.
+Enso is an **AI sandbox that generates complete solutions** — it can import, manage, and continuously evolve any software project through autonomous AI teams. Each project gets its own tailored team, customer personas, and evolution loop. Enso itself is just one project managed by this same system.
+
+The key insight: **Enso doesn't just manage projects it creates — it manages any existing project you point it at.** A Python ML system, a React SaaS app, a Rust library, a mobile game — Enso scans the codebase, understands the domain, assembles the right team, and starts evolving.
+
+## How It Works
+
+### 0. Discover Opportunities (`/discover`)
+
+Before importing or creating a project, Enso can help you **find what's worth building**. The `/discover` command launches an AI VC investment process:
+
+**The VC Team:**
+
+| Member | Role | Sourcing Lens |
+|--------|------|--------------|
+| Catherine Zhou | Managing Partner & IC Chair | Chairs the challenge session, final go/no-go |
+| Daniel Okafor | Investment Partner | **Demand signals** — user pain, complaints, "I wish X existed" |
+| Dr. Priya Sharma | Investment Partner | **Technology timing** — what's newly feasible with 2025-2026 AI |
+| Marcus Webb | Investment Partner | **Competitive gaps** — where incumbents are vulnerable |
+| Elena Vasquez | Head of Investment Intelligence | Produces final deliverables |
+
+**The Process (5 phases, ~30 min, ~$8-12 in tokens):**
+
+| Phase | Tasks | What Happens |
+|-------|:-----:|-------------|
+| **1. Deal Sourcing** | 3 parallel | Each partner explores the focus area through their unique lens. Same ocean, different nets — ensures diverse discovery. Each sources 2-3 candidates with real market data. |
+| **2. Pitch Session** | 3 parallel | Each partner reads ALL sourcing reports (not just their own), selects their single best opportunity, and writes a formal investment pitch with competitive analysis, revenue model, and build estimate. |
+| **3. Investment Committee** | 1 | Managing Partner chairs rigorous challenge debate on all 3 pitches. Every recommendation is challenged on 4 dimensions: |
+| | | **Market timing** — Is the market growing? Tailwind or headwind? First 100 users? |
+| | | **Enso competitive advantage** — Named competitors have funding and teams. Why would Enso win? Where does Enso's approach FAIL? |
+| | | **Realistic feasibility** — Can Claude Code agents build this? Hard MVP scope? Integration dependencies? |
+| | | **Cost of going in** — Token cost for MVP, monthly evolution cost, infrastructure, third-party APIs, break-even analysis |
+| **4. Deliverables** | 1 | Interactive dashboard (`.orchestration-ui.jsx`) with per-recommendation deep dives, radar charts, comparison matrix. Plus investment memo (`investment-memo.md`) structured as a Goldman Sachs-style presentation deck. |
+
+**Verdict per project: STRONG BUY / BUY / HOLD / PASS**
+
+**Usage:**
+- `/discover` — general discovery across all domains
+- `/discover AI-powered developer tools` — focused on a specific area
+- `/discover healthcare automation` — any focus area works
+
+**After discovery:** Review the recommendations in the interactive dashboard. For approved projects, import them via the Projects card — Enso creates the project, generates a domain-specific AI team, and starts the first evolution sprint.
+
+### 1. Import a Project
+
+Point Enso at any existing codebase. It scans the project structure, detects languages, frameworks, and domain, then auto-generates a tailored AI team and customer personas.
+
+**From the UI:**
+1. Open Enso → click **Projects** tile
+2. Click **"+ Import Project"**
+3. Enter project name and codebase path (required)
+4. Optionally add: description, vision, test URL (web apps), test command (CLI apps)
+5. Click **"Import & Generate AI Team"**
+
+**What happens behind the scenes:**
+1. **Codebase scan** — reads README, package.json/requirements.txt, project structure, detects languages and frameworks
+2. **Team generation** — Gemini analyzes the project and generates domain-specific team agents and personas
+3. **Project creation** — saves to `~/.enso/projects/<projectId>/` with full team definition
+
+**From the API:**
+```
+POST /api/projects/create-with-team
+{
+  "projectId": "alpharank",
+  "projectName": "AlphaRank",
+  "description": "Quantitative stock prediction system...",
+  "codebasePath": "D:/Github/AlphaRank",
+  "testCommand": "python -m pytest test/"
+}
+```
+
+**Preview without saving:**
+```
+POST /api/projects/generate-team
+{ same fields → returns teamAgents + personas without creating project }
+```
+
+### 2. Review the Generated Team
+
+Each imported project gets a team tailored to its domain:
+
+**Example: AlphaRank (Python ML trading system)**
+
+| Agent | Role | Why |
+|-------|------|-----|
+| Dr. Evelyn Reed | Head of Quant Research (Project Leader) | Domain-specific PL title |
+| Alex Chen | Lead Software Architect | Data pipelines + trading architecture |
+| Marcus Bell | Lead Software Engineer (Eng Manager) | Code quality across Python + TypeScript |
+| Sarah Davies | Senior QA Engineer | Testing trading strategies + Electron app |
+| **Dr. Kenji Tanaka** | **ML Scientist** | Ensemble model research — domain specialist |
+| **Isabella Rossi** | **Quant Trading Strategist** | Trading strategy design — domain specialist |
+| **David Lee** | **DevOps & Data Engineer** | Data pipelines + ML ops — domain specialist |
+
+Personas: Independent Quant Investor, Passive Portfolio Manager, Quant Analyst at a Hedge Fund — each with concrete test scenarios specific to a trading platform.
+
+Compare this to the generic Enso team (Project Leader, Marketing Director, Sales Director, Architect, Eng Manager, QA, AI Strategist). **The team composition adapts to the project.**
+
+### 3. Evolve the Project
+
+Once a project is imported with its team, run an evolution sprint:
+
+1. Open **Projects** → select the project → click **"Evolve [ProjectName]"**
+2. Or type `/evolve` in chat (uses the active project)
+
+The evolution sprint runs the full 7-phase cycle with the project's own team and personas:
+
+| Phase | What Happens |
+|-------|-------------|
+| **0. PL Meta-Evaluation** | Project Leader reviews prior sprints, sets priorities, selects personas |
+| **1. Persona Testing** | Customer personas test the product (Puppeteer for web, CLI for non-web) |
+| **2. PL Triage** | PL reviews persona findings, selects which team agents to involve |
+| **3. Team Evaluation** | Core agents always run; domain specialists by PL's choice |
+| **4. Synthesis + Design** | Cross-report analysis → prioritized backlog → technical specs |
+| **5. Implementation** | Parallel code changes in the project's OWN codebase + review |
+| **6. Validation** | Re-testing + interactive dashboard + PL meta-review |
+
+**The sprint operates on the project's codebase** — not Enso's. Claude Code sessions receive the project's `codebasePath`, so all code changes happen in the right repository.
+
+### 4. Iterate
+
+Each sprint:
+- Accumulates team knowledge via `painPoints` on each agent
+- Produces before/after metrics from persona retesting
+- Archives full reports to `~/.enso/projects/<projectId>/sprints/`
+- PL can adjust team composition, add/remove personas, shift priorities
+
+Over time, the AI team becomes increasingly effective at evolving that specific project.
 
 ## Core Concepts
 
 ### Project
 
-A project is any independent software product with its own codebase and identity:
+A project is any independent software product with its own codebase:
 
 ```
 Project = {
-  id: "enso" | "acme-saas" | "mobile-game" | ...
-  name: "Enso"
-  description: "An AI sandbox that generates complete solutions"
-  vision: "Discovers opportunities, assembles AI teams to build, self-evolves, and ships products."
-  codebasePath: "D:/Github/Enso"          # Independent git repo
-  techStack: "TypeScript/React/Node.js"    # Any stack
-  testUrl: "http://localhost:5173"          # For Puppeteer testing (web apps)
-  testCommand: "npm test"                  # For CLI/API testing
+  id: "alpharank"
+  name: "AlphaRank"
+  description: "Quantitative stock prediction system..."
+  vision: "AI-powered stock ranking..."
+  codebasePath: "D:/Github/AlphaRank"     # Any local git repo
+  techStack: "Python/scikit-learn/LightGBM/Electron/React"
+  testUrl: "http://localhost:3000"          # For web apps (Puppeteer testing)
+  testCommand: "python -m pytest test/"    # For CLI/API testing
+  teamAgents: [...]                        # Auto-generated or manual
+  personas: [...]                          # Auto-generated or manual
+  validationPersonaIds: [...]              # Subset of personas for retesting
 }
 ```
 
-Projects can be anything — a React SaaS app, a Python CLI tool, a Rust library, a mobile game, a data pipeline. The technology stack is defined by the project, not by Enso.
+Projects can be anything — the technology stack is defined by the project, not by Enso.
 
-### AI Team
+### AI Team Generation
 
-Each project has a team of AI agents with distinct roles. The team composition is **customizable per project** — different projects need different expertise.
+When you import a project, Enso's team generator:
 
-#### Team Agents (Leadership & Strategy)
+1. **Scans the codebase** — top-level structure, README, package.json, requirements.txt, entry points
+2. **Detects domain signals** — ML frameworks → quant specialist, React + API → UX designer, Docker + CI → DevOps
+3. **Composes a team** — 4 core roles (PL, Architect, Eng Manager, QA) + 1-3 domain specialists
+4. **Generates personas** — 3-5 user archetypes specific to the product's audience
 
-These agents provide strategic direction and evaluation:
+The team generator uses Gemini Flash for fast structured output (~10-15 seconds).
 
-| Role | Responsibility | Authority |
-|------|---------------|-----------|
-| **Project Leader** | Meta-controller of the entire evolution system. Defines vision, sets goals for all agents, monitors evolution effectiveness, adjusts team composition and sprint structure as needed. | Can modify ALL aspects: team agents, personas, goals, evolution mechanism |
-| **Marketing Director** | Evaluates positioning, messaging, competitive landscape. Proposes go-to-market improvements. | Advises on public-facing decisions |
-| **Sales Director** | Evaluates commercialization, pricing, customer acquisition strategy. | Advises on revenue/growth decisions |
+**Core roles** (always present):
 
-#### Customer Personas (User Testing)
+| Role | agentRole | Purpose |
+|------|-----------|---------|
+| Project Leader | architect | Meta-controller, sets vision, reviews all outputs |
+| Software Architect | architect | Technical design, architecture reviews, tech debt |
+| Engineering Manager | reviewer | Code quality, conventions, build validation |
+| QA & Test Manager | reviewer | Test scenarios, edge cases, quality metrics |
 
-These agents simulate real users testing the product:
+**Domain specialists** (auto-selected based on project):
 
-| Persona | Perspective |
-|---------|-------------|
-| Startup Founder | Time-starved decision-maker needing fast, actionable insights |
-| Student Researcher | Depth-focused academic needing comprehensive sourcing |
-| Developer | Precision-focused engineer needing working code |
-| Business Analyst | Data-focused professional needing visualizations |
-| Creative Professional | Inspiration-focused creator needing campaign tools |
-| AI Technology Strategist | Frontier-focused advisor evaluating against state-of-art |
+| Project Type | Specialist Examples |
+|-------------|-------------------|
+| ML/Data Science | ML Scientist, Data Engineer, ML Ops |
+| Trading/Finance | Quant Strategist, Risk Officer |
+| SaaS/Web App | UX/Product Designer, DevOps |
+| Mobile App | Mobile UX Designer, Performance Engineer |
+| Data Pipeline | Data Engineer, Reliability Engineer |
 
-Each project defines its own personas appropriate to its target users. A B2B SaaS project might have "Enterprise Admin", "End User", "IT Security Officer". A consumer app might have "Power User", "First-Time User", "Casual Browser".
+### Customer Personas
 
-### Collaborative Team Dynamics
+Personas represent real user archetypes who test the product during evolution sprints. Each persona has:
+- **Background** — who they are, what they know
+- **Goals** — what they want to accomplish with the product
+- **Frustrations** — what bothers them about current alternatives
+- **Test scenarios** — 3-5 concrete things they'll try (specific enough for automation)
 
-Team agents are **not just evaluators** — they are **collaborative participants**:
+The Project Leader selects which personas to involve per sprint based on the sprint focus.
 
-1. **Goal Negotiation**: Each agent works out their responsibilities and goals with the Project Leader. Goals evolve each sprint based on what's working.
+### Active Project
 
-2. **Capability Gap Surfacing**: When any agent identifies a task they can't do because the tooling doesn't exist (e.g., "I need to analyze real user analytics but there's no integration"), they surface it as a pain point. The engineering team can then prioritize building those capabilities.
+Enso tracks which project is "active" (stored in localStorage). The active project is used for:
+- `/evolve` command — runs evolution sprint on the active project
+- `/evolution-history` — shows sprint history for the active project
 
-3. **Compound Evolution Loop**: Both the product AND the team's tooling improve together. The Marketing Director might need social media posting → engineering builds the integration → next sprint, Marketing can actually execute campaigns.
-
-## Evolution Sprint (Closed Loop)
-
-The evolution sprint is the core mechanism by which projects improve themselves. Each sprint has 6 phases:
-
-### Phase 0: Meta-Evaluation (Project Leader)
-- Reviews previous sprint results and current project state
-- Can MODIFY project.json: add/change personas, adjust goals, update vision, restructure team
-- Sets priorities for this sprint
-- Evaluates whether the evolution mechanism itself is effective
-
-### Phase 1: Persona Testing (Customer Personas)
-- Each customer persona tests the product through real interaction (Puppeteer for web, CLI for tools)
-- Tests 3-5 scenarios from their unique perspective
-- Writes detailed report: scenarios tried, ratings (1-10), friction points, enhancement suggestions
-
-### Phase 2: Team Evaluation (Leadership Agents)
-- Marketing Director evaluates positioning, messaging, first impressions
-- Sales Director evaluates commercialization, pricing, customer objections
-- AI Strategist (if applicable) evaluates against frontier technology
-
-### Phase 3: Synthesis + Discussion
-- Architect synthesizes ALL reports (personas + team agents)
-- Simulates product team roundtable — each voice debates priorities
-- Produces ranked list of 3-5 enhancements to implement THIS sprint
-- Identifies capability gaps surfaced by team agents
-
-### Phase 4: Engineering Implementation
-- Architect designs concrete technical solutions
-- Coder implements changes in the project's OWN codebase (not Enso's)
-- Reviewer validates: code review, build check, regression testing
-- Be AGGRESSIVE — Claude Code implements 10x faster than human teams
-
-### Phase 5: Validation Re-Testing
-- 2 customer personas re-test the changed areas
-- Focus on code quality review + Puppeteer testing of existing behavior
-- Compare before/after scores
-- Remaining friction points become backlog for next sprint
-
-### Phase 6: Evolution Report + Meta-Review
-- Builder creates interactive dashboard with sprint results
-- Project Leader does final meta-review:
-  - Was this sprint effective?
-  - What should change for next iteration?
-  - Any team composition adjustments needed?
-  - Writes changes back to project.json
+Switch active project from the Projects card or by clicking "Set Active".
 
 ## Storage
 
 ```
 ~/.enso/projects/
-├── enso/
-│   ├── project.json              # Project definition + team + personas
-│   └── sprints/
-│       ├── sprint-<timestamp>/
-│       │   ├── meta.json         # Sprint metadata
-│       │   ├── personas/         # Customer persona reports
-│       │   ├── team/             # Team agent evaluations
-│       │   ├── synthesis.md
-│       │   ├── discussion.md
-│       │   ├── design.md
-│       │   ├── implementation.md
-│       │   ├── review.md
-│       │   ├── validation/
-│       │   └── dashboard-ui.jsx
-│       └── sprint-<timestamp>/
-├── acme-saas/
+├── enso/                               # Default Enso project
+│   ├── project.json                    # Vision, team, personas
+│   ├── sprints/
+│   │   └── sprint-<timestamp>/         # Full sprint archive
+│   └── deliverables/
+├── alpharank/                          # Imported project
 │   ├── project.json
-│   └── sprints/
+│   ├── sprints/
+│   └── deliverables/
+└── <any-project>/
 ```
 
-## The Enso Project (Default)
+## API Reference
 
-Enso is pre-configured as the default project with:
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/projects` | GET | List all projects |
+| `/api/projects/:id` | GET | Load single project |
+| `/api/projects` | POST | Create project (manual team) |
+| `/api/projects/:id` | PUT | Update project |
+| `/api/projects/:id` | DELETE | Delete project (except "enso") |
+| `/api/projects/generate-team` | POST | Preview auto-generated team |
+| `/api/projects/create-with-team` | POST | Create project with auto-generated team |
 
-**Team Agents:**
-- **James Rodriguez** — Project Leader: Defines Enso's vision, manages the AI team, monitors evolution effectiveness
-- **Victoria Park** — Marketing Director: Evaluates how Enso should be positioned and presented to the world
-- **Marcus Thompson** — Sales Director: Evaluates how to commercialize and popularize Enso
+## The Default Enso Project
 
-**Customer Personas:**
-- Alex Chen (Startup Founder)
-- Maya Patel (Graduate Student)
-- Jordan Kim (Senior Developer)
-- Sarah Thompson (Business Analyst)
-- Leo Morales (Creative Professional)
-- Dr. Riya Nakamura (AI Technology Strategist)
+Enso is pre-configured as the default project with its own team:
 
-**Config:**
-- codebasePath: D:/Github/Enso
-- techStack: TypeScript/React 19/Node.js/Vite
-- testUrl: http://localhost:5173
+**Team:** James Rodriguez (PL), Victoria Park (Marketing), Marcus Thompson (Sales), Elena Vasquez (Architect), David Park (Eng Manager), Aisha Rahman (QA), Dr. Riya Nakamura (AI Strategist)
 
-## Deliverables
+**Personas:** Alex Chen (Startup Founder), Maya Patel (Student Researcher), Jordan Kim (Developer), Sarah Thompson (Business Analyst), Leo Morales (Creative Professional)
 
-Team agents don't just evaluate — they produce **real deliverables** that the project can use:
-
-### Deliverable Types
-
-| Agent | Deliverable Examples |
-|-------|---------------------|
-| **Project Leader** | Product roadmap, sprint priorities doc, team performance review, vision statement |
-| **Marketing Director** | Landing page copy, feature announcement drafts, competitive positioning doc, brand guidelines, social media content calendar, press release templates |
-| **Sales Director** | Pricing strategy doc, customer pitch deck outline, ROI calculator inputs, objection handling guide, partnership proposal templates, case study drafts |
-| **AI Strategist** | Technology adoption roadmap, architecture improvement proposals, competitive analysis matrix |
-| **Engineers** | Code changes, test suites, documentation, API specs |
-
-### Storage
-
-Deliverables are stored per-project, organized by agent and sprint:
-
-```
-~/.enso/projects/<projectId>/
-├── deliverables/
-│   ├── marketing/
-│   │   ├── landing-page-copy-v1.md
-│   │   ├── feature-announcement-2026-03.md
-│   │   ├── social-media-calendar-q2.md
-│   │   └── competitive-positioning.md
-│   ├── sales/
-│   │   ├── pricing-strategy-v2.md
-│   │   ├── enterprise-pitch-outline.md
-│   │   └── roi-calculator-inputs.json
-│   ├── leadership/
-│   │   ├── product-roadmap-q2.md
-│   │   ├── sprint-3-retrospective.md
-│   │   └── vision-statement-v3.md
-│   └── engineering/
-│       ├── api-spec-v2.md
-│       └── architecture-decision-records/
-├── project.json
-└── sprints/
-```
-
-### Deliverable Lifecycle
-
-1. **Creation**: Team agents create deliverables during evolution sprints (or on-demand via orchestration)
-2. **Review**: Project Leader reviews and approves deliverables
-3. **Iteration**: Deliverables evolve across sprints — v1 → v2 → v3 as the product matures
-4. **Access**: Browsable from the Enso UI via the Projects card — view, download, share
-
-### In Evolution Sprints
-
-During a sprint, team agents are instructed to produce deliverables alongside their evaluation:
-- Marketing Director: "In addition to your evaluation, draft a feature announcement for the enhancements implemented this sprint"
-- Sales Director: "Update the pricing strategy doc if the new features change the value proposition"
-- Project Leader: "Update the product roadmap based on this sprint's outcomes"
-
-Deliverables accumulate across sprints, creating a growing body of project assets that compound in value.
+**Config:** `codebasePath: D:/Github/Enso`, `testUrl: http://localhost:5173`
 
 ## Safety Rules
 
 During evolution sprints, engineering agents MUST NOT:
 - Restart, stop, or kill the gateway/server process
-- Run restart scripts (restart.ps1, restart.sh)
-- Kill node processes (Stop-Process, taskkill)
 - Modify package.json version fields or lock files
 - Run npm install/update
 - Push to git (changes are local only)
 - Changes take effect on next server restart AFTER the sprint
 
-## Future Evolution
+## Implementation
 
-As we learn more through evolution cycles, this document will be updated with:
-- New patterns discovered for effective team composition
-- Better sprint structures for different project types
-- Lessons learned from cross-project evolution
-- New agent roles that prove valuable
-- Integration patterns for real-world tools (APIs, databases, monitoring)
+| Component | File | Purpose |
+|-----------|------|---------|
+| Discovery Engine | `server/src/discovery.ts` | AI VC team, sourcing/pitch/challenge planning prompt |
+| Team Generator | `server/src/team-generator.ts` | Codebase scanning + AI team/persona generation |
+| Project Manager | `server/src/project-manager.ts` | Project CRUD, storage, default Enso project |
+| Evolution Engine | `server/src/evolution.ts` | Sprint planning, lifecycle, project-scoped sprints |
+| Orchestrator | `server/src/orchestrator.ts` + `orchestrator-engine.ts` | DAG-based multi-agent execution |
+| Server API | `server/src/server.ts` | REST endpoints for projects + team generation + discovery |
+| Projects UI | `src/cards/ProjectsCard.tsx` | List, detail, import views |
+| Welcome Card | `src/components/WelcomeCard.tsx` | Discover + Projects tiles |
+| Evolution History | `src/cards/EvolutionHistoryCard.tsx` | Sprint history browser |
+| Sprint Archive | `server/src/evolution-archive.ts` | Sprint persistence + retrieval |

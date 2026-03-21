@@ -812,6 +812,73 @@ export async function startEnsoServer(opts: {
     res.json({ ok });
   });
 
+  // ── Team Generation API ──
+
+  app.post("/api/projects/generate-team", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { projectId, projectName, description, vision, codebasePath, techStack, testUrl } = req.body;
+      if (!projectId || !projectName || !codebasePath) {
+        res.status(400).json({ error: "projectId, projectName, and codebasePath required" });
+        return;
+      }
+      const geminiApiKey = account?.geminiApiKey;
+      if (!geminiApiKey) { res.status(400).json({ error: "Gemini API key not configured" }); return; }
+
+      const { generateTeamForProject } = await import("./team-generator.js");
+      const result = await generateTeamForProject({
+        projectId, projectName,
+        description: description || "",
+        vision, codebasePath, techStack, testUrl,
+        geminiApiKey,
+      });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/create-with-team", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { projectId, projectName, description, vision, codebasePath, techStack, testUrl, testCommand } = req.body;
+      if (!projectId || !projectName || !codebasePath) {
+        res.status(400).json({ error: "projectId, projectName, and codebasePath required" });
+        return;
+      }
+      const geminiApiKey = account?.geminiApiKey;
+      if (!geminiApiKey) { res.status(400).json({ error: "Gemini API key not configured" }); return; }
+
+      const { generateTeamForProject } = await import("./team-generator.js");
+      const { saveProject } = await import("./project-manager.js");
+
+      const result = await generateTeamForProject({
+        projectId, projectName,
+        description: description || "",
+        vision, codebasePath, techStack, testUrl,
+        geminiApiKey,
+      });
+
+      const project = {
+        id: projectId,
+        name: projectName,
+        description: description || result.detectedDescription,
+        vision: vision || "",
+        codebasePath,
+        techStack: techStack || result.techStack,
+        testUrl,
+        testCommand,
+        teamAgents: result.teamAgents,
+        personas: result.personas,
+        validationPersonaIds: result.validationPersonaIds,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      saveProject(project);
+      res.json({ ok: true, project });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Evolution Sprint History API (project-scoped) ──
   app.get("/api/evolution-sprints", async (req, res) => {
     const { listEvolutionSprints } = await import("./evolution-archive.js");
@@ -2006,7 +2073,7 @@ export async function startEnsoServer(opts: {
               const { handleEvolutionSprint } = await import("./evolution.js");
               runtime.log?.(`[enso] evolution module imported OK`);
               handleEvolutionSprint({
-                projectId: (msg as any).projectId,
+                projectId: msg.projectId,
                 goal: msg.evolutionGoal,
                 client,
                 account,
@@ -2018,6 +2085,24 @@ export async function startEnsoServer(opts: {
               logError("evolution", "Failed to import evolution module", importErr);
               runtime.log?.(`[enso] evolution import error: ${importErr?.message || importErr}`);
               client.send({ type: "chat.send", state: "error", text: `Evolution failed: ${importErr?.message}` } as any);
+            }
+            break;
+          }
+          case "discovery.start": {
+            runtime.log?.(`[enso] discovery sprint start`);
+            try {
+              const { handleDiscovery } = await import("./discovery.js");
+              handleDiscovery({
+                focus: msg.text?.replace(/^\/discover\s*/i, "").trim() || undefined,
+                client,
+                account,
+              }).catch((err) => {
+                logError("discovery", "Unhandled discovery error", err);
+                client.send({ type: "chat.send", state: "error", text: `Discovery failed: ${err?.message}` } as any);
+              });
+            } catch (importErr: any) {
+              logError("discovery", "Failed to import discovery module", importErr);
+              client.send({ type: "chat.send", state: "error", text: `Discovery failed: ${importErr?.message}` } as any);
             }
             break;
           }

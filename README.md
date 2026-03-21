@@ -52,6 +52,30 @@ Use Enso → notice a gap → /code "add a stock tracker"
 
 The platform evolves from within. No separate IDE. No deployment pipeline.
 
+### Discover Opportunities — AI VC
+
+Enso includes an AI venture capital team that discovers high-potential project opportunities. Type **`/discover`** with an optional focus area and a 5-person VC team runs a full investment process:
+
+| Phase | What Happens |
+|-------|-------------|
+| **Deal Sourcing** | 3 partners independently research using different lenses — demand signals, technology timing, competitive gaps |
+| **Pitch Session** | Each partner reads all research and pitches their single best find |
+| **Investment Committee** | Managing Partner chairs rigorous debate: market timing, Enso competitive advantage, feasibility, cost of entry |
+| **Deliverables** | Interactive investment dashboard + presentation-style investment memo |
+
+Each recommendation answers: *Why is this a great project right now? Why will Enso's approach beat existing competition? What does it cost to go in?*
+
+Approve a recommendation → Enso creates the project, auto-generates a domain-specific AI team, and starts building.
+
+### Manage Any Project — Import & Evolve
+
+Enso isn't just for projects it creates. Point it at **any existing codebase** and it becomes the project's AI management layer:
+
+1. **Import** — `/projects` → "Import Project" → enter codebase path
+2. **Team Generation** — Enso scans the project, auto-assembles a tailored AI team (PL, Architect, Engineers, QA, domain specialists) and customer personas
+3. **Evolve** — `/evolve` runs autonomous sprint cycles: persona testing → team evaluation → synthesis → implementation → review → validation
+4. **Iterate** — Each sprint the team accumulates knowledge, improving sprint over sprint
+
 ---
 
 ## How It Works

@@ -15,12 +15,25 @@ interface Persona {
 
 interface Project {
   id: string; name: string; description: string; vision: string;
-  codebasePath: string; techStack?: string; testUrl?: string;
+  codebasePath: string; techStack?: string; testUrl?: string; testCommand?: string;
   teamAgents: TeamAgent[]; personas: Persona[]; validationPersonaIds: string[];
   createdAt: number; updatedAt: number;
 }
 
-type View = "list" | "detail" | "create";
+type View = "list" | "detail" | "import";
+
+const ROLE_COLORS: Record<string, string> = {
+  architect: "bg-amber-400",
+  researcher: "bg-pink-400",
+  reviewer: "bg-cyan-400",
+  coder: "bg-emerald-400",
+  builder: "bg-violet-400",
+};
+
+function agentDot(agent: TeamAgent) {
+  if (agent.id === "project-leader") return "bg-amber-400";
+  return ROLE_COLORS[agent.agentRole] || "bg-blue-400";
+}
 
 export default function ProjectsCard({ card }: CardRendererProps) {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -29,6 +42,11 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   const [view, setView] = useState<View>("list");
   const [activeProject, setActiveProject] = useState(localStorage.getItem("enso-active-project") || "enso");
   const sendMessage = useChatStore(s => s.sendMessage);
+
+  // Import form state
+  const [importForm, setImportForm] = useState({ name: "", codebasePath: "", description: "", vision: "", testUrl: "", testCommand: "" });
+  const [generating, setGenerating] = useState(false);
+  const [importError, setImportError] = useState("");
 
   const baseUrl = getBackendBaseUrl();
   const headers = useMemo(() => authHeaders({ "Content-Type": "application/json" }), []);
@@ -55,6 +73,44 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
   const fmtDate = (ts: number) => new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+  // ── Import: create project with auto-generated team ──
+  const handleImport = async () => {
+    const { name, codebasePath } = importForm;
+    if (!name.trim() || !codebasePath.trim()) { setImportError("Name and codebase path are required"); return; }
+
+    const projectId = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    if (projects.some(p => p.id === projectId)) { setImportError(`Project "${projectId}" already exists`); return; }
+
+    setGenerating(true);
+    setImportError("");
+
+    try {
+      const res = await fetch(`${baseUrl}/api/projects/create-with-team`, {
+        method: "POST", headers,
+        body: JSON.stringify({
+          projectId,
+          projectName: name.trim(),
+          description: importForm.description.trim(),
+          vision: importForm.vision.trim(),
+          codebasePath: codebasePath.trim(),
+          testUrl: importForm.testUrl.trim() || undefined,
+          testCommand: importForm.testCommand.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create project");
+
+      fetchProjects();
+      setSelected(data.project);
+      setView("detail");
+      setImportForm({ name: "", codebasePath: "", description: "", vision: "", testUrl: "", testCommand: "" });
+    } catch (err: any) {
+      setImportError(err.message || "Failed to create project");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // ── List View ──
   if (view === "list") {
     return (
@@ -65,6 +121,12 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             <h3 className="text-sm font-semibold text-gray-200">Projects</h3>
             <span className="text-xs text-gray-500">{projects.length} project{projects.length !== 1 ? "s" : ""}</span>
           </div>
+          <button
+            onClick={() => setView("import")}
+            className="px-2.5 py-1 text-[10px] font-medium bg-violet-600 hover:bg-violet-500 text-white rounded-md transition-colors"
+          >
+            + Import Project
+          </button>
         </div>
 
         {loading && <div className="text-center py-8 text-gray-500 text-xs">Loading projects...</div>}
@@ -73,7 +135,9 @@ export default function ProjectsCard({ card }: CardRendererProps) {
           <div className="text-center py-8 space-y-2">
             <div className="text-2xl">📁</div>
             <div className="text-gray-400 text-sm">No projects yet</div>
-            <div className="text-gray-500 text-xs">The default Enso project will be created on first evolution sprint</div>
+            <button onClick={() => setView("import")} className="text-violet-400 text-xs hover:text-violet-300">
+              Import your first project →
+            </button>
           </div>
         )}
 
@@ -108,6 +172,127 @@ export default function ProjectsCard({ card }: CardRendererProps) {
     );
   }
 
+  // ── Import View ──
+  if (view === "import") {
+    return (
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setView("list"); setImportError(""); }} className="text-xs text-gray-400 hover:text-gray-200">← Back</button>
+          <span className="text-gray-600">|</span>
+          <h3 className="text-sm font-semibold text-gray-200">Import Project</h3>
+        </div>
+
+        <div className="bg-gradient-to-r from-violet-500/10 to-blue-500/10 border border-violet-500/20 rounded-lg p-2.5">
+          <div className="text-xs text-gray-300">
+            Point Enso at any existing codebase. It will scan the project, detect the tech stack, and auto-generate a tailored AI team and customer personas.
+          </div>
+        </div>
+
+        <div className="space-y-2.5">
+          {/* Required fields */}
+          <div>
+            <label className="text-[10px] text-gray-500 font-medium block mb-1">Project Name *</label>
+            <input
+              value={importForm.name}
+              onChange={e => setImportForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g., AlphaRank"
+              className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500 focus:outline-none"
+              disabled={generating}
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-500 font-medium block mb-1">Codebase Path *</label>
+            <input
+              value={importForm.codebasePath}
+              onChange={e => setImportForm(f => ({ ...f, codebasePath: e.target.value }))}
+              placeholder="e.g., D:/Github/AlphaRank"
+              className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500 focus:outline-none"
+              disabled={generating}
+            />
+          </div>
+
+          {/* Optional fields */}
+          <div>
+            <label className="text-[10px] text-gray-500 font-medium block mb-1">Description <span className="text-gray-600">(auto-detected if blank)</span></label>
+            <textarea
+              value={importForm.description}
+              onChange={e => setImportForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="What does this project do?"
+              rows={2}
+              className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500 focus:outline-none resize-none"
+              disabled={generating}
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-500 font-medium block mb-1">Vision <span className="text-gray-600">(optional)</span></label>
+            <input
+              value={importForm.vision}
+              onChange={e => setImportForm(f => ({ ...f, vision: e.target.value }))}
+              placeholder="Where is this project headed?"
+              className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500 focus:outline-none"
+              disabled={generating}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium block mb-1">Test URL <span className="text-gray-600">(for web apps)</span></label>
+              <input
+                value={importForm.testUrl}
+                onChange={e => setImportForm(f => ({ ...f, testUrl: e.target.value }))}
+                placeholder="http://localhost:3000"
+                className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500 focus:outline-none"
+                disabled={generating}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-medium block mb-1">Test Command <span className="text-gray-600">(for CLI apps)</span></label>
+              <input
+                value={importForm.testCommand}
+                onChange={e => setImportForm(f => ({ ...f, testCommand: e.target.value }))}
+                placeholder="python -m pytest test/"
+                className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500 focus:outline-none"
+                disabled={generating}
+              />
+            </div>
+          </div>
+        </div>
+
+        {importError && (
+          <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-2.5 py-1.5">
+            {importError}
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleImport}
+            disabled={generating || !importForm.name.trim() || !importForm.codebasePath.trim()}
+            className="flex-1 px-3 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs font-medium rounded-lg transition-colors active:scale-[0.98]"
+          >
+            {generating ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Scanning codebase & generating team...
+              </span>
+            ) : (
+              "Import & Generate AI Team"
+            )}
+          </button>
+          <button
+            onClick={() => { setView("list"); setImportError(""); }}
+            disabled={generating}
+            className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Detail View ──
   if (view === "detail" && selected) {
     const p = selected;
@@ -126,10 +311,12 @@ export default function ProjectsCard({ card }: CardRendererProps) {
         <h3 className="text-sm font-semibold text-gray-200">{p.name}</h3>
 
         {/* Vision */}
-        <div className="bg-gradient-to-r from-violet-500/10 to-blue-500/10 border border-violet-500/20 rounded-lg p-2.5">
-          <div className="text-[10px] text-violet-400 font-medium mb-1">VISION</div>
-          <div className="text-xs text-gray-300">{p.vision}</div>
-        </div>
+        {p.vision && (
+          <div className="bg-gradient-to-r from-violet-500/10 to-blue-500/10 border border-violet-500/20 rounded-lg p-2.5">
+            <div className="text-[10px] text-violet-400 font-medium mb-1">VISION</div>
+            <div className="text-xs text-gray-300">{p.vision}</div>
+          </div>
+        )}
 
         {/* Meta */}
         <div className="grid grid-cols-2 gap-2">
@@ -151,12 +338,9 @@ export default function ProjectsCard({ card }: CardRendererProps) {
               {p.teamAgents.map(agent => (
                 <details key={agent.id} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
                   <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50 flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      agent.id === "project-leader" ? "bg-amber-400" :
-                      agent.id === "marketing-director" ? "bg-pink-400" :
-                      agent.id === "sales-director" ? "bg-emerald-400" : "bg-blue-400"
-                    }`} />
+                    <span className={`w-1.5 h-1.5 rounded-full ${agentDot(agent)}`} />
                     {agent.name} — {agent.role}
+                    <span className="text-[9px] text-gray-600 ml-auto">{agent.agentRole}</span>
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-[11px] text-gray-400 space-y-1">
                     <div><span className="text-gray-500">Responsibilities:</span> {agent.responsibilities}</div>

@@ -203,6 +203,7 @@ export interface ClientMessage {
     | "orchestration.cancel"
     | "orchestration.message"
     | "evolution.start"
+    | "discovery.start"
     | "image_research"
     | "client.error";
   mode?: ChannelMode;
@@ -255,6 +256,7 @@ export interface ClientMessage {
   orchestrationGoal?: string;
   // evolution.start fields
   evolutionGoal?: string;
+  projectId?: string;
   orchestrationId?: string;
   orchestrationApprovedTasks?: string[];
   orchestrationTaskId?: string;
