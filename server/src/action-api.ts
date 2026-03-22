@@ -458,7 +458,7 @@ export function createActionRouter(deps: {
   router.delete("/api/actions/cancel/:runId", async (req: Request, res: Response) => {
     try {
       const { cancelClaudeCodeRun } = await import("./claude-code.js");
-      const cancelled = cancelClaudeCodeRun(req.params.runId);
+      const cancelled = cancelClaudeCodeRun(String(req.params.runId));
       res.json({ cancelled, runId: req.params.runId });
     } catch (err) {
       res.status(500).json({ error: String(err) });

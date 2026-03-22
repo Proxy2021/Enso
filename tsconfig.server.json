@@ -16,5 +16,6 @@
       "@shared/*": ["./shared/*"]
     }
   },
-  "include": ["server", "shared"]
+  "include": ["server", "shared"],
+  "exclude": ["server/src/phase1-enhancements.test.ts"]
 }

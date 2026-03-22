@@ -69,12 +69,11 @@ describe("Phase 1 enhancements", () => {
       connectionState: "disconnected",
       isWaiting: false,
       _wsClient: null,
-      channelMode: "full",
       projects: [],
       codeSessionCwd: null,
       codeSessionId: null,
       _activeTerminalCardId: null,
-    });
+    } as any);
   });
 
   it("returns structured operation error for unknown cancellation ids", async () => {
@@ -87,6 +86,7 @@ describe("Phase 1 enhancements", () => {
         port,
         host: "127.0.0.1",
         geminiApiKey: "",
+        providerKeys: {},
         mode: "full",
         config: {},
       },

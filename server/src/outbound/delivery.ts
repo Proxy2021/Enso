@@ -157,7 +157,7 @@ export async function deliverEnsoReply(params: {
     const followUpSuggestions = generateFollowUps({
       userMessage: params.userMessage || "",
       assistantText: text,
-      toolFamily: toolMeta?.toolId,
+      toolFamily: undefined,
       language: client.language,
     });
     if (followUpSuggestions.length > 0) {
@@ -489,10 +489,10 @@ export async function handleCardEnhance(params: {
       logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Family pre-selected: ${cap.appId}, using fallback tool ${cap.primaryTool}`, cardId });
     } else {
       logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Suggested family "${params.suggestedFamily}" not found, falling back to LLM selection`, cardId });
-      selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG });
+      selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG.map(c => ({ ...c, toolFamily: c.appId })) });
     }
   } else {
-    selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG });
+    selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG.map(c => ({ ...c, toolFamily: c.appId })) });
   }
 
   if (!selection) {

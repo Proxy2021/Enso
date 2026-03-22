@@ -207,11 +207,14 @@ async function buildBrowserResult(page: PuppeteerPage, tool: string, bookmarks: 
   const title = await page.title();
 
   // Check navigation history
-  const navState = await page.evaluate(() => ({
-    canGoBack: window.history.length > 1,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    canGoForward: (window as any).__ensoForwardAvailable ?? false,
-  })) as { canGoBack: boolean; canGoForward: boolean };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const navState = await page.evaluate(() => {
+    const w = globalThis as any;
+    return {
+      canGoBack: w.history.length > 1,
+      canGoForward: w.__ensoForwardAvailable ?? false,
+    };
+  }) as { canGoBack: boolean; canGoForward: boolean };
 
   return {
     tool,
@@ -304,7 +307,7 @@ async function browserScroll(params: ScrollParams): Promise<AgentToolResult> {
     const page = await getPage();
     const amount = params.amount ?? 400;
     const delta = params.direction === "up" ? -amount : amount;
-    await page.evaluate((d: unknown) => window.scrollBy(0, d as number), delta);
+    await page.evaluate((d: unknown) => (globalThis as any).scrollBy(0, d as number), delta);
     await new Promise((r) => setTimeout(r, 300));
     const bookmarks = getAllBookmarks();
     return jsonResult(await buildBrowserResult(page, "enso_browser_scroll", bookmarks));

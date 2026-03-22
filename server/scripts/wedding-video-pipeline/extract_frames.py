@@ -1,0 +1,451 @@
+#!/usr/bin/env python3
+"""
+extract_frames.py - Stages 2-4: Extract candidate frames, score them, select top N.
+
+Pipeline stages:
+  2a. Extract candidate frames from video at configurable FPS using FFmpeg
+  2b. Score each candidate for sharpness (Laplacian variance), brightness,
+      face presence, contrast, and saturation
+  3.  Select top N frames with temporal spacing and scene diversity constraints
+  4.  Export selected frames as full-resolution PNG stills
+
+Usage:
+    python extract_frames.py <input_video> [options]
+
+Requirements:
+    pip install opencv-python numpy mediapipe
+    ffmpeg in PATH
+"""
+
+import argparse
+import json
+import math
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="Extract, score, and select the best frames from a video"
+    )
+    p.add_argument("input_video", help="Path to input video file")
+    p.add_argument(
+        "--output-dir", default="./output",
+        help="Output directory (default: ./output)"
+    )
+    p.add_argument(
+        "--scenes-json", default=None,
+        help="Path to scenes.json from detect_scenes.py (default: <output_dir>/scenes.json)"
+    )
+    p.add_argument(
+        "--num-best", type=int, default=20,
+        help="Number of best frames to select (default: 20)"
+    )
+    p.add_argument(
+        "--min-spacing", type=float, default=30.0,
+        help="Minimum seconds between selected frames (default: 30)"
+    )
+    p.add_argument(
+        "--sample-fps", type=int, default=1,
+        help="Candidate extraction rate in fps (default: 1)"
+    )
+    p.add_argument(
+        "--analysis-width", type=int, default=1280,
+        help="Width in px for candidate analysis frames (default: 1280)"
+    )
+    p.add_argument(
+        "--face-detection", default="on", choices=["on", "off"],
+        help="Enable/disable MediaPipe face detection (default: on)"
+    )
+    p.add_argument(
+        "--skip-candidates", action="store_true",
+        help="Skip extraction if candidates already exist"
+    )
+    p.add_argument(
+        "--skip-scoring", action="store_true",
+        help="Skip scoring if frames.json already exists"
+    )
+    return p.parse_args()
+
+
+def format_timecode(seconds):
+    """Format seconds as HH:MM:SS."""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def find_scene_for_timestamp(scenes, timestamp):
+    """Return the scene ID that contains the given timestamp."""
+    for scene in scenes:
+        if scene["start_time"] <= timestamp < scene["end_time"]:
+            return scene["id"]
+    return scenes[-1]["id"] if scenes else 0
+
+
+# ── Stage 2a: Extract candidate frames ──────────────────────────────────────
+
+def extract_candidates(input_video, output_dir, sample_fps, analysis_width):
+    """Extract candidate frames at the given FPS using FFmpeg."""
+    candidates_dir = os.path.join(output_dir, "candidates")
+    os.makedirs(candidates_dir, exist_ok=True)
+
+    print(f"  Extracting candidates at {sample_fps} fps (width={analysis_width}px)...")
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_video,
+        "-vf", f"fps={sample_fps},scale={analysis_width}:-1",
+        "-q:v", "3",
+        os.path.join(candidates_dir, "frame_%05d.jpg"),
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"ERROR: FFmpeg candidate extraction failed:\n{result.stderr[:500]}", file=sys.stderr)
+        sys.exit(1)
+
+    frame_count = len(list(Path(candidates_dir).glob("frame_*.jpg")))
+    print(f"  Extracted {frame_count} candidate frames")
+    return candidates_dir, frame_count
+
+
+# ── Stage 2b: Score candidate frames ────────────────────────────────────────
+
+def score_frame(frame_bgr, face_detector, use_faces):
+    """
+    Score a single frame on multiple quality signals.
+    Returns (composite_score, detail_dict). Composite is 0.0-1.0.
+
+    Scoring weights (tuned for people-centric ceremony video):
+      sharpness    20%   - Laplacian variance
+      face_count   28%   - Number of detected faces (normalized)
+      face_center  18%   - How centered the primary face is
+      contrast     12%   - Histogram entropy
+      brightness    8%   - Penalizes too dark / too bright
+      saturation    8%   - Color richness
+      face_size     6%   - Face area relative to frame
+    """
+    import cv2
+    import numpy as np
+
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+
+    # 1. Sharpness — Laplacian variance (higher = sharper)
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    sharpness = min(laplacian_var / 500.0, 1.0)
+
+    # 2. Brightness — penalize extremes, peak at 128
+    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+    mean_brightness = float(hsv[:, :, 2].mean())
+    brightness = 1.0 - abs(mean_brightness - 128.0) / 128.0
+
+    # 3. Face detection (MediaPipe)
+    face_count = 0
+    face_center_score = 0.0
+    face_size_score = 0.0
+
+    if use_faces and face_detector is not None:
+        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        results = face_detector.process(rgb)
+        if results.detections:
+            face_count = len(results.detections)
+            for det in results.detections:
+                bb = det.location_data.relative_bounding_box
+                cx = bb.xmin + bb.width / 2
+                cy = bb.ymin + bb.height / 2
+                dist = ((cx - 0.5) ** 2 + (cy - 0.5) ** 2) ** 0.5
+                center = 1.0 - min(dist / 0.7, 1.0)
+                face_center_score = max(face_center_score, center)
+                area = bb.width * bb.height
+                face_size_score = max(face_size_score, min(area / 0.05, 1.0))
+
+    faces_norm = min(face_count / 3.0, 1.0)
+
+    # 4. Contrast — histogram entropy
+    hist = cv2.calcHist([gray], [0], None, [256], [0, 256]).flatten()
+    hist = hist / hist.sum()
+    hist = hist[hist > 0]
+    entropy = float(-np.sum(hist * np.log2(hist)))
+    contrast = min(entropy / 8.0, 1.0)
+
+    # 5. Color saturation
+    mean_sat = float(hsv[:, :, 1].mean())
+    saturation = min(mean_sat / 128.0, 1.0)
+
+    # Weighted composite
+    composite = (
+        0.20 * sharpness
+        + 0.08 * brightness
+        + 0.28 * faces_norm
+        + 0.18 * face_center_score
+        + 0.06 * face_size_score
+        + 0.12 * contrast
+        + 0.08 * saturation
+    )
+
+    details = {
+        "sharpness": round(sharpness, 4),
+        "brightness": round(brightness, 4),
+        "face_count": face_count,
+        "face_center": round(face_center_score, 4),
+        "face_size": round(face_size_score, 4),
+        "contrast": round(contrast, 4),
+        "saturation": round(saturation, 4),
+        "laplacian_raw": round(float(laplacian_var), 2),
+        "entropy_raw": round(entropy, 4),
+    }
+
+    return round(composite, 6), details
+
+
+def score_all_frames(candidates_dir, scenes, total_candidates, sample_fps, use_faces):
+    """Score every candidate frame. Returns list of scored frame dicts."""
+    import cv2
+
+    face_detector = None
+    if use_faces:
+        try:
+            import mediapipe as mp
+            mp_face = mp.solutions.face_detection
+            face_detector = mp_face.FaceDetection(
+                model_selection=1, min_detection_confidence=0.5
+            )
+        except ImportError:
+            print("  WARNING: mediapipe not installed — disabling face detection")
+            use_faces = False
+
+    print(f"  Scoring {total_candidates} candidates (faces={'on' if use_faces else 'off'})...")
+
+    scored = []
+    for idx in range(1, total_candidates + 1):
+        frame_path = os.path.join(candidates_dir, f"frame_{idx:05d}.jpg")
+        if not os.path.exists(frame_path):
+            continue
+
+        frame_bgr = cv2.imread(frame_path)
+        if frame_bgr is None:
+            continue
+
+        timestamp = (idx - 1) / sample_fps
+        scene_id = find_scene_for_timestamp(scenes, timestamp)
+        score, details = score_frame(frame_bgr, face_detector, use_faces)
+
+        scored.append({
+            "index": idx,
+            "timestamp_sec": round(timestamp, 3),
+            "timecode": format_timecode(timestamp),
+            "scene_id": scene_id,
+            "candidate_path": f"candidates/frame_{idx:05d}.jpg",
+            "composite_score": score,
+            "scores": details,
+        })
+
+        if idx % 100 == 0 or idx == total_candidates:
+            pct = idx * 100 // total_candidates
+            print(f"    Scored {idx}/{total_candidates} ({pct}%)")
+
+    if face_detector:
+        face_detector.close()
+
+    return scored
+
+
+# ── Stage 3: Select best N frames ───────────────────────────────────────────
+
+def select_best_frames(frames, scenes, n=20, min_spacing_sec=30):
+    """
+    Greedy selection of top N frames with diversity constraints:
+      - Minimum temporal spacing between selections
+      - Per-scene budget cap to ensure variety
+      - Output sorted chronologically
+    """
+    total_scenes = len(scenes) if scenes else 1
+    max_per_scene = max(2, math.ceil(n / total_scenes) * 2)
+
+    ranked = sorted(frames, key=lambda f: f["composite_score"], reverse=True)
+
+    selected = []
+    used_times = []
+    scene_counts = {}
+
+    for frame in ranked:
+        t = frame["timestamp_sec"]
+        sid = frame["scene_id"]
+
+        if any(abs(t - ut) < min_spacing_sec for ut in used_times):
+            continue
+        if scene_counts.get(sid, 0) >= max_per_scene:
+            continue
+
+        selected.append(frame.copy())
+        used_times.append(t)
+        scene_counts[sid] = scene_counts.get(sid, 0) + 1
+
+        if len(selected) >= n:
+            break
+
+    selected.sort(key=lambda f: f["timestamp_sec"])
+    for i, frame in enumerate(selected):
+        frame["rank"] = i + 1
+
+    return selected
+
+
+# ── Stage 4: Export full-resolution stills ───────────────────────────────────
+
+def export_stills(video_path, best_frames, output_dir):
+    """Extract selected frames at full source resolution as PNG files."""
+    frames_dir = os.path.join(output_dir, "frames")
+    os.makedirs(frames_dir, exist_ok=True)
+
+    print(f"  Exporting {len(best_frames)} full-resolution PNG stills...")
+
+    for frame in best_frames:
+        t = frame["timestamp_sec"]
+        mins = int(t // 60)
+        secs = int(t % 60)
+        filename = f"best_{frame['rank']:02d}_{mins:02d}m{secs:02d}s.png"
+        output_path = os.path.join(frames_dir, filename)
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", f"{t:.3f}",
+            "-i", video_path,
+            "-frames:v", "1",
+            "-update", "1",
+            output_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"    WARNING: Failed to export frame at {t:.1f}s: {result.stderr[:200]}")
+            continue
+
+        frame["output_filename"] = filename
+        print(f"    [{frame['rank']:2d}] {filename} (score={frame['composite_score']:.4f})")
+
+    return frames_dir
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+def main():
+    args = parse_args()
+
+    if not os.path.isfile(args.input_video):
+        print(f"ERROR: Input video not found: {args.input_video}", file=sys.stderr)
+        sys.exit(1)
+
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    scenes_path = args.scenes_json or os.path.join(output_dir, "scenes.json")
+    use_faces = args.face_detection == "on"
+
+    # Load scenes
+    if not os.path.isfile(scenes_path):
+        print(f"ERROR: scenes.json not found at {scenes_path}", file=sys.stderr)
+        print("  Run detect_scenes.py first.", file=sys.stderr)
+        sys.exit(1)
+
+    with open(scenes_path) as f:
+        scenes_data = json.load(f)
+    scenes = scenes_data["scenes"]
+    print(f"Loaded {len(scenes)} scenes from {scenes_path}")
+
+    # ── Stage 2a: Extract candidates ──
+    candidates_dir = os.path.join(output_dir, "candidates")
+    if args.skip_candidates and os.path.isdir(candidates_dir):
+        total_candidates = len(list(Path(candidates_dir).glob("frame_*.jpg")))
+        print(f"Skipping candidate extraction ({total_candidates} existing frames)")
+    else:
+        candidates_dir, total_candidates = extract_candidates(
+            args.input_video, output_dir, args.sample_fps, args.analysis_width
+        )
+
+    if total_candidates == 0:
+        print("ERROR: No candidate frames extracted", file=sys.stderr)
+        sys.exit(1)
+
+    # ── Stage 2b: Score candidates ──
+    frames_json_path = os.path.join(output_dir, "frames.json")
+    if args.skip_scoring and os.path.isfile(frames_json_path):
+        print(f"Skipping scoring (loading existing {frames_json_path})")
+        with open(frames_json_path) as f:
+            scored_frames = json.load(f)["frames"]
+    else:
+        scored_frames = score_all_frames(
+            candidates_dir, scenes, total_candidates, args.sample_fps, use_faces
+        )
+
+        frames_output = {
+            "version": 1,
+            "total_candidates": total_candidates,
+            "scoring_params": {
+                "sample_fps": args.sample_fps,
+                "analysis_width": args.analysis_width,
+                "face_detection": use_faces,
+                "weights": {
+                    "sharpness": 0.20,
+                    "brightness": 0.08,
+                    "faces": 0.28,
+                    "face_center": 0.18,
+                    "face_size": 0.06,
+                    "contrast": 0.12,
+                    "saturation": 0.08,
+                },
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "frames": scored_frames,
+        }
+        with open(frames_json_path, "w") as f:
+            json.dump(frames_output, f, indent=2)
+        print(f"  Wrote {frames_json_path} ({len(scored_frames)} frames)")
+
+    # ── Stage 3: Select best N ──
+    print(f"\nSelecting top {args.num_best} frames (min spacing={args.min_spacing}s)...")
+    best_frames = select_best_frames(
+        scored_frames, scenes, args.num_best, args.min_spacing
+    )
+    scene_coverage = len(set(f["scene_id"] for f in best_frames))
+    print(f"  Selected {len(best_frames)} frames across {scene_coverage} scenes")
+
+    # ── Stage 4: Export stills ──
+    print("\nExporting high-resolution PNG stills...")
+    export_stills(args.input_video, best_frames, output_dir)
+
+    # Write best_frames.json
+    best_frames_output = {
+        "version": 1,
+        "selection_params": {
+            "target_count": args.num_best,
+            "min_spacing_sec": args.min_spacing,
+        },
+        "selected_count": len(best_frames),
+        "scene_coverage": scene_coverage,
+        "total_scenes": len(scenes),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "frames": best_frames,
+    }
+    best_frames_path = os.path.join(output_dir, "best_frames.json")
+    with open(best_frames_path, "w") as f:
+        json.dump(best_frames_output, f, indent=2)
+
+    print(f"\nDone. Wrote {best_frames_path}")
+    print(f"Stills in: {os.path.join(output_dir, 'frames')}/")
+
+    scores = [f["composite_score"] for f in best_frames]
+    if scores:
+        print(
+            f"\nScore summary: "
+            f"min={min(scores):.4f} max={max(scores):.4f} "
+            f"avg={sum(scores)/len(scores):.4f}"
+        )
+
+
+if __name__ == "__main__":
+    main()

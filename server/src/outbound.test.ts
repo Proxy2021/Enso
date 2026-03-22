@@ -141,6 +141,7 @@ function mockAccount(mode: "im" | "ui" | "full"): ResolvedEnsoAccount {
     port: 3001,
     host: "0.0.0.0",
     geminiApiKey: "test-key",
+    providerKeys: {},
     mode,
     config: { mode },
   };
@@ -153,6 +154,7 @@ function mockClient(): ConnectedClient & { messages: ServerMessage[] } {
     sessionKey: "enso_test",
     ws: {} as any,
     send: vi.fn((msg: ServerMessage) => messages.push(msg)),
+    _disconnectedBuffer: [],
     messages,
   };
 }
@@ -674,7 +676,7 @@ describe("handlePluginCardAction", () => {
       signatureId: "ranked_predictions_table",
       templateId: "market-top-picks-v1",
       supportedActions: ["refresh", "predictions"],
-      coverageStatus: "covered",
+      coverageStatus: "covered" as const,
     };
 
     // Register card context with AlphaRank native tool hint
@@ -738,7 +740,7 @@ describe("handlePluginCardAction", () => {
       signatureId: "directory_listing",
       templateId: "filesystem-browser-v1",
       supportedActions: ["refresh", "list_directory", "read_text_file", "stat_path", "search_paths"],
-      coverageStatus: "covered",
+      coverageStatus: "covered" as const,
     };
 
     // Register card context with filesystem native tool hint
@@ -846,7 +848,7 @@ describe("handlePluginCardAction", () => {
       signatureId: "system_auto_official_mail",
       templateId: "system-auto-official-mail-v1",
       supportedActions: ["refresh", "list_threads", "read_thread", "archive_thread"],
-      coverageStatus: "covered",
+      coverageStatus: "covered" as const,
     };
 
     // Register card context with system tool hint

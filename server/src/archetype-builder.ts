@@ -73,7 +73,7 @@ export async function handleFocusedArchetype(params: FocusedArchetypeParams): Pr
     enhanceResult: {
       data: null,
       generatedUI: undefined as unknown as string,
-      cardMode: { appId: "archetype", toolFamily: "archetype", signatureId: "focused_archetype_building" },
+      cardMode: { interactionMode: "tool", appId: "archetype", toolFamily: "archetype", signatureId: "focused_archetype_building" },
     },
   });
 
@@ -194,7 +194,7 @@ export async function handleFocusedArchetype(params: FocusedArchetypeParams): Pr
     enhanceResult: {
       data: { tool: "archetype_builder", archetype, topic: userMessage.slice(0, 200), phase: "complete" },
       generatedUI: templateJSX,
-      cardMode: { appId: "archetype", toolFamily: "archetype", signatureId: "focused_archetype_custom" },
+      cardMode: { interactionMode: "tool", appId: "archetype", toolFamily: "archetype", signatureId: "focused_archetype_custom" },
     },
   });
 }

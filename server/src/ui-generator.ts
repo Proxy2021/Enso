@@ -1032,3 +1032,43 @@ ${params.cardText.slice(0, 4000)}`;
   }
 }
 
+// ── Tool Suggestion (used by tool-router for multi-strategy matching) ──
+
+export interface ToolSuggestionResult {
+  toolName: string;
+  confidence: number;
+  params: Record<string, unknown>;
+}
+
+export async function serverSuggestToolInvocation(params: {
+  userMessage: string;
+  geminiApiKey: string;
+  tools: Array<{ name: string; description?: string; parameters?: unknown }>;
+  catalogContext?: string;
+  timeoutMs?: number;
+  maxOutputTokens?: number;
+  maxAttempts?: number;
+  strategy?: string;
+}): Promise<ToolSuggestionResult | null> {
+  // Delegate to selectToolForContent with adapted shape
+  const toolFamilies = params.tools.map((t) => ({
+    toolFamily: t.name.split("_").slice(1, -1).join("_") || t.name,
+    primaryTool: t.name,
+    actions: [],
+    description: t.description,
+  }));
+
+  const result = await selectToolForContent({
+    cardText: params.userMessage,
+    geminiApiKey: params.geminiApiKey,
+    toolFamilies,
+  });
+
+  if (!result) return null;
+
+  return {
+    toolName: result.toolName,
+    confidence: 0.8,
+    params: result.params,
+  };
+}

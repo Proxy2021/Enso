@@ -51,6 +51,8 @@ import type { CoreConfig } from "./src/types.js";
 import { registerLocalTool, localToolCount } from "./src/tool-registry-local.js";
 import { createFilesystemTools } from "./src/filesystem-tools.js";
 import { createMediaTools } from "./src/media-tools.js";
+import { createVideoTools } from "./src/video-tools.js";
+import { createMediaProcessingTools } from "./src/media-ai-gateway.js";
 import { createScreenTools } from "./src/screen-tools.js";
 import { createBrowserTools } from "./src/browser-tools.js";
 import { createResearcherTools } from "./src/researcher-tools.js";
@@ -67,6 +69,8 @@ function registerAllTools(): void {
   const allToolSets = [
     createFilesystemTools(),
     createMediaTools(),
+    createVideoTools(),
+    createMediaProcessingTools(),
     createScreenTools(),
     createBrowserTools(),
     createResearcherTools(),

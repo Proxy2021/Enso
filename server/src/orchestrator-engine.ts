@@ -13,7 +13,7 @@ import type { OrchestrationPlan, OrchestrationTask } from "@shared/types.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { logAction, logError } from "./action-log.js";
 import type { ConnectedClient } from "./server.js";
-import type { ServerMessage } from "@shared/types.js";
+import type { ServerMessage } from "./types.js";
 
 // ── Semaphore ──
 

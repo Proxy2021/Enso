@@ -318,6 +318,23 @@ const APP_INTENT_PATTERNS: Array<{
   { pattern: /\b(photo\s+studio|style\s+gallery|apply\s+(a\s+)?style|photo\s+processing|film\s+stock|cinematic\s+style|artistic\s+style|photo\s+style|open\s+(the\s+)?studio)\b/i, toolFamily: "photo_studio", confidence: 0.9 },
   { pattern: /\b(batch\s+process|style\s+preview|portra\s+400|wong\s+kar[- ]?wai|blade\s+runner|nordic\s+noir|photo\s*book|create\s+(a\s+)?photo\s*book)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
   { pattern: /\b(adjust\s+(a\s+|my\s+|this\s+)?photo|photo\s+adjust|increase\s+contrast|add\s+grain|edit\s+(my\s+|a\s+|this\s+)?photo|analyze\s+(this\s+|my\s+|a\s+)?photo|compare\s+(photo\s+)?versions|show\s+(me\s+)?(all\s+)?styles|list\s+styles|artistic\s+styles)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
+
+  // ── Media Processing — AI operations, video intelligence, batch processing ──
+  // Added Sprint 11: route processing verbs to media_processing app
+  { pattern: /\b(upscale|upres|super.?res|enlarge)\s+(my\s+|this\s+|these\s+|the\s+)?(photo|image|picture|file)/i,
+    toolFamily: "media_processing", confidence: 0.9 },
+  { pattern: /\b(remove\s+(the\s+)?background|background\s+remov|transparent\s+png|cut\s*out)\b/i,
+    toolFamily: "media_processing", confidence: 0.9 },
+  { pattern: /\b(contact\s+sheet|thumbnail\s+grid|photo\s+grid|proof\s+sheet)\b/i,
+    toolFamily: "media_processing", confidence: 0.85 },
+  { pattern: /\b(color\s+(grade|grading|match|correct)|match\s+(the\s+)?color|color\s+palette)\b/i,
+    toolFamily: "media_processing", confidence: 0.85 },
+  { pattern: /\b(extract\s+frames?|scene\s+detect|video\s+(highlight|analysis|inspect)|frame\s+extract)\b/i,
+    toolFamily: "media_processing", confidence: 0.9 },
+  { pattern: /\b(generate\s+thumbnail|video\s+thumbnail|highlight\s+reel)\b/i,
+    toolFamily: "media_processing", confidence: 0.85 },
+  { pattern: /\b(batch\s+(convert|resize|rename|export)|bulk\s+(convert|resize))\b/i,
+    toolFamily: "media_processing", confidence: 0.85 },
 ];
 
 function matchAppIntent(message: string): { appId: string; toolFamily: string; confidence: number } | null {
@@ -1527,6 +1544,25 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
               try {
+                // ── Pre-classification: check for missing file references (E1 Sprint 11) ──
+                const { detectFileReference } = await import("./file-reference-detector.js");
+                const fileRef = detectFileReference(msg.text, /* hasAttachments */ false);
+                if (fileRef.missingAttachments) {
+                  // Dismiss processing indicator
+                  send({ id: randomUUID(), runId: processingRunId, sessionKey, seq: 99, state: "final", text: "", timestamp: Date.now() });
+                  // Send friendly prompt instead of forwarding to Gemini
+                  const fileRefCardId = randomUUID();
+                  send({
+                    id: fileRefCardId, runId: randomUUID(), sessionKey, seq: 1, state: "final", timestamp: Date.now(),
+                    text: fileRef.suggestedPrompt!,
+                    followUps: {
+                      cardId: fileRefCardId,
+                      suggestions: [{ label: "Browse Files", prompt: "Open the file browser" }],
+                    },
+                  });
+                  break; // Exit the chat.send case
+                }
+
                 // Build recent conversation context for the classifier
                 const recentCards = loadCardHistory(clientId, 10);
                 const recentHistory = recentCards
@@ -1680,6 +1716,41 @@ export async function startEnsoServer(opts: {
                    /\b(showing|display|create|build|generate)\b/i.test(msg.text))
                 ) {
                   runtime.log?.(`[enso] viz-override: reclassifying "${msg.text.slice(0, 60)}" from simple to agent`);
+                  dismissProcessing();
+                  await handleInbound({
+                    message: {
+                      messageId: randomUUID(),
+                      sessionId: sessionKey,
+                      senderNick: `user_${connectionId}`,
+                      text: msg.text,
+                      mediaUrls: msg.mediaUrls,
+                      timestamp: Date.now(),
+                    },
+                    account,
+                    config,
+                    runtime,
+                    client,
+                    routing: msg.routing,
+                    statusSink,
+                  });
+                  break;
+                }
+
+                // Post-classification media-action override (E1 Sprint 11)
+                // When Gemini classifies media action requests as "simple", re-route to
+                // the agent pipeline where registered tools (video, media processing,
+                // contact sheet, upscale, etc.) are available for execution.
+                const mediaActionVerbs = /\b(upscale|upres|super.?res|enlarge|enhance|sharpen|denoise|remove\s+(the\s+)?background|background\s+remov|transparent|cut\s*out|contact\s+sheet|proof\s+sheet|thumbnail\s+grid|photo\s+grid|extract\s+frames?|scene\s+detect|detect\s+scenes?|video\s+(inspect|analyz|highlight|thumbnail)|frame\s+extract|color\s+(grade|grading|match|correct)|batch\s+(convert|resize|rename|export|process)|generate\s+thumbnail|highlight\s+reel|crop\s+faces?|watermark|create\s+(a\s+)?(contact|proof)\s+sheet)\b/i;
+
+                // Exclude conceptual questions ("what is upscaling?", "how does scene detection work?")
+                const mediaConceptual = /\b(what\s+(is|are)|how\s+(do|does|to|can)|explain|tell\s+me\s+about|difference\s+between)\b/i;
+
+                if (
+                  classification.complexity === "simple" &&
+                  mediaActionVerbs.test(msg.text) &&
+                  !mediaConceptual.test(msg.text)
+                ) {
+                  runtime.log?.(`[enso] media-action-override: reclassifying "${msg.text.slice(0, 60)}" from simple to agent`);
                   dismissProcessing();
                   await handleInbound({
                     message: {
@@ -2019,24 +2090,24 @@ export async function startEnsoServer(opts: {
                     statusSink,
                   });
                 }
-              } catch (routerErr) {
-                // Router failed — fall through to agent as last resort
-                runtime.log?.(`[enso] task-router failed, falling through to agent: ${String(routerErr)}`);
-                await handleInbound({
-                  message: {
-                    messageId: randomUUID(),
-                    sessionId: sessionKey,
-                    senderNick: `user_${connectionId}`,
-                    text: msg.text,
-                    mediaUrls: msg.mediaUrls,
-                    timestamp: Date.now(),
+              } catch (routerErr: any) {
+                // Error boundary (E2 Sprint 11): show user-friendly message + recovery chips
+                const errMessage = routerErr?.message || "An unexpected error occurred";
+                runtime.log?.(`[enso] chat error: ${routerErr?.stack || errMessage}`);
+                // Dismiss the processing indicator if still active
+                send({ id: randomUUID(), runId: processingRunId, sessionKey, seq: 99, state: "final", text: "", timestamp: Date.now() });
+                // Send user-friendly error message (not raw error badge)
+                const errCardId = randomUUID();
+                send({
+                  id: errCardId, runId: randomUUID(), sessionKey, seq: 1, state: "final", timestamp: Date.now(),
+                  text: errMessage,
+                  followUps: {
+                    cardId: errCardId,
+                    suggestions: [
+                      { label: "Try again", prompt: "Try again" },
+                      { label: "Browse Files", prompt: "Open the file browser" },
+                    ],
                   },
-                  account,
-                  config,
-                  runtime,
-                  client,
-                  routing: msg.routing,
-                  statusSink,
                 });
               }
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
@@ -2963,7 +3034,7 @@ export async function startEnsoServer(opts: {
           }
           case "monitor.remove": {
             const { removeMonitor } = await import("./research-monitor.js");
-            const monitorId = (msg as Record<string, unknown>).monitorId as string;
+            const monitorId = (msg as unknown as Record<string, unknown>).monitorId as string;
             if (monitorId) removeMonitor(monitorId);
             break;
           }

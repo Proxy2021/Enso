@@ -925,7 +925,7 @@ export async function handlePluginCardAction(params: {
       // ── Build App from Research ──
       if (action === "build_from_research" && ctx.toolFamily === "researcher") {
         const researchData = ctx.currentData as Record<string, unknown>;
-        const topic = String(researchData?.topic ?? payload?.topic ?? "");
+        const topic = String(researchData?.topic ?? (payload as Record<string, unknown>)?.topic ?? "");
         const findings = (researchData?.keyFindings as Array<{ text: string }> ?? [])
           .slice(0, 5).map((f) => `- ${f.text}`).join("\n");
         const sectionTitles = (researchData?.sections as Array<{ title: string }> ?? [])
@@ -961,7 +961,7 @@ Requirements:
         try {
           const { addMonitor } = await import("../research-monitor.js");
           const researchData = ctx.currentData as Record<string, unknown>;
-          const topic = String(researchData?.topic ?? payload?.topic ?? "");
+          const topic = String(researchData?.topic ?? (payload as Record<string, unknown>)?.topic ?? "");
           const findings = (researchData?.keyFindings as Array<{ text: string }> ?? []).map((f) => f.text);
           addMonitor(topic, findings);
           logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Monitor added: "${topic}"`, cardId });
@@ -1014,9 +1014,8 @@ Requirements:
             }
 
             // Update the card's standard data (original research) with the flag
-            const templateCode = getToolTemplateCode(
-              inferToolTemplate({ toolName: ctx.appToolHint.toolName, data: standardData }),
-            );
+            const tpl = inferToolTemplate({ toolName: ctx.appToolHint.toolName, data: standardData });
+            const templateCode = tpl ? getToolTemplateCode(tpl) : undefined;
             client.send({
               id: randomUUID(),
               runId: randomUUID(),
@@ -1042,6 +1041,7 @@ Requirements:
                 data: result.data,
                 generatedUI: customUI,
                 cardMode: {
+                  interactionMode: "tool" as const,
                   ...cardModeFromContext(ctx),
                   signatureId: "deep_research_custom",
                 },
@@ -1060,7 +1060,7 @@ Requirements:
               cardMode: cardModeFromContext(ctx),
               appData: result.data,
               appGeneratedUI: customUI,
-              appCardMode: { ...cardModeFromContext(ctx), signatureId: "deep_research_custom" },
+              appCardMode: { interactionMode: "tool" as const, ...cardModeFromContext(ctx), signatureId: "deep_research_custom" },
               timestamp: Date.now(),
             });
             return;

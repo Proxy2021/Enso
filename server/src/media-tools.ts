@@ -235,7 +235,7 @@ function getVideoCodec(videoPath: string): string | undefined {
   } catch { return undefined; }
 }
 
-function buildMediaItem(fullPath: string, stat: ReturnType<typeof lstatSync>): MediaItem {
+function buildMediaItem(fullPath: string, stat: NonNullable<ReturnType<typeof lstatSync>>): MediaItem {
   const ext = extname(fullPath).toLowerCase();
   const isImage = IMAGE_EXTS.has(ext);
   const item: MediaItem = {
@@ -243,7 +243,7 @@ function buildMediaItem(fullPath: string, stat: ReturnType<typeof lstatSync>): M
     path: fullPath,
     ext,
     type: mediaTypeForExt(ext),
-    size: stat.size,
+    size: Number(stat.size),
     mediaUrl: toMediaUrl(fullPath),
     modifiedAt: stat.mtime.toISOString(),
   };

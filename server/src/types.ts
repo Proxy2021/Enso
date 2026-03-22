@@ -64,7 +64,8 @@ export type CardCoverageStatus = "covered" | "partial";
 
 export interface CardModeDetail {
   interactionMode: CardInteractionMode;
-  toolFamily?: string;
+  appId?: string;             // Primary identifier (replaces toolFamily)
+  toolFamily?: string;        // Backward compat
   signatureId?: string;
   coverageStatus?: CardCoverageStatus;
 }
@@ -178,18 +179,38 @@ export interface ServerMessage {
   data?: unknown;
   generatedUI?: string;
   mediaUrls?: string[];
-  toolMeta?: { toolId: string; toolSessionId?: string };
+  toolMeta?: { toolId: string; toolSessionId?: string; cwd?: string };
+  cardType?: string;
   cardMode?: CardModeDetail;
   targetCardId?: string;
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
   operation?: OperationStatus;
-  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }>; ensoProjectPath?: string };
+  serverEvent?: "restarting";
+  settings?: {
+    mode: ChannelMode;
+    toolFamilies?: Array<{ toolFamily: string; description: string }>;
+    ensoProjectPath?: string;
+    claudeModel?: string;
+    claudeThinking?: "adaptive" | "disabled";
+    language?: string;
+    chatModel?: string;
+    bootId?: string;
+    providers?: Array<{
+      id: string;
+      name: string;
+      configured: boolean;
+      models: Array<{ id: string; name: string; description?: string }>;
+      setupUrl?: string;
+      setupHint: string;
+    }>;
+  };
+  steps?: Array<{ seq: number; text: string }>;
   enhanceResult?: EnhanceResult | null;
   enhanceHint?: { toolFamily: string };
   appProposal?: { cardId: string; proposal: string };
   appsDeleted?: { families: string[]; count: number };
-  appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string; builtIn?: boolean; codebase?: boolean }>;
+  appsList?: Array<{ toolFamily: string; description: string; toolCount: number; primaryToolName: string; builtIn?: boolean; codebase?: boolean; appId?: string; system?: boolean; shipped?: boolean; experience?: "card" | "terminal" }>;
   appSaved?: { toolFamily: string; success: boolean; path?: string; error?: string };
   buildComplete?: {
     cardId: string;
@@ -197,11 +218,25 @@ export interface ServerMessage {
     summary?: ToolBuildSummary;
     error?: string;
   };
+  resolvedBugs?: Array<{
+    id: string;
+    timestamp: number;
+    description: string;
+    resolution: string;
+    category: string;
+  }>;
   autoHeal?: {
     stage: "fixing" | "fixed" | "failed";
     toolName: string;
     error?: string;
   };
+  sessionsList?: Array<{
+    sessionId: string;
+    summary: string;
+    lastModified: number;
+    cwd?: string;
+    gitBranch?: string;
+  }>;
   orchestrationPlan?: OrchestrationPlan;
   orchestrationProgress?: OrchestrationProgress;
   appSuggestion?: {
@@ -211,6 +246,13 @@ export interface ServerMessage {
     suggestedFamily?: string;
     buildHint?: string;
   };
+  followUps?: {
+    cardId: string;
+    suggestions: Array<{ label: string; prompt: string; icon?: string }>;
+  };
+  recentTopics?: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
+  monitorUpdate?: { topic: string; changes: { newFindings: string[]; removedFindings: string[] }; timestamp: number };
+  monitorList?: Array<{ id: string; topic: string; enabled: boolean; lastChecked: number }>;
   /** Batch of historical cards sent in response to chat.history */
   cardHistory?: Array<{
     id: string;
@@ -245,18 +287,42 @@ export interface ClientMessage {
     | "card.delete_all_apps"
     | "apps.list"
     | "apps.run"
+    | "apps.delete"
+    | "apps.reload"
     | "app.save_to_codebase"
+    | "app.promote"
     | "server.restart"
     | "settings.set_mode"
+    | "settings.set_model"
+    | "settings.set_chat_model"
+    | "settings.set_provider_key"
+    | "settings.set_language"
     | "operation.cancel"
+    | "sessions.list"
+    | "shell.create"
+    | "shell.input"
+    | "shell.resize"
+    | "shell.destroy"
     | "orchestration.start"
     | "orchestration.approve"
     | "orchestration.pause"
     | "orchestration.resume"
     | "orchestration.modify"
     | "orchestration.cancel"
-    | "orchestration.message";
+    | "orchestration.message"
+    | "evolution.start"
+    | "discovery.start"
+    | "image_research"
+    | "monitor.list"
+    | "monitor.remove"
+    | "client.error";
   mode?: ChannelMode;
+  claudeModel?: string;
+  claudeThinking?: "adaptive" | "disabled";
+  chatModel?: string;
+  providerId?: string;
+  providerApiKey?: string;
+  language?: string;
   text?: string;
   mediaUrls?: string[];
   sessionKey?: string;
@@ -266,15 +332,19 @@ export interface ClientMessage {
     payload?: unknown;
   };
   routing?: ToolRouting;
+  // Terminal card routing
+  sourceCardId?: string;
   // card.action fields
   cardId?: string;
   cardAction?: string;
   cardPayload?: unknown;
   // card.enhance / card.build_app / card.propose_app fields
   cardText?: string;
+  // card.enhance fields
+  suggestedFamily?: string;
   // card.build_app fields
   buildAppDefinition?: string;
-  // card.propose_app fields
+  // card.propose_app + card.build_app fields
   conversationContext?: string;
   // apps.run fields
   toolFamily?: string;
@@ -282,8 +352,25 @@ export interface ClientMessage {
   operationId?: string;
   // chat.history fields
   historyCount?: number;
+  // shell.* fields
+  shellSessionId?: string;
+  shellInput?: string;
+  shellCols?: number;
+  shellRows?: number;
+  // client.error fields
+  clientError?: {
+    message: string;
+    source: string;
+    stack?: string;
+    componentStack?: string;
+    url?: string;
+    timestamp: number;
+  };
   // orchestration.* fields
   orchestrationGoal?: string;
+  // evolution.start fields
+  evolutionGoal?: string;
+  projectId?: string;
   orchestrationId?: string;
   orchestrationApprovedTasks?: string[];
   orchestrationTaskId?: string;

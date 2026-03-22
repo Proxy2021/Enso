@@ -38,6 +38,7 @@ export interface TaskClassification {
   // Archetype fields — for one-off and orchestrated tasks
   archetype?: TaskArchetype;
   archetypeHints?: Record<string, string>;  // Domain-specific metadata
+  isRecurring?: boolean;  // Whether this is a recurring/repeated task pattern
   // Implicit orchestration — auto-detected multi-step intent (not explicit /orchestrate)
   implicit?: boolean;
 }

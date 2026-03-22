@@ -209,7 +209,7 @@ interface ResearchHistoryMeta extends DocMeta {
   hasVideos: boolean;
   hasContradictions: boolean;
   isDeepResearch: boolean;
-  tags: string[];
+  tags: string;  // comma-separated tags (DocMeta requires primitive values)
 }
 
 const researchHistory = getDocCollection<CachedResearch, ResearchHistoryMeta>(
@@ -237,7 +237,7 @@ function buildResearchMeta(entry: CachedResearch, depth: string, isDeepResearch 
     hasVideos: (entry.videos?.length ?? 0) > 0,
     hasContradictions: (entry.contradictions?.length ?? 0) > 0,
     isDeepResearch,
-    tags: [],
+    tags: "",
   };
 }
 
@@ -1427,6 +1427,7 @@ function generateSampleResearch(topic: string, depth: string): AgentToolResult {
 type RouteResult = {
   route: "simple" | "standard" | "deep";
   reason: string;
+  answer?: string;
 };
 
 async function classifyResearchRoute(topic: string, geminiKey: string, _language: string): Promise<RouteResult> {
@@ -2176,8 +2177,8 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
   const subtopic = params.subtopic?.trim() || "";
   if (!topic || !subtopic) return errorResult("topic and subtopic are required");
 
-  const cached = researchHistory.get(topicSlug(topic));
-  const parentContext = buildParentContext(cached);
+  const cached = researchHistory.load(topicSlug(topic));
+  const parentContext = buildParentContext(cached ?? undefined);
 
   // Targeted searches
   const queries = [
@@ -2340,8 +2341,8 @@ async function researcherFollowUp(params: FollowUpParams): Promise<AgentToolResu
   const question = params.question?.trim() || "";
   if (!topic || !question) return errorResult("topic and question are required");
 
-  const cached = researchHistory.get(topicSlug(topic));
-  const parentContext = buildParentContext(cached);
+  const cached = researchHistory.load(topicSlug(topic));
+  const parentContext = buildParentContext(cached ?? undefined);
 
   const queries = [
     `${question} ${topic}`,
@@ -2408,7 +2409,7 @@ async function researcherSendReport(params: SendReportParams): Promise<AgentTool
   const topic = params.topic?.trim() || "Research Report";
 
   // Pull rich data from cache (much better than agent-passed flat data)
-  const cached = researchHistory.get(topicSlug(topic));
+  const cached = researchHistory.load(topicSlug(topic));
   const summary = cached?.summary ?? params.summary ?? "";
   const narrative = cached?.narrative ?? params.narrative ?? "";
   const keyFindings = cached?.keyFindings ?? params.keyFindings ?? [];
@@ -2585,7 +2586,7 @@ function buildReportHtml(
                 <td style="padding:12px 14px;vertical-align:top;">
                   <div style="color:#f87171;font-size:10px;text-transform:uppercase;font-weight:600;letter-spacing:0.5px;">\u25B6 Featured Video</div>
                   <div style="color:#e2e8f0;font-size:13px;font-weight:600;margin-top:4px;">${esc(v.title)}</div>
-                  <div style="color:#64748b;font-size:11px;margin-top:3px;">${[v.creator, v.duration].filter(Boolean).map(esc).join(" \u00B7 ")}</div>
+                  <div style="color:#64748b;font-size:11px;margin-top:3px;">${[v.creator, v.duration].filter((s): s is string => !!s).map(esc).join(" \u00B7 ")}</div>
                 </td>
               </tr>
             </table>
@@ -2633,7 +2634,7 @@ function buildReportHtml(
           ${v.thumbnail ? `<td width="120" style="vertical-align:top;"><a href="${esc(v.url)}" style="text-decoration:none;"><img src="${esc(v.thumbnail)}" alt="" width="120" style="display:block;border-radius:8px 0 0 8px;height:68px;object-fit:cover;" /></a></td>` : ""}
           <td style="padding:10px 14px;vertical-align:top;">
             <a href="${esc(v.url)}" style="color:#93c5fd;font-size:13px;font-weight:600;text-decoration:none;">${esc(v.title)}</a>
-            <div style="color:#64748b;font-size:11px;margin-top:3px;">${[v.creator, v.duration].filter(Boolean).map(esc).join(" \u00B7 ")}</div>
+            <div style="color:#64748b;font-size:11px;margin-top:3px;">${[v.creator, v.duration].filter((s): s is string => !!s).map(esc).join(" \u00B7 ")}</div>
           </td>
         </tr>
       </table>
@@ -2862,13 +2863,12 @@ async function researcherGeneratePodcast(params: { topic: string }): Promise<Age
   if (!geminiKey) return errorResult("Gemini API key required for podcast generation");
 
   // Find cached research
-  const cached = researchHistory.get(topicSlug(topic)) ?? researchHistory.get(topicSlug(topic));
+  const cached = researchHistory.load(topicSlug(topic)) ?? researchHistory.load(topicSlug(topic));
   if (!cached) return errorResult(`No research found for "${topic}". Run a search first.`);
 
   // Helper to return full research data with audioUrl + script
   const fullResult = (audioUrl: string, script?: string) => jsonResult({
     tool: "enso_researcher_search",
-    topic: cached.topic,
     depth: "standard",
     phase: "complete",
     ...cached,
@@ -2922,7 +2922,6 @@ async function researcherGeneratePodcast(params: { topic: string }): Promise<Age
     // Return the research data unchanged so the card isn't broken
     return jsonResult({
       tool: "enso_researcher_search",
-      topic: cached.topic,
       depth: "standard",
       phase: "complete",
       ...cached,
@@ -2958,7 +2957,7 @@ async function researcherRecall(params: { query: string; maxResults?: number }):
       if (topicLower.includes(term)) score += 1;
       if (previewLower.includes(term)) score += 0.5;
       // Tag matching
-      if (entry.meta.tags?.some((t) => t.toLowerCase().includes(term))) score += 0.5;
+      if (entry.meta.tags && typeof entry.meta.tags === "string" && (entry.meta.tags as string).split(",").some((t: string) => t.trim().toLowerCase().includes(term))) score += 0.5;
     }
     if (score > 0) scored.push({ id: entry.id, meta: entry.meta, score });
   }

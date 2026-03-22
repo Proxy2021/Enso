@@ -315,7 +315,7 @@ Respond with ONLY a JSON object: { "family": "<family_name>" or "none", "label":
       return suggestion;
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const jsonMatch = rawText.match(/\{[^}]+\}/);
     if (jsonMatch) {

@@ -125,7 +125,7 @@ export async function handleEnsoInbound(params: {
 
   await core.channel.session.recordInboundSession({
     storePath,
-    sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+    sessionKey: route.sessionKey,
     ctx: ctxPayload,
     onRecordError: (err) => {
       runtime.error?.(`enso: failed updating session meta: ${String(err)}`);
@@ -135,7 +135,7 @@ export async function handleEnsoInbound(params: {
   // Dynamic import — inbound.ts is only called when OpenClaw is active
   const { createReplyPrefixOptions } = await import("openclaw/plugin-sdk");
   const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
-    cfg: config as unknown,
+    cfg: config as any,
     agentId: route.agentId,
     channel: CHANNEL_ID,
     accountId: account.accountId,

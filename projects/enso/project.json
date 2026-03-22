@@ -7,9 +7,9 @@
   "codebasePath": "D:/Github/Enso",
   "techStack": "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
   "testUrl": "http://localhost:5173",
-  "lastSprint": 10,
-  "lastSprintScore": 8.0,
-  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0],
+  "lastSprint": 11,
+  "lastSprintScore": 7.0,
+  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 7.0],
   "teamAgents": [
     {
       "id": "project-leader",
@@ -25,14 +25,14 @@
       "perspective": "Am I building the right things? Is the team effective? Is the product coherent?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 10 RESULT: 8/10 — BEST sprint in recent memory. 5 enhancements shipped, 202 tests, P0 shell trap FIXED at correct architectural layer. Retests ran for first time in 4 sprints.",
-        "Sprint score trend RECOVERED: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0]. 3-sprint decline REVERSED.",
-        "Sprint 10 validated Sprint 9 fixes: ThinkingCard VALIDATED, Mermaid VALIDATED, Shell NL FAILED→RE-FIXED, /code E2E INCONCLUSIVE→IMPROVED.",
-        "Shell trap fix: 4-sprint P0 finally correct — xterm onData interception with 23-case test suite. Needs browser validation in Sprint 11.",
-        "E3 streaming progress shipped but UNVALIDATED — backend-only, needs gateway restart to test.",
-        "Product entering QUALITY & POLISH phase — core capabilities in place, remaining work is reliability + discoverability + workflow integration.",
-        "Sprint 11 THEME: 'DEEP PHOTO/VIDEO PRODUCTION' — evolve Enso into a deep, indispensable tool for professional photo/video workflows. Focus on AI-powered media processing (upscaling, background removal, color grading, batch operations), video intelligence (scene detection, highlight extraction, frame export), EXIF/metadata-aware media management, and shoot-based project organization. Marco Reyes persona is the PRIMARY driver — his frustrations define the sprint backlog.",
-        "Sprint 11 SELECTED PERSONAS: Marco Reyes (Photographer/Videographer) as PRIMARY, Jordan Kim (Developer) as SECONDARY — Marco tests media/photo/video depth, Jordan validates technical implementation quality."
+        "Sprint 11 SCORE: 7.0/10. Strong engineering output (5 enhancements, 9/9/9 code quality, 7 new native tools) but ZERO persona retests. Improvement thesis unvalidated.",
+        "Sprint 11 DELIVERED: E1 execute-first routing (7 media intent patterns), E2 error handling (null guard + context-aware messages), E3 video intelligence (4 FFmpeg tools), E4 contact sheet + AI gateway, E5 cloud AI providers (Replicate + remove.bg).",
+        "Sprint 11 CRITICAL GAP: No retests performed. Marco 5.0 baseline never re-validated. hasAttachments always passed as false — undermines E1 routing. video-tools.ts registration unverified at runtime.",
+        "Sprint 11 TEST REGRESSION: 202 → 135 tests (-33%). New modules (video-tools, file-reference-detector, media-ai-gateway) have zero test coverage. Test-to-code ratio 1:10.3 (target 1:3-1:5).",
+        "Sprint 12 THEME: 'Validate & Wire — Proving the Media Pipeline Works'. Mandatory retests, test count restoration, runtime verification before new features.",
+        "Sprint 12 HARD GATES: (1) No sprint closes without persona retests. (2) Test count ≥ entry count. (3) Max 3 new enhancements. (4) hasAttachments fix is P0.",
+        "Sprint score trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 7.0]. Stabilized after Sprint 10 recovery. Must validate to break through 8.0.",
+        "BRIGHT SPOTS: Research 8-9/10, Media AI gateway architecture extensible, 4-agent focus sprint more productive than 6-agent sprawl. Competitive moat: no rival platform offers 21+ media tools."
       ]
     },
     {
@@ -94,13 +94,13 @@
       "perspective": "Is this architecturally sound? Will it scale? Are we creating tech debt?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 10 DELIVERED: Streaming progress (E3) — 3 OperationStatus emissions added to server.ts. Backend-only, awaiting gateway restart for validation.",
-        "Sprint 10 DELIVERED: Shell NL detection re-architected — moved from ChatInput to xterm onData at the correct layer. ADR-002 IMPLEMENTED.",
-        "Architecture health: 5.5/10. Three god modules: server.ts (~2400 LOC), researcher-tools.ts (~3000 LOC), chat.ts (~2500 LOC) — 7900 LOC total.",
-        "ADR-003 PROPOSED: Diagram request detection — post-processing to detect when user requested diagram but LLM produced none. Action button pattern.",
-        "In-memory cardContexts lost on restart — needs SQLite-backed CardContextStore (Sprint 12+).",
-        "Context bleed between cards: delayed research responses contaminate subsequent queries. Needs timestamp guard.",
-        "Sprint 11 ASSIGNMENT: Design diagram request detection system and citation metadata extraction architecture."
+        "Sprint 11 DELIVERED: Architecture review revealed code is ahead of persona tests — video-tools.ts, file-reference-detector.ts, media_processing app all existed but were unwired. Gap is routing, not capability.",
+        "Sprint 11 DELIVERED: ADR-001 (Video Intelligence IMPLEMENTED), ADR-002 (AI Media Processing INTERFACE DEFINED), ADR-003 (Execute-First Routing DESIGN COMPLETE).",
+        "Architecture health: 6.5/10 (up from 5.5). server.ts now ~3177 LOC (grew with routing additions). Technical debt: D1 server.ts god module, D2 in-memory cardContexts, D3 inconsistent error handling, D4 CJS require() in ESM.",
+        "CRITICAL VERIFICATION NEEDED: Is registerVideoTools() actually called during server startup? If not, E3's 4 native video tools exist in code but are never available. Sprint 12 P0 assignment.",
+        "Sprint 12 ASSIGNMENT: (1) Verify video-tools.ts registration pathway at runtime. (2) Design shoot-based project organization system — group media by shoot/client/date with metadata persistence. (3) ADR for CardContext → SQLite migration.",
+        "In-memory cardContexts still lost on restart — SQLite migration design needed for Sprint 12.",
+        "Media AI gateway (media-ai-gateway.ts ~265 LOC) is well-architected — provider registry pattern enables zero-config local + opt-in cloud. Extensible without core changes."
       ]
     },
     {
@@ -118,13 +118,13 @@
       "perspective": "Is this code production-ready? Are conventions followed? Will it break anything?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 10 RESULT: Build CLEAN, 202/202 tests passing. CardStore fix + test import drift RESOLVED. Review verdict: PASS (9/10 across quality dimensions).",
-        "Sprint 10 WIN: Shared utility extraction — isLikelyNaturalLanguage() exported from shared module, tests import production code instead of copies.",
-        "2 broken test suites STILL UNRESOLVED: filesystem-tools.test.ts, workspace-media-tools.test.ts — openclaw/plugin-sdk import errors. 2+ sprints old.",
-        "Test copy divergence: Mermaid sanitizer tests still use copied functions in some areas. Need full sync to direct imports.",
-        "No CI/CD pipeline — every commit to main is unvalidated.",
-        "Build pipeline is minimal (tsc -b && vite build) with no lint or test step.",
-        "Sprint 11 ASSIGNMENT: Fix or remove 2 broken test suites, fix Mermaid test copy divergence."
+        "Sprint 11 RESULT: Build CLEAN, 135/135 tests passing. Code review PASS (9/9/9). ~1,343 new LOC across 16 files. 8 convention violations found (2 major: require() in ESM, video-tools not registered).",
+        "Sprint 11 CRITICAL: Test count REGRESSED 202 → 135 (-33%). 67 tests disappeared. Test-to-code ratio 1:10.3 (target 1:3-1:5). New modules have ZERO test coverage.",
+        "Sprint 11 BUG: hasAttachments always passed as false in server.ts. This undermines E1 execute-first routing. Must fix in Sprint 12.",
+        "Sprint 11 BUG: video-tools.ts may be orphaned — registerVideoTools() call path unverified at runtime. 5 engineering risks identified.",
+        "Sprint 12 ASSIGNMENT: (1) Restore test count to 200+ — write tests for file-reference-detector.ts (Aisha's 9-case spec), video-tools.ts (mock FFmpeg), media-ai-gateway.ts (provider registration). (2) Fix hasAttachments always-false bug. (3) Fix require() in ESM convention violation. (4) Fix or remove broken test suites.",
+        "No CI/CD pipeline — every commit to main is unvalidated. Build pipeline still minimal (tsc -b && vite build).",
+        "Code quality highlights: video-tools.ts 8/10, file-reference-detector.ts 9/10, exif-parser.ts 9/10 (highest quality module)."
       ]
     },
     {
@@ -141,13 +141,13 @@
       "perspective": "Does this actually work? What edge cases are we missing? Is quality improving?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 10 WIN: Retests RAN for first time in 4 sprints. Developer and Student Researcher retested. Shell trap fix validated at code level, pending browser validation.",
-        "Sprint 10 WIN: 202 tests (+23 from Sprint 9). NL detection test suite: 23 cases. Test-per-feature ratio improving.",
-        "Quality trend RECOVERING: Sprint 7 (6.8) → Sprint 8 (6.6) → Sprint 9 (5.87) → Sprint 10 (8.0). P0 shell trap FIXED after 4 sprints.",
-        "P0 bugs now: 0 critical (shell trap fixed). Remaining issues: 2 broken test suites, test copy divergence, /code E2E inconclusive.",
-        "CardContext reconstruction (tryReconstructContext) is fragile and untested.",
-        "No end-to-end test coverage for the research pipeline.",
-        "Sprint 11 ASSIGNMENT: Validate E1 shell trap in browser, validate E3 streaming progress, verify /code E2E flow."
+        "Sprint 11 VERDICT: FAIL on test health. Test count regressed 202 → 135 (-33%). New Sprint 11 modules (video-tools.ts, file-reference-detector.ts, media-ai-gateway.ts) have ZERO test coverage. 48/60 source files (80%) untested.",
+        "Sprint 11 CRITICAL: NO persona retests performed. Marco 5.0 baseline never re-validated. Sprint's biggest process failure.",
+        "Sprint 11 DELIVERED: Comprehensive test plans for P0-1 (7 criteria), P0-2 (5 criteria), P0-3 (7 criteria). Edge case catalogs: 10 file-reference cases, 10 video tools cases, 9 error handling cases. Proposed file-reference-detector.test.ts with 9 test cases.",
+        "Quality trend: Sprint 7 (6.8) → Sprint 8 (6.6) → Sprint 9 (5.87) → Sprint 10 (8.0) → Sprint 11 (7.0). Recovery stalled without validation.",
+        "Sprint 12 ASSIGNMENT: (1) RUN FULL PERSONA RETESTS — Marco Reyes (10 scenarios) + Jordan Kim (4 scenarios) against Sprint 11 implementation. Score and compare to baselines. (2) Validate E1 routing, E2 error handling, E3 video tools, E4 contact sheet, E5 cloud AI at runtime. (3) Produce scored retest report with before/after comparison.",
+        "Sprint 12 HARD GATE: No sprint closes without at least one persona retest. This is now mandatory, not optional.",
+        "CardContext reconstruction (tryReconstructContext) still fragile and untested. No E2E coverage for research pipeline."
       ]
     },
     {
@@ -171,12 +171,13 @@
       "perspective": "What new AI tech exists that we are not leveraging? How do we stay ahead of the curve?",
       "agentRole": "researcher",
       "painPoints": [
-        "Sprint 7 ASSIGNMENT: Research prompt caching implementation for Claude/Gemini APIs — 90% cost savings potential",
-        "Sprint 7 ASSIGNMENT: Evaluate MCP (Model Context Protocol) integration patterns — emerging standard for tool interop",
-        "Model cascading (60-70% cost reduction) not yet adopted — route simple queries to cheaper models. Sprint 7+ target.",
-        "No persistent agent memory across sessions or sprints",
-        "Context propagation at 500 chars with STRUCTURED_SUMMARY JSON — working but limited for complex reasoning chains",
-        "No vision-based UI testing — persona retests use Puppeteer but agents cannot evaluate rendered screenshots programmatically"
+        "Sprint 11 DELIVERED: Comprehensive AI technology assessment (28 sources). Two-tier stack recommendation: Tier 1 (local/free: sharp + fluent-ffmpeg + photo_engine.py), Tier 2 (cloud: Replicate Real-ESRGAN $0.0025/img + remove.bg $0.23/img). @tugrul/rembg (BiRefNet ONNX) as zero-cost local fallback.",
+        "Sprint 11 KEY FINDING: RMBG 2.0 achieves 90% accuracy — local background removal is now production-viable. No API key, no cost, instant results. This is a competitive moat.",
+        "Sprint 11 KEY FINDING: No competing AI agent platform (Manus, Devin, Cursor, Replit) offers media processing tools. Enso's 21+ media tools are UNIQUE in the market.",
+        "Sprint 11 DELIVERED: Cost analysis — Tier 1 Only $0/mo, Light (50 img/mo) $0-12/mo, Medium (200 img/mo) $0.50-47/mo. Projected Marco impact: 5.0 → 7.5-8.0 with recommended stack.",
+        "Sprint 12 ASSIGNMENT: (1) Research and prototype local RMBG 2.0 integration — evaluate @tugrul/rembg (BiRefNet ONNX) vs alternatives, validate Windows compatibility. (2) Research video AI APIs for Sprint 12+ video intelligence — scene detection, highlight extraction, auto-captioning.",
+        "Model cascading (60-70% cost reduction) still not adopted. Prompt caching for Claude/Gemini APIs still unimplemented. MCP integration patterns still unresearched.",
+        "No vision-based UI testing — persona retests use Puppeteer but agents cannot evaluate rendered screenshots programmatically."
       ]
     }
   ],
@@ -351,5 +352,5 @@
     "developer"
   ],
   "createdAt": 1773909300324,
-  "updatedAt": 1774137600000
+  "updatedAt": 1774396800000
 }

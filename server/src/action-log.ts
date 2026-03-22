@@ -24,6 +24,8 @@ export interface LogEntry {
   toolFamily?: string;
   sessionId?: string;
   metadata?: Record<string, unknown>;
+  /** Allow domain-specific extra fields (topic, orchestrationId, etc.) */
+  [key: string]: unknown;
 }
 
 export interface FixEntry {

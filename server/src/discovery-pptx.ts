@@ -33,6 +33,11 @@ const C = {
 const FONT_HEAD = "Georgia";
 const FONT_BODY = "Calibri";
 
+// PptxGenJS exposes `shapes` at runtime but not in its type defs
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getShapes = (pres: pptxgen): Record<string, pptxgen.SHAPE_NAME> =>
+  (pres as any).shapes;
+
 // ── Helpers ──
 
 function verdictColor(verdict: string): string {
@@ -258,7 +263,7 @@ function buildTitleSlide(pres: pptxgen, memo: ParsedMemo) {
   addDarkBg(slide);
 
   // Top accent line
-  slide.addShape(pres.shapes.RECTANGLE, {
+  slide.addShape(getShapes(pres).RECTANGLE, {
     x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent },
   });
 
@@ -279,7 +284,7 @@ function buildTitleSlide(pres: pptxgen, memo: ParsedMemo) {
   });
 
   // Thin separator
-  slide.addShape(pres.shapes.RECTANGLE, {
+  slide.addShape(getShapes(pres).RECTANGLE, {
     x: 0.6, y: 3.1, w: 2.5, h: 0.03, fill: { color: C.accent },
   });
 
@@ -316,13 +321,13 @@ function buildExecSummarySlide(pres: pptxgen, memo: ParsedMemo) {
     recs.forEach((rec, i) => {
       const x = startX + i * (badgeW + gap);
       // Badge card
-      slide.addShape(pres.shapes.RECTANGLE, {
+      slide.addShape(getShapes(pres).RECTANGLE, {
         x, y: 0.95, w: badgeW, h: 1.1,
         fill: { color: C.navy },
         shadow: makeShadow(),
       });
       // Verdict badge
-      slide.addShape(pres.shapes.RECTANGLE, {
+      slide.addShape(getShapes(pres).RECTANGLE, {
         x: x + 0.15, y: 1.05, w: 0.9, h: 0.3,
         fill: { color: verdictColor(rec.verdict) },
       });
@@ -382,13 +387,13 @@ function buildDiscoveryProcessSlide(pres: pptxgen, memo: ParsedMemo) {
   const cardGap = 0.2;
   phases.forEach((ph, i) => {
     const x = 0.6 + i * (cardW + cardGap);
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x, y: 0.95, w: cardW, h: 1.2,
       fill: { color: C.white },
       shadow: makeShadow(),
     });
     // Top accent
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x, y: 0.95, w: cardW, h: 0.05, fill: { color: ph.color },
     });
     slide.addText(ph.label, {
@@ -465,7 +470,7 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
   });
 
   // Verdict badge
-  slide1.addShape(pres.shapes.RECTANGLE, {
+  slide1.addShape(getShapes(pres).RECTANGLE, {
     x: 7.5, y: 0.2, w: 1.5, h: 0.4,
     fill: { color: verdictColor(rec.verdict) },
   });
@@ -495,11 +500,11 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
   // Two-column: Opportunity + Solution
   const colW = 4.2;
   // Left: Opportunity
-  slide1.addShape(pres.shapes.RECTANGLE, {
+  slide1.addShape(getShapes(pres).RECTANGLE, {
     x: 0.6, y: 1.9, w: colW, h: 1.6,
     fill: { color: C.navy },
   });
-  slide1.addShape(pres.shapes.RECTANGLE, {
+  slide1.addShape(getShapes(pres).RECTANGLE, {
     x: 0.6, y: 1.9, w: colW, h: 0.04, fill: { color: C.accent },
   });
   slide1.addText("THE OPPORTUNITY", {
@@ -512,11 +517,11 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
   });
 
   // Right: Solution
-  slide1.addShape(pres.shapes.RECTANGLE, {
+  slide1.addShape(getShapes(pres).RECTANGLE, {
     x: 5.2, y: 1.9, w: colW, h: 1.6,
     fill: { color: C.navy },
   });
-  slide1.addShape(pres.shapes.RECTANGLE, {
+  slide1.addShape(getShapes(pres).RECTANGLE, {
     x: 5.2, y: 1.9, w: colW, h: 0.04, fill: { color: "7C4DFF" },
   });
   slide1.addText("THE SOLUTION", {
@@ -543,7 +548,7 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
           fontFace: FONT_BODY,
           color: ri === 0 ? C.white : C.lightText,
           fill: { color: ri === 0 ? C.tableHeader : (ri % 2 === 0 ? C.tableAlt : C.tableBase) },
-          border: [{ pt: 0.5, color: C.tableBorder }],
+          border: { pt: 0.5, color: C.tableBorder },
           bold: ri === 0,
           valign: "middle" as const,
           margin: [2, 4, 2, 4] as [number, number, number, number],
@@ -569,7 +574,7 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
   });
 
   // Verdict badge
-  slide2.addShape(pres.shapes.RECTANGLE, {
+  slide2.addShape(getShapes(pres).RECTANGLE, {
     x: 7.5, y: 0.2, w: 1.5, h: 0.4,
     fill: { color: verdictColor(rec.verdict) },
   });
@@ -579,12 +584,12 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
   });
 
   // Why Enso Wins card
-  slide2.addShape(pres.shapes.RECTANGLE, {
+  slide2.addShape(getShapes(pres).RECTANGLE, {
     x: 0.6, y: 0.75, w: 8.8, h: 1.3,
     fill: { color: C.white },
     shadow: makeShadow(),
   });
-  slide2.addShape(pres.shapes.RECTANGLE, {
+  slide2.addShape(getShapes(pres).RECTANGLE, {
     x: 0.6, y: 0.75, w: 0.06, h: 1.3, fill: { color: C.green },
   });
   slide2.addText("WHY ENSO WINS", {
@@ -615,7 +620,7 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
           fontFace: FONT_BODY,
           color: ri === 0 ? C.white : C.darkText,
           fill: { color: ri === 0 ? C.navy : (ri % 2 === 0 ? "E8EAF6" : C.white) },
-          border: [{ pt: 0.3, color: "D0D4E8" }],
+          border: { pt: 0.3, color: "D0D4E8" },
           bold: ri === 0,
           valign: "middle" as const,
           margin: [2, 3, 2, 3] as [number, number, number, number],
@@ -646,7 +651,7 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
           fontFace: FONT_BODY,
           color: ri === 0 ? C.white : C.darkText,
           fill: { color: ri === 0 ? C.navy : (ri % 2 === 0 ? "E8EAF6" : C.white) },
-          border: [{ pt: 0.3, color: "D0D4E8" }],
+          border: { pt: 0.3, color: "D0D4E8" },
           bold: ri === 0,
           valign: "middle" as const,
           margin: [2, 3, 2, 3] as [number, number, number, number],
@@ -663,11 +668,11 @@ function buildRecommendationSlides(pres: pptxgen, rec: Recommendation, idx: numb
 
   // Committee note
   if (rec.committeeNote) {
-    slide2.addShape(pres.shapes.RECTANGLE, {
+    slide2.addShape(getShapes(pres).RECTANGLE, {
       x: 0.6, y: 4.65, w: 8.8, h: 0.55,
       fill: { color: "FFF8E1" },
     });
-    slide2.addShape(pres.shapes.RECTANGLE, {
+    slide2.addShape(getShapes(pres).RECTANGLE, {
       x: 0.6, y: 4.65, w: 0.06, h: 0.55, fill: { color: C.amber },
     });
     slide2.addText(`COMMITTEE NOTE: ${rec.committeeNote.substring(0, 200)}`, {
@@ -704,7 +709,7 @@ function buildComparisonSlide(pres: pptxgen, memo: ParsedMemo) {
             fontFace: FONT_BODY,
             color: ri === 0 ? C.white : (isVerdict ? verdictColor(cell) : C.darkText),
             fill: { color: ri === 0 ? C.navy : (ri % 2 === 0 ? "E8EAF6" : C.white) },
-            border: [{ pt: 0.3, color: "D0D4E8" }],
+            border: { pt: 0.3, color: "D0D4E8" },
             bold: ri === 0 || ci === 0 || isVerdict,
             valign: "middle" as const,
             margin: [2, 4, 2, 4] as [number, number, number, number],
@@ -739,17 +744,17 @@ function buildVerdictSlide(pres: pptxgen, memo: ParsedMemo) {
     const x = 0.6 + i * (cardW + gap);
     const vc = verdictColor(rec.verdict);
 
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x, y: 0.9, w: cardW, h: 1.7,
       fill: { color: C.navy },
       shadow: makeShadow(),
     });
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x, y: 0.9, w: cardW, h: 0.05, fill: { color: vc },
     });
 
     // Badge
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x: x + 0.15, y: 1.1, w: 1.0, h: 0.32,
       fill: { color: vc },
     });
@@ -801,12 +806,12 @@ function buildNextStepsSlide(pres: pptxgen, memo: ParsedMemo) {
 
   // Conditions card (if any)
   if (memo.conditions.length > 0) {
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x: 0.6, y: 0.9, w: 8.8, h: 1.2,
       fill: { color: C.navy },
       shadow: makeShadow(),
     });
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x: 0.6, y: 0.9, w: 0.06, h: 1.2, fill: { color: C.amber },
     });
     slide.addText("CONDITIONS FOR INVESTMENT", {
@@ -845,7 +850,7 @@ function buildNextStepsSlide(pres: pptxgen, memo: ParsedMemo) {
 
   // Portfolio strategy note
   if (memo.portfolioStrategy) {
-    slide.addShape(pres.shapes.RECTANGLE, {
+    slide.addShape(getShapes(pres).RECTANGLE, {
       x: 0.6, y: 4.7, w: 8.8, h: 0.55,
       fill: { color: C.navy },
     });
@@ -863,7 +868,7 @@ function buildClosingSlide(pres: pptxgen, memo: ParsedMemo) {
   addDarkBg(slide);
 
   // Top accent
-  slide.addShape(pres.shapes.RECTANGLE, {
+  slide.addShape(getShapes(pres).RECTANGLE, {
     x: 0, y: 0, w: 10, h: 0.06, fill: { color: C.accent },
   });
 
@@ -877,7 +882,7 @@ function buildClosingSlide(pres: pptxgen, memo: ParsedMemo) {
     fontSize: 32, fontFace: FONT_HEAD, color: C.white, bold: true, align: "center",
   });
 
-  slide.addShape(pres.shapes.RECTANGLE, {
+  slide.addShape(getShapes(pres).RECTANGLE, {
     x: 4.2, y: 2.9, w: 1.6, h: 0.03, fill: { color: C.accent },
   });
 

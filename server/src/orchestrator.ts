@@ -26,6 +26,7 @@ import {
   generateSkillMd,
   type LoadedApp,
 } from "./app-persistence.js";
+import type { AppEntry } from "./app-catalog.js";
 import { executeToolDirect } from "./native-tools/registry.js";
 import { registerCardContext } from "./outbound.js";
 import { APP_CATALOG } from "./app-catalog.js";
@@ -141,7 +142,13 @@ At the END of your report, append a structured summary block:
   architect: `You are an Architect Agent. Your job is to take research findings and design a structured plan, blueprint, or framework.
 Consider trade-offs, organize information logically, and create a clear, actionable design.
 Write your design/plan to a file so builder agents can use it.
-CRITICAL: Design for REUSE — build a tool CATEGORY, not a single-use solution. If asked about "WKW photos", design a "Photo Studio" that works for any collection with any style. Always parameterize inputs. Specify 4-7 tools per app (browse, view, create, edit, search, manage patterns). Reference server/apps/media_gallery/ as the gold standard.
+
+CRITICAL — APP CONSOLIDATION FIRST:
+Before designing ANY new app, you MUST check existing apps. If an app already covers the domain, design an EXTENSION to it (new tools, improved template), not a new app. The goal is comprehensive domain apps — "be Photoshop, not 100 separate feature apps."
+- If asked about "WKW photos" and a Photo Studio app exists → extend Photo Studio with new tools
+- If asked about "video highlights" and a Media Processing app exists → add highlight tools to Media Processing
+- Only design a NEW app when no existing app covers the domain
+Design for the CATEGORY, not the specific request. Parameterize all inputs. Specify 4-7 tools per app (browse, view, create, edit, search, manage patterns). Reference server/apps/media_gallery/ as the gold standard.
 
 ## Output Format
 Your report MUST include:
@@ -157,7 +164,16 @@ At the END of your report, append a structured summary block:
   builder: `You are a Builder Agent in Enso. Your job is to build interactive Enso apps using the app framework.
 Read CLAUDE-REFERENCE.md first to understand the app format (app.json + template.jsx + executors/).
 Build polished, interactive apps with real functionality — not placeholder demos.
-CRITICAL: Build GENERAL-PURPOSE apps, not one-off solutions. Study server/apps/media_gallery/ as the gold standard (7 tools, multi-view template, fully parameterized). Aim for 4-7 tools per app. Never hardcode domain-specific data in executors. Family names should be generic categories (e.g., "photo_studio" not "wkw_photobook").
+
+CRITICAL — EXTEND EXISTING APPS FIRST:
+Before creating a new app, check if an existing app covers the same domain. If so, ADD NEW TOOLS to that app and enhance its template — do NOT create a separate app. When extending:
+- Read the existing app.json, template.jsx, and executors/ first
+- Add new tools to the existing app.json tools array
+- Add new views/tabs to the existing template.jsx
+- Write new executor files alongside the existing ones
+- Preserve ALL existing functionality
+
+Only create a new app when no existing app covers the domain. Study server/apps/media_gallery/ as the gold standard (7 tools, multi-view template, fully parameterized). Aim for 4-7 tools per app. Never hardcode domain-specific data in executors. Family names should be generic categories (e.g., "photo_studio" not "wkw_photobook").
 
 ## Output Format
 Your summary MUST include:
@@ -788,6 +804,44 @@ export function getActiveOrchestration(orchestrationId: string) {
   return activeOrchestrations.get(orchestrationId);
 }
 
+// ── App Inventory for Prompts ──
+
+function buildAppInventoryContext(): string {
+  const lines: string[] = [];
+  try {
+    const allApps = loadAllApps();
+    if (allApps.length === 0 && APP_CATALOG.length === 0) return "";
+
+    lines.push(`## Existing App Inventory (MUST check before creating new apps)`);
+    lines.push(``);
+    lines.push(`These apps already exist in the system. Before creating a new app, check if the user's need`);
+    lines.push(`can be met by EXTENDING an existing app with new tools. Build comprehensive domain apps,`);
+    lines.push(`not fragmented single-feature apps.`);
+    lines.push(``);
+
+    for (const entry of APP_CATALOG) {
+      const loaded = allApps.find(a => a.spec.toolFamily === entry.appId);
+      const toolCount = loaded ? loaded.spec.tools.length : entry.actions.length;
+      lines.push(`- **${entry.appId}** (${toolCount} tools): ${entry.description}`);
+    }
+
+    for (const app of allApps) {
+      if (!APP_CATALOG.some(c => c.appId === app.spec.toolFamily)) {
+        lines.push(`- **${app.spec.toolFamily}** (${app.spec.tools.length} tools): ${app.spec.description}`);
+      }
+    }
+
+    lines.push(``);
+    lines.push(`**Rule:** If the user's request falls within an existing app's domain, the architect should`);
+    lines.push(`design an EXTENSION (new tools added to that app), not a new standalone app.`);
+    lines.push(`Only create a new app when no existing app covers the domain.`);
+    lines.push(``);
+  } catch {
+    // Non-fatal — proceed without inventory
+  }
+  return lines.join("\n");
+}
+
 // ── Planning Prompt ──
 
 function buildPlanningPrompt(
@@ -828,15 +882,19 @@ function buildPlanningPrompt(
     `- Builder tasks create interactive Enso apps (the main deliverable for users)`,
     `- Keep the total to 3–7 tasks (focused, not too granular)`,
     ``,
-    `## App Reusability Principle (IMPORTANT)`,
+    `## App Consolidation Principle (CRITICAL)`,
+    `The platform should build COMPREHENSIVE, POWERFUL domain apps — not many fragmented single-purpose ones.`,
+    `Think: "Be Photoshop (one comprehensive photo tool), not 100 separate apps each doing one Photoshop feature."`,
+    ``,
     `When the plan includes builder tasks (agentRole: "builder"):`,
-    `- Builder tasks MUST create GENERAL-PURPOSE tools, not one-off solutions`,
-    `- If the user asks to "process photos in WKW style", the builder should create a "Photo Studio" app that can apply various artistic styles to any photo collection — NOT a WKW-specific photobook`,
-    `- The architect should design for the CATEGORY of need, not just the specific request`,
-    `- All tools and executors must be parameterized — no hardcoded paths, names, or domain data`,
-    `- App family names should be generic categories: "photo_studio" not "wkw_photobook", "trip_planner" not "japan_trip"`,
-    `- Builder task descriptions MUST include: "Build a reusable, general-purpose [category] app with at least 4 tools"`,
-    `- Study server/apps/media_gallery/ as the gold standard (7 tools, parameterized, multi-view template)`,
+    `1. **CHECK EXISTING APPS FIRST** — Review the app inventory below. If an existing app covers the domain, plan to EXTEND it with new tools instead of creating a new app.`,
+    `2. **Design for the DOMAIN, not the request** — If the user asks to "process photos in WKW style", extend the existing Photo Studio app, don't create a "WKW photobook" app`,
+    `3. **Consolidate overlapping apps** — If two apps do similar things, recommend merging them`,
+    `4. **Parameterize everything** — no hardcoded paths, names, or domain data in executors`,
+    `5. **Broad family names** — "photo_studio" not "portrait_retoucher", "trip_planner" not "japan_trip"`,
+    `6. **Study the gold standard** — server/apps/media_gallery/ (7 tools, parameterized, multi-view template)`,
+    ``,
+    buildAppInventoryContext(),
     ``,
     // Inject archetype-specific planning guidance when available
     ...(classification.archetype && classification.archetype !== "general" ? [
@@ -987,6 +1045,11 @@ export function buildAgentPrompt(
     parts.push(`Then study server/apps/media_gallery/ as the GOLD STANDARD for reusable apps.`);
     parts.push(`It has 7 focused tools, parameterized executors, and multi-view template rendering.`);
     parts.push(``);
+    parts.push(`### STEP 0: Check Existing Apps (MANDATORY)`);
+    parts.push(`List server/apps/ to see what already exists. If an app covers this domain, EXTEND it.`);
+    parts.push(`Only create a new app if no existing app covers the domain.`);
+    parts.push(`The goal: comprehensive domain apps, not fragmented single-feature apps.`);
+    parts.push(``);
     parts.push(`Build a GENERAL-PURPOSE, REUSABLE Enso app:`);
     parts.push(`- Family name must be a generic category (e.g., "photo_studio" not "wkw_photobook")`);
     parts.push(`- Aim for 4-7 tools (browse, view, create, edit, search, manage patterns)`);
@@ -1093,9 +1156,21 @@ function buildTaskPrompt(
     parts.push(`First, read the file CLAUDE-REFERENCE.md to understand Enso's app format.`);
     parts.push(`Then study server/apps/media_gallery/ as the GOLD STANDARD for reusable apps.`);
     parts.push(``);
-    parts.push(`Build a GENERAL-PURPOSE, REUSABLE Enso app:`);
+    parts.push(`### STEP 0: Check Existing Apps (MANDATORY)`);
+    parts.push(`Before creating anything new, list the contents of server/apps/ to see what already exists.`);
+    parts.push(`If an app already covers this domain, EXTEND it by adding new tools and template views.`);
+    parts.push(`Only create a new app if no existing app covers the domain.`);
+    parts.push(``);
+    parts.push(`### When Extending an Existing App:`);
+    parts.push(`- Read the existing app.json, template.jsx, and all executors/ files`);
+    parts.push(`- Add new tool entries to the existing app.json tools array`);
+    parts.push(`- Add new views/tabs to the existing template.jsx (preserve existing views)`);
+    parts.push(`- Write new executor files alongside existing ones`);
+    parts.push(`- Update the app description to reflect the expanded capabilities`);
+    parts.push(``);
+    parts.push(`### When Creating a New App:`);
     parts.push(`- Write files to: server/apps/<family_name>/`);
-    parts.push(`- Family name must be a generic category`);
+    parts.push(`- Family name must be a generic DOMAIN category, not a specific feature`);
     parts.push(`- Aim for 4-7 tools, every executor parameterized`);
     parts.push(`- Template must use data.tool branching for polymorphic views`);
     parts.push(`- Required files: app.json, template.jsx, executors/<suffix>.js`);
@@ -1257,6 +1332,10 @@ function buildExecutionPrompt(plan: OrchestrationPlan, completedTaskIds?: string
       parts.push(`### App Building Instructions`);
       parts.push(`First, read the file CLAUDE-REFERENCE.md to understand Enso's app format.`);
       parts.push(`Then study server/apps/media_gallery/ as the GOLD STANDARD for reusable apps.`);
+      parts.push(``);
+      parts.push(`### STEP 0: Check Existing Apps (MANDATORY)`);
+      parts.push(`List server/apps/ to see what already exists. If an app covers this domain, EXTEND it.`);
+      parts.push(`Only create a new app if no existing app covers the domain.`);
       parts.push(``);
       parts.push(`Build a GENERAL-PURPOSE, REUSABLE Enso app:`);
       parts.push(`- Write files to: server/apps/<family_name>/`);

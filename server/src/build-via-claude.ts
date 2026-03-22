@@ -34,16 +34,22 @@ const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
 // ── Public API ──
 
 interface BuildViaClaude {
-  cardId: string;
-  cardText: string;
-  buildAppDefinition: string;
+  cardId?: string;
+  cardText?: string;
+  buildAppDefinition?: string;
+  instruction?: string;        // Alternative to cardText (from action API)
+  originalText?: string;       // Alternative source text
+  targetCardId?: string;       // Alternative to cardId
   conversationContext?: string;
   client: ConnectedClient;
   account: ResolvedEnsoAccount;
 }
 
 export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<void> {
-  const { cardId, cardText, buildAppDefinition, conversationContext, client, account } = params;
+  const { conversationContext, client, account } = params;
+  const cardId = params.cardId ?? params.targetCardId ?? randomUUID();
+  const cardText = params.cardText ?? params.instruction ?? params.originalText ?? "";
+  const buildAppDefinition = params.buildAppDefinition ?? "";
   const buildTerminalCardId = randomUUID();
   const runId = randomUUID();
 
@@ -147,7 +153,10 @@ async function postBuildRegistration(
   preExistingFamilies: Set<string>,
   buildStartTime: number,
 ): Promise<void> {
-  const { cardId, cardText, buildAppDefinition, account } = params;
+  const { account } = params;
+  const cardId = params.cardId ?? params.targetCardId ?? "";
+  const cardText = params.cardText ?? params.instruction ?? params.originalText ?? "";
+  const buildAppDefinition = params.buildAppDefinition ?? "";
 
   // Rescan all apps from both directories
   let allApps: LoadedApp[];
@@ -350,7 +359,7 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
     enhanceResult: {
       data: null,
       generatedUI: undefined as unknown as string,
-      cardMode: { appId: "researcher", toolFamily: "researcher", signatureId: "deep_research_building" },
+      cardMode: { interactionMode: "tool", appId: "researcher", toolFamily: "researcher", signatureId: "deep_research_building" },
     },
   });
 

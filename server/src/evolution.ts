@@ -24,9 +24,51 @@ import { handleOrchestration } from "./orchestrator.js";
 import { archiveEvolutionSprint, cleanEvolutionTempFiles } from "./evolution-archive.js";
 import { loadProject, ensureDefaultProject } from "./project-manager.js";
 import type { Project, Persona, TeamAgent } from "./project-manager.js";
+import { APP_CATALOG } from "./app-catalog.js";
+import { loadAllApps, SHIPPED_APPS_DIR } from "./app-persistence.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const PLUGIN_DIR = dirname(__filename);
+
+// ── App Ecosystem Discovery ──
+
+function buildAppEcosystemContext(): string {
+  const lines: string[] = [];
+
+  try {
+    const allApps = loadAllApps();
+    if (allApps.length === 0 && APP_CATALOG.length === 0) {
+      return "No apps currently installed.";
+    }
+
+    lines.push(`Currently installed apps (${allApps.length} loaded, ${APP_CATALOG.length} cataloged):\n`);
+
+    for (const entry of APP_CATALOG) {
+      const loaded = allApps.find(a => a.spec.toolFamily === entry.appId);
+      const toolCount = loaded ? loaded.spec.tools.length : entry.actions.length;
+      lines.push(`  - **${entry.appId}** (${toolCount} tools): ${entry.description}`);
+      if (loaded) {
+        const toolNames = loaded.spec.tools.map((t: any) => t.suffix).join(", ");
+        lines.push(`    Tools: ${toolNames}`);
+      } else {
+        lines.push(`    Actions: ${entry.actions.join(", ")}`);
+      }
+    }
+
+    // Include loaded apps that aren't in the static catalog
+    for (const app of allApps) {
+      if (!APP_CATALOG.some(c => c.appId === app.spec.toolFamily)) {
+        const toolNames = app.spec.tools.map((t: any) => t.suffix).join(", ");
+        lines.push(`  - **${app.spec.toolFamily}** (${app.spec.tools.length} tools): ${app.spec.description}`);
+        lines.push(`    Tools: ${toolNames}`);
+      }
+    }
+  } catch {
+    lines.push("App discovery unavailable — proceed with awareness that apps may exist.");
+  }
+
+  return lines.join("\n");
+}
 
 // ── Planning Prompt Builder ──
 
@@ -97,6 +139,21 @@ function buildEvolutionPlanningPrompt(
     project.testUrl ? `**Test URL:** ${project.testUrl}` : "",
     ``,
     goal ? `**Sprint focus area:** ${goal}` : `**Focus:** General product assessment — test all major capabilities.`,
+    ``,
+    `## Existing App Ecosystem (CRITICAL — read before planning)`,
+    ``,
+    `Before creating ANY new app or tool, the sprint MUST analyze what already exists.`,
+    `The goal is to build COMPREHENSIVE, POWERFUL apps — not many fragmented single-purpose ones.`,
+    `Think: "Be Photoshop, not 100 separate apps each doing one Photoshop feature."`,
+    ``,
+    buildAppEcosystemContext(),
+    ``,
+    `**App Consolidation Rules:**`,
+    `- If a feature belongs to an existing app's domain, EXTEND that app (add tools, improve template)`,
+    `- If two or more existing apps overlap significantly, recommend MERGING them`,
+    `- Only create a NEW app when no existing app covers the domain`,
+    `- When extending an app, study its current template.jsx and executors/ to maintain consistency`,
+    `- App family names must be broad categories: "photo_studio" not "portrait_retoucher"`,
     ``,
     `## Streamlined Sprint Structure`,
     ``,
@@ -193,9 +250,17 @@ function buildEvolutionPlanningPrompt(
     ``,
     `  PART 1 — SYNTHESIS: Identify common themes across BOTH customer personas AND team agents. Categorize: UX Issues, Missing Features, Performance Issues, Bugs, Strategic Gaps. Rank by cross-report impact.`,
     ``,
-    `  PART 2 — DISCUSSION: Simulate a product team roundtable. Debate priorities. FINAL DECISION: top 3-5 enhancements to implement THIS sprint. Be AGGRESSIVE — Claude Code implements 10x faster than human engineers.`,
+    `  PART 2 — APP ECOSYSTEM ANALYSIS: Review the existing app inventory (listed above in "Existing App Ecosystem"). For each identified enhancement:`,
+    `  - Does it belong to an existing app's domain? → Plan to EXTEND that app`,
+    `  - Do multiple apps overlap? → Recommend MERGING into a single comprehensive app`,
+    `  - Is this truly a new domain? → Only then plan a new app`,
+    `  Write an "App Consolidation Plan" section in the synthesis with specific recommendations.`,
     ``,
-    `  PART 3 — DESIGN: For each chosen enhancement, design the CONCRETE technical solution. Read the project codebase. For each: technical design, affected files, implementation approach, risks.`,
+    `  PART 3 — DISCUSSION: Simulate a product team roundtable. Debate priorities. FINAL DECISION: top 3-5 enhancements to implement THIS sprint. Be AGGRESSIVE — Claude Code implements 10x faster than human engineers.`,
+    `  CRITICAL: Every issue identified as a bug, regression, or broken feature MUST be included in the implementation plan for THIS sprint. Do NOT defer known problems to future sprints. The sprint's responsibility is to leave the system better than it found it.`,
+    ``,
+    `  PART 4 — DESIGN: For each chosen enhancement, design the CONCRETE technical solution. Read the project codebase. For each: technical design, affected files, implementation approach, risks.`,
+    `  When extending existing apps: read the current app.json, template.jsx, and executors/ to ensure compatibility.`,
     ``,
     `  Write \`.evolution-synthesis.md\`, \`.evolution-discussion.md\`, AND \`.evolution-design.md\`.`,
     ``,
@@ -213,10 +278,16 @@ function buildEvolutionPlanningPrompt(
     ``,
     `Each implement task MUST follow these rules:`,
     `  Read \`.evolution-design.md\`. IMPLEMENT the changes in the actual project codebase at ${project.codebasePath}.`,
+    ``,
+    `  SPRINT RESPONSIBILITY PRINCIPLE: Every bug, regression, broken feature, or enhancement identified during Phases 0-4 that was prioritized for this sprint MUST be addressed in implementation. The evolution sprint exists to make the system better — deferring known problems defeats the purpose. If the design doc lists it, you implement it.`,
+    ``,
+    `  APP CONSOLIDATION: When the design calls for extending an existing app, read the existing app's files first (app.json, template.jsx, executors/) and add new tools/views to it. Do NOT create a separate app for features that belong in an existing app's domain.`,
+    ``,
     `  CRITICAL RULES:`,
     `  - Read each file BEFORE editing`,
     `  - Make surgical, minimal changes`,
     `  - Follow existing code conventions`,
+    `  - When extending an app, preserve all existing tools and template views`,
     `  - Write \`.evolution-implementation.md\` listing every file changed`,
     `  SAFETY — ABSOLUTELY FORBIDDEN (violating these will CRASH the sprint):`,
     `  - NEVER restart, stop, or kill any server/gateway process — it kills the running sprint`,
@@ -265,24 +336,30 @@ function buildEvolutionPlanningPrompt(
     `- **Instructions:** Read ALL evolution files. Build a BESPOKE interactive dashboard. Write EXACTLY \`.orchestration-ui.jsx\`. Under 500KB. NO import statements. Use var (not const/let). All hooks at top level. Use EnsoUI components + Recharts.`,
     `  Tabs: Overview | Personas | Team | Implementation | Validation | Backlog`,
     ``,
-    `### Project Leader Meta-Review & Follow-Up Assignments`,
+    `### Project Leader Meta-Review & Resolution Verification`,
     `- **Task ID:** meta-review`,
     `- **Agent role:** architect`,
     `- **Dependencies:** review`,
     `- **Instructions:** Final meta-review by ${projectLeader?.name || "the Project Leader"}.`,
     `  1. Read ALL sprint outputs (persona reports, team evaluations, synthesis, implementation, review)`,
-    `  2. Evaluate: Was this sprint effective? What worked? What didn't?`,
-    `  3. FOLLOW-UP ASSIGNMENTS: Determine if any team member has deliverables needed for the NEXT sprint.`,
-    `     For each assignment: who (agent name + ID), what (specific deliverable), why (how it advances the product).`,
-    `     Examples: "Marketing should prepare a feature announcement for the new UX improvements"`,
-    `              "QA should write integration tests for the orchestration pipeline"`,
-    `              "AI Strategist should research MCP integration patterns for next sprint"`,
-    `  4. Update project.json with: adjusted goals, sprint priorities, role adjustments, follow-up assignments`,
-    `  5. Write \`.evolution-meta-review.md\` with:`,
+    `  2. RESOLUTION AUDIT: For every bug, issue, and enhancement identified in Phases 0-4:`,
+    `     - Was it addressed in implementation? Mark as RESOLVED / PARTIALLY_RESOLVED / UNRESOLVED`,
+    `     - If UNRESOLVED: why? Was it deprioritized with justification, or simply missed?`,
+    `     - Unresolved items without justification indicate a sprint process failure — flag them`,
+    `  3. APP ECOSYSTEM HEALTH CHECK:`,
+    `     - Were app consolidation recommendations from Phase 4 followed?`,
+    `     - Are there still fragmented single-purpose apps that should be merged?`,
+    `     - Does each app serve a broad domain (comprehensive tool) vs. narrow use case (feature app)?`,
+    `  4. Evaluate: Was this sprint effective? What worked? What didn't?`,
+    `  5. NEXT SPRINT SEED: Based on unresolved items and new insights, list 3-5 specific focus areas.`,
+    `     These are not deferred tasks — they are discovery seeds for the next sprint's Phase 0.`,
+    `  6. Update project.json with: adjusted goals, sprint priorities, role adjustments, resolution status`,
+    `  7. Write \`.evolution-meta-review.md\` with:`,
     `     - Sprint effectiveness score and justification`,
+    `     - Resolution audit table (issue | status | evidence | notes)`,
+    `     - App ecosystem health assessment`,
     `     - What worked well / what didn't`,
-    `     - Follow-up assignments table (agent | deliverable | deadline | rationale)`,
-    `     - Next sprint focus recommendations`,
+    `     - Next sprint seed topics (NOT deferred tasks — discovery prompts)`,
     ``,
     `## Agent Output Standards`,
     ``,

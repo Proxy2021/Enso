@@ -1,0 +1,382 @@
+{
+  "version": 1,
+  "createdAt": 1709400000000,
+  "spec": {
+    "toolFamily": "client_gallery",
+    "toolPrefix": "enso_client_gallery_",
+    "description": "Client gallery delivery tool with AI-generated captions, dual-resolution downloads, and download tracking analytics",
+    "signatureId": "client_gallery_view",
+    "tools": [
+      {
+        "suffix": "create_gallery",
+        "description": "Create a new client gallery with a name, client name, event/theme description, and optional cover photo URL. Use when the user says: 'create a gallery', 'new client gallery', 'set up a gallery for delivery', 'make a photo gallery'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Gallery name/title (e.g. 'Sarah & James Wedding')"
+            },
+            "clientName": {
+              "type": "string",
+              "description": "Client's name"
+            },
+            "description": {
+              "type": "string",
+              "description": "Event or theme description for AI caption context"
+            },
+            "coverPhotoUrl": {
+              "type": "string",
+              "description": "Optional URL for the gallery cover photo"
+            }
+          },
+          "required": ["name", "clientName"]
+        },
+        "sampleParams": { "name": "Summer Portrait Session", "clientName": "Alex Rivera", "description": "Outdoor golden hour portrait session at the botanical gardens" },
+        "sampleData": {
+          "tool": "enso_client_gallery_create_gallery",
+          "action": "list",
+          "galleries": [
+            {
+              "id": "gal_a1b2c3d4",
+              "name": "Summer Portrait Session",
+              "clientName": "Alex Rivera",
+              "description": "Outdoor golden hour portrait session at the botanical gardens",
+              "coverPhotoUrl": "/media/portrait_01.jpg",
+              "status": "draft",
+              "photoCount": 24,
+              "totalDownloads": 8,
+              "createdAt": 1709400000000
+            },
+            {
+              "id": "gal_e5f6g7h8",
+              "name": "Corporate Headshots — TechCorp",
+              "clientName": "TechCorp HR",
+              "description": "Professional headshots for the executive team",
+              "coverPhotoUrl": "/media/headshot_ceo.jpg",
+              "status": "published",
+              "photoCount": 15,
+              "totalDownloads": 42,
+              "createdAt": 1709300000000
+            }
+          ],
+          "message": "Gallery created successfully"
+        },
+        "requiredDataKeys": ["tool"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "add_photos",
+        "description": "Add photos to an existing gallery by providing photo URLs and optional filenames/notes. Use when the user says: 'add photos to gallery', 'upload images to gallery', 'put these photos in the gallery'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "galleryId": {
+              "type": "string",
+              "description": "ID of the target gallery"
+            },
+            "photos": {
+              "type": "array",
+              "description": "Array of photo objects with url, optional filename, and optional notes",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "url": { "type": "string", "description": "Photo URL" },
+                  "filename": { "type": "string", "description": "Display filename" },
+                  "notes": { "type": "string", "description": "Optional notes about the photo" }
+                },
+                "required": ["url"]
+              }
+            }
+          },
+          "required": ["galleryId", "photos"]
+        },
+        "sampleParams": {
+          "galleryId": "gal_a1b2c3d4",
+          "photos": [
+            { "url": "/media/portrait_01.jpg", "filename": "Portrait 01.jpg" },
+            { "url": "/media/portrait_02.jpg", "filename": "Portrait 02.jpg", "notes": "Client's favorite pose" }
+          ]
+        },
+        "sampleData": {
+          "tool": "enso_client_gallery_add_photos",
+          "galleryId": "gal_a1b2c3d4",
+          "galleryName": "Summer Portrait Session",
+          "action": "view",
+          "total": 24,
+          "photos": [
+            {
+              "id": "ph_x1y2z3",
+              "url": "/media/portrait_01.jpg",
+              "filename": "Portrait 01.jpg",
+              "notes": "",
+              "caption": "Golden sunlight filters through the garden foliage, casting a warm glow across a candid moment of joy.",
+              "captionGenerated": true,
+              "addedAt": 1709400000000
+            },
+            {
+              "id": "ph_a4b5c6",
+              "url": "/media/portrait_02.jpg",
+              "filename": "Portrait 02.jpg",
+              "notes": "Client's favorite pose",
+              "caption": "",
+              "captionGenerated": false,
+              "addedAt": 1709400000000
+            }
+          ],
+          "message": "2 photos added"
+        },
+        "requiredDataKeys": ["tool", "galleryId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "generate_captions",
+        "description": "Generate AI captions for all uncaptioned photos in a gallery using the event/theme as context. Captions are 1-2 sentences, evocative and professional. Use when the user says: 'generate captions', 'write descriptions for photos', 'AI describe my gallery photos', 'caption my gallery'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "galleryId": {
+              "type": "string",
+              "description": "ID of the target gallery"
+            },
+            "style": {
+              "type": "string",
+              "description": "Caption style: elegant, storytelling, minimal, or descriptive (default: elegant)"
+            },
+            "regenerateAll": {
+              "type": "boolean",
+              "description": "If true, regenerate all captions including previously generated ones (default: false)"
+            }
+          },
+          "required": ["galleryId"]
+        },
+        "sampleParams": { "galleryId": "gal_a1b2c3d4", "style": "elegant" },
+        "sampleData": {
+          "tool": "enso_client_gallery_generate_captions",
+          "galleryId": "gal_a1b2c3d4",
+          "galleryName": "Summer Portrait Session",
+          "style": "elegant",
+          "total": 24,
+          "generated": 22,
+          "skipped": 2,
+          "photos": [
+            {
+              "id": "ph_x1y2z3",
+              "url": "/media/portrait_01.jpg",
+              "filename": "Portrait 01.jpg",
+              "caption": "Golden sunlight filters through the garden foliage, casting a warm glow across a candid moment of joy.",
+              "captionGenerated": true,
+              "captionEditedByUser": false
+            },
+            {
+              "id": "ph_a4b5c6",
+              "url": "/media/portrait_02.jpg",
+              "filename": "Portrait 02.jpg",
+              "caption": "A serene expression captures the quiet confidence of an afternoon spent among blooming flowers.",
+              "captionGenerated": true,
+              "captionEditedByUser": false
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "galleryId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "edit_caption",
+        "description": "Manually edit or override the caption for a specific photo in a gallery. Use when the user says: 'edit this caption', 'change photo description', 'update the caption', 'rewrite this caption'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "galleryId": {
+              "type": "string",
+              "description": "ID of the target gallery"
+            },
+            "photoId": {
+              "type": "string",
+              "description": "ID of the photo to edit the caption for"
+            },
+            "caption": {
+              "type": "string",
+              "description": "New caption text"
+            }
+          },
+          "required": ["galleryId", "photoId", "caption"]
+        },
+        "sampleParams": { "galleryId": "gal_a1b2c3d4", "photoId": "ph_x1y2z3", "caption": "A perfect moment of pure joy beneath the golden canopy of autumn leaves." },
+        "sampleData": {
+          "tool": "enso_client_gallery_edit_caption",
+          "galleryId": "gal_a1b2c3d4",
+          "galleryName": "Summer Portrait Session",
+          "action": "view",
+          "total": 24,
+          "photos": [
+            {
+              "id": "ph_x1y2z3",
+              "url": "/media/portrait_01.jpg",
+              "filename": "Portrait 01.jpg",
+              "caption": "A perfect moment of pure joy beneath the golden canopy of autumn leaves.",
+              "captionGenerated": false,
+              "captionEditedByUser": true
+            }
+          ],
+          "message": "Caption updated"
+        },
+        "requiredDataKeys": ["tool", "galleryId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "get_gallery_page",
+        "description": "Render the full client-facing gallery page showing all photos with AI captions and download buttons for web-res and print-res. Use when the user says: 'preview gallery', 'show gallery page', 'how will the client see this', 'gallery preview'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "galleryId": {
+              "type": "string",
+              "description": "ID of the gallery to preview"
+            }
+          },
+          "required": ["galleryId"]
+        },
+        "sampleParams": { "galleryId": "gal_a1b2c3d4" },
+        "sampleData": {
+          "tool": "enso_client_gallery_get_gallery_page",
+          "galleryId": "gal_a1b2c3d4",
+          "galleryName": "Summer Portrait Session",
+          "clientName": "Alex Rivera",
+          "description": "Outdoor golden hour portrait session at the botanical gardens",
+          "coverPhotoUrl": "/media/portrait_01.jpg",
+          "status": "published",
+          "total": 24,
+          "photos": [
+            {
+              "id": "ph_x1y2z3",
+              "url": "/media/portrait_01.jpg",
+              "filename": "Portrait 01.jpg",
+              "caption": "Golden sunlight filters through the garden foliage, casting a warm glow across a candid moment of joy.",
+              "webDownloads": 3,
+              "printDownloads": 1
+            },
+            {
+              "id": "ph_a4b5c6",
+              "url": "/media/portrait_02.jpg",
+              "filename": "Portrait 02.jpg",
+              "caption": "A serene expression captures the quiet confidence of an afternoon spent among blooming flowers.",
+              "webDownloads": 0,
+              "printDownloads": 0
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "galleryId", "photos"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "record_download",
+        "description": "Log a download event for a photo in a gallery, tracking resolution type, client name, and timestamp. Use when the user says: 'record a download', 'log this download', 'track download', 'client downloaded a photo'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "galleryId": {
+              "type": "string",
+              "description": "ID of the gallery"
+            },
+            "photoId": {
+              "type": "string",
+              "description": "ID of the downloaded photo"
+            },
+            "resolution": {
+              "type": "string",
+              "description": "Resolution type: 'web' or 'print'"
+            },
+            "clientName": {
+              "type": "string",
+              "description": "Name of the client who downloaded"
+            }
+          },
+          "required": ["galleryId", "photoId", "resolution"]
+        },
+        "sampleParams": { "galleryId": "gal_a1b2c3d4", "photoId": "ph_x1y2z3", "resolution": "print", "clientName": "Alex Rivera" },
+        "sampleData": {
+          "tool": "enso_client_gallery_record_download",
+          "galleryId": "gal_a1b2c3d4",
+          "galleryName": "Summer Portrait Session",
+          "photoId": "ph_x1y2z3",
+          "photoFilename": "Portrait 01.jpg",
+          "resolution": "print",
+          "clientName": "Alex Rivera",
+          "timestamp": 1709500000000,
+          "message": "Download recorded",
+          "totalDownloads": 9
+        },
+        "requiredDataKeys": ["tool", "galleryId", "message"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "get_download_stats",
+        "description": "Show download analytics for a gallery: which photos downloaded most, by whom, web vs print breakdown, total downloads. Use when the user says: 'show download stats', 'gallery analytics', 'who downloaded my photos', 'download report'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "galleryId": {
+              "type": "string",
+              "description": "ID of the gallery to get stats for"
+            }
+          },
+          "required": ["galleryId"]
+        },
+        "sampleParams": { "galleryId": "gal_a1b2c3d4" },
+        "sampleData": {
+          "tool": "enso_client_gallery_get_download_stats",
+          "galleryId": "gal_a1b2c3d4",
+          "galleryName": "Summer Portrait Session",
+          "stats": {
+            "totalDownloads": 42,
+            "webDownloads": 28,
+            "printDownloads": 14,
+            "uniqueClients": 3
+          },
+          "topPhotos": [
+            {
+              "photoId": "ph_x1y2z3",
+              "filename": "Portrait 01.jpg",
+              "url": "/media/portrait_01.jpg",
+              "totalDownloads": 8,
+              "webDownloads": 5,
+              "printDownloads": 3
+            },
+            {
+              "photoId": "ph_a4b5c6",
+              "filename": "Portrait 02.jpg",
+              "url": "/media/portrait_02.jpg",
+              "totalDownloads": 6,
+              "webDownloads": 4,
+              "printDownloads": 2
+            }
+          ],
+          "clientBreakdown": [
+            { "clientName": "Alex Rivera", "downloads": 20, "web": 14, "print": 6 },
+            { "clientName": "Guest", "downloads": 12, "web": 8, "print": 4 },
+            { "clientName": "Studio Archive", "downloads": 10, "web": 6, "print": 4 }
+          ],
+          "recentDownloads": [
+            {
+              "photoId": "ph_x1y2z3",
+              "photoFilename": "Portrait 01.jpg",
+              "resolution": "print",
+              "clientName": "Alex Rivera",
+              "timestamp": 1709500000000
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "galleryId", "stats"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

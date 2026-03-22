@@ -56,19 +56,19 @@ export const ensoPlugin: ChannelPlugin<ResolvedEnsoAccount> = {
     defaultAccountId: () => DEFAULT_ACCOUNT_ID,
     setAccountEnabled: ({ cfg, accountId, enabled }) =>
       setAccountEnabledInConfigSection({
-        cfg: cfg as CoreConfig,
+        cfg: cfg as any,
         sectionKey: "enso",
         accountId,
         enabled,
         allowTopLevel: true,
-      }),
+      }) as any,
     deleteAccount: ({ cfg, accountId }) =>
       deleteAccountFromConfigSection({
-        cfg: cfg as CoreConfig,
+        cfg: cfg as any,
         sectionKey: "enso",
         accountId,
         clearBaseFields: ["name", "port", "host", "geminiApiKey", "mode", "accessToken"],
-      }),
+      }) as any,
     isConfigured: (account) => account.configured,
     describeAccount: (account) => ({
       accountId: account.accountId,
@@ -96,6 +96,7 @@ export const ensoPlugin: ChannelPlugin<ResolvedEnsoAccount> = {
       allowFrom: account.config.allowFrom ?? [],
       policyPath: "channels.enso.dmPolicy",
       allowFromPath: "channels.enso.allowFrom",
+      approveHint: "Add sender to channels.enso.allowFrom",
     }),
   },
   outbound: {

@@ -17,6 +17,8 @@ import { recordToolCall } from "./src/native-tools/tool-call-store.js";
 import { buildEnsoContext, setWorkspaceDir } from "./src/memory-bridge.js";
 import { registerFilesystemTools, createFilesystemTools } from "./src/filesystem-tools.js";
 import { registerMediaTools, createMediaTools } from "./src/media-tools.js";
+import { registerVideoTools, createVideoTools } from "./src/video-tools.js";
+import { registerMediaProcessingTools, createMediaProcessingTools } from "./src/media-ai-gateway.js";
 import { registerScreenTools, createScreenTools } from "./src/screen-tools.js";
 import { registerBrowserTools, createBrowserTools } from "./src/browser-tools.js";
 import { registerResearcherTools, createResearcherTools } from "./src/researcher-tools.js";
@@ -64,6 +66,8 @@ function registerAllToolsLocally(): void {
   const allToolSets = [
     createFilesystemTools(),
     createMediaTools(),
+    createVideoTools(),
+    createMediaProcessingTools(),
     createScreenTools(),
     createBrowserTools(),
     createResearcherTools(),
@@ -104,7 +108,7 @@ const plugin = {
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
     // Store runtime + API for use throughout Enso
-    setEnsoRuntime(api.runtime as Parameters<typeof setEnsoRuntime>[0]);
+    setEnsoRuntime(api.runtime as unknown as Parameters<typeof setEnsoRuntime>[0]);
     setPluginApi(api as unknown as EnsoPluginApi);
 
     // Always populate the local tool registry
@@ -121,6 +125,8 @@ const plugin = {
       register: () => registerFilesystemTools(api as unknown as EnsoPluginApi),
     });
     registerMediaTools(api as unknown as EnsoPluginApi);
+    registerVideoTools(api as unknown as EnsoPluginApi);
+    registerMediaProcessingTools(api as unknown as EnsoPluginApi);
     registerScreenTools(api as unknown as EnsoPluginApi);
     maybeRegisterFallbackToolFamily({
       familyLabel: "browser",
@@ -142,7 +148,7 @@ const plugin = {
     });
 
     // ── Native Tool Bridge: capture agent tool usage ──
-    api.on("after_tool_call", (event: { error?: unknown; toolName: string; params: Record<string, unknown>; result: unknown }, _ctx: unknown) => {
+    api.on("after_tool_call", (event: { error?: unknown; toolName: string; params: Record<string, unknown>; result?: unknown }, _ctx: unknown) => {
       if (event.error) return;
       if (isToolRegistered(event.toolName)) {
         recordToolCall({

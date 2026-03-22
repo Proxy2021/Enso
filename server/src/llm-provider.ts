@@ -217,7 +217,7 @@ export function getProviderStatus(providerKeys: Record<string, string>): Provide
   const statuses = PROVIDERS.map((p) => ({
     id: p.id,
     name: p.name,
-    configured: p.id === "ollama" || !!providerKeys[p.id],
+    configured: p.id === "ollama" || !!(providerKeys && providerKeys[p.id]),
     models: p.models,
     setupUrl: p.setupUrl,
     setupHint: p.setupHint,
@@ -230,6 +230,7 @@ export function getProviderStatus(providerKeys: Record<string, string>): Provide
       name: "Custom",
       configured: true,
       models: cfg.customModels.map((m) => ({ id: m.id, name: m.name })),
+      setupUrl: undefined,
       setupHint: "User-configured models",
     });
   }
@@ -246,7 +247,9 @@ export function findProviderForModel(modelId: string): LLMProvider | null {
   return null;
 }
 
-function getCustomModelConfig(modelId: string): ProvidersConfig["customModels"] extends (infer T)[] ? T | undefined : never {
+type CustomModelEntry = NonNullable<ProvidersConfig["customModels"]>[number];
+
+function getCustomModelConfig(modelId: string): CustomModelEntry | undefined {
   const cfg = readConfig();
   return cfg.customModels?.find((m) => m.id === modelId);
 }
@@ -324,7 +327,20 @@ async function callGeminiChat(params: {
     if (!response.ok) {
       const err = await response.text();
       logError("llm-provider", `Gemini API error (${model}): ${response.status}`, err);
-      throw new Error(`Gemini API error: ${response.status}`);
+
+      // Provide context-aware error messages instead of raw status codes (E2 Sprint 11)
+      if (response.status === 400) {
+        throw new Error(
+          "I couldn't process that request. This usually happens when the message references files or images that aren't attached. " +
+          "Try sharing the specific files you'd like me to work with, or describe what you need in a different way."
+        );
+      } else if (response.status === 429) {
+        throw new Error("The AI service is temporarily busy. Please try again in a moment.");
+      } else if (response.status >= 500) {
+        throw new Error("The AI service encountered a temporary error. Please try again.");
+      } else {
+        throw new Error(`An unexpected error occurred (code ${response.status}). Please try again.`);
+      }
     }
 
     const result = (await response.json()) as {
