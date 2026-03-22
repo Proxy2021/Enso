@@ -2,6 +2,7 @@ import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { useSpeechRecognition } from "../lib/use-speech-recognition";
 import { useVoiceRecorder } from "../lib/use-voice-recorder";
+import { useNativeSpeech } from "../lib/use-native-speech";
 import { isNative } from "../lib/platform";
 import { isLikelyNaturalLanguage } from "../utils/nlDetection";
 import { useT } from "../lib/i18n";
@@ -152,7 +153,8 @@ export default function ChatInput() {
     return () => clearTimeout(timer);
   }, [nlInterceptionToast]);
 
-  // Speech-to-text — native uses MediaRecorder + server transcription, web uses Web Speech API
+  // Speech-to-text — prefer native SpeechRecognizer on Android, fall back to
+  // MediaRecorder + server transcription, use Web Speech API on desktop
   const handleTranscript = useCallback((transcript: string) => {
     setText((prev) => {
       const separator = prev.length > 0 && !prev.endsWith(" ") ? " " : "";
@@ -161,12 +163,17 @@ export default function ChatInput() {
   }, []);
   const speech = useSpeechRecognition(handleTranscript);
   const recorder = useVoiceRecorder(handleTranscript);
-  const voice = isNative ? recorder : speech;
+  const nativeSpeech = useNativeSpeech(handleTranscript);
+  const voice = isNative
+    ? (nativeSpeech.isSupported ? nativeSpeech : recorder)
+    : speech;
   const speechSupported = voice.isSupported;
   const isListening = voice.isListening;
   const toggleListening = voice.toggleListening;
   const interimTranscript = isNative
-    ? (recorder.isTranscribing ? t("chat.transcribing") : (recorder.isListening ? t("chat.recording") : ""))
+    ? (nativeSpeech.isSupported
+        ? nativeSpeech.interimTranscript
+        : (recorder.isTranscribing ? t("chat.transcribing") : (recorder.isListening ? t("chat.recording") : "")))
     : speech.interimTranscript;
 
   // Close attach menu on click outside
@@ -215,21 +222,27 @@ export default function ChatInput() {
     }
 
     if (attachedFiles.length > 0) {
-      await sendMessageWithMedia(trimmed, attachedFiles);
+      // Capture files before clearing state, then fire-and-forget.
+      // sendMessageWithMedia shows the card optimistically before uploading.
+      const filesToSend = [...attachedFiles];
+      setAttachedFiles([]);
+      setText("");
+      setSelectedIndex(0);
+      requestAnimationFrame(() => autoResize());
+      textareaRef.current?.focus();
+      sendMessageWithMedia(trimmed, filesToSend);
     } else {
       sendMessage(trimmed);
+      setText("");
+      setSelectedIndex(0);
+      requestAnimationFrame(() => autoResize());
+      textareaRef.current?.focus();
     }
 
     // Show queue toast if a background task is active
     if (hasActiveBackgroundTask()) {
       setQueueToast(t("chat.queueToast"));
     }
-
-    setText("");
-    setAttachedFiles([]);
-    setSelectedIndex(0);
-    requestAnimationFrame(() => autoResize());
-    textareaRef.current?.focus();
   }
 
   function selectCommand(cmd: SlashCommand) {

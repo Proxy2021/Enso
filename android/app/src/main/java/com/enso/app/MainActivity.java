@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AppUpdaterPlugin.class);
         registerPlugin(SharePlugin.class);
+        registerPlugin(SpeechPlugin.class);
         super.onCreate(savedInstanceState);
 
         getBridge().getWebView().setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {

@@ -30,8 +30,32 @@ export function isAudioFile(filePath: string): boolean {
 }
 
 /**
+ * Transcribe an audio buffer using Gemini 2.0 Flash — no disk I/O.
+ * Used by the /transcribe endpoint to avoid writing temp files.
+ */
+export async function transcribeAudioBuffer(params: {
+  audioBuffer: Buffer;
+  mimeType: string;
+  geminiApiKey: string;
+}): Promise<string | null> {
+  const { audioBuffer, mimeType, geminiApiKey } = params;
+
+  try {
+    if (audioBuffer.length > MAX_TRANSCRIBE_FILE_SIZE) {
+      logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `buffer too large (${(audioBuffer.length / 1024 / 1024).toFixed(1)}MB > ${(MAX_TRANSCRIBE_FILE_SIZE / 1024 / 1024).toFixed(0)}MB limit)` });
+      return null;
+    }
+
+    return await callGeminiTranscribe(audioBuffer.toString("base64"), mimeType, geminiApiKey, `buffer(${audioBuffer.length}b)`);
+  } catch (err) {
+    logError("transcribe", "buffer transcription failed (non-fatal)", err);
+    return null;
+  }
+}
+
+/**
  * Transcribe an audio file using Gemini 2.0 Flash.
- * Returns the transcript text, or null on failure (non-fatal).
+ * Used by inbound.ts for file-based audio attachments.
  */
 export async function transcribeAudio(params: {
   filePath: string;
@@ -54,60 +78,58 @@ export async function transcribeAudio(params: {
       return null;
     }
 
-    const base64Data = fileBuffer.toString("base64");
-
-    const response = await fetch(
-      geminiUrl(GEMINI_MODEL_UTILITY, geminiApiKey),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType,
-                    data: base64Data,
-                  },
-                },
-                {
-                  text: "Transcribe this audio. Return only the transcription text, nothing else.",
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 8192,
-          },
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      logError("transcribe", `Gemini API error ${response.status}: ${errorText.slice(0, 200)}`);
-      return null;
-    }
-
-    const result = await response.json() as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
-    };
-
-    const transcript = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-    if (!transcript) {
-      logError("transcribe", "no transcript in Gemini response");
-      return null;
-    }
-
-    logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `success: ${transcript.length} chars from ${filePath}` });
-    return transcript;
+    return await callGeminiTranscribe(fileBuffer.toString("base64"), mimeType, geminiApiKey, filePath);
   } catch (err) {
     logError("transcribe", "transcription failed (non-fatal)", err);
     return null;
   }
+}
+
+/** Shared Gemini transcription call used by both buffer and file paths. */
+async function callGeminiTranscribe(
+  base64Data: string,
+  mimeType: string,
+  geminiApiKey: string,
+  sourceLabel: string,
+): Promise<string | null> {
+  const response = await fetch(
+    geminiUrl(GEMINI_MODEL_UTILITY, geminiApiKey),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { inlineData: { mimeType, data: base64Data } },
+              { text: "Transcribe this audio. Return only the transcription text, nothing else." },
+            ],
+          },
+        ],
+        generationConfig: { temperature: 0, maxOutputTokens: 8192 },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    logError("transcribe", `Gemini API error ${response.status}: ${errorText.slice(0, 200)}`);
+    return null;
+  }
+
+  const result = await response.json() as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
+  };
+
+  const transcript = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+  if (!transcript) {
+    logError("transcribe", "no transcript in Gemini response");
+    return null;
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `success: ${transcript.length} chars from ${sourceLabel}` });
+  return transcript;
 }

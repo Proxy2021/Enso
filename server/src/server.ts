@@ -14,7 +14,7 @@ import { handleInbound } from "./agent-adapter.js";
 import { handleCardEnhance, handlePluginCardAction, createScopedShareContext, getCardState } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
-import { transcribeAudio } from "./transcribe.js";
+import { transcribeAudio, transcribeAudioBuffer } from "./transcribe.js";
 import { APP_CATALOG } from "./app-catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
@@ -1226,13 +1226,6 @@ export async function startEnsoServer(opts: {
       return;
     }
     try {
-      const extMap: Record<string, string> = {
-        "audio/webm": ".webm",
-        "audio/ogg": ".ogg",
-        "audio/mp4": ".m4a",
-        "audio/mpeg": ".mp3",
-        "audio/wav": ".wav",
-      };
       let audioBuffer: Buffer;
       let audioMimeType: string;
       if (req.body?.audio && typeof req.body.audio === "string") {
@@ -1247,12 +1240,7 @@ export async function startEnsoServer(opts: {
         res.status(400).json({ error: "Empty or missing audio body" });
         return;
       }
-      const ext = extMap[audioMimeType] ?? ".webm";
-      const filename = `${randomUUID()}${ext}`;
-      const filePath = join(uploadDir, filename);
-      writeFileSync(filePath, audioBuffer);
-      const transcript = await transcribeAudio({ filePath, geminiApiKey: account.geminiApiKey });
-      unlinkSync(filePath);
+      const transcript = await transcribeAudioBuffer({ audioBuffer, mimeType: audioMimeType, geminiApiKey: account.geminiApiKey });
       if (transcript) {
         res.json({ transcript });
       } else {

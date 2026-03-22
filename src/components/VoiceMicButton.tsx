@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useSpeechRecognition } from "../lib/use-speech-recognition";
 import { useVoiceRecorder } from "../lib/use-voice-recorder";
+import { useNativeSpeech } from "../lib/use-native-speech";
 import { isNative } from "../lib/platform";
 
 interface VoiceMicButtonProps {
@@ -14,13 +15,16 @@ interface VoiceMicButtonProps {
 
 /**
  * Reusable microphone button with platform-adaptive voice input.
+ * Native (Android): prefers native SpeechRecognizer, falls back to MediaRecorder + server.
  * Web: uses Web Speech API (Chrome/Edge/Firefox).
- * Native: uses MediaRecorder + server-side Gemini transcription.
  */
 export function VoiceMicButton({ onTranscript, size = "sm", className = "" }: VoiceMicButtonProps) {
   const speech = useSpeechRecognition(onTranscript);
   const recorder = useVoiceRecorder(onTranscript);
-  const voice = isNative ? recorder : speech;
+  const nativeSpeech = useNativeSpeech(onTranscript);
+  const voice = isNative
+    ? (nativeSpeech.isSupported ? nativeSpeech : recorder)
+    : speech;
 
   if (!voice.isSupported) return null;
 

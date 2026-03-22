@@ -684,24 +684,26 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   sendMessageWithMedia: async (text: string, mediaFiles: File[], intent?: "image_research") => {
-    const serverPaths: string[] = [];
-    const previewUrls: string[] = [];
-
-    for (const file of mediaFiles) {
-      const res = await fetch(`${getBackendBaseUrl()}/upload`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": file.type }),
-        body: file,
-      });
-      if (res.ok) {
-        const { filePath, mediaUrl } = await res.json();
-        serverPaths.push(filePath);
-        previewUrls.push(mediaUrl);
-      }
-    }
-
     const id = uuidv4();
     const now = Date.now();
+
+    // Optimistic UI: show the user bubble IMMEDIATELY with local blob previews
+    const localPreviews = mediaFiles.map((f) => URL.createObjectURL(f));
+
+    // Remove any existing thinking card before creating a new one
+    const oldThinkingId = get()._thinkingCardId;
+    if (oldThinkingId) {
+      set((s) => {
+        const { [oldThinkingId]: _, ...remainingCards } = s.cards;
+        return {
+          cardOrder: s.cardOrder.filter(cid => cid !== oldThinkingId),
+          cards: remainingCards,
+          _thinkingCardId: null,
+        };
+      });
+    }
+
+    const thinkingId = uuidv4();
     const card: Card = {
       id,
       runId: id,
@@ -710,16 +712,64 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "complete",
       display: "expanded",
       text,
-      mediaUrls: previewUrls,
+      mediaUrls: localPreviews,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const thinkingCard: Card = {
+      id: thinkingId,
+      runId: thinkingId,
+      type: "thinking",
+      role: "assistant",
+      status: "streaming",
+      display: "expanded",
+      text: "Processing your request...",
       createdAt: now,
       updatedAt: now,
     };
 
     set((s) => ({
-      cardOrder: [...s.cardOrder, id],
-      cards: { ...s.cards, [id]: card },
+      cardOrder: [...s.cardOrder, id, thinkingId],
+      cards: { ...s.cards, [id]: card, [thinkingId]: thinkingCard },
+      _thinkingCardId: thinkingId,
       isWaiting: true,
     }));
+
+    // Background: compress images + upload all files in parallel
+    const { compressImageFile } = await import("../lib/media-actions");
+
+    const uploadResults = await Promise.all(
+      mediaFiles.map(async (file) => {
+        const compressed = await compressImageFile(file);
+        const res = await fetch(`${getBackendBaseUrl()}/upload`, {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": compressed.type }),
+          body: compressed,
+        });
+        if (res.ok) {
+          return (await res.json()) as { filePath: string; mediaUrl: string };
+        }
+        return null;
+      }),
+    );
+
+    const serverPaths = uploadResults.filter(Boolean).map((r) => r!.filePath);
+    const serverUrls = uploadResults.filter(Boolean).map((r) => r!.mediaUrl);
+
+    // Update card with server URLs (replaces blob: previews for persistence/history)
+    if (serverUrls.length > 0) {
+      set((s) => ({
+        cards: {
+          ...s.cards,
+          [id]: { ...s.cards[id]!, mediaUrls: serverUrls, updatedAt: Date.now() },
+        },
+      }));
+    }
+
+    // Revoke blob URLs to free memory
+    for (const url of localPreviews) URL.revokeObjectURL(url);
+
+    // Send to server via WebSocket
     get()._wsClient?.send({
       type: intent === "image_research" ? "image_research" : "chat.send",
       text,
