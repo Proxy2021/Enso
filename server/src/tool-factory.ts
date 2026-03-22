@@ -120,10 +120,18 @@ export async function autoHealExecutor(params: {
   apiKey: string;
   /** Interaction trail context for contextual debugging (Living Apps Phase 1B). */
   failureContext?: { formatted: string };
+  model?: string;
+  providerKeys?: Record<string, string>;
 }): Promise<{ success: boolean; fixedBody?: string; error?: string }> {
   try {
     const prompt = buildExecutorFixPrompt(params);
-    const raw = await callGeminiLLMWithRetry(prompt, params.apiKey);
+    let raw: string;
+    if (params.model && params.providerKeys) {
+      const { callChatLLM } = await import("./llm-provider.js");
+      raw = await callChatLLM({ prompt, model: params.model, providerKeys: params.providerKeys });
+    } else {
+      raw = await callGeminiLLMWithRetry(prompt, params.apiKey);
+    }
     const fixedBody = stripMarkdownFences(raw);
 
     // Validate the fixed executor
@@ -198,8 +206,10 @@ export async function refineTemplate(params: {
   instruction: string;
   existingTemplate?: string;
   apiKey: string;
+  model?: string;
+  providerKeys?: Record<string, string>;
 }): Promise<{ templateJSX: string; valid: boolean; errors: string[] }> {
-  const { toolFamily, signatureId, currentData, instruction, existingTemplate, apiKey } = params;
+  const { toolFamily, signatureId, currentData, instruction, existingTemplate, apiKey, model, providerKeys } = params;
 
   const dataShape = (() => {
     try {
@@ -233,15 +243,22 @@ ${existingTemplate
 
 Respond with ONLY the JSX component code. Must start with: export default function GeneratedUI({ data, onAction })`;
 
-  let rawJSX = await callGeminiLLMWithRetry(prompt, apiKey, GEMINI_MODEL_PRO);
+  const callLLM = async (p: string) => {
+    if (model && providerKeys) {
+      const { callChatLLM } = await import("./llm-provider.js");
+      return callChatLLM({ prompt: p, model, providerKeys });
+    }
+    return callGeminiLLMWithRetry(p, apiKey, GEMINI_MODEL_PRO);
+  };
+
+  let rawJSX = await callLLM(prompt);
   let templateJSX = ensureExportDefault(stripMarkdownFences(rawJSX));
 
   const validation = await validateTemplateJSX(templateJSX);
   if (!validation.valid) {
-    // Retry once with error context
     const retryPrompt = prompt
       + `\n\nPREVIOUS ATTEMPT FAILED WITH ERRORS:\n${validation.errors.join("\n")}\n\nFix the JSX syntax errors.`;
-    rawJSX = await callGeminiLLMWithRetry(retryPrompt, apiKey, GEMINI_MODEL_PRO);
+    rawJSX = await callLLM(retryPrompt);
     templateJSX = ensureExportDefault(stripMarkdownFences(rawJSX));
 
     const retry = await validateTemplateJSX(templateJSX);

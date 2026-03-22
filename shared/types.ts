@@ -244,6 +244,7 @@ export interface ClientMessage {
     | "discovery.start"
     | "image_research"
     | "card.summarize"
+    | "card.evolve"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;
@@ -275,6 +276,8 @@ export interface ClientMessage {
     taskTerminals?: Record<string, { text: string; status: string }>;
   };
   cardSummarizeAction?: "summarize" | "podcast";
+  // card.evolve fields
+  includeResearch?: boolean;
   // card.enhance / card.build_app / card.propose_app fields
   cardText?: string;
   // card.enhance fields

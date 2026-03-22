@@ -94,7 +94,7 @@ export function createActionRouter(deps: {
       } else {
         const { classifyTask } = await import("./task-router.js");
         const classification = account.geminiApiKey
-          ? await classifyTask({ userMessage: text, conversationHistory: [], geminiApiKey: account.geminiApiKey })
+          ? await classifyTask({ userMessage: text, conversationHistory: [], geminiApiKey: account.geminiApiKey, chatModel: client.chatModel, providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey } })
           : { complexity: "simple" as const, answer: undefined, reasoning: "no gemini key" };
 
         if (classification.complexity === "research") {

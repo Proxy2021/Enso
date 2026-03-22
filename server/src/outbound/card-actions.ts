@@ -491,6 +491,7 @@ export async function handlePluginCardAction(params: {
     try {
       const { refineTemplate } = await import("../tool-factory.js");
       const existingTemplate = getGeneratedTemplateCodeBySignature(ctx.signatureId);
+      const refineAccount = getActiveAccount();
       const result = await refineTemplate({
         toolFamily: ctx.toolFamily ?? "unknown",
         signatureId: ctx.signatureId,
@@ -498,6 +499,8 @@ export async function handlePluginCardAction(params: {
         instruction,
         existingTemplate: existingTemplate ?? undefined,
         apiKey: ctx.geminiApiKey,
+        model: client.chatModel,
+        providerKeys: refineAccount ? { ...refineAccount.providerKeys, gemini: refineAccount.geminiApiKey } : undefined,
       });
 
       if (!result.valid) {
@@ -1137,11 +1140,61 @@ Requirements:
           return;
         }
 
-        // ── Executor failed — launch Claude Code to fix ──
+        // ── Executor failed — try auto-heal first, then Claude Code ──
         const errorMsg = result.error ?? "Tool returned no data";
         if (isDynamicTool(toolCall.toolName)) {
           const execBody = getExecutorBody(toolCall.toolName);
           if (execBody) {
+            // Attempt lightweight LLM auto-heal before resorting to Claude Code
+            const healAccount = getActiveAccount();
+            if (healAccount?.geminiApiKey) {
+              sendOperation("processing", "Auto-healing executor");
+              logAction({ ts: Date.now(), type: "action", category: "action:autoheal", message: `Attempting auto-heal for "${toolCall.toolName}": ${errorMsg}`, cardId });
+
+              try {
+                const { autoHealExecutor } = await import("../tool-factory.js");
+                const { buildFailureContext } = await import("../interaction-tracker.js");
+                const failureCtx = buildFailureContext(ctx.toolFamily ?? "", errorMsg);
+                const healResult = await autoHealExecutor({
+                  toolName: toolCall.toolName,
+                  toolFamily: ctx.toolFamily ?? "unknown",
+                  executorBody: execBody,
+                  errorMessage: errorMsg,
+                  failedParams: (toolCall.params ?? {}) as Record<string, unknown>,
+                  sampleData: (ctx.currentData ?? {}) as Record<string, unknown>,
+                  expectedKeys: Object.keys((ctx.currentData ?? {}) as Record<string, unknown>),
+                  apiKey: healAccount.geminiApiKey,
+                  failureContext: failureCtx ? { formatted: failureCtx.formatted } : undefined,
+                  model: client.chatModel,
+                  providerKeys: { ...healAccount.providerKeys, gemini: healAccount.geminiApiKey },
+                });
+
+                if (healResult.success && healResult.fixedBody) {
+                  logAction({ ts: Date.now(), type: "action", category: "action:autoheal", message: `Auto-heal succeeded for "${toolCall.toolName}", persisting fix and retrying`, cardId });
+
+                  hotSwapExecutor(toolCall.toolName, healResult.fixedBody, ctx.toolFamily ?? "unknown", healAccount.geminiApiKey);
+
+                  const { executeToolDirect } = await import("../native-tools/registry.js");
+                  const retryResult = await executeToolDirect(toolCall.toolName, toolCall.params ?? {});
+                  if (retryResult.success && retryResult.data) {
+                    sendOperation("complete", "Auto-heal succeeded");
+                    const freshData = retryResult.data;
+                    ctx.currentData = freshData;
+                    client.send({
+                      id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+                      state: "final", targetCardId: cardId,
+                      data: freshData,
+                      operation: { operationId, stage: "complete", label: "Fixed and refreshed", cancellable: false },
+                      timestamp: Date.now(),
+                    } as ServerMessage);
+                    return;
+                  }
+                }
+                logAction({ ts: Date.now(), type: "action", category: "action:autoheal", message: `Auto-heal failed for "${toolCall.toolName}", falling back to Claude Code`, cardId });
+              } catch (healErr) {
+                logError("action:autoheal", "Auto-heal threw", healErr, { cardId, toolName: toolCall.toolName });
+              }
+            }
             logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Executor failed for "${toolCall.toolName}": ${errorMsg}, launching Claude Code`, cardId });
 
             const fixParts: string[] = [

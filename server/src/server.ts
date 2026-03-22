@@ -1654,6 +1654,8 @@ export async function startEnsoServer(opts: {
                   conversationHistory: recentHistory,
                   geminiApiKey: account.geminiApiKey,
                   mediaUrls: msg.mediaUrls,
+                  chatModel: client.chatModel,
+                  providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey },
                 });
 
                 // Emit classification result status
@@ -2348,6 +2350,25 @@ export async function startEnsoServer(opts: {
                   });
                 }
               })();
+            }
+            break;
+          }
+          case "card.evolve": {
+            if (msg.cardId && msg.cardType && msg.cardContent) {
+              runtime.log?.(`[enso] card.evolve: ${msg.cardId} (${msg.cardType}${msg.evolutionGoal ? `, goal="${msg.evolutionGoal.slice(0, 60)}"` : ""})`);
+              const { handleCardEvolution } = await import("./card-evolution.js");
+              handleCardEvolution({
+                cardId: msg.cardId,
+                cardType: msg.cardType,
+                cardContent: msg.cardContent,
+                evolutionGoal: msg.evolutionGoal,
+                includeResearch: msg.includeResearch,
+                client,
+                account,
+              }).catch((err) => {
+                logError("card.evolve", "Card evolution failed", err, { cardId: msg.cardId });
+                runtime.error?.(`[enso] card.evolve error: ${err instanceof Error ? err.message : String(err)}`);
+              });
             }
             break;
           }

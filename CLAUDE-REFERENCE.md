@@ -14,11 +14,42 @@ Multi-block accumulation (inbound.ts: stable card ID + steps array)
     ↓
 deliverEnsoReply → plain text chat card (last block as primary, steps retained)
     ↓
-User clicks "App" enhance button → LLM selects tool → deterministic tool execution → pre-built template UI
+User clicks "Evolve" → card.evolve → card-evolution.ts → orchestration sprint (inline targeting)
     ↓
-User can toggle between Original (text) and App (interactive) views
+Orchestrator sends enhanceResult to source card (building → evolved toggle view)
     ↓
 Card actions in App view → four-path dispatch (refine / mechanical / native tool / agent fallback)
+```
+
+**Card evolution** (inline orchestration):
+```
+User clicks "Evolve" on any assistant card
+    ↓
+card.evolve message → server.ts → handleCardEvolution(cardId, cardType, cardContent, goal)
+    ↓
+card-evolution.ts builds type-specific planning prompt (chat/terminal/orchestration/dynamic-ui)
+    ↓
+handleOrchestration({ targetCardId: cardId }) — inline targeting
+    ↓
+orchestrator.ts: bootstrapCardId = targetCardId, sends enhanceResult with signatureId "card_evolution_building"
+    ↓
+Frontend shows building view on source card (same pattern as Deep Research)
+    ↓
+Agents complete → final enhanceResult with evolved app → source card gains Standard/Evolved toggle
+```
+
+**Card summarization + podcast**:
+```
+User clicks "Summarize" or "Listen" on any card
+    ↓
+card.summarize message → server.ts → card-summarizer.ts
+    ↓
+extractCardContent() → robust extraction from any card type
+    ↓
+Summarize: callChatLLM() → structured summary (overview, findings, outcomes, narrative)
+Podcast: callChatLLM() → script → Gemini multi-speaker TTS → WAV → media URL
+    ↓
+enhanceResult delivered back to source card
 ```
 
 **Claude Code direct tool** (bypasses OpenClaw agent):
@@ -33,7 +64,7 @@ AskUserQuestion tool_use → clickable question buttons → user selects → res
 
 ## WebSocket Protocol (Full Details)
 
-- **Client → Server**: `ClientMessage` with types `chat.send`, `chat.history`, `ui_action`, `tools.list_projects`, `card.action`, `card.enhance`, `card.build_app`, `card.propose_app`, `card.delete_all_apps`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`
+- **Client → Server**: `ClientMessage` with types `chat.send`, `chat.history`, `ui_action`, `tools.list_projects`, `card.action`, `card.enhance`, `card.evolve`, `card.summarize`, `card.build_app`, `card.propose_app`, `card.delete_all_apps`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`
 - **Server → Client**: `ServerMessage` with states `delta` (streaming), `final`, `error`
 - Messages carry: `text`, `data` (structured), `generatedUI` (JSX code), `mediaUrls`, `targetCardId` (for in-place card updates), `steps` (multi-block agent steps), `settings` (connection-time config including `toolFamilies` for the enhance menu)
 - `chat.send` can include `routing?: ToolRouting` — when `toolId: "claude-code"`, the server bypasses OpenClaw and directly spawns the Claude CLI
@@ -60,27 +91,34 @@ When the OpenClaw agent self-iterates (e.g., a tool call fails and it retries), 
 
 ---
 
-## App Enhancement (Full Details)
+## Card Evolution (Evolve — Replaces Enhance)
 
-### Enhance Menu (App Vocabulary)
+The **Evolve** button appears on every completed assistant card. It replaces the old Enhance button, providing a deeper, multi-agent transformation via the orchestration engine.
 
-The "App" enhance button shows a dropdown menu listing all available apps (from `APP_CATALOG`). Each entry shows an icon, app name, and description. Options:
-- **Auto-detect**: LLM picks the best app type (original behavior)
-- **Family shortcut**: Pre-selects a family, skips the LLM tool selection call entirely (instant enhance via `suggestedFamily` in the WS message)
-- **Build custom app...**: Opens the async build pipeline for new app types
+### How Evolve Works
 
-The menu is populated from `toolFamilies` state, sent by the server on WebSocket connection in the `settings` message. Frontend stores in Zustand; `enhanceCardWithFamily(cardId, family)` sends a `card.enhance` with `suggestedFamily`.
+1. User clicks **Evolve** on any assistant card (chat, terminal, orchestration, dynamic-ui)
+2. Frontend sends `card.evolve` with `cardId`, `cardType`, `cardContent`, optional `evolutionGoal` and `includeResearch`
+3. `card-evolution.ts` builds a card-type-specific planning prompt with focused strategy:
+   - **Chat cards** → Dashboard with data visualizations, interactive exploration
+   - **Terminal cards** → Project dashboard showing files changed, commands run, outcomes
+   - **Orchestration cards** → Executive report with task outcomes, timelines, deliverables
+   - **Dynamic-ui cards** → Feature additions, better data viz, enhanced UX
+4. Dispatches to `handleOrchestration` with `targetCardId: cardId` (inline targeting)
+5. Orchestrator uses the source card's `cardId` as `bootstrapCardId` and sends an initial `enhanceResult` with `signatureId: "card_evolution_building"` — the source card enters building state
+6. Agents run in parallel (max concurrency 3, Opus planning model), Claude Code streaming output appears on the source card
+7. On completion, the evolved app arrives as an `enhanceResult` — card gains a **Standard / ✨ Evolved** toggle
 
-### Fast Enhance (Existing Tool Family Matches)
+### Inline Orchestration UX Pattern
 
-1. User clicks the "App" button → dropdown shows families, or clicks a specific family for instant enhance
-2. `card.enhance` message sent to server with `cardText` and optional `suggestedFamily`
-3. **Tool selection** (manual enhance only): When `suggestedFamily` is set, the server skips `selectToolForContent()` and uses the family's `primaryTool` directly. Otherwise, Gemini analyzes the text and selects the best match from `APP_CATALOG`. Note: for auto-enhance (when agent called a tool), this step is skipped entirely — the tool data is already captured.
-4. **Deterministic tool execution**: The selected tool is executed directly via `executeToolDirect()` — no further LLM calls
-5. **Template rendering**: `inferToolTemplate()` selects a pre-built JSX template, `normalizeDataForToolTemplate()` aligns the data shape, `getToolTemplateCode()` returns the JSX string
-6. **App view delivered**: `enhanceResult` sent back with `data`, `generatedUI`, `cardMode`
-7. **Frontend**: Card gains an Original/App toggle. App view renders the compiled JSX template in the sandbox.
-8. **Card actions**: Buttons in the app view trigger `card.action` → four-path dispatch (refine / mechanical / native tool / agent fallback)
+All orchestration-driven features (Evolve, Deep Research, Discovery) share a consistent UX:
+- **Building phase**: Source card shows a terminal-style build view with live Claude Code output
+- **Complete**: Source card gains a toggle to switch between original content and the AI-generated result
+- Frontend recognizes building state via `signatureId` values: `card_evolution_building`, `deep_research_building`, `focused_archetype_building`
+
+### Legacy Enhance Path (Still Available)
+
+The catalog-based app matching still exists for programmatic use (`card.enhance` messages). `selectToolForContent()` picks from `APP_CATALOG`, `executeToolDirect()` runs the tool, and `inferToolTemplate()` renders the JSX template. Both `selectToolForContent` and `refineTemplate` now accept multi-provider LLM config via `callChatLLM` when `chatModel` and `providerKeys` are provided.
 
 ### Build App (No Existing Tool Family — Async Pipeline)
 
@@ -103,7 +141,7 @@ After an app is built and displayed, users can refine its UI without rebuilding 
 1. In the app view footer, a "Refine" button (pencil icon) toggles an inline text input
 2. User types an instruction (e.g., "use blue theme", "add a chart", "make cards bigger")
 3. Submits via `card.action` with `action: "refine"` and `payload: { instruction }`
-4. Server intercepts before normal dispatch, calls `refineTemplate()` — a single Gemini LLM call that takes the existing template JSX + current data shape + user instruction and regenerates only the template
+4. Server intercepts before normal dispatch, calls `refineTemplate()` — a single LLM call (via `callChatLLM` when multi-provider config is available, otherwise Gemini) that takes the existing template JSX + current data shape + user instruction and regenerates only the template
 5. Validated via Sucrase (with one retry on failure), then the registered template code is updated
 6. Card updates in-place with the new template; data unchanged, all existing actions still work
 
@@ -844,8 +882,16 @@ Enso is a plugin for [OpenClaw](../OpenClaw), a local-first multi-channel AI gat
 
 ---
 
-## Current Status (Phase 7)
+## Current Status (Phase 8)
 
-**Implemented**: Card-based chat UI, WebSocket messaging, text streaming (delta/final), media upload, OpenClaw plugin integration, multi-block response accumulation with expandable agent steps, user-triggered app enhancement (LLM tool selection → deterministic execution → pre-built template UI), Original/App view toggle, interactive card actions with four-path dispatch (refine / mechanical / native tool / agent fallback), card interaction context with action history, Claude Code CLI integration with direct tool routing, NDJSON streaming from CLI, session resumption, interactive AskUserQuestion with clickable option buttons, project picker with git repo scanning, persistent terminal card with multi-turn conversations, zero-config native tool bridge (auto-discovery from OpenClaw plugin registry, direct tool execution), deterministic tool-mode templates for AlphaRank/filesystem/workspace/media/travel/meal domains, `/tool enso` tool console for template introspection + add-tool requests, comprehensive server-side logging (`[enso:inbound/outbound/enhance/action/build]`), runtime mode switching (IM/UI/Full), async app build pipeline (fire-and-forget with `buildComplete` notification), deferred Build App dialog (waits for LLM proposal before showing), enhance menu with tool family vocabulary (dropdown showing available app types for instant enhance), conversation context threading (chat history passed through build pipeline for context-aware spec design), parallelized build pipeline (executor + template generation run concurrently, saving 3-5s), `ctx.ask()` LLM capability (Gemini Flash available in executors for summarization/classification/analysis), incremental iteration via Refine (single-LLM-call template regeneration from app view), `ctx.store` key-value persistence (JSON-backed per-family storage surviving restarts), **EnsoUI component library** (17 pre-styled React + Tailwind components — Tabs, DataTable, Stat, Badge, Button, Card, Progress, Accordion, Dialog, Select, Input, Switch, Slider, Separator, EmptyState, Tooltip, VideoPlayer — injected into the sandbox scope, with LLM prompts updated to prefer them over hand-coded equivalents, reducing generated template tokens by ~40-50%), **unified app model** (codebase apps in `server/apps/` + user apps in `~/.openclaw/enso-apps/`, merged by `loadAllApps()`, save-to-codebase promotion via Apps menu bookmark icon), **Apps menu** (flat list of all apps with run, save-to-codebase, restart server, and launch Code buttons).
+**Implemented**: Card-based chat UI, WebSocket messaging, text streaming (delta/final), media upload, OpenClaw plugin integration, multi-block response accumulation with expandable agent steps, Original/App view toggle, interactive card actions with four-path dispatch (refine / mechanical / native tool / agent fallback), card interaction context with action history, Claude Code CLI integration with direct tool routing, NDJSON streaming from CLI, session resumption, interactive AskUserQuestion with clickable option buttons, project picker with git repo scanning, persistent terminal card with multi-turn conversations, zero-config native tool bridge (auto-discovery from OpenClaw plugin registry, direct tool execution), deterministic tool-mode templates for AlphaRank/filesystem/workspace/media/travel/meal domains, `/tool enso` tool console for template introspection + add-tool requests, comprehensive server-side logging (`[enso:inbound/outbound/enhance/action/build]`), runtime mode switching (IM/UI/Full), async app build pipeline (fire-and-forget with `buildComplete` notification), deferred Build App dialog (waits for LLM proposal before showing), conversation context threading (chat history passed through build pipeline for context-aware spec design), parallelized build pipeline (executor + template generation run concurrently, saving 3-5s), `ctx.ask()` LLM capability (Gemini Flash available in executors for summarization/classification/analysis), incremental iteration via Refine (single-LLM-call template regeneration from app view), `ctx.store` key-value persistence (JSON-backed per-family storage surviving restarts), **EnsoUI component library** (17 pre-styled React + Tailwind components — Tabs, DataTable, Stat, Badge, Button, Card, Progress, Accordion, Dialog, Select, Input, Switch, Slider, Separator, EmptyState, Tooltip, VideoPlayer — injected into the sandbox scope), **unified app model** (codebase apps in `server/apps/` + user apps in `~/.openclaw/enso-apps/`, merged by `loadAllApps()`, save-to-codebase promotion via Apps menu bookmark icon), **Apps menu** (flat list of all apps with run, save-to-codebase, restart server, and launch Code buttons).
+
+**Phase 8 additions**:
+- **Card Evolution (Evolve)**: Unified Evolve button replaces old Enhance on all assistant cards. Multi-agent orchestration sprint transforms any card into a polished interactive app. Card-type-specific planning (chat → dashboard, terminal → project report, orchestration → executive report, dynamic-ui → feature upgrade). Inline targeting via `targetCardId` delivers results directly to the source card with Standard/Evolved toggle.
+- **Multi-provider LLM layer** (`llm-provider.ts`): `callChatLLM()` abstraction supporting Gemini, OpenAI, Anthropic, DeepSeek, Ollama, and OpenRouter. Used by task classification, tool selection, template refinement, auto-heal, text summarization, and podcast script generation. Provider is user-configurable, not hardcoded.
+- **Universal text & audio generation** (`card-summarizer.ts`, `podcast.ts`): One-click summarization and AI podcast for any card type. Content extraction handles chat, terminal, orchestration, and dynamic-ui cards. Text via multi-provider LLM; audio via Gemini multi-speaker TTS with WAV conversion. Multi-language support (Chinese, etc.).
+- **Auto-heal executor**: `autoHealExecutor` in `tool-factory.ts` activated in the production failure path. When a dynamic app executor fails, the system autonomously regenerates the code using multi-provider LLM before falling back to Claude Code rebuild. Supports `callChatLLM` for provider flexibility.
+- **Inline orchestration UX**: Consistent pattern across Evolve, Deep Research, and Discovery. Source card shows building view with live Claude Code output; results appear as toggle view. `signatureId` values (`card_evolution_building`, `deep_research_building`, `focused_archetype_building`) drive frontend state.
+- **Multi-provider for system operations**: Task router (`classifyTask`), tool selector (`selectToolForContent`), and template refiner (`refineTemplate`) all accept `chatModel` and `providerKeys` for provider-flexible operation.
 
 **Not yet implemented**: Persistent chat history, user authentication, multi-user session isolation, rate limiting, full inline tool activity trace cards (reads/edits/bash timeline), cost tracking per run, abort button for active Claude Code runs.

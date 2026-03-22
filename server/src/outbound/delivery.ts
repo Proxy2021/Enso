@@ -489,10 +489,10 @@ export async function handleCardEnhance(params: {
       logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Family pre-selected: ${cap.appId}, using fallback tool ${cap.primaryTool}`, cardId });
     } else {
       logAction({ ts: Date.now(), type: "action", category: "enhance", message: `Suggested family "${params.suggestedFamily}" not found, falling back to LLM selection`, cardId });
-      selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG.map(c => ({ ...c, toolFamily: c.appId })) });
+      selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG.map(c => ({ ...c, toolFamily: c.appId })), chatModel: client.chatModel, providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey } });
     }
   } else {
-    selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG.map(c => ({ ...c, toolFamily: c.appId })) });
+    selection = await selectToolForContent({ cardText, geminiApiKey: account.geminiApiKey, toolFamilies: APP_CATALOG.map(c => ({ ...c, toolFamily: c.appId })), chatModel: client.chatModel, providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey } });
   }
 
   if (!selection) {

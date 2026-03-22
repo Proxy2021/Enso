@@ -208,8 +208,10 @@ export async function classifyTask(params: {
   conversationHistory: string[];
   geminiApiKey: string;
   mediaUrls?: string[];
+  chatModel?: string;
+  providerKeys?: Record<string, string>;
 }): Promise<TaskClassification> {
-  const { userMessage, conversationHistory, geminiApiKey, mediaUrls } = params;
+  const { userMessage, conversationHistory, geminiApiKey, mediaUrls, chatModel, providerKeys } = params;
 
   // Quick heuristics for obvious cases — skip the LLM call entirely
   const quick = quickClassify(userMessage);
@@ -248,9 +250,14 @@ export async function classifyTask(params: {
   const fullPrompt = `${CLASSIFIER_PROMPT}\n${memoryBlock}${recentContext}${mediaBlock}\nUser message: "${userMessage}"`;
 
   try {
-    const raw = await callGeminiLLMWithRetry(fullPrompt, geminiApiKey, GEMINI_MODEL_FAST);
+    let raw: string;
+    if (chatModel && providerKeys) {
+      const { callChatLLM } = await import("./llm-provider.js");
+      raw = await callChatLLM({ prompt: fullPrompt, model: chatModel, providerKeys });
+    } else {
+      raw = await callGeminiLLMWithRetry(fullPrompt, geminiApiKey, GEMINI_MODEL_FAST);
+    }
 
-    // Parse the JSON response
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const parsed = JSON.parse(cleaned) as TaskClassification;
 

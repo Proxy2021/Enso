@@ -134,6 +134,7 @@ interface CardStore {
   toggleSidebar: () => void;
   requestCardSummary: (cardId: string) => void;
   requestCardPodcast: (cardId: string) => void;
+  requestCardEvolution: (cardId: string, options?: { goal?: string; includeResearch?: boolean }) => void;
   setCardSearchQuery: (query: string) => void;
   setCardSearchVisible: (visible: boolean) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
@@ -1714,6 +1715,26 @@ export const useChatStore = create<CardStore>((set, get) => ({
       wsClient.send(msg);
     }
   },
+  requestCardEvolution: (cardId: string, options?: { goal?: string; includeResearch?: boolean }) => {
+    const card = get().cards[cardId];
+    if (!card) return;
+    const wsClient = get()._wsClient;
+    if (!wsClient) return;
+    const MAX_TEXT = 10000;
+    const msg: ClientMessage = {
+      type: "card.evolve",
+      cardId,
+      cardType: card.type,
+      cardContent: {
+        text: card.text?.slice(0, MAX_TEXT),
+        data: card.data,
+        taskTerminals: card.taskTerminals,
+      },
+      evolutionGoal: options?.goal,
+      includeResearch: options?.includeResearch,
+    };
+    wsClient.send(msg);
+  },
   setCardSearchQuery: (query: string) => set({ cardSearchQuery: query }),
   setCardSearchVisible: (visible: boolean) => set((s) => ({
     cardSearchVisible: visible,
@@ -2532,7 +2553,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
           }
           // Deep research building phase — show terminal in app view, clear overlay
           const isDeepBuildStart = msg.enhanceResult.cardMode?.signatureId === "deep_research_building"
-            || msg.enhanceResult.cardMode?.signatureId === "focused_archetype_building";
+            || msg.enhanceResult.cardMode?.signatureId === "focused_archetype_building"
+            || msg.enhanceResult.cardMode?.signatureId === "card_evolution_building";
           if (isDeepBuildStart) {
             return {
               cards: {

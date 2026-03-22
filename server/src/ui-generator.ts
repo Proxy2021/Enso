@@ -912,8 +912,10 @@ export async function selectToolForContent(params: {
     actions: string[];
     description?: string;
   }>;
+  chatModel?: string;
+  providerKeys?: Record<string, string>;
 }): Promise<ToolSelectionResult | null> {
-  if (!params.geminiApiKey) return null;
+  if (!params.geminiApiKey && !params.chatModel) return null;
   if (params.toolFamilies.length === 0) return null;
 
   const familiesPayload = params.toolFamilies.map((f) => ({
@@ -949,83 +951,91 @@ Assistant response to analyze:
 ${params.cardText.slice(0, 4000)}`;
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch(
-        geminiUrl(GEMINI_MODEL_UTILITY, params.geminiApiKey),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              maxOutputTokens: 512,
-              temperature: 0,
-              responseMimeType: "application/json",
-            },
-          }),
-          signal: controller.signal,
-        },
-      );
-      if (!response.ok) {
-        logError("ui-gen", `Tool select: Gemini returned HTTP ${response.status}`);
-        return null;
-      }
+    let text: string | undefined;
 
-      const result = (await response.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string; thought?: boolean }> };
-        }>;
-      };
-      const parts = result.candidates?.[0]?.content?.parts;
-      // Gemini 2.5 Flash may return thinking parts first; pick the last non-thought text part
-      const textPart = parts?.filter((p) => p.text && !p.thought).pop();
-      const text = textPart?.text;
-      if (!text) {
-        logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: Gemini returned no text. parts: ${JSON.stringify(parts?.map((p) => ({ len: p.text?.length, thought: p.thought })))}` });
-        return null;
-      }
-
-      const cleaned = text
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/\s*```$/, "")
-        .trim();
-
-      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: response (${text.length} chars)` });
-
-      let parsed: {
-        matched?: boolean;
-        toolFamily?: string;
-        toolName?: string;
-        params?: Record<string, unknown>;
-      };
+    if (params.chatModel && params.providerKeys) {
+      const { callChatLLM } = await import("./llm-provider.js");
+      const raw = await callChatLLM({ prompt, model: params.chatModel, providerKeys: params.providerKeys });
+      text = raw?.trim();
+    } else {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
       try {
-        parsed = JSON.parse(cleaned);
-      } catch {
-        // Gemini 2.5 Flash may return slightly malformed JSON — try extracting object
-        const objMatch = cleaned.match(/\{[\s\S]*\}/);
-        if (!objMatch) {
-          logError("ui-gen", "Tool select: could not extract JSON object from response");
+        const response = await fetch(
+          geminiUrl(GEMINI_MODEL_UTILITY, params.geminiApiKey),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                maxOutputTokens: 512,
+                temperature: 0,
+                responseMimeType: "application/json",
+              },
+            }),
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok) {
+          logError("ui-gen", `Tool select: Gemini returned HTTP ${response.status}`);
           return null;
         }
-        parsed = JSON.parse(objMatch[0]);
-      }
 
-      if (!parsed.matched || !parsed.toolFamily || !parsed.toolName) {
-        logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: no match (matched=${parsed.matched})` });
+        const result = (await response.json()) as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ text?: string; thought?: boolean }> };
+          }>;
+        };
+        const parts = result.candidates?.[0]?.content?.parts;
+        const textPart = parts?.filter((p) => p.text && !p.thought).pop();
+        text = textPart?.text;
+        if (!text) {
+          logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: Gemini returned no text. parts: ${JSON.stringify(parts?.map((p) => ({ len: p.text?.length, thought: p.thought })))}` });
+          return null;
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    if (!text) return null;
+
+    const cleaned = text
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: response (${text.length} chars)` });
+
+    let parsed: {
+      matched?: boolean;
+      toolFamily?: string;
+      toolName?: string;
+      params?: Record<string, unknown>;
+    };
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      const objMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (!objMatch) {
+        logError("ui-gen", "Tool select: could not extract JSON object from response");
         return null;
       }
-
-      return {
-        toolFamily: parsed.toolFamily,
-        toolName: parsed.toolName,
-        params: parsed.params && typeof parsed.params === "object" ? parsed.params : {},
-      };
-    } finally {
-      clearTimeout(timeout);
+      parsed = JSON.parse(objMatch[0]);
     }
+
+    if (!parsed.matched || !parsed.toolFamily || !parsed.toolName) {
+      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: no match (matched=${parsed.matched})` });
+      return null;
+    }
+
+    return {
+      toolFamily: parsed.toolFamily,
+      toolName: parsed.toolName,
+      params: parsed.params && typeof parsed.params === "object" ? parsed.params : {},
+    };
   } catch (err) {
     logError("ui-gen", "Tool select failed", err);
     return null;
@@ -1062,6 +1072,8 @@ export async function serverSuggestToolInvocation(params: {
     cardText: params.userMessage,
     geminiApiKey: params.geminiApiKey,
     toolFamilies,
+    chatModel: (params as { chatModel?: string }).chatModel,
+    providerKeys: (params as { providerKeys?: Record<string, string> }).providerKeys,
   });
 
   if (!result) return null;

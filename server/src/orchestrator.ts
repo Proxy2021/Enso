@@ -237,6 +237,9 @@ export interface OrchestrationStartParams {
   chatModel?: string;
   /** Skip the review/approval UX — auto-execute immediately. */
   skipApproval?: boolean;
+  /** When set, reuse this card ID as the bootstrap card instead of generating a new one.
+   *  Used by card evolution to show orchestration inline on the source card. */
+  targetCardId?: string;
 }
 
 // ── Fast LLM Planning (for implicit orchestration) ──
@@ -313,8 +316,9 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
   const { userMessage, classification, client, account } = params;
   const orchestrationId = randomUUID();
   const runId = randomUUID();
-  const bootstrapCardId = randomUUID();
-  const terminalCardId = bootstrapCardId; // Single card — terminal embeds inside orchestration
+  const isInlineEvolution = !!params.targetCardId;
+  const bootstrapCardId = params.targetCardId ?? randomUUID();
+  const terminalCardId = bootstrapCardId;
 
   logAction({
     ts: Date.now(),
@@ -348,22 +352,34 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
   };
 
   // Step 1: Send bootstrap card (shows "Assembling your team..." state)
-  send({
-    text: `🎯 Analyzing your goal and assembling a team...\n\n> ${userMessage}`,
-    cardType: "orchestration",
-    targetCardId: bootstrapCardId,
-    orchestrationProgress: {
-      orchestrationId,
-      eventType: "plan_ready" as OrchestrationEventType,
-      plan: {
-        orchestrationId,
-        goal: userMessage,
-        tasks: [],
-        agents: [],
-        status: "planning",
+  if (isInlineEvolution) {
+    // Inline evolution: send building status to the source card (like deep research)
+    sendFinal({
+      targetCardId: bootstrapCardId,
+      enhanceResult: {
+        data: null,
+        generatedUI: undefined as unknown as string,
+        cardMode: { interactionMode: "tool", appId: "evolution", toolFamily: "evolution", signatureId: "card_evolution_building" },
       },
-    },
-  });
+    });
+  } else {
+    send({
+      text: `🎯 Analyzing your goal and assembling a team...\n\n> ${userMessage}`,
+      cardType: "orchestration",
+      targetCardId: bootstrapCardId,
+      orchestrationProgress: {
+        orchestrationId,
+        eventType: "plan_ready" as OrchestrationEventType,
+        plan: {
+          orchestrationId,
+          goal: userMessage,
+          tasks: [],
+          agents: [],
+          status: "planning",
+        },
+      },
+    });
+  }
 
   // ── Fast LLM planning path (for implicit orchestration) ──
   if (params.useGeminiPlanning) {

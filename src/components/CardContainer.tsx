@@ -828,7 +828,7 @@ function ExportButton({ card }: { card: Card }) {
   );
 }
 
-function DeepResearchBuildView({ text }: { text: string }) {
+function DeepResearchBuildView({ text, label }: { text: string; label?: string }) {
   return (
     <div className="bg-[#0d1117] rounded-lg border border-gray-800 overflow-hidden">
       <TerminalContent
@@ -836,7 +836,7 @@ function DeepResearchBuildView({ text }: { text: string }) {
         status="streaming"
         accentColor="violet"
         showHeader
-        headerLabel="Deep Research"
+        headerLabel={label ?? "Deep Research"}
         maxHeightClass="max-h-[500px]"
       />
     </div>
@@ -866,25 +866,28 @@ function ViewToggle({ card }: { card: Card }) {
   const familyLabel = family ? family.replace(/_/g, " ") : "App";
   const isBuilding = card.deepResearchStatus === "building";
 
-  // Deep research / archetype / orchestration toggle labels
+  // Deep research / archetype / orchestration / evolution toggle labels
   const isOrchestration = card.type === "orchestration";
   const orchHasBespokeUI = isOrchestration && !!card.appGeneratedUI && card.enhanceStatus === "ready";
   const isFocusedArchetype = isBuilding || family === "archetype" ||
+    card.appCardMode?.signatureId === "focused_archetype_custom";
+  const isCardEvolution = family === "evolution" ||
+    card.appCardMode?.signatureId === "card_evolution_building" ||
     card.appCardMode?.signatureId === "focused_archetype_custom";
   const isDeepResearch = isBuilding || (family === "researcher" && (
     card.appCardMode?.signatureId === "deep_research_custom" ||
     (card.appData as Record<string, unknown>)?.metadata &&
     ((card.appData as Record<string, unknown>)?.metadata as Record<string, unknown>)?.isDeepResearch
   ));
-  const isBespokeView = isDeepResearch || isFocusedArchetype || isOrchestration;
+  const isBespokeView = isDeepResearch || isFocusedArchetype || isCardEvolution || isOrchestration;
   const originalLabel = isOrchestration ? "Plan" : isBespokeView ? "Standard" : "Original";
   const originalLabelShort = isOrchestration ? "Plan" : isBespokeView ? "Std" : "Text";
   const appLabel = isOrchestration
     ? (orchHasBespokeUI ? "✨ Result" : "⚡ Terminal")
-    : isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
+    : isCardEvolution ? "✨ Evolved" : isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
   const appLabelShort = isOrchestration
     ? (orchHasBespokeUI ? "Result" : "Term")
-    : isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
+    : isCardEvolution ? "Evolved" : isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
   const appIcon = isOrchestration ? null : isBespokeView ? "✨" : familyIcon;
 
   return (
@@ -1141,6 +1144,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const sendCardAction = useChatStore((s) => s.sendCardAction);
   const requestCardSummary = useChatStore((s) => s.requestCardSummary);
   const requestCardPodcast = useChatStore((s) => s.requestCardPodcast);
+  const requestCardEvolution = useChatStore((s) => s.requestCardEvolution);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
@@ -1168,15 +1172,17 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
   const isShareable = isAppView || isDynamicCard;
   const isGeneralSmartCard = card.type === "dynamic-ui" && (card.cardMode?.appId ?? card.cardMode?.toolFamily) === "general";
-  const canEnhance = card.role === "assistant" && card.status === "complete"
-    && (card.type === "chat" || isGeneralSmartCard);
 
   // "Research this" is available on any assistant card with text, except researcher cards themselves
   const cardFamily = (isAppView ? card.appCardMode?.appId : card.cardMode?.appId)
     ?? (isAppView ? card.appCardMode?.toolFamily : card.cardMode?.toolFamily);
   const canResearch = card.role === "assistant" && card.status === "complete"
-    && !!card.text && card.type !== "terminal" && card.type !== "shell" && card.type !== "mission"
+    && !!card.text && card.type !== "shell" && card.type !== "mission"
     && cardFamily !== "researcher";
+
+  const canEvolve = card.role === "assistant" && card.status === "complete"
+    && !isDeepBuilding;
+  const evolveLabel = card.type === "terminal" ? "Dashboard" : card.type === "orchestration" ? "Report" : card.type === "dynamic-ui" ? "Upgrade" : "Evolve";
 
   const SUMMARIZABLE = new Set(["chat", "terminal", "orchestration", "dynamic-ui"]);
   const canSummarize = card.role === "assistant" && card.status === "complete"
@@ -1547,12 +1553,14 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                     const dataTopic = typeof data?.topic === "string" ? data.topic
                       : typeof data?.title === "string" ? data.title
                       : typeof data?.query === "string" ? data.query : null;
+                    const summaryCtx = card.cardSummary?.overview
+                      ? ` (Context: ${card.cardSummary.overview.slice(0, 150)})` : "";
                     if (dataTopic) {
-                      sendMessage(`Research ${dataTopic}`);
+                      sendMessage(`Research ${dataTopic}${summaryCtx}`);
                     } else {
                       const text = (card.text ?? "").trim();
                       const topic = text.length > 200 ? text.slice(0, 200) : text;
-                      sendMessage(`Research this: ${topic}`);
+                      sendMessage(`Research this: ${topic}${summaryCtx}`);
                     }
                   }}
                   className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-cyan-300 hover:border-cyan-500/50 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
@@ -1617,8 +1625,21 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
               {isShareable && card.status === "complete" && <ExportButton card={card} />}
               {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
+              {canEvolve && (
+                <button
+                  onClick={() => requestCardEvolution(card.id)}
+                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-violet-300 hover:border-violet-500/50 active:bg-violet-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
+                  title={`Evolve this card into a polished interactive app via multi-agent sprint`}
+                >
+                  <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                    <path d="M2 17l10 5 10-5" />
+                    <path d="M2 12l10 5 10-5" />
+                  </svg>
+                  <span className="hidden sm:inline">{evolveLabel}</span>
+                </button>
+              )}
               {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasBespokeUI) && <ViewToggle card={card} />}
-              {canEnhance && <EnhanceButton card={card} />}
               {statusLabel !== "ready" && (
                 <div className={`text-[10px] uppercase tracking-wide px-1.5 sm:px-2 py-0.5 rounded-full border ${statusTone}`}>
                   {statusLabel}
@@ -1627,7 +1648,10 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             </div>
           </div>
           {isDeepBuildAppView ? (
-            <DeepResearchBuildView text={card.buildTerminalText ?? ""} />
+            <DeepResearchBuildView
+              text={card.buildTerminalText ?? ""}
+              label={card.appCardMode?.signatureId === "card_evolution_building" ? "Evolving" : undefined}
+            />
           ) : orchShowTerminal ? (
             <OrchestrationTerminalView
               text={card.buildTerminalText ?? ""}
