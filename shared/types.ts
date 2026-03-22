@@ -106,6 +106,7 @@ export interface ServerMessage {
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
   operation?: OperationStatus;
+  serverEvent?: "restarting";
   settings?: {
     mode: ChannelMode;
     toolFamilies?: Array<{ toolFamily: string; description: string }>;
@@ -114,6 +115,7 @@ export interface ServerMessage {
     claudeThinking?: "adaptive" | "disabled";
     language?: string;
     chatModel?: string;
+    bootId?: string;
     providers?: Array<{
       id: string;
       name: string;
@@ -169,6 +171,8 @@ export interface ServerMessage {
     suggestions: Array<{ label: string; prompt: string; icon?: string }>;
   };
   recentTopics?: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
+  monitorUpdate?: { topic: string; changes: { newFindings: string[]; removedFindings: string[] }; timestamp: number };
+  monitorList?: Array<{ id: string; topic: string; enabled: boolean; lastChecked: number }>;
   /** Batch of historical cards sent in response to chat.history */
   cardHistory?: Array<{
     id: string;

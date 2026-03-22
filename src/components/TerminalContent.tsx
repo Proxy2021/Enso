@@ -34,6 +34,8 @@ const THINK_START_RE = /\u200B\[think:start\]\n?/g;
 const THINK_END_RE = /\u200B\[think:end\]\n?/g;
 const CONNECTION_MARKER_RE = /\u200B\[connection:lost\]\n?/g;
 const CONNECTION_RESTORED_RE = /\u200B\[connection:restored\]\n?/g;
+const SERVER_RESTARTING_RE = /\u200B\[server:restarting\]\n?/g;
+const SERVER_RESTARTED_RE = /\u200B\[server:restarted\]\n?/g;
 
 // ── Exported types ──
 
@@ -95,6 +97,8 @@ export interface TerminalEntry {
   cost: string | null;
   connectionLost: boolean;
   connectionRestored: boolean;
+  serverRestarting: boolean;
+  serverRestarted: boolean;
   status: Card["status"];
 }
 
@@ -230,7 +234,19 @@ export function stripMarkers(text: string) {
     return "";
   });
 
-  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, ctxPercent, thinkingBlocks, isThinking };
+  let serverRestarting = false;
+  clean = clean.replace(SERVER_RESTARTING_RE, () => {
+    serverRestarting = true;
+    return "";
+  });
+
+  let serverRestarted = false;
+  clean = clean.replace(SERVER_RESTARTED_RE, () => {
+    serverRestarted = true;
+    return "";
+  });
+
+  return { clean, tools, bashCommands, rateLimits, tasks, suggestions, sessionInit, filesChanged, compactEvents, cost, connectionLost, connectionRestored, serverRestarting, serverRestarted, ctxPercent, thinkingBlocks, isThinking };
 }
 
 // ── Entry parsing ──
@@ -260,6 +276,8 @@ export function parseEntries(text: string, cardStatus: Card["status"]): { entrie
       cost: parsed.cost,
       connectionLost: parsed.connectionLost,
       connectionRestored: parsed.connectionRestored,
+      serverRestarting: parsed.serverRestarting,
+      serverRestarted: parsed.serverRestarted,
       status: segments.length <= 1 ? cardStatus : "complete",
     });
   }
@@ -287,6 +305,8 @@ export function parseEntries(text: string, cardStatus: Card["status"]): { entrie
       cost: parsed.cost,
       connectionLost: parsed.connectionLost,
       connectionRestored: parsed.connectionRestored,
+      serverRestarting: parsed.serverRestarting,
+      serverRestarted: parsed.serverRestarted,
       status: isLast ? cardStatus : "complete",
     });
   }
@@ -615,6 +635,18 @@ export function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntr
         <div className="flex items-center gap-1.5 text-green-400 text-xs mt-2 pl-3">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400" />
           Reconnected — session resumed
+        </div>
+      )}
+      {entry.serverRestarting && (
+        <div className="flex items-center gap-1.5 text-blue-400 text-xs mt-2 pl-3">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+          Server restarting...
+        </div>
+      )}
+      {entry.serverRestarted && (
+        <div className="flex items-center gap-1.5 text-green-400 text-xs mt-2 pl-3">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400" />
+          Server restarted — start a new session to continue
         </div>
       )}
       {entry.status === "error" && (

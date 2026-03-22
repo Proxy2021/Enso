@@ -402,11 +402,13 @@ export async function startEnsoServer(opts: {
   selfHealMetrics?: () => { uptimeMs: number; heapUsedMB: number; heapTotalMB: number; rssMB: number; eventLoopP99Ms: number; eventLoopMaxMs: number; errorsLast5Min: number; memoryWarning: boolean; memoryCritical: boolean };
   /** Callback when a client requests server restart (code 78). */
   onRestartRequested?: () => void;
-}): Promise<{ stop: () => Promise<void> }> {
+}): Promise<{ stop: (isRestart?: boolean) => Promise<void> }> {
   const { account, config, runtime, statusSink } = opts;
   const port = account.port;
   activePort = port;
   activeAccount = account;
+
+  const bootId = randomUUID();
 
   // Pre-import provider status for initial settings (connection handler is not async)
   let _getProviderStatus: ((keys: Record<string, string>) => unknown[]) | undefined;
@@ -1384,6 +1386,7 @@ export async function startEnsoServer(opts: {
         mode: account.mode ?? "full",
         toolFamilies,
         ensoProjectPath,
+        bootId,
         providers: _getProviderStatus ? _getProviderStatus(account.providerKeys) as any : undefined,
       },
       timestamp: Date.now(),
@@ -2944,6 +2947,22 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
+          case "monitor.list": {
+            const { listMonitors } = await import("./research-monitor.js");
+            const monitors = listMonitors();
+            send({
+              id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+              monitorList: monitors.map((m) => ({ id: m.id, topic: m.topic, enabled: m.enabled, lastChecked: m.lastChecked })),
+              timestamp: Date.now(),
+            });
+            break;
+          }
+          case "monitor.remove": {
+            const { removeMonitor } = await import("./research-monitor.js");
+            const monitorId = (msg as Record<string, unknown>).monitorId as string;
+            if (monitorId) removeMonitor(monitorId);
+            break;
+          }
         }
       } catch (err) {
         runtime.error?.(`[enso] message handling error: ${String(err)}`);
@@ -3006,6 +3025,21 @@ export async function startEnsoServer(opts: {
       // Prune stale card history files on startup
       try { pruneStaleJournals(); } catch { /* best-effort */ }
 
+      // Start research topic monitor loop
+      import("./research-monitor.js").then(({ startMonitorLoop }) => {
+        startMonitorLoop({
+          geminiApiKey: account.geminiApiKey,
+          onUpdate: (topic: string, changes: { newFindings: string[]; removedFindings: string[] }) => {
+            const msg: ServerMessage = {
+              id: randomUUID(), runId: randomUUID(), sessionKey: "", seq: 0, state: "final",
+              monitorUpdate: { topic, changes, timestamp: Date.now() },
+              timestamp: Date.now(),
+            };
+            for (const c of clients.values()) c.send(msg);
+          },
+        });
+      }).catch(() => {});
+
       // Broadcast fix notifications to all connected clients in real-time
       onFixLogged((fix: FixEntry) => {
         const msg: ServerMessage = {
@@ -3034,12 +3068,30 @@ export async function startEnsoServer(opts: {
     });
   });
 
-  function stop(): Promise<void> {
+  function stop(isRestart = false): Promise<void> {
     return new Promise<void>((resolve) => {
-      runtime.log?.("[enso] stopping server");
+      runtime.log?.(`[enso] stopping server (restart=${isRestart})`);
       clearInterval(pingInterval);
+
+      if (isRestart) {
+        const restartMsg: ServerMessage = {
+          id: randomUUID(),
+          runId: randomUUID(),
+          sessionKey: "",
+          seq: 0,
+          state: "final",
+          serverEvent: "restarting",
+          timestamp: Date.now(),
+        };
+        for (const client of clients.values()) {
+          try { client.send(restartMsg); } catch { /* best-effort */ }
+        }
+      }
+
+      const closeCode = isRestart ? 4078 : 1001;
+      const closeReason = isRestart ? "server-restart" : "shutdown";
       for (const client of clients.values()) {
-        client.ws.close();
+        try { client.ws.close(closeCode, closeReason); } catch { /* best-effort */ }
       }
       clients.clear();
       wss.close();

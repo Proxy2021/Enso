@@ -26,8 +26,9 @@ import {
 } from "../tooling-console.js";
 import { logAction, logError, logFix } from "../action-log.js";
 import { setResearchProgressCallback, setDeepResearchLauncher } from "../researcher-tools.js";
+import { generateResearchFollowUps } from "../followup-generator.js";
 import { runClaudeCode } from "../claude-code.js";
-import { handleDeepResearchBuild } from "../build-via-claude.js";
+import { handleDeepResearchBuild, handleBuildAppViaClaude } from "../build-via-claude.js";
 // fs imports removed — no longer needed after deep research refactor
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import type { CardContext } from "./card-context.js";
@@ -56,7 +57,7 @@ function tryReconstructContext(
   const p = (payload ?? {}) as Record<string, unknown>;
 
   // ── Researcher family ──
-  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "generate_podcast", "send_report", "delete_history", "clear_all_history"];
+  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "generate_podcast", "send_report", "delete_history", "clear_all_history", "build_from_research", "monitor_topic"];
   if (researcherActions.includes(action) || (p.topic && typeof p.topic === "string")) {
     const account = getActiveAccount();
     if (!account) return null;
@@ -921,6 +922,60 @@ export async function handlePluginCardAction(params: {
         });
       }
 
+      // ── Build App from Research ──
+      if (action === "build_from_research" && ctx.toolFamily === "researcher") {
+        const researchData = ctx.currentData as Record<string, unknown>;
+        const topic = String(researchData?.topic ?? payload?.topic ?? "");
+        const findings = (researchData?.keyFindings as Array<{ text: string }> ?? [])
+          .slice(0, 5).map((f) => `- ${f.text}`).join("\n");
+        const sectionTitles = (researchData?.sections as Array<{ title: string }> ?? [])
+          .map((s) => s.title).join(", ");
+
+        const buildPrompt = `Build an interactive dashboard app about "${topic}".
+
+Key findings from research:
+${findings || "General overview of " + topic}
+
+Sections covered: ${sectionTitles || topic}
+
+Requirements:
+- Include data visualizations (charts, stats, progress indicators)
+- Add filtering and search capabilities
+- Include a findings/insights section with expandable details
+- Use the EnsoUI component library (Tabs, DataTable, Stat, Badge, etc.)
+- Make it visually polished with the dark theme`;
+
+        logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Build from research: "${topic}"`, cardId });
+        handleBuildAppViaClaude({
+          cardId,
+          cardText: topic,
+          buildAppDefinition: buildPrompt,
+          client,
+          account: ctx.account,
+        }).catch((err) => logError("action:build_from_research", "Build failed", err, { cardId }));
+        return;
+      }
+
+      // ── Monitor Topic ──
+      if (action === "monitor_topic" && ctx.toolFamily === "researcher") {
+        try {
+          const { addMonitor } = await import("../research-monitor.js");
+          const researchData = ctx.currentData as Record<string, unknown>;
+          const topic = String(researchData?.topic ?? payload?.topic ?? "");
+          const findings = (researchData?.keyFindings as Array<{ text: string }> ?? []).map((f) => f.text);
+          addMonitor(topic, findings);
+          logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Monitor added: "${topic}"`, cardId });
+          client.send({
+            id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0, state: "final",
+            text: `Now monitoring "${topic}" for changes. I'll check every 6 hours and notify you of significant updates.`,
+            timestamp: Date.now(),
+          });
+        } catch (err) {
+          logError("action:monitor_topic", "Failed to add monitor", err, { cardId });
+        }
+        return;
+      }
+
       try {
         let result = await executeToolDirect(toolCall.toolName, toolCall.params);
         logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Execute result: success=${result.success}, hasData=${result.data != null}, error=${result.error ?? "none"}`, cardId });
@@ -1056,6 +1111,29 @@ export async function handlePluginCardAction(params: {
           logAction({ ts: Date.now(), type: "action", category: "action:native", message: `Complete, delivering result mode=${effectiveMode}`, cardId });
 
           sendActionResult(followup.renderData, followup.generatedUI);
+
+          // Send context-aware follow-up chips for research results
+          if (ctx.toolFamily === "researcher" && (action === "search" || !action)) {
+            try {
+              const researchData = (result.data ?? followup.renderData) as Record<string, unknown>;
+              const suggestions = generateResearchFollowUps({
+                data: {
+                  topic: researchData.topic as string,
+                  keyFindings: researchData.keyFindings as Array<{ text: string; type?: string }>,
+                  sections: researchData.sections as Array<{ title: string; bullets?: string[] }>,
+                  contradictions: researchData.contradictions as Array<{ claim: string }>,
+                },
+                language: client.language,
+              });
+              if (suggestions.length > 0) {
+                client.send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0, state: "final",
+                  followUps: { cardId, suggestions },
+                  timestamp: Date.now(),
+                });
+              }
+            } catch { /* non-fatal */ }
+          }
           return;
         }
 

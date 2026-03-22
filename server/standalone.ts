@@ -101,7 +101,7 @@ async function main(): Promise<void> {
 
   // ── Self-healing monitors ──
   let stopping = false;
-  let serverStop: (() => Promise<void>) | undefined;
+  let serverStop: ((isRestart?: boolean) => Promise<void>) | undefined;
 
   const selfHeal = startSelfHealing({
     onRestartNeeded: (reason) => {
@@ -113,9 +113,10 @@ async function main(): Promise<void> {
   async function gracefulExit(code: number) {
     if (stopping) return;
     stopping = true;
-    console.log(`[enso:standalone] Graceful exit (code=${code})...`);
+    const isRestart = code === EXIT_RESTART_REQUESTED;
+    console.log(`[enso:standalone] Graceful exit (code=${code}, restart=${isRestart})...`);
     try {
-      if (serverStop) await serverStop();
+      if (serverStop) await serverStop(isRestart);
     } catch (err) {
       console.error("[enso:standalone] Error during stop:", err);
     }

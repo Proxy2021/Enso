@@ -4,10 +4,14 @@ import { isNative } from "./platform";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 
+export interface WSStateChangeMeta {
+  isServerRestart?: boolean;
+}
+
 interface WSClientOptions {
   url: string;
   onMessage: (msg: ServerMessage) => void;
-  onStateChange: (state: ConnectionState, isReconnect: boolean) => void;
+  onStateChange: (state: ConnectionState, isReconnect: boolean, meta?: WSStateChangeMeta) => void;
 }
 
 interface WSClient {
@@ -71,6 +75,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
   let intentionalClose = false;
   let hasConnectedBefore = false;
   let disconnectedAt = 0;
+  let lastCloseWasRestart = false;
 
   const clientId = getClientId();
   _debugClientId = clientId;
@@ -98,10 +103,12 @@ export function createWSClient(options: WSClientOptions): WSClient {
 
     ws.onopen = () => {
       const isReconnect = hasConnectedBefore;
+      const wasRestart = lastCloseWasRestart;
       hasConnectedBefore = true;
+      lastCloseWasRestart = false;
       reconnectDelay = 1000;
-      wsDebug("open", `isReconnect=${isReconnect}`);
-      options.onStateChange("connected", isReconnect);
+      wsDebug("open", `isReconnect=${isReconnect} wasRestart=${wasRestart}`);
+      options.onStateChange("connected", isReconnect, { isServerRestart: wasRestart });
 
       // Flush queued messages that were sent during reconnect
       // Clear queue if disconnect lasted > 60s (messages are stale)
@@ -134,9 +141,10 @@ export function createWSClient(options: WSClientOptions): WSClient {
     };
 
     ws.onclose = (ev) => {
-      wsDebug("close", `code=${ev.code} reason="${ev.reason}" wasClean=${ev.wasClean}`);
+      lastCloseWasRestart = ev.code === 4078;
+      wsDebug("close", `code=${ev.code} reason="${ev.reason}" wasClean=${ev.wasClean} isRestart=${lastCloseWasRestart}`);
       disconnectedAt = Date.now();
-      options.onStateChange("disconnected", false);
+      options.onStateChange("disconnected", false, { isServerRestart: lastCloseWasRestart });
       if (!intentionalClose) {
         reconnectTimer = setTimeout(() => {
           reconnectDelay = Math.min(reconnectDelay * 2, 10_000);

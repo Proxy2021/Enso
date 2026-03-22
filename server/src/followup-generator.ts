@@ -33,6 +33,13 @@ const LABELS = {
     howDoIStart: "How do I start?",
     tellMeMore: "Tell me more",
     alternatives: "Alternatives?",
+    // Research-specific
+    compareEntities: "Compare",
+    trackTrends: "Track trends",
+    buildDashboard: "Build dashboard",
+    exploreDebate: "Explore the debate",
+    buildFromResearch: "Build app from this",
+    monitorTopic: "Monitor this topic",
   },
   zh: {
     goDeeper: "深入了解",
@@ -52,6 +59,13 @@ const LABELS = {
     howDoIStart: "如何开始？",
     tellMeMore: "告诉我更多",
     alternatives: "有替代方案吗？",
+    // Research-specific
+    compareEntities: "对比",
+    trackTrends: "追踪趋势",
+    buildDashboard: "构建仪表盘",
+    exploreDebate: "探索争议",
+    buildFromResearch: "基于此构建应用",
+    monitorTopic: "监控此话题",
   },
 } as const;
 
@@ -157,4 +171,129 @@ function extractTopic(message: string): string {
   }
 
   return topic;
+}
+
+// ── Research-Specific Follow-Ups ──
+
+interface ResearchData {
+  topic?: string;
+  keyFindings?: Array<{ text: string; type?: string }>;
+  sections?: Array<{ title: string; bullets?: string[] }>;
+  contradictions?: Array<{ claim: string }>;
+}
+
+/**
+ * Extract named entities (capitalized multi-word phrases, organizations, products)
+ * from text for use in contextual follow-ups.
+ */
+function extractEntities(texts: string[]): string[] {
+  const entities = new Set<string>();
+  for (const text of texts) {
+    // Match capitalized multi-word names (2-4 words): "NVIDIA", "Apple Inc", "React Server Components"
+    const matches = text.match(/\b[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*){0,3}\b/g);
+    if (matches) {
+      for (const m of matches) {
+        // Filter out common sentence starters and generic words
+        const lower = m.toLowerCase();
+        if (lower.length > 2 && !["the", "this", "that", "these", "those", "with", "from", "into", "also", "however", "while", "since", "each", "both", "many", "some", "most", "such", "like"].includes(lower)) {
+          entities.add(m);
+        }
+      }
+    }
+  }
+  return Array.from(entities).slice(0, 10);
+}
+
+/**
+ * Extract comparison pairs from text (X vs Y, X versus Y, X compared to Y).
+ */
+function extractComparisonPairs(texts: string[]): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  for (const text of texts) {
+    const vsMatch = text.match(/\b([A-Z][a-zA-Z]+(?:\s+[A-Z]?[a-zA-Z]*)*)\s+(?:vs\.?|versus|compared to|or)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z]?[a-zA-Z]*)*)\b/i);
+    if (vsMatch && vsMatch[1] && vsMatch[2]) {
+      pairs.push([vsMatch[1].trim(), vsMatch[2].trim()]);
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Generate context-aware follow-up suggestions from structured research data.
+ * Extracts entities, comparisons, and contradictions from actual findings
+ * rather than using generic labels.
+ */
+export function generateResearchFollowUps(params: {
+  data: ResearchData;
+  language?: string;
+}): FollowUpSuggestion[] {
+  const { data, language } = params;
+  const topic = data.topic ?? "";
+  const chips: FollowUpSuggestion[] = [];
+
+  // Collect all text from findings and sections for entity extraction
+  const allTexts = [
+    ...(data.keyFindings?.map((f) => f.text) ?? []),
+    ...(data.sections?.flatMap((s) => [s.title, ...(s.bullets ?? [])]) ?? []),
+  ];
+
+  // 1. Comparison pairs from findings
+  const pairs = extractComparisonPairs(allTexts);
+  if (pairs.length > 0) {
+    const [a, b] = pairs[0];
+    chips.push({
+      label: `${l(language, "compareEntities")} ${a} vs ${b}`,
+      prompt: `Compare ${a} vs ${b} in the context of ${topic}`,
+      icon: "⚖️",
+    });
+  }
+
+  // 2. Entity-based tracking (from trend/fact findings)
+  const trendFindings = data.keyFindings?.filter((f) => f.type === "trend" || f.type === "fact") ?? [];
+  if (trendFindings.length > 0) {
+    const entities = extractEntities(trendFindings.map((f) => f.text));
+    if (entities.length > 0) {
+      chips.push({
+        label: `${l(language, "trackTrends")}: ${entities[0]}`,
+        prompt: `Research the latest trends and data for ${entities[0]} related to ${topic}`,
+        icon: "📈",
+      });
+    }
+  }
+
+  // 3. Contradiction exploration
+  if (data.contradictions && data.contradictions.length > 0) {
+    const claim = data.contradictions[0].claim.slice(0, 50);
+    chips.push({
+      label: l(language, "exploreDebate"),
+      prompt: `Explore different perspectives on: ${claim} in the context of ${topic}`,
+      icon: "🔀",
+    });
+  }
+
+  // 4. Build dashboard from research (always include)
+  const topFindings = (data.keyFindings ?? []).slice(0, 3).map((f) => f.text).join("; ");
+  chips.push({
+    label: l(language, "buildFromResearch"),
+    prompt: `Build an interactive dashboard app about "${topic}". Key findings: ${topFindings}. Include data visualization, filtering, and exploration features.`,
+    icon: "🛠️",
+  });
+
+  // 5. Monitor this topic
+  chips.push({
+    label: l(language, "monitorTopic"),
+    prompt: `Monitor the topic "${topic}" for changes and new developments`,
+    icon: "👁️",
+  });
+
+  // If no entity-specific chips were generated (only build + monitor), add a generic dashboard chip
+  if (chips.length <= 2) {
+    chips.unshift({
+      label: `${l(language, "buildDashboard")}: ${topic.slice(0, 30)}`,
+      prompt: `Build a research dashboard app for ${topic} with charts and data exploration`,
+      icon: "📊",
+    });
+  }
+
+  return chips.slice(0, 4); // Max 4 chips
 }

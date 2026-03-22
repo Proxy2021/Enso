@@ -2920,6 +2920,65 @@ async function researcherGeneratePodcast(params: { topic: string }): Promise<Age
   }
 }
 
+// ── Research Recall (cross-topic knowledge) ──
+
+async function researcherRecall(params: { query: string; maxResults?: number }): Promise<AgentToolResult> {
+  const { query, maxResults = 3 } = params;
+  if (!query.trim()) {
+    return jsonResult({ tool: "enso_researcher_recall", query, matches: [], message: "Empty query" });
+  }
+
+  const queryLower = query.toLowerCase();
+  const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 2);
+
+  // Search through all cached research topics
+  const entries = researchHistory.list();
+  const scored: Array<{ id: string; meta: ResearchHistoryMeta; score: number }> = [];
+
+  for (const entry of entries) {
+    let score = 0;
+    const topicLower = entry.meta.topic.toLowerCase();
+    const previewLower = entry.meta.summaryPreview.toLowerCase();
+
+    // Exact topic match
+    if (topicLower.includes(queryLower)) score += 3;
+    // Term matching
+    for (const term of queryTerms) {
+      if (topicLower.includes(term)) score += 1;
+      if (previewLower.includes(term)) score += 0.5;
+      // Tag matching
+      if (entry.meta.tags?.some((t) => t.toLowerCase().includes(term))) score += 0.5;
+    }
+    if (score > 0) scored.push({ id: entry.id, meta: entry.meta, score });
+  }
+
+  // Sort by score, take top N
+  scored.sort((a, b) => b.score - a.score);
+  const topMatches = scored.slice(0, maxResults);
+
+  // Load full data for top matches
+  const matches = topMatches.map((m) => {
+    const data = researchHistory.load(m.id);
+    return {
+      topic: m.meta.topic,
+      summary: data?.summary ?? m.meta.summaryPreview,
+      keyFindings: (data?.keyFindings ?? []).slice(0, 5).map((f) => f.text),
+      sectionTitles: (data?.sections ?? []).map((s) => s.title),
+      sourceCount: m.meta.sourceCount,
+      timestamp: m.meta.timestamp,
+      relevance: Math.round((m.score / Math.max(1, queryTerms.length)) * 100) + "%",
+    };
+  });
+
+  return jsonResult({
+    tool: "enso_researcher_recall",
+    query,
+    matchCount: matches.length,
+    totalTopics: entries.length,
+    matches,
+  });
+}
+
 // ── Tool registration ──
 
 export function createResearcherTools(): EnsoAgentTool[] {
@@ -3048,11 +3107,44 @@ export function createResearcherTools(): EnsoAgentTool[] {
       },
       execute: async () => researcherClearAllHistory(),
     } as EnsoAgentTool,
+    {
+      name: "enso_researcher_recall",
+      label: "Research Recall",
+      description: "Search across all past research topics to find relevant cached findings. Use this when the user asks about something they've researched before, or wants to synthesize knowledge across topics.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string", description: "Search query to find in past research topics" },
+          maxResults: { type: "number", description: "Max number of past topics to return (default: 3)" },
+        },
+        required: ["query"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) =>
+        researcherRecall(params as { query: string; maxResults?: number }),
+    } as EnsoAgentTool,
   ];
 }
 
 export function registerResearcherTools(api?: EnsoPluginApi): void {
   for (const tool of createResearcherTools()) {
     if (api) api.registerTool(tool);
+  }
+}
+
+/**
+ * Direct research search for use by the monitor (returns cached research data, not tool result).
+ * Returns null if research fails or no API key is available.
+ */
+export async function researcherSearchDirect(params: { topic: string; depth?: string }): Promise<{ keyFindings: Array<{ text: string; type?: string }> } | null> {
+  try {
+    const result = await researcherSearch({ topic: params.topic, depth: (params.depth ?? "quick") as "quick" | "standard" | "deep" });
+    const text = result.content?.[0]?.text;
+    if (!text) return null;
+    const parsed = JSON.parse(text);
+    if (parsed.keyFindings) return { keyFindings: parsed.keyFindings };
+    return null;
+  } catch {
+    return null;
   }
 }

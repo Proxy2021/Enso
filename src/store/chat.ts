@@ -66,6 +66,10 @@ interface CardStore {
   _thinkingCardId: string | null;
   _nlInterceptionToast: string | null;
 
+  // Graceful restart protocol
+  _serverBootId: string | null;
+  _lastDisconnectWasRestart: boolean;
+
   // Conversation continuity
   recentTopics: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
 
@@ -127,30 +131,58 @@ interface CardStore {
 }
 
 
+// Pending auto-resume timer IDs — stored so boot ID mismatch can cancel them
+let _pendingResumeTimers: ReturnType<typeof setTimeout>[] = [];
+
+function _cancelPendingResumes() {
+  for (const t of _pendingResumeTimers) clearTimeout(t);
+  _pendingResumeTimers = [];
+}
+
 // Helper: handle reconnection — replace connection:lost markers and auto-resume sessions
 function _handleReconnection(
   get: () => CardStore,
   set: (fn: Partial<CardStore> | ((s: CardStore) => Partial<CardStore>)) => void,
+  isServerRestart = false,
 ) {
   const { cards } = get();
   const updates: Record<string, Card> = {};
   const resumeTargets: Array<{ id: string; sessionId: string; cwd: string }> = [];
 
   for (const [id, card] of Object.entries(cards)) {
-    if (card.text?.includes("\u200B[connection:lost]")) {
-      // Replace connection:lost with connection:restored
+    // After a server restart, handle server:restarting markers
+    if (card.text?.includes("\u200B[server:restarting]")) {
       updates[id] = {
         ...card,
-        text: card.text.replace(/\u200B\[connection:lost\]\n?/g, "\u200B[connection:restored]\n"),
+        text: card.text.replace(/\u200B\[server:restarting\]\n?/g, "\u200B[server:restarted]\n"),
         updatedAt: Date.now(),
       };
-      // Collect terminal cards with valid sessions for auto-resume
-      if (card.type === "terminal" && card.toolMeta?.toolSessionId && card.toolMeta?.cwd) {
-        resumeTargets.push({
-          id,
-          sessionId: card.toolMeta.toolSessionId,
-          cwd: card.toolMeta.cwd,
-        });
+      continue; // never auto-resume after a restart
+    }
+
+    if (card.text?.includes("\u200B[connection:lost]")) {
+      if (isServerRestart) {
+        // Server restarted (detected via boot ID) — upgrade the marker
+        updates[id] = {
+          ...card,
+          text: card.text.replace(/\u200B\[connection:lost\]\n?/g, "\u200B[server:restarted]\n"),
+          updatedAt: Date.now(),
+        };
+      } else {
+        // Normal network glitch — replace with restored
+        updates[id] = {
+          ...card,
+          text: card.text.replace(/\u200B\[connection:lost\]\n?/g, "\u200B[connection:restored]\n"),
+          updatedAt: Date.now(),
+        };
+        // Collect terminal cards with valid sessions for auto-resume
+        if (card.type === "terminal" && card.toolMeta?.toolSessionId && card.toolMeta?.cwd) {
+          resumeTargets.push({
+            id,
+            sessionId: card.toolMeta.toolSessionId,
+            cwd: card.toolMeta.cwd,
+          });
+        }
       }
     }
   }
@@ -159,6 +191,9 @@ function _handleReconnection(
     set((s) => ({ cards: { ...s.cards, ...updates } }));
   }
 
+  // Skip auto-resume entirely after a server restart — sessions are gone
+  if (isServerRestart) return;
+
   // Auto-resume Claude Code sessions — but only if the backend session is no
   // longer alive.  After a brief disconnect the backend swaps the WebSocket
   // reference and the running session resumes sending deltas automatically.
@@ -166,7 +201,7 @@ function _handleReconnection(
   // "streaming" (meaning the old session is alive) before sending /resume.
   if (resumeTargets.length > 0) {
     const reconnectTs = Date.now();
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       for (const target of resumeTargets) {
         const wsClient = get()._wsClient;
         if (!wsClient) continue;
@@ -209,6 +244,7 @@ function _handleReconnection(
         });
       }
     }, 5000);
+    _pendingResumeTimers.push(timer);
   }
 }
 
@@ -235,6 +271,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _pendingCodeText: null as string | null,
   _thinkingCardId: null as string | null,
   _nlInterceptionToast: null as string | null,
+  _serverBootId: null as string | null,
+  _lastDisconnectWasRestart: false,
   recentTopics: [],
   pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
   showSidebar: false,
@@ -255,30 +293,36 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const client = createWSClient({
       url: wsUrl,
       onMessage: (msg) => get()._handleServerMessage(msg),
-      onStateChange: (state, isReconnect) => {
+      onStateChange: (state, isReconnect, meta) => {
         const prev = get().connectionState;
         set({ connectionState: state });
 
         // Handle successful reconnection — restore lost cards and auto-resume sessions
         if (state === "connected" && isReconnect) {
-          _handleReconnection(get, set);
+          const isRestart = meta?.isServerRestart || get()._lastDisconnectWasRestart;
+          _handleReconnection(get, set, isRestart);
+          if (isRestart) set({ _lastDisconnectWasRestart: false });
         }
 
         // When connection drops, finalize any streaming cards
         if (state === "disconnected" && prev === "connected") {
+          const isRestart = meta?.isServerRestart ?? false;
+          if (isRestart) set({ _lastDisconnectWasRestart: true });
+
           const { cards } = get();
           const updates: Record<string, Card> = {};
+          const marker = isRestart ? "\n\u200B[server:restarting]\n" : "\n\u200B[connection:lost]\n";
           for (const [id, card] of Object.entries(cards)) {
             if (card.status === "streaming") {
               if (card.type === "shell") {
                 const writer = shellWriters.get(id);
-                if (writer) writer("\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
+                if (writer) writer(isRestart ? "\r\n\x1b[36m[Server restarting]\x1b[0m\r\n" : "\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
                 updates[id] = { ...card, status: "complete", updatedAt: Date.now() };
               } else {
                 updates[id] = {
                   ...card,
                   status: "complete",
-                  text: (card.text ?? "") + "\n\u200B[connection:lost]\n",
+                  text: (card.text ?? "") + marker,
                   operation: undefined,
                   updatedAt: Date.now(),
                 };
@@ -1438,26 +1482,32 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const client = createWSClient({
       url: wsUrl,
       onMessage: (msg) => get()._handleServerMessage(msg),
-      onStateChange: (state, isReconnect) => {
+      onStateChange: (state, isReconnect, meta) => {
         const prev = get().connectionState;
         set({ connectionState: state });
 
         // Handle successful reconnection
         if (state === "connected" && isReconnect) {
-          _handleReconnection(get, set);
+          const isRestart = meta?.isServerRestart || get()._lastDisconnectWasRestart;
+          _handleReconnection(get, set, isRestart);
+          if (isRestart) set({ _lastDisconnectWasRestart: false });
         }
 
         if (state === "disconnected" && prev === "connected") {
+          const isRestart = meta?.isServerRestart ?? false;
+          if (isRestart) set({ _lastDisconnectWasRestart: true });
+
           const { cards } = get();
           const updates: Record<string, Card> = {};
+          const marker = isRestart ? "\n\u200B[server:restarting]\n" : "\n\u200B[connection:lost]\n";
           for (const [id, card] of Object.entries(cards)) {
             if (card.status === "streaming") {
               if (card.type === "shell") {
                 const writer = shellWriters.get(id);
-                if (writer) writer("\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
+                if (writer) writer(isRestart ? "\r\n\x1b[36m[Server restarting]\x1b[0m\r\n" : "\r\n\x1b[33m[Connection lost]\x1b[0m\r\n");
                 updates[id] = { ...card, status: "complete", updatedAt: Date.now() };
               } else {
-                updates[id] = { ...card, status: "complete", text: (card.text ?? "") + "\n\u200B[connection:lost]\n", operation: undefined, updatedAt: Date.now() };
+                updates[id] = { ...card, status: "complete", text: (card.text ?? "") + marker, operation: undefined, updatedAt: Date.now() };
               }
             }
           }
@@ -1588,6 +1638,32 @@ export const useChatStore = create<CardStore>((set, get) => ({
         localStorage.setItem("enso_language", msg.settings.language);
         _setLocale(msg.settings.language as Locale);
       }
+      // Boot ID mismatch detection — catches abrupt kills where close code
+      // 4078 was never received.  If the server restarted, cancel any pending
+      // auto-resume timers and upgrade connection:lost markers.
+      if (msg.settings.bootId) {
+        const prevBootId = get()._serverBootId;
+        patch._serverBootId = msg.settings.bootId;
+        if (prevBootId && prevBootId !== msg.settings.bootId) {
+          _cancelPendingResumes();
+          // Upgrade any connection:lost markers to server:restarted
+          const { cards } = get();
+          const cardUpdates: Record<string, Card> = {};
+          for (const [id, card] of Object.entries(cards)) {
+            if (card.text?.includes("\u200B[connection:lost]")) {
+              cardUpdates[id] = {
+                ...card,
+                text: card.text.replace(/\u200B\[connection:lost\]\n?/g, "\u200B[server:restarted]\n"),
+                updatedAt: Date.now(),
+              };
+            }
+          }
+          if (Object.keys(cardUpdates).length > 0) {
+            set((s) => ({ cards: { ...s.cards, ...cardUpdates } }));
+          }
+        }
+      }
+
       if (Object.keys(patch).length > 0) set(patch);
 
       // Request chat history + sync models only on initial settings (has toolFamilies)
@@ -1760,6 +1836,23 @@ export const useChatStore = create<CardStore>((set, get) => ({
     // Handle recent topics (conversation continuity)
     if (msg.recentTopics) {
       set({ recentTopics: msg.recentTopics });
+      return;
+    }
+
+    // Handle research monitor updates — show as a chat card
+    if (msg.monitorUpdate) {
+      const { topic, changes } = msg.monitorUpdate;
+      const newItems = changes.newFindings.slice(0, 3).map((f: string) => `- ${f}`).join("\n");
+      const text = `**Topic Update: ${topic}**\n\nNew findings detected:\n${newItems || "Changes in existing findings."}`;
+      const monitorCard: Card = {
+        id: msg.id, runId: msg.runId, type: "chat", role: "assistant",
+        status: "complete", display: "expanded", text,
+        createdAt: Date.now(), updatedAt: Date.now(),
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, msg.id],
+        cards: { ...s.cards, [msg.id]: monitorCard },
+      }));
       return;
     }
 
