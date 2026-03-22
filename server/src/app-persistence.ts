@@ -558,11 +558,13 @@ export function registerLoadedApp(app: LoadedApp): void {
 
   // Register data hint
   const primaryDef = spec.tools.find((t) => t.isPrimary) ?? spec.tools[0];
-  registerToolTemplateDataHint({
-    toolFamily: spec.toolFamily,
-    signatureId: spec.signatureId,
-    requiredKeys: primaryDef.requiredDataKeys,
-  });
+  if (primaryDef.requiredDataKeys?.length) {
+    registerToolTemplateDataHint({
+      toolFamily: spec.toolFamily,
+      signatureId: spec.signatureId,
+      requiredKeys: primaryDef.requiredDataKeys,
+    });
+  }
 
   // Register template JSX code
   registerAppTemplate(spec.signatureId, app.templateJSX);
