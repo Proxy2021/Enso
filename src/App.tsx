@@ -153,6 +153,32 @@ function ResultsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** Compact label showing active chat LLM in the header */
+function ActiveModelLabel() {
+  const chatModel = useChatStore((s) => s.chatModel);
+
+  // Derive short display name from model ID
+  const label = (() => {
+    if (!chatModel) return "";
+    // e.g. "gemini-2.5-flash" → "Gemini 2.5 Flash"
+    if (chatModel.startsWith("gemini-")) {
+      const rest = chatModel.slice(7); // "2.5-flash"
+      return "Gemini " + rest.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+    }
+    if (chatModel.startsWith("ollama:")) return chatModel.slice(7);
+    // Fallback: capitalize segments
+    return chatModel.split(/[-_]/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+  })();
+
+  if (!label) return null;
+
+  return (
+    <span className="text-[11px] text-gray-500 font-medium truncate max-w-[10rem]" title={`Chat model: ${chatModel}`}>
+      {label}
+    </span>
+  );
+}
+
 export default function App() {
   const connect = useChatStore((s) => s.connect);
   const disconnect = useChatStore((s) => s.disconnect);
@@ -210,7 +236,10 @@ export default function App() {
     <AppErrorBoundary>
       <div className="flex flex-col h-dvh text-gray-100">
         <header className="sticky top-0 z-20 flex items-center justify-between px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
-          <h1 className="text-base font-semibold tracking-tight">Enso</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold tracking-tight">Enso</h1>
+            <ActiveModelLabel />
+          </div>
           <div className="flex items-center gap-1.5">
             <SettingsPanel />
             <DebugReporter />
