@@ -31,8 +31,8 @@
         "Shell trap fix: 4-sprint P0 finally correct — xterm onData interception with 23-case test suite. Needs browser validation in Sprint 11.",
         "E3 streaming progress shipped but UNVALIDATED — backend-only, needs gateway restart to test.",
         "Product entering QUALITY & POLISH phase — core capabilities in place, remaining work is reliability + discoverability + workflow integration.",
-        "Sprint 11 THEME: 'GENERAL PRODUCT ASSESSMENT' — broad capability testing with fresh personas, no pre-determined priority list.",
-        "Sprint 11 SELECTED PERSONAS: Alex Chen (Startup Founder), Jordan Kim (Developer), Sarah Thompson (Business Analyst) — broadest capability coverage."
+        "Sprint 11 THEME: 'DEEP PHOTO/VIDEO PRODUCTION' — evolve Enso into a deep, indispensable tool for professional photo/video workflows. Focus on AI-powered media processing (upscaling, background removal, color grading, batch operations), video intelligence (scene detection, highlight extraction, frame export), EXIF/metadata-aware media management, and shoot-based project organization. Marco Reyes persona is the PRIMARY driver — his frustrations define the sprint backlog.",
+        "Sprint 11 SELECTED PERSONAS: Marco Reyes (Photographer/Videographer) as PRIMARY, Jordan Kim (Developer) as SECONDARY — Marco tests media/photo/video depth, Jordan validates technical implementation quality."
       ]
     },
     {
@@ -347,10 +347,8 @@
     }
   ],
   "validationPersonaIds": [
-    "startup-founder",
-    "indie-developer",
-    "developer",
-    "creative-professional"
+    "creative-professional",
+    "developer"
   ],
   "createdAt": 1773909300324,
   "updatedAt": 1774137600000
