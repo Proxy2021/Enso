@@ -35,6 +35,8 @@ export type ConnectedClient = {
   claudeThinking?: "adaptive" | "disabled";
   /** User-selected UI language. */
   language?: string;
+  /** User-selected chat LLM model. */
+  chatModel?: string;
 };
 
 /** All connected browser clients, keyed by connection id. */
@@ -360,6 +362,13 @@ export async function startEnsoServer(opts: {
   const port = account.port;
   activePort = port;
   activeAccount = account;
+
+  // Pre-import provider status for initial settings (connection handler is not async)
+  let _getProviderStatus: ((keys: Record<string, string>) => unknown[]) | undefined;
+  try {
+    const mod = await import("./llm-provider.js");
+    _getProviderStatus = mod.getProviderStatus;
+  } catch { /* non-fatal */ }
 
   // Re-hydrate saved apps from disk before setting up routes
   try {
@@ -1313,7 +1322,12 @@ export async function startEnsoServer(opts: {
       sessionKey: client.sessionKey,
       seq: 0,
       state: "final",
-      settings: { mode: account.mode ?? "full", toolFamilies, ensoProjectPath },
+      settings: {
+        mode: account.mode ?? "full",
+        toolFamilies,
+        ensoProjectPath,
+        providers: _getProviderStatus ? _getProviderStatus(account.providerKeys) as any : undefined,
+      },
       timestamp: Date.now(),
     });
 
@@ -1800,7 +1814,41 @@ export async function startEnsoServer(opts: {
 
                 // "simple" — router provides the answer directly
                 dismissProcessing();
-                if (classification.answer) {
+                const userChatModel = client.chatModel ?? "gemini-2.5-flash";
+                const isUserGemini = userChatModel.startsWith("gemini-");
+
+                if (classification.answer && !isUserGemini) {
+                  // User selected a non-Gemini model — call their preferred model
+                  runtime.log?.(`[enso] task-router: simple → calling ${userChatModel} for "${msg.text.slice(0, 60)}"`);
+                  try {
+                    const { callChatLLM } = await import("./llm-provider.js");
+                    const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
+                    const modelAnswer = await callChatLLM({ prompt: msg.text, model: userChatModel, providerKeys });
+                    const answerCardId = randomUUID();
+                    const answerRunId = randomUUID();
+                    send({
+                      id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
+                      state: "final", text: modelAnswer, timestamp: Date.now(),
+                    });
+                    persistCard(clientId, {
+                      id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
+                      text: modelAnswer, timestamp: Date.now(),
+                    });
+                  } catch (llmErr) {
+                    logError("task-router", `callChatLLM failed for ${userChatModel}`, llmErr);
+                    // Fallback: use the Gemini classifier answer
+                    const answerCardId = randomUUID();
+                    const answerRunId = randomUUID();
+                    send({
+                      id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
+                      state: "final", text: classification.answer, timestamp: Date.now(),
+                    });
+                    persistCard(clientId, {
+                      id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
+                      text: classification.answer, timestamp: Date.now(),
+                    });
+                  }
+                } else if (classification.answer) {
                   // Quality gate — validate answer before sending
                   const gate = qualityGate(classification.answer, msg.text);
                   if (!gate.pass) {
@@ -1856,6 +1904,31 @@ export async function startEnsoServer(opts: {
                       type: "chat",
                       role: "assistant",
                       text: classification.answer,
+                      timestamp: Date.now(),
+                    });
+                  }
+                } else if (!isUserGemini) {
+                  // No classifier answer + non-Gemini model — call user's model directly
+                  runtime.log?.(`[enso] task-router: simple (no answer) → calling ${userChatModel}`);
+                  try {
+                    const { callChatLLM } = await import("./llm-provider.js");
+                    const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
+                    const modelAnswer = await callChatLLM({ prompt: msg.text, model: userChatModel, providerKeys });
+                    const answerCardId = randomUUID();
+                    const answerRunId = randomUUID();
+                    send({
+                      id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
+                      state: "final", text: modelAnswer, timestamp: Date.now(),
+                    });
+                    persistCard(clientId, {
+                      id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
+                      text: modelAnswer, timestamp: Date.now(),
+                    });
+                  } catch (llmErr) {
+                    logError("task-router", `callChatLLM failed for ${userChatModel}`, llmErr);
+                    send({
+                      id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
+                      state: "error", text: `Error: ${llmErr instanceof Error ? llmErr.message : String(llmErr)}`,
                       timestamp: Date.now(),
                     });
                   }
@@ -2683,9 +2756,9 @@ export async function startEnsoServer(opts: {
             break;
           }
           case "settings.set_model": {
-            const validModels = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"];
+            const { isValidClaudeCodeModel } = await import("./llm-provider.js");
             const validThinking = ["adaptive", "disabled"] as const;
-            if (msg.claudeModel && validModels.includes(msg.claudeModel)) {
+            if (msg.claudeModel && isValidClaudeCodeModel(msg.claudeModel)) {
               client.claudeModel = msg.claudeModel;
             }
             if (msg.claudeThinking && validThinking.includes(msg.claudeThinking as typeof validThinking[number])) {
@@ -2701,6 +2774,44 @@ export async function startEnsoServer(opts: {
               settings: { mode: account.mode, claudeModel: client.claudeModel, claudeThinking: client.claudeThinking },
               timestamp: Date.now(),
             });
+            break;
+          }
+          case "settings.set_chat_model": {
+            const { isValidChatModel } = await import("./llm-provider.js");
+            if (msg.chatModel && isValidChatModel(msg.chatModel)) {
+              client.chatModel = msg.chatModel;
+              runtime.log?.(`[enso] chat model: ${client.chatModel}`);
+            }
+            send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey,
+              seq: 0,
+              state: "final",
+              settings: { mode: account.mode, chatModel: client.chatModel },
+              timestamp: Date.now(),
+            });
+            break;
+          }
+          case "settings.set_provider_key": {
+            if (msg.providerId && msg.providerApiKey) {
+              const { saveProviderKey, getProviderStatus, loadProviderKeys } = await import("./llm-provider.js");
+              saveProviderKey(msg.providerId, msg.providerApiKey);
+              // Refresh account keys
+              const freshKeys = loadProviderKeys();
+              if (account.geminiApiKey) freshKeys.gemini = account.geminiApiKey;
+              account.providerKeys = freshKeys;
+              runtime.log?.(`[enso] provider key saved: ${msg.providerId}`);
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                settings: { mode: account.mode, providers: getProviderStatus(account.providerKeys) },
+                timestamp: Date.now(),
+              });
+            }
             break;
           }
           case "settings.set_language": {

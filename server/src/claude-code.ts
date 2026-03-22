@@ -335,9 +335,12 @@ export async function runClaudeCode(params: {
 
   /** Run the SDK query and process all streamed messages. */
   const runQuery = async () => {
-    const selectedModel = params.model || "claude-opus-4-6";
+    const rawModel = params.model || "claude-opus-4-6";
+    const isOllama = rawModel.startsWith("ollama:");
+    const selectedModel = isOllama ? rawModel.slice(7) : rawModel;
     // Build thinking config — adaptive enables extended thinking, disabled turns it off
-    const thinkingMode = params.thinking ?? "adaptive"; // default to adaptive for richer output
+    // Ollama models don't support extended thinking
+    const thinkingMode = isOllama ? "disabled" : (params.thinking ?? "adaptive");
     const thinkingConfig = thinkingMode === "adaptive"
       ? { type: "adaptive" as const }
       : { type: "disabled" as const };
@@ -354,8 +357,6 @@ export async function runClaudeCode(params: {
         allowDangerouslySkipPermissions: true,
         promptSuggestions: true,
         abortController,
-        // Append Enso-specific context to Claude Code's system prompt
-        // Applied to ALL sessions (new and resumed) for safety
         systemPrompt: {
           type: "preset" as const,
           preset: "claude_code" as const,
@@ -366,10 +367,15 @@ export async function runClaudeCode(params: {
             "IMPORTANT: Always follow through on your plans. Never stop after just stating what you intend to do — actually execute the investigation, fix, or task. If you say 'I will analyze X', you must then analyze X in the same session.",
           ].join(" "),
         },
-        // Effort level: "!!" prefix → max, "!" → high (default is SDK's own default)
         ...(effort ? { effort } : {}),
-        // Trigger compaction at ~80% instead of default ~83% for more headroom
-        env: { ...process.env, CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80" },
+        env: {
+          ...process.env,
+          CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80",
+          ...(isOllama ? {
+            ANTHROPIC_BASE_URL: "http://localhost:11434",
+            ANTHROPIC_AUTH_TOKEN: "ollama",
+          } : {}),
+        },
       },
     });
 

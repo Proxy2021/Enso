@@ -106,7 +106,23 @@ export interface ServerMessage {
   projects?: Array<{ name: string; path: string }>;
   questions?: ToolQuestion[];
   operation?: OperationStatus;
-  settings?: { mode: ChannelMode; toolFamilies?: Array<{ toolFamily: string; description: string }>; ensoProjectPath?: string; claudeModel?: string; claudeThinking?: "adaptive" | "disabled"; language?: string };
+  settings?: {
+    mode: ChannelMode;
+    toolFamilies?: Array<{ toolFamily: string; description: string }>;
+    ensoProjectPath?: string;
+    claudeModel?: string;
+    claudeThinking?: "adaptive" | "disabled";
+    language?: string;
+    chatModel?: string;
+    providers?: Array<{
+      id: string;
+      name: string;
+      configured: boolean;
+      models: Array<{ id: string; name: string; description?: string }>;
+      setupUrl?: string;
+      setupHint: string;
+    }>;
+  };
   steps?: AgentStep[];
   enhanceResult?: EnhanceResult | null;
   enhanceHint?: { toolFamily: string };
@@ -189,6 +205,8 @@ export interface ClientMessage {
     | "server.restart"
     | "settings.set_mode"
     | "settings.set_model"
+    | "settings.set_chat_model"
+    | "settings.set_provider_key"
     | "settings.set_language"
     | "operation.cancel"
     | "sessions.list"
@@ -210,6 +228,9 @@ export interface ClientMessage {
   mode?: ChannelMode;
   claudeModel?: string;
   claudeThinking?: "adaptive" | "disabled";
+  chatModel?: string;
+  providerId?: string;
+  providerApiKey?: string;
   language?: string;
   text?: string;
   mediaUrls?: string[];

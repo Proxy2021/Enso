@@ -49,6 +49,15 @@ interface CardStore {
   codeSessionId: string | null;
   claudeModel: string;
   claudeThinking: "adaptive" | "disabled";
+  chatModel: string;
+  providers: Array<{
+    id: string;
+    name: string;
+    configured: boolean;
+    models: Array<{ id: string; name: string; description?: string }>;
+    setupUrl?: string;
+    setupHint: string;
+  }>;
   language: "en" | "zh";
 
   // Internal: active terminal card
@@ -94,6 +103,8 @@ interface CardStore {
   switchTerminalProject: (cardId: string, cwd: string) => void;
   resumeSessionOnCard: (cardId: string, sessionId: string, cwd: string) => void;
   setClaudeModel: (model: string, thinking?: "adaptive" | "disabled") => void;
+  setChatModel: (model: string) => void;
+  configureProvider: (providerId: string, apiKey: string) => void;
   setLanguage: (language: "en" | "zh") => void;
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
@@ -214,6 +225,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   codeSessionId: localStorage.getItem("enso_code_session_id") || null,
   claudeModel: localStorage.getItem("enso_claude_model") || "claude-opus-4-6",
   claudeThinking: (localStorage.getItem("enso_claude_thinking") as "adaptive" | "disabled") || "adaptive",
+  chatModel: localStorage.getItem("enso_chat_model") || "gemini-2.5-flash",
+  providers: [],
   language: (localStorage.getItem("enso_language") as Locale) || "en",
   _activeTerminalCardId: null,
   _pendingCodeText: null as string | null,
@@ -1368,10 +1381,25 @@ export const useChatStore = create<CardStore>((set, get) => ({
       localStorage.setItem("enso_claude_thinking", thinking);
     }
     set(patch);
-    // Notify server of model + thinking change
     const ws = get()._wsClient;
     if (ws) {
       ws.send({ type: "settings.set_model", claudeModel: model, claudeThinking: thinking ?? get().claudeThinking } as import("@shared/types").ClientMessage);
+    }
+  },
+
+  setChatModel: (model: string) => {
+    set({ chatModel: model });
+    localStorage.setItem("enso_chat_model", model);
+    const ws = get()._wsClient;
+    if (ws) {
+      ws.send({ type: "settings.set_chat_model", chatModel: model } as import("@shared/types").ClientMessage);
+    }
+  },
+
+  configureProvider: (providerId: string, apiKey: string) => {
+    const ws = get()._wsClient;
+    if (ws) {
+      ws.send({ type: "settings.set_provider_key", providerId, providerApiKey: apiKey } as import("@shared/types").ClientMessage);
     }
   },
 
@@ -1544,6 +1572,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
         patch.claudeThinking = msg.settings.claudeThinking;
         localStorage.setItem("enso_claude_thinking", msg.settings.claudeThinking);
       }
+      if (msg.settings.chatModel) {
+        patch.chatModel = msg.settings.chatModel;
+        localStorage.setItem("enso_chat_model", msg.settings.chatModel);
+      }
+      if (msg.settings.providers) {
+        patch.providers = msg.settings.providers;
+      }
       if (msg.settings.language) {
         patch.language = msg.settings.language as Locale;
         localStorage.setItem("enso_language", msg.settings.language);
@@ -1551,15 +1586,17 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
       if (Object.keys(patch).length > 0) set(patch);
 
-      // Request chat history + sync model only on initial settings (has toolFamilies)
+      // Request chat history + sync models only on initial settings (has toolFamilies)
       if (msg.settings.toolFamilies) {
         const wsClient = get()._wsClient;
         if (wsClient) {
           wsClient.send({ type: "chat.history", historyCount: 50 });
-          // Sync model + thinking preference to server
-          const { claudeModel: model, claudeThinking: thinking } = get();
+          const { claudeModel: model, claudeThinking: thinking, chatModel } = get();
           if (model) {
             wsClient.send({ type: "settings.set_model", claudeModel: model, claudeThinking: thinking } as import("@shared/types").ClientMessage);
+          }
+          if (chatModel) {
+            wsClient.send({ type: "settings.set_chat_model", chatModel } as import("@shared/types").ClientMessage);
           }
         }
       }

@@ -6,7 +6,7 @@ import AppsMenu from "./components/AppsMenu";
 import PinnedSidebar from "./components/PinnedSidebar";
 import ConnectionPicker from "./components/ConnectionPicker";
 import SetupWizard from "./components/SetupWizard";
-import MemoryPanel from "./components/MemoryPanel";
+
 import { parseDeepLink, setActiveBackend, getActiveBackend, loadBackends } from "./lib/connection";
 import { isNative } from "./lib/platform";
 import { initDeepLinkListener } from "./lib/deep-link-handler";
@@ -153,27 +153,11 @@ function ResultsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function MemoryButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center text-sm text-gray-400 hover:text-gray-200 transition-colors p-1.5 rounded-lg border border-gray-700/60 bg-gray-800/50"
-      title="Memory"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2a5 5 0 0 1 5 5v3a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5Z" />
-        <path d="M8.21 13.89 7 23l5-3 5 3-1.21-9.12" />
-      </svg>
-    </button>
-  );
-}
-
 export default function App() {
   const connect = useChatStore((s) => s.connect);
   const disconnect = useChatStore((s) => s.disconnect);
   const connectToBackend = useChatStore((s) => s.connectToBackend);
   const loadSharedCard = useChatStore((s) => s.loadSharedCard);
-  const [showMemory, setShowMemory] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
@@ -232,7 +216,6 @@ export default function App() {
             <DebugReporter />
             <AppsMenu />
             <ResultsButton onClick={() => setShowResults(true)} />
-            <MemoryButton onClick={() => setShowMemory(true)} />
             <SidebarToggle />
             <ConnectionDot />
           </div>
@@ -251,7 +234,6 @@ export default function App() {
         <ResultsInbox show={showResults} onClose={() => setShowResults(false)} />
         <ConnectionPicker />
         <SetupWizard />
-        <MemoryPanel show={showMemory} onClose={() => setShowMemory(false)} />
       </div>
     </AppErrorBoundary>
   );

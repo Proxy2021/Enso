@@ -24,7 +24,7 @@ import { logAction, logError } from "./action-log.js";
 
 function createSSEClient(
   res: Response,
-  settings?: { model?: string; thinking?: string },
+  settings?: { model?: string; thinking?: string; chatModel?: string },
 ): ConnectedClient {
   const clientId = `api-${randomUUID()}`;
   return {
@@ -39,6 +39,7 @@ function createSSEClient(
     _disconnectedBuffer: [],
     claudeModel: settings?.model,
     claudeThinking: (settings?.thinking as "adaptive" | "disabled") ?? "adaptive",
+    chatModel: settings?.chatModel,
   };
 }
 
@@ -69,31 +70,32 @@ export function createActionRouter(deps: {
 
   // ── POST /api/actions/chat ──
   router.post("/api/actions/chat", async (req: Request, res: Response) => {
-    const { text, model, thinking } = req.body as {
-      text?: string; model?: string; thinking?: string;
+    const { text, model, thinking, chatModel } = req.body as {
+      text?: string; model?: string; thinking?: string; chatModel?: string;
     };
     if (!text) { res.status(400).json({ error: "text is required" }); return; }
 
     initSSE(res);
-    const client = createSSEClient(res, { model, thinking });
+    const client = createSSEClient(res, { model, thinking, chatModel });
     const runId = randomUUID();
 
     logAction({ ts: Date.now(), type: "action", category: "action-api", message: `chat: ${text.slice(0, 80)}` });
 
     try {
-      if (!account.geminiApiKey) {
+      const chatModel = client.chatModel ?? "gemini-2.5-flash";
+      const isGeminiModel = chatModel.startsWith("gemini-");
+
+      if (!account.geminiApiKey && isGeminiModel) {
         client.send({
           id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
-          state: "error", text: "No GEMINI_API_KEY configured. Add it to server/.env",
+          state: "error", text: "No GEMINI_API_KEY configured. Add it in Settings or server/.env",
           timestamp: Date.now(),
         });
       } else {
         const { classifyTask } = await import("./task-router.js");
-        const classification = await classifyTask({
-          userMessage: text,
-          conversationHistory: [],
-          geminiApiKey: account.geminiApiKey,
-        });
+        const classification = account.geminiApiKey
+          ? await classifyTask({ userMessage: text, conversationHistory: [], geminiApiKey: account.geminiApiKey })
+          : { complexity: "simple" as const, answer: undefined, reasoning: "no gemini key" };
 
         if (classification.complexity === "research") {
           const topic = classification.researchTopic || text;
@@ -101,29 +103,21 @@ export function createActionRouter(deps: {
           await routeToResearchAPI({ topic, depth: depth as "quick" | "standard", text, client, account, config, runtime });
         } else if (classification.complexity === "orchestrated") {
           const { handleOrchestration } = await import("./orchestrator.js");
-          await handleOrchestration({
-            userMessage: text,
-            classification,
-            client,
-            account,
-          });
+          await handleOrchestration({ userMessage: text, classification, client, account });
         } else if (classification.complexity === "one-off") {
           const { runClaudeCode } = await import("./claude-code.js");
           await runClaudeCode({ prompt: text, client, runId });
-        } else if (classification.answer) {
-          // CLI/API: deliver classifier answers directly — skip the quality gate
-          // which is designed for the richer web UI experience where short answers
-          // get escalated to the full agent pipeline.
+        } else if (classification.answer && isGeminiModel) {
+          // Gemini fast path: use the classifier's inline answer directly
           client.send({
             id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
             state: "final", text: classification.answer, timestamp: Date.now(),
           });
         } else {
-          // No classifier answer — make a direct Gemini text call rather than
-          // falling through to handleInbound (the standalone agent has a known
-          // bug with additionalProperties in tool schemas).
-          const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-          const answer = await callGeminiLLMWithRetry(text, account.geminiApiKey);
+          // Call the user's selected chat model
+          const { callChatLLM } = await import("./llm-provider.js");
+          const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
+          const answer = await callChatLLM({ prompt: text, model: chatModel, providerKeys });
           client.send({
             id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
             state: "final", text: answer, timestamp: Date.now(),

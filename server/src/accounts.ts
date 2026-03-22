@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import { DEFAULT_ACCOUNT_ID } from "./local-types.js";
 import type { CoreConfig, EnsoAccountConfig } from "./types.js";
+import { loadProviderKeys } from "./llm-provider.js";
 
 const PLUGIN_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GEMINI_KEY_FILE = join(PLUGIN_DIR, "gemini.key");
@@ -16,6 +17,7 @@ export type ResolvedEnsoAccount = {
   port: number;
   host: string;
   geminiApiKey: string;
+  providerKeys: Record<string, string>;
   mode: "im" | "ui" | "full";
   accessToken?: string;
   machineName?: string;
@@ -48,6 +50,9 @@ export function resolveEnsoAccount(params: {
     console.log(`[enso] Auto-generated access token: ${accessToken}`);
   }
 
+  const providerKeys = loadProviderKeys();
+  if (geminiApiKey) providerKeys.gemini = geminiApiKey;
+
   return {
     accountId,
     enabled: section.enabled !== false,
@@ -56,6 +61,7 @@ export function resolveEnsoAccount(params: {
     port,
     host,
     geminiApiKey,
+    providerKeys,
     mode,
     accessToken,
     machineName: section.machineName ?? process.env.ENSO_MACHINE_NAME ?? undefined,
