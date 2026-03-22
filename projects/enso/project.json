@@ -8,8 +8,8 @@
   "techStack": "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
   "testUrl": "http://localhost:5173",
   "lastSprint": 11,
-  "lastSprintScore": 7.0,
-  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 7.0],
+  "lastSprintScore": 6.0,
+  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0],
   "teamAgents": [
     {
       "id": "project-leader",
@@ -25,14 +25,13 @@
       "perspective": "Am I building the right things? Is the team effective? Is the product coherent?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 11 SCORE: 7.0/10. Strong engineering output (5 enhancements, 9/9/9 code quality, 7 new native tools) but ZERO persona retests. Improvement thesis unvalidated.",
-        "Sprint 11 DELIVERED: E1 execute-first routing (7 media intent patterns), E2 error handling (null guard + context-aware messages), E3 video intelligence (4 FFmpeg tools), E4 contact sheet + AI gateway, E5 cloud AI providers (Replicate + remove.bg).",
-        "Sprint 11 CRITICAL GAP: No retests performed. Marco 5.0 baseline never re-validated. hasAttachments always passed as false — undermines E1 routing. video-tools.ts registration unverified at runtime.",
-        "Sprint 11 TEST REGRESSION: 202 → 135 tests (-33%). New modules (video-tools, file-reference-detector, media-ai-gateway) have zero test coverage. Test-to-code ratio 1:10.3 (target 1:3-1:5).",
-        "Sprint 12 THEME: 'Validate & Wire — Proving the Media Pipeline Works'. Mandatory retests, test count restoration, runtime verification before new features.",
-        "Sprint 12 HARD GATES: (1) No sprint closes without persona retests. (2) Test count ≥ entry count. (3) Max 3 new enhancements. (4) hasAttachments fix is P0.",
-        "Sprint score trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 7.0]. Stabilized after Sprint 10 recovery. Must validate to break through 8.0.",
-        "BRIGHT SPOTS: Research 8-9/10, Media AI gateway architecture extensible, 4-agent focus sprint more productive than 6-agent sprawl. Competitive moat: no rival platform offers 21+ media tools."
+        "Sprint 11 RESULT: 6.0/10 — identified critical 'explain-vs-execute' gap where AI describes media capabilities instead of invoking existing tools. Video tools (303 LOC, 4 tools) and AI processing tools (318 LOC, 3 tools) were BUILT but never registered in the server pipeline. Root cause: routing/registration failure, not feature deficit.",
+        "Sprint score trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0]. Sprint 11 regressed because tools exist but are orphaned — users get text explanations instead of executed actions.",
+        "Sprint 11 built: AI photo culling system, video-tools.ts, ai-processing-tools.ts, intent patterns — but execution pipeline broken. Sprint 12 must WIRE these tools into the system and VALIDATE they actually execute.",
+        "KEY INSIGHT from Sprint 11: Enso has many small fragmented tools but needs COMPREHENSIVE, POWERFUL vertical-domain apps. Think 'Photoshop' not '100 separate single-purpose apps'. The photo_studio app must be a deep, complete experience — not surface-level demos.",
+        "Sprint 12 THEME: 'PHOTOGRAPHER PERSONA DEEP DIVE' — Marco Reyes is the PRIMARY driver again. Sprint 11 identified the problems; Sprint 12 FIXES them. Focus: (1) Wire orphaned video/AI tools into execution pipeline, (2) Build comprehensive photo_studio app that handles upscaling, background removal, EXIF, batch operations, contact sheets, culling, (3) Make AI processing REAL — not lanczos3 placeholders but actual AI models or APIs, (4) Video intelligence must work end-to-end.",
+        "Sprint 12 EVOLUTION EFFECTIVENESS: Recent sprints had many failures/partial completions. The sprint must be FOCUSED — fewer but more impactful changes. Fix the wiring FIRST, then build on top. Do not attempt 10 things and complete 3 — attempt 5 things and complete all 5.",
+        "Sprint 12 SELECTED PERSONAS: Marco Reyes (Photographer/Videographer) as PRIMARY, Jordan Kim (Developer) as SECONDARY."
       ]
     },
     {
@@ -94,13 +93,13 @@
       "perspective": "Is this architecturally sound? Will it scale? Are we creating tech debt?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 11 DELIVERED: Architecture review revealed code is ahead of persona tests — video-tools.ts, file-reference-detector.ts, media_processing app all existed but were unwired. Gap is routing, not capability.",
-        "Sprint 11 DELIVERED: ADR-001 (Video Intelligence IMPLEMENTED), ADR-002 (AI Media Processing INTERFACE DEFINED), ADR-003 (Execute-First Routing DESIGN COMPLETE).",
-        "Architecture health: 6.5/10 (up from 5.5). server.ts now ~3177 LOC (grew with routing additions). Technical debt: D1 server.ts god module, D2 in-memory cardContexts, D3 inconsistent error handling, D4 CJS require() in ESM.",
-        "CRITICAL VERIFICATION NEEDED: Is registerVideoTools() actually called during server startup? If not, E3's 4 native video tools exist in code but are never available. Sprint 12 P0 assignment.",
-        "Sprint 12 ASSIGNMENT: (1) Verify video-tools.ts registration pathway at runtime. (2) Design shoot-based project organization system — group media by shoot/client/date with metadata persistence. (3) ADR for CardContext → SQLite migration.",
-        "In-memory cardContexts still lost on restart — SQLite migration design needed for Sprint 12.",
-        "Media AI gateway (media-ai-gateway.ts ~265 LOC) is well-architected — provider registry pattern enables zero-config local + opt-in cloud. Extensible without core changes."
+        "Sprint 10 DELIVERED: Streaming progress (E3) — 3 OperationStatus emissions added to server.ts. Backend-only, awaiting gateway restart for validation.",
+        "Sprint 10 DELIVERED: Shell NL detection re-architected — moved from ChatInput to xterm onData at the correct layer. ADR-002 IMPLEMENTED.",
+        "Architecture health: 5.5/10. Three god modules: server.ts (~2400 LOC), researcher-tools.ts (~3000 LOC), chat.ts (~2500 LOC) — 7900 LOC total.",
+        "ADR-003 PROPOSED: Diagram request detection — post-processing to detect when user requested diagram but LLM produced none. Action button pattern.",
+        "In-memory cardContexts lost on restart — needs SQLite-backed CardContextStore (Sprint 12+).",
+        "Context bleed between cards: delayed research responses contaminate subsequent queries. Needs timestamp guard.",
+        "Sprint 11 ASSIGNMENT: Design diagram request detection system and citation metadata extraction architecture."
       ]
     },
     {
@@ -118,13 +117,13 @@
       "perspective": "Is this code production-ready? Are conventions followed? Will it break anything?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 11 RESULT: Build CLEAN, 135/135 tests passing. Code review PASS (9/9/9). ~1,343 new LOC across 16 files. 8 convention violations found (2 major: require() in ESM, video-tools not registered).",
-        "Sprint 11 CRITICAL: Test count REGRESSED 202 → 135 (-33%). 67 tests disappeared. Test-to-code ratio 1:10.3 (target 1:3-1:5). New modules have ZERO test coverage.",
-        "Sprint 11 BUG: hasAttachments always passed as false in server.ts. This undermines E1 execute-first routing. Must fix in Sprint 12.",
-        "Sprint 11 BUG: video-tools.ts may be orphaned — registerVideoTools() call path unverified at runtime. 5 engineering risks identified.",
-        "Sprint 12 ASSIGNMENT: (1) Restore test count to 200+ — write tests for file-reference-detector.ts (Aisha's 9-case spec), video-tools.ts (mock FFmpeg), media-ai-gateway.ts (provider registration). (2) Fix hasAttachments always-false bug. (3) Fix require() in ESM convention violation. (4) Fix or remove broken test suites.",
-        "No CI/CD pipeline — every commit to main is unvalidated. Build pipeline still minimal (tsc -b && vite build).",
-        "Code quality highlights: video-tools.ts 8/10, file-reference-detector.ts 9/10, exif-parser.ts 9/10 (highest quality module)."
+        "Sprint 10 RESULT: Build CLEAN, 202/202 tests passing. CardStore fix + test import drift RESOLVED. Review verdict: PASS (9/10 across quality dimensions).",
+        "Sprint 10 WIN: Shared utility extraction — isLikelyNaturalLanguage() exported from shared module, tests import production code instead of copies.",
+        "2 broken test suites STILL UNRESOLVED: filesystem-tools.test.ts, workspace-media-tools.test.ts — openclaw/plugin-sdk import errors. 2+ sprints old.",
+        "Test copy divergence: Mermaid sanitizer tests still use copied functions in some areas. Need full sync to direct imports.",
+        "No CI/CD pipeline — every commit to main is unvalidated.",
+        "Build pipeline is minimal (tsc -b && vite build) with no lint or test step.",
+        "Sprint 11 ASSIGNMENT: Fix or remove 2 broken test suites, fix Mermaid test copy divergence."
       ]
     },
     {
@@ -141,13 +140,13 @@
       "perspective": "Does this actually work? What edge cases are we missing? Is quality improving?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 11 VERDICT: FAIL on test health. Test count regressed 202 → 135 (-33%). New Sprint 11 modules (video-tools.ts, file-reference-detector.ts, media-ai-gateway.ts) have ZERO test coverage. 48/60 source files (80%) untested.",
-        "Sprint 11 CRITICAL: NO persona retests performed. Marco 5.0 baseline never re-validated. Sprint's biggest process failure.",
-        "Sprint 11 DELIVERED: Comprehensive test plans for P0-1 (7 criteria), P0-2 (5 criteria), P0-3 (7 criteria). Edge case catalogs: 10 file-reference cases, 10 video tools cases, 9 error handling cases. Proposed file-reference-detector.test.ts with 9 test cases.",
-        "Quality trend: Sprint 7 (6.8) → Sprint 8 (6.6) → Sprint 9 (5.87) → Sprint 10 (8.0) → Sprint 11 (7.0). Recovery stalled without validation.",
-        "Sprint 12 ASSIGNMENT: (1) RUN FULL PERSONA RETESTS — Marco Reyes (10 scenarios) + Jordan Kim (4 scenarios) against Sprint 11 implementation. Score and compare to baselines. (2) Validate E1 routing, E2 error handling, E3 video tools, E4 contact sheet, E5 cloud AI at runtime. (3) Produce scored retest report with before/after comparison.",
-        "Sprint 12 HARD GATE: No sprint closes without at least one persona retest. This is now mandatory, not optional.",
-        "CardContext reconstruction (tryReconstructContext) still fragile and untested. No E2E coverage for research pipeline."
+        "Sprint 10 WIN: Retests RAN for first time in 4 sprints. Developer and Student Researcher retested. Shell trap fix validated at code level, pending browser validation.",
+        "Sprint 10 WIN: 202 tests (+23 from Sprint 9). NL detection test suite: 23 cases. Test-per-feature ratio improving.",
+        "Quality trend RECOVERING: Sprint 7 (6.8) → Sprint 8 (6.6) → Sprint 9 (5.87) → Sprint 10 (8.0). P0 shell trap FIXED after 4 sprints.",
+        "P0 bugs now: 0 critical (shell trap fixed). Remaining issues: 2 broken test suites, test copy divergence, /code E2E inconclusive.",
+        "CardContext reconstruction (tryReconstructContext) is fragile and untested.",
+        "No end-to-end test coverage for the research pipeline.",
+        "Sprint 11 ASSIGNMENT: Validate E1 shell trap in browser, validate E3 streaming progress, verify /code E2E flow."
       ]
     },
     {
@@ -171,13 +170,12 @@
       "perspective": "What new AI tech exists that we are not leveraging? How do we stay ahead of the curve?",
       "agentRole": "researcher",
       "painPoints": [
-        "Sprint 11 DELIVERED: Comprehensive AI technology assessment (28 sources). Two-tier stack recommendation: Tier 1 (local/free: sharp + fluent-ffmpeg + photo_engine.py), Tier 2 (cloud: Replicate Real-ESRGAN $0.0025/img + remove.bg $0.23/img). @tugrul/rembg (BiRefNet ONNX) as zero-cost local fallback.",
-        "Sprint 11 KEY FINDING: RMBG 2.0 achieves 90% accuracy — local background removal is now production-viable. No API key, no cost, instant results. This is a competitive moat.",
-        "Sprint 11 KEY FINDING: No competing AI agent platform (Manus, Devin, Cursor, Replit) offers media processing tools. Enso's 21+ media tools are UNIQUE in the market.",
-        "Sprint 11 DELIVERED: Cost analysis — Tier 1 Only $0/mo, Light (50 img/mo) $0-12/mo, Medium (200 img/mo) $0.50-47/mo. Projected Marco impact: 5.0 → 7.5-8.0 with recommended stack.",
-        "Sprint 12 ASSIGNMENT: (1) Research and prototype local RMBG 2.0 integration — evaluate @tugrul/rembg (BiRefNet ONNX) vs alternatives, validate Windows compatibility. (2) Research video AI APIs for Sprint 12+ video intelligence — scene detection, highlight extraction, auto-captioning.",
-        "Model cascading (60-70% cost reduction) still not adopted. Prompt caching for Claude/Gemini APIs still unimplemented. MCP integration patterns still unresearched.",
-        "No vision-based UI testing — persona retests use Puppeteer but agents cannot evaluate rendered screenshots programmatically."
+        "Sprint 7 ASSIGNMENT: Research prompt caching implementation for Claude/Gemini APIs — 90% cost savings potential",
+        "Sprint 7 ASSIGNMENT: Evaluate MCP (Model Context Protocol) integration patterns — emerging standard for tool interop",
+        "Model cascading (60-70% cost reduction) not yet adopted — route simple queries to cheaper models. Sprint 7+ target.",
+        "No persistent agent memory across sessions or sprints",
+        "Context propagation at 500 chars with STRUCTURED_SUMMARY JSON — working but limited for complex reasoning chains",
+        "No vision-based UI testing — persona retests use Puppeteer but agents cannot evaluate rendered screenshots programmatically"
       ]
     }
   ],
@@ -200,11 +198,11 @@
         "Built products need significant polish before they're demo-ready for investors"
       ],
       "testScenarios": [
-        "Run /discover focused on 'underserved SaaS markets where AI-native solutions could displace legacy tools'",
-        "Take the top discovery recommendation and say: 'Build this as a working product'",
-        "Import the built product and run /evolve to get first-round improvements",
-        "Orchestrate: 'Create a pitch deck, competitive analysis, and financial model for the product just built'",
-        "Use deep research: 'Deep dive into the market sizing and TAM for the top discovery recommendation'"
+        "Ask Enso: 'Research the top 5 underserved SaaS markets where AI-native solutions could displace legacy tools'",
+        "Orchestrate: 'Create a pitch deck, competitive analysis, and financial model for an AI-native developer tools startup'",
+        "Use deep research: 'Deep dive into the market sizing and TAM for AI-native developer tools'",
+        "Build a product: 'Create a startup metrics dashboard that tracks MRR, churn, runway, and burn rate with interactive charts'",
+        "Ask Enso: 'Compare the pros and cons of freemium vs usage-based pricing for a B2B SaaS product'"
       ]
     },
     {
@@ -225,12 +223,11 @@
         "Wants to see her product's evolution trajectory — sprint-over-sprint improvements visualized"
       ],
       "testScenarios": [
-        "Use /code to implement a new feature in one of her products",
-        "Run /evolve on her imported project and evaluate the sprint quality",
-        "Run /discover focused on 'developer tools for solo founders' and select one to build",
-        "Build the discovered product: 'Build this as a standalone app with user auth, dashboard, and API'",
-        "Import the newly built product and immediately run /evolve on it",
-        "Open /shell to run tests and verify evolution sprint changes"
+        "Use /code to implement a new feature: 'Add a keyboard shortcut Ctrl+K to open a command palette in the chat'",
+        "Ask Enso: 'Research developer tools for solo founders — what gaps exist in the market?'",
+        "Build a product: 'Create a simple todo app with categories, priorities, and a Kanban board view'",
+        "Use deep research: 'Deep dive into indie SaaS growth strategies that work without a marketing budget'",
+        "Open /shell and run 'npm test' to check the current test suite status"
       ]
     },
     {
@@ -251,12 +248,11 @@
         "Products built by Enso have inconsistent architecture — each build makes different choices"
       ],
       "testScenarios": [
-        "Run /discover focused on 'AI tools for healthcare administration'",
-        "Take 2 recommendations and build both as working products",
-        "Import both products and run /evolve on each",
-        "Compare evolution sprint dashboards between the two products",
-        "Orchestrate: 'Evaluate which of these two products has stronger market potential — produce a comparison with metrics'",
-        "Review /evolution-history across products to assess trajectory"
+        "Ask Enso: 'Research AI tools for healthcare administration — what are the biggest pain points and who are the incumbents?'",
+        "Build a product: 'Create a patient intake form builder with drag-and-drop fields, HIPAA compliance checklist, and PDF export'",
+        "Orchestrate: 'Evaluate which of these two product ideas has stronger market potential: AI medical billing vs AI scheduling — produce a comparison with metrics'",
+        "Use deep research: 'Deep dive into how product studios evaluate which MVPs to kill vs invest in'",
+        "Browse the Projects section and evaluate what project management features are available"
       ]
     },
     {
@@ -278,11 +274,10 @@
       ],
       "testScenarios": [
         "Build a product: 'Create a real-time API monitoring dashboard with alerting, historical charts, and webhook integrations'",
-        "Import the built product and run /evolve — evaluate whether the AI team finds real issues",
-        "Use /code to implement a feature the evolution sprint recommended",
-        "Run /evolve again after the manual fix — verify the re-test catches the improvement",
-        "Open /shell to run the product's test suite",
-        "Deep research: 'Deep dive into observability best practices for Node.js microservices'"
+        "Use /code to implement a feature: 'Add a dark mode toggle to the settings panel'",
+        "Browse and run an existing app, then try refining it with a text instruction to test the refine flow",
+        "Use deep research: 'Deep dive into observability best practices for Node.js microservices'",
+        "Open /shell and explore the project structure — run 'ls server/src/' and 'npm test'"
       ]
     },
     {
@@ -303,12 +298,11 @@
         "Evolution sprints produce dashboards that are useful internally but not shareable with clients"
       ],
       "testScenarios": [
-        "Run /discover focused on 'AI applications disrupting financial compliance'",
-        "Download the PPTX from the discovery and evaluate presentation quality",
-        "Build a product from the top recommendation: 'Build a compliance monitoring tool with rule engine and audit trail'",
-        "Import the built product and run /evolve to polish it",
-        "Deep research: 'Deep dive into RegTech market dynamics in Southeast Asia'",
-        "Orchestrate: 'Produce a complete market entry analysis — research, competitive map, opportunity ranking, and executive deck'"
+        "Ask Enso: 'Research AI applications disrupting financial compliance — who are the key players and what are the gaps?'",
+        "Build a product: 'Create a compliance monitoring tool with rule engine, audit trail, and violation alerts dashboard'",
+        "Use deep research: 'Deep dive into RegTech market dynamics in Southeast Asia'",
+        "Orchestrate: 'Produce a complete market entry analysis — research, competitive map, opportunity ranking, and executive summary'",
+        "Ask Enso: 'Create a competitive landscape analysis of the top 10 RegTech startups — funding, features, target market'"
       ]
     },
     {
@@ -334,16 +328,14 @@
         "Cutting-edge AI models release monthly but he has no systematic way to evaluate them for his workflow — needs Enso to help him track, test, and integrate new models as they drop"
       ],
       "testScenarios": [
-        "Navigate to a recent shoot folder (500+ RAW+JPEG files) and ask Enso to show a contact sheet view — thumbnails grid with filename, dimensions, and camera info",
-        "Ask Enso: 'Upscale these 5 client photos to 4x resolution for large-format printing — use the best AI upscaler available and preserve color accuracy'",
-        "Ask Enso: 'Remove the background from all product shots in this folder and export as transparent PNGs — handle hair and fine edges cleanly'",
-        "Build a product: 'Create an AI-powered photo culling tool — I point it at a shoot folder, it groups similar shots, auto-detects the sharpest frame in each burst, flags blurry/eyes-closed shots, and lets me approve/reject with keyboard shortcuts'",
-        "Ask Enso: 'I have a 45-minute wedding ceremony video. Extract the 20 best moments as still frames, detect scene changes, and generate a 60-second highlight reel with smooth transitions'",
-        "Ask Enso: 'Match the color grading of this reference photo across all 30 images in this folder — same tone, contrast curve, and color palette'",
-        "Deep research: 'Deep dive into the latest AI video generation and editing models in 2026 — Runway Gen-4, Kling 2.0, Pika, Minimax — compare quality, pricing, API availability, and which ones I can integrate into a professional workflow'",
-        "Build a product: 'Create a client gallery delivery tool with AI-generated captions — I select photos, it generates a gallery page with AI descriptions, download options for web-res and print-res, and tracks client downloads'",
-        "Orchestrate: 'For this wedding shoot: (1) AI-cull the 2000 photos down to the best 200, (2) batch color-grade to match my signature warm tone, (3) generate a contact sheet PDF, (4) create Instagram-optimized exports, (5) build a client delivery gallery'",
-        "Ask Enso: 'Generate AI variations of this product photo — show the same item on 5 different backgrounds (white studio, marble, outdoor garden, rustic wood, gradient) for my e-commerce client'"
+        "Navigate to a recent shoot folder and ask Enso to browse the files — evaluate the filesystem and media viewing experience",
+        "Ask Enso: 'Show me the photos in D:/Photos/test — display them as a gallery with filenames and dimensions'",
+        "Ask Enso: 'Upscale these 5 client photos to 4x resolution for large-format printing — use the best AI upscaler available'",
+        "Ask Enso: 'Remove the background from all product shots in this folder and export as transparent PNGs'",
+        "Build a product: 'Create an AI-powered photo culling tool — point it at a shoot folder, it groups similar shots, auto-detects the sharpest frame in each burst, and lets me approve/reject'",
+        "Use deep research: 'Deep dive into the latest AI image processing models in 2026 — upscaling, background removal, style transfer — which ones have production-grade APIs?'",
+        "Ask Enso: 'Match the color grading of this reference photo across all 30 images in this folder'",
+        "Orchestrate: 'For this wedding shoot: AI-cull the photos, batch color-grade, generate a contact sheet PDF, and create Instagram-optimized exports'"
       ]
     }
   ],
@@ -352,5 +344,5 @@
     "developer"
   ],
   "createdAt": 1773909300324,
-  "updatedAt": 1774396800000
+  "updatedAt": 1774137600000
 }
