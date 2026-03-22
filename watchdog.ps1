@@ -1,18 +1,21 @@
-# watchdog.ps1 — Check if Enso services are healthy, restart any that are down
-# Intended to run on a 10-minute interval via Windows Scheduled Task.
+# watchdog.ps1 — Verify Enso guardian + server are running; restart if needed.
+# Runs on a 2-minute interval via the "Enso Guardian Watchdog" Scheduled Task.
 #
-# Monitors: Enso plugin (:3001), Vite dev server (:5173), Cloudflare tunnel
+# Defense layer 3: catches the case where both guardian and server are dead.
+# Under normal operation the guardian (layer 2) handles server restarts, so
+# this script only intervenes when the guardian itself is gone.
 
 $ErrorActionPreference = "SilentlyContinue"
 
-$LogFile = "$env:USERPROFILE\.openclaw\watchdog.log"
+$EnsoDir   = "$env:USERPROFILE\.enso"
+$LogFile   = "$EnsoDir\watchdog.log"
 $MaxLogLines = 500
-$EnsoDir = "D:\Github\Enso"
-$OpenClawDir = "D:\Github\openclaw"
+$GuardianPid = "$EnsoDir\guardian.pid"
+$RepoDir   = "D:\Github\Enso"
+$Port      = 3001
 
-# Ensure log directory exists
-$logDir = Split-Path $LogFile
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+# Ensure directory
+if (-not (Test-Path $EnsoDir)) { New-Item -ItemType Directory -Path $EnsoDir -Force | Out-Null }
 
 function Write-Log($msg) {
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -28,12 +31,11 @@ function Trim-Log {
     }
 }
 
-function Test-Port($port) {
+function Test-ProcessAlive($pid) {
+    if (-not $pid) { return $false }
     try {
-        $tcp = New-Object System.Net.Sockets.TcpClient
-        $tcp.Connect("127.0.0.1", $port)
-        $tcp.Close()
-        return $true
+        $proc = Get-Process -Id $pid -ErrorAction Stop
+        return ($proc -ne $null)
     } catch {
         return $false
     }
@@ -43,51 +45,65 @@ Trim-Log
 
 $allHealthy = $true
 
-# ── 1. Check Enso plugin (gateway + plugin) ──
-$ensoUp = $false
+# ── 1. Check guardian process via PID file ──
+$guardianAlive = $false
+if (Test-Path $GuardianPid) {
+    $gpid = [int](Get-Content $GuardianPid -Raw).Trim()
+    $guardianAlive = Test-ProcessAlive $gpid
+}
+
+# ── 2. Check server health endpoint ──
+$serverUp = $false
 try {
-    $r = Invoke-WebRequest -Uri "http://localhost:3001/health" -TimeoutSec 10 -UseBasicParsing
-    if ($r.StatusCode -eq 200) { $ensoUp = $true }
+    $r = Invoke-WebRequest -Uri "http://localhost:$Port/health" -TimeoutSec 10 -UseBasicParsing
+    if ($r.StatusCode -eq 200) { $serverUp = $true }
 } catch {}
 
-if ($ensoUp) {
-    Write-Log "[ok] Enso plugin healthy (:3001)"
-} else {
-    $allHealthy = $false
-    Write-Log "[FAIL] Enso plugin not responding — restarting gateway"
+# ── 3. Decide what to do ──
 
-    # Kill orphaned gateway node processes
+if ($guardianAlive -and $serverUp) {
+    Write-Log "[ok] Guardian (PID $gpid) + server healthy"
+}
+elseif ($guardianAlive -and -not $serverUp) {
+    # Guardian is alive but server is down — let the guardian handle it.
+    # It has its own health polling and will restart the server.
+    Write-Log "[wait] Guardian alive (PID $gpid) but server not responding — guardian will handle"
+    $allHealthy = $false
+}
+else {
+    # Guardian is dead (or PID file missing) — we need to restart it.
+    $allHealthy = $false
+    Write-Log "[FAIL] Guardian not running — restarting"
+
+    # Kill any orphaned Enso node processes
     $nodeProcs = Get-WmiObject Win32_Process -Filter "Name='node.exe'" | Where-Object {
-        $_.CommandLine -match "openclaw" -and $_.CommandLine -match "gateway"
+        $_.CommandLine -match "standalone\.ts" -or $_.CommandLine -match "guardian\.ts"
     }
     foreach ($proc in $nodeProcs) {
-        Write-Log "[restart] Killing gateway node.exe PID $($proc.ProcessId)"
+        Write-Log "[restart] Killing orphaned node.exe PID $($proc.ProcessId)"
         Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
     }
     if ($nodeProcs) { Start-Sleep -Seconds 2 }
 
-    # Restart via scheduled task
-    $TaskName = "OpenClaw Gateway"
-    try {
-        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-        if ($task.State -eq "Running") {
-            Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
-        }
-        Start-ScheduledTask -TaskName $TaskName
-        Write-Log "[restart] Started scheduled task '$TaskName'"
-    } catch {
-        Write-Log "[restart] Scheduled task not found, trying openclaw CLI"
-        & openclaw gateway start 2>$null
-    }
+    # Start the guardian
+    $nullInput = Join-Path $env:TEMP "enso-null-input.txt"
+    if (-not (Test-Path $nullInput)) { [System.IO.File]::WriteAllText($nullInput, "") }
 
-    # Wait for recovery
+    $guardianLog    = Join-Path $env:TEMP "enso-guardian-stdout.log"
+    $guardianErrLog = Join-Path $env:TEMP "enso-guardian-stderr.log"
+
+    Start-Process -FilePath "cmd.exe" `
+        -ArgumentList "/c", "npx tsx server/guardian.ts > `"$guardianLog`" 2> `"$guardianErrLog`"" `
+        -WorkingDirectory $RepoDir `
+        -WindowStyle Hidden
+
+    # Wait for server to become healthy
     $recovered = $false
     for ($i = 1; $i -le 30; $i++) {
         try {
-            $r = Invoke-WebRequest -Uri "http://localhost:3001/health" -TimeoutSec 5 -UseBasicParsing
+            $r = Invoke-WebRequest -Uri "http://localhost:$Port/health" -TimeoutSec 5 -UseBasicParsing
             if ($r.StatusCode -eq 200) {
-                Write-Log "[restart] Gateway recovered after ${i}s"
+                Write-Log "[restart] Server recovered after ${i}s"
                 $recovered = $true
                 break
             }
@@ -95,61 +111,26 @@ if ($ensoUp) {
         Start-Sleep -Seconds 1
     }
     if (-not $recovered) {
-        Write-Log "[restart] Gateway did NOT recover within 30s"
+        Write-Log "[restart] Server did NOT recover within 30s"
     }
 }
 
-# ── 2. Check Vite dev server ──
-$viteUp = Test-Port 5173
+# ── 4. Check Vite dev server (optional, non-critical) ──
+$viteUp = $false
+try {
+    $tcp = New-Object System.Net.Sockets.TcpClient
+    $tcp.Connect("127.0.0.1", 5173)
+    $tcp.Close()
+    $viteUp = $true
+} catch {}
 
 if ($viteUp) {
     Write-Log "[ok] Vite dev server healthy (:5173)"
 } else {
-    $allHealthy = $false
-    Write-Log "[FAIL] Vite dev server not responding — restarting"
-
-    # Kill any lingering vite node processes
-    $viteProcs = Get-WmiObject Win32_Process -Filter "Name='node.exe'" | Where-Object {
-        $_.CommandLine -match "vite" -and $_.CommandLine -match "Enso"
-    }
-    foreach ($proc in $viteProcs) {
-        Write-Log "[restart] Killing vite node.exe PID $($proc.ProcessId)"
-        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-    if ($viteProcs) { Start-Sleep -Seconds 1 }
-
-    # Start Vite
-    $nullInput = Join-Path $env:TEMP "openclaw-null-input.txt"
-    if (-not (Test-Path $nullInput)) { [System.IO.File]::WriteAllText($nullInput, "") }
-    $nodeExe = "C:\Program Files\nodejs\node.exe"
-    $npmCli = "`"C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js`""
-    $viteLog = Join-Path $env:TEMP "enso-vite.log"
-    $viteErrLog = Join-Path $env:TEMP "enso-vite-err.log"
-
-    Start-Process -FilePath $nodeExe `
-        -ArgumentList $npmCli, "run", "dev" `
-        -WorkingDirectory $EnsoDir `
-        -WindowStyle Hidden `
-        -RedirectStandardInput $nullInput `
-        -RedirectStandardOutput $viteLog `
-        -RedirectStandardError $viteErrLog
-
-    # Wait for Vite
-    $viteRecovered = $false
-    for ($i = 1; $i -le 15; $i++) {
-        if (Test-Port 5173) {
-            Write-Log "[restart] Vite recovered after ${i}s"
-            $viteRecovered = $true
-            break
-        }
-        Start-Sleep -Seconds 1
-    }
-    if (-not $viteRecovered) {
-        Write-Log "[restart] Vite did NOT recover within 15s"
-    }
+    Write-Log "[info] Vite dev server not running (:5173) — this is normal in production"
 }
 
-# ── 3. Check Cloudflare tunnel ──
+# ── 5. Check Cloudflare tunnel ──
 $cfProc = Get-Process -Name cloudflared -ErrorAction SilentlyContinue
 $cloudflaredExe = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
 

@@ -164,6 +164,11 @@ export interface ServerMessage {
     suggestedFamily?: string;
     buildHint?: string;
   };
+  followUps?: {
+    cardId: string;
+    suggestions: Array<{ label: string; prompt: string; icon?: string }>;
+  };
+  recentTopics?: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
   /** Batch of historical cards sent in response to chat.history */
   cardHistory?: Array<{
     id: string;

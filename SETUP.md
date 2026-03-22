@@ -45,12 +45,48 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser. That's it.
 
-### Production build
+### Production deployment (recommended)
+
+Use the guardian process supervisor for automatic crash recovery:
 
 ```bash
 npm run build
-npm run dev:server
+npx tsx server/guardian.ts
+# Guardian spawns + monitors the server, restarts on crash
 # Frontend served at http://localhost:3001
+```
+
+The guardian provides three layers of fault tolerance:
+
+- **Layer 1 -- In-process**: event loop monitoring, memory pressure detection, error budget tracking
+- **Layer 2 -- Guardian**: forks the server, restarts on crash with exponential backoff, IPC heartbeat monitoring
+- **Layer 3 -- Watchdog**: OS-level scheduled task (every 2 min) restarts the guardian if it dies
+
+Install the watchdog for maximum resilience:
+
+```bash
+# Windows
+powershell -ExecutionPolicy Bypass -File install-watchdog.ps1
+
+# macOS
+./install-watchdog.sh
+```
+
+Restart all services cleanly:
+
+```bash
+# Windows
+powershell -ExecutionPolicy Bypass -File restart.ps1
+
+# macOS / Linux
+./restart.sh
+```
+
+### Development mode
+
+```bash
+npm run dev:server    # Backend only (no guardian, direct mode)
+npm run dev           # Frontend with hot reload
 ```
 
 ## CLI

@@ -17,7 +17,7 @@ import { logAction, logError } from "./action-log.js";
 import { setLastUserMessage } from "./researcher-tools.js";
 import { GEMINI_MODEL_FAST, callGeminiLLMWithRetry } from "./ui-generator.js";
 import { getAllLocalTools, executeLocalTool } from "./tool-registry-local.js";
-import { getMemoryContext } from "./memory-bridge.js";
+import { getMemoryContext, appendDailyMemory } from "./memory-bridge.js";
 
 // ── Conversation history (in-memory, per session) ──
 
@@ -38,9 +38,44 @@ function getSessionHistory(sessionKey: string): ConversationEntry[] {
   return history;
 }
 
+const FLUSH_THRESHOLD = 30; // Flush when history exceeds this before trimming
+
 function trimHistory(history: ConversationEntry[]): void {
+  if (history.length > FLUSH_THRESHOLD) {
+    flushOlderEntriesToMemory(history);
+  }
   while (history.length > MAX_HISTORY) {
     history.shift();
+  }
+}
+
+/**
+ * Pre-compaction memory flush: extract key context from older history entries
+ * and save to daily memory log before they're trimmed away.
+ * Heuristic — no LLM call, just saves user messages that look substantive.
+ */
+function flushOlderEntriesToMemory(history: ConversationEntry[]): void {
+  try {
+    const entriesToFlush = history.slice(0, history.length - FLUSH_THRESHOLD);
+    const userMessages = entriesToFlush
+      .filter((e) => e.role === "user" && e.parts[0]?.text)
+      .map((e) => e.parts[0].text!)
+      .filter((t) => t.length > 30 && !/^(hi|hello|hey|thanks|ok|yes|no)\b/i.test(t));
+
+    if (userMessages.length === 0) return;
+
+    // Save a compact summary of what was discussed
+    const topics = userMessages.slice(0, 5).map((m) => m.slice(0, 80)).join("; ");
+    appendDailyMemory(`[session context] Topics discussed: ${topics}`);
+
+    logAction({
+      ts: Date.now(),
+      type: "action",
+      category: "memory-flush",
+      message: `Flushed ${userMessages.length} conversation turns to daily memory`,
+    });
+  } catch {
+    // Best effort — never fail the main flow
   }
 }
 
@@ -51,12 +86,22 @@ function buildSystemPrompt(tools: EnsoAgentTool[]): string {
     .map((t) => `- **${t.name}**: ${t.description}`)
     .join("\n");
 
-  // Load memory context if available
-  let memoryBlock = "";
+  // Load user profile (lightweight, always injected)
+  let profileBlock = "";
   try {
     const mem = getMemoryContext();
-    if (mem) memoryBlock = `\n\n## User Memory\n${mem}`;
+    if (mem) profileBlock = `\n\n## User Context\n${mem}`;
   } catch { /* ignore */ }
+
+  // Check if memory tools are available
+  const hasMemoryTools = tools.some((t) => t.name === "enso_memory_search");
+  const memoryRecallBlock = hasMemoryTools ? `
+
+## Memory Recall
+You have persistent memory across conversations stored in files. Before answering questions about
+prior work, user preferences, decisions, past conversations, or anything the user might have
+told you before: use enso_memory_search to check your memory files first.
+If you learn new facts about the user (preferences, decisions, goals), save them with enso_memory_save.` : "";
 
   return `You are Enso, a helpful AI assistant that provides rich interactive answers.
 You have access to tools that let you browse filesystems, manage media, search the web, take screenshots, and more.
@@ -66,7 +111,7 @@ When the user asks a general knowledge question, answer directly.
 
 ## Available Tools
 ${toolDescriptions}
-${memoryBlock}
+${profileBlock}${memoryRecallBlock}
 
 ## Guidelines
 - Be concise but thorough

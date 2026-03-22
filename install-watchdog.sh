@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# install-watchdog.sh — Install Enso watchdog as a macOS LaunchAgent (10-minute interval)
+# install-watchdog.sh — Install Enso watchdog as a macOS LaunchAgent (2-minute interval)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WATCHDOG="$SCRIPT_DIR/watchdog.sh"
 PLIST_DIR="$HOME/Library/LaunchAgents"
-PLIST="$PLIST_DIR/ai.openclaw.enso-watchdog.plist"
-LABEL="ai.openclaw.enso-watchdog"
+LABEL="ai.enso.watchdog"
+PLIST="$PLIST_DIR/${LABEL}.plist"
 UID_NUM="$(id -u)"
 
 chmod +x "$WATCHDOG"
 
-# Unload existing if present
-launchctl bootout "gui/$UID_NUM/$LABEL" 2>/dev/null || true
+# Remove old labels
+for OLD_LABEL in "$LABEL" "ai.openclaw.enso-watchdog"; do
+  launchctl bootout "gui/$UID_NUM/$OLD_LABEL" 2>/dev/null || true
+  OLD_PLIST="$PLIST_DIR/${OLD_LABEL}.plist"
+  [ -f "$OLD_PLIST" ] && rm -f "$OLD_PLIST"
+done
 
 mkdir -p "$PLIST_DIR"
 
@@ -29,7 +33,7 @@ cat > "$PLIST" <<EOF
         <string>$WATCHDOG</string>
     </array>
     <key>StartInterval</key>
-    <integer>600</integer>
+    <integer>120</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
@@ -41,6 +45,6 @@ cat > "$PLIST" <<EOF
 EOF
 
 launchctl bootstrap "gui/$UID_NUM" "$PLIST"
-echo "[watchdog] Installed and started: $LABEL (every 10 minutes)"
+echo "[watchdog] Installed and started: $LABEL (every 2 minutes)"
 echo "[watchdog] Plist: $PLIST"
-echo "[watchdog] Log:   ~/.openclaw/watchdog.log"
+echo "[watchdog] Log:   ~/.enso/watchdog.log"

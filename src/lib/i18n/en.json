@@ -232,5 +232,12 @@
   "discovery.loadingDashboard": "Loading dashboard...",
   "discovery.compileError": "Compile error:",
   "discovery.dashboardCrashed": "Dashboard crashed during rendering. Try refreshing the page.",
-  "discovery.loading": "Loading..."
+  "discovery.loading": "Loading...",
+
+  "recent.title": "Pick up where you left off",
+  "recent.justNow": "just now",
+  "recent.minsAgo": "{n}m ago",
+  "recent.hoursAgo": "{n}h ago",
+  "recent.yesterday": "yesterday",
+  "recent.daysAgo": "{n}d ago"
 }

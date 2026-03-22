@@ -50,6 +50,9 @@ export interface Card {
     buildHint?: string;
   };
 
+  // Smart follow-up suggestions
+  followUps?: Array<{ label: string; prompt: string; icon?: string }>;
+
   // Deep research build in progress (terminal streams into app view)
   deepResearchStatus?: "building";
   buildTerminalText?: string;

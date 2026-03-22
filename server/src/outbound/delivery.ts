@@ -21,7 +21,9 @@ import type { ToolCallRecord } from "../native-tools/tool-call-store.js";
 import { getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
 import { recordAppInteraction } from "../interaction-tracker.js";
-import { persistCard, resolveCardType } from "../memory-bridge.js";
+import { persistCard, resolveCardType, invalidateContextCache } from "../memory-bridge.js";
+import { extractAndPersistMemory } from "../memory-extractor.js";
+import { generateFollowUps } from "../followup-generator.js";
 import {
   detectPattern,
   buildSuggestion,
@@ -150,6 +152,27 @@ export async function deliverEnsoReply(params: {
   chatRecord.type = resolveCardType(chatRecord);
   persistCard(client.id, chatRecord);
 
+  // ── Follow-up suggestions ──
+  if (!toolMeta && !targetCardId && text.length > 30) {
+    const followUpSuggestions = generateFollowUps({
+      userMessage: params.userMessage || "",
+      assistantText: text,
+      toolFamily: toolMeta?.toolId,
+      language: client.language,
+    });
+    if (followUpSuggestions.length > 0) {
+      client.send({
+        id: randomUUID(),
+        runId,
+        sessionKey: client.sessionKey,
+        seq: 0,
+        state: "final",
+        followUps: { cardId: msgId, suggestions: followUpSuggestions },
+        timestamp: Date.now(),
+      });
+    }
+  }
+
   // ── Auto-enhance: if the agent used a registered tool, render the app card ──
   // This replaces the old background compat check (which required an LLM call).
   // Deterministic: did the agent call a tool? If yes, and a template exists, show app view.
@@ -224,6 +247,17 @@ export async function deliverEnsoReply(params: {
           });
       }
     }
+  }
+
+  // ── Memory extraction (fire-and-forget) ──
+  const hasLLM = params.account.geminiApiKey || Object.keys(params.account.providerKeys ?? {}).length > 0;
+  if (params.userMessage && text.length > 50 && hasLLM) {
+    extractAndPersistMemory({
+      userMessage: params.userMessage,
+      assistantResponse: text,
+      geminiApiKey: params.account.geminiApiKey,
+      providerKeys: params.account.providerKeys,
+    }).then(() => invalidateContextCache()).catch(() => {});
   }
 }
 

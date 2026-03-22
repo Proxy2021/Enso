@@ -232,5 +232,12 @@
   "discovery.loadingDashboard": "加载仪表盘...",
   "discovery.compileError": "编译错误：",
   "discovery.dashboardCrashed": "仪表盘渲染崩溃。请尝试刷新页面。",
-  "discovery.loading": "加载中..."
+  "discovery.loading": "加载中...",
+
+  "recent.title": "继续上次的对话",
+  "recent.justNow": "刚刚",
+  "recent.minsAgo": "{n}分钟前",
+  "recent.hoursAgo": "{n}小时前",
+  "recent.yesterday": "昨天",
+  "recent.daysAgo": "{n}天前"
 }

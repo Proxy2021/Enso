@@ -3,10 +3,13 @@
     Restart all Enso services on Windows.
 
 .DESCRIPTION
-    1. Kills existing Enso server + Vite dev processes
-    2. Starts Enso standalone server on :3001
-    3. Starts the Enso Vite dev server on :5173
-    4. Restarts the Cloudflare tunnel
+    1. Stops the watchdog (prevents interference during restart)
+    2. Kills existing guardian + server + Vite processes
+    3. Pulls latest code
+    4. Starts the guardian (which spawns the server)
+    5. Optionally starts Vite dev server
+    6. Restarts Cloudflare tunnel
+    7. Restarts the watchdog
 
 .NOTES
     Run from any PowerShell terminal:
@@ -17,6 +20,7 @@
 
 param(
     [switch]$NoDev,           # Don't start Vite dev server
+    [switch]$NoPull,          # Skip git pull
     [int]$EnsoPort    = 3001,
     [int]$VitePort    = 5173
 )
@@ -24,8 +28,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 # -- Paths -----------------------------------------------------------------
-$WatchdogTask = "Enso Watchdog"
+$WatchdogTask = "Enso Guardian Watchdog"
+$OldWatchdogTask = "Enso Watchdog"
 $EnsoDir      = Split-Path -Parent $MyInvocation.MyCommand.Path
+$EnsoHome     = Join-Path $env:USERPROFILE ".enso"
+$GuardianPid  = Join-Path $EnsoHome "guardian.pid"
+$ServerPid    = Join-Path $EnsoHome "server.pid"
 $nodeExe      = "C:\Program Files\nodejs\node.exe"
 
 # -- Colors ----------------------------------------------------------------
@@ -35,23 +43,43 @@ function Write-Skip  ($msg) { Write-Host "   [SKIP] $msg" -ForegroundColor Yello
 function Write-Err   ($msg) { Write-Host "   [ERR] $msg" -ForegroundColor Red }
 
 # ==========================================================================
-#  STEP 0 -- Stop watchdog (prevent interference during restart)
+#  STEP 0 -- Disable watchdog (prevent interference during restart)
 # ==========================================================================
-Write-Step "Stopping watchdog..."
-$wdTask = Get-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
-if ($wdTask -and $wdTask.State -eq "Running") {
-    Stop-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
-    Write-Ok "Watchdog stopped"
-} else {
-    Write-Skip "Watchdog not running"
+Write-Step "Disabling watchdog..."
+foreach ($taskName in @($WatchdogTask, $OldWatchdogTask)) {
+    $wdTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($wdTask) {
+        if ($wdTask.State -eq "Running") {
+            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        }
+        Disable-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        Write-Ok "Disabled '$taskName'"
+    }
 }
 
 # ==========================================================================
-#  STEP 1 -- Kill existing processes
+#  STEP 1 -- Kill existing processes (guardian, server, vite)
 # ==========================================================================
 Write-Step "Killing existing services..."
 
 $killed = 0
+
+# Kill by PID files first (most reliable)
+foreach ($pidFile in @($GuardianPid, $ServerPid)) {
+    if (Test-Path $pidFile) {
+        $procId = [int](Get-Content $pidFile -Raw).Trim()
+        try {
+            Stop-Process -Id $procId -Force -ErrorAction Stop
+            Write-Ok "Killed PID $procId (from $([System.IO.Path]::GetFileName($pidFile)))"
+            $killed++
+        } catch {
+            # Already dead
+        }
+        Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Also sweep for any orphaned node processes matching our scripts
 $nodeProcs = Get-CimInstance Win32_Process -Filter "name='node.exe'" |
     Select-Object ProcessId, CommandLine
 
@@ -60,6 +88,7 @@ foreach ($proc in $nodeProcs) {
     if (-not $cmd) { continue }
 
     $isOurs = ($cmd -match "standalone\.ts") -or
+              ($cmd -match "guardian\.ts") -or
               ($cmd -match "Enso") -or
               ($cmd -match "concurrently") -or
               ($cmd -match "tsx\b.*watch") -or
@@ -71,7 +100,7 @@ foreach ($proc in $nodeProcs) {
             Write-Ok "Killed PID $($proc.ProcessId)"
             $killed++
         } catch {
-            Write-Err "Failed to kill PID $($proc.ProcessId): $_"
+            # Already dead
         }
     }
 }
@@ -96,67 +125,69 @@ if ($portsInUse) {
 # ==========================================================================
 #  STEP 2 -- Pull latest code
 # ==========================================================================
-Write-Step "Pulling latest code..."
-
-if (Test-Path (Join-Path $EnsoDir ".git")) {
-    Push-Location $EnsoDir
-    try {
-        $pullOutput = git pull --ff-only 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Ok "Enso -- $($pullOutput | Select-Object -Last 1)"
-        } else {
-            Write-Err "Enso git pull failed: $pullOutput"
-        }
-    } catch {
-        Write-Err "Enso git pull failed: $_"
-    } finally {
-        Pop-Location
-    }
+if ($NoPull) {
+    Write-Skip "Git pull skipped (-NoPull)"
 } else {
-    Write-Skip "Not a git repo at $EnsoDir"
+    Write-Step "Pulling latest code..."
+    if (Test-Path (Join-Path $EnsoDir ".git")) {
+        Push-Location $EnsoDir
+        try {
+            $pullOutput = git pull --ff-only 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "Enso -- $($pullOutput | Select-Object -Last 1)"
+            } else {
+                Write-Err "Enso git pull failed: $pullOutput"
+            }
+        } catch {
+            Write-Err "Enso git pull failed: $_"
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Write-Skip "Not a git repo at $EnsoDir"
+    }
 }
 
 # ==========================================================================
-#  STEP 3 -- Start Enso standalone server on :3001
+#  STEP 3 -- Start Guardian (supervises the Enso server on :3001)
 # ==========================================================================
-Write-Step "Starting Enso server on :$EnsoPort ..."
+Write-Step "Starting Enso guardian (server on :$EnsoPort) ..."
 
-# Redirect stdin to an empty file so child node.exe processes don't inherit
-# the console's stdin handle (which would consume keystrokes from this terminal).
 $nullInput = Join-Path $env:TEMP "enso-null-input.txt"
 if (-not (Test-Path $nullInput)) { [System.IO.File]::WriteAllText($nullInput, "") }
 
-$serverLog    = Join-Path $env:TEMP "enso-server.log"
-$serverErrLog = Join-Path $env:TEMP "enso-server-err.log"
+$guardianLog    = Join-Path $env:TEMP "enso-guardian.log"
+$guardianErrLog = Join-Path $env:TEMP "enso-guardian-err.log"
 
-# Use cmd /c to launch npx tsx (handles paths with spaces correctly)
-$serverProc = Start-Process -FilePath "cmd.exe" `
-    -ArgumentList "/c", "npx tsx server/standalone.ts > `"$serverLog`" 2> `"$serverErrLog`"" `
+$guardianProc = Start-Process -FilePath "cmd.exe" `
+    -ArgumentList "/c", "npx tsx server/guardian.ts > `"$guardianLog`" 2> `"$guardianErrLog`"" `
     -WorkingDirectory $EnsoDir `
     -WindowStyle Hidden `
     -PassThru
 
 # Wait for server to be ready
 $ready = $false
-for ($i = 0; $i -lt 20; $i++) {
+for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep -Seconds 1
-    $ensoUp = netstat -ano | Select-String ":$EnsoPort.*LISTENING"
-    if ($ensoUp) {
-        $ready = $true
-        break
-    }
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:$EnsoPort/health" -TimeoutSec 5 -UseBasicParsing
+        if ($r.StatusCode -eq 200) {
+            $ready = $true
+            break
+        }
+    } catch {}
 }
 
 if ($ready) {
-    Write-Ok "Enso server running (PID $($serverProc.Id)) -- :$EnsoPort"
+    Write-Ok "Guardian + server running (PID $($guardianProc.Id)) -- :$EnsoPort"
 } else {
-    Write-Err "Server did not start within 20s. Check $serverLog"
+    Write-Err "Server did not start within 30s. Check $guardianLog"
     Write-Host "   Last 5 lines of log:" -ForegroundColor Yellow
-    if (Test-Path $serverLog) {
-        Get-Content $serverLog -Tail 5 | ForEach-Object { Write-Host "   $_" }
+    if (Test-Path $guardianLog) {
+        Get-Content $guardianLog -Tail 5 | ForEach-Object { Write-Host "   $_" }
     }
-    if (Test-Path $serverErrLog) {
-        Get-Content $serverErrLog -Tail 5 | ForEach-Object { Write-Host "   $_" -ForegroundColor Red }
+    if (Test-Path $guardianErrLog) {
+        Get-Content $guardianErrLog -Tail 5 | ForEach-Object { Write-Host "   $_" -ForegroundColor Red }
     }
 }
 
@@ -219,7 +250,6 @@ if (Test-Path $cloudflaredExe) {
         -ArgumentList "tunnel", "run", "enso" `
         -WindowStyle Hidden
 
-    # Quick check that the process started
     Start-Sleep -Seconds 2
     $cfCheck = Get-Process -Name cloudflared -ErrorAction SilentlyContinue
     if ($cfCheck) {
@@ -232,15 +262,16 @@ if (Test-Path $cloudflaredExe) {
 }
 
 # ==========================================================================
-#  STEP 6 -- Restart watchdog
+#  STEP 6 -- Re-enable and restart watchdog
 # ==========================================================================
-Write-Step "Restarting watchdog..."
+Write-Step "Re-enabling watchdog..."
 $wdTask = Get-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
 if ($wdTask) {
+    Enable-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
     Start-ScheduledTask -TaskName $WatchdogTask -ErrorAction SilentlyContinue
-    Write-Ok "Watchdog restarted"
+    Write-Ok "Watchdog re-enabled and started ($WatchdogTask)"
 } else {
-    Write-Skip "Watchdog not installed"
+    Write-Skip "Watchdog not installed -- run install-watchdog.ps1 to install"
 }
 
 # ==========================================================================
@@ -249,6 +280,7 @@ if ($wdTask) {
 Write-Host "`n" -NoNewline
 Write-Host "===========================================" -ForegroundColor DarkGray
 Write-Host "  Services:" -ForegroundColor White
+Write-Host "    Guardian  -> supervised, auto-restart" -ForegroundColor Gray
 Write-Host "    Server    -> http://localhost:$EnsoPort" -ForegroundColor Gray
 if (-not $NoDev) {
     Write-Host "    Vite      -> http://localhost:$VitePort" -ForegroundColor Gray
@@ -264,9 +296,12 @@ if (Test-Path $cfConfig) {
 }
 
 Write-Host "  Logs:" -ForegroundColor White
-Write-Host "    Server    -> $serverLog" -ForegroundColor Gray
+Write-Host "    Guardian  -> $guardianLog" -ForegroundColor Gray
+Write-Host "    Guardian  -> $env:USERPROFILE\.enso\guardian.log" -ForegroundColor Gray
 if (-not $NoDev) {
     Write-Host "    Vite      -> $viteLog" -ForegroundColor Gray
 }
+Write-Host "  Crash reports:" -ForegroundColor White
+Write-Host "    $env:USERPROFILE\.enso\crashes" -ForegroundColor Gray
 Write-Host "===========================================" -ForegroundColor DarkGray
 Write-Host ""

@@ -147,28 +147,38 @@ cd "$REPO_DIR"
 npm run build 2>&1 | tail -1
 echo "  ✓ Frontend built"
 
-# ── 6. Start server ─────────────────────────────────────────────────
+# ── 6. Start server via guardian ─────────────────────────────────────
 echo
-echo "▸ Starting Enso server..."
+echo "▸ Starting Enso guardian (production supervisor)..."
 cd "$REPO_DIR"
-npx tsx server/standalone.ts &
-SERVER_PID=$!
+npx tsx server/guardian.ts &
+GUARDIAN_PID=$!
 
-# Wait for health
 echo -n "  Waiting for server"
 for i in $(seq 1 30); do
   if curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
     echo
-    echo "  ✓ Server is running on port $PORT"
+    echo "  ✓ Server is running on port $PORT (guardian-supervised)"
     break
   fi
   echo -n "."
   sleep 1
   if [ "$i" -eq 30 ]; then
     echo
-    echo "  ⚠ Server did not respond within 30s. Check the terminal output above."
+    echo "  ⚠ Server did not respond within 30s. Check /tmp/enso-guardian.log"
   fi
 done
+
+# ── 6b. Install watchdog ──────────────────────────────────────────────
+echo
+echo "▸ Installing watchdog (2-minute health checks)..."
+WATCHDOG_INSTALLER="$REPO_DIR/install-watchdog.sh"
+if [ -f "$WATCHDOG_INSTALLER" ]; then
+  chmod +x "$WATCHDOG_INSTALLER"
+  bash "$WATCHDOG_INSTALLER" 2>/dev/null && echo "  ✓ Watchdog installed" || echo "  ⚠ Watchdog install failed (non-critical)"
+else
+  echo "  ⚠ install-watchdog.sh not found"
+fi
 
 # ── 7. Display QR code ──────────────────────────────────────────────
 echo
@@ -231,5 +241,5 @@ echo "    - For remote access: see SETUP.md (Cloudflare Tunnel)"
 echo "    - For Claude Code: npm install -g @anthropic-ai/claude-code"
 echo
 
-# Keep server in foreground
-wait $SERVER_PID
+# Keep guardian in foreground
+wait $GUARDIAN_PID

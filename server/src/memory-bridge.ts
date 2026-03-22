@@ -241,6 +241,11 @@ export function pruneStaleJournals(): void {
 let cachedContext: { text: string; timestamp: number } | null = null;
 const CACHE_TTL = 60_000; // 60 seconds
 
+/** Invalidate the context cache so the next prompt picks up new memory. */
+export function invalidateContextCache(): void {
+  cachedContext = null;
+}
+
 /**
  * Build a compact Enso context block for injection into the agent prompt.
  * Cached for CACHE_TTL to avoid recomputing on every turn.
@@ -337,12 +342,19 @@ function formatTimeAgo(ts: number): string {
 // ── Part 3: Enso Memory (local, independent of OpenClaw workspace) ──
 
 const MEMORY_DIR = join(homedir(), ".enso", "memory");
+const DAILY_DIR = join(MEMORY_DIR, "daily");
 const USER_FILE = "ENSO_USER.md";
 const MEMORY_FILE = "ENSO_MEMORY.md";
 
 function ensureMemoryDir(): void {
   if (!existsSync(MEMORY_DIR)) {
     mkdirSync(MEMORY_DIR, { recursive: true });
+  }
+}
+
+function ensureDailyDir(): void {
+  if (!existsSync(DAILY_DIR)) {
+    mkdirSync(DAILY_DIR, { recursive: true });
   }
 }
 
@@ -404,6 +416,175 @@ export function appendEnsoMemory(entry: string): boolean {
   }
 }
 
+// ── Daily Memory Logs ──
+
+/** Get today's date as YYYY-MM-DD. */
+function todayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Append an entry to today's daily memory log. */
+export function appendDailyMemory(entry: string): boolean {
+  try {
+    ensureDailyDir();
+    const filePath = join(DAILY_DIR, `${todayDate()}.md`);
+    const existing = safeReadFile(filePath) ?? "";
+    const time = new Date().toTimeString().slice(0, 5);
+    const line = `- [${time}] ${entry.trim()}`;
+    const newContent = existing
+      ? `${existing.trimEnd()}\n${line}\n`
+      : `# ${todayDate()}\n\n${line}\n`;
+    writeFileSync(filePath, newContent, "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Read recent daily logs (last N days). Returns concatenated content. */
+export function readRecentDailyLogs(days = 3): string {
+  try {
+    ensureDailyDir();
+    const files = readdirSync(DAILY_DIR)
+      .filter((f) => f.endsWith(".md"))
+      .sort()
+      .slice(-days);
+    if (files.length === 0) return "";
+    return files
+      .map((f) => safeReadFile(join(DAILY_DIR, f)) ?? "")
+      .filter(Boolean)
+      .join("\n\n");
+  } catch {
+    return "";
+  }
+}
+
+/** List all daily log files with paths. */
+export function listDailyLogFiles(): Array<{ name: string; path: string; size: number }> {
+  try {
+    ensureDailyDir();
+    return readdirSync(DAILY_DIR)
+      .filter((f) => f.endsWith(".md"))
+      .sort()
+      .map((f) => {
+        const p = join(DAILY_DIR, f);
+        const s = statSync(p);
+        return { name: f, path: p, size: s.size };
+      });
+  } catch {
+    return [];
+  }
+}
+
+// ── Memory Search & Get (agent-driven recall) ──
+
+interface MemorySearchResult {
+  file: string;
+  snippet: string;
+  score: number;
+}
+
+/**
+ * Search across all memory files (MEMORY.md, ENSO_USER.md, daily logs)
+ * using keyword matching. Returns ranked snippets.
+ */
+export function searchMemory(query: string, maxResults = 5): MemorySearchResult[] {
+  const results: MemorySearchResult[] = [];
+  const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+  if (queryTerms.length === 0) return [];
+
+  // Collect all memory files
+  const files: Array<{ name: string; content: string }> = [];
+
+  const memContent = safeReadFile(join(MEMORY_DIR, MEMORY_FILE));
+  if (memContent) files.push({ name: "ENSO_MEMORY.md", content: memContent });
+
+  const userContent = safeReadFile(join(MEMORY_DIR, USER_FILE));
+  if (userContent) files.push({ name: "ENSO_USER.md", content: userContent });
+
+  // Add daily logs
+  for (const f of listDailyLogFiles()) {
+    const content = safeReadFile(f.path);
+    if (content) files.push({ name: `daily/${f.name}`, content });
+  }
+
+  // Search each file by paragraphs/sections
+  for (const file of files) {
+    const sections = file.content.split(/\n(?=##?\s|\n- )/).filter((s) => s.trim().length > 10);
+    for (const section of sections) {
+      const sectionLower = section.toLowerCase();
+      let score = 0;
+      for (const term of queryTerms) {
+        if (sectionLower.includes(term)) {
+          score += 1;
+          // Boost exact phrase matches
+          if (sectionLower.includes(query.toLowerCase())) score += 2;
+        }
+      }
+      if (score > 0) {
+        results.push({
+          file: file.name,
+          snippet: section.trim().slice(0, 300),
+          score: score / queryTerms.length,
+        });
+      }
+    }
+  }
+
+  // Sort by score descending, take top N
+  results.sort((a, b) => b.score - a.score);
+  return results.slice(0, maxResults);
+}
+
+/**
+ * Read a specific memory file by name. Supports line range.
+ */
+export function getMemoryFile(fileName: string, fromLine?: number, lineCount?: number): string | null {
+  // Resolve path safely — only allow files within memory dir
+  let filePath: string;
+  if (fileName.startsWith("daily/")) {
+    filePath = join(DAILY_DIR, fileName.slice(6));
+  } else {
+    filePath = join(MEMORY_DIR, fileName);
+  }
+
+  // Security: ensure resolved path is within memory dir
+  const resolved = join(filePath);
+  if (!resolved.startsWith(MEMORY_DIR)) return null;
+
+  const content = safeReadFile(resolved);
+  if (!content) return null;
+
+  if (fromLine !== undefined || lineCount !== undefined) {
+    const lines = content.split("\n");
+    const start = Math.max(0, (fromLine ?? 1) - 1);
+    const count = lineCount ?? lines.length;
+    return lines.slice(start, start + count).join("\n");
+  }
+
+  return content;
+}
+
+/** List all memory files available for search/read. */
+export function listMemoryFiles(): Array<{ name: string; size: number }> {
+  const files: Array<{ name: string; size: number }> = [];
+  try {
+    ensureMemoryDir();
+    // Main memory files
+    for (const name of [MEMORY_FILE, USER_FILE]) {
+      const p = join(MEMORY_DIR, name);
+      if (existsSync(p)) {
+        files.push({ name, size: statSync(p).size });
+      }
+    }
+    // Daily logs
+    for (const f of listDailyLogFiles()) {
+      files.push({ name: `daily/${f.name}`, size: f.size });
+    }
+  } catch { /* best effort */ }
+  return files;
+}
+
 /**
  * Build a compact memory context block for injection into LLM prompts.
  * Includes user profile and recent memory entries (truncated to budget).
@@ -432,6 +613,73 @@ export function getMemoryContext(): string {
   }
 
   return sections.join("\n");
+}
+
+// ── Part 4: Recent Conversation Topics ──
+
+interface RecentTopic {
+  topic: string;
+  lastMessage: string;
+  timestamp: number;
+  cardId: string;
+}
+
+/**
+ * Extract recent conversation topics from card history.
+ * Groups cards into "conversations" (gap > 30 min = new conversation).
+ * Returns the most recent `count` topics for display on WelcomeCard.
+ */
+export function getRecentConversationTopics(clientId: string, count = 5): RecentTopic[] {
+  const records = loadCardHistory(clientId, 100);
+  if (records.length === 0) return [];
+
+  // Group into conversations (gap > 30 min = new conversation)
+  const GAP_MS = 30 * 60 * 1000;
+  const conversations: CardRecord[][] = [];
+  let currentGroup: CardRecord[] = [];
+
+  for (const rec of records) {
+    if (currentGroup.length > 0) {
+      const lastTs = currentGroup[currentGroup.length - 1].timestamp;
+      if (rec.timestamp - lastTs > GAP_MS) {
+        conversations.push(currentGroup);
+        currentGroup = [];
+      }
+    }
+    currentGroup.push(rec);
+  }
+  if (currentGroup.length > 0) conversations.push(currentGroup);
+
+  // Extract topic from each conversation
+  const topics: RecentTopic[] = [];
+  const seen = new Set<string>();
+
+  // Process most recent first
+  for (let i = conversations.length - 1; i >= 0 && topics.length < count; i--) {
+    const conv = conversations[i];
+    const userMessages = conv.filter((r) => r.role === "user" && r.text);
+    if (userMessages.length === 0) continue;
+
+    const firstUserMsg = userMessages[0].text!;
+    const lastUserMsg = userMessages[userMessages.length - 1].text!;
+
+    // Topic = first user message, truncated
+    const topic = firstUserMsg.length > 60 ? firstUserMsg.slice(0, 57) + "..." : firstUserMsg;
+
+    // Deduplicate by first 30 chars
+    const dedupeKey = topic.slice(0, 30).toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    topics.push({
+      topic,
+      lastMessage: lastUserMsg,
+      timestamp: conv[conv.length - 1].timestamp,
+      cardId: conv[0].id,
+    });
+  }
+
+  return topics;
 }
 
 // ── Legacy compatibility (OpenClaw workspace hooks) ──

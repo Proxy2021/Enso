@@ -89,6 +89,9 @@ export default function WelcomeCard() {
         </div>
       )}
 
+      {/* Recent conversations */}
+      <RecentTopics disabled={disabled} />
+
       {/* Suggested prompts */}
       <div className="w-full max-w-lg mb-6">
         <p className="text-xs text-gray-500 mb-2 px-1">{t("welcome.tryAsking")}</p>
@@ -148,6 +151,45 @@ export default function WelcomeCard() {
         <p className="text-[10px] text-gray-500 text-center mt-1">
           {t("welcome.hint.slashCommands")} &middot; {t("welcome.hint.attachFiles")}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function RecentTopics({ disabled }: { disabled: boolean }) {
+  const recentTopics = useChatStore((s) => s.recentTopics);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const { t } = useT();
+
+  if (!recentTopics || recentTopics.length === 0) return null;
+
+  function formatTimeAgo(ts: number): string {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return t("recent.justNow");
+    if (mins < 60) return t("recent.minsAgo").replace("{n}", String(mins));
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return t("recent.hoursAgo").replace("{n}", String(hours));
+    const days = Math.floor(hours / 24);
+    if (days === 1) return t("recent.yesterday");
+    return t("recent.daysAgo").replace("{n}", String(days));
+  }
+
+  return (
+    <div className="w-full max-w-lg mb-5">
+      <p className="text-xs text-gray-500 mb-2 px-1">{t("recent.title")}</p>
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {recentTopics.map((topic, i) => (
+          <button
+            key={i}
+            onClick={() => sendMessage(topic.lastMessage)}
+            disabled={disabled}
+            className="shrink-0 text-left px-3 py-2 rounded-lg border border-gray-700/50 bg-gray-800/40 hover:bg-gray-800/70 hover:border-indigo-500/40 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 max-w-[200px]"
+          >
+            <div className="text-xs text-gray-300 truncate">{topic.topic}</div>
+            <div className="text-[10px] text-gray-600 mt-0.5">{formatTimeAgo(topic.timestamp)}</div>
+          </button>
+        ))}
       </div>
     </div>
   );

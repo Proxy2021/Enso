@@ -132,14 +132,20 @@ Write-Host "# Building frontend..." -ForegroundColor Yellow
 npm run build 2>&1 | Select-Object -Last 1
 Write-Host "  OK Frontend built" -ForegroundColor Green
 
-# ── 6. Start server ─────────────────────────────────────────────────
+# ── 6. Start server via guardian ─────────────────────────────────────
 Write-Host ""
-Write-Host "# Starting Enso server..." -ForegroundColor Yellow
-$serverJob = Start-Job -ScriptBlock {
-    param($repoDir)
-    Set-Location $repoDir
-    npx tsx server/standalone.ts 2>&1
-} -ArgumentList $RepoDir
+Write-Host "# Starting Enso guardian (production supervisor)..." -ForegroundColor Yellow
+
+$nullInput = Join-Path $env:TEMP "enso-null-input.txt"
+if (-not (Test-Path $nullInput)) { [System.IO.File]::WriteAllText($nullInput, "") }
+
+$guardianLog    = Join-Path $env:TEMP "enso-guardian.log"
+$guardianErrLog = Join-Path $env:TEMP "enso-guardian-err.log"
+
+Start-Process -FilePath "cmd.exe" `
+    -ArgumentList "/c", "npx tsx server/guardian.ts > `"$guardianLog`" 2> `"$guardianErrLog`"" `
+    -WorkingDirectory $RepoDir `
+    -WindowStyle Hidden
 
 Write-Host -NoNewline "  Waiting for server"
 $ready = $false
@@ -156,9 +162,24 @@ for ($i = 1; $i -le 30; $i++) {
 }
 Write-Host ""
 if ($ready) {
-    Write-Host "  OK Server is running on port $Port" -ForegroundColor Green
+    Write-Host "  OK Server is running on port $Port (guardian-supervised)" -ForegroundColor Green
 } else {
-    Write-Host "  ! Server did not respond within 30s. Check terminal output." -ForegroundColor DarkYellow
+    Write-Host "  ! Server did not respond within 30s. Check $guardianLog" -ForegroundColor DarkYellow
+}
+
+# ── 6b. Install watchdog ──────────────────────────────────────────────
+Write-Host ""
+Write-Host "# Installing watchdog (2-minute health checks)..." -ForegroundColor Yellow
+$watchdogInstaller = Join-Path $RepoDir "install-watchdog.ps1"
+if (Test-Path $watchdogInstaller) {
+    try {
+        & $watchdogInstaller
+        Write-Host "  OK Watchdog installed" -ForegroundColor Green
+    } catch {
+        Write-Host "  ! Watchdog install failed (non-critical): $_" -ForegroundColor DarkYellow
+    }
+} else {
+    Write-Host "  ! install-watchdog.ps1 not found" -ForegroundColor DarkYellow
 }
 
 # ── 7. Display QR code ──────────────────────────────────────────────

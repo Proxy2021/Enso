@@ -66,6 +66,9 @@ interface CardStore {
   _thinkingCardId: string | null;
   _nlInterceptionToast: string | null;
 
+  // Conversation continuity
+  recentTopics: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
+
   // Pinning
   pinnedCards: string[];
   showSidebar: boolean;
@@ -232,6 +235,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _pendingCodeText: null as string | null,
   _thinkingCardId: null as string | null,
   _nlInterceptionToast: null as string | null,
+  recentTopics: [],
   pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
   showSidebar: false,
 
@@ -1750,6 +1754,28 @@ export const useChatStore = create<CardStore>((set, get) => ({
         cardOrder: [...s.cardOrder, id],
         cards: { ...s.cards, [id]: card },
       }));
+      return;
+    }
+
+    // Handle recent topics (conversation continuity)
+    if (msg.recentTopics) {
+      set({ recentTopics: msg.recentTopics });
+      return;
+    }
+
+    // Handle follow-up suggestions
+    if (msg.followUps) {
+      const { cardId: fuCardId, suggestions } = msg.followUps;
+      set((s) => {
+        const card = s.cards[fuCardId];
+        if (!card) return s;
+        return {
+          cards: {
+            ...s.cards,
+            [fuCardId]: { ...card, followUps: suggestions, updatedAt: Date.now() },
+          },
+        };
+      });
       return;
     }
 

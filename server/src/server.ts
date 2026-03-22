@@ -19,8 +19,10 @@ import { APP_CATALOG } from "./app-catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
 import { classifyTask, qualityGate } from "./task-router.js";
-import { persistCard, loadCardHistory, clearCardHistory, pruneStaleJournals, migrateCardJournals, readEnsoMemory, writeEnsoUser, writeEnsoMemory, getMemoryContext } from "./memory-bridge.js";
+import { persistCard, loadCardHistory, clearCardHistory, pruneStaleJournals, migrateCardJournals, readEnsoMemory, writeEnsoUser, writeEnsoMemory, getMemoryContext, getRecentConversationTopics, invalidateContextCache } from "./memory-bridge.js";
 import type { CardRecord } from "./memory-bridge.js";
+import { generateFollowUps } from "./followup-generator.js";
+import { extractAndPersistMemory } from "./memory-extractor.js";
 
 export type ConnectedClient = {
   id: string;
@@ -351,13 +353,56 @@ function inferAppParams(message: string, primaryTool: any): Record<string, unkno
   return params;
 }
 
+/**
+ * Send follow-up suggestions and trigger memory extraction for direct-path responses.
+ * Called from the "simple" task router path which bypasses deliverEnsoReply().
+ */
+function sendFollowUpsAndExtractMemory(params: {
+  userMessage: string;
+  assistantText: string;
+  cardId: string;
+  sessionKey: string;
+  send: (msg: ServerMessage) => void;
+  account: ResolvedEnsoAccount;
+  language?: string;
+}): void {
+  const { userMessage, assistantText, cardId, sessionKey, send: sendFn, account, language } = params;
+
+  // Follow-ups
+  if (assistantText.length > 30) {
+    const suggestions = generateFollowUps({ userMessage, assistantText, language });
+    if (suggestions.length > 0) {
+      sendFn({
+        id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+        followUps: { cardId, suggestions },
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  // Memory extraction (fire-and-forget)
+  const hasLLM = account.geminiApiKey || Object.keys(account.providerKeys ?? {}).length > 0;
+  if (userMessage.length > 20 && assistantText.length > 50 && hasLLM) {
+    extractAndPersistMemory({
+      userMessage,
+      assistantResponse: assistantText,
+      geminiApiKey: account.geminiApiKey,
+      providerKeys: account.providerKeys,
+    }).then(() => invalidateContextCache()).catch(() => {});
+  }
+}
+
 export async function startEnsoServer(opts: {
   account: ResolvedEnsoAccount;
   config: CoreConfig;
   runtime: EnsoRuntime;
   abortSignal?: AbortSignal;
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
-}): Promise<{ stop: () => void }> {
+  /** Self-heal metrics accessor for the /health endpoint. */
+  selfHealMetrics?: () => { uptimeMs: number; heapUsedMB: number; heapTotalMB: number; rssMB: number; eventLoopP99Ms: number; eventLoopMaxMs: number; errorsLast5Min: number; memoryWarning: boolean; memoryCritical: boolean };
+  /** Callback when a client requests server restart (code 78). */
+  onRestartRequested?: () => void;
+}): Promise<{ stop: () => Promise<void> }> {
   const { account, config, runtime, statusSink } = opts;
   const port = account.port;
   activePort = port;
@@ -458,6 +503,8 @@ export async function startEnsoServer(opts: {
   const accessToken = account.accessToken;
   app.get("/health", (_req, res) => {
     const pkg = readPkgVersion();
+    const shm = opts.selfHealMetrics?.();
+    const mem = process.memoryUsage();
     res.json({
       status: "ok",
       channel: "enso",
@@ -473,6 +520,17 @@ export async function startEnsoServer(opts: {
         platform: platform(),
         arch: arch(),
         memoryGB: Math.round(totalmem() / (1024 ** 3)),
+      },
+      process: {
+        pid: process.pid,
+        uptimeSeconds: Math.floor(process.uptime()),
+        heapUsedMB: shm?.heapUsedMB ?? Math.round(mem.heapUsed / 1_048_576),
+        heapTotalMB: shm?.heapTotalMB ?? Math.round(mem.heapTotal / 1_048_576),
+        rssMB: shm?.rssMB ?? Math.round(mem.rss / 1_048_576),
+        eventLoopP99Ms: shm?.eventLoopP99Ms ?? -1,
+        errorsLast5Min: shm?.errorsLast5Min ?? 0,
+        memoryWarning: shm?.memoryWarning ?? false,
+        guardianManaged: process.env.ENSO_GUARDIAN_MANAGED === "1",
       },
     });
   });
@@ -1834,6 +1892,7 @@ export async function startEnsoServer(opts: {
                       id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
                       text: modelAnswer, timestamp: Date.now(),
                     });
+                    sendFollowUpsAndExtractMemory({ userMessage: msg.text, assistantText: modelAnswer, cardId: answerCardId, sessionKey, send, account, language: client.language });
                   } catch (llmErr) {
                     logError("task-router", `callChatLLM failed for ${userChatModel}`, llmErr);
                     // Fallback: use the Gemini classifier answer
@@ -1906,6 +1965,7 @@ export async function startEnsoServer(opts: {
                       text: classification.answer,
                       timestamp: Date.now(),
                     });
+                    sendFollowUpsAndExtractMemory({ userMessage: msg.text, assistantText: classification.answer, cardId: answerCardId, sessionKey, send, account, language: client.language });
                   }
                 } else if (!isUserGemini) {
                   // No classifier answer + non-Gemini model — call user's model directly
@@ -2642,52 +2702,25 @@ export async function startEnsoServer(opts: {
           }
           case "server.restart": {
             runtime.log?.(`[enso] server restart requested`);
-            try {
-              const { exec } = await import("node:child_process");
-              const { writeFileSync } = await import("node:fs");
-              const { tmpdir } = await import("node:os");
-              const { join } = await import("node:path");
-              const myPid = process.pid;
-              // Write a temp batch file that kills our PID and starts a fresh gateway.
-              // Then use WMI to run it in a process independent of our tree (parented
-              // to WMI Provider Host, survives when our process is killed).
-              const script = join(tmpdir(), "enso-restart.cmd");
-              writeFileSync(script, [
-                `@echo off`,
-                `timeout /t 1 /nobreak >nul`,
-                `taskkill /PID ${myPid} /F >nul 2>&1`,
-                `timeout /t 3 /nobreak >nul`,
-                `schtasks /run /tn "OpenClaw Gateway"`,
-              ].join("\r\n"));
-              exec(
-                `powershell.exe -Command "([wmiclass]'Win32_Process').Create('cmd.exe /c ${script.replace(/\\/g, "\\\\")}')"`,
-                { windowsHide: true },
-                (err) => {
-                  if (err) runtime.error?.(`[enso] WMI restart spawn failed: ${err.message}`);
-                },
-              );
-              send({
-                id: randomUUID(),
-                runId: randomUUID(),
-                sessionKey,
-                seq: 0,
-                state: "final",
-                text: "Restarting gateway...",
-                timestamp: Date.now(),
-              });
-              // The WMI process will kill us after ~1s, then start a fresh gateway.
-            } catch (err) {
-              runtime.error?.(`[enso] restart failed: ${err instanceof Error ? err.message : String(err)}`);
-              send({
-                id: randomUUID(),
-                runId: randomUUID(),
-                sessionKey,
-                seq: 0,
-                state: "error",
-                text: `Restart failed: ${err instanceof Error ? err.message : String(err)}`,
-                timestamp: Date.now(),
-              });
-            }
+            send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey,
+              seq: 0,
+              state: "final",
+              text: "Restarting server...",
+              timestamp: Date.now(),
+            });
+            // Give the WebSocket message time to flush, then trigger restart.
+            // If running under the guardian, exit code 78 causes an immediate
+            // restart.  Without the guardian, the process simply exits.
+            setTimeout(() => {
+              if (opts.onRestartRequested) {
+                opts.onRestartRequested();
+              } else {
+                process.exit(78);
+              }
+            }, 200);
             break;
           }
           case "tools.list_projects": {
@@ -2896,6 +2929,19 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
             }
+            // Send recent conversation topics for WelcomeCard
+            const topics = getRecentConversationTopics(clientId, 5);
+            if (topics.length > 0) {
+              send({
+                id: randomUUID(),
+                runId: randomUUID(),
+                sessionKey,
+                seq: 0,
+                state: "final",
+                recentTopics: topics,
+                timestamp: Date.now(),
+              });
+            }
             break;
           }
         }
@@ -2988,15 +3034,21 @@ export async function startEnsoServer(opts: {
     });
   });
 
-  function stop() {
-    runtime.log?.("[enso] stopping server");
-    clearInterval(pingInterval);
-    for (const client of clients.values()) {
-      client.ws.close();
-    }
-    clients.clear();
-    wss.close();
-    server.close();
+  function stop(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      runtime.log?.("[enso] stopping server");
+      clearInterval(pingInterval);
+      for (const client of clients.values()) {
+        client.ws.close();
+      }
+      clients.clear();
+      wss.close();
+      const drainTimeout = setTimeout(resolve, 5_000);
+      server.close(() => {
+        clearTimeout(drainTimeout);
+        resolve();
+      });
+    });
   }
 
   opts.abortSignal?.addEventListener("abort", () => {

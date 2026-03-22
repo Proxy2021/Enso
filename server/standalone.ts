@@ -3,13 +3,11 @@
  * standalone.ts — Run Enso without OpenClaw.
  *
  * Usage:
- *   npx tsx standalone.ts
- *   node --loader tsx standalone.ts
+ *   npx tsx server/standalone.ts         # direct (development)
+ *   npx tsx server/guardian.ts           # supervised (production)
  *
  * Starts the Enso Express+WS server directly, registers all tools in the
- * local registry, and uses Gemini Flash for the chat agent pipeline.
- *
- * Requires GEMINI_API_KEY in .env or environment.
+ * local registry, and uses the configured LLM for the chat agent pipeline.
  */
 
 import { readFileSync } from "node:fs";
@@ -45,7 +43,7 @@ function loadEnvFile(): void {
 
 loadEnvFile();
 
-// ── Imports (after env load so GEMINI_API_KEY is available) ──
+// ── Imports (after env load so API keys are available) ──
 
 import { resolveEnsoAccount } from "./src/accounts.js";
 import { startEnsoServer } from "./src/server.js";
@@ -57,6 +55,11 @@ import { createScreenTools } from "./src/screen-tools.js";
 import { createBrowserTools } from "./src/browser-tools.js";
 import { createResearcherTools } from "./src/researcher-tools.js";
 import { createClawHubTools } from "./src/clawhub-tools.js";
+import { createMemoryTools } from "./src/memory-tools.js";
+import { startSelfHealing } from "./src/self-heal.js";
+
+// ── Exit codes ──
+const EXIT_RESTART_REQUESTED = 78;
 
 // ── Register all tools in the local registry ──
 
@@ -68,6 +71,7 @@ function registerAllTools(): void {
     createBrowserTools(),
     createResearcherTools(),
     createClawHubTools(),
+    createMemoryTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {
@@ -95,35 +99,80 @@ async function main(): Promise<void> {
     error: (...args: unknown[]) => console.error("[enso:error]", ...args),
   };
 
+  // ── Self-healing monitors ──
+  let stopping = false;
+  let serverStop: (() => Promise<void>) | undefined;
+
+  const selfHeal = startSelfHealing({
+    onRestartNeeded: (reason) => {
+      console.error(`[enso:self-heal] Restart needed: ${reason}`);
+      gracefulExit(EXIT_RESTART_REQUESTED);
+    },
+  });
+
+  async function gracefulExit(code: number) {
+    if (stopping) return;
+    stopping = true;
+    console.log(`[enso:standalone] Graceful exit (code=${code})...`);
+    try {
+      if (serverStop) await serverStop();
+    } catch (err) {
+      console.error("[enso:standalone] Error during stop:", err);
+    }
+    selfHeal.stop();
+    process.exit(code);
+  }
+
+  // ── Process-level error handlers ──
+
+  process.on("uncaughtException", (err, origin) => {
+    console.error(`[enso:fatal] Uncaught exception (${origin}):`, err);
+    selfHeal.recordError(err);
+    gracefulExit(1);
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    console.error("[enso] Unhandled rejection:", reason);
+    selfHeal.recordError(reason);
+  });
+
+  // ── Start server ──
+
   console.log(`[enso:standalone] Starting Enso server on :${account.port}`);
   console.log(`[enso:standalone] Mode: standalone (no OpenClaw)`);
+
+  if (process.env.ENSO_GUARDIAN_MANAGED === "1") {
+    console.log("[enso:standalone] Running under guardian supervision");
+  }
 
   const { stop } = await startEnsoServer({
     account,
     config,
     runtime,
+    selfHealMetrics: () => selfHeal.metrics(),
+    onRestartRequested: () => gracefulExit(EXIT_RESTART_REQUESTED),
     statusSink: (patch) => {
       if (patch.lastInboundAt) console.log(`[enso:standalone] Inbound at ${new Date(patch.lastInboundAt).toISOString()}`);
     },
   });
+  serverStop = stop;
 
-  // Graceful shutdown
-  const shutdown = () => {
-    console.log("\n[enso:standalone] Shutting down...");
-    stop();
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-  process.on("unhandledRejection", (reason) => {
-    console.error("[enso] Unhandled rejection:", reason);
-  });
+  // Tell guardian what port we're on (if running under guardian)
+  if (process.send) {
+    try {
+      process.send({ type: "port", port: account.port });
+    } catch { /* guardian may not be listening yet */ }
+  }
+
+  // ── Graceful shutdown on signals ──
+  process.on("SIGINT", () => gracefulExit(0));
+  process.on("SIGTERM", () => gracefulExit(0));
 
   console.log(`[enso:standalone] Server running. Open http://localhost:${account.port}`);
   console.log(`[enso:standalone] Access token: ${account.accessToken}`);
 }
 
 main().catch((err) => {
-  console.error("[enso:standalone] Fatal error:", err);
+  console.error("[enso:standalone] Fatal startup error:", err);
   process.exit(1);
 });

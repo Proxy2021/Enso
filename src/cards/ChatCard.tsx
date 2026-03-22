@@ -2,6 +2,7 @@ import { useState } from "react";
 import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
 import AppSuggestion from "../components/AppSuggestion";
+import FollowUpChips from "../components/FollowUpChips";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
@@ -17,6 +18,9 @@ export default function ChatCard({ card }: CardRendererProps) {
       </div>
       {hasMedia && <MediaGallery urls={card.mediaUrls!} />}
       {showRestart && <RestartButton />}
+      {card.followUps && card.followUps.length > 0 && card.status === "complete" && (
+        <FollowUpChips cardId={card.id} followUps={card.followUps} />
+      )}
       {card.appSuggestion && card.status === "complete" && (
         <AppSuggestion
           cardId={card.id}
