@@ -26,6 +26,7 @@ import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ServerMessage, ToolBuildSummary, EnhanceResult } from "./types.js";
 import { logAction, logError, logFix } from "./action-log.js";
+import { getEnsoPath } from "./utils/home.js";
 
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
@@ -164,7 +165,7 @@ async function postBuildRegistration(
   // Also check for modified existing apps (file mtime after build start)
   if (freshApps.length === 0) {
     for (const app of allApps) {
-      for (const dir of [SHIPPED_APPS_DIR, join(process.env.HOME || process.env.USERPROFILE || "", ".enso", "apps")]) {
+      for (const dir of [SHIPPED_APPS_DIR, getEnsoPath("apps")]) {
         const manifestPath = join(dir, app.spec.toolFamily, "app.json");
         try {
           const stat = statSync(manifestPath);
@@ -700,9 +701,7 @@ async function recoverIncompleteApps(
   buildStartTime: number,
 ): Promise<boolean> {
   let recovered = false;
-  const userAppsDir = join(process.env.HOME || process.env.USERPROFILE || "", ".enso", "apps");
-
-  for (const dir of [SHIPPED_APPS_DIR, userAppsDir]) {
+  for (const dir of [SHIPPED_APPS_DIR, getEnsoPath("apps")]) {
     if (!existsSync(dir)) continue;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;

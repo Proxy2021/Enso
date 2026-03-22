@@ -20,6 +20,7 @@ import {
   type BackendConfig,
 } from "../lib/connection";
 import { _setLocale, type Locale } from "../lib/i18n";
+import { TOOL_ID_CLAUDE_CODE, STORAGE_KEYS, TIMINGS, DEFAULT_CLAUDE_MODEL, DEFAULT_CHAT_MODEL, API } from "../lib/constants";
 
 export interface ProjectInfo {
   name: string;
@@ -236,7 +237,7 @@ function _handleReconnection(
           text: "/resume",
           routing: {
             mode: "direct_tool",
-            toolId: "claude-code",
+            toolId: TOOL_ID_CLAUDE_CODE,
             toolSessionId: target.sessionId,
             cwd: target.cwd,
           },
@@ -260,13 +261,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
   toolFamilies: [],
   ensoProjectPath: null,
   projects: [],
-  codeSessionCwd: localStorage.getItem("enso_code_session_cwd") || null,
-  codeSessionId: localStorage.getItem("enso_code_session_id") || null,
-  claudeModel: localStorage.getItem("enso_claude_model") || "claude-opus-4-6",
-  claudeThinking: (localStorage.getItem("enso_claude_thinking") as "adaptive" | "disabled") || "adaptive",
-  chatModel: localStorage.getItem("enso_chat_model") || "gemini-2.5-flash",
+  codeSessionCwd: localStorage.getItem(STORAGE_KEYS.CODE_SESSION_CWD) || null,
+  codeSessionId: localStorage.getItem(STORAGE_KEYS.CODE_SESSION_ID) || null,
+  claudeModel: localStorage.getItem(STORAGE_KEYS.CLAUDE_MODEL) || DEFAULT_CLAUDE_MODEL,
+  claudeThinking: (localStorage.getItem(STORAGE_KEYS.CLAUDE_THINKING) as "adaptive" | "disabled") || "adaptive",
+  chatModel: localStorage.getItem(STORAGE_KEYS.CHAT_MODEL) || DEFAULT_CHAT_MODEL,
   providers: [],
-  language: (localStorage.getItem("enso_language") as Locale) || "en",
+  language: (localStorage.getItem(STORAGE_KEYS.LANGUAGE) as Locale) || "en",
   _activeTerminalCardId: null,
   _pendingCodeText: null as string | null,
   _thinkingCardId: null as string | null,
@@ -274,7 +275,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _serverBootId: null as string | null,
   _lastDisconnectWasRestart: false,
   recentTopics: [],
-  pinnedCards: JSON.parse(localStorage.getItem("enso_pinned_cards") ?? "[]"),
+  pinnedCards: JSON.parse(localStorage.getItem(STORAGE_KEYS.PINNED_CARDS) ?? "[]"),
   showSidebar: false,
 
   connect: () => {
@@ -520,7 +521,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           role: "assistant",
           status: "complete",
           display: "expanded",
-          toolMeta: { toolId: "claude-code" },
+          toolMeta: { toolId: TOOL_ID_CLAUDE_CODE },
           createdAt: now,
           updatedAt: now,
         };
@@ -556,7 +557,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
               role: "assistant",
               status: "complete",
               display: "expanded",
-              toolMeta: { toolId: "claude-code" },
+              toolMeta: { toolId: TOOL_ID_CLAUDE_CODE },
               data: displayText ? { pendingCodeText: displayText } : undefined,
               createdAt: now,
               updatedAt: now,
@@ -572,7 +573,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
         finalRouting = {
           mode: "direct_tool",
-          toolId: "claude-code",
+          toolId: TOOL_ID_CLAUDE_CODE,
           ...(toolSessionId ? { toolSessionId } : {}),
           ...(cwd ? { cwd } : {}),
         };
@@ -582,7 +583,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }
 
     // Terminal routing: append to specific or active terminal card
-    if (finalRouting?.toolId === "claude-code") {
+    if (finalRouting?.toolId === TOOL_ID_CLAUDE_CODE) {
       const now = Date.now();
       let termCardId = sourceCardId ?? get()._activeTerminalCardId;
 
@@ -597,7 +598,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           status: "streaming",
           display: "expanded",
           text: `>>> ${displayText}\n`,
-          toolMeta: { toolId: "claude-code", ...(finalRouting.cwd ? { cwd: finalRouting.cwd } : {}) },
+          toolMeta: { toolId: TOOL_ID_CLAUDE_CODE, ...(finalRouting.cwd ? { cwd: finalRouting.cwd } : {}) },
           createdAt: now,
           updatedAt: now,
         };
@@ -1031,8 +1032,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     // If instruction + known project path, launch directly with prompt
     if (instruction && ensoPath) {
-      localStorage.setItem("enso_code_session_cwd", ensoPath);
-      localStorage.removeItem("enso_code_session_id");
+      localStorage.setItem(STORAGE_KEYS.CODE_SESSION_CWD, ensoPath);
+      localStorage.removeItem(STORAGE_KEYS.CODE_SESSION_ID);
 
       const id = uuidv4();
       const now = Date.now();
@@ -1044,7 +1045,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         status: "streaming",
         display: "expanded",
         text: `>>> ${instruction}\n`,
-        toolMeta: { toolId: "claude-code", cwd: ensoPath },
+        toolMeta: { toolId: TOOL_ID_CLAUDE_CODE, cwd: ensoPath },
         createdAt: now,
         updatedAt: now,
       };
@@ -1056,7 +1057,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         codeSessionId: null,
         isWaiting: true,
       }));
-      const routing: ToolRouting = { mode: "direct_tool", toolId: "claude-code", cwd: ensoPath };
+      const routing: ToolRouting = { mode: "direct_tool", toolId: TOOL_ID_CLAUDE_CODE, cwd: ensoPath };
       get()._wsClient?.send({ type: "chat.send", text: instruction, routing, sourceCardId: id });
       return;
     }
@@ -1071,7 +1072,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       role: "assistant",
       status: "complete",
       display: "expanded",
-      toolMeta: { toolId: "claude-code" },
+      toolMeta: { toolId: TOOL_ID_CLAUDE_CODE },
       createdAt: now,
       updatedAt: now,
     };
@@ -1144,8 +1145,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
     if (!ensoPath) return;
 
     // Update global convenience state
-    localStorage.setItem("enso_code_session_cwd", ensoPath);
-    localStorage.removeItem("enso_code_session_id");
+    localStorage.setItem(STORAGE_KEYS.CODE_SESSION_CWD, ensoPath);
+    localStorage.removeItem(STORAGE_KEYS.CODE_SESSION_ID);
 
     // Build the prompt
     const lines: string[] = ["A user reported a bug in the Enso app via the in-app debug reporter.", ""];
@@ -1195,7 +1196,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "streaming",
       display: "expanded",
       text: `>>> ${displayText}\n`,
-      toolMeta: { toolId: "claude-code", cwd: ensoPath },
+      toolMeta: { toolId: TOOL_ID_CLAUDE_CODE, cwd: ensoPath },
       createdAt: now,
       updatedAt: now,
     };
@@ -1211,7 +1212,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     const routing: ToolRouting = {
       mode: "direct_tool",
-      toolId: "claude-code",
+      toolId: TOOL_ID_CLAUDE_CODE,
       cwd: ensoPath,
     };
 
@@ -1225,8 +1226,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const ensoPath = get().ensoProjectPath;
     if (!ensoPath) return;
 
-    localStorage.setItem("enso_code_session_cwd", ensoPath);
-    localStorage.removeItem("enso_code_session_id");
+    localStorage.setItem(STORAGE_KEYS.CODE_SESSION_CWD, ensoPath);
+    localStorage.removeItem(STORAGE_KEYS.CODE_SESSION_ID);
 
     const promptParts: string[] = [
       `## Enhancement Request`,
@@ -1271,7 +1272,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "streaming",
       display: "expanded",
       text: `>>> Enhancing app...\n`,
-      toolMeta: { toolId: "claude-code", cwd: ensoPath },
+      toolMeta: { toolId: TOOL_ID_CLAUDE_CODE, cwd: ensoPath },
       createdAt: now,
       updatedAt: now,
     };
@@ -1287,7 +1288,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     const routing: ToolRouting = {
       mode: "direct_tool",
-      toolId: "claude-code",
+      toolId: TOOL_ID_CLAUDE_CODE,
       cwd: ensoPath,
     };
 
@@ -1298,8 +1299,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const ensoPath = get().ensoProjectPath;
     if (!ensoPath) return;
 
-    localStorage.setItem("enso_code_session_cwd", ensoPath);
-    localStorage.removeItem("enso_code_session_id");
+    localStorage.setItem(STORAGE_KEYS.CODE_SESSION_CWD, ensoPath);
+    localStorage.removeItem(STORAGE_KEYS.CODE_SESSION_ID);
 
     const prompt = [
       "The user wants to enhance the Enso system.",
@@ -1323,7 +1324,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       status: "streaming",
       display: "expanded",
       text: `>>> System enhance: ${instruction.slice(0, 80)}...\n`,
-      toolMeta: { toolId: "claude-code", cwd: ensoPath },
+      toolMeta: { toolId: TOOL_ID_CLAUDE_CODE, cwd: ensoPath },
       createdAt: now,
       updatedAt: now,
     };
@@ -1339,7 +1340,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     const routing: ToolRouting = {
       mode: "direct_tool",
-      toolId: "claude-code",
+      toolId: TOOL_ID_CLAUDE_CODE,
       cwd: ensoPath,
     };
 
@@ -1352,13 +1353,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   setCodeSessionCwd: (cwd: string) => {
     const prev = get().codeSessionCwd;
-    localStorage.setItem("enso_code_session_cwd", cwd);
+    localStorage.setItem(STORAGE_KEYS.CODE_SESSION_CWD, cwd);
     const termId = get()._activeTerminalCardId;
 
     // Update global state + active terminal card's toolMeta
     const updates: Record<string, unknown> = { codeSessionCwd: cwd };
     if (prev && prev !== cwd) {
-      localStorage.removeItem("enso_code_session_id");
+      localStorage.removeItem(STORAGE_KEYS.CODE_SESSION_ID);
       updates.codeSessionId = null;
     }
 
@@ -1369,7 +1370,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           ...get().cards,
           [termId]: {
             ...card,
-            toolMeta: { ...card.toolMeta, toolId: "claude-code", cwd, toolSessionId: undefined },
+            toolMeta: { ...card.toolMeta, toolId: TOOL_ID_CLAUDE_CODE, cwd, toolSessionId: undefined },
             updatedAt: Date.now(),
           },
         };
@@ -1394,7 +1395,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         ...s.cards,
         [cardId]: {
           ...card,
-          toolMeta: { toolId: "claude-code", cwd },
+          toolMeta: { toolId: TOOL_ID_CLAUDE_CODE, cwd },
           updatedAt: Date.now(),
         },
       },
@@ -1402,8 +1403,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
       codeSessionCwd: cwd,
       codeSessionId: null,
     }));
-    localStorage.setItem("enso_code_session_cwd", cwd);
-    localStorage.removeItem("enso_code_session_id");
+    localStorage.setItem(STORAGE_KEYS.CODE_SESSION_CWD, cwd);
+    localStorage.removeItem(STORAGE_KEYS.CODE_SESSION_ID);
   },
 
   resumeSessionOnCard: (cardId: string, sessionId: string, cwd: string) => {
@@ -1414,7 +1415,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         ...s.cards,
         [cardId]: {
           ...card,
-          toolMeta: { toolId: "claude-code", cwd, toolSessionId: sessionId },
+          toolMeta: { toolId: TOOL_ID_CLAUDE_CODE, cwd, toolSessionId: sessionId },
           updatedAt: Date.now(),
         },
       },
@@ -1423,10 +1424,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   setClaudeModel: (model: string, thinking?: "adaptive" | "disabled") => {
     const patch: Partial<CardStore> = { claudeModel: model };
-    localStorage.setItem("enso_claude_model", model);
+    localStorage.setItem(STORAGE_KEYS.CLAUDE_MODEL, model);
     if (thinking) {
       patch.claudeThinking = thinking;
-      localStorage.setItem("enso_claude_thinking", thinking);
+      localStorage.setItem(STORAGE_KEYS.CLAUDE_THINKING, thinking);
     }
     set(patch);
     const ws = get()._wsClient;
@@ -1437,7 +1438,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   setChatModel: (model: string) => {
     set({ chatModel: model });
-    localStorage.setItem("enso_chat_model", model);
+    localStorage.setItem(STORAGE_KEYS.CHAT_MODEL, model);
     const ws = get()._wsClient;
     if (ws) {
       ws.send({ type: "settings.set_chat_model", chatModel: model } as import("@shared/types").ClientMessage);
@@ -1453,7 +1454,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   setLanguage: (language: "en" | "zh") => {
     set({ language });
-    localStorage.setItem("enso_language", language);
+    localStorage.setItem(STORAGE_KEYS.LANGUAGE, language);
     _setLocale(language);
     const ws = get()._wsClient;
     if (ws) {
@@ -1544,7 +1545,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   loadSharedCard: async (cardId: string) => {
     try {
       const baseUrl = getBackendBaseUrl();
-      const res = await fetch(`${baseUrl}/api/card/${encodeURIComponent(cardId)}/state`, {
+      const res = await fetch(`${baseUrl}${API.CARD_STATE(encodeURIComponent(cardId))}`, {
         headers: authHeaders(),
       });
       if (!res.ok) return;
@@ -1584,7 +1585,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     set((s) => {
       if (s.pinnedCards.includes(cardId)) return s;
       const pins = [...s.pinnedCards, cardId];
-      localStorage.setItem("enso_pinned_cards", JSON.stringify(pins));
+      localStorage.setItem(STORAGE_KEYS.PINNED_CARDS, JSON.stringify(pins));
       return { pinnedCards: pins, showSidebar: true };
     });
   },
@@ -1592,7 +1593,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   unpinCard: (cardId: string) => {
     set((s) => {
       const pins = s.pinnedCards.filter((id) => id !== cardId);
-      localStorage.setItem("enso_pinned_cards", JSON.stringify(pins));
+      localStorage.setItem(STORAGE_KEYS.PINNED_CARDS, JSON.stringify(pins));
       return { pinnedCards: pins };
     });
   },
@@ -1609,7 +1610,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       _thinkingCardId: null,
       pinnedCards: [],
     });
-    localStorage.removeItem("enso_pinned_cards");
+    localStorage.removeItem(STORAGE_KEYS.PINNED_CARDS);
   },
 
   _handleServerMessage: (msg: ServerMessage) => {
@@ -1620,22 +1621,22 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (msg.settings.ensoProjectPath) patch.ensoProjectPath = msg.settings.ensoProjectPath;
       if (msg.settings.claudeModel) {
         patch.claudeModel = msg.settings.claudeModel;
-        localStorage.setItem("enso_claude_model", msg.settings.claudeModel);
+        localStorage.setItem(STORAGE_KEYS.CLAUDE_MODEL, msg.settings.claudeModel);
       }
       if (msg.settings.claudeThinking) {
         patch.claudeThinking = msg.settings.claudeThinking;
-        localStorage.setItem("enso_claude_thinking", msg.settings.claudeThinking);
+        localStorage.setItem(STORAGE_KEYS.CLAUDE_THINKING, msg.settings.claudeThinking);
       }
       if (msg.settings.chatModel) {
         patch.chatModel = msg.settings.chatModel;
-        localStorage.setItem("enso_chat_model", msg.settings.chatModel);
+        localStorage.setItem(STORAGE_KEYS.CHAT_MODEL, msg.settings.chatModel);
       }
       if (msg.settings.providers) {
         patch.providers = msg.settings.providers;
       }
       if (msg.settings.language) {
         patch.language = msg.settings.language as Locale;
-        localStorage.setItem("enso_language", msg.settings.language);
+        localStorage.setItem(STORAGE_KEYS.LANGUAGE, msg.settings.language);
         _setLocale(msg.settings.language as Locale);
       }
       // Boot ID mismatch detection — catches abrupt kills where close code
@@ -1692,10 +1693,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
         // (older records may have type="chat" even for terminal/dynamic-ui cards)
         let resolvedType = rec.type;
         if (rec.role === "user") {
-          resolvedType = rec.toolMeta?.toolId === "claude-code" ? "terminal" : "user-bubble";
+          resolvedType = rec.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE ? "terminal" : "user-bubble";
         } else {
           if (rec.toolMeta?.toolId === "shell") resolvedType = "shell";
-          else if (rec.toolMeta?.toolId === "claude-code") resolvedType = "terminal";
+          else if (rec.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) resolvedType = "terminal";
           else if (rec.generatedUI) resolvedType = "dynamic-ui";
         }
         historicCards[rec.id] = {
@@ -2059,7 +2060,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         let card = state.cards[msg.targetCardId];
 
         // ── Deep research build: accumulate terminal text in buildTerminalText ──
-        if (card?.deepResearchStatus === "building" && msg.toolMeta?.toolId === "claude-code") {
+        if (card?.deepResearchStatus === "building" && msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) {
           if (msg.state === "delta") {
             return {
               cards: {
@@ -2093,7 +2094,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
 
         // ── Parallel orchestration: route virtual task card IDs to taskTerminals ──
-        if (!card && msg.targetCardId.includes(":task:") && msg.toolMeta?.toolId === "claude-code") {
+        if (!card && msg.targetCardId.includes(":task:") && msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) {
           const sepIdx = msg.targetCardId.indexOf(":task:");
           const parentCardId = msg.targetCardId.slice(0, sepIdx);
           const taskId = msg.targetCardId.slice(sepIdx + 6); // after ":task:"
@@ -2136,7 +2137,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
 
         // ── Orchestration: accumulate claude-code terminal text inline (legacy single-session) ──
-        if (card?.type === "orchestration" && msg.toolMeta?.toolId === "claude-code") {
+        if (card?.type === "orchestration" && msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) {
           if (msg.state === "delta") {
             return {
               cards: {
@@ -2154,7 +2155,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
 
         // Auto-create terminal card if it doesn't exist yet (e.g. build-via-claude)
-        if (!card && msg.toolMeta?.toolId === "claude-code" && msg.state === "delta") {
+        if (!card && msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE && msg.state === "delta") {
           card = {
             id: msg.targetCardId,
             runId: msg.runId,
@@ -2242,7 +2243,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         if (!card) return state;
 
         // ── Terminal card (claude-code): append text, per-card session ──
-        if (card.type === "terminal" && msg.toolMeta?.toolId === "claude-code") {
+        if (card.type === "terminal" && msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) {
           if (msg.state === "delta") {
             const hasQuestions = msg.questions && msg.questions.length > 0;
             return {
@@ -2269,13 +2270,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
             // Capture session ID on the card's own toolMeta
             const newToolMeta = {
               ...card.toolMeta,
-              toolId: "claude-code" as const,
+              toolId: TOOL_ID_CLAUDE_CODE,
               ...(msg.toolMeta?.toolSessionId ? { toolSessionId: msg.toolMeta.toolSessionId } : {}),
             };
             // Also update global convenience state
             if (msg.toolMeta?.toolSessionId) {
               storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
-              localStorage.setItem("enso_code_session_id", msg.toolMeta.toolSessionId);
+              localStorage.setItem(STORAGE_KEYS.CODE_SESSION_ID, msg.toolMeta.toolSessionId);
             }
             // Browser notification for Claude Code session completion
             const isDeepResearchTerminal = msg.targetCardId.endsWith("-deep");
@@ -2566,7 +2567,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
 
       // ── Route claude-code messages to active terminal card ──
-      if (msg.toolMeta?.toolId === "claude-code" && state._activeTerminalCardId) {
+      if (msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE && state._activeTerminalCardId) {
         const cardId = state._activeTerminalCardId;
         const card = state.cards[cardId];
         if (!card) return { isWaiting: false };
@@ -2598,7 +2599,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         if (msg.state === "final") {
           if (msg.toolMeta?.toolSessionId) {
             storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
-            localStorage.setItem("enso_code_session_id", msg.toolMeta.toolSessionId);
+            localStorage.setItem(STORAGE_KEYS.CODE_SESSION_ID, msg.toolMeta.toolSessionId);
           }
           // Browser notification for active Claude Code session completion
           notifyTaskComplete({
@@ -2627,7 +2628,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         if (msg.state === "error") {
           // Keep session ID for claude-code — session is still resumable.
           // For other tool types, use msg.toolMeta as before.
-          const isClaudeCode = card.toolMeta?.toolId === "claude-code" || msg.toolMeta?.toolId === "claude-code";
+          const isClaudeCode = card.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE || msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE;
           const errorToolMeta = isClaudeCode ? card.toolMeta : (msg.toolMeta ?? card.toolMeta);
           return {
             ...storeUpdates,
@@ -2713,9 +2714,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
         const mediaUrls = mergedMediaUrls.length > 0 ? mergedMediaUrls : undefined;
 
         const storeUpdates: Partial<CardStore> = { isWaiting: false };
-        if (msg.toolMeta?.toolId === "claude-code" && msg.toolMeta.toolSessionId) {
+        if (msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE && msg.toolMeta.toolSessionId) {
           storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
-          localStorage.setItem("enso_code_session_id", msg.toolMeta.toolSessionId);
+          localStorage.setItem(STORAGE_KEYS.CODE_SESSION_ID, msg.toolMeta.toolSessionId);
         }
 
         // Resolve card type from the full message

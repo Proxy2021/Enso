@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useChatStore, type ProjectInfo } from "../store/chat";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { TOOL_ID_CLAUDE_CODE, API } from "../lib/constants";
 import { useVoiceInput } from "../components/VoiceMicButton";
 import type { Card, CardRendererProps } from "./types";
 
@@ -86,7 +87,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
     if (!cwd) return;
     const cached = slashCommandCache.get(cwd);
     if (cached) { setCommands(cached); return; }
-    const url = `${getBackendBaseUrl()}/api/claude-commands?cwd=${encodeURIComponent(cwd)}`;
+    const url = `${getBackendBaseUrl()}${API.CLAUDE_COMMANDS}?cwd=${encodeURIComponent(cwd)}`;
     fetch(url, { headers: authHeaders() })
       .then(r => r.json())
       .then((cmds: SlashCommand[]) => { slashCommandCache.set(cwd, cmds); setCommands(cmds); })
@@ -341,7 +342,7 @@ function SessionPicker({ cardId, onDismiss }: { cardId: string; onDismiss: () =>
                 // Send /resume to actually resume the CLI session
                 const routing = {
                   mode: "direct_tool" as const,
-                  toolId: "claude-code",
+                  toolId: TOOL_ID_CLAUDE_CODE,
                   toolSessionId: c.toolMeta.toolSessionId,
                   cwd: c.toolMeta.cwd,
                 };
@@ -398,7 +399,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
     }
     const routing = {
       mode: "direct_tool" as const,
-      toolId: "claude-code",
+      toolId: TOOL_ID_CLAUDE_CODE,
       ...(cardSessionId ? { toolSessionId: cardSessionId } : {}),
       ...(cardCwd ? { cwd: cardCwd } : {}),
     };

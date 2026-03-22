@@ -11,7 +11,7 @@ $EnsoDir   = "$env:USERPROFILE\.enso"
 $LogFile   = "$EnsoDir\watchdog.log"
 $MaxLogLines = 500
 $GuardianPid = "$EnsoDir\guardian.pid"
-$RepoDir   = "D:\Github\Enso"
+$RepoDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Port      = 3001
 
 # Ensure directory

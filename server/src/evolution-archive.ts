@@ -8,10 +8,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync, rmSync } from "fs";
 import { join, basename } from "path";
 import { logAction, logError } from "./action-log.js";
+import { getEnsoPath, HOME_DIR } from "./utils/home.js";
 
-const HOME = process.env.HOME || process.env.USERPROFILE || "";
-const PROJECTS_DIR = join(HOME, ".enso", "projects");
-const LEGACY_EVOLUTION_DIR = join(HOME, ".openclaw", "enso-evolution");
+const PROJECTS_DIR = getEnsoPath("projects");
+const LEGACY_EVOLUTION_DIR = join(HOME_DIR, ".openclaw", "enso-evolution");
 
 // ── Types ──
 

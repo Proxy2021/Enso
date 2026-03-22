@@ -8,6 +8,7 @@ import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
 import { formatElapsed } from "../lib/useElapsedTime";
+import { TOOL_ID_CLAUDE_CODE, TIMINGS } from "../lib/constants";
 
 // ── Seen tracking (persisted to localStorage) ──
 
@@ -44,7 +45,7 @@ function isLongRunningResult(card: Card): boolean {
   if (card.status !== "complete" && card.status !== "error") return false;
 
   // Terminal (Claude Code)
-  if (card.type === "terminal" && card.toolMeta?.toolId === "claude-code") return true;
+  if (card.type === "terminal" && card.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) return true;
 
   // Orchestration
   if (card.type === "orchestration") {
@@ -156,7 +157,7 @@ export function useUnseenCount(): number {
 
   // Refresh seen set when cards change (in case markSeen was called)
   useEffect(() => {
-    const interval = setInterval(() => setSeen(loadSeen()), 2000);
+    const interval = setInterval(() => setSeen(loadSeen()), TIMINGS.SEEN_POLL);
     return () => clearInterval(interval);
   }, []);
 

@@ -9,7 +9,13 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import {
+  OLLAMA_API_URL,
+  geminiUrl,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  LLM_DEFAULT_TIMEOUT_MS,
+  ENSO_HOME,
+} from "./config.js";
 import { logAction, logError } from "./action-log.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -109,7 +115,7 @@ export const PROVIDERS: LLMProvider[] = [
     id: "ollama",
     name: "Ollama (Local)",
     format: "openai-compat",
-    baseUrl: "http://localhost:11434/v1",
+    baseUrl: OLLAMA_API_URL,
     setupUrl: "https://ollama.com",
     setupHint: "Install Ollama locally — free, no API key needed",
     models: [
@@ -144,8 +150,7 @@ export const CLAUDE_CODE_MODELS: LLMModel[] = [
 
 // ── Config Persistence ──────────────────────────────────────────────────────
 
-const ENSO_DIR = join(homedir(), ".enso");
-const PROVIDERS_FILE = join(ENSO_DIR, "providers.json");
+const PROVIDERS_FILE = join(ENSO_HOME, "providers.json");
 
 function readConfig(): ProvidersConfig {
   try {
@@ -159,7 +164,7 @@ function readConfig(): ProvidersConfig {
 }
 
 function writeConfig(cfg: ProvidersConfig): void {
-  if (!existsSync(ENSO_DIR)) mkdirSync(ENSO_DIR, { recursive: true });
+  if (!existsSync(ENSO_HOME)) mkdirSync(ENSO_HOME, { recursive: true });
   writeFileSync(PROVIDERS_FILE, JSON.stringify(cfg, null, 2));
 }
 
@@ -255,7 +260,7 @@ export async function callChatLLM(params: {
   providerKeys: Record<string, string>;
   timeoutMs?: number;
 }): Promise<string> {
-  const { prompt, systemPrompt, model, providerKeys, timeoutMs = 60_000 } = params;
+  const { prompt, systemPrompt, model, providerKeys, timeoutMs = LLM_DEFAULT_TIMEOUT_MS } = params;
 
   const provider = findProviderForModel(model);
 
@@ -300,14 +305,14 @@ async function callGeminiChat(params: {
   try {
     const body: Record<string, unknown> = {
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 16384 },
+      generationConfig: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS },
     };
     if (systemPrompt) {
       body.system_instruction = { parts: [{ text: systemPrompt }] };
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      geminiUrl(model, apiKey),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

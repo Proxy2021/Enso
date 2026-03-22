@@ -2,6 +2,17 @@ import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
 import { getDocCollection, type DocMeta } from "./persistence.js";
 import { sendHtmlEmail } from "./email.js";
 import { logAction, logError } from "./action-log.js";
+import {
+  BRAVE_WEB_SEARCH,
+  BRAVE_IMAGE_SEARCH,
+  BRAVE_VIDEO_SEARCH,
+  BRAVE_SEARCH_TIMEOUT_MS,
+  GEMINI_MODEL_UTILITY,
+  LLM_RESEARCH_TIMEOUT_MS,
+  LLM_FAST_TIMEOUT_MS,
+  geminiUrl,
+  GEMINI_API_BASE,
+} from "./config.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -675,12 +686,12 @@ async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[
     logError("researcher", "braveWebSearch: no BRAVE_API_KEY", undefined, {});
     return [];
   }
-  const url = new URL("https://api.search.brave.com/res/v1/web/search");
+  const url = new URL(BRAVE_WEB_SEARCH);
   url.searchParams.set("q", query);
   url.searchParams.set("count", String(Math.min(Math.max(count, 1), 10)));
 
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 10_000);
+  const timer = setTimeout(() => ac.abort(), BRAVE_SEARCH_TIMEOUT_MS);
   try {
     const resp = await globalThis.fetch(url.toString(), {
       method: "GET",
@@ -709,12 +720,12 @@ async function braveImageSearch(query: string, count = 8): Promise<BraveImageRes
   const apiKey = getBraveApiKey();
   if (!apiKey) return [];
 
-  const url = new URL("https://api.search.brave.com/res/v1/images/search");
+  const url = new URL(BRAVE_IMAGE_SEARCH);
   url.searchParams.set("q", query);
   url.searchParams.set("count", String(Math.min(Math.max(count, 1), 10)));
 
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 10_000);
+  const timer = setTimeout(() => ac.abort(), BRAVE_SEARCH_TIMEOUT_MS);
   try {
     const resp = await globalThis.fetch(url.toString(), {
       method: "GET",
@@ -741,12 +752,12 @@ async function braveVideoSearch(query: string, count = 6): Promise<BraveVideoRes
   const apiKey = getBraveApiKey();
   if (!apiKey) return [];
 
-  const url = new URL("https://api.search.brave.com/res/v1/videos/search");
+  const url = new URL(BRAVE_VIDEO_SEARCH);
   url.searchParams.set("q", query);
   url.searchParams.set("count", String(Math.min(Math.max(count, 1), 10)));
 
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 10_000);
+  const timer = setTimeout(() => ac.abort(), BRAVE_SEARCH_TIMEOUT_MS);
   try {
     const resp = await globalThis.fetch(url.toString(), {
       method: "GET",
@@ -904,7 +915,7 @@ Example for "quantum computing":
   "media": ["best books about quantum computing beginners to advanced", "quantum computing movies documentaries TV shows"]
 }`;
 
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash");
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, GEMINI_MODEL_UTILITY);
     const parsed = JSON.parse(cleanJson(raw));
     if (parsed && Array.isArray(parsed.web) && parsed.web.length >= 2) {
       const result: GeneratedQueries = {
@@ -1434,7 +1445,7 @@ IMPORTANT: Default to "standard". Deep research takes 5+ minutes and uses expens
 Return valid JSON (no markdown fences):
 { "route": "standard" | "deep", "reason": "One sentence explaining" }`;
 
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash");
+    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, GEMINI_MODEL_UTILITY);
     const parsed = JSON.parse(cleanJson(raw)) as RouteResult;
     const route = (["simple", "standard", "deep"].includes(parsed.route) ? parsed.route : "standard") as RouteResult["route"];
     logAction({ ts: Date.now(), type: "action", category: "researcher", message: `route: ${route} for "${topic}" — ${parsed.reason ?? ""}` });
@@ -1771,7 +1782,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     // Phase A: Core synthesis (summary + narrative + key findings)
     mark("synthesis_start");
     const phaseAPrompt = buildPhaseAPrompt(topic, sourceContext, language, videoContext, allSourcesForLLM.length);
-    let phaseARaw = await callGeminiLLMWithRetry(phaseAPrompt, geminiKey, "gemini-2.0-flash", 45_000);
+    let phaseARaw = await callGeminiLLMWithRetry(phaseAPrompt, geminiKey, GEMINI_MODEL_UTILITY, LLM_RESEARCH_TIMEOUT_MS);
     let phaseAParsed: Record<string, unknown>;
     try {
       phaseAParsed = JSON.parse(cleanJson(phaseARaw));
@@ -1779,7 +1790,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       logAction({ ts: Date.now(), type: "action", category: "researcher", message: `retrying Phase A synthesis for "${topic}"` });
       phaseARaw = await callGeminiLLMWithRetry(
         phaseAPrompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no comments, no trailing commas.",
-        geminiKey, "gemini-2.0-flash", 45_000,
+        geminiKey, GEMINI_MODEL_UTILITY, LLM_RESEARCH_TIMEOUT_MS,
       );
       phaseAParsed = JSON.parse(cleanJson(phaseARaw));
     }
@@ -1827,7 +1838,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     const phaseBPrompt = buildPhaseBPrompt(topic, sourceContext, language, videoContext, allSourcesForLLM.length, videos.length);
 
     // Start Phase B and gap check concurrently
-    const phaseBPromise = callGeminiLLMWithRetry(phaseBPrompt, geminiKey, "gemini-2.0-flash", 45_000)
+    const phaseBPromise = callGeminiLLMWithRetry(phaseBPrompt, geminiKey, GEMINI_MODEL_UTILITY, LLM_RESEARCH_TIMEOUT_MS)
       .then((raw) => {
         try { return JSON.parse(cleanJson(raw)); } catch { return null; }
       })
@@ -1851,7 +1862,7 @@ Generate gap queries in the same language as the topic "${topic}".
 If the research is already comprehensive, return: { "gaps": [] }`;
 
       try {
-        const gapRaw = await callGeminiLLMWithRetry(gapPrompt, geminiKey, "gemini-2.0-flash");
+        const gapRaw = await callGeminiLLMWithRetry(gapPrompt, geminiKey, GEMINI_MODEL_UTILITY);
         const gapParsed = JSON.parse(cleanJson(gapRaw)) as { gaps: string[] };
         gapQueries = (gapParsed.gaps ?? []).filter((g) => typeof g === "string").slice(0, 3);
         return gapQueries;
@@ -1998,7 +2009,7 @@ Return valid JSON (no markdown fences) with ONLY new content to merge:
 Only include genuinely new information. If gap sources don't add meaningful new content, return empty arrays and empty string.`;
 
           try {
-            const mergeRaw = await callGeminiLLMWithRetry(mergePrompt, geminiKey, "gemini-2.0-flash");
+            const mergeRaw = await callGeminiLLMWithRetry(mergePrompt, geminiKey, GEMINI_MODEL_UTILITY);
             const mergeParsed = JSON.parse(cleanJson(mergeRaw)) as {
               additionalFindings?: KeyFinding[];
               narrativeAddendum?: string;
@@ -2772,12 +2783,12 @@ ${contradictionsSummary ? `\nContradictions:\n${contradictionsSummary}` : ""}
 Narrative (condensed):
 ${(research.narrative ?? "").slice(0, 1500)}`;
 
-  const script = await callGeminiLLMWithRetry(prompt, geminiKey, "gemini-2.0-flash", 30_000);
+  const script = await callGeminiLLMWithRetry(prompt, geminiKey, GEMINI_MODEL_UTILITY, LLM_FAST_TIMEOUT_MS);
   return script?.trim() ?? "";
 }
 
 async function renderPodcastAudio(script: string, geminiKey: string): Promise<Buffer> {
-  const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
+  const endpoint = `${GEMINI_API_BASE}/models/gemini-2.5-flash-preview-tts:generateContent`;
 
   const body = {
     contents: [{ parts: [{ text: `TTS the following conversation between Host A and Host B:\n\n${script}` }] }],

@@ -34,7 +34,8 @@ $EnsoDir      = Split-Path -Parent $MyInvocation.MyCommand.Path
 $EnsoHome     = Join-Path $env:USERPROFILE ".enso"
 $GuardianPid  = Join-Path $EnsoHome "guardian.pid"
 $ServerPid    = Join-Path $EnsoHome "server.pid"
-$nodeExe      = "C:\Program Files\nodejs\node.exe"
+$nodeExe = (Get-Command node -ErrorAction SilentlyContinue)?.Source
+if (-not $nodeExe) { $nodeExe = "C:\Program Files\nodejs\node.exe" }
 
 # -- Colors ----------------------------------------------------------------
 function Write-Step  ($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
@@ -201,7 +202,11 @@ if ($NoDev) {
 
     $viteLog    = Join-Path $env:TEMP "enso-vite.log"
     $viteErrLog = Join-Path $env:TEMP "enso-vite-err.log"
-    $npmCli     = "`"C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js`""
+    $npmCli = (Get-Command npm -ErrorAction SilentlyContinue)?.Source
+    if ($npmCli) {
+        $npmCli = (Resolve-Path (Join-Path (Split-Path $npmCli) "../node_modules/npm/bin/npm-cli.js") -ErrorAction SilentlyContinue)?.Path
+    }
+    if (-not $npmCli) { $npmCli = "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" }
 
     $viteProc = Start-Process -FilePath $nodeExe `
         -ArgumentList $npmCli, "run", "dev" `
@@ -244,7 +249,8 @@ if ($cfProcs) {
     Write-Skip "No existing cloudflared processes"
 }
 
-$cloudflaredExe = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+$cloudflaredExe = (Get-Command cloudflared -ErrorAction SilentlyContinue)?.Source
+if (-not $cloudflaredExe) { $cloudflaredExe = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }
 if (Test-Path $cloudflaredExe) {
     Start-Process -FilePath $cloudflaredExe `
         -ArgumentList "tunnel", "run", "enso" `

@@ -11,6 +11,7 @@
  */
 
 import { logAction, logError } from "./action-log.js";
+import { geminiUrl, GEMINI_MODEL_UTILITY } from "./config.js";
 
 // ── Types ──
 
@@ -295,7 +296,7 @@ ${text.slice(0, 500)}
 Respond with ONLY a JSON object: { "family": "<family_name>" or "none", "label": "<short suggestion label>" }`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      geminiUrl(GEMINI_MODEL_UTILITY, apiKey),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

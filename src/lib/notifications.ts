@@ -19,6 +19,7 @@
  *   (mobile: app backgrounded → reconnect → replay; web: tab not focused)
  */
 
+import { STORAGE_KEYS, TIMINGS } from "./constants";
 import { isNative } from "./platform";
 
 // ── State ──
@@ -58,6 +59,15 @@ export function isPageVisible(): boolean {
 
 // ── Permission ──
 
+function persistBrowserNotificationPermission(): void {
+  if (isNative || !("Notification" in window)) return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATION_PERMISSION, Notification.permission);
+  } catch {
+    // private mode / quota
+  }
+}
+
 /** Request notification permission. Call on first long-running task start. */
 export async function requestNotificationPermission(): Promise<boolean> {
   // On native, browser Notification API isn't available — skip
@@ -65,11 +75,16 @@ export async function requestNotificationPermission(): Promise<boolean> {
   if (!("Notification" in window)) return false;
   if (Notification.permission === "granted") {
     _permissionGranted = true;
+    persistBrowserNotificationPermission();
     return true;
   }
-  if (Notification.permission === "denied") return false;
+  if (Notification.permission === "denied") {
+    persistBrowserNotificationPermission();
+    return false;
+  }
   const result = await Notification.requestPermission();
   _permissionGranted = result === "granted";
+  persistBrowserNotificationPermission();
   return _permissionGranted;
 }
 
@@ -101,6 +116,10 @@ export function initNotifications(): void {
   if (soundPref !== null) _soundEnabled = soundPref === "1";
 
   if (!isNative) {
+    if ("Notification" in window) {
+      persistBrowserNotificationPermission();
+      if (Notification.permission === "granted") _permissionGranted = true;
+    }
     // Web: save original favicon for badge overlay
     const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (link) _originalFavicon = link.href;
@@ -322,7 +341,7 @@ export function notifyTaskComplete(completion: TaskCompletion): void {
 
   // In-app toast (works on all platforms, all visibility states)
   const isUserAway = !isPageVisible() || wasRecentlyBackgrounded();
-  pushToast(toastTitle, toastBody, completion.success !== false, isUserAway ? 8000 : 5000);
+  pushToast(toastTitle, toastBody, completion.success !== false, isUserAway ? TIMINGS.NOTIFICATION_DURATION : 5000);
 
   if (isNative) {
     // ── Mobile path ──
@@ -347,7 +366,7 @@ export function notifyTaskComplete(completion: TaskCompletion): void {
             tag: "enso-task-complete",
             silent: true, // We play our own sound
           });
-          setTimeout(() => notif.close(), 8000);
+          setTimeout(() => notif.close(), TIMINGS.NOTIFICATION_DURATION);
           notif.onclick = () => {
             window.focus();
             notif.close();

@@ -44,14 +44,11 @@ import type {
 } from "./types.js";
 import type { TaskClassification } from "./task-router.js";
 import { logAction, logError } from "./action-log.js";
+import { getEnsoPath } from "./utils/home.js";
 
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
-const ORCHESTRATIONS_DIR = join(
-  process.env.HOME || process.env.USERPROFILE || "/tmp",
-  ".enso",
-  "orchestrations",
-);
+const ORCHESTRATIONS_DIR = getEnsoPath("orchestrations");
 
 // ── Active Orchestrations ──
 
@@ -218,6 +215,73 @@ export interface OrchestrationStartParams {
   maxConcurrency?: number;
   /** Override the model used for the planning session. Default "claude-sonnet-4-6". Use "opus" for evolution sprints. */
   planningModel?: "opus" | "sonnet";
+  /** Use fast LLM planning (user's chat model) instead of Claude Code. For implicit orchestration. */
+  useGeminiPlanning?: boolean;
+  /** User's selected chat model ID for fast planning. */
+  chatModel?: string;
+  /** Skip the review/approval UX — auto-execute immediately. */
+  skipApproval?: boolean;
+}
+
+// ── Fast LLM Planning (for implicit orchestration) ──
+
+const FAST_PLAN_PROMPT = `You are a task planner. Decompose the user's goal into 2-5 sequential tasks.
+
+Available agent roles:
+- researcher: Web research, data gathering, market analysis
+- architect: System design, architecture decisions, technical planning
+- builder: Build Enso apps with interactive UI (dashboards, tools)
+- coder: Write/modify code, scripts, configurations
+- reviewer: Quality review, testing, validation
+
+Rules:
+- Use 2-5 tasks maximum. Keep it lean.
+- Each task must have a clear, specific description
+- Use dependsOn to order tasks (task IDs of prerequisites)
+- First task should have dependsOn: []
+- outputType: "research" | "code" | "app" | "document" | "decision" | "review"
+
+Respond with ONLY a JSON object (no markdown):
+{"tasks":[{"taskId":"task-1","title":"...","description":"...","agentRole":"researcher","dependsOn":[],"outputType":"research"},{"taskId":"task-2","title":"...","description":"...","agentRole":"builder","dependsOn":["task-1"],"outputType":"app"}]}`;
+
+/**
+ * Generate a plan using the user's selected chat LLM (~3s) instead of Claude Code (~20s).
+ * Returns null on any failure — caller should fall back to Claude Code.
+ */
+async function planWithLLM(params: {
+  userMessage: string;
+  chatModel?: string;
+  account: ResolvedEnsoAccount;
+}): Promise<Array<{ taskId: string; title: string; description: string; agentRole: string; dependsOn: string[]; outputType: string }> | null> {
+  try {
+    const prompt = `${FAST_PLAN_PROMPT}\n\nUser's goal: "${params.userMessage}"`;
+    let raw: string;
+
+    // Use unified provider system with user's chat model
+    const chatModel = params.chatModel ?? "gemini-2.5-flash";
+    const providerKeys = { ...params.account.providerKeys };
+    if (params.account.geminiApiKey) providerKeys.gemini = params.account.geminiApiKey;
+
+    const { callChatLLM } = await import("./llm-provider.js");
+    raw = await callChatLLM({ prompt, model: chatModel, providerKeys, timeoutMs: 8_000 });
+
+    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    const tasks = parsed.tasks;
+
+    if (!Array.isArray(tasks) || tasks.length < 2 || tasks.length > 7) return null;
+
+    // Basic validation
+    for (const t of tasks) {
+      if (!t.taskId || !t.title || !t.agentRole) return null;
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Fast LLM plan: ${tasks.length} tasks via ${chatModel}` });
+    return tasks;
+  } catch (err) {
+    logError("orchestrator", "Fast LLM planning failed (falling back to Claude Code)", err);
+    return null;
+  }
 }
 
 /**
@@ -225,9 +289,9 @@ export interface OrchestrationStartParams {
  *
  * Flow:
  *   1. Create orchestration record + bootstrap card
- *   2. Spawn Claude Code to analyze + plan the mission (writes .orchestration-<id>.json)
+ *   2. Plan: fast LLM (~3s) or Claude Code (~20s)
  *   3. Parse plan → send to client as orchestrationPlan
- *   4. Wait for user approval → execute via engine
+ *   4. Execute via DAG engine
  */
 export async function handleOrchestration(params: OrchestrationStartParams): Promise<void> {
   const { userMessage, classification, client, account } = params;
@@ -285,14 +349,54 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
     },
   });
 
-  // Step 2: Build the planning prompt
+  // ── Fast LLM planning path (for implicit orchestration) ──
+  if (params.useGeminiPlanning) {
+    const fastTasks = await planWithLLM({ userMessage, chatModel: params.chatModel, account });
+    if (fastTasks) {
+      const plan: OrchestrationPlan = {
+        orchestrationId,
+        goal: userMessage,
+        tasks: normalizeTasks(fastTasks, orchestrationId),
+        agents: buildAgentRoster(fastTasks),
+        status: "executing",
+      };
+
+      activeOrchestrations.set(orchestrationId, {
+        plan, client, account,
+        sharedContext: new Map(),
+        bootstrapCardId, terminalCardId,
+        aborted: false, taskRunIds: new Map(), taskSessionIds: new Map(),
+        maxConcurrency: params.maxConcurrency ?? 4,
+        onComplete: params.onComplete,
+      });
+      persistOrchestration(orchestrationId, plan);
+
+      logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Fast plan ready: ${plan.tasks.length} tasks, ${plan.agents.length} agents` });
+
+      send({
+        text: `Mission planned: ${plan.tasks.length} tasks across ${plan.agents.length} agents. Executing...`,
+        targetCardId: bootstrapCardId,
+        orchestrationPlan: plan,
+        orchestrationProgress: { orchestrationId, eventType: "plan_ready", plan },
+      });
+
+      handleOrchestrationApprove({ orchestrationId, client, account }).catch((err) => {
+        logError("orchestrator", "Fast plan execution failed", err, { orchestrationId });
+      });
+      return;
+    }
+    // Fast planning failed — fall through to Claude Code planning
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: "Fast LLM planning returned null, falling back to Claude Code" });
+  }
+
+  // ── Full Claude Code planning path ──
   const planFilePath = join(PROJECT_ROOT, `server/.orchestration-${orchestrationId}.json`);
   const planningPrompt = params.planningPromptBuilder
     ? params.planningPromptBuilder(orchestrationId, planFilePath)
     : buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath);
 
   try {
-    // Step 4: Run Claude Code to analyze and plan
+    // Run Claude Code to analyze and plan
     // Use Sonnet with thinking disabled for fast planning (~10s vs ~40s with Opus+adaptive)
     const { sessionId } = await runClaudeCode({
       prompt: planningPrompt,
@@ -1348,7 +1452,7 @@ async function postOrchestrationRegistration(
   // Also check for modified existing apps (file mtime after build start)
   if (freshApps.length === 0) {
     for (const app of allApps) {
-      for (const dir of [SHIPPED_APPS_DIR, join(process.env.HOME || process.env.USERPROFILE || "", ".enso", "apps")]) {
+      for (const dir of [SHIPPED_APPS_DIR, getEnsoPath("apps")]) {
         const manifestPath = join(dir, app.spec.toolFamily, "app.json");
         try {
           const stat = statSync(manifestPath);

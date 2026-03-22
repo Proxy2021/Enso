@@ -2,6 +2,9 @@
 # restart.sh — Kill and restart all Enso services (guardian + server + Vite + tunnel)
 set -euo pipefail
 
+ENSO_PORT="${ENSO_PORT:-3001}"
+VITE_PORT="${VITE_PORT:-5173}"
+
 ENSO_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENSO_HOME="$HOME/.enso"
 GUARDIAN_PID_FILE="$ENSO_HOME/guardian.pid"
@@ -80,15 +83,15 @@ GUARDIAN_PID=$!
 
 echo -n "[enso] Waiting for server"
 for i in $(seq 1 30); do
-  if curl -sf http://localhost:3001/health &>/dev/null; then
+  if curl -sf "http://localhost:$ENSO_PORT/health" &>/dev/null; then
     echo " ready (guardian PID: $GUARDIAN_PID)"
     break
   fi
   echo -n "."
   sleep 1
 done
-if ! curl -sf http://localhost:3001/health &>/dev/null; then
-  echo " TIMEOUT (port 3001 not responding)"
+if ! curl -sf "http://localhost:$ENSO_PORT/health" &>/dev/null; then
+  echo " TIMEOUT (port $ENSO_PORT not responding)"
 fi
 
 # ── 5. Start Vite dev server ──
@@ -99,15 +102,15 @@ VITE_PID=$!
 
 echo -n "[vite] Waiting for dev server"
 for i in $(seq 1 10); do
-  if curl -sf http://localhost:5173 &>/dev/null; then
+  if curl -sf "http://localhost:$VITE_PORT" &>/dev/null; then
     echo " ready (PID: $VITE_PID)"
     break
   fi
   echo -n "."
   sleep 1
 done
-if ! curl -sf http://localhost:5173 &>/dev/null; then
-  echo " TIMEOUT (port 5173 not responding)"
+if ! curl -sf "http://localhost:$VITE_PORT" &>/dev/null; then
+  echo " TIMEOUT (port $VITE_PORT not responding)"
 fi
 
 # ── 6. Start Cloudflare Tunnel ──
@@ -139,10 +142,10 @@ fi
 echo ""
 echo "=== Services ==="
 echo "  Guardian: supervised, auto-restart on crash"
-echo "  Server:   http://localhost:3001/health"
-echo "  Vite UI:  http://localhost:5173"
+echo "  Server:   http://localhost:$ENSO_PORT/health"
+echo "  Vite UI:  http://localhost:$VITE_PORT"
 IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "unknown")
-echo "  Network:  http://$IP:5173"
+echo "  Network:  http://$IP:$VITE_PORT"
 if [ -f "$HOME/.cloudflared/config.yml" ]; then
   TUNNEL_HOST=$(grep 'hostname:' "$HOME/.cloudflared/config.yml" | head -1 | awk '{print $3}')
   [ -n "$TUNNEL_HOST" ] && echo "  Tunnel:   https://$TUNNEL_HOST"

@@ -23,6 +23,7 @@ import { persistCard, loadCardHistory, clearCardHistory, pruneStaleJournals, mig
 import type { CardRecord } from "./memory-bridge.js";
 import { generateFollowUps } from "./followup-generator.js";
 import { extractAndPersistMemory } from "./memory-extractor.js";
+import { MAX_MEDIA_FILE_SIZE, WS_PING_INTERVAL_MS, WS_DISCONNECT_CLEANUP_MS, DEFAULT_CHAT_MODEL, HOME_DIR, ENSO_HOME } from "./config.js";
 
 export type ConnectedClient = {
   id: string;
@@ -50,8 +51,8 @@ let activeAccount: ResolvedEnsoAccount | null = null;
 /** Current server port for constructing media URLs. */
 let activePort = 3001;
 
-/** Maximum file size for served media (300 MB). */
-export const MAX_MEDIA_FILE_SIZE = 300 * 1024 * 1024; // 300 MB for non-streamable files
+/** Maximum file size for served media (300 MB) — re-exported from centralized config. */
+export { MAX_MEDIA_FILE_SIZE } from "./config.js";
 
 /** Extensions that support HTTP Range streaming — exempt from the size limit. */
 const STREAMABLE_EXTS = new Set([
@@ -144,14 +145,13 @@ export function broadcastToSession(sessionKey: string, msg: ServerMessage): void
  */
 function scanProjects(): Array<{ name: string; path: string }> {
   const projects: Array<{ name: string; path: string }> = [];
-  const home = process.env.HOME || process.env.USERPROFILE || "";
   const searchDirs = [
-    join(home, "Desktop", "Github"),
-    join(home, "Github"),
-    join(home, "Projects"),
-    join(home, "Desktop", "Projects"),
-    join(home, "repos"),
-    join(home, "src"),
+    join(HOME_DIR, "Desktop", "Github"),
+    join(HOME_DIR, "Github"),
+    join(HOME_DIR, "Projects"),
+    join(HOME_DIR, "Desktop", "Projects"),
+    join(HOME_DIR, "repos"),
+    join(HOME_DIR, "src"),
     "D:\\Github",
     "C:\\Github",
   ];
@@ -1270,7 +1270,6 @@ export async function startEnsoServer(opts: {
   // connections after ~2 minutes.  Send protocol-level pings every 30s so the
   // connection is never considered idle.  Browsers respond with pong
   // automatically at the protocol level.
-  const WS_PING_INTERVAL_MS = 30_000;
   // Allow up to 2 missed pong responses (~60s) before terminating.
   // Mobile networks (cellular, tunnels, network switches) can cause transient
   // delays that exceed a single 30s cycle but recover within 60s.
@@ -1787,7 +1786,8 @@ export async function startEnsoServer(opts: {
                 }
 
                 if (classification.complexity === "orchestrated") {
-                  runtime.log?.(`[enso] task-router: orchestrated → "${msg.text.slice(0, 60)}"`);
+                  const isImplicit = classification.implicit === true;
+                  runtime.log?.(`[enso] task-router: orchestrated${isImplicit ? " (implicit)" : ""} → "${msg.text.slice(0, 60)}"`);
                   dismissProcessing();
                   const { handleOrchestration } = await import("./orchestrator.js");
                   handleOrchestration({
@@ -1795,6 +1795,10 @@ export async function startEnsoServer(opts: {
                     classification,
                     client,
                     account,
+                    // For implicitly detected multi-step tasks: use fast LLM planning
+                    useGeminiPlanning: isImplicit,
+                    chatModel: client.chatModel,
+                    skipApproval: isImplicit,
                   }).catch((err) => {
                     logError("orchestrator", "Auto-routed orchestration failed", err);
                     runtime.error?.(`[enso] orchestrator error: ${err instanceof Error ? err.message : String(err)}`);
@@ -1875,7 +1879,7 @@ export async function startEnsoServer(opts: {
 
                 // "simple" — router provides the answer directly
                 dismissProcessing();
-                const userChatModel = client.chatModel ?? "gemini-2.5-flash";
+                const userChatModel = client.chatModel ?? DEFAULT_CHAT_MODEL;
                 const isUserGemini = userChatModel.startsWith("gemini-");
 
                 if (classification.answer && !isUserGemini) {
@@ -3003,7 +3007,7 @@ export async function startEnsoServer(opts: {
         client._disconnectedBuffer.length = 0;
         clients.delete(clientId);
         runtime.log?.(`[enso] client cleanup: ${clientId} (no reconnect after 10min, dropped ${droppedMsgs} buffered msgs)`);
-      }, 600_000);
+      }, WS_DISCONNECT_CLEANUP_MS);
       cleanupTimers.set(clientId, timer);
     });
   });

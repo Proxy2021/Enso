@@ -3,6 +3,9 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
+const API_PORT = process.env.ENSO_PORT || "3001";
+const API_TARGET = `http://localhost:${API_PORT}`;
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -15,20 +18,20 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/ws": {
-        target: "http://localhost:3001",
+        target: API_TARGET,
         ws: true,
       },
       "/media": {
-        target: "http://localhost:3001",
+        target: API_TARGET,
       },
       "/upload": {
-        target: "http://localhost:3001",
+        target: API_TARGET,
       },
       "/demo": {
-        target: "http://localhost:3001",
+        target: API_TARGET,
       },
       "/api": {
-        target: "http://localhost:3001",
+        target: API_TARGET,
       },
     },
   },

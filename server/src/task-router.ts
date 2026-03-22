@@ -38,6 +38,8 @@ export interface TaskClassification {
   // Archetype fields — for one-off and orchestrated tasks
   archetype?: TaskArchetype;
   archetypeHints?: Record<string, string>;  // Domain-specific metadata
+  // Implicit orchestration — auto-detected multi-step intent (not explicit /orchestrate)
+  implicit?: boolean;
 }
 
 // ── Classifier ──
@@ -92,6 +94,8 @@ Examples:
 - "Build a complete freelance photography management system" → archetype: general
 - "Help me launch my startup's MVP — landing page, auth, payments, admin" → archetype: general
 - "Create a full data pipeline from CSV ingestion to dashboard deployment" → archetype: data_analysis
+
+**Implicit orchestration** — When a message explicitly describes multiple distinct sequential actions (e.g. "research X then build Y", "analyze the code and then fix the bugs"), classify as orchestrated with "implicit": true. Do NOT set implicit for explicit /orchestrate commands.
 
 **NOT orchestrated (these are SIMPLE or RESEARCH instead):**
 - "Compare 3 CRM platforms" → SIMPLE (comparison table)
@@ -196,7 +200,7 @@ When classifying as one-off or orchestrated, also identify the task archetype:
 | general | Everything else (most one-off and orchestrated tasks) |
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeHints":{"key":"value"}}`;
+{"complexity":"simple|research|one-off|orchestrated","reasoning":"brief reason","answer":"your answer (SIMPLE only)","researchTopic":"extracted topic (RESEARCH only)","researchDepth":"quick|standard","goalSummary":"for orchestrated only","directAction":"for one-off only","archetype":"archetype name (ONE-OFF/ORCHESTRATED only)","archetypeHints":{"key":"value"},"implicit":true}`;
 
 export async function classifyTask(params: {
   userMessage: string;
@@ -622,6 +626,28 @@ export function quickClassify(message: string): TaskClassification | null {
     }
     // All question-word messages → let LLM decide (may be direct, research, or simple)
     return null;
+  }
+
+  // ── Compound multi-step intent → implicit orchestration ──
+  // Detects messages with 2+ distinct action verbs connected by step words.
+  // High-precision: only triggers for clear multi-phase commands, not questions.
+  if (trimmed.length > 40 && !trimmed.endsWith("?")) {
+    const stepConnectors = /\b(and then|then|after that|first .* then|followed by|and also|and)\b/i;
+    if (stepConnectors.test(lower)) {
+      const actionVerbs = ["research", "compare", "analyze", "audit", "build", "create", "design", "fix", "test", "deploy", "write", "scan", "review", "implement"];
+      const found = new Set<string>();
+      for (const v of actionVerbs) {
+        if (new RegExp(`\\b${v}\\b`, "i").test(lower)) found.add(v);
+      }
+      if (found.size >= 2) {
+        return {
+          complexity: "orchestrated",
+          implicit: true,
+          goalSummary: trimmed,
+          reasoning: `Multi-step compound intent: ${[...found].join(" + ")}`,
+        };
+      }
+    }
   }
 
   // Let LLM handle everything else

@@ -13,6 +13,7 @@ import { isNative } from "../lib/platform";
 import { nativeShare } from "../lib/native-share";
 import TerminalContent from "./TerminalContent";
 import { copyAsMarkdown, copyAsPlainText, downloadAsPDF, downloadAsCSV, hasMarkdownTables } from "../lib/export";
+import { API, TIMINGS } from "../lib/constants";
 
 const APP_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
@@ -459,7 +460,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
       const baseUrl = backend?.url || "";
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${baseUrl}/api/create-share`, {
+      const res = await fetch(`${baseUrl}${API.SHARE_CREATE}`, {
         method: "POST",
         headers,
         body: JSON.stringify({ cardId: card.id, allowedRoot: currentPath }),
@@ -472,7 +473,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
     } else if (!token) {
       try {
         const baseUrl = backend?.url || "";
-        const res = await fetch(`${baseUrl}/api/share-token`);
+        const res = await fetch(`${baseUrl}${API.SHARE_TOKEN}`);
         if (res.ok) {
           const data = await res.json();
           token = data.token || "";
@@ -621,7 +622,7 @@ function ContentExportMenu({ card }: { card: Card }) {
   useEffect(() => {
     if (card.status === "complete") {
       setJustCompleted(true);
-      const timer = setTimeout(() => setJustCompleted(false), 2000);
+      const timer = setTimeout(() => setJustCompleted(false), TIMINGS.TOAST_DURATION);
       return () => clearTimeout(timer);
     }
   }, [card.status]);
@@ -649,7 +650,7 @@ function ContentExportMenu({ card }: { card: Card }) {
       {open && (
         <div className="absolute bottom-full right-0 mb-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] z-[200]">
           <button
-            onClick={async () => { await copyAsMarkdown(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, 600); }}
+            onClick={async () => { await copyAsMarkdown(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, TIMINGS.COPY_FEEDBACK); }}
             className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -659,7 +660,7 @@ function ContentExportMenu({ card }: { card: Card }) {
             {copied ? "Copied!" : "Copy Markdown"}
           </button>
           <button
-            onClick={async () => { await copyAsPlainText(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, 600); }}
+            onClick={async () => { await copyAsPlainText(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, TIMINGS.COPY_FEEDBACK); }}
             className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
           >
             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -929,7 +930,7 @@ function CardContextMenu({ x, y, onRemove, onClose, cardText }: { x: number; y: 
     try {
       await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
-      setTimeout(() => onClose(), 600);
+      setTimeout(() => onClose(), TIMINGS.COPY_FEEDBACK);
     } catch {
       // fallback for older browsers
       const ta = document.createElement("textarea");
@@ -941,7 +942,7 @@ function CardContextMenu({ x, y, onRemove, onClose, cardText }: { x: number; y: 
       document.execCommand("copy");
       document.body.removeChild(ta);
       setCopied(true);
-      setTimeout(() => onClose(), 600);
+      setTimeout(() => onClose(), TIMINGS.COPY_FEEDBACK);
     }
   };
 

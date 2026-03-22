@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
 import type { PluginSpec, PluginToolDef } from "./tool-factory.js";
 import type { ExecutorContext } from "./types.js";
@@ -20,6 +19,7 @@ import {
 import { registerApp, unregisterApp as unregisterAppFromCatalog } from "./app-catalog.js";
 import { getDocCollection } from "./persistence.js";
 import { logAction, logError } from "./action-log.js";
+import { BRAVE_WEB_SEARCH, BRAVE_SEARCH_TIMEOUT_MS, ENSO_HOME } from "./config.js";
 
 // ── Codebase Apps Directory ──
 
@@ -117,7 +117,7 @@ const storeCache = new Map<string, Record<string, unknown>>();
 
 function loadStoreForFamily(family: string): Record<string, unknown> {
   if (storeCache.has(family)) return storeCache.get(family)!;
-  const storePath = path.join(os.homedir(), ".enso", "apps", family, "store.json");
+  const storePath = path.join(ENSO_HOME, "apps", family, "store.json");
   try {
     if (fs.existsSync(storePath)) {
       const raw = fs.readFileSync(storePath, "utf-8");
@@ -134,7 +134,7 @@ function loadStoreForFamily(family: string): Record<string, unknown> {
 }
 
 function saveStoreForFamily(family: string, data: Record<string, unknown>): void {
-  const storePath = path.join(os.homedir(), ".enso", "apps", family, "store.json");
+  const storePath = path.join(ENSO_HOME, "apps", family, "store.json");
   const json = JSON.stringify(data, null, 2);
   if (json.length > STORE_MAX_SIZE) {
     throw new Error(`Store for "${family}" exceeds ${STORE_MAX_SIZE} bytes`);
@@ -255,13 +255,13 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
         }
 
         const count = Math.min(Math.max(options?.count ?? 3, 1), 5);
-        const searchUrl = new URL("https://api.search.brave.com/res/v1/web/search");
+        const searchUrl = new URL(BRAVE_WEB_SEARCH);
         searchUrl.searchParams.set("q", query);
         searchUrl.searchParams.set("count", String(count));
         if (options?.country) searchUrl.searchParams.set("country", options.country);
 
         const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), EXECUTOR_CTX_TIMEOUT_MS);
+        const timer = setTimeout(() => ac.abort(), BRAVE_SEARCH_TIMEOUT_MS);
         try {
           const resp = await globalThis.fetch(searchUrl.toString(), {
             method: "GET",
@@ -362,7 +362,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
 // ── Paths ──
 
 function resolveBasePath(basePath?: string): string {
-  return basePath ?? path.join(os.homedir(), ".enso");
+  return basePath ?? ENSO_HOME;
 }
 
 function appsDir(basePath?: string): string {

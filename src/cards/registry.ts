@@ -1,4 +1,5 @@
 import type { ServerMessage } from "@shared/types";
+import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 import type { CardTypeRegistration } from "./types";
 
 class CardRegistry {
@@ -15,7 +16,7 @@ class CardRegistry {
   /** Resolve the card type for a given server message and role. */
   resolve(msg: ServerMessage, role: string): string {
     if (role === "user") {
-      if (msg.toolMeta?.toolId === "claude-code") return "terminal";
+      if (msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) return "terminal";
       return "user-bubble";
     }
 

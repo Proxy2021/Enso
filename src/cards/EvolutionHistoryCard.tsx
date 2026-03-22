@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { API } from "../lib/constants";
+import { useFetchFile } from "../hooks/useFetchFile";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import type { CardRendererProps } from "./types";
@@ -30,7 +32,6 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
   const [loading, setLoading] = useState(true);
   const [selectedSprint, setSelectedSprint] = useState<SprintMeta | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>("overview");
-  const [fileContent, setFileContent] = useState<Record<string, string>>({});
   const [dashboardJSX, setDashboardJSX] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [DashboardComp, setDashboardComp] = useState<any>(null);
@@ -38,11 +39,12 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
 
   const baseUrl = getBackendBaseUrl();
   const headers = useMemo(() => authHeaders(), []);
+  const { fetchFile, fileCache } = useFetchFile(API.EVOLUTION_SPRINTS);
 
   // Fetch sprint list
   useEffect(() => {
     setLoading(true);
-    fetch(`${baseUrl}/api/evolution-sprints`, { headers })
+    fetch(`${baseUrl}${API.EVOLUTION_SPRINTS}`, { headers })
       .then(r => r.json())
       .then(data => {
         setSprints(data.sprints || []);
@@ -50,21 +52,6 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
       })
       .catch(() => setLoading(false));
   }, [baseUrl]);
-
-  // Fetch a file from a sprint
-  const fetchFile = useCallback(async (sprintId: string, filename: string) => {
-    const key = `${sprintId}/${filename}`;
-    if (fileContent[key]) return fileContent[key];
-    try {
-      const res = await fetch(`${baseUrl}/api/evolution-sprints/${sprintId}/file/${filename}`, { headers });
-      if (!res.ok) return null;
-      const text = await res.text();
-      setFileContent(prev => ({ ...prev, [key]: text }));
-      return text;
-    } catch {
-      return null;
-    }
-  }, [baseUrl, headers, fileContent]);
 
   // Load dashboard JSX when tab selected
   useEffect(() => {
@@ -282,7 +269,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
           <div className="space-y-3">
             {s.phases.personas.files.map(file => {
               const key = `${sid}/${file}`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               const name = file.replace("personas/", "").replace(".md", "").replace("persona-", "").replace(/-/g, " ");
               return (
                 <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
@@ -302,7 +289,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
           <div className="space-y-3">
             {["design.md", "implementation.md", "review.md"].map(file => {
               const key = `${sid}/${file}`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               const label = file.replace(".md", "").replace(/-/g, " ");
               const hasFile = file === "design.md" ? s.phases.design :
                              file === "implementation.md" ? s.phases.implementation :
@@ -326,7 +313,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
           <div className="space-y-3">
             {s.phases.validation.files.map(file => {
               const key = `${sid}/${file}`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               const name = file.replace("validation/", "").replace(".md", "").replace(/retest-|persona-/g, "").replace(/-/g, " ");
               return (
                 <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
@@ -364,7 +351,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
           <div className="space-y-3">
             {["synthesis.md", "discussion.md"].map(file => {
               const key = `${sid}/${file}`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               const label = file.replace(".md", "");
               const hasFile = file === "synthesis.md" ? s.phases.synthesis : s.phases.discussion;
               if (!hasFile) return null;

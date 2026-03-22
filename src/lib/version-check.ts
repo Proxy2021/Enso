@@ -1,3 +1,4 @@
+import { API } from "./constants";
 import { isNative } from "./platform";
 import { getActiveBackend } from "./connection";
 import { AppUpdater, type AppVersionInfo, type DownloadProgress } from "./app-updater";
@@ -38,7 +39,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     };
   }
 
-  const res = await fetch(`${backend.url}/api/version`, {
+  const res = await fetch(`${backend.url}${API.VERSION}`, {
     signal: AbortSignal.timeout(8000),
   });
 
@@ -63,7 +64,7 @@ export async function downloadAndInstall(
   const backend = getActiveBackend();
   if (!backend?.url) throw new Error("No backend connected");
 
-  const apkUrl = `${backend.url}/api/apk${backend.token ? `?token=${encodeURIComponent(backend.token)}` : ""}`;
+  const apkUrl = `${backend.url}${API.APK}${backend.token ? `?token=${encodeURIComponent(backend.token)}` : ""}`;
 
   let listener: { remove: () => void } | null = null;
   if (onProgress) {

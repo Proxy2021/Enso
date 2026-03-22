@@ -22,9 +22,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync } from "fs";
 import { join, basename, resolve } from "path";
 import { logAction, logError } from "./action-log.js";
+import { getEnsoPath } from "./utils/home.js";
 
-const HOME = process.env.HOME || process.env.USERPROFILE || "";
-const DISCOVERIES_DIR = join(HOME, ".enso", "discoveries");
+const DISCOVERIES_DIR = getEnsoPath("discoveries");
 
 // ── Types ──
 

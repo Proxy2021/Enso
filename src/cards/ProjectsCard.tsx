@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { API } from "../lib/constants";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import { useChatStore } from "../store/chat";
@@ -118,7 +119,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
   const fetchProjects = useCallback(() => {
     setLoading(true);
-    fetch(`${baseUrl}/api/projects`, { headers })
+    fetch(`${baseUrl}${API.PROJECTS}`, { headers })
       .then(r => r.json())
       .then(d => { setProjects(d.projects || []); setLoading(false); })
       .catch(() => setLoading(false));
@@ -130,7 +131,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   useEffect(() => {
     if (view === "detail" && selected && detailTab === "sprints" && sprints.length === 0 && !sprintsLoading) {
       setSprintsLoading(true);
-      fetch(`${baseUrl}/api/evolution-sprints?projectId=${selected.id}`, { headers: headersPlain })
+      fetch(`${baseUrl}${API.EVOLUTION_SPRINTS}?projectId=${selected.id}`, { headers: headersPlain })
         .then(r => r.json())
         .then(d => { setSprints(d.sprints || []); setSprintsLoading(false); })
         .catch(() => setSprintsLoading(false));
@@ -141,7 +142,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   useEffect(() => {
     if (view === "detail" && selected && detailTab === "discoveries" && discoveries.length === 0 && !discoveriesLoading) {
       setDiscoveriesLoading(true);
-      fetch(`${baseUrl}/api/discovery-results`, { headers: headersPlain })
+      fetch(`${baseUrl}${API.DISCOVERY_RESULTS}`, { headers: headersPlain })
         .then(r => r.json())
         .then(d => { setDiscoveries(d.results || []); setDiscoveriesLoading(false); })
         .catch(() => setDiscoveriesLoading(false));

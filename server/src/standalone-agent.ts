@@ -18,6 +18,7 @@ import { setLastUserMessage } from "./researcher-tools.js";
 import { GEMINI_MODEL_FAST, callGeminiLLMWithRetry } from "./ui-generator.js";
 import { getAllLocalTools, executeLocalTool } from "./tool-registry-local.js";
 import { getMemoryContext, appendDailyMemory } from "./memory-bridge.js";
+import { geminiUrl, DEFAULT_MAX_OUTPUT_TOKENS, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
 
 // ── Conversation history (in-memory, per session) ──
 
@@ -163,7 +164,7 @@ async function callGeminiWithTools(params: {
   timeoutMs?: number;
 }): Promise<GeminiResponse> {
   const model = params.model ?? GEMINI_MODEL_FAST;
-  const timeoutMs = params.timeoutMs ?? 60_000;
+  const timeoutMs = params.timeoutMs ?? LLM_DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -183,7 +184,7 @@ async function callGeminiWithTools(params: {
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${params.apiKey}`,
+      geminiUrl(model, params.apiKey),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

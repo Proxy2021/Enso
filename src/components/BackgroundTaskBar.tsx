@@ -12,6 +12,7 @@ import { useChatStore } from "../store/chat";
 import { isOrchestrationCardData } from "@shared/types";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import { t as translate } from "../lib/i18n";
+import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 
 type BackgroundTask = {
   cardId: string;
@@ -30,7 +31,7 @@ function useBackgroundTasks(): BackgroundTask[] {
     if (!card || card.status !== "streaming") continue;
 
     // Terminal card (Claude Code session)
-    if (card.type === "terminal" && card.toolMeta?.toolId === "claude-code") {
+    if (card.type === "terminal" && card.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) {
       tasks.push({
         cardId: id,
         label: card.operation?.label || translate("task.claudeCode"),

@@ -7,6 +7,7 @@
 
 import { readFile } from "fs/promises";
 import { extname } from "path";
+import { geminiUrl, GEMINI_MODEL_UTILITY, MAX_TRANSCRIBE_FILE_SIZE } from "./config.js";
 import { logAction, logError } from "./action-log.js";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".webm", ".wma"]);
@@ -21,8 +22,6 @@ const MIME_MAP: Record<string, string> = {
   ".webm": "audio/webm",
   ".wma": "audio/x-ms-wma",
 };
-
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB — Gemini inline data limit
 
 /** Check if a file path points to an audio file based on extension. */
 export function isAudioFile(filePath: string): boolean {
@@ -50,15 +49,15 @@ export async function transcribeAudio(params: {
 
     const fileBuffer = await readFile(filePath);
 
-    if (fileBuffer.length > MAX_FILE_SIZE) {
-      logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `file too large (${(fileBuffer.length / 1024 / 1024).toFixed(1)}MB > 20MB limit): ${filePath}` });
+    if (fileBuffer.length > MAX_TRANSCRIBE_FILE_SIZE) {
+      logAction({ ts: Date.now(), type: "action", category: "transcribe", message: `file too large (${(fileBuffer.length / 1024 / 1024).toFixed(1)}MB > ${(MAX_TRANSCRIBE_FILE_SIZE / 1024 / 1024).toFixed(0)}MB limit): ${filePath}` });
       return null;
     }
 
     const base64Data = fileBuffer.toString("base64");
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      geminiUrl(GEMINI_MODEL_UTILITY, geminiApiKey),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

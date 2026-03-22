@@ -1,9 +1,8 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useChatStore } from "../store/chat";
 import { useT, SUPPORTED_LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
-import { getBackendBaseUrl, authHeaders } from "../lib/connection";
-import { isNative } from "../lib/platform";
+import { useMemoryApi } from "../hooks/useMemoryApi";
 
 // ── Claude Code Presets ─────────────────────────────────────────────────────
 
@@ -40,11 +39,6 @@ type SettingsTab = "language" | "chatModel" | "claudeCode" | "memory";
 // ── Memory sub-tabs ─────────────────────────────────────────────────────────
 
 type MemoryTab = "user" | "memory" | "history";
-
-interface MemoryData {
-  user: string | null;
-  memory: string | null;
-}
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
@@ -355,66 +349,34 @@ function ClaudeCodeSection({ onClose }: { onClose: () => void }) {
 
 function MemorySection() {
   const [memTab, setMemTab] = useState<MemoryTab>("user");
-  const [data, setData] = useState<MemoryData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { memory, loading, saving, clearing, historyCount, fetchMemory, saveMemory, clearHistory } = useMemoryApi();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [clearing, setClearing] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
-  const cardOrder = useChatStore((s) => s.cardOrder);
   const { t } = useT();
 
-  const fetchMemory = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${getBackendBaseUrl()}/api/memory`, {
-        headers: authHeaders(),
-        signal: AbortSignal.timeout(5000),
-      });
-      if (res.ok) setData(await res.json());
-    } catch { /* silently fail */ } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { fetchMemory(); }, [fetchMemory]);
+  useEffect(() => {
+    fetchMemory();
+  }, [fetchMemory]);
 
   const handleSave = async () => {
-    setSaving(true);
-    try {
-      const field = memTab === "user" ? "user" : "memory";
-      await fetch(`${getBackendBaseUrl()}/api/memory`, {
-        method: "PUT",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ [field]: editText }),
-      });
-      setData((prev) => (prev ? { ...prev, [field]: editText || null } : prev));
-      setEditing(false);
-    } catch { /* */ } finally { setSaving(false); }
+    const field = memTab === "user" ? "user" : "memory";
+    const ok = await saveMemory(field, editText);
+    if (ok) setEditing(false);
   };
 
   const handleClearHistory = async () => {
-    setClearing(true);
-    try {
-      const storage = isNative ? localStorage : sessionStorage;
-      const clientId = storage.getItem("enso-clientId");
-      if (clientId) {
-        await fetch(`${getBackendBaseUrl()}/api/history?clientId=${encodeURIComponent(clientId)}`, {
-          method: "DELETE",
-          headers: authHeaders(),
-        });
-      }
-      useChatStore.setState({ cardOrder: [], cards: {} });
-      setClearConfirm(false);
-    } catch { /* */ } finally { setClearing(false); }
+    const ok = await clearHistory();
+    if (ok) setClearConfirm(false);
   };
 
   const startEdit = () => {
-    const current = memTab === "user" ? data?.user : data?.memory;
+    const current = memTab === "user" ? memory?.user : memory?.memory;
     setEditText(current ?? "");
     setEditing(true);
   };
 
-  const content = memTab === "user" ? data?.user : memTab === "memory" ? data?.memory : null;
+  const content = memTab === "user" ? memory?.user : memTab === "memory" ? memory?.memory : null;
   const editableTab = memTab === "user" || memTab === "memory";
 
   return (
@@ -448,7 +410,7 @@ function MemorySection() {
               <path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="10" />
             </svg>
             <div>
-              <p className="text-xs text-gray-300">{cardOrder.length} {t("settings.cardsInSession")}</p>
+              <p className="text-xs text-gray-300">{historyCount} {t("settings.cardsInSession")}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{t("settings.historyRestoredHint")}</p>
             </div>
           </div>

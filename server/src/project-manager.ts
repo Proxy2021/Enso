@@ -10,9 +10,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { logAction, logError } from "./action-log.js";
+import { getEnsoPath } from "./utils/home.js";
 
-const HOME = process.env.HOME || process.env.USERPROFILE || "";
-const PROJECTS_DIR = join(HOME, ".enso", "projects");
+const PROJECTS_DIR = getEnsoPath("projects");
 
 // ── Types ──
 

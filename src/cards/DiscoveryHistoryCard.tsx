@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, Component, type ErrorInfo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, Component, type ErrorInfo, type ReactNode } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { API } from "../lib/constants";
+import { useFetchFile } from "../hooks/useFetchFile";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import type { CardRendererProps } from "./types";
@@ -69,7 +71,6 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DiscoveryMeta | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>("overview");
-  const [fileContent, setFileContent] = useState<Record<string, string>>({});
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [DashboardComp, setDashboardComp] = useState<any>(null);
   const [dashError, setDashError] = useState<string | null>(null);
@@ -77,11 +78,12 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
 
   const baseUrl = getBackendBaseUrl();
   const headers = useMemo(() => authHeaders(), []);
+  const { fetchFile, fileCache } = useFetchFile(API.DISCOVERY_RESULTS);
 
   // Fetch discovery list
   useEffect(() => {
     setLoading(true);
-    fetch(`${baseUrl}/api/discovery-results`, { headers })
+    fetch(`${baseUrl}${API.DISCOVERY_RESULTS}`, { headers })
       .then(r => r.json())
       .then(data => {
         setDiscoveries(data.results || []);
@@ -89,21 +91,6 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
       })
       .catch(() => setLoading(false));
   }, [baseUrl]);
-
-  // Fetch a file from a discovery
-  const fetchFile = useCallback(async (discoveryId: string, filename: string) => {
-    const key = `${discoveryId}/${filename}`;
-    if (fileContent[key]) return fileContent[key];
-    try {
-      const res = await fetch(`${baseUrl}/api/discovery-results/${discoveryId}/file/${filename}`, { headers });
-      if (!res.ok) return null;
-      const text = await res.text();
-      setFileContent(prev => ({ ...prev, [key]: text }));
-      return text;
-    } catch {
-      return null;
-    }
-  }, [baseUrl, headers, fileContent]);
 
   // Load dashboard JSX when tab selected
   useEffect(() => {
@@ -354,7 +341,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
           <div className="space-y-3">
             {d.phases.sourcing.files.map(file => {
               const key = `${did}/${file}`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               return (
                 <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
                   <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
@@ -373,7 +360,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
           <div className="space-y-3">
             {d.phases.pitches.files.map(file => {
               const key = `${did}/${file}`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               return (
                 <details key={file} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
                   <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
@@ -392,7 +379,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
           <div className="space-y-3">
             {d.phases.committee.files.map(file => {
               const key = `${did}/${file}`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               return (
                 <details key={file} open className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
                   <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
@@ -434,7 +421,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
             )}
             {d.phases.deliverables.memo && (() => {
               const key = `${did}/investment-memo.md`;
-              const content = fileContent[key];
+              const content = fileCache[key];
               return (
                 <details open className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
                   <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">

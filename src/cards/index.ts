@@ -1,3 +1,4 @@
+import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 import { cardRegistry } from "./registry";
 import ChatCard from "./ChatCard";
 import UserBubbleCard from "./UserBubbleCard";
@@ -45,7 +46,7 @@ cardRegistry.register({
 cardRegistry.register({
   type: "terminal",
   renderer: TerminalCard,
-  match: (msg) => msg.toolMeta?.toolId === "claude-code",
+  match: (msg) => msg.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE,
 });
 
 cardRegistry.register({

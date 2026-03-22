@@ -1,5 +1,17 @@
 import type { UIGeneratorResult } from "./types.js";
 import { logAction, logError } from "./action-log.js";
+import {
+  GEMINI_MODEL_FAST,
+  GEMINI_MODEL_PRO,
+  GEMINI_MODEL_UTILITY,
+  geminiUrl,
+  MAX_VISION_IMAGE_SIZE,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  LLM_FAST_TIMEOUT_MS,
+  LLM_PRO_TIMEOUT_MS,
+} from "./config.js";
+
+export { GEMINI_MODEL_FAST, GEMINI_MODEL_PRO };
 
 /**
  * Recursively builds a deterministic shape string from data structure.
@@ -494,24 +506,18 @@ function isRetryableGeminiError(err: unknown): boolean {
   return false;
 }
 
-/** Default fast model for UI generation and tool selection. */
-export const GEMINI_MODEL_FAST = "gemini-2.5-flash";
-
-/** Powerful model for code generation (app spec, executors, templates). */
-export const GEMINI_MODEL_PRO = "gemini-3-pro-preview";
-
-async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000, model = GEMINI_MODEL_FAST): Promise<string> {
+async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = LLM_FAST_TIMEOUT_MS, model = GEMINI_MODEL_FAST): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      geminiUrl(model, apiKey),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 16384 },
+          generationConfig: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS },
         }),
         signal: controller.signal,
       },
@@ -547,7 +553,7 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = 30000, 
 export async function callGeminiLLMWithRetry(prompt: string, apiKey: string, model?: string, overrideTimeoutMs?: number): Promise<string> {
   const maxAttempts = 3;
   // Pro models need longer timeouts for large code-generation prompts
-  const timeoutMs = overrideTimeoutMs ?? (model === GEMINI_MODEL_PRO ? 90_000 : 30_000);
+  const timeoutMs = overrideTimeoutMs ?? (model === GEMINI_MODEL_PRO ? LLM_PRO_TIMEOUT_MS : LLM_FAST_TIMEOUT_MS);
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -588,9 +594,9 @@ export async function callGeminiVision(params: {
   };
   const mimeType = mimeMap[ext] ?? "image/jpeg";
 
-  // Read image — limit to 10 MB
+  // Read image — limit to MAX_VISION_IMAGE_SIZE
   const imageBuffer = readFileSync(params.imagePath);
-  if (imageBuffer.length > 10 * 1024 * 1024) {
+  if (imageBuffer.length > MAX_VISION_IMAGE_SIZE) {
     throw new Error("Image too large for vision API (max 10 MB)");
   }
   const imageBase64 = imageBuffer.toString("base64");
@@ -600,10 +606,10 @@ export async function callGeminiVision(params: {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeout = setTimeout(() => controller.abort(), LLM_FAST_TIMEOUT_MS);
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${params.apiKey}`,
+        geminiUrl(model, params.apiKey),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -649,7 +655,7 @@ export async function callGeminiVision(params: {
     } catch (err) {
       lastError = err;
       if ((err as Error).name === "AbortError") {
-        lastError = new Error("Gemini Vision timeout after 30s");
+        lastError = new Error(`Gemini Vision timeout after ${LLM_FAST_TIMEOUT_MS}ms`);
       }
       if (!isRetryableGeminiError(lastError) || attempt === maxAttempts) {
         throw lastError instanceof Error ? lastError : new Error(String(lastError));
@@ -947,7 +953,7 @@ ${params.cardText.slice(0, 4000)}`;
     const timeout = setTimeout(() => controller.abort(), 8000);
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${params.geminiApiKey}`,
+        geminiUrl(GEMINI_MODEL_UTILITY, params.geminiApiKey),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

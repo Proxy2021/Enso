@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
+import { STORAGE_KEYS, TIMINGS } from "../lib/constants";
 
 interface Template {
   icon: string;
@@ -46,12 +47,17 @@ export default function WelcomeCard() {
   const disabled = connectionState !== "connected";
   const { t } = useT();
 
-  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("enso_onboarded"));
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (localStorage.getItem(STORAGE_KEYS.ONBOARDING_DISMISSED)) return false;
+    // Legacy key (pre-constants): treat as already seen
+    if (localStorage.getItem("enso_onboarded")) return false;
+    return true;
+  });
 
   useEffect(() => {
     if (showOnboarding) {
-      localStorage.setItem("enso_onboarded", "1");
-      const timer = setTimeout(() => setShowOnboarding(false), 8000);
+      localStorage.setItem(STORAGE_KEYS.ONBOARDING_DISMISSED, "1");
+      const timer = setTimeout(() => setShowOnboarding(false), TIMINGS.ONBOARDING_HIDE);
       return () => clearTimeout(timer);
     }
   }, [showOnboarding]);

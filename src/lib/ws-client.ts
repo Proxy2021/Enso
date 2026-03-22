@@ -1,4 +1,5 @@
 import type { ClientMessage, ServerMessage } from "@shared/types";
+import { STORAGE_KEYS, TIMINGS, API } from "./constants";
 import { reportError } from "./error-reporter";
 import { isNative } from "./platform";
 
@@ -28,15 +29,15 @@ interface WSClient {
  */
 function getClientId(): string {
   const storage = isNative ? localStorage : sessionStorage;
-  let id = storage.getItem("enso-clientId");
+  let id = storage.getItem(STORAGE_KEYS.CLIENT_ID);
   // Migrate: if native and sessionStorage has an ID but localStorage doesn't, adopt it
   if (!id && isNative) {
-    id = sessionStorage.getItem("enso-clientId");
+    id = sessionStorage.getItem(STORAGE_KEYS.CLIENT_ID);
   }
   if (!id) {
     id = crypto.randomUUID();
   }
-  storage.setItem("enso-clientId", id);
+  storage.setItem(STORAGE_KEYS.CLIENT_ID, id);
   return id;
 }
 
@@ -54,14 +55,14 @@ function wsDebug(event: string, detail?: string) {
   if (!_debugEnabled) return;
   _debugLog.push({ event, ts: Date.now(), detail });
   if (_debugLog.length >= 10) flushDebugLog();
-  else if (!_debugFlushTimer) _debugFlushTimer = setTimeout(flushDebugLog, 2000);
+  else if (!_debugFlushTimer) _debugFlushTimer = setTimeout(flushDebugLog, TIMINGS.DEBUG_FLUSH);
 }
 
 function flushDebugLog() {
   if (_debugFlushTimer) { clearTimeout(_debugFlushTimer); _debugFlushTimer = null; }
   if (_debugLog.length === 0 || !_debugBaseUrl) return;
   const entries = _debugLog.splice(0);
-  fetch(`${_debugBaseUrl}/api/ws-debug`, {
+  fetch(`${_debugBaseUrl}${API.WS_DEBUG}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ clientId: _debugClientId, entries }),
@@ -79,7 +80,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
 
   const clientId = getClientId();
   _debugClientId = clientId;
-  _debugEnabled = localStorage.getItem("enso-ws-debug") === "1";
+  _debugEnabled = localStorage.getItem(STORAGE_KEYS.WS_DEBUG) === "1";
   try {
     const parsed = new URL(options.url, location.href);
     parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
@@ -114,7 +115,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
       // Clear queue if disconnect lasted > 60s (messages are stale)
       if (pendingMessages.length > 0) {
         const disconnectDuration = disconnectedAt > 0 ? Date.now() - disconnectedAt : 0;
-        if (disconnectDuration > 60_000) {
+        if (disconnectDuration > TIMINGS.STALE_QUEUE_THRESHOLD) {
           wsDebug("clear-stale-queue", `count=${pendingMessages.length} disconnectedFor=${disconnectDuration}ms`);
           pendingMessages.length = 0;
         } else {

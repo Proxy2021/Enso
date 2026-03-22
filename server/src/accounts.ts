@@ -3,6 +3,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import { DEFAULT_ACCOUNT_ID } from "./local-types.js";
+import { ENSO_PORT, ENSO_HOST } from "./config.js";
 import type { CoreConfig, EnsoAccountConfig } from "./types.js";
 import { loadProviderKeys } from "./llm-provider.js";
 
@@ -35,8 +36,8 @@ export function resolveEnsoAccount(params: {
   const accountId = params.accountId ?? DEFAULT_ACCOUNT_ID;
   const section = params.cfg.channels?.enso ?? {};
 
-  const port = section.port ?? parseInt(process.env.ENSO_PORT ?? "3001", 10);
-  const host = section.host ?? process.env.ENSO_HOST ?? "0.0.0.0";
+  const port = section.port ?? ENSO_PORT;
+  const host = section.host ?? ENSO_HOST;
   const geminiApiKey =
     section.geminiApiKey ?? process.env.GEMINI_API_KEY ?? readKeyFile(GEMINI_KEY_FILE) ?? "";
 

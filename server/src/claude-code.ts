@@ -5,6 +5,11 @@ import { join } from "path";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage, ToolQuestion } from "./types.js";
 import { logAction, logError } from "./action-log.js";
+import {
+  CLAUDE_HEARTBEAT_TIMEOUT_MS,
+  DEFAULT_CLAUDE_MODEL,
+  OLLAMA_BASE_URL,
+} from "./config.js";
 import { persistCard } from "./memory-bridge.js";
 
 const activeAbortControllers = new Map<string, AbortController>();
@@ -320,14 +325,13 @@ export async function runClaudeCode(params: {
   // Needs to be generous — Claude Code can go silent for extended periods during
   // context compaction on /resume, long-running bash tools (ffmpeg, sleep), and
   // API-side processing. 180s was too aggressive and caused false aborts.
-  const HEARTBEAT_TIMEOUT_MS = 600_000;
   let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   const resetHeartbeat = () => {
     if (heartbeatTimer) clearTimeout(heartbeatTimer);
     heartbeatTimer = setTimeout(() => {
-      logError("claude-code:heartbeat", `Stream heartbeat timeout after ${HEARTBEAT_TIMEOUT_MS / 1000}s`, undefined, { sessionId });
+      logError("claude-code:heartbeat", `Stream heartbeat timeout after ${CLAUDE_HEARTBEAT_TIMEOUT_MS / 1000}s`, undefined, { sessionId });
       abortController.abort();
-    }, HEARTBEAT_TIMEOUT_MS);
+    }, CLAUDE_HEARTBEAT_TIMEOUT_MS);
   };
   const clearHeartbeat = () => {
     if (heartbeatTimer) { clearTimeout(heartbeatTimer); heartbeatTimer = null; }
@@ -335,7 +339,7 @@ export async function runClaudeCode(params: {
 
   /** Run the SDK query and process all streamed messages. */
   const runQuery = async () => {
-    const rawModel = params.model || "claude-opus-4-6";
+    const rawModel = params.model || DEFAULT_CLAUDE_MODEL;
     const isOllama = rawModel.startsWith("ollama:");
     const selectedModel = isOllama ? rawModel.slice(7) : rawModel;
     // Build thinking config — adaptive enables extended thinking, disabled turns it off
@@ -372,7 +376,7 @@ export async function runClaudeCode(params: {
           ...process.env,
           CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80",
           ...(isOllama ? {
-            ANTHROPIC_BASE_URL: "http://localhost:11434",
+            ANTHROPIC_BASE_URL: OLLAMA_BASE_URL,
             ANTHROPIC_AUTH_TOKEN: "ollama",
           } : {}),
         },

@@ -11,16 +11,16 @@ import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
 
 // ── Thresholds ──
 
-const ERROR_WINDOW_MS = 5 * 60_000;
-const ERROR_BUDGET = 50;
-const MEMORY_WARNING_RATIO = 0.70;
-const MEMORY_CRITICAL_MB = 1536;
-const MEMORY_CHECK_MS = 30_000;
-const EVENT_LOOP_CHECK_MS = 5_000;
-const EVENT_LOOP_BLOCK_FACTOR = 3;
-const HEARTBEAT_MS = 5_000;
-const HEAP_GROWTH_CHECKS = 5;
-const HEAP_GROWTH_THRESHOLD_MB = 50;
+const ERROR_WINDOW_MS = parseInt(process.env.ENSO_SELFHEAL_ERROR_WINDOW_MS ?? "", 10) || 5 * 60_000;
+const ERROR_BUDGET = parseInt(process.env.ENSO_SELFHEAL_ERROR_BUDGET ?? "", 10) || 50;
+const MEMORY_WARNING_RATIO = parseFloat(process.env.ENSO_SELFHEAL_MEMORY_WARNING_RATIO ?? "") || 0.70;
+const MEMORY_CRITICAL_MB = parseInt(process.env.ENSO_SELFHEAL_MEMORY_CRITICAL_MB ?? "", 10) || 1536;
+const MEMORY_CHECK_MS = parseInt(process.env.ENSO_SELFHEAL_MEMORY_CHECK_MS ?? "", 10) || 30_000;
+const EVENT_LOOP_CHECK_MS = parseInt(process.env.ENSO_SELFHEAL_EVENT_LOOP_CHECK_MS ?? "", 10) || 5_000;
+const EVENT_LOOP_BLOCK_FACTOR = parseInt(process.env.ENSO_SELFHEAL_EVENT_LOOP_BLOCK_FACTOR ?? "", 10) || 3;
+const HEARTBEAT_MS = parseInt(process.env.ENSO_SELFHEAL_HEARTBEAT_MS ?? "", 10) || 5_000;
+const HEAP_GROWTH_CHECKS = parseInt(process.env.ENSO_SELFHEAL_HEAP_GROWTH_CHECKS ?? "", 10) || 5;
+const HEAP_GROWTH_THRESHOLD_MB = parseInt(process.env.ENSO_SELFHEAL_HEAP_GROWTH_THRESHOLD_MB ?? "", 10) || 50;
 
 export interface SelfHealMetrics {
   uptimeMs: number;

@@ -1,42 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
-import { getBackendBaseUrl, authHeaders } from "../lib/connection";
-import { isNative } from "../lib/platform";
-import { useChatStore } from "../store/chat";
-
-interface MemoryData {
-  user: string | null;
-  memory: string | null;
-}
+import { useState, useEffect } from "react";
+import { useMemoryApi } from "../hooks/useMemoryApi";
 
 export default function MemoryPanel({ show, onClose }: { show: boolean; onClose: () => void }) {
-  const [data, setData] = useState<MemoryData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { memory, loading, saving, clearing, historyCount, fetchMemory, saveMemory, clearHistory } = useMemoryApi();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
-  const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"user" | "memory" | "history">("user");
-  const [clearing, setClearing] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
-
-  const cardOrder = useChatStore((s) => s.cardOrder);
-
-  const fetchMemory = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${getBackendBaseUrl()}/api/memory`, {
-        headers: authHeaders(),
-        signal: AbortSignal.timeout(5000),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-      }
-    } catch {
-      // Silently fail
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (show) {
@@ -49,51 +19,26 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
   if (!show) return null;
 
   const handleSave = async () => {
-    setSaving(true);
-    try {
-      const field = activeTab === "user" ? "user" : "memory";
-      await fetch(`${getBackendBaseUrl()}/api/memory`, {
-        method: "PUT",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ [field]: editText }),
-      });
-      setData((prev) => (prev ? { ...prev, [field]: editText || null } : prev));
-      setEditing(false);
-    } catch {
-      // Show inline error if needed
-    } finally {
-      setSaving(false);
-    }
+    const field = activeTab === "user" ? "user" : "memory";
+    const ok = await saveMemory(field, editText);
+    if (ok) setEditing(false);
   };
 
   const handleClearHistory = async () => {
-    setClearing(true);
-    try {
-      const storage = isNative ? localStorage : sessionStorage;
-      const clientId = storage.getItem("enso-clientId");
-      if (clientId) {
-        await fetch(`${getBackendBaseUrl()}/api/history?clientId=${encodeURIComponent(clientId)}`, {
-          method: "DELETE",
-          headers: authHeaders(),
-        });
-      }
-      useChatStore.setState({ cardOrder: [], cards: {} });
+    const ok = await clearHistory();
+    if (ok) {
       setClearConfirm(false);
       onClose();
-    } catch {
-      // Silently fail
-    } finally {
-      setClearing(false);
     }
   };
 
   const startEdit = () => {
-    const current = activeTab === "user" ? data?.user : data?.memory;
+    const current = activeTab === "user" ? memory?.user : memory?.memory;
     setEditText(current ?? "");
     setEditing(true);
   };
 
-  const content = activeTab === "user" ? data?.user : activeTab === "memory" ? data?.memory : null;
+  const content = activeTab === "user" ? memory?.user : activeTab === "memory" ? memory?.memory : null;
   const tabLabel = activeTab === "user" ? "About You" : activeTab === "memory" ? "Memory" : "Chat History";
   const editableTab = activeTab === "user" || activeTab === "memory";
 
@@ -156,7 +101,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                     <circle cx="12" cy="12" r="10" />
                   </svg>
                   <div>
-                    <p className="text-sm text-gray-300">{cardOrder.length} cards in current session</p>
+                    <p className="text-sm text-gray-300">{historyCount} cards in current session</p>
                     <p className="text-xs text-gray-500 mt-0.5">History is restored automatically when you refresh the page.</p>
                   </div>
                 </div>

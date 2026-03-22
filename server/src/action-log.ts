@@ -7,9 +7,8 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
 import { randomUUID } from "crypto";
+import { getEnsoPath, ENSO_HOME } from "./utils/home.js";
 
 // ── Types ──
 
@@ -39,16 +38,15 @@ export interface FixEntry {
 
 // ── Paths ──
 
-const BASE_DIR = join(homedir(), ".enso");
-const LOG_PATH = join(BASE_DIR, "action.log");
-const FIXES_PATH = join(BASE_DIR, "fixes.json");
+const LOG_PATH = getEnsoPath("action.log");
+const FIXES_PATH = getEnsoPath("fixes.json");
 
 const MAX_LINES = 1000;
 const KEEP_LINES = 800;
 
 function ensureDir(): void {
-  if (!existsSync(BASE_DIR)) {
-    mkdirSync(BASE_DIR, { recursive: true });
+  if (!existsSync(ENSO_HOME)) {
+    mkdirSync(ENSO_HOME, { recursive: true });
   }
 }
 
