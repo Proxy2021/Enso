@@ -100,12 +100,12 @@ function ChartableTable({ headers, rows, idx }: { headers: string[]; rows: strin
       {showChart ? (
         <InlineBarChart headers={headers} rows={rows} />
       ) : (
-        <div className="my-1.5 overflow-x-auto rounded-md border border-gray-700/50">
+        <div className="my-1.5 overflow-x-auto max-w-full rounded-md border border-gray-700/50">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-800/80">
                 {headers.map((h, hi) => (
-                  <th key={hi} className="px-3 py-1.5 text-left font-semibold text-gray-200 border-b border-gray-700/50">
+                  <th key={hi} className="px-2 sm:px-3 py-1.5 text-left font-semibold text-gray-200 border-b border-gray-700/50 break-words">
                     {renderInline(h)}
                   </th>
                 ))}
@@ -115,7 +115,7 @@ function ChartableTable({ headers, rows, idx }: { headers: string[]; rows: strin
               {rows.map((row, ri) => (
                 <tr key={ri} className={ri % 2 === 0 ? "bg-gray-900/30" : "bg-gray-900/60"}>
                   {row.map((cell, ci) => (
-                    <td key={ci} className="px-3 py-1.5 text-gray-300 border-b border-gray-700/30">
+                    <td key={ci} className="px-2 sm:px-3 py-1.5 text-gray-300 border-b border-gray-700/30 break-words">
                       {renderInline(cell)}
                     </td>
                   ))}

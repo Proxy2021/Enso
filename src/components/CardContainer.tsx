@@ -236,7 +236,7 @@ function EnhanceButton({ card }: { card: Card }) {
       <>
         <button
           onClick={handleBuildAppClick}
-          className="flex items-center justify-center gap-1 text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 active:bg-amber-500/30 active:scale-[0.95] transition-all duration-150"
+          className="flex items-center justify-center gap-1 text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 active:bg-amber-500/30 active:scale-[0.95] transition-all duration-150"
           title="Build a new app for this content"
         >
           <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -287,7 +287,7 @@ function EnhanceButton({ card }: { card: Card }) {
             enhanceCard(card.id);
           }
         }}
-        className="flex items-center justify-center gap-1 text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 active:bg-violet-500/30 active:scale-[0.95] transition-all duration-150"
+        className="flex items-center justify-center gap-1 text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 active:bg-violet-500/30 active:scale-[0.95] transition-all duration-150"
         title="Turn this response into an interactive app"
       >
         <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -423,7 +423,7 @@ function PinButton({ cardId }: { cardId: string }) {
   return (
     <button
       onClick={() => isPinned ? unpinCard(cardId) : pinCard(cardId)}
-      className={`min-h-[28px] min-w-[28px] px-1 py-0.5 rounded-full border transition-colors flex items-center justify-center ${
+      className={`min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] px-1 py-0.5 rounded-full border transition-colors flex items-center justify-center ${
         isPinned
           ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
           : "border-gray-600/50 bg-transparent text-gray-500 hover:text-gray-300"
@@ -637,7 +637,7 @@ function ContentExportMenu({ card }: { card: Card }) {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
-        className={`text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1 ${justCompleted ? "ring-2 ring-indigo-400/50 animate-pulse" : ""}`}
+        className={`text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1 ${justCompleted ? "ring-2 ring-indigo-400/50 animate-pulse" : ""}`}
         title="Export content"
       >
         <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -710,7 +710,7 @@ function ExportButton({ card }: { card: Card }) {
     <>
       <button
         onClick={() => setShowDialog(true)}
-        className="text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1"
+        className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1"
         title="Share / Export app"
       >
         <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -894,7 +894,7 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
             </span>
             <button
               onClick={() => setShowInput(true)}
-              className="flex items-center justify-center gap-1 text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 active:bg-gray-700/60 active:scale-[0.95] transition-all duration-150 shrink-0 ml-2"
+              className="flex items-center justify-center gap-1 text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 active:bg-gray-700/60 active:scale-[0.95] transition-all duration-150 shrink-0 ml-2"
               title="Refine this app's UI"
             >
               <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1413,11 +1413,11 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                 <span className="truncate">{getCardLabel(card, effectiveType)}</span>
               </div>
             )}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap justify-end">
               {card.role === "assistant" && card.status === "complete" && (
                 <button
                   onClick={() => setShowCodeDialog(true)}
-                  className="text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 active:bg-indigo-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
+                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 active:bg-indigo-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
                   title="Enhance with Claude Code"
                 >
                   <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1442,7 +1442,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                       sendMessage(`Research this: ${topic}`);
                     }
                   }}
-                  className="text-[10px] min-h-[28px] min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-cyan-300 hover:border-cyan-500/50 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
+                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-cyan-300 hover:border-cyan-500/50 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
                   title="Deep research on this topic"
                 >
                   <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

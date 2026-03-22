@@ -108,8 +108,8 @@ function ConnectionDot() {
       className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors max-w-[4.5rem] truncate"
       title="Connection settings"
     >
-      <div className={`w-2 h-2 rounded-full ${color}`} />
-      {active ? active.name : state}
+      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />
+      <span className="hidden sm:inline">{active ? active.name : state}</span>
     </button>
   );
 }
@@ -238,11 +238,11 @@ export default function App() {
         <header className="sticky top-0 z-20 flex items-center justify-between px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
           <div className="flex items-center gap-2">
             <h1 className="text-base font-semibold tracking-tight">Enso</h1>
-            <ActiveModelLabel />
+            <span className="hidden sm:inline"><ActiveModelLabel /></span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             <SettingsPanel />
-            <DebugReporter />
+            <span className="hidden sm:flex"><DebugReporter /></span>
             <AppsMenu />
             <ResultsButton onClick={() => setShowResults(true)} />
             <SidebarToggle />

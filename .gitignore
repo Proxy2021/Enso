@@ -6,8 +6,13 @@ dist
 tsconfig.tsbuildinfo
 .DS_Store
 server/ui-cache/
+# Runtime temp files (orchestration, deep research, evolution)
 server/.orchestration-*.json
 server/.orchestration-*.md
+server/.orchestration-output-*.md
+server/.orchestration-ui.jsx
+.deep-research-ui.jsx
+.mission-plan.json
 # Track install scripts but ignore any generated files in scripts/
 scripts/*.log
 

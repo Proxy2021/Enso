@@ -272,7 +272,7 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed w-72 max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1"
+          className="fixed w-[calc(100vw-2rem)] max-w-72 sm:w-72 max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1"
           style={{ top: pos.top, right: pos.right }}
         >
           {projects.length === 0 ? (

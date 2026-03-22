@@ -164,8 +164,8 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
   const Comp = result.Component!;
 
   return (
-    <div className="flex justify-start p-2">
-      <div className="w-full min-w-0">
+    <div className="flex justify-start p-2 overflow-x-hidden max-w-full">
+      <div className="w-full min-w-0 max-w-full">
         <UIErrorBoundary onAction={onAction}>
           <Comp data={resolvedData} sendMessage={sendMessageAsAction} onAction={onAction} theme="dark" />
         </UIErrorBoundary>

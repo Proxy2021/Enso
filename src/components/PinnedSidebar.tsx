@@ -25,12 +25,12 @@ export default function PinnedSidebar() {
         className="md:hidden fixed inset-0 bg-black/40 z-30"
         onClick={toggleSidebar}
       />
-      <aside className="fixed md:relative right-0 top-0 bottom-0 w-56 z-40 md:z-0 border-l border-gray-800 bg-gray-950/95 backdrop-blur overflow-y-auto flex flex-col">
+      <aside className="fixed md:relative right-0 top-0 bottom-0 w-[70vw] max-w-56 sm:w-56 z-40 md:z-0 border-l border-gray-800 bg-gray-950/95 backdrop-blur overflow-y-auto flex flex-col">
         <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 shrink-0">
           <span className="text-xs font-medium text-gray-400">Pinned Apps</span>
           <button
             onClick={toggleSidebar}
-            className="text-gray-500 hover:text-gray-300 text-sm leading-none"
+            className="w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center text-gray-500 hover:text-gray-300 text-sm leading-none"
           >
             &times;
           </button>
@@ -43,7 +43,7 @@ export default function PinnedSidebar() {
             return (
               <div
                 key={id}
-                className="group flex items-center gap-2 px-3 py-2 hover:bg-gray-800/60 cursor-pointer transition-all duration-150"
+                className="group flex items-center gap-2 px-3 py-3 sm:py-2 hover:bg-gray-800/60 cursor-pointer transition-all duration-150"
                 onClick={() => handleScrollTo(id)}
               >
                 <div className="flex-1 min-w-0">

@@ -64,7 +64,7 @@ export default function SettingsPanel() {
       {open && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)}>
           <div
-            className="relative w-full max-w-xl max-h-[85vh] mx-4 bg-gray-900 rounded-xl border border-gray-700/80 shadow-2xl flex flex-col"
+            className="relative w-full max-w-xl max-h-[90vh] sm:max-h-[85vh] mx-2 sm:mx-4 bg-gray-900 rounded-xl border border-gray-700/80 shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -78,7 +78,7 @@ export default function SettingsPanel() {
             </div>
 
             {/* Tab bar */}
-            <div className="flex gap-1 px-4 pt-3 pb-1 shrink-0 border-b border-gray-800/50">
+            <div className="flex gap-1 px-3 sm:px-4 pt-3 pb-1 shrink-0 border-b border-gray-800/50 overflow-x-auto scrollbar-hide">
               {([
                 { id: "chatModel" as const, label: t("settings.chatModel") },
                 { id: "claudeCode" as const, label: t("settings.claudeCodeModel") },
@@ -88,7 +88,7 @@ export default function SettingsPanel() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 py-1.5 text-xs rounded-md transition-all duration-150 ${
+                  className={`px-3 py-1.5 text-xs rounded-md transition-all duration-150 whitespace-nowrap flex-shrink-0 ${
                     activeTab === tab.id
                       ? "bg-indigo-500/20 text-indigo-300 font-medium"
                       : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
