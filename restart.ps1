@@ -34,7 +34,8 @@ $EnsoDir      = Split-Path -Parent $MyInvocation.MyCommand.Path
 $EnsoHome     = Join-Path $env:USERPROFILE ".enso"
 $GuardianPid  = Join-Path $EnsoHome "guardian.pid"
 $ServerPid    = Join-Path $EnsoHome "server.pid"
-$nodeExe = (Get-Command node -ErrorAction SilentlyContinue)?.Source
+$nodeCmdInfo = Get-Command node -ErrorAction SilentlyContinue
+$nodeExe = if ($nodeCmdInfo) { $nodeCmdInfo.Source } else { $null }
 if (-not $nodeExe) { $nodeExe = "C:\Program Files\nodejs\node.exe" }
 
 # -- Colors ----------------------------------------------------------------
@@ -202,9 +203,11 @@ if ($NoDev) {
 
     $viteLog    = Join-Path $env:TEMP "enso-vite.log"
     $viteErrLog = Join-Path $env:TEMP "enso-vite-err.log"
-    $npmCli = (Get-Command npm -ErrorAction SilentlyContinue)?.Source
+    $npmCmdInfo = Get-Command npm -ErrorAction SilentlyContinue
+    $npmCli = if ($npmCmdInfo) { $npmCmdInfo.Source } else { $null }
     if ($npmCli) {
-        $npmCli = (Resolve-Path (Join-Path (Split-Path $npmCli) "../node_modules/npm/bin/npm-cli.js") -ErrorAction SilentlyContinue)?.Path
+        $resolved = Resolve-Path (Join-Path (Split-Path $npmCli) "../node_modules/npm/bin/npm-cli.js") -ErrorAction SilentlyContinue
+        $npmCli = if ($resolved) { $resolved.Path } else { $null }
     }
     if (-not $npmCli) { $npmCli = "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" }
 
@@ -249,7 +252,8 @@ if ($cfProcs) {
     Write-Skip "No existing cloudflared processes"
 }
 
-$cloudflaredExe = (Get-Command cloudflared -ErrorAction SilentlyContinue)?.Source
+$cfCmdInfo = Get-Command cloudflared -ErrorAction SilentlyContinue
+$cloudflaredExe = if ($cfCmdInfo) { $cfCmdInfo.Source } else { $null }
 if (-not $cloudflaredExe) { $cloudflaredExe = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }
 if (Test-Path $cloudflaredExe) {
     Start-Process -FilePath $cloudflaredExe `
