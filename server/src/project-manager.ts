@@ -14,6 +14,14 @@ import { getEnsoPath } from "./utils/home.js";
 
 const PROJECTS_DIR = getEnsoPath("projects");
 
+/**
+ * For the "enso" project, use the checked-in repo copy as source of truth
+ * so it stays in sync across machines via git.
+ */
+const REPO_PROJECTS_DIR = join(
+  import.meta.dirname, "..", "..", "projects"
+);
+
 // ── Types ──
 
 export interface TeamAgent {
@@ -55,11 +63,26 @@ export interface Project {
   updatedAt: number;
 }
 
+// ── Helpers ──
+
+/**
+ * Resolve the directory for a project.
+ * "enso" project → repo's projects/enso/ (git-tracked, syncs across machines)
+ * All others → ~/.enso/projects/<id>/ (user data, machine-local)
+ */
+function projectDir(projectId: string): string {
+  if (projectId === "enso") {
+    const repoDir = join(REPO_PROJECTS_DIR, "enso");
+    if (existsSync(join(repoDir, "project.json"))) return repoDir;
+  }
+  return join(PROJECTS_DIR, projectId);
+}
+
 // ── CRUD ──
 
 export function loadProject(projectId: string): Project | null {
   try {
-    const filePath = join(PROJECTS_DIR, projectId, "project.json");
+    const filePath = join(projectDir(projectId), "project.json");
     if (!existsSync(filePath)) return null;
     return JSON.parse(readFileSync(filePath, "utf-8"));
   } catch (err) {
@@ -70,10 +93,12 @@ export function loadProject(projectId: string): Project | null {
 
 export function saveProject(project: Project): void {
   try {
-    const dir = join(PROJECTS_DIR, project.id);
+    const dir = projectDir(project.id);
     mkdirSync(dir, { recursive: true });
-    mkdirSync(join(dir, "sprints"), { recursive: true });
-    mkdirSync(join(dir, "deliverables"), { recursive: true });
+    // Sprints & deliverables always in ~/.enso (not git-tracked)
+    const dataDir = join(PROJECTS_DIR, project.id);
+    mkdirSync(join(dataDir, "sprints"), { recursive: true });
+    mkdirSync(join(dataDir, "deliverables"), { recursive: true });
     project.updatedAt = Date.now();
     writeFileSync(join(dir, "project.json"), JSON.stringify(project, null, 2));
     logAction({ ts: Date.now(), type: "action", category: "project-manager", message: `Saved project: ${project.name} (${project.id})` });
@@ -406,6 +431,9 @@ function getDefaultEnsoProject(): Project {
 
 /**
  * Ensure the default Enso project exists. Called on server startup.
+ *
+ * Priority: repo's projects/enso/project.json (git-tracked) → ~/.enso fallback → hardcoded default.
+ * Sprints/deliverables dirs are always created under ~/.enso/ (machine-local data).
  */
 export function ensureDefaultProject(): Project {
   mkdirSync(PROJECTS_DIR, { recursive: true });
@@ -415,5 +443,9 @@ export function ensureDefaultProject(): Project {
     saveProject(project);
     logAction({ ts: Date.now(), type: "action", category: "project-manager", message: "Created default Enso project" });
   }
+  // Ensure sprints/deliverables dirs exist in ~/.enso even if project.json lives in repo
+  const dataDir = join(PROJECTS_DIR, "enso");
+  mkdirSync(join(dataDir, "sprints"), { recursive: true });
+  mkdirSync(join(dataDir, "deliverables"), { recursive: true });
   return project;
 }
