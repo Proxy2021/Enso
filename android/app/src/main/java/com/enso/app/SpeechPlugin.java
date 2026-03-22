@@ -116,6 +116,17 @@ public class SpeechPlugin extends Plugin {
         });
     }
 
+    @PluginMethod()
+    public void cancel(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            if (recognizer != null) {
+                recognizer.cancel();
+            }
+            isListening = false;
+            call.resolve();
+        });
+    }
+
     @Override
     protected void handleOnDestroy() {
         if (recognizer != null) {

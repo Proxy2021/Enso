@@ -97,10 +97,20 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
     recognitionRef.current?.stop();
   }, []);
 
+  const cancelListening = useCallback(() => {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+    setIsListening(false);
+    setInterimTranscript("");
+  }, []);
+
   const toggleListening = useCallback(() => {
     if (isListening) stopListening();
     else startListening();
   }, [isListening, startListening, stopListening]);
 
-  return { isSupported, isListening, interimTranscript, toggleListening } as const;
+  return {
+    isSupported, isListening, interimTranscript,
+    startListening, stopListening, cancelListening, toggleListening,
+  } as const;
 }

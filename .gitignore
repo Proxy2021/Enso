@@ -20,4 +20,4 @@ scripts/*.log
 android/app/build/
 android/.gradle/
 android/local.properties
-android/app/src/main/assets/public/
+android/app/src/main/assets/public/server/evolution-screenshots/

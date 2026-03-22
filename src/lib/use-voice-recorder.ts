@@ -126,10 +126,28 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
     }
   }, []);
 
+  const cancelRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    chunksRef.current = [];
+    mediaRecorderRef.current = null;
+    setIsListening(false);
+    setIsTranscribing(false);
+  }, []);
+
   const toggleListening = useCallback(() => {
     if (isListening) stopRecording();
     else startRecording();
   }, [isListening, stopRecording, startRecording]);
 
-  return { isSupported, isListening, isTranscribing, toggleListening } as const;
+  return {
+    isSupported, isListening, isTranscribing, interimTranscript: "",
+    startListening: startRecording, stopListening: stopRecording,
+    cancelListening: cancelRecording, toggleListening,
+  } as const;
 }

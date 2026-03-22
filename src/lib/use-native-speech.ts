@@ -7,6 +7,7 @@ interface SpeechPlugin {
   available(): Promise<{ available: boolean }>;
   start(options?: { language?: string }): Promise<void>;
   stop(): Promise<void>;
+  cancel(): Promise<void>;
   addListener(
     event: "partialResults",
     handler: (data: { transcript: string }) => void,
@@ -32,8 +33,8 @@ let nativeAvailable = false;
  * Provides real-time streaming partial results (word-by-word preview)
  * with zero server round-trips.
  *
- * On non-native platforms or devices without speech recognition,
- * returns isSupported=false so callers can fall back gracefully.
+ * Exposes granular startListening/stopListening/cancelListening for
+ * push-to-talk, plus toggleListening for simple toggle UIs.
  */
 export function useNativeSpeech(onTranscript: (text: string) => void) {
   const [isSupported, setIsSupported] = useState(availabilityChecked ? nativeAvailable : false);
@@ -76,7 +77,6 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
   const startListening = useCallback(async () => {
     if (!isSupported || isListening) return;
 
-    // Clean up any stale listeners
     for (const handle of listenersRef.current) {
       handle.remove().catch(() => {});
     }
@@ -124,6 +124,21 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
     }
   }, [isListening]);
 
+  const cancelListening = useCallback(async () => {
+    if (!isListening) return;
+    try {
+      await Speech.cancel();
+    } catch {
+      // fall through
+    }
+    setIsListening(false);
+    setInterimTranscript("");
+    for (const handle of listenersRef.current) {
+      handle.remove().catch(() => {});
+    }
+    listenersRef.current = [];
+  }, [isListening]);
+
   const toggleListening = useCallback(() => {
     if (isListening) {
       stopListening();
@@ -132,5 +147,8 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
     }
   }, [isListening, startListening, stopListening]);
 
-  return { isSupported, isListening, interimTranscript, toggleListening } as const;
+  return {
+    isSupported, isListening, interimTranscript,
+    startListening, stopListening, cancelListening, toggleListening,
+  } as const;
 }

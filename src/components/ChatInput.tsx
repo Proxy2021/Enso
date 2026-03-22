@@ -3,6 +3,7 @@ import { useChatStore } from "../store/chat";
 import { useSpeechRecognition } from "../lib/use-speech-recognition";
 import { useVoiceRecorder } from "../lib/use-voice-recorder";
 import { useNativeSpeech } from "../lib/use-native-speech";
+import { VoiceOverlay } from "./VoiceOverlay";
 import { isNative } from "../lib/platform";
 import { isLikelyNaturalLanguage } from "../utils/nlDetection";
 import { useT } from "../lib/i18n";
@@ -153,28 +154,34 @@ export default function ChatInput() {
     return () => clearTimeout(timer);
   }, [nlInterceptionToast]);
 
-  // Speech-to-text — prefer native SpeechRecognizer on Android, fall back to
-  // MediaRecorder + server transcription, use Web Speech API on desktop
-  const handleTranscript = useCallback((transcript: string) => {
-    setText((prev) => {
-      const separator = prev.length > 0 && !prev.endsWith(" ") ? " " : "";
-      return prev + separator + transcript;
-    });
+  // Push-to-talk state
+  const [pttActive, setPttActive] = useState(false);
+  const [pttCancelZone, setPttCancelZone] = useState(false);
+  const pttAccumulatedRef = useRef("");
+  const pttStartYRef = useRef(0);
+  const pttActiveRef = useRef(false);
+  const pttCancelRef = useRef(false);
+
+  // Speech-to-text hooks — PTT transcript accumulates in ref, not textarea
+  const handlePttTranscript = useCallback((transcript: string) => {
+    const sep = pttAccumulatedRef.current.length > 0 && !pttAccumulatedRef.current.endsWith(" ") ? " " : "";
+    pttAccumulatedRef.current += sep + transcript;
   }, []);
-  const speech = useSpeechRecognition(handleTranscript);
-  const recorder = useVoiceRecorder(handleTranscript);
-  const nativeSpeech = useNativeSpeech(handleTranscript);
+  const speech = useSpeechRecognition(handlePttTranscript);
+  const recorder = useVoiceRecorder(handlePttTranscript);
+  const nativeSpeech = useNativeSpeech(handlePttTranscript);
+
+  const isFallbackRecorder = isNative && !nativeSpeech.isSupported;
   const voice = isNative
     ? (nativeSpeech.isSupported ? nativeSpeech : recorder)
     : speech;
-  const speechSupported = voice.isSupported;
-  const isListening = voice.isListening;
-  const toggleListening = voice.toggleListening;
-  const interimTranscript = isNative
-    ? (nativeSpeech.isSupported
-        ? nativeSpeech.interimTranscript
-        : (recorder.isTranscribing ? t("chat.transcribing") : (recorder.isListening ? t("chat.recording") : "")))
-    : speech.interimTranscript;
+  const speechSupported = voice.isSupported !== undefined ? voice.isSupported : false;
+
+  const pttDisplayText = pttActive
+    ? ((pttAccumulatedRef.current || "") + (voice.interimTranscript ? (pttAccumulatedRef.current ? " " : "") + voice.interimTranscript : ""))
+    : "";
+
+  const CANCEL_THRESHOLD_PX = 100;
 
   // Close attach menu on click outside
   useEffect(() => {
@@ -206,7 +213,13 @@ export default function ChatInput() {
     const trimmed = text.trim();
     if ((!trimmed && attachedFiles.length === 0) || disabled) return;
 
-    if (isListening) toggleListening();
+    if (pttActiveRef.current) {
+      voice.cancelListening();
+      pttActiveRef.current = false;
+      setPttActive(false);
+      setPttCancelZone(false);
+      pttAccumulatedRef.current = "";
+    }
 
     // Route to active shell session when one exists (essential for mobile
     // where xterm.js virtual keyboard doesn't reliably appear in WebView).
@@ -566,11 +579,14 @@ export default function ChatInput() {
           </div>
         )}
 
-        {isListening && interimTranscript && (
-          <div className="mb-1.5 px-3 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/40 text-sm text-gray-400 italic truncate">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse mr-2 align-middle" />
-            {interimTranscript}
-          </div>
+        {/* Push-to-talk overlay */}
+        {pttActive && (
+          <VoiceOverlay
+            transcript={pttDisplayText}
+            isInCancelZone={pttCancelZone}
+            isFallbackRecorder={isFallbackRecorder}
+            isTranscribing={"isTranscribing" in recorder && recorder.isTranscribing}
+          />
         )}
 
         <div className="flex gap-2">
@@ -672,7 +688,7 @@ export default function ChatInput() {
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Disconnected..." : isListening ? "Listening..." : activeShellSessionId ? "Shell command..." : "Message..."}
+            placeholder={disabled ? "Disconnected..." : activeShellSessionId ? "Shell command..." : "Message..."}
             disabled={disabled}
             rows={1}
             className={`flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none placeholder-gray-500 disabled:opacity-50 overflow-y-auto ${
@@ -684,19 +700,58 @@ export default function ChatInput() {
           />
           {speechSupported && (
             <button
-              onClick={toggleListening}
               disabled={disabled}
-              className={`relative px-3 py-2.5 rounded-xl text-sm transition-all duration-150 ${
-                isListening
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 active:bg-red-500/40 active:scale-[0.95]"
-                  : "bg-gray-800 hover:bg-gray-700 active:bg-gray-600 active:scale-[0.95] text-gray-300"
-              } disabled:opacity-50`}
-              title={isListening ? "Stop recording" : "Voice input"}
-              aria-label={isListening ? "Stop voice recording" : "Start voice recording"}
+              className="relative px-3 py-2.5 rounded-xl text-sm transition-all duration-150 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 disabled:opacity-50 select-none touch-none"
+              title="Hold to talk"
+              aria-label="Hold to talk"
+              onPointerDown={(e) => {
+                if (disabled) return;
+                e.preventDefault();
+                (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                pttAccumulatedRef.current = "";
+                pttStartYRef.current = e.clientY;
+                pttActiveRef.current = true;
+                pttCancelRef.current = false;
+                setPttActive(true);
+                setPttCancelZone(false);
+                voice.startListening();
+              }}
+              onPointerMove={(e) => {
+                if (!pttActiveRef.current) return;
+                const dy = pttStartYRef.current - e.clientY;
+                const inCancel = dy > CANCEL_THRESHOLD_PX;
+                if (inCancel !== pttCancelRef.current) {
+                  pttCancelRef.current = inCancel;
+                  setPttCancelZone(inCancel);
+                }
+              }}
+              onPointerUp={() => {
+                if (!pttActiveRef.current) return;
+                pttActiveRef.current = false;
+                const wasCancelled = pttCancelRef.current;
+                setPttActive(false);
+                setPttCancelZone(false);
+
+                if (wasCancelled) {
+                  voice.cancelListening();
+                } else {
+                  voice.cancelListening();
+                  const finalText = (pttAccumulatedRef.current + (voice.interimTranscript ? (pttAccumulatedRef.current ? " " : "") + voice.interimTranscript : "")).trim();
+                  if (finalText) {
+                    sendMessage(finalText);
+                  }
+                }
+                pttAccumulatedRef.current = "";
+              }}
+              onPointerCancel={() => {
+                if (!pttActiveRef.current) return;
+                pttActiveRef.current = false;
+                setPttActive(false);
+                setPttCancelZone(false);
+                voice.cancelListening();
+                pttAccumulatedRef.current = "";
+              }}
             >
-              {isListening && (
-                <span className="absolute inset-0 rounded-xl bg-red-500/20 animate-pulse" />
-              )}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="18"
@@ -707,7 +762,6 @@ export default function ChatInput() {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="relative z-10"
               >
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />

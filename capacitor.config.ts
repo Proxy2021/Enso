@@ -7,6 +7,8 @@ const config: CapacitorConfig = {
   server: {
     // Allow connections to arbitrary remote backends
     allowNavigation: ["*"],
+    // Use HTTP so the WebView allows ws:// WebSocket connections to non-TLS backends
+    androidScheme: "http",
   },
   plugins: {
     CapacitorHttp: {
