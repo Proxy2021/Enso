@@ -14,7 +14,11 @@
     "android": "npm run build && npx cap sync android",
     "android:run": "npm run build && npx cap sync android && npx cap run android",
     "android:open": "npm run build && npx cap sync android && npx cap open android",
-    "android:build-apk": "npm run build && npx cap sync android && cd android && ./gradlew assembleRelease"
+    "android:build-apk": "npm run build && npx cap sync android && cd android && ./gradlew assembleRelease",
+    "cli": "npx tsx server/cli.ts"
+  },
+  "bin": {
+    "enso": "./server/cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.63",

@@ -3,6 +3,7 @@ import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
 import AppSuggestion from "../components/AppSuggestion";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
 export default function ChatCard({ card }: CardRendererProps) {
@@ -32,6 +33,7 @@ export default function ChatCard({ card }: CardRendererProps) {
 
 function RestartButton() {
   const [clicked, setClicked] = useState(false);
+  const { t } = useT();
 
   return (
     <button
@@ -48,7 +50,7 @@ function RestartButton() {
         <path d="M3 22v-6h6" />
         <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
       </svg>
-      {clicked ? "Restarting…" : "Restart Services"}
+      {clicked ? t("chat.restarting") : t("chat.restartServices")}
     </button>
   );
 }

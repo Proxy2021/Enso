@@ -97,13 +97,42 @@ if ($envContent -match '(?m)^ENSO_ACCESS_TOKEN=(.+)$') {
     Add-Content -Path $EnvFile -Value "`nENSO_ACCESS_TOKEN=$AccessToken"
 }
 
-# ── 4. Build frontend ───────────────────────────────────────────────
+# ── 4. Install CLI ──────────────────────────────────────────────────
+Write-Host ""
+Write-Host "# Installing CLI..." -ForegroundColor Yellow
+
+$BinDir = Join-Path $RepoDir "bin"
+$CliJson = Join-Path $EnsoDir "cli.json"
+
+# Write cli.json so the CLI knows where the server is and the token
+node -e @"
+const fs = require('fs');
+const dir = '$($EnsoDir -replace '\\', '\\\\')';
+if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+fs.writeFileSync('$($CliJson -replace '\\', '\\\\')', JSON.stringify({
+  server: 'http://localhost:$Port',
+  token: '$AccessToken'
+}, null, 2));
+"@
+Write-Host "  OK CLI config written to ~\.enso\cli.json" -ForegroundColor Green
+
+# Add bin/ to user PATH if not already there
+$CurrentPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+if ($CurrentPath -notlike "*$BinDir*") {
+    [System.Environment]::SetEnvironmentVariable("Path", "$CurrentPath;$BinDir", "User")
+    $env:Path = "$env:Path;$BinDir"
+    Write-Host "  OK Added bin\ to PATH — 'enso' command available globally" -ForegroundColor Green
+} else {
+    Write-Host "  OK bin\ already in PATH" -ForegroundColor Green
+}
+
+# ── 5. Build frontend ───────────────────────────────────────────────
 Write-Host ""
 Write-Host "# Building frontend..." -ForegroundColor Yellow
 npm run build 2>&1 | Select-Object -Last 1
 Write-Host "  OK Frontend built" -ForegroundColor Green
 
-# ── 5. Start server ─────────────────────────────────────────────────
+# ── 6. Start server ─────────────────────────────────────────────────
 Write-Host ""
 Write-Host "# Starting Enso server..." -ForegroundColor Yellow
 $serverJob = Start-Job -ScriptBlock {
@@ -132,7 +161,7 @@ if ($ready) {
     Write-Host "  ! Server did not respond within 30s. Check terminal output." -ForegroundColor DarkYellow
 }
 
-# ── 6. Display QR code ──────────────────────────────────────────────
+# ── 7. Display QR code ──────────────────────────────────────────────
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Setup complete!" -ForegroundColor Cyan
@@ -196,6 +225,7 @@ Write-Host "  To show this QR code again later:" -ForegroundColor DarkGray
 Write-Host "    node $RepoDir\scripts\show-qr.js" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor White
+Write-Host "    - Try the CLI: enso chat `"Hello, world!`"" -ForegroundColor Gray
 Write-Host "    - For development: npm run dev (starts Vite on :5173)" -ForegroundColor Gray
 Write-Host "    - For remote access: see SETUP.md (Cloudflare Tunnel)" -ForegroundColor Gray
 Write-Host "    - For Claude Code: npm install -g @anthropic-ai/claude-code" -ForegroundColor Gray

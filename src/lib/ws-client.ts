@@ -70,6 +70,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
   let reconnectDelay = 1000;
   let intentionalClose = false;
   let hasConnectedBefore = false;
+  let disconnectedAt = 0;
 
   const clientId = getClientId();
   _debugClientId = clientId;
@@ -101,6 +102,25 @@ export function createWSClient(options: WSClientOptions): WSClient {
       reconnectDelay = 1000;
       wsDebug("open", `isReconnect=${isReconnect}`);
       options.onStateChange("connected", isReconnect);
+
+      // Flush queued messages that were sent during reconnect
+      // Clear queue if disconnect lasted > 60s (messages are stale)
+      if (pendingMessages.length > 0) {
+        const disconnectDuration = disconnectedAt > 0 ? Date.now() - disconnectedAt : 0;
+        if (disconnectDuration > 60_000) {
+          wsDebug("clear-stale-queue", `count=${pendingMessages.length} disconnectedFor=${disconnectDuration}ms`);
+          pendingMessages.length = 0;
+        } else {
+          wsDebug("flush-queue", `count=${pendingMessages.length}`);
+          const queued = pendingMessages.splice(0);
+          for (const m of queued) {
+            if (ws?.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(m));
+            }
+          }
+        }
+      }
+      disconnectedAt = 0;
     };
 
     ws.onmessage = (event) => {
@@ -115,6 +135,7 @@ export function createWSClient(options: WSClientOptions): WSClient {
 
     ws.onclose = (ev) => {
       wsDebug("close", `code=${ev.code} reason="${ev.reason}" wasClean=${ev.wasClean}`);
+      disconnectedAt = Date.now();
       options.onStateChange("disconnected", false);
       if (!intentionalClose) {
         reconnectTimer = setTimeout(() => {
@@ -133,15 +154,26 @@ export function createWSClient(options: WSClientOptions): WSClient {
   function disconnect() {
     intentionalClose = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    // Remove event listeners to prevent leaks on repeated createWSClient calls
+    window.removeEventListener("online", onNetworkRecovery);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
     ws?.close();
     ws = null;
   }
+
+  // ── Message queue for messages sent during reconnect ──
+  const pendingMessages: ClientMessage[] = [];
+  const MAX_PENDING = 50;
 
   function send(msg: ClientMessage) {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
     } else {
-      console.warn("[WS] Message dropped — not connected. readyState:", ws?.readyState, "msg:", msg.type);
+      // Queue messages during reconnect instead of dropping them
+      if (pendingMessages.length < MAX_PENDING) {
+        pendingMessages.push(msg);
+      }
+      console.warn("[WS] Message queued — not connected. readyState:", ws?.readyState, "msg:", msg.type, "queued:", pendingMessages.length);
     }
   }
 
@@ -158,10 +190,12 @@ export function createWSClient(options: WSClientOptions): WSClient {
     connect();
   }
 
-  window.addEventListener("online", onNetworkRecovery);
-  document.addEventListener("visibilitychange", () => {
+  function onVisibilityChange() {
     if (document.visibilityState === "visible") onNetworkRecovery();
-  });
+  }
+
+  window.addEventListener("online", onNetworkRecovery);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   return { connect, disconnect, send };
 }

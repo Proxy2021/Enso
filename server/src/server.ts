@@ -704,6 +704,10 @@ export async function startEnsoServer(opts: {
     runtime.log?.(`[enso] access token required for remote connections`);
   }
 
+  // ── Action API (HTTP + SSE endpoints for CLI / external tools) ──
+  const { createActionRouter } = await import("./action-api.js");
+  app.use(createActionRouter({ account, config, runtime }));
+
   // ── Share token endpoint — returns access token for embedding in live exports ──
   app.get("/api/share-token", (_req, res) => {
     res.json({ token: accessToken || "" });
@@ -1184,6 +1188,11 @@ export async function startEnsoServer(opts: {
   const server: Server = createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws" });
 
+  // Guard against protocol-level WebSocket errors crashing the process
+  wss.on("error", (err) => {
+    runtime.log?.(`[enso] WebSocketServer error: ${err.message}`);
+  });
+
   /** Cleanup timers for disconnected clients — keyed by clientId. */
   const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -1214,11 +1223,16 @@ export async function startEnsoServer(opts: {
   }, WS_PING_INTERVAL_MS);
 
   wss.on("connection", (ws, req) => {
+    // Parse URL early so clientId is available for error logging
+    const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
+
+    // ── Persistent client identity (reconnect-safe) ──
+    const clientId = wsUrl.searchParams.get("clientId") ?? randomUUID().slice(0, 8);
+
     // Reset pong flag on each pong received
     ws.on("pong", () => { (ws as any)._ensoMissedPongs = 0; });
     ws.on("error", (err) => { runtime.log?.(`[enso] ws error for ${clientId}: ${err.message}`); });
     // ── WebSocket token auth ──
-    const wsUrl = new URL(req.url ?? "", `http://${req.headers.host}`);
     if (accessToken) {
       const origin = req.headers.origin ?? "";
       const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`;
@@ -1227,9 +1241,6 @@ export async function startEnsoServer(opts: {
         return;
       }
     }
-
-    // ── Persistent client identity (reconnect-safe) ──
-    const clientId = wsUrl.searchParams.get("clientId") ?? randomUUID().slice(0, 8);
     const existing = clients.get(clientId);
 
     let client: ConnectedClient;

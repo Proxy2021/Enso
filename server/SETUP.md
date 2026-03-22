@@ -12,6 +12,21 @@ npx tsx standalone.ts
 npm run dev:server
 ```
 
+## CLI
+
+The setup script (`scripts/install.sh` or `scripts/install.ps1`) installs the `enso` command globally. Once the server is running you can use it from any terminal:
+
+```bash
+enso status                          # server health check
+enso chat "What is quantum computing?"
+enso research "AI trends in 2026"
+enso apps list
+enso apps run photobook browse
+enso --json chat "Hello"             # NDJSON output for scripting
+```
+
+Configuration is stored in `~/.enso/cli.json` (server URL and access token). You can also pass `--server` / `--token` flags or set `ENSO_SERVER` / `ENSO_TOKEN` environment variables.
+
 ## Environment Variables
 
 Create a `.env` file in this directory:

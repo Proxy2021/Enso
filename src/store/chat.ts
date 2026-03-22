@@ -1872,6 +1872,24 @@ export const useChatStore = create<CardStore>((set, get) => ({
           };
         }
 
+        // Add evolve suggestion card after successful build
+        if (success) {
+          const evolveId = uuidv4();
+          const evolveCard: Card = {
+            id: evolveId,
+            runId: evolveId,
+            type: "chat",
+            role: "assistant",
+            display: "expanded",
+            text: "**App built successfully!** To improve it with an AI sprint, run `/evolve`.\n\nOr tell me what to change \u2014 e.g., \"Add dark mode\" or \"Improve the landing page.\"",
+            status: "complete",
+            createdAt: now + 1,
+            updatedAt: now + 1,
+          };
+          updates.cardOrder = [...(updates.cardOrder || state.cardOrder), evolveId];
+          updates.cards = { ...updates.cards!, [evolveId]: evolveCard };
+        }
+
         return updates;
       });
       return;

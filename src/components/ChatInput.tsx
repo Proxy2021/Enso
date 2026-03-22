@@ -11,22 +11,35 @@ interface SlashCommand {
   label: string;
   descKey: string;
   icon?: string;
+  category: "build" | "research" | "system" | "history";
 }
 
 const SLASH_COMMANDS: SlashCommand[] = [
-  { command: "/code", label: "/code", descKey: "slash.code", icon: "\uD83D\uDCBB" },
-  { command: "/code ", label: "/code <prompt>", descKey: "slash.codePrompt", icon: "\uD83D\uDCBB" },
-  { command: "/research ", label: "/research <topic>", descKey: "slash.research", icon: "\uD83D\uDD0D" },
-  { command: "/orchestrate", label: "/orchestrate", descKey: "slash.orchestrate", icon: "\u26A1" },
-  { command: "/evolve", label: "/evolve", descKey: "slash.evolve", icon: "\uD83E\uDDEC" },
-  { command: "/projects", label: "/projects", descKey: "slash.projects", icon: "\uD83D\uDCC1" },
-  { command: "/evolution-history", label: "/evolution-history", descKey: "slash.evolutionHistory", icon: "\uD83D\uDCCA" },
-  { command: "/discovery-history", label: "/discovery-history", descKey: "slash.discoveryHistory", icon: "\uD83D\uDD0D" },
-  { command: "/shell", label: "/shell", descKey: "slash.shell", icon: "\uD83D\uDDA5\uFE0F" },
-  { command: "/tool enso", label: "/tool enso", descKey: "slash.toolEnso", icon: "\uD83D\uDD27" },
-  { command: "/delete-apps", label: "/delete-apps", descKey: "slash.deleteApps", icon: "\uD83D\uDDD1\uFE0F" },
-  { command: "/help", label: "/help", descKey: "slash.help", icon: "\u2753" },
+  // Build
+  { command: "/code", label: "/code", descKey: "slash.code", icon: "\uD83D\uDCBB", category: "build" },
+  { command: "/code ", label: "/code <prompt>", descKey: "slash.codePrompt", icon: "\uD83D\uDCBB", category: "build" },
+  { command: "/orchestrate", label: "/orchestrate", descKey: "slash.orchestrate", icon: "\u26A1", category: "build" },
+  { command: "/evolve", label: "/evolve", descKey: "slash.evolve", icon: "\uD83E\uDDEC", category: "build" },
+  // Research
+  { command: "/research ", label: "/research <topic>", descKey: "slash.research", icon: "\uD83D\uDD0D", category: "research" },
+  { command: "/discover", label: "/discover", descKey: "slash.discover", icon: "\uD83D\uDD2C", category: "research" },
+  // System
+  { command: "/projects", label: "/projects", descKey: "slash.projects", icon: "\uD83D\uDCC1", category: "system" },
+  { command: "/shell", label: "/shell", descKey: "slash.shell", icon: "\uD83D\uDDA5\uFE0F", category: "system" },
+  { command: "/tool enso", label: "/tool enso", descKey: "slash.toolEnso", icon: "\uD83D\uDD27", category: "system" },
+  { command: "/delete-apps", label: "/delete-apps", descKey: "slash.deleteApps", icon: "\uD83D\uDDD1\uFE0F", category: "system" },
+  { command: "/help", label: "/help", descKey: "slash.help", icon: "\u2753", category: "system" },
+  // History
+  { command: "/evolution-history", label: "/evolution-history", descKey: "slash.evolutionHistory", icon: "\uD83D\uDCCA", category: "history" },
+  { command: "/discovery-history", label: "/discovery-history", descKey: "slash.discoveryHistory", icon: "\uD83D\uDD0D", category: "history" },
 ];
+
+const CATEGORY_LABELS: Record<SlashCommand["category"], string> = {
+  build: "Build",
+  research: "Research",
+  system: "System",
+  history: "History",
+};
 
 const ATTACH_CATEGORIES = [
   {
@@ -501,22 +514,37 @@ export default function ChatInput() {
         {/* Slash command autocomplete menu */}
         {showMenu && (
           <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 border border-gray-600/60 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.4)] overflow-hidden z-50 max-h-[60vh] overflow-y-auto">
-            {filteredCommands.map((cmd, idx) => (
-              <button
-                key={cmd.command}
-                onClick={() => selectCommand(cmd)}
-                onMouseEnter={() => setSelectedIndex(idx)}
-                className={`w-full text-left px-3 py-3 sm:py-2.5 flex items-center gap-3 transition-all duration-150 ${
-                  idx === selectedIndex
-                    ? "bg-indigo-600/30 text-gray-100"
-                    : "text-gray-300 hover:bg-gray-700/50 active:bg-gray-600/50"
-                }`}
-              >
-                {cmd.icon && <span className="text-base flex-shrink-0 w-6 text-center">{cmd.icon}</span>}
-                <span className="text-xs font-mono text-indigo-400 min-w-[100px] sm:min-w-[120px]">{cmd.label}</span>
-                <span className="text-xs text-gray-400 truncate">{t(cmd.descKey)}</span>
-              </button>
-            ))}
+            {(() => {
+              let globalIdx = 0;
+              let lastCategory = "";
+              return filteredCommands.map((cmd) => {
+                const idx = globalIdx++;
+                const showHeader = cmd.category !== lastCategory;
+                lastCategory = cmd.category;
+                return (
+                  <div key={cmd.command}>
+                    {showHeader && (
+                      <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 bg-gray-800/80 border-b border-gray-700/30">
+                        {CATEGORY_LABELS[cmd.category]}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => selectCommand(cmd)}
+                      onMouseEnter={() => setSelectedIndex(idx)}
+                      className={`w-full text-left px-3 py-3 sm:py-2.5 flex items-center gap-3 transition-all duration-150 ${
+                        idx === selectedIndex
+                          ? "bg-indigo-600/30 text-gray-100"
+                          : "text-gray-300 hover:bg-gray-700/50 active:bg-gray-600/50"
+                      }`}
+                    >
+                      {cmd.icon && <span className="text-base flex-shrink-0 w-6 text-center">{cmd.icon}</span>}
+                      <span className="text-xs font-mono text-indigo-400 min-w-[100px] sm:min-w-[120px]">{cmd.label}</span>
+                      <span className="text-xs text-gray-400 truncate">{t(cmd.descKey)}</span>
+                    </button>
+                  </div>
+                );
+              });
+            })()}
             <div className="px-3 py-1.5 border-t border-gray-700/50 text-[10px] text-gray-500 flex justify-between">
               <span>{"\u2191\u2193"} navigate</span>
               <span>Enter or Tab to select</span>

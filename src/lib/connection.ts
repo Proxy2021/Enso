@@ -90,11 +90,11 @@ export function buildWsUrl(config: BackendConfig | null): string {
     // On native/Capacitor or when served from a local asset server, there is
     // no Enso backend at same-origin, so return "" to prevent futile connects.
     if (isNative) return "";
-    // Capacitor WebView may report isNativePlatform()=false but still serve
-    // from localhost on a non-standard port with no real backend.  Detect this
-    // by checking for the Capacitor bridge object on window.
-    if ((window as any).Capacitor) return "";
-    // Same-origin mode
+    // Same-origin fallback for dev/PWA/test (non-native).
+    // NOTE: The raw `window.Capacitor` check was removed here because the
+    // Capacitor JS library is bundled in PWA/test builds where
+    // isNativePlatform() correctly returns false. The `isNative` check above
+    // (via Capacitor.isNativePlatform()) is the only correct native gate.
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${location.host}/ws`;
   }

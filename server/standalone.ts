@@ -115,6 +115,9 @@ async function main(): Promise<void> {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+  process.on("unhandledRejection", (reason) => {
+    console.error("[enso] Unhandled rejection:", reason);
+  });
 
   console.log(`[enso:standalone] Server running. Open http://localhost:${account.port}`);
   console.log(`[enso:standalone] Access token: ${account.accessToken}`);

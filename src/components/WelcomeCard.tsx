@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 
@@ -19,6 +20,8 @@ const TEMPLATES: Template[] = [
   { icon: "\uD83D\uDDA5\uFE0F", titleKey: "welcome.tile.remoteDesktop", descKey: "welcome.tile.remoteDesktop.desc", toolFamily: "remote_desktop" },
   { icon: "\uD83D\uDCC1", titleKey: "welcome.tile.projects", descKey: "welcome.tile.projects.desc", prompt: "/projects" },
   { icon: "\uD83D\uDDA5\uFE0F", titleKey: "welcome.tile.terminal", descKey: "welcome.tile.terminal.desc", prompt: "/shell" },
+  { icon: "\uD83D\uDD2C", titleKey: "welcome.tile.discover", descKey: "welcome.tile.discover.desc", prompt: "/discover" },
+  { icon: "\uD83E\uDDEC", titleKey: "welcome.tile.evolve", descKey: "welcome.tile.evolve.desc", prompt: "/evolve" },
 ];
 
 interface SuggestedPrompt {
@@ -42,6 +45,16 @@ export default function WelcomeCard() {
   const connectionState = useChatStore((s) => s.connectionState);
   const disabled = connectionState !== "connected";
   const { t } = useT();
+
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem("enso_onboarded"));
+
+  useEffect(() => {
+    if (showOnboarding) {
+      localStorage.setItem("enso_onboarded", "1");
+      const timer = setTimeout(() => setShowOnboarding(false), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [showOnboarding]);
 
   function handleClick(template: Template) {
     if (disabled) return;
@@ -67,6 +80,15 @@ export default function WelcomeCard() {
         </p>
       </div>
 
+      {showOnboarding && (
+        <div className="w-full max-w-lg mb-4 px-3 py-2.5 rounded-lg bg-indigo-900/40 border border-indigo-700/40 text-sm text-indigo-200 animate-in fade-in">
+          <div className="flex items-start justify-between gap-2">
+            <p>{t("welcome.onboarding")}</p>
+            <button onClick={() => setShowOnboarding(false)} className="text-indigo-400 hover:text-indigo-200 text-xs shrink-0 mt-0.5">&#x2715;</button>
+          </div>
+        </div>
+      )}
+
       {/* Suggested prompts */}
       <div className="w-full max-w-lg mb-6">
         <p className="text-xs text-gray-500 mb-2 px-1">{t("welcome.tryAsking")}</p>
@@ -89,7 +111,7 @@ export default function WelcomeCard() {
       {/* Feature tiles */}
       <div className="w-full max-w-lg">
         <p className="text-xs text-gray-500 mb-2 px-1">{t("welcome.launchTool")}</p>
-        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {TEMPLATES.map((tmpl) => (
             <button
               key={tmpl.titleKey}
@@ -118,6 +140,10 @@ export default function WelcomeCard() {
           <span className="text-gray-300 font-medium">/shell</span> {t("welcome.hint.shell")}
           <span className="mx-1.5 text-gray-600">&middot;</span>
           <span className="text-gray-300 font-medium">/orchestrate</span> {t("welcome.hint.orchestrate")}
+          <span className="mx-1.5 text-gray-600">&middot;</span>
+          <span className="text-gray-300 font-medium">/discover</span> {t("welcome.hint.discover")}
+          <span className="mx-1.5 text-gray-600">&middot;</span>
+          <span className="text-gray-300 font-medium">/evolve</span> {t("welcome.hint.evolve")}
         </p>
         <p className="text-[10px] text-gray-500 text-center mt-1">
           {t("welcome.hint.slashCommands")} &middot; {t("welcome.hint.attachFiles")}

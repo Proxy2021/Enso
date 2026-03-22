@@ -99,14 +99,55 @@ if [ -z "$ACCESS_TOKEN" ]; then
   echo "ENSO_ACCESS_TOKEN=${ACCESS_TOKEN}" >> "$ENV_FILE"
 fi
 
-# ── 4. Build frontend ───────────────────────────────────────────────
+# ── 4. Install CLI ──────────────────────────────────────────────────
+echo
+echo "▸ Installing CLI..."
+
+CLI_JSON="$ENSO_DIR/cli.json"
+BIN_SCRIPT="$REPO_DIR/bin/enso"
+
+# Write cli.json so the CLI knows where the server is and the token
+node -e "
+const fs = require('fs');
+const dir = '$ENSO_DIR';
+if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+fs.writeFileSync('$CLI_JSON', JSON.stringify({
+  server: 'http://localhost:$PORT',
+  token: '$ACCESS_TOKEN'
+}, null, 2));
+"
+echo "  ✓ CLI config written to ~/.enso/cli.json"
+
+# Make the wrapper executable
+chmod +x "$BIN_SCRIPT"
+
+# Symlink into /usr/local/bin (or ~/bin if no sudo)
+if [ -w /usr/local/bin ]; then
+  ln -sf "$BIN_SCRIPT" /usr/local/bin/enso
+  echo "  ✓ Linked 'enso' into /usr/local/bin"
+elif command -v sudo &>/dev/null; then
+  sudo ln -sf "$BIN_SCRIPT" /usr/local/bin/enso
+  echo "  ✓ Linked 'enso' into /usr/local/bin (via sudo)"
+else
+  # Fallback: symlink into ~/bin
+  mkdir -p "$HOME/bin"
+  ln -sf "$BIN_SCRIPT" "$HOME/bin/enso"
+  if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+    echo "  ⚠ Added symlink to ~/bin — add it to your PATH:"
+    echo "    export PATH=\"\$HOME/bin:\$PATH\""
+  else
+    echo "  ✓ Linked 'enso' into ~/bin"
+  fi
+fi
+
+# ── 5. Build frontend ───────────────────────────────────────────────
 echo
 echo "▸ Building frontend..."
 cd "$REPO_DIR"
 npm run build 2>&1 | tail -1
 echo "  ✓ Frontend built"
 
-# ── 5. Start server ─────────────────────────────────────────────────
+# ── 6. Start server ─────────────────────────────────────────────────
 echo
 echo "▸ Starting Enso server..."
 cd "$REPO_DIR"
@@ -129,7 +170,7 @@ for i in $(seq 1 30); do
   fi
 done
 
-# ── 6. Display QR code ──────────────────────────────────────────────
+# ── 7. Display QR code ──────────────────────────────────────────────
 echo
 echo "════════════════════════════════════════════"
 echo "  Setup complete!"
@@ -184,6 +225,7 @@ echo "  To show this QR code again later:"
 echo "    node $REPO_DIR/scripts/show-qr.js"
 echo
 echo "  Next steps:"
+echo "    - Try the CLI: enso chat \"Hello, world!\""
 echo "    - For development: npm run dev (starts Vite on :5173)"
 echo "    - For remote access: see SETUP.md (Cloudflare Tunnel)"
 echo "    - For Claude Code: npm install -g @anthropic-ai/claude-code"

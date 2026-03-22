@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import TerminalContent from "../components/TerminalContent";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 import {
   isOrchestrationCardData,
@@ -23,12 +24,12 @@ const ROLE_EMOJI: Record<AgentRole, string> = {
   reviewer: "\u2705",
 };
 
-const ROLE_LABELS: Record<AgentRole, string> = {
-  researcher: "Researcher",
-  architect: "Architect",
-  builder: "Builder",
-  coder: "Coder",
-  reviewer: "Reviewer",
+const ROLE_LABEL_KEYS: Record<AgentRole, string> = {
+  researcher: "orchestration.role.researcher",
+  architect: "orchestration.role.architect",
+  builder: "orchestration.role.builder",
+  coder: "orchestration.role.coder",
+  reviewer: "orchestration.role.reviewer",
 };
 
 export default function OrchestrationCard({ card }: CardRendererProps) {
@@ -79,6 +80,7 @@ function InputPhase({ cardId }: { cardId: string }) {
   });
   const [text, setText] = useState(orchGoal);
   const startOrchestration = useChatStore((s) => s.startOrchestration);
+  const { t } = useT();
 
   function handleSubmit() {
     if (!text.trim()) return;
@@ -89,15 +91,15 @@ function InputPhase({ cardId }: { cardId: string }) {
     <div>
       <div className="flex items-center gap-2 mb-3">
         <span className="text-lg">{"\u26A1"}</span>
-        <h3 className="text-sm font-semibold text-gray-200">Orchestrator</h3>
+        <h3 className="text-sm font-semibold text-gray-200">{t("orchestration.title")}</h3>
       </div>
       <p className="text-xs text-gray-400 mb-3">
-        Describe a complex goal or mission. I'll assemble a team of AI agents to research, plan, and build everything you need.
+        {t("orchestration.description")}
       </p>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="e.g. Plan a 2-week trip to Japan for my family, or build a complete freelance management system..."
+        placeholder={t("orchestration.placeholder")}
         rows={4}
         className="w-full bg-gray-800/60 border border-gray-700/60 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder:text-gray-500 resize-none focus:outline-none focus:border-blue-500/50"
         onKeyDown={(e) => {
@@ -105,13 +107,13 @@ function InputPhase({ cardId }: { cardId: string }) {
         }}
       />
       <div className="flex justify-between items-center mt-2">
-        <span className="text-[10px] text-gray-600">Cmd+Enter to submit</span>
+        <span className="text-[10px] text-gray-600">{t("orchestration.submitHint")}</span>
         <button
           onClick={handleSubmit}
           disabled={!text.trim()}
           className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-400 active:scale-[0.97] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
         >
-          Orchestrate
+          {t("orchestration.orchestrate")}
         </button>
       </div>
     </div>
@@ -121,11 +123,12 @@ function InputPhase({ cardId }: { cardId: string }) {
 // ── Phase: Planning ──
 
 function PlanningPhase({ goal }: { goal?: string }) {
+  const { t } = useT();
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
         <span className="text-lg">{"\u26A1"}</span>
-        <h3 className="text-sm font-semibold text-gray-200">Orchestrator</h3>
+        <h3 className="text-sm font-semibold text-gray-200">{t("orchestration.title")}</h3>
       </div>
       {goal && (
         <div className="mb-3 p-2 rounded-lg bg-gray-800/30 border border-gray-700/30">
@@ -134,12 +137,12 @@ function PlanningPhase({ goal }: { goal?: string }) {
       )}
       <div className="flex items-center gap-2 text-sm text-gray-400">
         <Spinner />
-        Assembling your team and planning the mission...
+        {t("orchestration.planning")}
       </div>
       <p className="text-[11px] text-gray-500 mt-2">
-        Decomposing into tasks and assigning agent roles.
+        {t("orchestration.planningDetail")}
         <br />
-        Toggle to Terminal view to see live planning output. This typically takes 10–20 seconds.
+        {t("orchestration.planningHint")}
       </p>
     </div>
   );
@@ -150,12 +153,13 @@ function PlanningPhase({ goal }: { goal?: string }) {
 function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
   const approveOrchestration = useChatStore((s) => s.approveOrchestration);
   const cancelOrchestration = useChatStore((s) => s.cancelOrchestration);
+  const { t } = useT();
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
         <span className="text-lg">{"\u26A1"}</span>
-        <h3 className="text-sm font-semibold text-gray-200">Mission Plan</h3>
+        <h3 className="text-sm font-semibold text-gray-200">{t("orchestration.missionPlan")}</h3>
       </div>
 
       {/* Goal summary */}
@@ -164,17 +168,17 @@ function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
       </div>
 
       <p className="text-xs text-gray-400 mb-3">
-        {plan.tasks.length} tasks across {plan.agents.length} agents. Review and approve to begin.
+        {t("orchestration.reviewDescription").replace("{taskCount}", String(plan.tasks.length)).replace("{agentCount}", String(plan.agents.length))}
       </p>
 
       {/* Agent Team */}
       <div className="mb-3 p-2.5 rounded-lg bg-gray-800/40 border border-gray-700/40">
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Team</div>
+        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{t("orchestration.team")}</div>
         <div className="flex flex-wrap gap-2">
           {plan.agents.map((agent) => (
             <div key={agent.agentId} className="flex items-center gap-1.5 text-xs text-gray-300 px-2 py-1 rounded-md bg-gray-700/30">
               <span>{ROLE_EMOJI[agent.role]}</span>
-              <span>{ROLE_LABELS[agent.role]}</span>
+              <span>{t(ROLE_LABEL_KEYS[agent.role])}</span>
             </div>
           ))}
         </div>
@@ -192,13 +196,13 @@ function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
           onClick={() => cancelOrchestration(plan.orchestrationId)}
           className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-all duration-150"
         >
-          Cancel
+          {t("orchestration.cancel")}
         </button>
         <button
           onClick={() => approveOrchestration(plan.orchestrationId)}
           className="px-4 py-1.5 text-xs font-medium rounded-lg bg-green-600 hover:bg-green-500 active:bg-green-400 active:scale-[0.97] text-white transition-all duration-150"
         >
-          Execute Plan
+          {t("orchestration.executePlan")}
         </button>
       </div>
     </div>
@@ -213,6 +217,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
   const approveOrchestration = useChatStore((s) => s.approveOrchestration);
   const pauseOrchestration = useChatStore((s) => s.pauseOrchestration);
   const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
+  const { t } = useT();
 
   const [view, setView] = useState<ExecutingView>("tasks");
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
@@ -255,7 +260,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-sm">{"\u26A1"}</span>
         <h3 className="text-[11px] font-semibold text-gray-200 truncate">
-          {isPaused ? "Paused" : "Mission"}
+          {isPaused ? t("orchestration.paused") : t("orchestration.mission")}
         </h3>
         <span className="text-[9px] text-gray-500 tabular-nums">{formatElapsed(elapsed)}</span>
         <span className="text-[9px] text-gray-500 ml-auto whitespace-nowrap">{completed}/{total}</span>
@@ -268,7 +273,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
               view === "tasks" ? "bg-gray-600/60 text-gray-200" : "text-gray-500 hover:text-gray-300"
             }`}
           >
-            Tasks
+            {t("orchestration.tasks")}
           </button>
           <button
             onClick={() => setView("terminals")}
@@ -276,7 +281,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
               view === "terminals" ? "bg-violet-500/30 text-violet-200" : "text-gray-500 hover:text-gray-300"
             }`}
           >
-            Terminals
+            {t("orchestration.terminals")}
             {runningTerminals.length > 0 && (
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             )}
@@ -299,7 +304,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
       {/* Approval gate (compact) */}
       {awaitingApproval.length > 0 && (
         <div className="mb-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
-          <p className="text-[10px] font-medium text-amber-200 mb-1">{"\u26A0\uFE0F"} Approval needed</p>
+          <p className="text-[10px] font-medium text-amber-200 mb-1">{"\u26A0\uFE0F"} {t("orchestration.approvalNeeded")}</p>
           {awaitingApproval.map((t) => (
             <p key={t.taskId} className="text-[9px] text-amber-300/70 truncate">{t.title}</p>
           ))}
@@ -307,7 +312,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
             onClick={() => approveOrchestration(plan.orchestrationId, awaitingApproval.map((t) => t.taskId))}
             className="text-[9px] px-2 py-0.5 mt-1 rounded bg-amber-600 hover:bg-amber-500 active:bg-amber-400 active:scale-[0.97] text-white transition-all duration-150"
           >
-            Approve
+            {t("orchestration.approve")}
           </button>
         </div>
       )}
@@ -335,7 +340,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
         <div>
           {orderedTerminals.length === 0 ? (
             <div className="text-center py-6 text-xs text-gray-500">
-              No active sessions yet. Waiting for tasks to start...
+              {t("orchestration.noSessions")}
             </div>
           ) : (
             <>
@@ -377,7 +382,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
                           ? "bg-green-500/15 text-green-400"
                           : "bg-red-500/15 text-red-400"
                     }`}>
-                      {activeTask.status === "running" ? "live" : activeTask.status}
+                      {activeTask.status === "running" ? t("orchestration.live") : activeTask.status}
                     </span>
                   </div>
                   <TerminalContent
@@ -401,14 +406,14 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
             onClick={() => resumeOrchestration(plan.orchestrationId)}
             className="w-full text-[9px] py-1 rounded bg-blue-600/80 hover:bg-blue-500 active:bg-blue-400 active:scale-[0.97] text-white transition-all duration-150"
           >
-            Resume
+            {t("orchestration.resume")}
           </button>
         ) : (
           <button
             onClick={() => pauseOrchestration(plan.orchestrationId)}
             className="w-full text-[9px] py-1 rounded bg-gray-700/60 hover:bg-gray-600 active:bg-gray-500 active:scale-[0.97] text-gray-400 transition-all duration-150"
           >
-            Pause
+            {t("orchestration.pause")}
           </button>
         )}
       </div>
@@ -494,6 +499,7 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
 // ── Phase: Complete ──
 
 function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskTerminals?: Record<string, { text: string; status: string }> }) {
+  const { t } = useT();
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const failed = plan.tasks.filter((t) => t.status === "failed").length;
   const appTasks = plan.tasks.filter((t) => t.outputType === "app" && t.status === "completed");
@@ -506,7 +512,7 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
     <div>
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">{"\u2705"}</span>
-        <h3 className="text-sm font-semibold text-green-300">Mission Complete</h3>
+        <h3 className="text-sm font-semibold text-green-300">{t("orchestration.missionComplete")}</h3>
       </div>
 
       {/* Goal summary */}
@@ -515,16 +521,16 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
       </div>
 
       <p className="text-xs text-gray-400 mb-3">
-        {completed} task{completed !== 1 ? "s" : ""} completed
-        {failed > 0 ? `, ${failed} failed` : ""}
-        {" \u00B7 "}{plan.agents.length} agents deployed
+        {t("orchestration.tasksCompleted").replace("{completed}", String(completed))}
+        {failed > 0 ? t("orchestration.tasksFailed").replace("{failed}", String(failed)) : ""}
+        {" \u00B7 "}{t("orchestration.agentsDeployed").replace("{count}", String(plan.agents.length))}
       </p>
 
       {/* Built apps highlight */}
       {appTasks.length > 0 && (
         <div className="mb-3 p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
           <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-1.5">
-            Apps Built
+            {t("orchestration.appsBuilt")}
           </div>
           <div className="space-y-1">
             {appTasks.map((t) => (
@@ -555,7 +561,7 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
             }}
             className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
           >
-            {showTerminals ? "\u25BC" : "\u25B6"} {terminalTasks.length} session log{terminalTasks.length !== 1 ? "s" : ""}
+            {showTerminals ? "\u25BC" : "\u25B6"} {t("orchestration.sessionLogs").replace("{count}", String(terminalTasks.length))}
           </button>
 
           {showTerminals && (
@@ -599,20 +605,21 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
 // ── Phase: Error ──
 
 function ErrorPhase({ error, plan }: { error?: string; plan?: OrchestrationPlan }) {
+  const { t } = useT();
   const failedTasks = plan?.tasks.filter((t) => t.status === "failed") || [];
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">{"\u26A1"}</span>
-        <h3 className="text-sm font-semibold text-red-300">Orchestration Failed</h3>
+        <h3 className="text-sm font-semibold text-red-300">{t("orchestration.failed")}</h3>
       </div>
       {plan?.goal && (
         <div className="mb-2 p-2 rounded-lg bg-red-500/5 border border-red-500/20">
           <p className="text-xs text-gray-400 line-clamp-2">{plan.goal}</p>
         </div>
       )}
-      <p className="text-xs text-red-400/80 mb-2">{error || "An unexpected error occurred."}</p>
+      <p className="text-xs text-red-400/80 mb-2">{error || t("orchestration.unexpectedError")}</p>
       {failedTasks.length > 0 && (
         <div className="space-y-1.5">
           {failedTasks.map((task, i) => (
@@ -628,6 +635,7 @@ function ErrorPhase({ error, plan }: { error?: string; plan?: OrchestrationPlan 
 
 function TaskRow({ task, index, showDescription }: { task: OrchestrationTask; index: number; showDescription?: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useT();
 
   return (
     <div
@@ -669,13 +677,13 @@ function TaskRow({ task, index, showDescription }: { task: OrchestrationTask; in
           <span className="text-[10px]">{ROLE_EMOJI[task.agentRole]}</span>
           {task.requiresApproval && task.status === "pending" && (
             <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              approval
+              {t("orchestration.approval")}
             </span>
           )}
         </div>
         {task.dependsOn.length > 0 && (
           <div className="text-[10px] text-gray-600 mt-0.5">
-            depends on: {task.dependsOn.join(", ")}
+            {t("orchestration.dependsOn")} {task.dependsOn.join(", ")}
           </div>
         )}
         {/* Show description in review phase or when expanded */}

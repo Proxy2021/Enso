@@ -56,6 +56,41 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
+function ConnectionBanner() {
+  const state = useChatStore((s) => s.connectionState);
+  const connect = useChatStore((s) => s.connect);
+
+  if (state === "connected") return null;
+
+  const isConnecting = state === "connecting";
+
+  return (
+    <div className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-amber-900/80 border-b border-amber-700/60 text-amber-200">
+      {isConnecting ? (
+        <>
+          <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <span>Reconnecting to server...</span>
+        </>
+      ) : (
+        <>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>Connection lost</span>
+          <button
+            onClick={() => connect()}
+            className="ml-2 px-2.5 py-0.5 rounded bg-amber-700/80 hover:bg-amber-600/80 text-amber-100 text-xs font-medium transition-colors"
+          >
+            Retry
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ConnectionDot() {
   const state = useChatStore((s) => s.connectionState);
   const setShowPicker = useChatStore((s) => s.setShowConnectionPicker);
@@ -203,6 +238,7 @@ export default function App() {
           </div>
         </header>
         <UpdateBanner />
+        <ConnectionBanner />
         <div className="flex flex-1 overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden">
             <CardTimeline />

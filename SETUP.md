@@ -53,6 +53,21 @@ npm run dev:server
 # Frontend served at http://localhost:3001
 ```
 
+## CLI
+
+After running the setup script, the `enso` command is available globally:
+
+```bash
+enso status                              # server health check
+enso chat "What is quantum computing?"   # ask anything
+enso research "AI trends in 2026"        # deep research
+enso apps list                           # list installed apps
+enso apps run photobook browse           # run an app tool
+enso --json chat "Hello"                 # NDJSON output for scripting
+```
+
+The CLI reads `~/.enso/cli.json` for the server URL and access token (created automatically by the setup script). You can also use flags (`--server`, `--token`) or environment variables (`ENSO_SERVER`, `ENSO_TOKEN`).
+
 ## Claude Code Setup (Optional)
 
 Claude Code powers `/code` sessions, Build App, orchestration, and evolution sprints. Without it, Enso still works for chat, research, and all built-in apps.

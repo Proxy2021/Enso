@@ -392,6 +392,7 @@ function buildDiscoveryPlanningPrompt(
   lines.push(`  - For each BUY project: "Create [ProjectName] Project" CTA text, suggested team composition, first sprint goal, estimated token investment`);
   lines.push(`  - Timeline: "Week 1: MVP sprint. Week 2-3: Evolution sprints. Week 4: User testing."`);
   lines.push(`  - Token cost breakdown: planning tokens + implementation tokens + evolution tokens`);
+  lines.push(`  - Include a prominent call-to-action: **"To build any recommendation, say: 'Build [name] as a working product' — Enso will create it automatically."**`);
   lines.push(`- **Research Trail** tab: All URLs, citations, and data sources from the entire discovery process`);
   lines.push(`- **VC Process** tab: Summary of how the discovery was conducted — phases, participants, methodology`);
   lines.push(``);

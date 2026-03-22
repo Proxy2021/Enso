@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { useChatStore } from "../store/chat";
 import { isLikelyNaturalLanguage } from "../utils/nlDetection";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
 /**
@@ -21,6 +22,7 @@ export default function ShellCard({ card }: CardRendererProps) {
   const wsClient = useChatStore((s) => s._wsClient);
   const shellSessionId = card.toolMeta?.toolSessionId;
   const [isExited, setIsExited] = useState(card.status === "complete");
+  const { t } = useT();
 
   // Buffer output received before xterm is mounted
   const pendingOutputRef = useRef<string>("");
@@ -268,13 +270,13 @@ export default function ShellCard({ card }: CardRendererProps) {
             <button
               onClick={handleKill}
               className="w-2.5 h-2.5 rounded-full bg-red-500/70 hover:bg-red-500 active:bg-red-600 active:scale-[0.85] transition-all duration-150 cursor-pointer"
-              title="Kill shell"
+              title={t("shell.killShell")}
             />
             <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/30" />
             <span className="w-2.5 h-2.5 rounded-full bg-green-500/30" />
           </div>
           <span className="text-gray-500 text-[11px] ml-1">
-            {isExited ? "exited" : "shell"}
+            {isExited ? t("shell.exited") : t("shell.shell")}
           </span>
           {shellSessionId && (
             <span className="text-gray-700 text-[10px] ml-auto font-mono">
