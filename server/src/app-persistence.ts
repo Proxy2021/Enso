@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { PluginSpec, PluginToolDef } from "./tool-factory.js";
 import type { ExecutorContext } from "./types.js";
@@ -355,6 +356,50 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
           },
         };
       },
+    },
+
+    uuid(): string {
+      return crypto.randomUUID();
+    },
+
+    hash(text: string, algorithm?: string): string {
+      const algo = algorithm ?? "sha256";
+      return crypto.createHash(algo).update(text).digest("hex");
+    },
+
+    async sleep(ms: number): Promise<void> {
+      const capped = Math.min(Math.max(0, ms), 10_000);
+      return new Promise((resolve) => setTimeout(resolve, capped));
+    },
+
+    log(message: string): void {
+      logAction({ ts: Date.now(), type: "action", category: `executor:${toolFamily ?? "unknown"}`, message });
+    },
+
+    formatDate(date?: string | number, format?: string): string {
+      const d = date ? new Date(date) : new Date();
+      if (isNaN(d.getTime())) return "Invalid Date";
+      switch (format) {
+        case "iso": return d.toISOString();
+        case "date": return d.toISOString().slice(0, 10);
+        case "time": return d.toTimeString().slice(0, 8);
+        case "relative": {
+          const diff = Date.now() - d.getTime();
+          const secs = Math.floor(Math.abs(diff) / 1000);
+          if (secs < 60) return diff >= 0 ? "just now" : "in a moment";
+          const mins = Math.floor(secs / 60);
+          if (mins < 60) return diff >= 0 ? `${mins}m ago` : `in ${mins}m`;
+          const hours = Math.floor(mins / 60);
+          if (hours < 24) return diff >= 0 ? `${hours}h ago` : `in ${hours}h`;
+          const days = Math.floor(hours / 24);
+          return diff >= 0 ? `${days}d ago` : `in ${days}d`;
+        }
+        default: return d.toLocaleString();
+      }
+    },
+
+    now(): number {
+      return Date.now();
     },
   };
 }

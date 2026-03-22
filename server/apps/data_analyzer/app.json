@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "createdAt": 1742691600000,
+  "spec": {
+    "toolFamily": "data_analyzer",
+    "toolPrefix": "enso_data_analyzer_",
+    "description": "Interactive data analysis: paste CSV/JSON, auto-detect columns, compute statistics, and generate charts",
+    "signatureId": "data_analyzer_view",
+    "tools": [
+      {
+        "suffix": "analyze",
+        "description": "Parse CSV or JSON data and compute column statistics (type, min, max, mean, median, nulls, unique count)",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "type": "string",
+              "description": "Raw CSV or JSON data to analyze"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["csv", "json", "auto"],
+              "description": "Data format. Defaults to auto-detect."
+            }
+          },
+          "required": ["data"]
+        },
+        "sampleParams": { "data": "name,age,score\nAlice,30,85\nBob,25,92\nCharlie,35,78", "format": "auto" },
+        "sampleData": {
+          "tool": "enso_data_analyzer_analyze",
+          "rowCount": 3,
+          "columns": [
+            { "name": "name", "type": "string", "unique": 3, "nulls": 0, "sample": ["Alice", "Bob", "Charlie"] },
+            { "name": "age", "type": "number", "min": 25, "max": 35, "mean": 30, "median": 30, "nulls": 0 },
+            { "name": "score", "type": "number", "min": 78, "max": 92, "mean": 85, "median": 85, "nulls": 0 }
+          ],
+          "preview": [
+            { "name": "Alice", "age": 30, "score": 85 },
+            { "name": "Bob", "age": 25, "score": 92 },
+            { "name": "Charlie", "age": 35, "score": 78 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "columns", "preview"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "chart",
+        "description": "Generate chart configuration from analyzed data columns",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "chart_type": {
+              "type": "string",
+              "enum": ["bar", "line", "pie", "area"],
+              "description": "Chart type to generate"
+            },
+            "x_column": {
+              "type": "string",
+              "description": "Column name for X axis / labels"
+            },
+            "y_column": {
+              "type": "string",
+              "description": "Column name for Y axis / values"
+            }
+          },
+          "required": ["chart_type", "x_column", "y_column"]
+        },
+        "sampleParams": { "chart_type": "bar", "x_column": "name", "y_column": "score" },
+        "sampleData": {
+          "tool": "enso_data_analyzer_chart",
+          "chartType": "bar",
+          "xColumn": "name",
+          "yColumn": "score",
+          "chartData": [
+            { "label": "Alice", "value": 85 },
+            { "label": "Bob", "value": 92 },
+            { "label": "Charlie", "value": 78 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "chartType", "chartData"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "query",
+        "description": "Filter, sort, or group the analyzed dataset",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filter_column": {
+              "type": "string",
+              "description": "Column to filter on"
+            },
+            "filter_op": {
+              "type": "string",
+              "enum": ["eq", "neq", "gt", "lt", "gte", "lte", "contains"],
+              "description": "Filter operator"
+            },
+            "filter_value": {
+              "type": "string",
+              "description": "Value to filter by"
+            },
+            "sort_column": {
+              "type": "string",
+              "description": "Column to sort by"
+            },
+            "sort_dir": {
+              "type": "string",
+              "enum": ["asc", "desc"],
+              "description": "Sort direction"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "sort_column": "score", "sort_dir": "desc" },
+        "sampleData": {
+          "tool": "enso_data_analyzer_query",
+          "rowCount": 3,
+          "applied": { "sort": "score desc" },
+          "rows": [
+            { "name": "Bob", "age": 25, "score": 92 },
+            { "name": "Alice", "age": 30, "score": 85 },
+            { "name": "Charlie", "age": 35, "score": 78 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "rows"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

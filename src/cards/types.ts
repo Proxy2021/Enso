@@ -67,6 +67,18 @@ export interface Card {
   // Parallel orchestration task terminals
   taskTerminals?: Record<string, { text: string; status: string }>;
 
+  // Universal card summary + podcast
+  cardSummary?: {
+    overview: string;
+    keyOutcomes: string[];
+    narrative: string;
+  };
+  cardSummaryStatus?: "generating" | "ready" | "error";
+  cardSummaryError?: string;
+  cardAudioUrl?: string;
+  cardPodcastScript?: string;
+  cardPodcastStatus?: "writing_script" | "rendering_audio" | "ready" | "error";
+
   // Timestamps
   createdAt: number;
   updatedAt: number;

@@ -24,6 +24,7 @@ import { registerBrowserTools, createBrowserTools } from "./src/browser-tools.js
 import { registerResearcherTools, createResearcherTools } from "./src/researcher-tools.js";
 import { registerClawHubTools, createClawHubTools } from "./src/clawhub-tools.js";
 import { createMemoryTools } from "./src/memory-tools.js";
+import { createSystemTools } from "./src/system-tools.js";
 import { registerLocalTool } from "./src/tool-registry-local.js";
 import { APP_CATALOG } from "./src/app-catalog.js";
 import { readFileSync } from "node:fs";
@@ -73,6 +74,7 @@ function registerAllToolsLocally(): void {
     createResearcherTools(),
     createClawHubTools(),
     createMemoryTools(),
+    createSystemTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

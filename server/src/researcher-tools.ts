@@ -9,9 +9,7 @@ import {
   BRAVE_SEARCH_TIMEOUT_MS,
   GEMINI_MODEL_UTILITY,
   LLM_RESEARCH_TIMEOUT_MS,
-  LLM_FAST_TIMEOUT_MS,
   geminiUrl,
-  GEMINI_API_BASE,
 } from "./config.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
@@ -256,27 +254,8 @@ function getBraveApiKey(): string | undefined {
 }
 
 async function getGeminiApiKey(): Promise<string | undefined> {
-  // 1. From active account (accounts.ts resolves config → env → key file)
-  try {
-    const { getActiveAccount } = await import("./server.js");
-    const fromAccount = getActiveAccount()?.geminiApiKey;
-    if (fromAccount) return fromAccount;
-  } catch { /* server not ready yet */ }
-
-  // 2. From environment variable (loaded from .env at module init)
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
-
-  // 3. Direct file read (gemini.key next to plugin root)
-  try {
-    const { readFileSync } = await import("node:fs");
-    const { join, dirname } = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
-    const keyPath = join(dirname(fileURLToPath(import.meta.url)), "..", "gemini.key");
-    const key = readFileSync(keyPath, "utf-8").trim();
-    if (key) return key;
-  } catch { /* path resolution failed */ }
-
-  return undefined;
+  const { getGeminiApiKey: sharedGetKey } = await import("./podcast.js");
+  return sharedGetKey();
 }
 
 function sanitizeJsonStrings(json: string): string {
@@ -2742,131 +2721,15 @@ async function researcherClearAllHistory(): Promise<AgentToolResult> {
   return researcherSearch({ topic: "" } as SearchParams);
 }
 
-// ── Podcast generation (Gemini TTS) ──
-
-const PODCAST_SCRIPT_PROMPT = `You are a podcast script writer. Given research data, write a natural 3-5 minute conversational podcast script between two hosts.
-
-Rules:
-- Use exactly "Host A:" and "Host B:" as speaker tags (one per line, alternating)
-- Host A drives the conversation, introduces the topic, asks questions
-- Host B provides insights, adds detail, plays devil's advocate
-- Cover the key findings naturally — don't just list them
-- Reference specific data points, statistics, and sources
-- If there are contradictions, discuss both sides
-- Keep it conversational and engaging — use reactions, follow-ups, "that's interesting"
-- End with a brief summary of takeaways
-- Output ONLY the dialogue script, no stage directions or metadata
-- Keep total script under 3000 characters (API limit)
-
-CRITICAL LANGUAGE RULE: Detect the language that the TOPIC TEXT ITSELF is written in — ignore the language of any data or snippets below. The podcast dialogue MUST be in the same language as the topic. If the topic is written in English (e.g. "Dune world", "quantum computing"), the ENTIRE dialogue must be in English. If the topic is written in Chinese characters, speak Chinese. If in Japanese, speak Japanese. Default to English when uncertain. Always keep "Host A:" and "Host B:" tags in English.`;
-
-async function generatePodcastScript(research: CachedResearch, geminiKey: string): Promise<string> {
-  const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-
-  const findingsSummary = (research.keyFindings ?? []).slice(0, 6)
-    .map((f, i) => `${i + 1}. [${f.type}] ${f.text}`).join("\n");
-  const contradictionsSummary = (research.contradictions ?? []).slice(0, 3)
-    .map((c) => `- ${c.claim}: ${c.perspectives.join(" vs ")}`).join("\n");
-
-  // Detect if topic is primarily non-Latin (CJK, Arabic, etc.) to hint language
-  const nonLatinRatio = (research.topic.match(/[^\u0000-\u007F]/g) ?? []).length / Math.max(research.topic.length, 1);
-  const topicLang = nonLatinRatio > 0.3 ? "the same language the topic is written in" : "English";
-
-  const prompt = `${PODCAST_SCRIPT_PROMPT}
-
-LANGUAGE FOR THIS PODCAST: ${topicLang}
-
-Topic: ${research.topic}
-Summary: ${research.summary}
-Key Findings:
-${findingsSummary}
-${contradictionsSummary ? `\nContradictions:\n${contradictionsSummary}` : ""}
-Narrative (condensed):
-${(research.narrative ?? "").slice(0, 1500)}`;
-
-  const script = await callGeminiLLMWithRetry(prompt, geminiKey, GEMINI_MODEL_UTILITY, LLM_FAST_TIMEOUT_MS);
-  return script?.trim() ?? "";
-}
-
-async function renderPodcastAudio(script: string, geminiKey: string): Promise<Buffer> {
-  const endpoint = `${GEMINI_API_BASE}/models/gemini-2.5-flash-preview-tts:generateContent`;
-
-  const body = {
-    contents: [{ parts: [{ text: `TTS the following conversation between Host A and Host B:\n\n${script}` }] }],
-    generationConfig: {
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        multiSpeakerVoiceConfig: {
-          speakerVoiceConfigs: [
-            { speaker: "Host A", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
-            { speaker: "Host B", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } },
-          ],
-        },
-      },
-    },
-  };
-
-  const res = await fetch(`${endpoint}?key=${geminiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "unknown");
-    throw new Error(`Gemini TTS API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
-  };
-  const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!b64) throw new Error("No audio data in Gemini TTS response");
-
-  return Buffer.from(b64, "base64");
-}
-
-/** Convert raw PCM (s16le, 24kHz, mono) to WAV by prepending a WAV header. */
-function pcmToWav(pcm: Buffer): Buffer {
-  const sampleRate = 24000;
-  const bitsPerSample = 16;
-  const numChannels = 1;
-  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-  const blockAlign = numChannels * (bitsPerSample / 8);
-  const dataSize = pcm.length;
-  const headerSize = 44;
-  const wav = Buffer.alloc(headerSize + dataSize);
-
-  wav.write("RIFF", 0);
-  wav.writeUInt32LE(36 + dataSize, 4);
-  wav.write("WAVE", 8);
-  wav.write("fmt ", 12);
-  wav.writeUInt32LE(16, 16);           // chunk size
-  wav.writeUInt16LE(1, 20);            // PCM format
-  wav.writeUInt16LE(numChannels, 22);
-  wav.writeUInt32LE(sampleRate, 24);
-  wav.writeUInt32LE(byteRate, 28);
-  wav.writeUInt16LE(blockAlign, 32);
-  wav.writeUInt16LE(bitsPerSample, 34);
-  wav.write("data", 36);
-  wav.writeUInt32LE(dataSize, 40);
-  pcm.copy(wav, headerSize);
-
-  return wav;
-}
+// ── Podcast generation (delegated to shared podcast.ts pipeline) ──
 
 async function researcherGeneratePodcast(params: { topic: string }): Promise<AgentToolResult> {
   const topic = params.topic?.trim();
   if (!topic) return errorResult("No topic specified");
 
-  const geminiKey = await getGeminiApiKey();
-  if (!geminiKey) return errorResult("Gemini API key required for podcast generation");
-
-  // Find cached research
   const cached = researchHistory.load(topicSlug(topic)) ?? researchHistory.load(topicSlug(topic));
   if (!cached) return errorResult(`No research found for "${topic}". Run a search first.`);
 
-  // Helper to return full research data with audioUrl + script
   const fullResult = (audioUrl: string, script?: string) => jsonResult({
     tool: "enso_researcher_search",
     depth: "standard",
@@ -2876,50 +2739,50 @@ async function researcherGeneratePodcast(params: { topic: string }): Promise<Age
     podcastScript: script ?? cached.podcastScript ?? undefined,
   });
 
-  // If audio already exists, return full data with it
   if (cached.audioUrl) return fullResult(cached.audioUrl, cached.podcastScript);
 
   try {
-    // Phase 1: Generate script
-    pushProgress({ tool: "enso_researcher_search", topic, phase: "generating_podcast", podcastStatus: "writing_script" });
-    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `generating podcast script for "${topic}"` });
+    const { generatePodcastAudio } = await import("./podcast.js");
 
-    const script = await generatePodcastScript(cached, geminiKey);
-    if (!script) return errorResult("Failed to generate podcast script");
+    // Resolve LLM model + provider keys for script generation
+    let model = GEMINI_MODEL_UTILITY;
+    let providerKeys: Record<string, string> = {};
+    try {
+      const { getActiveAccount } = await import("./server.js");
+      const acct = getActiveAccount();
+      if (acct) {
+        providerKeys = { ...acct.providerKeys, gemini: acct.geminiApiKey };
+        // Use the user's chat model if available, otherwise default
+        if (acct.geminiApiKey) providerKeys.gemini = acct.geminiApiKey;
+      }
+    } catch { /* standalone mode */ }
 
-    // Phase 2: Render audio via TTS
-    pushProgress({ tool: "enso_researcher_search", topic, phase: "generating_podcast", podcastStatus: "rendering_audio" });
-    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `rendering podcast audio for "${topic}"` });
+    const result = await generatePodcastAudio({
+      content: {
+        title: cached.topic,
+        summary: cached.summary ?? "",
+        keyPoints: (cached.keyFindings ?? []).slice(0, 6)
+          .map((f) => `[${f.type}] ${f.text}`),
+        contradictions: (cached.contradictions ?? []).slice(0, 3)
+          .map((c) => `${c.claim}: ${c.perspectives.join(" vs ")}`),
+        narrative: cached.narrative,
+      },
+      audioSlug: topicSlug(topic),
+      subdirectory: "researcher",
+      model,
+      providerKeys,
+      onProgress: (status) => {
+        pushProgress({ tool: "enso_researcher_search", topic, phase: "generating_podcast", podcastStatus: status });
+      },
+    });
 
-    const pcmData = await renderPodcastAudio(script, geminiKey);
-    const wavData = pcmToWav(pcmData);
-
-    // Phase 3: Save to disk
-    const { join } = await import("node:path");
-    const { mkdirSync, writeFileSync } = await import("node:fs");
-    const { homedir } = await import("node:os");
-
-    const audioDir = join(homedir(), ".enso", "data", "researcher", "audio");
-    mkdirSync(audioDir, { recursive: true });
-
-    const filename = `${topicSlug(topic)}.wav`;
-    const filePath = join(audioDir, filename);
-    writeFileSync(filePath, wavData);
-
-    const { toMediaUrl } = await import("./server.js");
-    const audioUrl = toMediaUrl(filePath);
-
-    // Update history
-    cached.audioUrl = audioUrl;
-    cached.podcastScript = script;
+    cached.audioUrl = result.audioUrl;
+    cached.podcastScript = result.script;
     researchHistory.save(topicSlug(topic), cached, buildResearchMeta(cached, "standard"));
 
-    logAction({ ts: Date.now(), type: "action", category: "researcher", message: `podcast ready for "${topic}" (${wavData.length} bytes)` });
-
-    return fullResult(audioUrl, script);
+    return fullResult(result.audioUrl, result.script);
   } catch (err) {
     logError("researcher", "podcast generation failed", err, { topic });
-    // Return the research data unchanged so the card isn't broken
     return jsonResult({
       tool: "enso_researcher_search",
       depth: "standard",

@@ -230,6 +230,16 @@ export interface ServerMessage {
     toolName: string;
     error?: string;
   };
+  cardSummary?: {
+    overview: string;
+    keyOutcomes: string[];
+    narrative: string;
+  };
+  cardSummaryStatus?: "generating" | "ready" | "error";
+  cardSummaryError?: string;
+  cardAudioUrl?: string;
+  cardPodcastScript?: string;
+  cardPodcastStatus?: "writing_script" | "rendering_audio" | "ready" | "error";
   sessionsList?: Array<{
     sessionId: string;
     summary: string;
@@ -313,6 +323,7 @@ export interface ClientMessage {
     | "evolution.start"
     | "discovery.start"
     | "image_research"
+    | "card.summarize"
     | "monitor.list"
     | "monitor.remove"
     | "client.error";
@@ -338,6 +349,14 @@ export interface ClientMessage {
   cardId?: string;
   cardAction?: string;
   cardPayload?: unknown;
+  // card.summarize fields
+  cardType?: string;
+  cardContent?: {
+    text?: string;
+    data?: unknown;
+    taskTerminals?: Record<string, { text: string; status: string }>;
+  };
+  cardSummarizeAction?: "summarize" | "podcast";
   // card.enhance / card.build_app / card.propose_app fields
   cardText?: string;
   // card.enhance fields
@@ -437,6 +456,24 @@ export interface ExecutorContext {
       count(): Promise<number>;
     };
   };
+
+  /** Generate a UUID v4 string. */
+  uuid(): string;
+
+  /** Compute a hex hash of text (default: SHA-256). */
+  hash(text: string, algorithm?: string): string;
+
+  /** Async delay, capped at 10 seconds. */
+  sleep(ms: number): Promise<void>;
+
+  /** Log a message to the Enso action log for debugging. */
+  log(message: string): void;
+
+  /** Format a date string. Formats: "iso", "date", "time", "relative", or default locale. */
+  formatDate(date?: string | number, format?: string): string;
+
+  /** Current timestamp (Date.now()). */
+  now(): number;
 }
 
 /** UIGenerator types */

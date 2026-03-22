@@ -1043,6 +1043,468 @@ function VideoPlayer({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   18. TEXTAREA — Multi-line text input
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function Textarea({
+  value: controlledValue,
+  defaultValue,
+  onChange,
+  placeholder = "",
+  rows = 4,
+  maxLength,
+  disabled = false,
+  className = "",
+}: {
+  value?: string;
+  defaultValue?: string;
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  rows?: number;
+  maxLength?: number;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [internalValue, setInternalValue] = useState(defaultValue ?? "");
+  const currentValue = controlledValue ?? internalValue;
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const v = e.target.value;
+      if (controlledValue === undefined) setInternalValue(v);
+      onChange?.(v);
+    },
+    [controlledValue, onChange],
+  );
+
+  return (
+    <div className={`relative ${className}`}>
+      <textarea
+        value={currentValue}
+        onChange={handleChange}
+        placeholder={placeholder}
+        rows={rows}
+        maxLength={maxLength}
+        disabled={disabled}
+        className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 text-xs placeholder-gray-500 px-2.5 py-2 focus:outline-none focus:border-violet-500/50 transition-colors disabled:opacity-50 resize-y min-h-[60px]"
+      />
+      {maxLength && (
+        <span className="absolute bottom-2 right-2.5 text-[10px] text-gray-500 tabular-nums pointer-events-none">
+          {currentValue.length}/{maxLength}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   19. ALERT — Info / warning / error / success callout box
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function Alert({
+  variant = "info",
+  title,
+  children,
+  icon,
+  dismissible = false,
+  onDismiss,
+  className = "",
+}: {
+  variant?: "info" | "success" | "warning" | "danger";
+  title?: string;
+  children: React.ReactNode;
+  icon?: React.ReactNode;
+  dismissible?: boolean;
+  onDismiss?: () => void;
+  className?: string;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+
+  const styles: Record<string, { bg: string; border: string; icon: string; text: string }> = {
+    info:    { bg: "bg-blue-400/10",    border: "border-blue-400/30",    icon: "text-blue-400",    text: "text-blue-300" },
+    success: { bg: "bg-emerald-400/10", border: "border-emerald-400/30", icon: "text-emerald-400", text: "text-emerald-300" },
+    warning: { bg: "bg-amber-400/10",   border: "border-amber-400/30",   icon: "text-amber-400",   text: "text-amber-300" },
+    danger:  { bg: "bg-rose-400/10",    border: "border-rose-400/30",    icon: "text-rose-400",    text: "text-rose-300" },
+  };
+
+  if (dismissed) return null;
+
+  const s = styles[variant] ?? styles.info;
+  const defaultIcons: Record<string, React.ReactNode> = {
+    info: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+    success: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+    warning: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    danger: <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
+  };
+
+  return (
+    <div className={`flex gap-2.5 px-3 py-2.5 rounded-lg border ${s.bg} ${s.border} ${className}`}>
+      <span className={`shrink-0 mt-0.5 ${s.icon}`}>{icon ?? defaultIcons[variant]}</span>
+      <div className="flex-1 min-w-0">
+        {title && <p className={`text-xs font-semibold ${s.text} mb-0.5`}>{title}</p>}
+        <div className="text-xs text-gray-300">{children}</div>
+      </div>
+      {dismissible && (
+        <button
+          onClick={() => { setDismissed(true); onDismiss?.(); }}
+          className="shrink-0 text-gray-500 hover:text-gray-300 active:text-gray-100 active:scale-[0.9] transition-all duration-150 cursor-pointer"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   20. AVATAR — User / entity avatar with fallback initials
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function Avatar({
+  src,
+  name,
+  size = "md",
+  accent = "violet",
+  className = "",
+}: {
+  src?: string;
+  name?: string;
+  size?: "sm" | "md" | "lg";
+  accent?: Accent;
+  className?: string;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const a = getAccent(accent);
+
+  const sizes: Record<string, { container: string; text: string }> = {
+    sm: { container: "w-6 h-6", text: "text-[10px]" },
+    md: { container: "w-8 h-8", text: "text-xs" },
+    lg: { container: "w-12 h-12", text: "text-sm" },
+  };
+
+  const s = sizes[size] ?? sizes.md;
+
+  const initials = useMemo(() => {
+    if (!name) return "?";
+    return name.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  }, [name]);
+
+  if (src && !imgError) {
+    return (
+      <img
+        src={src}
+        alt={name ?? "avatar"}
+        onError={() => setImgError(true)}
+        className={`${s.container} rounded-full object-cover border border-gray-600/50 ${className}`}
+      />
+    );
+  }
+
+  return (
+    <div className={`${s.container} rounded-full ${a.bg} border ${a.border} flex items-center justify-center ${className}`}>
+      <span className={`${s.text} font-semibold ${a.text}`}>{initials}</span>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   21. TIMELINE — Vertical event timeline
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function Timeline({
+  items,
+  className = "",
+}: {
+  items: Array<{
+    title: string;
+    description?: string;
+    time?: string;
+    icon?: React.ReactNode;
+    accent?: Accent;
+  }>;
+  className?: string;
+}) {
+  const safeItems = Array.isArray(items) ? items : [];
+
+  return (
+    <div className={`relative ${className}`}>
+      {safeItems.map((item, i) => {
+        const a = getAccent(item.accent);
+        const isLast = i === safeItems.length - 1;
+        return (
+          <div key={i} className="flex gap-3 pb-4 last:pb-0">
+            <div className="flex flex-col items-center">
+              <div className={`w-6 h-6 rounded-full ${a.bg} border ${a.border} flex items-center justify-center shrink-0`}>
+                {item.icon ?? <div className={`w-2 h-2 rounded-full ${a.text.replace("text-", "bg-")}`} />}
+              </div>
+              {!isLast && <div className="w-px flex-1 bg-gray-700/50 mt-1" />}
+            </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-gray-200 truncate">{item.title}</p>
+                {item.time && <span className="text-[10px] text-gray-500 shrink-0 tabular-nums">{item.time}</span>}
+              </div>
+              {item.description && <p className="text-[11px] text-gray-400 mt-0.5">{item.description}</p>}
+            </div>
+          </div>
+        );
+      })}
+      {safeItems.length === 0 && (
+        <p className="text-xs text-gray-500 text-center py-4">No events</p>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   22. SKELETON — Loading placeholder animations
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function Skeleton({
+  variant = "text",
+  width,
+  height,
+  count = 1,
+  className = "",
+}: {
+  variant?: "text" | "circle" | "rect";
+  width?: string;
+  height?: string;
+  count?: number;
+  className?: string;
+}) {
+  const baseClass = "bg-gray-700 animate-pulse";
+
+  const getShape = () => {
+    switch (variant) {
+      case "circle":
+        return `${baseClass} rounded-full ${className}`;
+      case "rect":
+        return `${baseClass} rounded-lg ${className}`;
+      default:
+        return `${baseClass} rounded h-3 ${className}`;
+    }
+  };
+
+  const shapeClass = getShape();
+
+  const items = Array.from({ length: count }, (_, i) => (
+    <div
+      key={i}
+      className={shapeClass}
+      style={{
+        width: width ?? (variant === "circle" ? "2rem" : "100%"),
+        height: height ?? (variant === "circle" ? "2rem" : variant === "rect" ? "4rem" : undefined),
+      }}
+    />
+  ));
+
+  return count === 1 ? items[0] : <div className="space-y-2">{items}</div>;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   23. DROPDOWN MENU — Action menus triggered by a button
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function DropdownMenu({
+  trigger,
+  items,
+  align = "left",
+  className = "",
+}: {
+  trigger: React.ReactNode;
+  items: Array<{
+    label: string;
+    icon?: React.ReactNode;
+    onClick?: () => void;
+    variant?: "default" | "danger";
+    disabled?: boolean;
+  }>;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative inline-flex ${className}`}>
+      <span onClick={() => setOpen((v) => !v)} className="cursor-pointer">
+        {trigger}
+      </span>
+      {open && (
+        <div
+          className={`absolute z-50 top-full mt-1 min-w-[160px] bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 ${align === "right" ? "right-0" : "left-0"}`}
+        >
+          {items.map((item, i) => (
+            <button
+              key={i}
+              onClick={() => { item.onClick?.(); setOpen(false); }}
+              disabled={item.disabled}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                item.variant === "danger"
+                  ? "text-rose-400 hover:bg-rose-400/10 active:bg-rose-400/20"
+                  : "text-gray-300 hover:bg-gray-700/60 active:bg-gray-700"
+              }`}
+            >
+              {item.icon && <span className="shrink-0 w-4 h-4 flex items-center justify-center">{item.icon}</span>}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   24. CHECKBOX GROUP — Multiple selection from a list
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function CheckboxGroup({
+  options,
+  value: controlledValue,
+  defaultValue = [],
+  onChange,
+  label,
+  orientation = "vertical",
+  className = "",
+}: {
+  options: Array<{ value: string; label: string; disabled?: boolean }>;
+  value?: string[];
+  defaultValue?: string[];
+  onChange?: (value: string[]) => void;
+  label?: string;
+  orientation?: "vertical" | "horizontal";
+  className?: string;
+}) {
+  const [internalValue, setInternalValue] = useState<string[]>(defaultValue);
+  const currentValue = controlledValue ?? internalValue;
+
+  const toggle = useCallback(
+    (optionValue: string) => {
+      const next = currentValue.includes(optionValue)
+        ? currentValue.filter((v) => v !== optionValue)
+        : [...currentValue, optionValue];
+      if (controlledValue === undefined) setInternalValue(next);
+      onChange?.(next);
+    },
+    [currentValue, controlledValue, onChange],
+  );
+
+  return (
+    <div className={className}>
+      {label && <p className="text-xs text-gray-400 mb-1.5">{label}</p>}
+      <div className={`flex gap-2 ${orientation === "vertical" ? "flex-col" : "flex-row flex-wrap"}`}>
+        {options.map((opt) => {
+          const checked = currentValue.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              onClick={() => !opt.disabled && toggle(opt.value)}
+              disabled={opt.disabled}
+              className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97] transition-transform duration-150"
+            >
+              <span
+                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors duration-150 ${
+                  checked
+                    ? "bg-violet-600 border-violet-500"
+                    : "bg-gray-800 border-gray-600 hover:border-gray-500"
+                }`}
+              >
+                {checked && (
+                  <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </span>
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   25. CODE BLOCK — Formatted code display with copy button
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function CodeBlock({
+  code,
+  language,
+  showLineNumbers = false,
+  className = "",
+}: {
+  code: string;
+  language?: string;
+  showLineNumbers?: boolean;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    try {
+      navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard may be unavailable in sandbox */ }
+  }, [code]);
+
+  const lines = code.split("\n");
+
+  return (
+    <div className={`relative rounded-lg border border-gray-700/50 bg-gray-900 overflow-hidden ${className}`}>
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700/50 bg-gray-800/40">
+        <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{language ?? "code"}</span>
+        <button
+          onClick={handleCopy}
+          className="text-[10px] text-gray-400 hover:text-gray-200 active:text-gray-100 active:scale-[0.95] transition-all duration-150 cursor-pointer flex items-center gap-1"
+        >
+          {copied ? (
+            <><svg className="w-3 h-3 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied</>
+          ) : (
+            <><svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</>
+          )}
+        </button>
+      </div>
+      <div className="overflow-x-auto p-3">
+        <pre className="text-xs text-gray-300 font-mono leading-relaxed">
+          {lines.map((line, i) => (
+            <div key={i} className="flex">
+              {showLineNumbers && (
+                <span className="inline-block w-8 shrink-0 text-right pr-3 text-gray-600 select-none tabular-nums">
+                  {i + 1}
+                </span>
+              )}
+              <code>{line}</code>
+            </div>
+          ))}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    EXPORT — Single namespace object injected into sandbox
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1064,4 +1526,12 @@ export const EnsoUI = {
   Stat,
   EmptyState,
   VideoPlayer,
+  Textarea,
+  Alert,
+  Avatar,
+  Timeline,
+  Skeleton,
+  DropdownMenu,
+  CheckboxGroup,
+  CodeBlock,
 };

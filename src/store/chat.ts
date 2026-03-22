@@ -78,6 +78,10 @@ interface CardStore {
   pinnedCards: string[];
   showSidebar: boolean;
 
+  // Card search
+  cardSearchQuery: string;
+  cardSearchVisible: boolean;
+
   // Actions
   connect: () => void;
   disconnect: () => void;
@@ -128,6 +132,10 @@ interface CardStore {
   unpinCard: (cardId: string) => void;
   clearConversation: () => void;
   toggleSidebar: () => void;
+  requestCardSummary: (cardId: string) => void;
+  requestCardPodcast: (cardId: string) => void;
+  setCardSearchQuery: (query: string) => void;
+  setCardSearchVisible: (visible: boolean) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -277,6 +285,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   recentTopics: [],
   pinnedCards: JSON.parse(localStorage.getItem(STORAGE_KEYS.PINNED_CARDS) ?? "[]"),
   showSidebar: false,
+  cardSearchQuery: "",
+  cardSearchVisible: false,
 
   connect: () => {
     const existing = get()._wsClient;
@@ -1650,6 +1660,66 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   toggleSidebar: () => set((s) => ({ showSidebar: !s.showSidebar })),
 
+  requestCardSummary: (cardId: string) => {
+    const card = get().cards[cardId];
+    if (!card) return;
+    const wsClient = get()._wsClient;
+    if (!wsClient) return;
+    const MAX_TEXT = 10000;
+    const msg: ClientMessage = {
+      type: "card.summarize",
+      cardId,
+      cardType: card.type,
+      cardContent: {
+        text: card.text?.slice(0, MAX_TEXT),
+        data: card.data,
+        taskTerminals: card.taskTerminals,
+      },
+      cardSummarizeAction: "summarize",
+    };
+    wsClient.send(msg);
+  },
+  requestCardPodcast: (cardId: string) => {
+    const card = get().cards[cardId];
+    if (!card) return;
+    const wsClient = get()._wsClient;
+    if (!wsClient) return;
+    if (card.cardSummary) {
+      // Summary already exists, just request podcast
+      const msg: ClientMessage = {
+        type: "card.summarize",
+        cardId,
+        cardType: card.type,
+        cardContent: {
+          text: card.text?.slice(0, 10000),
+          data: card.data,
+          taskTerminals: card.taskTerminals,
+        },
+        cardSummarizeAction: "podcast",
+      };
+      wsClient.send(msg);
+    } else {
+      // Need both summary + podcast
+      const msg: ClientMessage = {
+        type: "card.summarize",
+        cardId,
+        cardType: card.type,
+        cardContent: {
+          text: card.text?.slice(0, 10000),
+          data: card.data,
+          taskTerminals: card.taskTerminals,
+        },
+        cardSummarizeAction: "podcast",
+      };
+      wsClient.send(msg);
+    }
+  },
+  setCardSearchQuery: (query: string) => set({ cardSearchQuery: query }),
+  setCardSearchVisible: (visible: boolean) => set((s) => ({
+    cardSearchVisible: visible,
+    cardSearchQuery: visible ? s.cardSearchQuery : "",
+  })),
+
   clearConversation: () => {
     set({
       cardOrder: [],
@@ -2560,6 +2630,25 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 ...card,
                 autoHealStatus: msg.autoHeal.stage,
                 autoHealError: msg.autoHeal.error,
+                updatedAt: now,
+              },
+            },
+          };
+        }
+
+        // Handle card summary / podcast updates
+        if (msg.cardSummaryStatus || msg.cardSummary || msg.cardAudioUrl || msg.cardPodcastStatus) {
+          return {
+            cards: {
+              ...state.cards,
+              [msg.targetCardId]: {
+                ...card,
+                ...(msg.cardSummary ? { cardSummary: msg.cardSummary } : {}),
+                ...(msg.cardSummaryStatus ? { cardSummaryStatus: msg.cardSummaryStatus } : {}),
+                ...(msg.cardSummaryError ? { cardSummaryError: msg.cardSummaryError } : {}),
+                ...(msg.cardAudioUrl ? { cardAudioUrl: msg.cardAudioUrl } : {}),
+                ...(msg.cardPodcastScript ? { cardPodcastScript: msg.cardPodcastScript } : {}),
+                ...(msg.cardPodcastStatus ? { cardPodcastStatus: msg.cardPodcastStatus } : {}),
                 updatedAt: now,
               },
             },

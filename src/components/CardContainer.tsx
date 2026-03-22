@@ -33,6 +33,109 @@ const APP_LABELS: Record<string, string> = {
   clawhub: "ClawHub",
 };
 
+function SummaryPanel({ card }: { card: Card }) {
+  const [narrativeExpanded, setNarrativeExpanded] = useState(false);
+  const [scriptExpanded, setScriptExpanded] = useState(false);
+  const summary = card.cardSummary;
+  if (!summary) return null;
+
+  return (
+    <div className="mx-3 my-2 rounded-lg border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+      <div className="px-3 py-2">
+        <div className="flex items-center gap-2 text-[11px] text-amber-400 uppercase tracking-wide mb-1.5">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          AI Summary
+        </div>
+        <p className="text-xs text-gray-300 leading-relaxed">{summary.overview}</p>
+
+        {summary.keyOutcomes.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {summary.keyOutcomes.map((outcome, i) => (
+              <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-400">
+                <span className="text-amber-500 mt-0.5 shrink-0">{"•"}</span>
+                <span>{outcome}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {summary.narrative && (
+          <div className="mt-2">
+            <button
+              onClick={() => setNarrativeExpanded(!narrativeExpanded)}
+              className="flex items-center gap-1 text-[10px] text-amber-400/70 hover:text-amber-300 transition-colors"
+            >
+              <span>{narrativeExpanded ? "\u25BC" : "\u25B6"}</span>
+              <span>Full narrative</span>
+            </button>
+            {narrativeExpanded && (
+              <div className="mt-1.5 text-[11px] text-gray-400 leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                {summary.narrative}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {card.cardAudioUrl && (
+        <div id={`summary-audio-${card.id}`} className="px-3 py-2 border-t border-amber-500/15 bg-cyan-500/5">
+          <div className="flex items-center gap-2 text-[11px] text-cyan-400 uppercase tracking-wide mb-1.5">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+              <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+            </svg>
+            AI Podcast Overview
+          </div>
+          <audio controls preload="metadata" className="w-full h-10" style={{ borderRadius: "8px" }}>
+            <source src={card.cardAudioUrl} type="audio/wav" />
+            Your browser does not support audio playback.
+          </audio>
+          <div className="flex items-center justify-between mt-1">
+            <div className="text-[10px] text-gray-500">Two AI hosts discuss the key points from this card</div>
+            {card.cardPodcastScript && (
+              <button
+                onClick={() => setScriptExpanded(!scriptExpanded)}
+                className="flex items-center gap-1 text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
+              >
+                <span>{scriptExpanded ? "\u25BC" : "\u25B6"}</span>
+                <span>Transcript</span>
+              </button>
+            )}
+          </div>
+          {scriptExpanded && card.cardPodcastScript && (
+            <div className="mt-2 pt-2 border-t border-cyan-500/20 max-h-[300px] overflow-y-auto text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">
+              {card.cardPodcastScript.split(/\n/).map((line, i) => {
+                const hostMatch = line.match(/^(Host [AB]):\s*(.*)/);
+                if (hostMatch) {
+                  const isA = hostMatch[1] === "Host A";
+                  return (
+                    <div key={i} className={`mb-1 ${isA ? "text-cyan-300" : "text-amber-300"}`}>
+                      <span className="font-medium">{hostMatch[1]}:</span>{" "}
+                      <span className="text-gray-300">{hostMatch[2]}</span>
+                    </div>
+                  );
+                }
+                return line.trim() ? <div key={i} className="mb-1">{line}</div> : null;
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {card.cardSummaryError && (
+        <div className="px-3 py-1.5 border-t border-red-500/20 bg-red-500/5">
+          <div className="text-[10px] text-red-400">{card.cardSummaryError}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getCardLabel(card: Card, effectiveType: string): string {
   if (card.type === "terminal") return "Terminal";
   if (card.type === "shell") return "Shell";
@@ -1036,6 +1139,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const expandCard = useChatStore((s) => s.expandCard);
   const removeCard = useChatStore((s) => s.removeCard);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
+  const requestCardSummary = useChatStore((s) => s.requestCardSummary);
+  const requestCardPodcast = useChatStore((s) => s.requestCardPodcast);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
@@ -1072,6 +1177,14 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const canResearch = card.role === "assistant" && card.status === "complete"
     && !!card.text && card.type !== "terminal" && card.type !== "shell" && card.type !== "mission"
     && cardFamily !== "researcher";
+
+  const SUMMARIZABLE = new Set(["chat", "terminal", "orchestration", "dynamic-ui"]);
+  const canSummarize = card.role === "assistant" && card.status === "complete"
+    && SUMMARIZABLE.has(card.type) && !card.cardSummary && card.cardSummaryStatus !== "generating";
+  const hasSummary = !!card.cardSummary;
+  const canPodcast = hasSummary && !card.cardAudioUrl && card.cardPodcastStatus !== "writing_script" && card.cardPodcastStatus !== "rendering_audio";
+  const isSummaryGenerating = card.cardSummaryStatus === "generating";
+  const isPodcastGenerating = card.cardPodcastStatus === "writing_script" || card.cardPodcastStatus === "rendering_audio";
 
   const effectiveType = isAppView ? "dynamic-ui" : card.type;
   const registration = cardRegistry.get(effectiveType);
@@ -1452,6 +1565,53 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                   <span className="hidden sm:inline">Research</span>
                 </button>
               )}
+              {(canSummarize || isSummaryGenerating) && (
+                <button
+                  onClick={() => requestCardSummary(card.id)}
+                  disabled={isSummaryGenerating}
+                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-amber-300 hover:border-amber-500/50 active:bg-amber-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Summarize this card"
+                >
+                  {isSummaryGenerating ? (
+                    <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                  )}
+                  <span className="hidden sm:inline">{isSummaryGenerating ? "Summarizing..." : "Summarize"}</span>
+                </button>
+              )}
+              {(canPodcast || isPodcastGenerating) && (
+                <button
+                  onClick={() => requestCardPodcast(card.id)}
+                  disabled={isPodcastGenerating}
+                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-cyan-300 hover:border-cyan-500/50 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Generate AI podcast from summary"
+                >
+                  {isPodcastGenerating ? (
+                    <><div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /><span className="hidden sm:inline">{card.cardPodcastStatus === "rendering_audio" ? "Recording..." : "Writing..."}</span></>
+                  ) : (
+                    <><svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6" /><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" /></svg><span className="hidden sm:inline">Listen</span></>
+                  )}
+                </button>
+              )}
+              {card.cardAudioUrl && (
+                <button
+                  onClick={() => {
+                    const el = document.getElementById(`summary-audio-${card.id}`);
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-cyan-500/50 text-cyan-400 hover:text-cyan-300 hover:border-cyan-400/70 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
+                  title="Scroll to podcast"
+                >
+                  <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6" /><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" /></svg>
+                  <span className="hidden sm:inline">Podcast</span>
+                </button>
+              )}
               {!isShareable && card.role === "assistant" && card.status === "complete" && !!card.text && card.type !== "shell" && card.type !== "terminal" && (
                 <ContentExportMenu card={card} />
               )}
@@ -1485,6 +1645,16 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               isActive={isActive}
               onAction={handleAction}
             />
+          )}
+          {(card.cardSummary || card.cardSummaryStatus === "generating") && (
+            card.cardSummaryStatus === "generating" ? (
+              <div className="mx-3 my-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-3 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-amber-400">Generating summary...</span>
+              </div>
+            ) : (
+              <SummaryPanel card={card} />
+            )
           )}
           {isAppView && card.appBuildSummary && !buildSummaryDismissed && (
             <BuildSummaryBanner

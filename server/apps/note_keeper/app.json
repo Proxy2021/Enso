@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "createdAt": 1742691600000,
+  "spec": {
+    "toolFamily": "note_keeper",
+    "toolPrefix": "enso_note_keeper_",
+    "description": "Persistent notes with search, tags, and organization",
+    "signatureId": "note_keeper_view",
+    "tools": [
+      {
+        "suffix": "list_notes",
+        "description": "List all saved notes with title, preview, tags, and timestamps",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tag": {
+              "type": "string",
+              "description": "Filter by tag (optional)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_note_keeper_list_notes",
+          "count": 2,
+          "notes": [
+            { "id": "abc123", "title": "Meeting Notes", "preview": "Discussed Q2 goals...", "tags": ["work", "meetings"], "createdAt": "2026-03-22T10:00:00Z", "updatedAt": "2026-03-22T10:30:00Z" },
+            { "id": "def456", "title": "Shopping List", "preview": "Milk, eggs, bread...", "tags": ["personal"], "createdAt": "2026-03-21T15:00:00Z", "updatedAt": "2026-03-21T15:00:00Z" }
+          ],
+          "allTags": ["work", "meetings", "personal"]
+        },
+        "requiredDataKeys": ["tool", "notes"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "save_note",
+        "description": "Create or update a note with title, body, and optional tags",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Note ID (omit to create new, provide to update)"
+            },
+            "title": {
+              "type": "string",
+              "description": "Note title"
+            },
+            "body": {
+              "type": "string",
+              "description": "Note body content"
+            },
+            "tags": {
+              "type": "string",
+              "description": "Comma-separated tags"
+            }
+          },
+          "required": ["title", "body"]
+        },
+        "sampleParams": { "title": "Meeting Notes", "body": "Discussed Q2 goals and roadmap", "tags": "work,meetings" },
+        "sampleData": {
+          "tool": "enso_note_keeper_save_note",
+          "success": true,
+          "id": "abc123",
+          "title": "Meeting Notes",
+          "message": "Note saved successfully"
+        },
+        "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "delete_note",
+        "description": "Delete a note by ID",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Note ID to delete"
+            }
+          },
+          "required": ["id"]
+        },
+        "sampleParams": { "id": "abc123" },
+        "sampleData": {
+          "tool": "enso_note_keeper_delete_note",
+          "success": true,
+          "id": "abc123",
+          "message": "Note deleted"
+        },
+        "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "search_notes",
+        "description": "Full-text search across all notes",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "meeting" },
+        "sampleData": {
+          "tool": "enso_note_keeper_search_notes",
+          "query": "meeting",
+          "count": 1,
+          "results": [
+            { "id": "abc123", "title": "Meeting Notes", "preview": "Discussed Q2 goals...", "tags": ["work", "meetings"], "updatedAt": "2026-03-22T10:30:00Z" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "results"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

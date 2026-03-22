@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
@@ -6,6 +6,7 @@ import CardContainer from "./CardContainer";
 import WelcomeCard from "./WelcomeCard";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import { useT } from "../lib/i18n";
+import { Search, X } from "lucide-react";
 
 /**
  * Returns true when the only streaming activity is background tasks
@@ -64,10 +65,69 @@ function TypingIndicator() {
   );
 }
 
+function cardMatchesSearch(card: Card, query: string): boolean {
+  const q = query.toLowerCase();
+  if (card.text && card.text.toLowerCase().includes(q)) return true;
+  if (card.type && card.type.toLowerCase().includes(q)) return true;
+  if (card.data) {
+    try {
+      const dataStr = typeof card.data === "string" ? card.data : JSON.stringify(card.data);
+      if (dataStr.toLowerCase().includes(q)) return true;
+    } catch { /* ignore */ }
+  }
+  return false;
+}
+
+function SearchBar() {
+  const searchQuery = useChatStore((s) => s.cardSearchQuery);
+  const searchVisible = useChatStore((s) => s.cardSearchVisible);
+  const setQuery = useChatStore((s) => s.setCardSearchQuery);
+  const setVisible = useChatStore((s) => s.setCardSearchVisible);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchVisible) inputRef.current?.focus();
+  }, [searchVisible]);
+
+  if (!searchVisible) return null;
+
+  return (
+    <div className="sticky top-0 z-20 px-4 pt-2 pb-1">
+      <div className="max-w-5xl mx-auto flex items-center gap-2 bg-gray-900/95 border border-gray-700/60 rounded-lg px-3 py-1.5 backdrop-blur-sm shadow-lg">
+        <Search size={14} className="text-gray-500 shrink-0" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search cards..."
+          className="flex-1 bg-transparent text-xs text-gray-200 placeholder-gray-500 outline-none"
+          onKeyDown={(e) => { if (e.key === "Escape") setVisible(false); }}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setQuery("")}
+            className="text-gray-500 hover:text-gray-300 active:scale-[0.9] transition-all cursor-pointer"
+          >
+            <X size={13} />
+          </button>
+        )}
+        <button
+          onClick={() => setVisible(false)}
+          className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors cursor-pointer px-1"
+        >
+          ESC
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function CardTimeline() {
   const cardOrder = useChatStore((s) => s.cardOrder);
   const cards = useChatStore((s) => s.cards);
   const isWaiting = useChatStore((s) => s.isWaiting);
+  const searchQuery = useChatStore((s) => s.cardSearchQuery);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -139,10 +199,35 @@ export default function CardTimeline() {
     renderItems.push({ type: "single", id });
   }
 
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return renderItems;
+    return renderItems.filter((item) => {
+      if (item.type === "orch-pair") {
+        const orchCard = cards[item.orchId];
+        const termCard = cards[item.termId];
+        return (orchCard && cardMatchesSearch(orchCard, searchQuery)) ||
+               (termCard && cardMatchesSearch(termCard, searchQuery));
+      }
+      const card = cards[item.id];
+      return card ? cardMatchesSearch(card, searchQuery) : false;
+    });
+  }, [renderItems, searchQuery, cards]);
+
+  const matchCount = searchQuery.trim() ? filteredItems.length : 0;
+
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-5">
+    <div ref={containerRef} className="flex-1 overflow-y-auto">
+      <SearchBar />
+      {searchQuery.trim() && (
+        <div className="px-4 pb-1">
+          <div className="max-w-5xl mx-auto">
+            <span className="text-[10px] text-gray-500">{matchCount} card{matchCount !== 1 ? "s" : ""} matching "{searchQuery}"</span>
+          </div>
+        </div>
+      )}
+      <div className="px-4 py-5">
       <div className="max-w-5xl mx-auto">
-        {renderItems.map((item) => {
+        {filteredItems.map((item) => {
           if (item.type === "orch-pair") {
             const orchCard = cards[item.orchId];
             const termCard = cards[item.termId];
@@ -168,6 +253,7 @@ export default function CardTimeline() {
         })}
         {isWaiting && !hasOnlyBackgroundTasks(cards, cardOrder) && <TypingIndicator />}
         <div ref={bottomRef} />
+      </div>
       </div>
     </div>
   );

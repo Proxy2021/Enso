@@ -17,6 +17,7 @@ import ToastContainer from "./components/ToastContainer";
 import BackgroundTaskBar from "./components/BackgroundTaskBar";
 import ResultsInbox, { useUnseenCount } from "./components/ResultsInbox";
 import { reportError } from "./lib/error-reporter";
+import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
 
@@ -179,12 +180,32 @@ function ActiveModelLabel() {
   );
 }
 
+function SearchToggle() {
+  const searchVisible = useChatStore((s) => s.cardSearchVisible);
+  const setVisible = useChatStore((s) => s.setCardSearchVisible);
+  const cardCount = useChatStore((s) => s.cardOrder.length);
+  if (cardCount === 0) return null;
+  return (
+    <button
+      onClick={() => setVisible(!searchVisible)}
+      className={`flex items-center text-sm transition-colors p-1.5 rounded-lg border ${searchVisible ? "text-violet-400 border-violet-500/40 bg-violet-500/10" : "text-gray-400 hover:text-gray-200 border-gray-700/60 bg-gray-800/50"}`}
+      title="Search cards (Ctrl+F)"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    </button>
+  );
+}
+
 export default function App() {
   const connect = useChatStore((s) => s.connect);
   const disconnect = useChatStore((s) => s.disconnect);
   const connectToBackend = useChatStore((s) => s.connectToBackend);
   const loadSharedCard = useChatStore((s) => s.loadSharedCard);
   const [showResults, setShowResults] = useState(false);
+
+  useKeyboardShortcuts();
 
   useEffect(() => {
     // Handle deep-link: ?backend=https://...&token=xxx&share=cardId
@@ -244,6 +265,7 @@ export default function App() {
             <SettingsPanel />
             <span className="hidden sm:flex"><DebugReporter /></span>
             <AppsMenu />
+            <SearchToggle />
             <ResultsButton onClick={() => setShowResults(true)} />
             <SidebarToggle />
             <ConnectionDot />

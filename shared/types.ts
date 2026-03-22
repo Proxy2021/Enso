@@ -150,6 +150,16 @@ export interface ServerMessage {
     toolName: string;
     error?: string;
   };
+  cardSummary?: {
+    overview: string;
+    keyOutcomes: string[];
+    narrative: string;
+  };
+  cardSummaryStatus?: "generating" | "ready" | "error";
+  cardSummaryError?: string;
+  cardAudioUrl?: string;
+  cardPodcastScript?: string;
+  cardPodcastStatus?: "writing_script" | "rendering_audio" | "ready" | "error";
   sessionsList?: Array<{
     sessionId: string;
     summary: string;
@@ -233,6 +243,7 @@ export interface ClientMessage {
     | "evolution.start"
     | "discovery.start"
     | "image_research"
+    | "card.summarize"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;
@@ -256,6 +267,14 @@ export interface ClientMessage {
   cardId?: string;
   cardAction?: string;
   cardPayload?: unknown;
+  // card.summarize fields
+  cardType?: string;
+  cardContent?: {
+    text?: string;
+    data?: unknown;
+    taskTerminals?: Record<string, { text: string; status: string }>;
+  };
+  cardSummarizeAction?: "summarize" | "podcast";
   // card.enhance / card.build_app / card.propose_app fields
   cardText?: string;
   // card.enhance fields

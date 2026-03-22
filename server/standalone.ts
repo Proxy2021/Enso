@@ -58,6 +58,7 @@ import { createBrowserTools } from "./src/browser-tools.js";
 import { createResearcherTools } from "./src/researcher-tools.js";
 import { createClawHubTools } from "./src/clawhub-tools.js";
 import { createMemoryTools } from "./src/memory-tools.js";
+import { createSystemTools } from "./src/system-tools.js";
 import { startSelfHealing } from "./src/self-heal.js";
 
 // ── Exit codes ──
@@ -76,6 +77,7 @@ function registerAllTools(): void {
     createResearcherTools(),
     createClawHubTools(),
     createMemoryTools(),
+    createSystemTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

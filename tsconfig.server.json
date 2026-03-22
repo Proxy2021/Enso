@@ -17,5 +17,5 @@
     }
   },
   "include": ["server", "shared"],
-  "exclude": ["server/src/phase1-enhancements.test.ts"]
+  "exclude": ["server/src/phase1-enhancements.test.ts", "server/src/sprint-enhancements.test.ts"]
 }

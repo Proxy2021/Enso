@@ -91,6 +91,7 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
       "RadialBarChart", "RadialBar", "Treemap", "Funnel", "FunnelChart",
       "Tabs", "Button", "Badge", "UICard", "Select", "Input", "Switch", "Slider",
       "Progress", "Accordion", "Dialog", "DataTable", "Stat", "Separator", "EmptyState",
+      "Textarea", "Alert", "Avatar", "Timeline", "Skeleton", "DropdownMenu", "CheckboxGroup", "CodeBlock",
       "Icons",
     ]);
     const lucideDestructure = Object.keys(LucideReact)
@@ -117,6 +118,14 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
       { source: "Stat", local: "Stat" },
       { source: "Separator", local: "Separator" },
       { source: "EmptyState", local: "EmptyState" },
+      { source: "Textarea", local: "Textarea" },
+      { source: "Alert", local: "Alert" },
+      { source: "Avatar", local: "Avatar" },
+      { source: "Timeline", local: "Timeline" },
+      { source: "Skeleton", local: "Skeleton" },
+      { source: "DropdownMenu", local: "DropdownMenu" },
+      { source: "CheckboxGroup", local: "CheckboxGroup" },
+      { source: "CodeBlock", local: "CodeBlock" },
     ];
     const filteredEnsoUI = ensoUINames
       .filter(({ local }) => !templateNames.has(local))
