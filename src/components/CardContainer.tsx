@@ -6,13 +6,13 @@ import { useElapsedTime, formatElapsed, estimateDuration } from "../lib/useElaps
 import { isOrchestrationCardData } from "@shared/types";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
-import { CodeInvestigateDialog } from "./CodeInvestigateDialog";
+
 import { useVoiceInput } from "./VoiceMicButton";
 import { getActiveBackend } from "../lib/connection";
 import { isNative } from "../lib/platform";
 import { nativeShare } from "../lib/native-share";
 import TerminalContent from "./TerminalContent";
-import { copyAsMarkdown, copyAsPlainText, downloadAsPDF, downloadAsCSV, hasMarkdownTables } from "../lib/export";
+import { copyAsMarkdown, copyAsPlainText, downloadAsCSV, hasMarkdownTables } from "../lib/export";
 import { API, TIMINGS } from "../lib/constants";
 
 const APP_ICONS: Record<string, string> = {
@@ -713,13 +713,21 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
   );
 }
 
-function ContentExportMenu({ card }: { card: Card }) {
+function CardShareMenu({ card, isShareable }: { card: Card; isShareable: boolean }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [imgBusy, setImgBusy] = useState(false);
+  const [showShareLink, setShowShareLink] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const sendCardAction = useChatStore((s) => s.sendCardAction);
   const text = card.text ?? "";
-  const hasTables = hasMarkdownTables(text);
+  const hasText = !!text && card.type !== "shell" && card.type !== "terminal";
+  const hasTables = hasText && hasMarkdownTables(text);
+  const family = card.appCardMode?.appId ?? card.appCardMode?.toolFamily
+    ?? card.cardMode?.appId ?? card.cardMode?.toolFamily;
 
   useEffect(() => {
     if (!open) return;
@@ -730,7 +738,6 @@ function ContentExportMenu({ card }: { card: Card }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Flash the export button when card first completes
   useEffect(() => {
     if (card.status === "complete") {
       setJustCompleted(true);
@@ -740,100 +747,197 @@ function ContentExportMenu({ card }: { card: Card }) {
   }, [card.status]);
 
   const title = (() => {
+    const data = (card.appData ?? card.data) as Record<string, unknown> | undefined;
+    if (typeof data?.topic === "string") return data.topic.slice(0, 60);
+    if (typeof data?.title === "string") return data.title.slice(0, 60);
     const firstLine = text.split("\n").find(l => l.trim());
     if (!firstLine) return "Enso Export";
     return firstLine.replace(/^#+\s*/, "").slice(0, 60);
   })();
 
-  return (
-    <div className="relative" ref={menuRef}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1 ${justCompleted ? "ring-2 ring-indigo-400/50 animate-pulse" : ""}`}
-        title="Export content"
-      >
-        <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-        <span className="text-[10px]">Export</span>
-      </button>
-      {open && (
-        <div className="absolute bottom-full right-0 mb-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] z-[200]">
-          <button
-            onClick={async () => { await copyAsMarkdown(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, TIMINGS.COPY_FEEDBACK); }}
-            className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            {copied ? "Copied!" : "Copy Markdown"}
-          </button>
-          <button
-            onClick={async () => { await copyAsPlainText(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, TIMINGS.COPY_FEEDBACK); }}
-            className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-            Copy Plain Text
-          </button>
-          <div className="h-px bg-gray-700/50 mx-2" />
-          <button
-            onClick={() => { downloadAsPDF(title, text); setOpen(false); }}
-            className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-            </svg>
-            Download PDF
-          </button>
-          {hasTables && (
-            <button
-              onClick={() => { downloadAsCSV(text, title.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 30)); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="3" y1="9" x2="21" y2="9" />
-                <line x1="3" y1="15" x2="21" y2="15" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-                <line x1="15" y1="3" x2="15" y2="21" />
-              </svg>
-              Download CSV
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ExportButton({ card }: { card: Card }) {
-  const [showDialog, setShowDialog] = useState(false);
+  const menuBtnClass = "w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2";
+  const iconClass = "h-3.5 w-3.5";
 
   return (
     <>
-      <button
-        onClick={() => setShowDialog(true)}
-        className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1"
-        title="Share / Export app"
-      >
-        <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-          <polyline points="16 6 12 2 8 6" />
-          <line x1="12" y1="2" x2="12" y2="15" />
-        </svg>
-        <span className="hidden sm:inline">Share</span>
-      </button>
-      {showDialog && <ShareDialog card={card} onClose={() => setShowDialog(false)} />}
+      <div className="relative" ref={menuRef}>
+        <button
+          onClick={() => setOpen(!open)}
+          className={`text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1 ${justCompleted ? "ring-2 ring-indigo-400/50 animate-pulse" : ""}`}
+          title="Share / Export"
+        >
+          <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+            <polyline points="16 6 12 2 8 6" />
+            <line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+          <span className="hidden sm:inline">Share</span>
+        </button>
+        {open && (
+          <div className="absolute top-full right-0 mt-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[170px] z-[200]">
+            {/* ── Copy section (text cards) ── */}
+            {hasText && (
+              <>
+                <button
+                  onClick={async () => { await copyAsMarkdown(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, TIMINGS.COPY_FEEDBACK); }}
+                  className={menuBtnClass}
+                >
+                  <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  {copied ? "Copied!" : "Copy Markdown"}
+                </button>
+                <button
+                  onClick={async () => { await copyAsPlainText(text); setCopied(true); setTimeout(() => { setCopied(false); setOpen(false); }, TIMINGS.COPY_FEEDBACK); }}
+                  className={menuBtnClass}
+                >
+                  <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  Copy Plain Text
+                </button>
+                <div className="h-px bg-gray-700/50 mx-2" />
+              </>
+            )}
+            {/* ── Image ── */}
+            <button
+              disabled={imgBusy}
+              onClick={async () => {
+                setImgBusy(true);
+                try {
+                  const { shareCardAsImage } = await import("../lib/card-share");
+                  await shareCardAsImage(card.id, title);
+                } catch (err) { console.error("[share_card_image]", err); }
+                setImgBusy(false);
+                setOpen(false);
+              }}
+              className={menuBtnClass}
+            >
+              <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              {imgBusy ? "Capturing..." : "Save as Image"}
+            </button>
+            {/* ── PDF ── */}
+            <button
+              disabled={pdfBusy}
+              onClick={async () => {
+                setPdfBusy(true);
+                try {
+                  const { shareCardAsPDF } = await import("../lib/card-share");
+                  const cardData = (card.appData ?? card.data ?? {}) as Record<string, unknown>;
+                  await shareCardAsPDF(card.id, title, family, cardData);
+                } catch (err) { console.error("[share_card_pdf]", err); }
+                setPdfBusy(false);
+                setOpen(false);
+              }}
+              className={menuBtnClass}
+            >
+              <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </svg>
+              {pdfBusy ? "Generating..." : "Save as PDF"}
+            </button>
+            {/* ── Email ── */}
+            <button
+              onClick={() => { setOpen(false); setShowEmailDialog(true); }}
+              className={menuBtnClass}
+            >
+              <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+              Email
+            </button>
+            <div className="h-px bg-gray-700/50 mx-2" />
+            {/* ── CSV (text cards with tables) ── */}
+            {hasTables && (
+              <button
+                onClick={() => { downloadAsCSV(text, title.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 30)); setOpen(false); }}
+                className={menuBtnClass}
+              >
+                <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="3" y1="15" x2="21" y2="15" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                  <line x1="15" y1="3" x2="15" y2="21" />
+                </svg>
+                Download CSV
+              </button>
+            )}
+            {/* ── Share Link (app/dynamic cards only) ── */}
+            {isShareable && (
+              <button
+                onClick={() => { setOpen(false); setShowShareLink(true); }}
+                className={menuBtnClass}
+              >
+                <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+                Share Live Link
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {showShareLink && <ShareDialog card={card} onClose={() => setShowShareLink(false)} />}
+      {showEmailDialog && (
+        <CardEmailDialog
+          title={title}
+          onClose={() => setShowEmailDialog(false)}
+          onSend={(recipient) => {
+            setShowEmailDialog(false);
+            sendCardAction(card.id, "share_email", { recipient, title });
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function CardEmailDialog({ title, onClose, onSend }: { title: string; onClose: () => void; onSend: (recipient: string) => void }) {
+  const [email, setEmail] = useState("");
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-sm mx-4 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 pt-4 pb-2">
+          <h3 className="text-sm font-semibold text-gray-100">Email: {title}</h3>
+        </div>
+        <div className="px-4 py-3">
+          <input
+            type="email"
+            placeholder="recipient@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter" && email.trim()) onSend(email.trim()); }}
+          />
+        </div>
+        <div className="px-4 py-3 border-t border-gray-700/50 flex items-center justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs rounded-lg border border-gray-600 text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-all duration-150 active:scale-[0.97] cursor-pointer">
+            Cancel
+          </button>
+          <button
+            onClick={() => { if (email.trim()) onSend(email.trim()); }}
+            disabled={!email.trim()}
+            className="px-3 py-1.5 text-xs rounded-lg border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition-all duration-150 active:scale-[0.97] cursor-pointer disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1153,8 +1257,11 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const sendCardAction = useChatStore((s) => s.sendCardAction);
   const requestCardSummary = useChatStore((s) => s.requestCardSummary);
   const requestCardEvolution = useChatStore((s) => s.requestCardEvolution);
+  const buildApp = useChatStore((s) => s.buildApp);
   const sendMessage = useChatStore((s) => s.sendMessage);
-  const [showCodeDialog, setShowCodeDialog] = useState(false);
+
+  const [showEvolveMenu, setShowEvolveMenu] = useState(false);
+  const evolveMenuRef = useRef<HTMLDivElement>(null);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -1162,6 +1269,15 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY });
   }, []);
+
+  useEffect(() => {
+    if (!showEvolveMenu) return;
+    const handler = (e: globalThis.MouseEvent) => {
+      if (evolveMenuRef.current && !evolveMenuRef.current.contains(e.target as Node)) setShowEvolveMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showEvolveMenu]);
 
   const isCollapsed = card.display === "collapsed";
   const isDeepBuilding = card.deepResearchStatus === "building";
@@ -1178,7 +1294,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   })();
   const isAppView = (card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI) || isDeepBuildAppView;
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
-  const isShareable = isAppView || isDynamicCard;
+  const isShareable = !!(isAppView || isDynamicCard);
   const isGeneralSmartCard = card.type === "dynamic-ui" && (card.cardMode?.appId ?? card.cardMode?.toolFamily) === "general";
 
   // "Research this" is available on any assistant card with text, except researcher cards themselves
@@ -1190,7 +1306,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
 
   const canEvolve = card.role === "assistant" && card.status === "complete"
     && !isDeepBuilding;
-  const evolveLabel = card.type === "terminal" ? "Dashboard" : card.type === "orchestration" ? "Report" : card.type === "dynamic-ui" ? "Upgrade" : "Evolve";
 
   const SUMMARIZABLE = new Set(["chat", "terminal", "orchestration", "dynamic-ui"]);
   const canSummarize = card.role === "assistant" && card.status === "complete"
@@ -1299,121 +1414,34 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       }
       return;
     }
-    // Client-side research share as long screenshot image
-    if (action === "__share_research_image") {
+    // Generic card share as image (works for any card)
+    if (action === "__share_card_image" || action === "__share_research_image") {
       const p = payload as Record<string, unknown> | undefined;
       const targetCardId = typeof p?.cardId === "string" ? p.cardId : card.id;
-      const topic = typeof p?.topic === "string" ? p.topic : "Research";
-      const el = document.querySelector(`[data-card-id="${targetCardId}"]`) as HTMLElement | null;
-      if (!el) return;
-
+      const title = typeof p?.topic === "string" ? p.topic : typeof p?.title === "string" ? p.title : "Enso";
       (async () => {
         try {
-          const { toPng } = await import("html-to-image");
-          const dataUrl = await toPng(el, {
-            pixelRatio: 2,
-            cacheBust: true,
-            backgroundColor: "#030712",
-            filter: (node: HTMLElement) => {
-              // Skip context menus, tooltips, etc.
-              if (node.classList?.contains("group-hover:opacity-100")) return false;
-              return true;
-            },
-          });
-          const res = await fetch(dataUrl);
-          const blob = await res.blob();
-          const filename = `enso-research-${topic.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 40)}.png`;
-          const file = new File([blob], filename, { type: "image/png" });
-
-          // Native app: share via Android share sheet with image file
-          const { nativeShareImage, isNative: isNativePlatform } = await import("../lib/native-share");
-          if (isNativePlatform) {
-            await nativeShareImage({ dataUrl, title: `Research: ${topic}`, filename });
-            return;
-          }
-
-          // Mobile browser: try Web Share API with file
-          const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-          if (isMobile && navigator.share && navigator.canShare?.({ files: [file] })) {
-            try {
-              await navigator.share({ title: `Research: ${topic}`, files: [file] });
-              return;
-            } catch (err) {
-              if ((err as DOMException)?.name === "AbortError") return;
-            }
-          }
-
-          // Desktop fallback: download the image
-          const a = document.createElement("a");
-          a.href = dataUrl;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+          const { shareCardAsImage } = await import("../lib/card-share");
+          await shareCardAsImage(targetCardId, title);
         } catch (err) {
-          console.error("[share_research_image] capture failed:", err);
-          // Fallback to text share
-          handleAction("__share_research", payload);
+          console.error("[share_card_image] capture failed:", err);
         }
       })();
       return;
     }
-    // Client-side research share as PDF
-    if (action === "__share_research_pdf") {
+    // Generic card share as PDF (uses per-family override if registered, else screenshot)
+    if (action === "__share_card_pdf" || action === "__share_research_pdf") {
       const p = payload as Record<string, unknown> | undefined;
-      const topic = typeof p?.topic === "string" ? p.topic : "Research";
+      const title = typeof p?.topic === "string" ? p.topic : typeof p?.title === "string" ? p.title : "Enso";
+      const cardFamily = card.appCardMode?.appId ?? card.appCardMode?.toolFamily
+        ?? card.cardMode?.appId ?? card.cardMode?.toolFamily;
       (async () => {
         try {
-          const { shareResearchAsPDF } = await import("../lib/research-pdf");
-          const { blob, filename } = await shareResearchAsPDF({
-            topic,
-            summary: typeof p?.summary === "string" ? p.summary : "",
-            keyFindings: Array.isArray(p?.keyFindings) ? p.keyFindings : [],
-            sections: Array.isArray(p?.sections) ? p.sections : [],
-            sources: Array.isArray(p?.sources) ? p.sources : [],
-            narrative: typeof p?.narrative === "string" ? p.narrative : "",
-            videos: Array.isArray(p?.videos) ? p.videos : [],
-            books: Array.isArray(p?.books) ? p.books : [],
-            movies: Array.isArray(p?.movies) ? p.movies : [],
-            contradictions: Array.isArray(p?.contradictions) ? p.contradictions : [],
-          });
-
-          // Native app: share PDF via Android share sheet
-          const { nativeShareFile, isNative: isNativePlatform } = await import("../lib/native-share");
-          if (isNativePlatform) {
-            // Convert blob to base64 data URL for native sharing
-            const reader = new FileReader();
-            const dataUrl = await new Promise<string>((resolve) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-            await nativeShareFile({ dataUrl, title: `Research: ${topic}`, filename, mimeType: "application/pdf" });
-            return;
-          }
-
-          // Mobile browser: try Web Share API with file
-          const file = new File([blob], filename, { type: "application/pdf" });
-          const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-          if (isMobile && navigator.share && navigator.canShare?.({ files: [file] })) {
-            try {
-              await navigator.share({ title: `Research: ${topic}`, files: [file] });
-              return;
-            } catch (err) {
-              if ((err as DOMException)?.name === "AbortError") return;
-            }
-          }
-
-          // Desktop fallback: download the PDF
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          const { shareCardAsPDF } = await import("../lib/card-share");
+          const data = (p ?? card.appData ?? card.data ?? {}) as Record<string, unknown>;
+          await shareCardAsPDF(card.id, title, cardFamily, data);
         } catch (err) {
-          console.error("[share_research_pdf] generation failed:", err);
+          console.error("[share_card_pdf] generation failed:", err);
         }
       })();
       return;
@@ -1539,19 +1567,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               </div>
             )}
             <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap justify-end">
-              {card.role === "assistant" && card.status === "complete" && (
-                <button
-                  onClick={() => setShowCodeDialog(true)}
-                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/50 active:bg-indigo-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
-                  title="Enhance with Claude Code"
-                >
-                  <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="16 18 22 12 16 6" />
-                    <polyline points="8 6 2 12 8 18" />
-                  </svg>
-                  <span className="hidden sm:inline">Code</span>
-                </button>
-              )}
               {canResearch && (
                 <button
                   onClick={() => {
@@ -1612,24 +1627,60 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                   <span className="hidden sm:inline">Podcast</span>
                 </button>
               )}
-              {!isShareable && card.role === "assistant" && card.status === "complete" && !!card.text && card.type !== "shell" && card.type !== "terminal" && (
-                <ContentExportMenu card={card} />
+              {card.role === "assistant" && card.status === "complete" && card.type !== "shell" && card.type !== "terminal" && (
+                <CardShareMenu card={card} isShareable={isShareable} />
               )}
-              {isShareable && card.status === "complete" && <ExportButton card={card} />}
               {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
               {canEvolve && (
-                <button
-                  onClick={() => requestCardEvolution(card.id)}
-                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-violet-300 hover:border-violet-500/50 active:bg-violet-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
-                  title={`Evolve this card into a polished interactive app via multi-agent sprint`}
-                >
-                  <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                    <path d="M2 17l10 5 10-5" />
-                    <path d="M2 12l10 5 10-5" />
-                  </svg>
-                  <span className="hidden sm:inline">{evolveLabel}</span>
-                </button>
+                <div className="relative" ref={evolveMenuRef}>
+                  <button
+                    onClick={() => setShowEvolveMenu(!showEvolveMenu)}
+                    className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-violet-300 hover:border-violet-500/50 active:bg-violet-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
+                    title="Evolve this card"
+                  >
+                    <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                      <path d="M2 17l10 5 10-5" />
+                      <path d="M2 12l10 5 10-5" />
+                    </svg>
+                    <span className="hidden sm:inline">Evolve</span>
+                  </button>
+                  {showEvolveMenu && (
+                    <div className="absolute top-full right-0 mt-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[190px] z-[200]">
+                      <button
+                        onClick={() => { setShowEvolveMenu(false); requestCardEvolution(card.id); }}
+                        className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
+                      >
+                        <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                          <path d="M2 17l10 5 10-5" />
+                          <path d="M2 12l10 5 10-5" />
+                        </svg>
+                        Evolve Current Card
+                      </button>
+                      <div className="h-px bg-gray-700/50 mx-2" />
+                      <button
+                        onClick={() => {
+                          setShowEvolveMenu(false);
+                          const data = (isAppView ? card.appData : card.data) as Record<string, unknown> | undefined;
+                          const topic = typeof data?.topic === "string" ? data.topic
+                            : typeof data?.title === "string" ? data.title
+                            : typeof data?.query === "string" ? data.query
+                            : (card.text ?? "").trim().split("\n")[0]?.slice(0, 200) || "card content";
+                          buildApp(card.id, card.text ?? "", `Build a new app based on this card's context: ${topic}`);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
+                      >
+                        <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="16" />
+                          <line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                        Build New App
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasBespokeUI) && <ViewToggle card={card} />}
               {statusLabel !== "ready" && (
@@ -1695,12 +1746,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
         </div>
       )}
 
-      {showCodeDialog && (
-        <CodeInvestigateDialog
-          cardId={card.id}
-          onClose={() => setShowCodeDialog(false)}
-        />
-      )}
     </div>
   );
 }

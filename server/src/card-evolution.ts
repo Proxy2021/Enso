@@ -57,7 +57,7 @@ function buildCardEvolutionPlanningPrompt(
     ? `\n## User's Evolution Goal\n${evolutionGoal}\n`
     : "";
 
-  return `You are planning a focused evolution sprint for a single Enso card. Your job is to create a short, targeted plan that transforms this card's content into a polished interactive app experience.
+  return `You are planning a focused evolution sprint for a single Enso card. Your job is to create a short, targeted plan that transforms this card into a polished, fully-functional interactive app — not just a new UI, but the complete component: data handling, business logic, and presentation.
 
 ${contentBlock}
 ${summaryBlock}${userGoalBlock}
@@ -73,7 +73,7 @@ ${includeResearch ? "Include a researcher task to gather real-world data that en
 Available agent roles: researcher, architect, builder, coder, reviewer
 Available output types: app, research, code, document, decision, review
 
-IMPORTANT: The final task MUST be a builder that creates a polished .orchestration-ui.jsx file at the project root. This file will be delivered as the evolved card UI.
+IMPORTANT: The final task MUST be a builder that creates a polished .orchestration-ui.jsx file at the project root. This file will be delivered as the evolved card. The component should be self-contained with its own state management, data processing, and UI — think of it as evolving the entire card, not just reskinning it. Include computed metrics, derived insights, interactive controls, and any logic that makes the component genuinely more capable than the original.
 
 Write the plan as a JSON file to: ${planFilePath}
 
@@ -102,46 +102,47 @@ function getTypeGuidance(cardType: string, includeResearch?: boolean): string {
 
   switch (cardType) {
     case "chat":
-      return `This is a chat response from an AI assistant. Transform it into a comprehensive interactive app.
-- Identify the core topic and domain
+      return `This is a chat response from an AI assistant. Evolve it into a comprehensive interactive app component.
+- Identify the core topic and domain, then build logic that processes and enriches the content
+- Compute derived metrics, comparisons, or summaries from the raw content
 - Design a UI that makes the content explorable, not just readable
 - Add structure: sections, tabs, comparison tables, visual hierarchies
-- If the topic involves data, include visualizations
-- Make it useful as a reference tool, not just a pretty display${researchNote}`;
+- If the topic involves data, include visualizations with interactive controls
+- Make it useful as a reference tool with filtering, search, and export${researchNote}`;
 
     case "terminal":
-      return `This is a Claude Code session transcript. Create a project status dashboard.
-- Extract files changed, created, or deleted
-- Identify key decisions made during the session
-- Show test results and coverage if mentioned
-- Create a timeline of actions taken
-- Highlight any errors encountered and how they were resolved
-- Include a "what changed" summary section${researchNote}`;
+      return `This is a Claude Code session transcript. Evolve it into a full project dashboard component.
+- Parse and extract files changed, created, or deleted — compute change statistics
+- Identify key decisions made during the session and surface them prominently
+- Aggregate test results, coverage data, and error counts
+- Build a timeline of actions taken with interactive navigation
+- Highlight errors encountered and how they were resolved
+- Include computed summaries: lines changed, session duration, success rate${researchNote}`;
 
     case "orchestration":
-      return `This is a multi-agent orchestration run. Build an executive dashboard.
-- Show each task's status, outcome, and key deliverables
-- Create a visual task dependency graph or timeline
-- Highlight successes and failures with clear indicators
-- Summarize agent contributions
+      return `This is a multi-agent orchestration run. Evolve it into a full executive dashboard component.
+- Parse task statuses and compute aggregate metrics (completion rate, timing, dependencies)
+- Create a visual task dependency graph or timeline with interactive drill-down
+- Highlight successes and failures with clear indicators and computed statistics
+- Summarize agent contributions with effort and output metrics
 - Include a "next steps" section based on what was accomplished vs what failed
-- If tasks produced research or code, make it browseable${researchNote}`;
+- If tasks produced research or code, make it browseable with search and filtering${researchNote}`;
 
     case "dynamic-ui":
-      return `This is an existing dynamic app. Evolve it to the next level.
-- Analyze the current data and UI structure
-- Identify missing features that would make it more useful
-- Improve data visualization and interactivity
-- Add filtering, sorting, export, or comparison capabilities
+      return `This is an existing dynamic app. Evolve the entire component to the next level.
+- Analyze the current data and UI structure, then add deeper processing logic
+- Identify missing features and build them (computed metrics, derived insights, correlations)
+- Improve data visualization with interactive charts, filters, and drill-downs
+- Add filtering, sorting, export, comparison, and search capabilities
 - Enhance the visual design with better layouts and typography
-- Keep all existing functionality while adding depth${researchNote}`;
+- Keep all existing functionality while adding substantial new depth and capability${researchNote}`;
 
     default:
-      return `Transform this card content into a polished interactive application.
-- Identify the key information and structure it for exploration
-- Design a clear, intuitive UI with appropriate visualizations
-- Make it interactive: filterable, sortable, or expandable
-- Focus on making the content actionable and referenceable${researchNote}`;
+      return `Evolve this card into a polished, fully-capable interactive component.
+- Identify the key information and build logic to process, enrich, and derive insights from it
+- Design a clear, intuitive UI with appropriate visualizations and interactive controls
+- Add computed metrics, filtering, sorting, search, and export capabilities
+- Focus on making the content actionable, explorable, and referenceable${researchNote}`;
   }
 }
 
@@ -159,10 +160,10 @@ export async function handleCardEvolution(params: CardEvolutionParams): Promise<
 
   try {
     await handleOrchestration({
-      userMessage: `Evolve this ${cardType} card into a polished interactive application${evolutionGoal ? `: ${evolutionGoal}` : ""}`,
+      userMessage: `Evolve this ${cardType} card into a polished, fully-functional interactive component — not just a new UI, but improved data handling, logic, and presentation${evolutionGoal ? `: ${evolutionGoal}` : ""}`,
       classification: {
         complexity: "orchestrated" as const,
-        reasoning: `Focused card evolution for ${cardType} card — multi-agent sprint to transform card content into an interactive app`,
+        reasoning: `Focused card evolution for ${cardType} card — multi-agent sprint to transform the entire component`,
       },
       client,
       account,

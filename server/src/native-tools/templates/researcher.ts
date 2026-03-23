@@ -605,14 +605,14 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
         <div className="flex gap-1 sm:gap-1.5 shrink-0 flex-wrap justify-end">
           {isComplete && (
-            <Button variant="ghost" onClick={() => onAction("__share_research_image", { topic })}>
+            <Button variant="ghost" onClick={() => onAction("__share_card_image", { topic })}>
               <LucideReact.Image className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Image</span>
             </Button>
           )}
           {isComplete && (
             <Button variant="ghost" onClick={() => {
               setShared(true);
-              onAction("__share_research_pdf", { topic, summary, keyFindings, sections, sources, narrative, videos, books, movies, contradictions });
+              onAction("__share_card_pdf", { topic, summary, keyFindings, sections, sources, narrative, videos, books, movies, contradictions });
               setTimeout(() => setShared(false), 3000);
             }}>
               {shared

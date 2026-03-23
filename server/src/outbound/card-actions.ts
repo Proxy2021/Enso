@@ -31,6 +31,7 @@ import { runClaudeCode } from "../claude-code.js";
 import { handleDeepResearchBuild, handleBuildAppViaClaude } from "../build-via-claude.js";
 // fs imports removed — no longer needed after deep research refactor
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
+import { sendHtmlEmail } from "../email.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts, isPathWithinRoot, validateScopedAction } from "./card-context.js";
 import {
@@ -40,6 +41,10 @@ import {
   applyDetectedToolTemplate,
   cardModeFromContext,
 } from "./helpers.js";
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 // ── Context Reconstruction ──
 
@@ -282,6 +287,79 @@ export async function handlePluginCardAction(params: {
       operation: { operationId, stage: "error", label: "Action not allowed", cancellable: false },
       timestamp: Date.now(),
     });
+    return;
+  }
+
+  // ── Share Email: send card content via email (generic, works for any card) ──
+  if (action === "share_email") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const recipient = String(p.recipient ?? "").trim();
+    if (!recipient) {
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "error", targetCardId: cardId,
+        text: "Recipient email address is required.",
+        operation: { operationId, stage: "error", label: "Email failed", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    const emailTitle = typeof p.title === "string" ? p.title : ctx.toolFamily ?? "Enso Card";
+
+    // Build email body from card context data
+    const data = ctx.currentData as Record<string, unknown> | undefined;
+    const parts: string[] = [];
+    parts.push(`<div style="font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;">`);
+    parts.push(`<h1 style="color:#1e40af;font-size:22px;margin-bottom:8px;">${escapeHtml(emailTitle)}</h1>`);
+    parts.push(`<p style="font-size:12px;color:#6b7280;margin-bottom:16px;">${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</p>`);
+    parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0;" />`);
+
+    const summary = typeof data?.summary === "string" ? data.summary : null;
+    const narrative = typeof data?.narrative === "string" ? data.narrative : null;
+    const text = typeof data?.text === "string" ? data.text : null;
+
+    if (summary) {
+      parts.push(`<p style="font-size:15px;line-height:1.6;">${escapeHtml(summary)}</p>`);
+    }
+    if (narrative) {
+      for (const para of narrative.split(/\n\n+/)) {
+        parts.push(`<p style="font-size:14px;line-height:1.5;color:#374151;">${escapeHtml(para.trim())}</p>`);
+      }
+    }
+    if (!summary && !narrative && text) {
+      parts.push(`<pre style="font-size:13px;line-height:1.5;white-space:pre-wrap;color:#374151;">${escapeHtml(text)}</pre>`);
+    }
+    if (!summary && !narrative && !text) {
+      parts.push(`<p style="color:#6b7280;">Card content shared from Enso.</p>`);
+    }
+
+    parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />`);
+    parts.push(`<p style="font-size:11px;color:#9ca3af;text-align:center;">Shared from Enso</p>`);
+    parts.push(`</div>`);
+
+    const html = parts.join("\n");
+
+    try {
+      const result = await sendHtmlEmail({
+        to: recipient,
+        subject: `Enso: ${emailTitle}`,
+        html,
+        textFallback: [emailTitle, "", summary ?? narrative ?? text ?? "Card content shared from Enso."].join("\n"),
+      });
+      sendOperation("complete", result.success ? "Email sent" : "Email failed");
+      client.send({
+        id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+        state: "complete", targetCardId: cardId,
+        data: { tool: "share_email", success: result.success, message: result.message },
+        generatedUI: ctx.signatureId ? getGeneratedTemplateCodeBySignature(ctx.signatureId) : undefined,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logError("email", `share_email failed: ${msg}`, undefined, { cardId });
+      sendOperation("error", "Email failed", msg);
+    }
     return;
   }
 
