@@ -196,9 +196,72 @@ export function ensureConversationLayout(clientId: string): string {
   return root;
 }
 
+/** Sidebar titles we replace with the first user message (ChatGPT-style). */
+const GENERIC_THREAD_TITLES = new Set(["new chat", "chat", ""]);
+
+function readFirstUserBubbleText(clientId: string, conversationId: string): string | null {
+  try {
+    if (!isSafeConversationId(conversationId)) return null;
+    ensureConversationLayout(clientId);
+    const path = conversationJournalPath(clientId, conversationId);
+    if (!existsSync(path)) return null;
+    const content = readFileSync(path, "utf-8");
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const r = JSON.parse(line) as CardRecord;
+        if (r.role === "user" && typeof r.text === "string" && r.text.trim()) return r.text.trim();
+      } catch {
+        /* skip */
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Derive a short sidebar title from the user's first message (ChatGPT-style).
+ */
+export function conversationTitleFromUserMessage(raw: string): string {
+  let s = raw.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
+  if (!s) return "";
+  let line = s.split("\n")[0]?.trim() ?? s;
+  line = line.replace(/^#+\s*/, "").replace(/^\s*[-*•]\s+/, "").trim();
+  if (!line) return "";
+  if ((line.startsWith('"') && line.endsWith('"')) || (line.startsWith("'") && line.endsWith("'"))) {
+    line = line.slice(1, -1).trim();
+  } else if (line.startsWith("\u201c") && line.endsWith("\u201d")) {
+    line = line.slice(1, -1).trim();
+  }
+  if (!line) return "";
+  const maxChars = 48;
+  const chars = Array.from(line);
+  if (chars.length <= maxChars) return line;
+  let out = chars.slice(0, maxChars).join("");
+  const lastSpace = out.lastIndexOf(" ");
+  if (lastSpace > 24) out = out.slice(0, lastSpace).trimEnd();
+  return `${out}…`;
+}
+
 export function listConversations(clientId: string): ConversationSummary[] {
   ensureConversationLayout(clientId);
-  return readConversationsIndex(clientCardsRoot(clientId)).sort((a, b) => b.updatedAt - a.updatedAt);
+  const root = clientCardsRoot(clientId);
+  let list = readConversationsIndex(root);
+  let changed = false;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    if (!GENERIC_THREAD_TITLES.has(c.title.trim().toLowerCase())) continue;
+    const first = readFirstUserBubbleText(clientId, c.id);
+    if (!first) continue;
+    const derived = conversationTitleFromUserMessage(first).trim();
+    if (!derived || GENERIC_THREAD_TITLES.has(derived.toLowerCase())) continue;
+    list[i] = { ...c, title: derived.slice(0, 200), updatedAt: Date.now() };
+    changed = true;
+  }
+  if (changed) writeConversationsIndex(root, list);
+  return readConversationsIndex(root).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 function touchConversationUpdatedAt(clientId: string, conversationId: string): void {
@@ -230,6 +293,52 @@ export function createConversation(clientId: string, title?: string): Conversati
   list.push(entry);
   writeConversationsIndex(root, list);
   return entry;
+}
+
+/** True if this thread's journal already has at least one persisted user message. */
+export function conversationJournalHasUserMessage(clientId: string, conversationId: string): boolean {
+  try {
+    if (!isSafeConversationId(conversationId)) return false;
+    ensureConversationLayout(clientId);
+    const path = conversationJournalPath(clientId, conversationId);
+    if (!existsSync(path)) return false;
+    const content = readFileSync(path, "utf-8");
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const r = JSON.parse(line) as { role?: string };
+        if (r.role === "user") return true;
+      } catch {
+        /* skip */
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * If the thread still has a generic title, set it from the first user message.
+ * Call only when this message is the first user turn in the journal (caller checks).
+ */
+export function maybeAutotitleConversation(clientId: string, conversationId: string, userMessageText: string): boolean {
+  try {
+    ensureConversationLayout(clientId);
+    const root = clientCardsRoot(clientId);
+    const list = readConversationsIndex(root);
+    const idx = list.findIndex((c) => c.id === conversationId);
+    if (idx < 0) return false;
+    const cur = list[idx].title.trim();
+    if (!GENERIC_THREAD_TITLES.has(cur.toLowerCase())) return false;
+    const derived = conversationTitleFromUserMessage(userMessageText).trim();
+    if (!derived || GENERIC_THREAD_TITLES.has(derived.toLowerCase())) return false;
+    list[idx] = { ...list[idx], title: derived.slice(0, 200), updatedAt: Date.now() };
+    writeConversationsIndex(root, list);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function renameConversation(clientId: string, conversationId: string, title: string): boolean {

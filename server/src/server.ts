@@ -35,6 +35,8 @@ import {
   createConversation,
   renameConversation,
   deleteConversation,
+  conversationJournalHasUserMessage,
+  maybeAutotitleConversation,
   isSafeConversationId,
   DEFAULT_CONVERSATION_ID,
 } from "./memory-bridge.js";
@@ -1499,6 +1501,7 @@ export async function startEnsoServer(opts: {
             // messages (e.g. claude-code prompts contain system instructions
             // that shouldn't appear as user messages in history).
             if (msg.text && !msg.routing?.toolId) {
+              const hadPriorUserInThread = conversationJournalHasUserMessage(clientId, convId);
               const userCardId = randomUUID();
               persistConv({
                 id: userCardId,
@@ -1509,6 +1512,20 @@ export async function startEnsoServer(opts: {
                 mediaUrls: msg.mediaUrls,
                 timestamp: Date.now(),
               });
+              if (!hadPriorUserInThread && msg.text.trim()) {
+                const titled = maybeAutotitleConversation(clientId, convId, msg.text);
+                if (titled) {
+                  send({
+                    id: randomUUID(),
+                    runId: randomUUID(),
+                    sessionKey,
+                    seq: 0,
+                    state: "final",
+                    conversationsList: listConversations(clientId),
+                    timestamp: Date.now(),
+                  });
+                }
+              }
             }
             // Direct tool invocation — bypass OpenClaw pipeline entirely
             if (msg.routing?.toolId === "claude-code" && msg.text) {

@@ -1886,7 +1886,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       const res = await fetch(`${getBackendBaseUrl()}${API.CONVERSATIONS}`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ clientId, title: "New chat" }),
+        body: JSON.stringify({ clientId }),
         signal: AbortSignal.timeout(TIMINGS.API_FETCH_TIMEOUT),
       });
       if (!res.ok) return;
