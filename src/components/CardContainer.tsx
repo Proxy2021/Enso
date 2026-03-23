@@ -1086,16 +1086,17 @@ function ViewToggle({ card }: { card: Card }) {
   }
 
   // Standard 2-segment toggle for other cards
+  const isAppBuilding = isBuilding && card.appCardMode?.signatureId === "app_building";
   const isBespokeView = isDeepResearch || isFocusedArchetype || isOrchestration;
   const originalLabel = isOrchestration ? "Plan" : isBespokeView ? "Standard" : "Original";
   const originalLabelShort = isOrchestration ? "Plan" : isBespokeView ? "Std" : "Text";
-  const appLabel = isOrchestration
-    ? (orchHasBespokeUI ? "✨ Result" : "⚡ Terminal")
+  const appLabel = isAppBuilding ? "Building"
+    : isOrchestration ? (orchHasBespokeUI ? "✨ Result" : "⚡ Terminal")
     : isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
-  const appLabelShort = isOrchestration
-    ? (orchHasBespokeUI ? "Result" : "Term")
+  const appLabelShort = isAppBuilding ? "Build"
+    : isOrchestration ? (orchHasBespokeUI ? "Result" : "Term")
     : isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
-  const appIcon = isOrchestration ? null : isBespokeView ? "✨" : familyIcon;
+  const appIcon = isAppBuilding ? null : isOrchestration ? null : isBespokeView ? "✨" : familyIcon;
 
   return (
     <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
@@ -1387,7 +1388,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     const s = card.data.orchestrationProgress?.plan?.status;
     return s === "completed" || s === "failed";
   })();
-  const isAppView = (card.viewMode === "app" && card.enhanceStatus === "ready" && card.appGeneratedUI) || isDeepBuildAppView;
+  const isAppView = (card.viewMode === "app" && card.appGeneratedUI) || isDeepBuildAppView;
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
   const isShareable = !!(isAppView || isDynamicCard);
   const isGeneralSmartCard = card.type === "dynamic-ui" && (card.cardMode?.appId ?? card.cardMode?.toolFamily) === "general";
@@ -1650,24 +1651,27 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
       ) : (
         <div data-card-id={card.id} className={`relative rounded-2xl border border-gray-700/70 bg-gray-900/40 backdrop-blur-sm shadow-[0_10px_26px_rgba(0,0,0,0.28)] ${isActive ? "ring-1 ring-indigo-400/35" : ""}`}>
           <div className="flex items-center justify-between px-2 sm:px-3 py-1.5 border-b border-gray-700/60">
-            {card.status === "complete" ? (
-              <button
-                onClick={() => collapseCard(card.id)}
-                className="flex items-center gap-1 sm:gap-1.5 text-xs text-gray-400 min-w-0 hover:text-gray-200 active:text-gray-100 transition-all duration-150"
-                title="Collapse card"
-              >
-                <svg className="h-3 w-3 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                <span>{icon}</span>
-                <span className="truncate">{getCardLabel(card, effectiveType)}</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-gray-400 min-w-0">
-                <span>{icon}</span>
-                <span className="truncate">{getCardLabel(card, effectiveType)}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              {card.status === "complete" ? (
+                <button
+                  onClick={() => collapseCard(card.id)}
+                  className="flex items-center gap-1 sm:gap-1.5 text-xs text-gray-400 min-w-0 hover:text-gray-200 active:text-gray-100 transition-all duration-150"
+                  title="Collapse card"
+                >
+                  <svg className="h-3 w-3 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                  <span>{icon}</span>
+                  <span className="truncate">{getCardLabel(card, effectiveType)}</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-gray-400 min-w-0">
+                  <span>{icon}</span>
+                  <span className="truncate">{getCardLabel(card, effectiveType)}</span>
+                </div>
+              )}
+              {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasBespokeUI || !!card.appGeneratedUI) && <ViewToggle card={card} />}
+            </div>
             <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap justify-end">
               {canResearch && (
                 <button
@@ -1732,7 +1736,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               {card.role === "assistant" && card.status === "complete" && card.type !== "shell" && card.type !== "terminal" && (
                 <CardShareMenu card={card} isShareable={isShareable} />
               )}
-              {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
               {canEvolve && (
                 <div className="relative" ref={evolveMenuRef}>
                   <button
@@ -1784,7 +1787,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                   )}
                 </div>
               )}
-              {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasBespokeUI) && <ViewToggle card={card} />}
               {isEvolution && card.status === "complete" && card.appCardMode?.signatureId !== "card_evolution_building" && (
                 <button
                   onClick={() => releaseCard(card.id)}
@@ -1825,6 +1827,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                   {statusLabel}
                 </div>
               )}
+              {isShareable && card.status === "complete" && <PinButton cardId={card.id} />}
             </div>
           </div>
           {card.releaseProgress && (
@@ -1862,7 +1865,9 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           ) : isDeepBuildAppView ? (
             <DeepResearchBuildView
               text={card.buildTerminalText ?? ""}
-              label={card.appCardMode?.signatureId === "card_evolution_building" ? "Evolving" : undefined}
+              label={card.appCardMode?.signatureId === "card_evolution_building" ? "Evolving"
+                : card.appCardMode?.signatureId === "app_building" ? "Building App"
+                : undefined}
             />
           ) : orchShowTerminal ? (
             <OrchestrationTerminalView

@@ -27,6 +27,7 @@ import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ServerMessage, ToolBuildSummary, EnhanceResult } from "./types.js";
 import { logAction, logError, logFix } from "./action-log.js";
 import { getEnsoPath } from "./utils/home.js";
+import { persistCard } from "./memory-bridge.js";
 
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
@@ -50,7 +51,6 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
   const cardId = params.cardId ?? params.targetCardId ?? randomUUID();
   const cardText = params.cardText ?? params.instruction ?? params.originalText ?? "";
   const buildAppDefinition = params.buildAppDefinition ?? "";
-  const buildTerminalCardId = randomUUID();
   const runId = randomUUID();
 
   // 1. Snapshot existing app families before the build starts
@@ -58,7 +58,6 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
   const buildStartTime = Date.now();
   logAction({ ts: buildStartTime, type: "build", category: "build-via-claude", message: `Build start: ${buildAppDefinition.slice(0, 100)}`, cardId });
 
-  // 2. Create a terminal card on the client
   const send = (msg: Partial<ServerMessage>) => {
     client.send({
       id: randomUUID(),
@@ -70,18 +69,10 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
     } as ServerMessage);
   };
 
-  send({
-    state: "delta",
-    text: "",
-    toolMeta: { toolId: "claude-code", cwd: PROJECT_ROOT },
-    targetCardId: buildTerminalCardId,
-    cardType: "terminal",
-  });
-
-  // 3. Craft the build prompt
+  // 2. Craft the build prompt
   const prompt = buildAppPrompt(cardText, buildAppDefinition, conversationContext);
 
-  // 4. Run Claude Code — the terminal card will show full streaming output
+  // 3. Run Claude Code — streams to the source card (client accumulates in buildTerminalText)
   let sessionId: string | undefined;
   try {
     const result = await runClaudeCode({
@@ -89,7 +80,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
       cwd: PROJECT_ROOT,
       client,
       runId,
-      targetCardId: buildTerminalCardId,
+      targetCardId: cardId,
       skipPersist: true,
     });
     sessionId = result.sessionId;
@@ -132,7 +123,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
           toolSessionId: sessionId,
           client,
           runId: randomUUID(),
-          targetCardId: buildTerminalCardId,
+          targetCardId: cardId,
           skipPersist: true,
         });
         // Re-scan and re-deliver after fix
@@ -306,7 +297,18 @@ async function postBuildRegistration(
     enhanceResult,
   });
 
-  // Send buildComplete notification (creates a notification card)
+  // Persist enhance result to card journal so it survives page reload
+  persistCard(params.client.id, {
+    id: cardId,
+    runId: "",
+    type: "chat",
+    role: "assistant",
+    appData: data,
+    appGeneratedUI: app.templateJSX,
+    appCardMode: enhanceResult.cardMode,
+    timestamp: Date.now(),
+  });
+
   sendBuildComplete(send, cardId, true, buildSummary);
 
   logAction({ ts: Date.now(), type: "build", category: "build-via-claude", message: `App "${spec.toolFamily}" built and registered (${registeredToolNames.length} tools)`, cardId, toolFamily: spec.toolFamily });

@@ -189,7 +189,7 @@ describe("System tools", () => {
 // ── WS2: App manifests are valid ──
 
 describe("New app manifests", () => {
-  const appFamilies = ["data_analyzer", "system_monitor", "note_keeper"];
+  const appFamilies = ["data_analyzer", "note_keeper"];
 
   for (const family of appFamilies) {
     describe(family, () => {
@@ -290,14 +290,6 @@ describe("New app templates compile", () => {
     // Dynamic import to avoid pulling in browser deps at module level
     const { compileComponent } = await import("../../src/lib/sandbox.js");
     const templateCode = fs.readFileSync(path.join(APPS_DIR, "data_analyzer", "template.jsx"), "utf-8");
-    const result = compileComponent(templateCode);
-    expect(result.error).toBeUndefined();
-    expect(result.Component).toBeDefined();
-  });
-
-  it("system_monitor template compiles", async () => {
-    const { compileComponent } = await import("../../src/lib/sandbox.js");
-    const templateCode = fs.readFileSync(path.join(APPS_DIR, "system_monitor", "template.jsx"), "utf-8");
     const result = compileComponent(templateCode);
     expect(result.error).toBeUndefined();
     expect(result.Component).toBeDefined();

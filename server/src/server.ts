@@ -319,22 +319,6 @@ const APP_INTENT_PATTERNS: Array<{
   { pattern: /\b(batch\s+process|style\s+preview|portra\s+400|wong\s+kar[- ]?wai|blade\s+runner|nordic\s+noir|photo\s*book|create\s+(a\s+)?photo\s*book)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
   { pattern: /\b(adjust\s+(a\s+|my\s+|this\s+)?photo|photo\s+adjust|increase\s+contrast|add\s+grain|edit\s+(my\s+|a\s+|this\s+)?photo|analyze\s+(this\s+|my\s+|a\s+)?photo|compare\s+(photo\s+)?versions|show\s+(me\s+)?(all\s+)?styles|list\s+styles|artistic\s+styles)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
 
-  // ── Media Processing — AI operations, video intelligence, batch processing ──
-  // Added Sprint 11: route processing verbs to media_processing app
-  { pattern: /\b(upscale|upres|super.?res|enlarge)\s+(my\s+|this\s+|these\s+|the\s+)?(photo|image|picture|file)/i,
-    toolFamily: "media_processing", confidence: 0.9 },
-  { pattern: /\b(remove\s+(the\s+)?background|background\s+remov|transparent\s+png|cut\s*out)\b/i,
-    toolFamily: "media_processing", confidence: 0.9 },
-  { pattern: /\b(contact\s+sheet|thumbnail\s+grid|photo\s+grid|proof\s+sheet)\b/i,
-    toolFamily: "media_processing", confidence: 0.85 },
-  { pattern: /\b(color\s+(grade|grading|match|correct)|match\s+(the\s+)?color|color\s+palette)\b/i,
-    toolFamily: "media_processing", confidence: 0.85 },
-  { pattern: /\b(extract\s+frames?|scene\s+detect|video\s+(highlight|analysis|inspect)|frame\s+extract)\b/i,
-    toolFamily: "media_processing", confidence: 0.9 },
-  { pattern: /\b(generate\s+thumbnail|video\s+thumbnail|highlight\s+reel)\b/i,
-    toolFamily: "media_processing", confidence: 0.85 },
-  { pattern: /\b(batch\s+(convert|resize|rename|export)|bulk\s+(convert|resize))\b/i,
-    toolFamily: "media_processing", confidence: 0.85 },
 ];
 
 function matchAppIntent(message: string): { appId: string; toolFamily: string; confidence: number } | null {

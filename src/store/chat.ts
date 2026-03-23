@@ -911,17 +911,30 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const card = get().cards[cardId];
     if (!card) return;
 
-    // Request notification permission for long-running build
     requestNotificationPermission();
 
-    // Gather recent conversation context for the build prompt
+    // Put the card into building mode — Claude Code will stream into buildTerminalText
+    set((s) => ({
+      cards: {
+        ...s.cards,
+        [cardId]: {
+          ...s.cards[cardId],
+          deepResearchStatus: "building" as const,
+          buildTerminalText: "",
+          viewMode: "app" as const,
+          enhanceStatus: "ready" as const,
+          appCardMode: { interactionMode: "tool", signatureId: "app_building" },
+          updatedAt: Date.now(),
+        },
+      },
+    }));
+
     const { cardOrder, cards } = get();
     const recent = cardOrder.slice(-6).map((id) => cards[id]).filter(Boolean);
     const conversationContext = recent
       .map((c) => `[${c.role}] ${(c.text ?? "").slice(0, 400)}`)
       .join("\n\n");
 
-    // Fire-and-forget: build runs as Claude Code session in a terminal card
     get()._wsClient?.send({
       type: "card.build_app",
       cardId,
@@ -2086,13 +2099,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
       return;
     }
 
-    // Handle build completion (async build pipeline notification)
+    // Handle build completion — update source card, browser notification only (no extra cards)
     if (msg.buildComplete) {
       const { cardId: buildCardId, success, summary, error } = msg.buildComplete;
       const now = Date.now();
-      const notifId = msg.id;
 
-      // Browser notification for build completion
       if (success && summary) {
         const familyLabel = summary.toolFamily.replace(/_/g, " ");
         notifyTaskComplete({
@@ -2110,66 +2121,22 @@ export const useChatStore = create<CardStore>((set, get) => ({
         });
       }
 
-      // Create a notification chat card
-      let notifText: string;
-      if (success && summary) {
-        const familyLabel = summary.toolFamily.replace(/_/g, " ");
-        notifText = `✓ New app built: **${familyLabel}** (${summary.toolNames.length} tools)\n\n${summary.description}`;
-      } else {
-        notifText = `✗ App build failed${error ? `: ${error}` : ""}`;
-      }
-
-      const notifCard: Card = {
-        id: notifId,
-        runId: msg.runId,
-        type: "chat",
-        role: "assistant",
-        status: "complete",
-        display: "expanded",
-        text: notifText,
-        createdAt: now,
-        updatedAt: now,
-      };
-
       set((state) => {
-        const updates: Partial<CardStore> = {
-          cardOrder: [...state.cardOrder, notifId],
-          cards: { ...state.cards, [notifId]: notifCard },
-        };
-
-        // If the source card still exists, update its enhance status and auto-open app view
         const sourceCard = state.cards[buildCardId];
-        if (sourceCard && success) {
-          updates.cards = {
-            ...updates.cards!,
+        if (!sourceCard) return state;
+        return {
+          cards: {
+            ...state.cards,
             [buildCardId]: {
               ...sourceCard,
-              enhanceStatus: "ready",
-              viewMode: "app",
+              enhanceStatus: success ? "ready" as const : sourceCard.enhanceStatus,
+              viewMode: success ? "app" as const : sourceCard.viewMode,
+              deepResearchStatus: undefined,
+              buildTerminalText: undefined,
               updatedAt: now,
             },
-          };
-        }
-
-        // Add evolve suggestion card after successful build
-        if (success) {
-          const evolveId = uuidv4();
-          const evolveCard: Card = {
-            id: evolveId,
-            runId: evolveId,
-            type: "chat",
-            role: "assistant",
-            display: "expanded",
-            text: "**App built successfully!** To improve it with an AI sprint, run `/evolve`.\n\nOr tell me what to change \u2014 e.g., \"Add dark mode\" or \"Improve the landing page.\"",
-            status: "complete",
-            createdAt: now + 1,
-            updatedAt: now + 1,
-          };
-          updates.cardOrder = [...(updates.cardOrder || state.cardOrder), evolveId];
-          updates.cards = { ...updates.cards!, [evolveId]: evolveCard };
-        }
-
-        return updates;
+          },
+        };
       });
       return;
     }
@@ -2571,7 +2538,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
           const isOrchestration = card.type === "orchestration";
 
           // Browser notification for deep research / enhance completion
-          if (wasBuilding) {
+          // (skip for app builds — buildComplete sends its own notification)
+          if (wasBuilding && card.appCardMode?.signatureId !== "app_building") {
             notifyTaskComplete({
               type: "deep_research",
               title: "Deep research complete",
@@ -2673,7 +2641,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           };
         }
 
-        const isAppView = card.viewMode === "app" && card.enhanceStatus === "ready";
+        const isAppView = card.viewMode === "app" && (card.enhanceStatus === "ready" || !!card.appGeneratedUI);
         const isDeepBuild = card.deepResearchStatus === "building";
         const updatedCard: Card = {
           ...card,

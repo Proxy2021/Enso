@@ -57,14 +57,6 @@ export const APP_CATALOG: AppEntry[] = [
     signatureId: "clawhub_store",
     description: "ClawHub skill store: browse, search, install and manage OpenClaw skills",
   },
-  // ── Media Processing (Sprint 11: E3) ──
-  {
-    appId: "media_processing",
-    primaryTool: "enso_media_processing_inspect",
-    actions: ["inspect", "frames", "scenes", "thumbnail", "sheet", "upscale", "rmbg"],
-    signatureId: "media_processing_view",
-    description: "Media processing: video intelligence (inspect, scenes, frames), contact sheets, AI upscaling, background removal",
-  },
   // ── Terminal System Apps ──
   {
     appId: "claude_code",
