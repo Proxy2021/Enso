@@ -37,7 +37,7 @@ export interface Card {
   appGeneratedUI?: string;
   appCardMode?: CardModeDetail;
   appBuildSummary?: ToolBuildSummary;
-  viewMode?: "original" | "app";
+  viewMode?: "original" | "app" | "plan" | "sessions";
   enhanceStatus?: EnhanceStatus;
   suggestedFamily?: string;
   pendingProposal?: string;

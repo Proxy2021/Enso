@@ -43,6 +43,13 @@ function humanToolLabel(name: string): string {
   return TOOL_LABELS[name] ?? name;
 }
 
+function formatWait(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
 /**
  * Best-effort extraction of a short detail string from partial JSON.
  * We look for common parameter names (file_path, command, pattern, query, url).
@@ -658,14 +665,13 @@ export async function runClaudeCode(params: {
         const info = msg.rate_limit_info as Record<string, unknown> | undefined;
         if (info) {
           const status = info.status as string;
-          if (status === "rejected" || status === "allowed_warning") {
-            const resetsAt = info.resetsAt as number | undefined;
-            const waitLabel = resetsAt
-              ? ` (resets in ${Math.max(1, Math.round((resetsAt - Date.now() / 1000)))}s)`
-              : "";
-            const markerStatus = status === "rejected" ? "rejected" : "warning";
-            logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:ratelimit", message: `Rate limit ${markerStatus}${waitLabel}`, sessionId, metadata: { status: markerStatus, resetsAt } });
-            sendDelta(`\u200B[ratelimit:${markerStatus}${waitLabel}]\n`);
+          const resetsAt = info.resetsAt as number | undefined;
+          const deltaSec = resetsAt ? Math.max(1, Math.round(resetsAt - Date.now() / 1000)) : 0;
+          const waitLabel = deltaSec > 0 ? ` (resets in ${formatWait(deltaSec)})` : "";
+
+          if (status === "rejected") {
+            logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:ratelimit", message: `Rate limit rejected${waitLabel}`, sessionId, metadata: { status: "rejected", resetsAt } });
+            sendDelta(`\u200B[ratelimit:rejected${waitLabel}]\n`);
             sendDelta(undefined, {
               operation: {
                 operationId: runId,
@@ -674,6 +680,8 @@ export async function runClaudeCode(params: {
                 cancellable: true,
               },
             });
+          } else if (status === "allowed_warning") {
+            logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:ratelimit", message: `Rate limit warning${waitLabel} (utilization: ${info.utilization ?? "?"})`, sessionId, metadata: { status: "warning", resetsAt, utilization: info.utilization } });
           }
         }
         continue;

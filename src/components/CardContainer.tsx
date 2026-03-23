@@ -971,6 +971,51 @@ function OrchestrationTerminalView({ text, isComplete }: { text: string; isCompl
   );
 }
 
+function TaskSessionsView({ taskTerminals }: { taskTerminals: Record<string, { text: string; status: string }> }) {
+  const tasks = Object.entries(taskTerminals);
+  const [activeTab, setActiveTab] = useState(0);
+  if (tasks.length === 0) return <div className="px-4 py-6 text-center text-gray-500 text-sm">No sessions yet</div>;
+
+  const [taskId, task] = tasks[Math.min(activeTab, tasks.length - 1)];
+  const shortId = taskId.length > 8 ? taskId.slice(0, 8) : taskId;
+
+  return (
+    <div className="bg-[#0d1117] rounded-lg border border-gray-800 overflow-hidden">
+      {tasks.length > 1 && (
+        <div className="flex border-b border-gray-800 overflow-x-auto">
+          {tasks.map(([tid, t], i) => {
+            const label = tid.length > 12 ? tid.slice(0, 12) : tid;
+            const isActive = i === Math.min(activeTab, tasks.length - 1);
+            const statusDot = t.status === "complete" ? "bg-green-400" : t.status === "error" ? "bg-red-400" : "bg-amber-400 animate-pulse";
+            return (
+              <button
+                key={tid}
+                onClick={() => setActiveTab(i)}
+                className={`px-3 py-1.5 text-[11px] whitespace-nowrap flex items-center gap-1.5 border-b-2 transition-colors ${
+                  isActive
+                    ? "border-violet-400 text-violet-300 bg-violet-500/10"
+                    : "border-transparent text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <TerminalContent
+        text={task.text}
+        status={task.status === "complete" ? "complete" : "streaming"}
+        accentColor="violet"
+        showHeader
+        headerLabel={`Session ${shortId}`}
+        maxHeightClass="max-h-[500px]"
+      />
+    </div>
+  );
+}
+
 function ViewToggle({ card }: { card: Card }) {
   const toggleCardView = useChatStore((s) => s.toggleCardView);
   const viewMode = card.viewMode ?? "original";
@@ -979,7 +1024,6 @@ function ViewToggle({ card }: { card: Card }) {
   const familyLabel = family ? family.replace(/_/g, " ") : "App";
   const isBuilding = card.deepResearchStatus === "building";
 
-  // Deep research / archetype / orchestration / evolution toggle labels
   const isOrchestration = card.type === "orchestration";
   const orchHasBespokeUI = isOrchestration && !!card.appGeneratedUI && card.enhanceStatus === "ready";
   const isFocusedArchetype = isBuilding || family === "archetype" ||
@@ -992,15 +1036,58 @@ function ViewToggle({ card }: { card: Card }) {
     (card.appData as Record<string, unknown>)?.metadata &&
     ((card.appData as Record<string, unknown>)?.metadata as Record<string, unknown>)?.isDeepResearch
   ));
-  const isBespokeView = isDeepResearch || isFocusedArchetype || isCardEvolution || isOrchestration;
+
+  // Card evolution: 3-segment toggle (Content / Plan / Sessions)
+  if (isCardEvolution) {
+    const hasTaskTerminals = !!card.taskTerminals && Object.keys(card.taskTerminals).length > 0;
+    const segClass = (active: boolean, pulse?: boolean) =>
+      `text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
+        pulse ? "bg-violet-500/20 text-violet-300 animate-pulse"
+        : active ? "bg-gray-600/60 text-gray-200"
+        : "text-gray-400 hover:text-gray-300 active:text-gray-200"
+      }`;
+    return (
+      <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
+        <button
+          onClick={() => toggleCardView(card.id, "app")}
+          className={segClass(viewMode === "app", isBuilding && viewMode === "app")}
+          title="Evolved content"
+        >
+          <span className="hidden sm:inline">{isBuilding ? "Building" : "Content"}</span>
+          <span className="sm:hidden">{isBuilding ? "Build" : "Content"}</span>
+        </button>
+        <button
+          onClick={() => toggleCardView(card.id, "plan")}
+          className={segClass(viewMode === "plan", isBuilding && viewMode === "plan")}
+          title="Orchestration plan"
+        >
+          <span className="hidden sm:inline">Plan</span>
+          <span className="sm:hidden">Plan</span>
+        </button>
+        {hasTaskTerminals && (
+          <button
+            onClick={() => toggleCardView(card.id, "sessions")}
+            className={segClass(viewMode === "sessions")}
+            title="Claude Code sessions"
+          >
+            <span className="hidden sm:inline">Sessions</span>
+            <span className="sm:hidden">Sess</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Standard 2-segment toggle for other cards
+  const isBespokeView = isDeepResearch || isFocusedArchetype || isOrchestration;
   const originalLabel = isOrchestration ? "Plan" : isBespokeView ? "Standard" : "Original";
   const originalLabelShort = isOrchestration ? "Plan" : isBespokeView ? "Std" : "Text";
   const appLabel = isOrchestration
     ? (orchHasBespokeUI ? "✨ Result" : "⚡ Terminal")
-    : isCardEvolution ? "✨ Evolved" : isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
+    : isFocusedArchetype ? "✨ Result" : isDeepResearch ? "Deep" : familyLabel;
   const appLabelShort = isOrchestration
     ? (orchHasBespokeUI ? "Result" : "Term")
-    : isCardEvolution ? "Evolved" : isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
+    : isFocusedArchetype ? "Result" : isDeepResearch ? "Deep" : "App";
   const appIcon = isOrchestration ? null : isBespokeView ? "✨" : familyIcon;
 
   return (
@@ -1296,6 +1383,12 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const isDynamicCard = card.type === "dynamic-ui" && !!card.generatedUI;
   const isShareable = !!(isAppView || isDynamicCard);
   const isGeneralSmartCard = card.type === "dynamic-ui" && (card.cardMode?.appId ?? card.cardMode?.toolFamily) === "general";
+  const evolFamily = card.appCardMode?.appId ?? card.appCardMode?.toolFamily;
+  const isEvolution = evolFamily === "evolution"
+    || card.appCardMode?.signatureId === "card_evolution_building"
+    || card.appCardMode?.signatureId === "focused_archetype_custom";
+  const showPlanView = isEvolution && card.viewMode === "plan";
+  const showSessionsView = isEvolution && card.viewMode === "sessions" && !!card.taskTerminals;
 
   // "Research this" is available on any assistant card with text, except researcher cards themselves
   const cardFamily = (isAppView ? card.appCardMode?.appId : card.cardMode?.appId)
@@ -1690,7 +1783,15 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
             </div>
           </div>
-          {isDeepBuildAppView ? (
+          {showPlanView ? (
+            <Renderer
+              card={{ ...card, viewMode: "original" }}
+              isActive={isActive}
+              onAction={handleAction}
+            />
+          ) : showSessionsView ? (
+            <TaskSessionsView taskTerminals={card.taskTerminals!} />
+          ) : isDeepBuildAppView ? (
             <DeepResearchBuildView
               text={card.buildTerminalText ?? ""}
               label={card.appCardMode?.signatureId === "card_evolution_building" ? "Evolving" : undefined}

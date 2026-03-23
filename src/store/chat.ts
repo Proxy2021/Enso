@@ -91,7 +91,7 @@ interface CardStore {
   enhanceCard: (cardId: string) => void;
   enhanceCardWithFamily: (cardId: string, family: string) => void;
   buildApp: (cardId: string, cardText: string, definition: string) => void;
-  toggleCardView: (cardId: string, viewMode: "original" | "app") => void;
+  toggleCardView: (cardId: string, viewMode: "original" | "app" | "plan" | "sessions") => void;
   cancelOperation: (operationId: string) => void;
   collapseCard: (cardId: string) => void;
   expandCard: (cardId: string) => void;
@@ -994,7 +994,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
-  toggleCardView: (cardId: string, viewMode: "original" | "app") => {
+  toggleCardView: (cardId: string, viewMode: "original" | "app" | "plan" | "sessions") => {
     set((s) => {
       const card = s.cards[cardId];
       if (!card) return s;
