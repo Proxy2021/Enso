@@ -20,6 +20,7 @@ import { callChatLLM } from "./llm-provider.js";
 import { getAllLocalTools, executeLocalTool } from "./tool-registry-local.js";
 import { getMemoryContext, appendDailyMemory } from "./memory-bridge.js";
 import { geminiUrl, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
+import { recordToolCall } from "./native-tools/tool-call-store.js";
 
 // ── Conversation history (in-memory, per session) ──
 
@@ -118,6 +119,7 @@ ${profileBlock}${memoryRecallBlock}
 ## Guidelines
 - Be concise but thorough
 - When a tool can provide better data than your knowledge, prefer the tool
+- IMPORTANT: For real-time or dynamic information (current time, live data, file listings, system status), ALWAYS use the relevant tool instead of guessing. You do NOT have access to the current time — use a tool if one exists.
 - Always explain your findings after calling a tool
 - If a tool call fails, explain the error and try an alternative approach`;
 }
@@ -213,9 +215,29 @@ async function callGeminiWithTools(params: {
 
 // ── Convert EnsoAgentTool to Gemini function declaration ──
 
+/** Recursively strip fields that Gemini's API doesn't support (e.g. additionalProperties). */
+function stripUnsupportedSchemaFields(obj: Record<string, unknown>): Record<string, unknown> {
+  const clone: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === "additionalProperties") continue;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      clone[key] = stripUnsupportedSchemaFields(value as Record<string, unknown>);
+    } else if (Array.isArray(value)) {
+      clone[key] = value.map((item) =>
+        item && typeof item === "object" && !Array.isArray(item)
+          ? stripUnsupportedSchemaFields(item as Record<string, unknown>)
+          : item,
+      );
+    } else {
+      clone[key] = value;
+    }
+  }
+  return clone;
+}
+
 function toolToFunctionDeclaration(tool: EnsoAgentTool): GeminiFunctionDeclaration {
-  // Clone parameters and ensure valid JSON Schema for Gemini
-  const params = { ...tool.parameters };
+  // Clone parameters, strip Gemini-unsupported fields, ensure valid schema
+  const params = stripUnsupportedSchemaFields(tool.parameters as Record<string, unknown>);
   // Gemini requires "type": "object" at the top level
   if (!params.type) params.type = "object";
   return {
@@ -336,9 +358,34 @@ export async function handleStandaloneInbound(params: {
     return;
   }
 
-  const tools = getAllLocalTools();
+  const allTools = getAllLocalTools();
+  // Gemini Flash chokes on 100+ function declarations (returns empty responses).
+  // Only send primary tools (isPrimary === true) from system tools, and first-of-family
+  // from dynamic app tools. This keeps the count manageable (~20-40 tools).
+  const tools = (() => {
+    const selected: EnsoAgentTool[] = [];
+    const seenDynamicFamilies = new Set<string>();
+    for (const t of allTools) {
+      // System tools: only include those marked as primary
+      if (t.isPrimary === true) {
+        selected.push(t);
+        continue;
+      }
+      // Dynamic app tools (no isPrimary field): include first tool per family
+      if (t.isPrimary === undefined) {
+        const parts = t.name.split("_");
+        const family = parts.length >= 3 ? parts.slice(0, -1).join("_") : t.name;
+        if (!seenDynamicFamilies.has(family)) {
+          seenDynamicFamilies.add(family);
+          selected.push(t);
+        }
+      }
+    }
+    return selected;
+  })();
   const systemPrompt = buildSystemPrompt(tools);
   const functionDeclarations = tools.map(toolToFunctionDeclaration);
+  logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Sending ${functionDeclarations.length} tools to Gemini (filtered from ${allTools.length})`, cardId: stableCardId });
 
   const history = getSessionHistory(sessionKey);
   history.push({ role: "user", parts: [{ text: rawBody }] });
@@ -371,6 +418,8 @@ export async function handleStandaloneInbound(params: {
         try {
           const result = await executeLocalTool(name, args);
           toolResult = result ?? { success: true };
+          // Record the tool call so auto-enhance can render the app UI
+          recordToolCall({ toolName: name, params: args, result: toolResult, timestamp: Date.now() });
         } catch (err) {
           toolResult = { error: String(err) };
           logError("standalone-agent", `Tool ${name} failed`, err, { cardId: stableCardId });

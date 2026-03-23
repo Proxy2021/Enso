@@ -5,12 +5,13 @@
  * without requiring the OpenClaw global plugin registry. This registry
  * is always populated (both standalone and OpenClaw modes).
  *
- * Dynamic app tools (from registerAppTool in registry.ts) are stored
- * separately in `generatedToolExecutors` — this registry is for the
- * system tools (filesystem, media, browser, researcher, etc.).
+ * `getAllLocalTools()` merges system tools with dynamically registered
+ * app tools (from registerAppTool) so the standalone agent can discover
+ * and use user-built apps.
  */
 
 import type { EnsoAgentTool } from "./local-types.js";
+import { getAllDynamicTools } from "./native-tools/registry.js";
 
 const localTools = new Map<string, EnsoAgentTool>();
 
@@ -29,9 +30,22 @@ export function getLocalTool(name: string): EnsoAgentTool | undefined {
   return localTools.get(name);
 }
 
-/** Return all registered local tools. */
+/** Return all registered tools (system + dynamic app tools). */
 export function getAllLocalTools(): EnsoAgentTool[] {
-  return Array.from(localTools.values());
+  const systemTools = Array.from(localTools.values());
+  // Merge dynamically registered app tools so the standalone agent can use them
+  const dynamicTools = getAllDynamicTools();
+  for (const dt of dynamicTools) {
+    if (!localTools.has(dt.name)) {
+      systemTools.push({
+        name: dt.name,
+        description: dt.description,
+        parameters: dt.parameters,
+        execute: dt.execute,
+      });
+    }
+  }
+  return systemTools;
 }
 
 /** Return all tool names. */
@@ -47,7 +61,12 @@ export async function executeLocalTool(
   name: string,
   params: Record<string, unknown>,
 ): Promise<unknown> {
-  const tool = localTools.get(name);
+  let tool: EnsoAgentTool | undefined = localTools.get(name);
+  // Fall back to dynamic app tools if not in system registry
+  if (!tool) {
+    const dt = getAllDynamicTools().find((t) => t.name === name);
+    if (dt) tool = dt;
+  }
   if (!tool) {
     throw new Error(`Tool not found in local registry: ${name}`);
   }

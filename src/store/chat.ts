@@ -2137,7 +2137,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           cards: { ...state.cards, [notifId]: notifCard },
         };
 
-        // If the source card still exists, update its enhance status
+        // If the source card still exists, update its enhance status and auto-open app view
         const sourceCard = state.cards[buildCardId];
         if (sourceCard && success) {
           updates.cards = {
@@ -2145,6 +2145,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
             [buildCardId]: {
               ...sourceCard,
               enhanceStatus: "ready",
+              viewMode: "app",
               updatedAt: now,
             },
           };

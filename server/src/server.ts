@@ -1654,6 +1654,7 @@ export async function startEnsoServer(opts: {
                   }
                 }
 
+
                 const classification = await classifyTask({
                   userMessage: msg.text,
                   conversationHistory: recentHistory,
@@ -1943,13 +1944,13 @@ export async function startEnsoServer(opts: {
                   break;
                 }
 
-                // "simple" — router provides the answer directly
-                dismissProcessing();
+                // "simple" — router provides the answer directly (or escalates to agent with tools)
                 const userChatModel = client.chatModel ?? DEFAULT_CHAT_MODEL;
                 const isUserGemini = userChatModel.startsWith("gemini-");
 
                 if (classification.answer && !isUserGemini) {
                   // User selected a non-Gemini model — call their preferred model
+                  dismissProcessing();
                   runtime.log?.(`[enso] task-router: simple → calling ${userChatModel} for "${msg.text.slice(0, 60)}"`);
                   try {
                     const { callChatLLM } = await import("./llm-provider.js");
@@ -1981,10 +1982,14 @@ export async function startEnsoServer(opts: {
                     });
                   }
                 } else if (classification.answer) {
-                  // Quality gate — validate answer before sending
-                  const gate = qualityGate(classification.answer, msg.text);
+                  // For Gemini users: always route to standalone agent so it can use
+                  // function calling (tool invocation + auto-enhance). The task-router
+                  // answer is a bonus — used only when quality gate passes AND no dynamic tools.
+                  const { getAllDynamicTools } = await import("./native-tools/registry.js");
+                  const hasDynamicTools = getAllDynamicTools().length > 0;
+                  const gate = hasDynamicTools ? { pass: false, reason: "dynamic-tools" } : qualityGate(classification.answer, msg.text);
                   if (!gate.pass) {
-                    runtime.log?.(`[enso] quality-gate FAILED (${gate.reason}): "${msg.text.slice(0, 60)}" — escalating to agent`);
+                    runtime.log?.(`[enso] simple → agent (${gate.reason}): "${msg.text.slice(0, 60)}"`);
                     await handleInbound({
                       message: {
                         messageId: randomUUID(),
@@ -2001,7 +2006,9 @@ export async function startEnsoServer(opts: {
                       routing: msg.routing,
                       statusSink,
                     });
+                    dismissProcessing();
                   } else {
+                    dismissProcessing();
                     runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
                     const answerCardId = randomUUID();
                     const answerRunId = randomUUID();
@@ -2042,6 +2049,7 @@ export async function startEnsoServer(opts: {
                   }
                 } else if (!isUserGemini) {
                   // No classifier answer + non-Gemini model — call user's model directly
+                  dismissProcessing();
                   runtime.log?.(`[enso] task-router: simple (no answer) → calling ${userChatModel}`);
                   try {
                     const { callChatLLM } = await import("./llm-provider.js");
@@ -2084,6 +2092,7 @@ export async function startEnsoServer(opts: {
                     routing: msg.routing,
                     statusSink,
                   });
+                  dismissProcessing();
                 }
               } catch (routerErr: any) {
                 // Error boundary (E2 Sprint 11): show user-friendly message + recovery chips

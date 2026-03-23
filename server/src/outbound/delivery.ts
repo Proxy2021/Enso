@@ -272,17 +272,20 @@ function parseToolCallResult(result: unknown): Record<string, unknown> | null {
 
   // AgentToolResult format: { content: [{ type: "text", text: "..." }] }
   const content = (result as { content?: Array<{ type: string; text?: string }> }).content;
-  if (!Array.isArray(content)) return null;
+  if (Array.isArray(content)) {
+    const textParts = content.filter((c) => c.type === "text" && c.text).map((c) => c.text!);
+    for (const text of textParts) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+      } catch { /* not JSON — skip */ }
+    }
+    return null;
+  }
 
-  const textParts = content.filter((c) => c.type === "text" && c.text).map((c) => c.text!);
-  if (textParts.length === 0) return null;
-
-  // Try parsing each text part as JSON (tool results are typically JSON-stringified)
-  for (const text of textParts) {
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-    } catch { /* not JSON — skip */ }
+  // Already-parsed data object (from standalone agent's executeLocalTool which pre-parses JSON)
+  if ("tool" in (result as Record<string, unknown>)) {
+    return result as Record<string, unknown>;
   }
 
   return null;

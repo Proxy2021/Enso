@@ -643,7 +643,7 @@ function buildAppPrompt(
   lines.push(``);
 
   lines.push(`## Step 3: Design and Build the App`);
-  lines.push(`Write the app files to: server/apps/<family_name>/`);
+  lines.push(`Write the app files to: ~/.enso/apps/<family_name>/`);
   lines.push(`Required files:`);
   lines.push(`- app.json — manifest with PluginSpec (tools array, sampleData, sampleParams)`);
   lines.push(`- template.jsx — React component as JSX string`);
@@ -677,6 +677,8 @@ function buildAppPrompt(
   lines.push(`8. Template: use data.tool field for polymorphic rendering (switching views based on which tool produced the data)`);
   lines.push(`9. Use EnsoUI.Tooltip (NOT Tooltip which conflicts with Recharts)`);
   lines.push(`10. sampleData must be realistic and match what the executor would actually return`);
+  lines.push(`11. NEVER render objects/arrays directly as React children — always render primitive strings/numbers. Use String(val) or JSON.stringify(val) as a safety net for any data field that could be non-primitive. React error #31 ("Objects are not valid as a React child") is the most common template bug.`);
+  lines.push(`12. When passing Lucide icons to the Button/EmptyState \`icon\` prop, pass ELEMENTS not components: \`icon={<Clock size={14} />}\` NOT \`icon={Clock}\`. The icon prop expects ReactNode (rendered content), not a component reference.`);
   lines.push(``);
   lines.push(`## File Writing Order (IMPORTANT)`);
   lines.push(`Write files in this exact order:`);

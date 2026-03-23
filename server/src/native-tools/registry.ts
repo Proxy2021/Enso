@@ -204,6 +204,16 @@ export function registerAppTemplate(signatureId: string, code: string): void {
   logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered generated template code for signature "${signatureId}"` });
 }
 
+/** Return all dynamically registered app tools (for standalone agent discovery). */
+export function getAllDynamicTools(): Array<{
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+}> {
+  return Array.from(generatedToolExecutors.values());
+}
+
 /** Remove a generated tool executor by name. Returns true if it existed. */
 export function unregisterAppTool(toolName: string): boolean {
   const existed = generatedToolExecutors.delete(toolName);

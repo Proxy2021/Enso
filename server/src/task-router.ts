@@ -247,7 +247,25 @@ export async function classifyTask(params: {
       }).join(", ")}\nWhen data files are attached, bias toward data_analysis archetype. When documents are attached, bias toward document_processing.\n`
     : "";
 
-  const fullPrompt = `${CLASSIFIER_PROMPT}\n${memoryBlock}${recentContext}${mediaBlock}\nUser message: "${userMessage}"`;
+  // Inject available app tools so the classifier knows to route to SIMPLE when a tool can handle it
+  let toolsBlock = "";
+  try {
+    const { getAllDynamicTools } = await import("./native-tools/registry.js");
+    const dynTools = getAllDynamicTools();
+    if (dynTools.length > 0) {
+      const toolSummary = dynTools
+        .filter((_, i, arr) => {
+          // Deduplicate to one per family
+          const family = arr[i].name.split("_").slice(0, -1).join("_");
+          return arr.findIndex(t => t.name.split("_").slice(0, -1).join("_") === family) === i;
+        })
+        .map(t => `- ${t.name}: ${t.description.slice(0, 80)}`)
+        .join("\n");
+      toolsBlock = `\nThe system has installed app tools that can handle certain requests directly. When a user's question matches one of these tools, classify as SIMPLE (the agent will invoke the tool):\n${toolSummary}\n`;
+    }
+  } catch { /* ignore */ }
+
+  const fullPrompt = `${CLASSIFIER_PROMPT}\n${toolsBlock}${memoryBlock}${recentContext}${mediaBlock}\nUser message: "${userMessage}"`;
 
   try {
     let raw: string;
