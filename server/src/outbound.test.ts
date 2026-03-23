@@ -155,6 +155,7 @@ function mockClient(): ConnectedClient & { messages: ServerMessage[] } {
     ws: {} as any,
     send: vi.fn((msg: ServerMessage) => messages.push(msg)),
     _disconnectedBuffer: [],
+    conversationId: "default",
     messages,
   };
 }

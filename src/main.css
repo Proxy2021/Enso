@@ -53,6 +53,38 @@
   100% { transform: translateX(-100%); }
 }
 
+/* Staged auto-enhance: first paint of app view after tool-matched reply */
+@keyframes enso-app-reveal {
+  0% {
+    opacity: 0;
+    filter: blur(14px) saturate(0.65);
+    transform: scale(0.982);
+  }
+  40% {
+    opacity: 0.92;
+    filter: blur(3px) saturate(1.12);
+    transform: scale(0.995);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0) saturate(1);
+    transform: scale(1);
+  }
+}
+
+.enso-app-reveal-anim {
+  animation: enso-app-reveal 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enso-app-reveal-anim {
+    animation: none;
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
 /* Touch-device utilities: mirror hover states on active for mobile */
 @layer utilities {
   /* Make group-hover patterns also trigger on group-active (touch) */

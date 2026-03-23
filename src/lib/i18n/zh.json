@@ -141,6 +141,11 @@
   "chat.restartServices": "重启服务",
   "chat.restarting": "重启中…",
 
+  "conversations.newChat": "新对话",
+  "conversations.chats": "对话",
+  "conversations.rename": "重命名",
+  "conversations.delete": "删除对话",
+
   "orchestration.title": "编排器",
   "orchestration.description": "描述一个复杂目标或任务。我将组建一支 AI 团队来研究、规划和构建你需要的一切。",
   "orchestration.placeholder": "例如：为我的家庭规划一次两周的日本之旅，或构建一个完整的自由职业管理系统...",

@@ -4,6 +4,7 @@ import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
 import AppsMenu from "./components/AppsMenu";
 import PinnedSidebar from "./components/PinnedSidebar";
+import ConversationSidebar from "./components/ConversationSidebar";
 import ConnectionPicker from "./components/ConnectionPicker";
 import SetupWizard from "./components/SetupWizard";
 
@@ -273,8 +274,9 @@ export default function App() {
         </header>
         <UpdateBanner />
         <ConnectionBanner />
-        <div className="flex flex-1 overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          <ConversationSidebar />
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             <CardTimeline />
             <BackgroundTaskBar />
             <ChatInput />

@@ -20,6 +20,7 @@ When you ask Enso something, it doesn't just return text. It delivers the **best
 - **Process photos** → Get a professional photo studio with 28 film/cinematic styles and batch processing
 - **Browse the web** → Get a full browser rendered inside the conversation — click, type, scroll
 - **Summarize anything** → One-click text summarization for any card — chat responses, orchestration runs, terminal sessions — with key outcomes, narrative, and optional AI podcast
+- **Multiple conversations** → Sidebar threads with separate history per chat (persisted per browser client), so you can branch topics without losing context
 
 Every answer is delivered through purpose-built interactive React components. The experience adapts to the content.
 

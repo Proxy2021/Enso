@@ -127,8 +127,6 @@ export default function ChatInput() {
   const activeShellSessionId = useChatStore((s) => s.getActiveShellSessionId());
   const connectionState = useChatStore((s) => s.connectionState);
   const hasActiveBackgroundTask = useChatStore((s) => s.hasActiveBackgroundTask);
-  const hasCards = useChatStore((s) => s.cardOrder.length > 0);
-  const clearConversation = useChatStore((s) => s.clearConversation);
   const { t } = useT();
   const [queueToast, setQueueToast] = useState<string | null>(null);
   const nlInterceptionToast = useChatStore((s) => s._nlInterceptionToast);
@@ -525,16 +523,6 @@ export default function ChatInput() {
               Exit Shell
             </button>
           </div>
-        )}
-
-        {/* New Conversation button — only show when cards exist */}
-        {hasCards && !activeShellSessionId && (
-          <button
-            onClick={clearConversation}
-            className="text-[10px] px-2 py-1 rounded-md border border-gray-700/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-indigo-500/40 transition-colors mb-2"
-          >
-            New Conversation
-          </button>
         )}
 
         {/* Slash command autocomplete menu */}

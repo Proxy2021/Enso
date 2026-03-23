@@ -10,7 +10,7 @@ import {
   DEFAULT_CLAUDE_MODEL,
   OLLAMA_BASE_URL,
 } from "./config.js";
-import { persistCard } from "./memory-bridge.js";
+import { persistCard, DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
 
 const activeAbortControllers = new Map<string, AbortController>();
 const activeTasks = new Map<string, string>(); // taskId → description
@@ -270,7 +270,7 @@ export async function runClaudeCode(params: {
         ? accumulatedText.slice(0, maxPersistLen) + "\n... (truncated)"
         : accumulatedText;
       if (textForHistory.trim()) {
-        persistCard(client.id, {
+        persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
           id: targetCardId ?? `${runId}-0`,
           runId,
           type: "terminal",

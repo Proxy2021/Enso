@@ -32,6 +32,9 @@ export interface Card {
   // Multi-block agent steps (for expandable intermediate content)
   steps?: AgentStep[];
 
+  /** Auto-enhance: text stays visible until app sandbox is ready, then crossfade to app view. */
+  pendingAutoAppReveal?: boolean;
+
   // App enhancement (user-triggered)
   appData?: unknown;
   appGeneratedUI?: string;
@@ -94,6 +97,8 @@ export interface CardRendererProps {
   card: Card;
   isActive: boolean;
   onAction: (action: string, payload?: unknown) => void;
+  /** Fired once when generated UI has compiled (success or error) and is ready to show — used for staged auto-enhance reveal. */
+  onDynamicUIReady?: () => void;
 }
 
 // ── Card Type Registration ──

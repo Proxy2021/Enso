@@ -27,7 +27,7 @@ import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ServerMessage, ToolBuildSummary, EnhanceResult } from "./types.js";
 import { logAction, logError, logFix } from "./action-log.js";
 import { getEnsoPath } from "./utils/home.js";
-import { persistCard } from "./memory-bridge.js";
+import { persistCard, DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
 
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
@@ -298,7 +298,7 @@ async function postBuildRegistration(
   });
 
   // Persist enhance result to card journal so it survives page reload
-  persistCard(params.client.id, {
+  persistCard(params.client.id, params.client.conversationId ?? DEFAULT_CONVERSATION_ID, {
     id: cardId,
     runId: "",
     type: "chat",

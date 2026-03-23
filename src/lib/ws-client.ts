@@ -27,7 +27,7 @@ interface WSClient {
  * and chat history is properly restored.
  * On web, use sessionStorage so each tab gets its own identity.
  */
-function getClientId(): string {
+export function getClientId(): string {
   const storage = isNative ? localStorage : sessionStorage;
   let id = storage.getItem(STORAGE_KEYS.CLIENT_ID);
   // Migrate: if native and sessionStorage has an ID but localStorage doesn't, adopt it

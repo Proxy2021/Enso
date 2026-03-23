@@ -4,7 +4,7 @@ import type { AppInfo, ClientMessage, OrchestrationCardData, ServerMessage, Tool
 import type { Card } from "../cards/types";
 import { cardRegistry } from "../cards/registry";
 import { shellWriters } from "../cards/ShellCard";
-import { createWSClient, type ConnectionState } from "../lib/ws-client";
+import { createWSClient, getClientId, type ConnectionState } from "../lib/ws-client";
 import { initErrorReporter } from "../lib/error-reporter";
 import {
   initNotifications,
@@ -21,6 +21,32 @@ import {
 } from "../lib/connection";
 import { _setLocale, type Locale } from "../lib/i18n";
 import { TOOL_ID_CLAUDE_CODE, STORAGE_KEYS, TIMINGS, DEFAULT_CLAUDE_MODEL, DEFAULT_CHAT_MODEL, API } from "../lib/constants";
+
+type CardHistoryRecord = NonNullable<ServerMessage["cardHistory"]>[number];
+
+/** Drop journal rows / finals that would render as an empty bubble only. */
+function shouldSkipEmptyHistoryRecord(rec: CardHistoryRecord, resolvedType: string): boolean {
+  const textTrim = String(rec.text ?? "").trim();
+  const hasMedia = Array.isArray(rec.mediaUrls) && rec.mediaUrls.length > 0;
+  const hasSteps = Array.isArray(rec.steps) && rec.steps.length > 0;
+  const hasData = rec.data != null;
+  const hasUI = Boolean(rec.generatedUI);
+  const hasApp = rec.appData != null || Boolean(rec.appGeneratedUI);
+
+  if (rec.role === "user") {
+    if (resolvedType === "terminal") return false;
+    return !textTrim && !hasMedia;
+  }
+  if (resolvedType !== "chat") return false;
+  return !textTrim && !hasMedia && !hasData && !hasUI && !hasSteps && !hasApp;
+}
+
+export interface ConversationEntry {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export interface ProjectInfo {
   name: string;
@@ -73,6 +99,8 @@ interface CardStore {
 
   // Conversation continuity
   recentTopics: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
+  activeConversationId: string;
+  conversationsList: ConversationEntry[];
 
   // Pinning
   pinnedCards: string[];
@@ -92,6 +120,7 @@ interface CardStore {
   enhanceCardWithFamily: (cardId: string, family: string) => void;
   buildApp: (cardId: string, cardText: string, definition: string) => void;
   toggleCardView: (cardId: string, viewMode: "original" | "app" | "plan" | "sessions") => void;
+  completeAutoAppReveal: (cardId: string) => void;
   cancelOperation: (operationId: string) => void;
   collapseCard: (cardId: string) => void;
   expandCard: (cardId: string) => void;
@@ -131,6 +160,11 @@ interface CardStore {
   pinCard: (cardId: string) => void;
   unpinCard: (cardId: string) => void;
   clearConversation: () => void;
+  refreshConversationsList: () => Promise<void>;
+  selectConversation: (id: string) => void;
+  startNewChat: () => Promise<void>;
+  deleteConversationById: (id: string) => Promise<void>;
+  renameConversationById: (id: string, title: string) => Promise<void>;
   toggleSidebar: () => void;
   requestCardSummary: (cardId: string) => void;
   requestCardEvolution: (cardId: string, options?: { goal?: string; includeResearch?: boolean }) => void;
@@ -243,6 +277,7 @@ function _handleReconnection(
         // Send resume command directly (no ">>> /resume" in card text)
         wsClient.send({
           type: "chat.send",
+          conversationId: get().activeConversationId,
           text: "/resume",
           routing: {
             mode: "direct_tool",
@@ -284,6 +319,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _serverBootId: null as string | null,
   _lastDisconnectWasRestart: false,
   recentTopics: [],
+  activeConversationId: localStorage.getItem(STORAGE_KEYS.ACTIVE_CONVERSATION_ID) || "default",
+  conversationsList: [],
   pinnedCards: JSON.parse(localStorage.getItem(STORAGE_KEYS.PINNED_CARDS) ?? "[]"),
   showSidebar: false,
   cardSearchQuery: "",
@@ -640,7 +677,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
         });
       }
 
-      get()._wsClient?.send({ type: "chat.send", text: displayText, routing: finalRouting, sourceCardId: termCardId });
+      get()._wsClient?.send({
+        type: "chat.send",
+        conversationId: get().activeConversationId,
+        text: displayText,
+        routing: finalRouting,
+        sourceCardId: termCardId,
+      });
       return;
     }
 
@@ -691,7 +734,12 @@ export const useChatStore = create<CardStore>((set, get) => ({
       _thinkingCardId: thinkingId,
       isWaiting: true,
     }));
-    get()._wsClient?.send({ type: "chat.send", text: displayText, routing: finalRouting });
+    get()._wsClient?.send({
+      type: "chat.send",
+      conversationId: get().activeConversationId,
+      text: displayText,
+      routing: finalRouting,
+    });
   },
 
   sendMessageWithMedia: async (text: string, mediaFiles: File[], intent?: "image_research") => {
@@ -783,6 +831,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     // Send to server via WebSocket
     get()._wsClient?.send({
       type: intent === "image_research" ? "image_research" : "chat.send",
+      conversationId: get().activeConversationId,
       text,
       mediaUrls: serverPaths,
     });
@@ -1012,10 +1061,35 @@ export const useChatStore = create<CardStore>((set, get) => ({
     set((s) => {
       const card = s.cards[cardId];
       if (!card) return s;
+      const clearPending =
+        viewMode === "app" || (card.pendingAutoAppReveal && viewMode === "original");
       return {
         cards: {
           ...s.cards,
-          [cardId]: { ...card, viewMode, updatedAt: Date.now() },
+          [cardId]: {
+            ...card,
+            viewMode,
+            ...(clearPending ? { pendingAutoAppReveal: false } : {}),
+            updatedAt: Date.now(),
+          },
+        },
+      };
+    });
+  },
+
+  completeAutoAppReveal: (cardId: string) => {
+    set((s) => {
+      const card = s.cards[cardId];
+      if (!card?.pendingAutoAppReveal) return s;
+      return {
+        cards: {
+          ...s.cards,
+          [cardId]: {
+            ...card,
+            pendingAutoAppReveal: false,
+            viewMode: "app",
+            updatedAt: Date.now(),
+          },
         },
       };
     });
@@ -1076,7 +1150,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
   runApp: (toolFamily: string) => {
     set({ isWaiting: true });
-    get()._wsClient?.send({ type: "apps.run", toolFamily });
+    get()._wsClient?.send({
+      type: "apps.run",
+      toolFamily,
+      conversationId: get().activeConversationId,
+    });
   },
 
   saveAppToCodebase: (toolFamily: string) => {
@@ -1132,7 +1210,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
         isWaiting: true,
       }));
       const routing: ToolRouting = { mode: "direct_tool", toolId: TOOL_ID_CLAUDE_CODE, cwd: ensoPath };
-      get()._wsClient?.send({ type: "chat.send", text: instruction, routing, sourceCardId: id });
+      get()._wsClient?.send({
+        type: "chat.send",
+        conversationId: get().activeConversationId,
+        text: instruction,
+        routing,
+        sourceCardId: id,
+      });
       return;
     }
 
@@ -1290,7 +1374,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cwd: ensoPath,
     };
 
-    get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
+    get()._wsClient?.send({
+      type: "chat.send",
+      conversationId: get().activeConversationId,
+      text: prompt,
+      routing,
+      sourceCardId: id,
+    });
   },
 
   codeInvestigate: (cardId: string, instruction: string) => {
@@ -1366,7 +1456,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cwd: ensoPath,
     };
 
-    get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
+    get()._wsClient?.send({
+      type: "chat.send",
+      conversationId: get().activeConversationId,
+      text: prompt,
+      routing,
+      sourceCardId: id,
+    });
   },
 
   launchSystemEnhance: (instruction: string) => {
@@ -1418,7 +1514,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cwd: ensoPath,
     };
 
-    get()._wsClient?.send({ type: "chat.send", text: prompt, routing, sourceCardId: id });
+    get()._wsClient?.send({
+      type: "chat.send",
+      conversationId: get().activeConversationId,
+      text: prompt,
+      routing,
+      sourceCardId: id,
+    });
   },
 
   fetchProjects: () => {
@@ -1747,6 +1849,90 @@ export const useChatStore = create<CardStore>((set, get) => ({
     localStorage.removeItem(STORAGE_KEYS.PINNED_CARDS);
   },
 
+  refreshConversationsList: async () => {
+    try {
+      const clientId = getClientId();
+      const res = await fetch(
+        `${getBackendBaseUrl()}${API.CONVERSATIONS}?clientId=${encodeURIComponent(clientId)}`,
+        { headers: authHeaders(), signal: AbortSignal.timeout(TIMINGS.API_FETCH_TIMEOUT) },
+      );
+      if (!res.ok) return;
+      const j = (await res.json()) as { conversations: ConversationEntry[] };
+      set({ conversationsList: j.conversations ?? [] });
+    } catch {
+      // best-effort
+    }
+  },
+
+  selectConversation: (id: string) => {
+    const ws = get()._wsClient;
+    localStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION_ID, id);
+    set({
+      activeConversationId: id,
+      cardOrder: [],
+      cards: {},
+      isWaiting: false,
+      _activeTerminalCardId: null,
+      _pendingCodeText: null,
+      _thinkingCardId: null,
+      recentTopics: [],
+    });
+    if (ws) ws.send({ type: "chat.history", historyCount: 50, conversationId: id });
+  },
+
+  startNewChat: async () => {
+    try {
+      const clientId = getClientId();
+      const res = await fetch(`${getBackendBaseUrl()}${API.CONVERSATIONS}`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ clientId, title: "New chat" }),
+        signal: AbortSignal.timeout(TIMINGS.API_FETCH_TIMEOUT),
+      });
+      if (!res.ok) return;
+      const created = (await res.json()) as { id: string };
+      await get().refreshConversationsList();
+      get().selectConversation(created.id);
+    } catch {
+      // best-effort
+    }
+  },
+
+  deleteConversationById: async (id: string) => {
+    try {
+      const clientId = getClientId();
+      const res = await fetch(
+        `${getBackendBaseUrl()}${API.CONVERSATIONS}/${encodeURIComponent(id)}?clientId=${encodeURIComponent(clientId)}`,
+        { method: "DELETE", headers: authHeaders(), signal: AbortSignal.timeout(TIMINGS.API_FETCH_TIMEOUT) },
+      );
+      if (!res.ok) return;
+      const wasActive = get().activeConversationId === id;
+      await get().refreshConversationsList();
+      if (wasActive) {
+        const first = get().conversationsList[0];
+        if (first) get().selectConversation(first.id);
+      }
+    } catch {
+      // best-effort
+    }
+  },
+
+  renameConversationById: async (id: string, title: string) => {
+    try {
+      const clientId = getClientId();
+      const res = await fetch(`${getBackendBaseUrl()}${API.CONVERSATIONS}/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ clientId, title }),
+        signal: AbortSignal.timeout(TIMINGS.API_FETCH_TIMEOUT),
+      });
+      if (!res.ok) return;
+      await get().refreshConversationsList();
+    } catch {
+      // best-effort
+    }
+  },
+
   _handleServerMessage: (msg: ServerMessage) => {
     // Handle settings messages (mode + tool families)
     if (msg.settings) {
@@ -1805,7 +1991,17 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (msg.settings.toolFamilies) {
         const wsClient = get()._wsClient;
         if (wsClient) {
-          wsClient.send({ type: "chat.history", historyCount: 50 });
+          void (async () => {
+            await get().refreshConversationsList();
+            const list = get().conversationsList;
+            let active = get().activeConversationId;
+            if (list.length > 0 && !list.some((c) => c.id === active)) {
+              active = list[0].id;
+              localStorage.setItem(STORAGE_KEYS.ACTIVE_CONVERSATION_ID, active);
+              set({ activeConversationId: active });
+            }
+            wsClient.send({ type: "chat.history", historyCount: 50, conversationId: active });
+          })();
           const { claudeModel: model, claudeThinking: thinking, chatModel } = get();
           if (model) {
             wsClient.send({ type: "settings.set_model", claudeModel: model, claudeThinking: thinking } as import("@shared/types").ClientMessage);
@@ -1816,6 +2012,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
       }
       return;
+    }
+
+    if (msg.conversationsList) {
+      set({ conversationsList: msg.conversationsList });
     }
 
     // Handle card history batch (response to chat.history)
@@ -1833,6 +2033,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           else if (rec.toolMeta?.toolId === TOOL_ID_CLAUDE_CODE) resolvedType = "terminal";
           else if (rec.generatedUI) resolvedType = "dynamic-ui";
         }
+        if (shouldSkipEmptyHistoryRecord(rec, resolvedType)) continue;
         historicCards[rec.id] = {
           id: rec.id,
           runId: rec.runId,
@@ -2548,9 +2749,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
             });
           }
 
-          // Auto-switch to app view only for the fast enhance path (enhanceStatus was "loading").
-          // Background builds keep the current viewMode — user will be notified via buildComplete.
+          // Fast enhance / deep build / orchestration: jump straight to app.
+          // Auto-matched tool reply: stay on original text until sandbox is ready (CardContainer + completeAutoAppReveal).
           const wasLoading = card.enhanceStatus === "loading";
+          const forceImmediateApp = wasBuilding || isOrchestration || wasLoading;
           return {
             cards: {
               ...state.cards,
@@ -2564,7 +2766,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 status: "complete",
                 deepResearchStatus: undefined,
                 buildTerminalText: isOrchestration ? card.buildTerminalText : undefined,
-                viewMode: (wasBuilding || isOrchestration) ? "app" : (wasLoading ? "app" : (card.viewMode ?? "app")),
+                viewMode: forceImmediateApp ? "app" : "original",
+                pendingAutoAppReveal: !forceImmediateApp,
                 operation: undefined,
                 pendingAction: undefined,
                 updatedAt: now,
@@ -2862,10 +3065,19 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
         if (existing && existingId) {
           // Dismiss processing indicator cards — remove cards that finalize with no content
-          const finalText = msg.text ?? existing.text ?? "";
+          const finalText = String(msg.text ?? existing.text ?? "").trim();
           const finalData = msg.data ?? existing.data;
           const finalUI = msg.generatedUI ?? existing.generatedUI;
-          if (!finalText && !finalData && !finalUI && existing.type === "chat") {
+          const finalSteps = msg.steps ?? existing.steps;
+          const hasSteps = Array.isArray(finalSteps) && finalSteps.length > 0;
+          if (
+            !finalText &&
+            !finalData &&
+            !finalUI &&
+            !mergedMediaUrls.length &&
+            !hasSteps &&
+            existing.type === "chat"
+          ) {
             const { [existingId]: _, ...remainingCards } = state.cards;
             return {
               ...storeUpdates,
@@ -2894,6 +3106,18 @@ export const useChatStore = create<CardStore>((set, get) => ({
               },
             },
           };
+        }
+
+        // Empty final with a fresh id (e.g. processing dismiss) — do not append a ghost bubble
+        if (
+          type === "chat" &&
+          !String(msg.text ?? "").trim() &&
+          !(mediaUrls?.length) &&
+          msg.data == null &&
+          !msg.generatedUI &&
+          !(msg.steps?.length)
+        ) {
+          return { ...storeUpdates };
         }
 
         const cardId = msg.id;

@@ -7,7 +7,9 @@
  *   3. Memory Surface:   local ENSO_USER.md + ENSO_MEMORY.md for personalization
  *
  * Storage:
- *   ~/.enso/cards/<clientId>.jsonl     — card history journals
+ *   ~/.enso/cards/<clientId>/conversations.json — thread metadata (id, title, timestamps)
+ *   ~/.enso/cards/<clientId>/<conversationId>.jsonl — per-thread card journal
+ *   (legacy flat ~/.enso/cards/<clientId>.jsonl is migrated to .../default.jsonl on first access)
  *   ~/.enso/memory/ENSO_USER.md        — user profile (editable)
  *   ~/.enso/memory/ENSO_MEMORY.md      — accumulated conversation memory
  *
@@ -20,11 +22,14 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import type { AgentStep, CardModeDetail } from "@shared/types";
 import { APP_CATALOG } from "./app-catalog.js";
@@ -101,22 +106,200 @@ export function migrateCardJournals(): void {
   }
 }
 
-function journalPath(clientId: string): string {
-  // Sanitize clientId for filesystem safety
-  const safe = clientId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return join(CARDS_DIR, `${safe}.jsonl`);
+const CONVERSATIONS_INDEX = "conversations.json";
+/** Migrated legacy single-file journals use this thread id. */
+export const DEFAULT_CONVERSATION_ID = "default";
+
+function sanitizeClientDirSegment(clientId: string): string {
+  return clientId.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/** Only allow safe conversation ids (UUID, default, alphanumeric). */
+export function isSafeConversationId(id: string): boolean {
+  return /^[a-zA-Z0-9_-]{1,128}$/.test(id);
+}
+
+function clientCardsRoot(clientId: string): string {
+  return join(CARDS_DIR, sanitizeClientDirSegment(clientId));
+}
+
+function conversationJournalPath(clientId: string, conversationId: string): string {
+  return join(clientCardsRoot(clientId), `${conversationId}.jsonl`);
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+function readConversationsIndex(root: string): ConversationSummary[] {
+  try {
+    const p = join(root, CONVERSATIONS_INDEX);
+    if (!existsSync(p)) return [];
+    const raw = JSON.parse(readFileSync(p, "utf-8")) as unknown;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(
+      (x): x is ConversationSummary =>
+        x && typeof x === "object" && typeof (x as ConversationSummary).id === "string",
+    ) as ConversationSummary[];
+  } catch {
+    return [];
+  }
+}
+
+function writeConversationsIndex(root: string, list: ConversationSummary[]): void {
+  writeFileSync(join(root, CONVERSATIONS_INDEX), JSON.stringify(list, null, 2), "utf-8");
+}
+
+/**
+ * Ensure per-client folder + conversations index exist; migrate legacy flat `.jsonl` if present.
+ */
+export function ensureConversationLayout(clientId: string): string {
+  ensureCardsDir();
+  const safe = sanitizeClientDirSegment(clientId);
+  const root = join(CARDS_DIR, safe);
+  const legacyFlat = join(CARDS_DIR, `${safe}.jsonl`);
+
+  if (!existsSync(root)) {
+    if (existsSync(legacyFlat)) {
+      mkdirSync(root, { recursive: true });
+      renameSync(legacyFlat, join(root, `${DEFAULT_CONVERSATION_ID}.jsonl`));
+      const now = Date.now();
+      writeConversationsIndex(root, [
+        { id: DEFAULT_CONVERSATION_ID, title: "Chat", createdAt: now, updatedAt: now },
+      ]);
+    } else {
+      mkdirSync(root, { recursive: true });
+      const now = Date.now();
+      writeConversationsIndex(root, [
+        { id: DEFAULT_CONVERSATION_ID, title: "New chat", createdAt: now, updatedAt: now },
+      ]);
+    }
+  } else {
+    const idxPath = join(root, CONVERSATIONS_INDEX);
+    if (!existsSync(idxPath)) {
+      const jsonlFiles = readdirSync(root).filter((f) => f.endsWith(".jsonl"));
+      const now = Date.now();
+      const rebuilt: ConversationSummary[] = jsonlFiles.map((f) => {
+        const id = f.replace(/\.jsonl$/, "");
+        return { id, title: "Chat", createdAt: now, updatedAt: now };
+      });
+      if (rebuilt.length === 0) {
+        rebuilt.push({ id: DEFAULT_CONVERSATION_ID, title: "New chat", createdAt: now, updatedAt: now });
+      }
+      writeConversationsIndex(root, rebuilt);
+    }
+  }
+
+  return root;
+}
+
+export function listConversations(clientId: string): ConversationSummary[] {
+  ensureConversationLayout(clientId);
+  return readConversationsIndex(clientCardsRoot(clientId)).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+function touchConversationUpdatedAt(clientId: string, conversationId: string): void {
+  try {
+    const root = clientCardsRoot(clientId);
+    const list = readConversationsIndex(root);
+    const now = Date.now();
+    const idx = list.findIndex((c) => c.id === conversationId);
+    if (idx < 0) return;
+    list[idx] = { ...list[idx], updatedAt: now };
+    writeConversationsIndex(root, list);
+  } catch {
+    // best-effort
+  }
+}
+
+export function createConversation(clientId: string, title?: string): ConversationSummary {
+  ensureConversationLayout(clientId);
+  const root = clientCardsRoot(clientId);
+  const id = randomUUID();
+  const now = Date.now();
+  const entry: ConversationSummary = {
+    id,
+    title: (title?.trim() || "New chat").slice(0, 200),
+    createdAt: now,
+    updatedAt: now,
+  };
+  const list = readConversationsIndex(root);
+  list.push(entry);
+  writeConversationsIndex(root, list);
+  return entry;
+}
+
+export function renameConversation(clientId: string, conversationId: string, title: string): boolean {
+  try {
+    ensureConversationLayout(clientId);
+    const root = clientCardsRoot(clientId);
+    const list = readConversationsIndex(root);
+    const idx = list.findIndex((c) => c.id === conversationId);
+    if (idx < 0) return false;
+    list[idx] = { ...list[idx], title: title.trim().slice(0, 200) || "Chat", updatedAt: Date.now() };
+    writeConversationsIndex(root, list);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete one conversation journal. If it was the last thread, creates a fresh empty default.
+ */
+export function deleteConversation(clientId: string, conversationId: string): boolean {
+  try {
+    ensureConversationLayout(clientId);
+    const root = clientCardsRoot(clientId);
+    let list = readConversationsIndex(root);
+    list = list.filter((c) => c.id !== conversationId);
+    const journal = join(root, `${conversationId}.jsonl`);
+    if (existsSync(journal)) unlinkSync(journal);
+
+    if (list.length === 0) {
+      const now = Date.now();
+      list = [{ id: DEFAULT_CONVERSATION_ID, title: "New chat", createdAt: now, updatedAt: now }];
+    }
+    writeConversationsIndex(root, list);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Remove all threads and journals for a client; recreate a single empty default chat. */
+export function clearCardHistory(clientId: string): boolean {
+  try {
+    const safe = sanitizeClientDirSegment(clientId);
+    const root = join(CARDS_DIR, safe);
+    const legacyFlat = join(CARDS_DIR, `${safe}.jsonl`);
+    if (existsSync(root)) {
+      rmSync(root, { recursive: true, force: true });
+    }
+    if (existsSync(legacyFlat)) {
+      unlinkSync(legacyFlat);
+    }
+    ensureConversationLayout(clientId);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── Part 1: Card History ──
 
 /**
- * Append a card record to the client's JSONL journal.
+ * Append a card record to a conversation journal.
  * If the card ID already exists (enhance update), replace the existing entry.
  */
-export function persistCard(clientId: string, record: CardRecord): void {
+export function persistCard(clientId: string, conversationId: string, record: CardRecord): void {
   try {
-    ensureCardsDir();
-    const path = journalPath(clientId);
+    if (!isSafeConversationId(conversationId)) return;
+    ensureConversationLayout(clientId);
+    const path = conversationJournalPath(clientId, conversationId);
 
     // Check if this card already exists (for enhance updates to existing cards)
     if (existsSync(path)) {
@@ -132,38 +315,36 @@ export function persistCard(clientId: string, record: CardRecord): void {
       });
 
       if (existingIdx >= 0) {
-        // Merge: keep existing fields, overlay new ones
         const existing = JSON.parse(lines[existingIdx]) as CardRecord;
         const merged: CardRecord = { ...existing, ...record, timestamp: record.timestamp || existing.timestamp };
         lines[existingIdx] = JSON.stringify(merged);
         writeFileSync(path, lines.join("\n") + "\n");
+        touchConversationUpdatedAt(clientId, conversationId);
         return;
       }
     }
 
-    // Append new entry
     appendFileSync(path, JSON.stringify(record) + "\n");
-
-    // Rotate if needed
     rotateJournal(path);
+    touchConversationUpdatedAt(clientId, conversationId);
   } catch {
     // Never let history persistence break the main flow
   }
 }
 
 /**
- * Load recent cards for a client. Returns entries in chronological order.
+ * Load recent cards for a conversation. Returns entries in chronological order.
  */
-export function loadCardHistory(clientId: string, count: number): CardRecord[] {
+export function loadCardHistory(clientId: string, conversationId: string, count: number): CardRecord[] {
   try {
-    const path = journalPath(clientId);
+    if (!isSafeConversationId(conversationId)) return [];
+    ensureConversationLayout(clientId);
+    const path = conversationJournalPath(clientId, conversationId);
     if (!existsSync(path)) return [];
 
     const content = readFileSync(path, "utf-8");
     const lines = content.split("\n").filter(Boolean);
     const records: CardRecord[] = [];
-
-    // Take last N entries (they're already in chronological order)
     const start = Math.max(0, lines.length - count);
     for (let i = start; i < lines.length; i++) {
       try {
@@ -172,26 +353,9 @@ export function loadCardHistory(clientId: string, count: number): CardRecord[] {
         // Skip malformed lines
       }
     }
-
     return records;
   } catch {
     return [];
-  }
-}
-
-/**
- * Clear all card history for a client.
- * Deletes the JSONL journal file.
- */
-export function clearCardHistory(clientId: string): boolean {
-  try {
-    const path = journalPath(clientId);
-    if (existsSync(path)) {
-      unlinkSync(path);
-    }
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -219,16 +383,28 @@ export function pruneStaleJournals(): void {
     const now = Date.now();
     const cutoff = STALE_DAYS * 24 * 60 * 60 * 1000;
 
-    for (const file of readdirSync(CARDS_DIR)) {
-      if (!file.endsWith(".jsonl")) continue;
-      const filePath = join(CARDS_DIR, file);
+    for (const name of readdirSync(CARDS_DIR)) {
+      const filePath = join(CARDS_DIR, name);
+      let stat: ReturnType<typeof statSync>;
       try {
-        const stat = statSync(filePath);
-        if (now - stat.mtimeMs > cutoff) {
-          unlinkSync(filePath);
-        }
+        stat = statSync(filePath);
       } catch {
-        // Skip inaccessible files
+        continue;
+      }
+      if (stat.isFile() && name.endsWith(".jsonl")) {
+        if (now - stat.mtimeMs > cutoff) unlinkSync(filePath);
+        continue;
+      }
+      if (!stat.isDirectory()) continue;
+      for (const j of readdirSync(filePath)) {
+        if (!j.endsWith(".jsonl")) continue;
+        const jp = join(filePath, j);
+        try {
+          const st = statSync(jp);
+          if (now - st.mtimeMs > cutoff) unlinkSync(jp);
+        } catch {
+          // skip
+        }
       }
     }
   } catch {
@@ -615,6 +791,26 @@ export function getMemoryContext(): string {
   return sections.join("\n");
 }
 
+/**
+ * Find a card record by id, preferring the active conversation then scanning other threads.
+ */
+export function findCardRecordForClient(
+  clientId: string,
+  cardId: string,
+  preferredConversationId?: string,
+): CardRecord | null {
+  if (preferredConversationId && isSafeConversationId(preferredConversationId)) {
+    const hit = loadCardHistory(clientId, preferredConversationId, 500).find((r) => r.id === cardId);
+    if (hit) return hit;
+  }
+  ensureConversationLayout(clientId);
+  for (const c of listConversations(clientId)) {
+    const hit = loadCardHistory(clientId, c.id, 500).find((r) => r.id === cardId);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 // ── Part 4: Recent Conversation Topics ──
 
 interface RecentTopic {
@@ -625,12 +821,12 @@ interface RecentTopic {
 }
 
 /**
- * Extract recent conversation topics from card history.
- * Groups cards into "conversations" (gap > 30 min = new conversation).
+ * Extract recent conversation topics from one thread's card history.
+ * Groups cards into "sessions" (gap > 30 min = new session).
  * Returns the most recent `count` topics for display on WelcomeCard.
  */
-export function getRecentConversationTopics(clientId: string, count = 5): RecentTopic[] {
-  const records = loadCardHistory(clientId, 100);
+export function getRecentConversationTopics(clientId: string, conversationId: string, count = 5): RecentTopic[] {
+  const records = loadCardHistory(clientId, conversationId, 100);
   if (records.length === 0) return [];
 
   // Group into conversations (gap > 30 min = new conversation)

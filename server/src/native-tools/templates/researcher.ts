@@ -21,7 +21,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   var [expandedSource, setExpandedSource] = useState(null);
   var [playingVideos, setPlayingVideos] = useState({});
 
-  var [shared, setShared] = useState(false);
   var [narrativeExpanded, setNarrativeExpanded] = useState(false);
   var [findingFilter, setFindingFilter] = useState("all");
   var [sourceSort, setSourceSort] = useState("relevance");
@@ -736,23 +735,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           <div className="text-base font-semibold text-gray-100 truncate">{topic}</div>
         </div>
         <div className="flex gap-1 sm:gap-1.5 shrink-0 flex-wrap justify-end">
-          {isComplete && (
-            <Button variant="ghost" onClick={() => onAction("__share_card_image", { topic })}>
-              <LucideReact.Image className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Image</span>
-            </Button>
-          )}
-          {isComplete && (
-            <Button variant="ghost" onClick={() => {
-              setShared(true);
-              onAction("__share_card_pdf", { topic, summary, keyFindings, sections, sources, narrative, videos, books, movies, contradictions });
-              setTimeout(() => setShared(false), 3000);
-            }}>
-              {shared
-                ? <><LucideReact.Check className="w-3.5 h-3.5 text-emerald-400" /> <span className="hidden sm:inline">Saved!</span></>
-                : <><LucideReact.FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">PDF</span></>
-              }
-            </Button>
-          )}
           {isComplete && data?.depth !== "deep" && !data?.metadata?.isDeepResearch && !data?.hasDeepResearch && (
             <Button variant="ghost" onClick={() => onAction("search", { topic, depth: "deep" })}>
               <LucideReact.Sparkles className="w-3.5 h-3.5 text-violet-400" /> <span className="hidden sm:inline">Deep</span>

@@ -141,6 +141,11 @@
   "chat.restartServices": "Restart Services",
   "chat.restarting": "Restarting…",
 
+  "conversations.newChat": "New chat",
+  "conversations.chats": "Chats",
+  "conversations.rename": "Rename",
+  "conversations.delete": "Delete chat",
+
   "orchestration.title": "Orchestrator",
   "orchestration.description": "Describe a complex goal or mission. I'll assemble a team of AI agents to research, plan, and build everything you need.",
   "orchestration.placeholder": "e.g. Plan a 2-week trip to Japan for my family, or build a complete freelance management system...",

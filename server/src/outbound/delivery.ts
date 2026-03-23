@@ -21,7 +21,7 @@ import type { ToolCallRecord } from "../native-tools/tool-call-store.js";
 import { getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
 import { recordAppInteraction } from "../interaction-tracker.js";
-import { persistCard, resolveCardType, invalidateContextCache } from "../memory-bridge.js";
+import { persistCard, resolveCardType, invalidateContextCache, DEFAULT_CONVERSATION_ID } from "../memory-bridge.js";
 import { extractAndPersistMemory } from "../memory-extractor.js";
 import { generateFollowUps } from "../followup-generator.js";
 import {
@@ -118,7 +118,7 @@ export async function deliverEnsoReply(params: {
       timestamp: msg.timestamp,
     };
     toolRecord.type = resolveCardType(toolRecord);
-    persistCard(client.id, toolRecord);
+    persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, toolRecord);
     return;
   }
 
@@ -150,7 +150,7 @@ export async function deliverEnsoReply(params: {
     timestamp: msg.timestamp,
   };
   chatRecord.type = resolveCardType(chatRecord);
-  persistCard(client.id, chatRecord);
+  persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, chatRecord);
 
   // ── Follow-up suggestions ──
   if (!toolMeta && !targetCardId && text.length > 30) {
@@ -419,7 +419,7 @@ async function autoEnhanceFromToolCall(
   logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhanced: ${toolName} → ${template.toolFamily}/${template.signatureId}`, cardId });
 
   // Persist enhance update to card history (merges with existing card record)
-  persistCard(client.id, {
+  persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
     id: cardId,
     runId: "",
     type: "chat",

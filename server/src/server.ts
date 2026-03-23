@@ -19,7 +19,25 @@ import { APP_CATALOG } from "./app-catalog.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
 import { classifyTask, qualityGate } from "./task-router.js";
-import { persistCard, loadCardHistory, clearCardHistory, pruneStaleJournals, migrateCardJournals, readEnsoMemory, writeEnsoUser, writeEnsoMemory, getMemoryContext, getRecentConversationTopics, invalidateContextCache } from "./memory-bridge.js";
+import {
+  persistCard,
+  loadCardHistory,
+  clearCardHistory,
+  pruneStaleJournals,
+  migrateCardJournals,
+  readEnsoMemory,
+  writeEnsoUser,
+  writeEnsoMemory,
+  getMemoryContext,
+  getRecentConversationTopics,
+  invalidateContextCache,
+  listConversations,
+  createConversation,
+  renameConversation,
+  deleteConversation,
+  isSafeConversationId,
+  DEFAULT_CONVERSATION_ID,
+} from "./memory-bridge.js";
 import type { CardRecord } from "./memory-bridge.js";
 import { generateFollowUps } from "./followup-generator.js";
 import { extractAndPersistMemory } from "./memory-extractor.js";
@@ -32,6 +50,8 @@ export type ConnectedClient = {
   send: (msg: ServerMessage) => void;
   /** Messages buffered while the WebSocket was disconnected (mobile background). */
   _disconnectedBuffer: ServerMessage[];
+  /** Active chat thread id (per-client journals on disk). */
+  conversationId: string;
   /** User-selected Claude model for Claude Code sessions. */
   claudeModel?: string;
   /** User-selected thinking mode. */
@@ -41,6 +61,19 @@ export type ConnectedClient = {
   /** User-selected chat LLM model. */
   chatModel?: string;
 };
+
+function resolveConversationId(client: ConnectedClient, msg?: { conversationId?: string }): string {
+  const fromMsg = msg?.conversationId;
+  if (fromMsg && isSafeConversationId(fromMsg)) {
+    client.conversationId = fromMsg;
+    return fromMsg;
+  }
+  if (client.conversationId && isSafeConversationId(client.conversationId)) {
+    return client.conversationId;
+  }
+  client.conversationId = DEFAULT_CONVERSATION_ID;
+  return DEFAULT_CONVERSATION_ID;
+}
 
 /** All connected browser clients, keyed by connection id. */
 const clients = new Map<string, ConnectedClient>();
@@ -1070,6 +1103,39 @@ export async function startEnsoServer(opts: {
     res.json({ ok });
   });
 
+  // ── Conversations (multi-chat threads per browser client) ──
+  app.get("/api/conversations", (req, res) => {
+    const clientId = req.query.clientId as string;
+    if (!clientId) { res.status(400).json({ error: "clientId required" }); return; }
+    res.json({ conversations: listConversations(clientId) });
+  });
+
+  app.post("/api/conversations", express.json(), (req, res) => {
+    const { clientId, title } = req.body as { clientId?: string; title?: string };
+    if (!clientId) { res.status(400).json({ error: "clientId required" }); return; }
+    const c = createConversation(clientId, title);
+    res.json(c);
+  });
+
+  app.patch("/api/conversations/:id", express.json(), (req, res) => {
+    const conversationId = req.params.id;
+    const { clientId, title } = req.body as { clientId?: string; title?: string };
+    if (!clientId || typeof title !== "string") {
+      res.status(400).json({ error: "clientId and title required" });
+      return;
+    }
+    const ok = renameConversation(clientId, conversationId, title);
+    res.json({ ok });
+  });
+
+  app.delete("/api/conversations/:id", (req, res) => {
+    const conversationId = req.params.id;
+    const clientId = req.query.clientId as string;
+    if (!clientId) { res.status(400).json({ error: "clientId required" }); return; }
+    const ok = deleteConversation(clientId, conversationId);
+    res.json({ ok });
+  });
+
   // ── Collections API — browse all persisted document collections ──
   app.get("/api/collections", async (_req, res) => {
     try {
@@ -1321,6 +1387,7 @@ export async function startEnsoServer(opts: {
         }
       };
       client = existing;
+      if (!client.conversationId) client.conversationId = DEFAULT_CONVERSATION_ID;
       // Cancel any pending cleanup timer
       const timer = cleanupTimers.get(clientId);
       if (timer) { clearTimeout(timer); cleanupTimers.delete(clientId); }
@@ -1344,6 +1411,7 @@ export async function startEnsoServer(opts: {
         sessionKey,
         ws,
         _disconnectedBuffer: [],
+        conversationId: DEFAULT_CONVERSATION_ID,
         send: (msg: ServerMessage) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(msg));
@@ -1419,18 +1487,20 @@ export async function startEnsoServer(opts: {
         statusSink?.({ lastInboundAt: Date.now() });
 
         switch (msg.type) {
-          case "chat.send":
+          case "chat.send": {
             // Guard: reject empty/whitespace-only messages with no media
             if (!msg.text?.trim() && (!msg.mediaUrls || msg.mediaUrls.length === 0)) {
               runtime.log?.(`[enso] chat.send: ignoring empty message`);
               break;
             }
+            const convId = resolveConversationId(client, msg);
+            const persistConv = (record: CardRecord) => persistCard(clientId, convId, record);
             // Persist user bubble to card history — but skip tool-routed
             // messages (e.g. claude-code prompts contain system instructions
             // that shouldn't appear as user messages in history).
             if (msg.text && !msg.routing?.toolId) {
               const userCardId = randomUUID();
-              persistCard(clientId, {
+              persistConv({
                 id: userCardId,
                 runId: userCardId,
                 type: "user-bubble",
@@ -1541,7 +1611,7 @@ export async function startEnsoServer(opts: {
                 }
 
                 // Build recent conversation context for the classifier
-                const recentCards = loadCardHistory(clientId, 10);
+                const recentCards = loadCardHistory(clientId, convId, 10);
                 const recentHistory = recentCards
                   .filter((c) => c.text)
                   .slice(-5)
@@ -1616,7 +1686,7 @@ export async function startEnsoServer(opts: {
                       };
                       send(appCardMsg);
 
-                      persistCard(clientId, {
+                      persistConv({
                         id: cardId,
                         runId: appCardMsg.runId,
                         type: "dynamic-ui",
@@ -1815,7 +1885,7 @@ export async function startEnsoServer(opts: {
                       };
                       send(overrideMsg);
 
-                      persistCard(clientId, {
+                      persistConv({
                         id: cardId2,
                         runId: overrideMsg.runId,
                         type: "dynamic-ui",
@@ -1946,7 +2016,7 @@ export async function startEnsoServer(opts: {
                       id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
                       state: "final", text: modelAnswer, timestamp: Date.now(),
                     });
-                    persistCard(clientId, {
+                    persistConv({
                       id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
                       text: modelAnswer, timestamp: Date.now(),
                     });
@@ -1960,7 +2030,7 @@ export async function startEnsoServer(opts: {
                       id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
                       state: "final", text: classification.answer, timestamp: Date.now(),
                     });
-                    persistCard(clientId, {
+                    persistConv({
                       id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
                       text: classification.answer, timestamp: Date.now(),
                     });
@@ -2021,7 +2091,7 @@ export async function startEnsoServer(opts: {
                       text: classification.answer,
                       timestamp: Date.now(),
                     });
-                    persistCard(clientId, {
+                    persistConv({
                       id: answerCardId,
                       runId: answerRunId,
                       type: "chat",
@@ -2045,7 +2115,7 @@ export async function startEnsoServer(opts: {
                       id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
                       state: "final", text: modelAnswer, timestamp: Date.now(),
                     });
-                    persistCard(clientId, {
+                    persistConv({
                       id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
                       text: modelAnswer, timestamp: Date.now(),
                     });
@@ -2118,6 +2188,7 @@ export async function startEnsoServer(opts: {
               });
             }
             break;
+          }
           case "operation.cancel":
             if (msg.operationId) {
               const cancelled = cancelClaudeCodeRun(msg.operationId);
@@ -2167,9 +2238,10 @@ export async function startEnsoServer(opts: {
                 text: "No image was attached. Please try again with a photo.", timestamp: Date.now() });
               break;
             }
+            const irConvId = resolveConversationId(client, msg);
             // Persist user bubble with image
             const irUserCardId = randomUUID();
-            persistCard(clientId, {
+            persistCard(clientId, irConvId, {
               id: irUserCardId, runId: irUserCardId, type: "user-bubble", role: "user",
               text: msg.text || "", mediaUrls: msg.mediaUrls, timestamp: Date.now(),
             });
@@ -2585,6 +2657,7 @@ export async function startEnsoServer(opts: {
           }
           case "apps.run": {
             if (msg.toolFamily) {
+              const appRunConvId = resolveConversationId(client, msg);
               runtime.log?.(`[enso:app-runner] apps.run: ${msg.toolFamily}`);
               try {
                 const { loadAllApps } = await import("./app-persistence.js");
@@ -2654,7 +2727,7 @@ export async function startEnsoServer(opts: {
                   send(appRunMsg);
 
                   // Persist dynamic app card to history
-                  persistCard(clientId, {
+                  persistCard(clientId, appRunConvId, {
                     id: cardId,
                     runId: appRunMsg.runId,
                     type: "dynamic-ui",
@@ -2752,7 +2825,7 @@ export async function startEnsoServer(opts: {
                   send(builtinRunMsg);
 
                   // Persist built-in app card to history
-                  persistCard(clientId, {
+                  persistCard(clientId, appRunConvId, {
                     id: cardId,
                     runId: builtinRunMsg.runId,
                     type: "dynamic-ui",
@@ -3120,21 +3193,22 @@ export async function startEnsoServer(opts: {
             break;
           }
           case "chat.history": {
+            const histConvId = resolveConversationId(client, msg);
             const historyCount = msg.historyCount ?? 50;
-            const records = loadCardHistory(clientId, historyCount);
-            if (records.length > 0) {
-              send({
-                id: randomUUID(),
-                runId: randomUUID(),
-                sessionKey,
-                seq: 0,
-                state: "final",
-                cardHistory: records,
-                timestamp: Date.now(),
-              });
-            }
+            const records = loadCardHistory(clientId, histConvId, historyCount);
+            const conversationsList = listConversations(clientId);
+            send({
+              id: randomUUID(),
+              runId: randomUUID(),
+              sessionKey,
+              seq: 0,
+              state: "final",
+              ...(records.length > 0 ? { cardHistory: records } : {}),
+              conversationsList,
+              timestamp: Date.now(),
+            });
             // Send recent conversation topics for WelcomeCard
-            const topics = getRecentConversationTopics(clientId, 5);
+            const topics = getRecentConversationTopics(clientId, histConvId, 5);
             if (topics.length > 0) {
               send({
                 id: randomUUID(),

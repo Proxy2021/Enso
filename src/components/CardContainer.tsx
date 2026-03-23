@@ -1087,6 +1087,7 @@ function ViewToggle({ card }: { card: Card }) {
 
   // Standard 2-segment toggle for other cards
   const isAppBuilding = isBuilding && card.appCardMode?.signatureId === "app_building";
+  const awaitingAutoAppReveal = card.pendingAutoAppReveal === true && (card.viewMode ?? "original") === "original";
   const isBespokeView = isDeepResearch || isFocusedArchetype || isOrchestration;
   const originalLabel = isOrchestration ? "Plan" : isBespokeView ? "Standard" : "Original";
   const originalLabelShort = isOrchestration ? "Plan" : isBespokeView ? "Std" : "Text";
@@ -1116,6 +1117,8 @@ function ViewToggle({ card }: { card: Card }) {
         className={`text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
           isBuilding
             ? "bg-violet-500/20 text-violet-300 border-violet-500/30 animate-pulse"
+            : awaitingAutoAppReveal
+              ? "bg-violet-500/15 text-violet-200/90 border border-violet-500/25 shadow-[0_0_12px_rgba(139,92,246,0.25)] animate-pulse"
             : viewMode === "app"
               ? "bg-violet-500/30 text-violet-200 border-violet-500/40"
               : "text-gray-400 hover:text-gray-300 active:text-gray-200"
@@ -1355,11 +1358,28 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const releaseCard = useChatStore((s) => s.releaseCard);
   const buildApp = useChatStore((s) => s.buildApp);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const completeAutoAppReveal = useChatStore((s) => s.completeAutoAppReveal);
 
   const [showEvolveMenu, setShowEvolveMenu] = useState(false);
   const evolveMenuRef = useRef<HTMLDivElement>(null);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [playAppRevealAnim, setPlayAppRevealAnim] = useState(false);
+  const prevPendingRevealRef = useRef(card.pendingAutoAppReveal);
+
+  const onPrefetchDynamicReady = useCallback(() => {
+    completeAutoAppReveal(card.id);
+  }, [card.id, completeAutoAppReveal]);
+
+  useEffect(() => {
+    const wasPending = prevPendingRevealRef.current === true;
+    prevPendingRevealRef.current = card.pendingAutoAppReveal;
+    if (wasPending && !card.pendingAutoAppReveal && card.viewMode === "app") {
+      setPlayAppRevealAnim(true);
+      const t = window.setTimeout(() => setPlayAppRevealAnim(false), 900);
+      return () => clearTimeout(t);
+    }
+  }, [card.pendingAutoAppReveal, card.viewMode, card.id]);
 
   const handleContextMenu = useCallback((e: ReactMouseEvent) => {
     e.preventDefault();
@@ -1399,6 +1419,14 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const showOriginalView = isEvolution && card.viewMode === "original";
   const showPlanView = isEvolution && card.viewMode === "plan";
   const showSessionsView = isEvolution && card.viewMode === "sessions" && !!card.taskTerminals;
+
+  const pendingAutoReveal =
+    card.pendingAutoAppReveal === true &&
+    !!card.appGeneratedUI &&
+    (card.viewMode ?? "original") === "original" &&
+    !isDeepBuilding &&
+    !isOrchestration &&
+    !isEvolution;
 
   // "Research this" is available on any assistant card with text, except researcher cards themselves
   const cardFamily = (isAppView ? card.appCardMode?.appId : card.cardMode?.appId)
@@ -1441,6 +1469,16 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     };
   }, [card, isAppView, isDeepBuilding]);
 
+  const prefetchAppCard = useMemo<Card>(
+    () => ({
+      ...card,
+      data: card.appData,
+      generatedUI: card.appGeneratedUI,
+      cardMode: card.appCardMode,
+    }),
+    [card, card.appData, card.appGeneratedUI, card.appCardMode],
+  );
+
   if (!registration) {
     return (
       <div className="mb-3 text-gray-500 text-sm">
@@ -1450,6 +1488,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   }
 
   const Renderer = registration.renderer;
+  const ChatRenderer = cardRegistry.get("chat")?.renderer;
+  const DynamicPrefetchRenderer = cardRegistry.get("dynamic-ui")?.renderer;
   const icon = TYPE_ICONS[effectiveType] ?? "\uD83D\uDCCB";
 
   if (card.type === "thinking") {
@@ -1841,7 +1881,34 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               {card.releaseProgress}
             </div>
           )}
-          {showOriginalView ? (() => {
+          {pendingAutoReveal && ChatRenderer && DynamicPrefetchRenderer ? (
+            <div className="relative">
+              <div className="relative z-0 rounded-b-xl overflow-hidden">
+                <ChatRenderer card={card} isActive={isActive} onAction={handleAction} />
+              </div>
+              <div
+                className="fixed top-0 -left-[12000px] w-[min(100vw,720px)] max-h-[min(100dvh,900px)] overflow-y-auto opacity-0 pointer-events-none"
+                aria-hidden
+              >
+                <DynamicPrefetchRenderer
+                  card={prefetchAppCard}
+                  isActive={false}
+                  onAction={handleAction}
+                  onDynamicUIReady={onPrefetchDynamicReady}
+                />
+              </div>
+              <div className="mx-3 mb-2 mt-1 flex items-center gap-2 rounded-lg border border-violet-500/20 bg-gradient-to-r from-violet-500/10 via-fuchsia-500/5 to-transparent px-3 py-2">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.9)] animate-pulse"
+                  aria-hidden
+                />
+                <span className="text-[11px] text-violet-200/95">
+                  Preparing interactive view…
+                </span>
+                <span className="ml-auto text-[10px] text-violet-400/70 tabular-nums">✦</span>
+              </div>
+            </div>
+          ) : showOriginalView ? (() => {
             const hasSnapshot = card.standardGeneratedUISnapshot != null;
             const origType = hasSnapshot ? "dynamic-ui" : "chat";
             const OrigRenderer = cardRegistry.get(origType)?.renderer ?? Renderer;
@@ -1881,11 +1948,13 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               onAction={handleAction}
             />
           ) : (
-            <Renderer
-              card={renderCard}
-              isActive={isActive}
-              onAction={handleAction}
-            />
+            <div className={playAppRevealAnim ? "enso-app-reveal-anim" : undefined}>
+              <Renderer
+                card={renderCard}
+                isActive={isActive}
+                onAction={handleAction}
+              />
+            </div>
           )}
           {(card.cardSummary || card.cardSummaryStatus === "generating") && (
             card.cardSummaryStatus === "generating" ? (

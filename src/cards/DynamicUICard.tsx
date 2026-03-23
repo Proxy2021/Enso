@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
@@ -87,10 +87,30 @@ class UIErrorBoundary extends React.Component<
 
 // ── Main Component ──
 
-export default function DynamicUICard({ card, onAction }: CardRendererProps) {
+export default function DynamicUICard({ card, onAction, onDynamicUIReady }: CardRendererProps) {
   const [showSource, setShowSource] = useState(false);
   const [showRawText, setShowRawText] = useState(false);
   const hasMedia = Boolean(card.mediaUrls?.length);
+  const readyFiredRef = useRef(false);
+
+  useEffect(() => {
+    readyFiredRef.current = false;
+  }, [card.generatedUI]);
+
+  const result = useMemo(
+    () => (card.generatedUI ? compileComponent(card.generatedUI) : null),
+    [card.generatedUI],
+  );
+
+  useLayoutEffect(() => {
+    if (!onDynamicUIReady || !result) return;
+    if (readyFiredRef.current) return;
+    readyFiredRef.current = true;
+    const id = requestAnimationFrame(() => {
+      onDynamicUIReady();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [result, onDynamicUIReady]);
 
   // Redirect sendMessage calls from generated components to onAction,
   // so clicking buttons within a card updates it in-place instead of
@@ -111,11 +131,6 @@ export default function DynamicUICard({ card, onAction }: CardRendererProps) {
   const resolvedMediaUrls = useMemo(
     () => card.mediaUrls?.map(u => resolveMediaUrl(u)) ?? [],
     [card.mediaUrls],
-  );
-
-  const result = useMemo(
-    () => (card.generatedUI ? compileComponent(card.generatedUI) : null),
-    [card.generatedUI],
   );
 
   if (!result) {

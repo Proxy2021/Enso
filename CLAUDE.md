@@ -16,7 +16,7 @@
 
 Enso has two layers:
 
-1. **React Frontend** — Browser-based chat UI (Vite + React 19 + Tailwind CSS 4 + Zustand)
+1. **React Frontend** — Browser-based chat UI (Vite + React 19 + Tailwind CSS 4 + Zustand), including a **conversation sidebar** for multiple persisted threads per client
 2. **Enso Server (Backend)** — Express + WS server providing deterministic tool-to-template rendering + Claude Code integration. Can run standalone or as an OpenClaw channel plugin for agent routing and tool sharing.
 
 > **Standalone mode**: Enso can run its backend server independently via `npm run dev:server`, without requiring an OpenClaw gateway. In standalone mode, chat is handled directly (no agent pipeline), but all other features — Claude Code, apps, orchestration, evolution — work identically.
@@ -33,7 +33,7 @@ Enso has two layers:
 src/                          # React frontend (Vite entry)
 ├── App.tsx                   # Root layout
 ├── cards/                    # Card renderers (DynamicUICard, TerminalCard, ShellCard, etc.)
-├── components/               # CardTimeline, CardContainer, ChatInput, MarkdownText, ConnectionPicker, ToastContainer, BackgroundTaskBar, ResultsInbox
+├── components/               # CardTimeline, CardContainer, ChatInput, ConversationSidebar, MarkdownText, ConnectionPicker, ToastContainer, BackgroundTaskBar, ResultsInbox
 ├── store/chat.ts             # Zustand state
 ├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components), connection manager, notifications, useElapsedTime
 └── types.ts
@@ -73,6 +73,7 @@ shared/types.ts               # Protocol types shared between frontend and serve
 
 ### WebSocket Protocol
 
+- **Multi-conversation**: `conversationId` on `chat.send`, `chat.history`, and other chat-scoped messages; card journals live per thread under `~/.enso/cards/<client>/` (`conversations.json` + `<conversationId>.jsonl`). REST: `/api/conversations` (CRUD + list). Client: `activeConversationId` in Zustand + `ConversationSidebar`.
 - **Client → Server** (`ClientMessage`): `chat.send`, `chat.history`, `ui_action`, `card.action`, `card.enhance`, `card.build_app`, `apps.list`, `apps.run`, `app.promote`, `settings.set_mode`, `operation.cancel`, `shell.create`, `shell.input`, `shell.resize`, `shell.destroy`, `mission.start`, `mission.approve`, `orchestration.approve`, `orchestration.pause`, `orchestration.resume`, `orchestration.cancel`, `client.error`
 - **Server → Client** (`ServerMessage`): states `delta` (streaming), `final`, `error` — carries `text`, `data`, `generatedUI`, `mediaUrls`, `targetCardId`, `steps`, `settings`, `enhanceResult`, `buildComplete`, `missionPlan`, `missionProgress`, `orchestrationProgress`, `questions`
 - `chat.send` with `routing.toolId: "claude-code"` bypasses OpenClaw agent, spawns CLI directly

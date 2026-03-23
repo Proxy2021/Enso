@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { EnsoRuntime } from "../local-types.js";
 import type { ConnectedClient } from "../server.js";
 import { getActiveAccount } from "../server.js";
-import { loadCardHistory } from "../memory-bridge.js";
+import { findCardRecordForClient, DEFAULT_CONVERSATION_ID } from "../memory-bridge.js";
 import type { CardModeDetail, CoreConfig, OperationStage, ServerMessage } from "../types.js";
 import { persistCard } from "../memory-bridge.js";
 import { APP_CATALOG } from "../app-catalog.js";
@@ -91,8 +91,7 @@ function tryReconstructContext(
   // from the stored data, cardMode, and appCardMode fields.
   const account = getActiveAccount();
   if (account) {
-    const records = loadCardHistory(client.id, 200);
-    const rec = records.find((r) => r.id === cardId);
+    const rec = findCardRecordForClient(client.id, cardId, client.conversationId);
     if (rec) {
       const mode = rec.appCardMode ?? rec.cardMode;
       const data = rec.appData ?? rec.data;
@@ -697,7 +696,7 @@ export async function handlePluginCardAction(params: {
       });
 
       // Persist the new card to history
-      persistCard(client.id, {
+      persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
         id: newCardId,
         runId: "",
         type: "dynamic-ui",
@@ -729,7 +728,7 @@ export async function handlePluginCardAction(params: {
       });
 
       // Persist card update to history (merges with existing record)
-      persistCard(client.id, {
+      persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
         id: cardId,
         runId: "",
         type: "dynamic-ui",
@@ -1131,7 +1130,7 @@ Requirements:
             });
 
             // Persist both standard and deep research data to card history
-            persistCard(client.id, {
+            persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
               id: cardId,
               runId: "",
               type: "dynamic-ui",

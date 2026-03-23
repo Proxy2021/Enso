@@ -19,6 +19,7 @@ import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig } from "./types.js";
 import type { EnsoRuntime } from "./local-types.js";
 import { logAction, logError } from "./action-log.js";
+import { DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
 
 // ── SSE Bridge ──────────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ function createSSEClient(
       }
     },
     _disconnectedBuffer: [],
+    conversationId: DEFAULT_CONVERSATION_ID,
     claudeModel: settings?.model,
     claudeThinking: (settings?.thinking as "adaptive" | "disabled") ?? "adaptive",
     chatModel: settings?.chatModel,

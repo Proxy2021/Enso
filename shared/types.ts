@@ -184,6 +184,8 @@ export interface ServerMessage {
   recentTopics?: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
   monitorUpdate?: { topic: string; changes: { newFindings: string[]; removedFindings: string[] }; timestamp: number };
   monitorList?: Array<{ id: string; topic: string; enabled: boolean; lastChecked: number }>;
+  /** Saved chat threads for the browser client (sidebar). */
+  conversationsList?: Array<{ id: string; title: string; createdAt: number; updatedAt: number }>;
   /** Batch of historical cards sent in response to chat.history */
   cardHistory?: Array<{
     id: string;
@@ -295,6 +297,8 @@ export interface ClientMessage {
   operationId?: string;
   // chat.history fields
   historyCount?: number;
+  /** Active chat thread (persisted server-side per client). */
+  conversationId?: string;
   // shell.* fields
   shellSessionId?: string;
   shellInput?: string;
