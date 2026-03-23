@@ -934,6 +934,73 @@ export async function startEnsoServer(opts: {
     res.json({ ok });
   });
 
+  // ── Branch Management API ──
+
+  app.get("/api/projects/:id/branch-status", async (req, res) => {
+    try {
+      const { loadProject, getProjectBranch } = await import("./project-manager.js");
+      const { execSync } = await import("child_process");
+      const project = loadProject(req.params.id);
+      if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+      if (!project.codebasePath) { res.status(400).json({ error: "Project has no codebasePath" }); return; }
+
+      const cwd = project.codebasePath;
+      const branch = getProjectBranch(project);
+      const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf-8" }).trim();
+      const hasUncommitted = execSync("git status --porcelain", { cwd, encoding: "utf-8" }).trim().length > 0;
+
+      let aheadOfMain = 0;
+      let behindMain = 0;
+      if (branch !== "main" && currentBranch === branch) {
+        try {
+          const counts = execSync(`git rev-list --left-right --count main...${branch}`, { cwd, encoding: "utf-8" }).trim();
+          const [behind, ahead] = counts.split(/\s+/).map(Number);
+          behindMain = behind || 0;
+          aheadOfMain = ahead || 0;
+        } catch { /* branch may not have diverged yet */ }
+      }
+
+      res.json({ branch, currentBranch, aheadOfMain, behindMain, hasUncommitted });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/merge-branch", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { loadProject, getProjectBranch } = await import("./project-manager.js");
+      const { execSync } = await import("child_process");
+      const project = loadProject(req.params.id);
+      if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+      if (!project.codebasePath) { res.status(400).json({ error: "Project has no codebasePath" }); return; }
+
+      const branch = getProjectBranch(project);
+      if (branch === "main") { res.status(400).json({ error: "Project is already on main — nothing to merge" }); return; }
+
+      const cwd = project.codebasePath;
+      const message = req.body.message || `Merge evolution branch '${branch}' into main`;
+
+      // Switch to main and merge
+      execSync("git checkout main", { cwd, encoding: "utf-8" });
+      execSync(`git merge ${branch} --no-ff -m "${message.replace(/"/g, '\\"')}"`, { cwd, encoding: "utf-8" });
+
+      // Push if remote tracking exists
+      let pushed = false;
+      try {
+        const remote = execSync("git remote", { cwd, encoding: "utf-8" }).trim();
+        if (remote) {
+          execSync("git push", { cwd, encoding: "utf-8" });
+          pushed = true;
+        }
+      } catch { /* no remote or push failed — that's ok */ }
+
+      const commitHash = execSync("git rev-parse --short HEAD", { cwd, encoding: "utf-8" }).trim();
+      res.json({ ok: true, commitHash, pushed, message });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Team Generation API ──
 
   app.post("/api/projects/generate-team", express.json({ limit: "1mb" }), async (req, res) => {

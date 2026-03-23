@@ -17,12 +17,13 @@
 
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 import { logAction, logError } from "./action-log.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import { handleOrchestration } from "./orchestrator.js";
 import { archiveEvolutionSprint, cleanEvolutionTempFiles } from "./evolution-archive.js";
-import { loadProject, ensureDefaultProject } from "./project-manager.js";
+import { loadProject, ensureDefaultProject, getProjectBranch } from "./project-manager.js";
 import type { Project, Persona, TeamAgent } from "./project-manager.js";
 import { APP_CATALOG } from "./app-catalog.js";
 import { loadAllApps, SHIPPED_APPS_DIR } from "./app-persistence.js";
@@ -137,6 +138,7 @@ function buildEvolutionPlanningPrompt(
     `**Vision:** ${project.vision}`,
     `**Tech Stack:** ${project.techStack || "Not specified"}`,
     `**Codebase:** ${project.codebasePath}`,
+    `**Branch:** ${getProjectBranch(project)} (all changes MUST be committed on this branch)`,
     project.testUrl ? `**Test URL:** ${project.testUrl}` : "",
     ``,
     goal ? `**Sprint focus area:** ${goal}` : `**Focus:** General product assessment — test all major capabilities.`,
@@ -296,7 +298,8 @@ function buildEvolutionPlanningPrompt(
     `  - NEVER use Stop-Process, taskkill, kill, pkill, or terminate ANY process`,
     `  - NEVER modify package.json (especially version/versionCode), package-lock.json, or any lock files`,
     `  - NEVER run npm install, npm update, npx cap sync, or any package manager commands`,
-    `  - NEVER push to git (git push, git commit) — changes are LOCAL only`,
+    `  - NEVER push to git (git push) — changes are LOCAL only. You may git commit on the current branch.`,
+    `  - NEVER switch git branches — the sprint branch (${getProjectBranch(project)}) is already checked out`,
     `  - NEVER bump versions — version management is handled by the release process, not evolution sprints`,
     `  - NEVER run the build command after implementing — the review task handles build verification`,
     `  - NEVER trigger evolution sprints (/evolve) or discovery sessions (/discover) during persona testing — these spawn massive multi-agent sessions (10-20+ Claude Code sessions each) that consume all available tokens and cause rate limit failures, crashing the sprint`,
@@ -431,12 +434,31 @@ export async function handleEvolutionSprint(params: {
   }
 
   const sprintId = `sprint-${Date.now()}`;
+  const branch = getProjectBranch(project);
+
+  // Ensure the target branch exists and is checked out in the project's codebase
+  if (project.codebasePath) {
+    try {
+      const cwd = project.codebasePath;
+      const existing = execSync(`git branch --list ${branch}`, { cwd, encoding: "utf-8" }).trim();
+      if (!existing) {
+        execSync(`git checkout -b ${branch}`, { cwd, encoding: "utf-8" });
+        logAction({ ts: Date.now(), type: "action", category: "evolution", message: `Created and checked out branch "${branch}" for project "${project.name}"` });
+      } else {
+        execSync(`git checkout ${branch}`, { cwd, encoding: "utf-8" });
+        logAction({ ts: Date.now(), type: "action", category: "evolution", message: `Checked out branch "${branch}" for project "${project.name}"` });
+      }
+    } catch (err) {
+      logError("evolution", `Failed to setup branch "${branch}" for project "${project.name}"`, err);
+      // Continue anyway — agents can still work on whatever branch is current
+    }
+  }
 
   logAction({
     ts: Date.now(),
     type: "action",
     category: "evolution",
-    message: `Evolution sprint start for project "${project.name}": ${goal || "Full product assessment"}`,
+    message: `Evolution sprint start for project "${project.name}" on branch "${branch}": ${goal || "Full product assessment"}`,
   });
 
   try {

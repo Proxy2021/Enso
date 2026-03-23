@@ -19,6 +19,7 @@ interface Persona {
 interface Project {
   id: string; name: string; description: string; vision: string;
   codebasePath: string; techStack?: string; testUrl?: string; testCommand?: string;
+  branch?: string;
   teamAgents: TeamAgent[]; personas: Persona[]; validationPersonaIds: string[];
   createdAt: number; updatedAt: number;
 }
@@ -113,6 +114,13 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   const [discoveryDashError, setDiscoveryDashError] = useState<string | null>(null);
   const [discoveryViewTab, setDiscoveryViewTab] = useState<"overview" | "sourcing" | "pitches" | "committee" | "deliverables" | "dashboard">("overview");
 
+  // Branch management state
+  const [branchStatus, setBranchStatus] = useState<{ branch: string; currentBranch: string; aheadOfMain: number; behindMain: number; hasUncommitted: boolean } | null>(null);
+  const [branchEditing, setBranchEditing] = useState(false);
+  const [branchInput, setBranchInput] = useState("");
+  const [branchMerging, setBranchMerging] = useState(false);
+  const [branchError, setBranchError] = useState("");
+
   const baseUrl = getBackendBaseUrl();
   const headers = useMemo(() => authHeaders({ "Content-Type": "application/json" }), []);
   const headersPlain = useMemo(() => authHeaders(), []);
@@ -148,6 +156,53 @@ export default function ProjectsCard({ card }: CardRendererProps) {
         .catch(() => setDiscoveriesLoading(false));
     }
   }, [view, selected, detailTab]);
+
+  // Fetch branch status when overview tab is selected
+  useEffect(() => {
+    if (view === "detail" && selected && detailTab === "overview") {
+      setBranchStatus(null);
+      setBranchError("");
+      fetch(`${baseUrl}/api/projects/${selected.id}/branch-status`, { headers: headersPlain })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setBranchStatus(d); })
+        .catch(() => {});
+    }
+  }, [view, selected, detailTab]);
+
+  const handleBranchSave = async (projectId: string) => {
+    const branch = branchInput.trim();
+    if (!branch) return;
+    setBranchError("");
+    try {
+      const res = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+        method: "PUT", headers, body: JSON.stringify({ branch }),
+      });
+      if (!res.ok) { setBranchError("Failed to update branch"); return; }
+      setBranchEditing(false);
+      // Refresh project + branch status
+      const pRes = await fetch(`${baseUrl}/api/projects/${projectId}`, { headers: headersPlain });
+      if (pRes.ok) { const p = await pRes.json(); setSelected(p); fetchProjects(); }
+      const sRes = await fetch(`${baseUrl}/api/projects/${projectId}/branch-status`, { headers: headersPlain });
+      if (sRes.ok) setBranchStatus(await sRes.json());
+    } catch { setBranchError("Failed to update branch"); }
+  };
+
+  const handleMergeBranch = async (projectId: string) => {
+    if (!confirm("Merge evolution branch into main? This will checkout main and merge.")) return;
+    setBranchMerging(true);
+    setBranchError("");
+    try {
+      const res = await fetch(`${baseUrl}/api/projects/${projectId}/merge-branch`, {
+        method: "POST", headers, body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) { setBranchError(data.error || "Merge failed"); setBranchMerging(false); return; }
+      setBranchMerging(false);
+      // Refresh branch status
+      const sRes = await fetch(`${baseUrl}/api/projects/${projectId}/branch-status`, { headers: headersPlain });
+      if (sRes.ok) setBranchStatus(await sRes.json());
+    } catch { setBranchError("Merge failed"); setBranchMerging(false); }
+  };
 
   const handleSetActive = (id: string) => {
     localStorage.setItem("enso-active-project", id);
@@ -700,6 +755,56 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             <div className="text-gray-500 text-[10px]">Tech Stack</div>
             <div className="text-gray-300 truncate">{p.techStack || "Not specified"}</div>
           </div>
+        </div>
+
+        {/* Branch */}
+        <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-2 text-xs">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-gray-500 text-[10px] flex items-center gap-1">
+              <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/></svg>
+              Branch
+            </div>
+            {!branchEditing && (
+              <button onClick={() => { setBranchInput(p.branch || "main"); setBranchEditing(true); }} className="text-[10px] text-gray-500 hover:text-gray-300">Edit</button>
+            )}
+          </div>
+          {branchEditing ? (
+            <div className="flex gap-1.5 items-center">
+              <input
+                className="flex-1 bg-gray-900 border border-gray-600 rounded px-1.5 py-0.5 text-xs text-gray-200 focus:border-violet-500 outline-none"
+                value={branchInput}
+                onChange={e => setBranchInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleBranchSave(p.id); if (e.key === "Escape") setBranchEditing(false); }}
+                placeholder="branch name"
+                autoFocus
+              />
+              <button onClick={() => handleBranchSave(p.id)} className="text-[10px] px-1.5 py-0.5 bg-violet-600 hover:bg-violet-500 text-white rounded">Save</button>
+              <button onClick={() => setBranchEditing(false)} className="text-[10px] text-gray-500 hover:text-gray-300">Cancel</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className={`font-mono ${(p.branch && p.branch !== "main") ? "text-violet-400" : "text-gray-300"}`}>{p.branch || "main"}</span>
+              {branchStatus && branchStatus.aheadOfMain > 0 && (
+                <span className="text-[10px] text-emerald-400">{branchStatus.aheadOfMain} ahead</span>
+              )}
+              {branchStatus && branchStatus.behindMain > 0 && (
+                <span className="text-[10px] text-amber-400">{branchStatus.behindMain} behind</span>
+              )}
+              {branchStatus && branchStatus.hasUncommitted && (
+                <span className="text-[10px] text-yellow-500">uncommitted</span>
+              )}
+              {p.branch && p.branch !== "main" && branchStatus && branchStatus.aheadOfMain > 0 && (
+                <button
+                  onClick={() => handleMergeBranch(p.id)}
+                  disabled={branchMerging}
+                  className="ml-auto text-[10px] px-1.5 py-0.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded disabled:opacity-50"
+                >
+                  {branchMerging ? "Merging..." : "Merge to main"}
+                </button>
+              )}
+            </div>
+          )}
+          {branchError && <div className="text-red-400 text-[10px] mt-1">{branchError}</div>}
         </div>
 
         {/* Quick stats */}

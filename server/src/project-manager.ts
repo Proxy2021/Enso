@@ -54,6 +54,7 @@ export interface Project {
   techStack?: string;
   testUrl?: string;
   testCommand?: string;
+  branch?: string;  // Git branch for evolution work (default: "main")
 
   teamAgents: TeamAgent[];
   personas: Persona[];
@@ -448,4 +449,19 @@ export function ensureDefaultProject(): Project {
   mkdirSync(join(dataDir, "sprints"), { recursive: true });
   mkdirSync(join(dataDir, "deliverables"), { recursive: true });
   return project;
+}
+
+// ── Branch Helpers ──
+
+/** Get the project's configured branch (defaults to "main"). */
+export function getProjectBranch(project: Project): string {
+  return project.branch || "main";
+}
+
+/** Update a project's branch and persist. */
+export function setProjectBranch(projectId: string, branch: string): void {
+  const project = loadProject(projectId);
+  if (!project) return;
+  project.branch = branch;
+  saveProject(project);
 }
