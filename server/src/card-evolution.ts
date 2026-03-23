@@ -1,17 +1,37 @@
 /**
- * card-evolution.ts — Focused card evolution via the orchestration engine.
+ * card-evolution.ts — App-aware card evolution.
  *
- * Follows the same "themed orchestration" pattern as evolution.ts and
- * discovery.ts: builds a card-type-specific planning prompt and delegates
- * to handleOrchestration for parallel DAG execution.
+ * Two paths:
+ * 1. App-based cards (dynamic apps with server/apps/ or ~/.enso/apps/ directory):
+ *    Uses Claude Code to read, analyze, and improve the app's source files in place.
+ * 2. Standard cards (chat, terminal, or cards without an app directory):
+ *    Falls back to orchestration-based content evolution (builds a one-off .orchestration-ui.jsx).
  */
 
+import { randomUUID } from "crypto";
+import { existsSync, readFileSync, statSync } from "fs";
+import { join, dirname, relative } from "path";
+import { fileURLToPath } from "url";
 import { handleOrchestration } from "./orchestrator.js";
 import { extractCardContent } from "./card-summarizer.js";
-import { logAction, logError } from "./action-log.js";
+import { runClaudeCode } from "./claude-code.js";
+import {
+  loadAllApps,
+  registerLoadedApp,
+  SHIPPED_APPS_DIR,
+  type LoadedApp,
+} from "./app-persistence.js";
+import { executeToolDirect } from "./native-tools/registry.js";
+import { registerCardContext } from "./outbound.js";
+import { logAction, logError, logFix } from "./action-log.js";
+import { getEnsoPath } from "./utils/home.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CardSummary } from "./card-summarizer.js";
+import type { ServerMessage, EnhanceResult } from "./types.js";
+
+const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
 
 // ── Types ──
 
@@ -24,13 +44,345 @@ export interface CardEvolutionParams {
     taskTerminals?: Record<string, { text: string; status: string }>;
     summary?: CardSummary;
   };
+  appId?: string;
+  toolFamily?: string;
   evolutionGoal?: string;
   includeResearch?: boolean;
   client: ConnectedClient;
   account: ResolvedEnsoAccount;
 }
 
-// ── Per-card-type planning prompts ──
+// ── App Directory Resolution ──
+
+function resolveAppDirectory(appId?: string, toolFamily?: string): string | null {
+  const family = toolFamily ?? appId;
+  if (!family) return null;
+  const userDir = join(getEnsoPath("apps"), family);
+  if (existsSync(join(userDir, "app.json"))) return userDir;
+  const shippedDir = join(SHIPPED_APPS_DIR, family);
+  if (existsSync(join(shippedDir, "app.json"))) return shippedDir;
+  return null;
+}
+
+// ── Main Entry Point ──
+
+export async function handleCardEvolution(params: CardEvolutionParams): Promise<void> {
+  const { cardId, cardType, appId, toolFamily, evolutionGoal, client } = params;
+
+  const appDir = resolveAppDirectory(appId, toolFamily);
+  const family = toolFamily ?? appId;
+
+  logAction({
+    ts: Date.now(),
+    type: "action",
+    category: "card-evolution",
+    message: `Card evolution start: ${cardType} card ${cardId.slice(0, 20)}${family ? ` (app: ${family})` : ""}${evolutionGoal ? ` — goal: ${evolutionGoal.slice(0, 80)}` : ""}`,
+  });
+
+  if (appDir && family) {
+    return evolveAppViaClaude(params, appDir, family);
+  }
+
+  return evolveViaOrchestration(params);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PATH 1: App Evolution via Claude Code
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function evolveAppViaClaude(
+  params: CardEvolutionParams,
+  appDir: string,
+  family: string,
+): Promise<void> {
+  const { cardId, cardContent, evolutionGoal, client, account } = params;
+  const runId = randomUUID();
+  const buildStartTime = Date.now();
+
+  const send = (msg: Partial<ServerMessage>) => {
+    client.send({
+      id: randomUUID(),
+      runId,
+      sessionKey: client.sessionKey,
+      seq: 0,
+      timestamp: Date.now(),
+      ...msg,
+    } as ServerMessage);
+  };
+
+  // Put card in building mode
+  send({
+    state: "final",
+    targetCardId: cardId,
+    enhanceResult: {
+      data: null,
+      generatedUI: undefined as unknown as string,
+      cardMode: {
+        interactionMode: "tool",
+        appId: family,
+        toolFamily: family,
+        signatureId: "card_evolution_building",
+      },
+    },
+  });
+
+  // Build the 3-phase evolution prompt
+  const prompt = buildAppEvolutionPrompt(params, appDir, family);
+
+  // Run Claude Code — streams terminal output to the same card
+  let sessionId: string | undefined;
+  try {
+    const result = await runClaudeCode({
+      prompt,
+      cwd: PROJECT_ROOT,
+      client,
+      runId,
+      targetCardId: cardId,
+      skipPersist: true,
+    });
+    sessionId = result.sessionId;
+  } catch (err) {
+    logError("card-evolution", "Claude Code evolution error", err, { cardId, family });
+    send({
+      state: "final",
+      targetCardId: cardId,
+      enhanceResult: null as unknown as EnhanceResult,
+    });
+    return;
+  }
+
+  logAction({
+    ts: Date.now(),
+    type: "action",
+    category: "card-evolution",
+    message: `Claude Code session complete (${sessionId}). Reloading app ${family}...`,
+    cardId,
+  });
+
+  // Reload all apps and find the evolved one
+  let allApps: LoadedApp[];
+  try {
+    allApps = loadAllApps();
+  } catch (err) {
+    logError("card-evolution", "App reload failed after evolution", err, { cardId, family });
+    return;
+  }
+
+  let evolvedApp = allApps.find((a) => a.spec.toolFamily === family);
+  if (!evolvedApp) {
+    logError("card-evolution", `App ${family} not found after reload`, undefined, { cardId });
+    return;
+  }
+
+  // Compile-check the template, auto-fix if broken
+  if (sessionId) {
+    try {
+      const { transform } = await import("sucrase");
+      transform(evolvedApp.templateJSX, { transforms: ["jsx"], jsxRuntime: "classic" });
+      logAction({ ts: Date.now(), type: "action", category: "card-evolution", message: "Template compile check: OK", cardId });
+    } catch (compileErr) {
+      logAction({ ts: Date.now(), type: "action", category: "card-evolution", message: "Template compile error, resuming session to fix", cardId });
+      logError("card-evolution", "Template compile error after evolution, auto-fixing", compileErr, { cardId, family });
+
+      const fixPrompt = [
+        "The template.jsx you just modified has a compile error:",
+        "```",
+        String(compileErr),
+        "```",
+        "",
+        "Please fix template.jsx to resolve this error.",
+        "Read CLAUDE-REFERENCE.md for the template format rules.",
+        "Common issues: unclosed JSX tags, invalid expressions, missing parentheses.",
+      ].join("\n");
+
+      try {
+        await runClaudeCode({
+          prompt: fixPrompt,
+          cwd: PROJECT_ROOT,
+          toolSessionId: sessionId,
+          client,
+          runId: randomUUID(),
+          targetCardId: cardId,
+          skipPersist: true,
+        });
+        allApps = loadAllApps();
+        evolvedApp = allApps.find((a) => a.spec.toolFamily === family);
+        if (!evolvedApp) return;
+        logFix({ description: `Template compile error in ${family} evolution`, error: String(compileErr), resolution: "Auto-fixed via Claude Code session", category: "card-evolution" });
+      } catch (fixErr) {
+        logError("card-evolution", "Auto-fix session failed", fixErr, { cardId, family });
+      }
+    }
+  }
+
+  // Re-register the evolved app
+  try {
+    registerLoadedApp(evolvedApp);
+  } catch (err) {
+    logError("card-evolution", "App re-registration failed", err, { cardId, family });
+    return;
+  }
+
+  // Execute primary tool to get data for the evolved template
+  const spec = evolvedApp.spec;
+  const primaryDef = spec.tools.find((t) => t.isPrimary) ?? spec.tools[0];
+  const primaryToolName = `${spec.toolPrefix}${primaryDef.suffix}`;
+
+  let data: unknown = primaryDef.sampleData;
+  try {
+    const result = await executeToolDirect(primaryToolName, primaryDef.sampleParams);
+    if (result.success && result.data != null) {
+      data = result.data;
+    } else {
+      logError("card-evolution", "Primary tool returned no data, using sampleData", result.error, { cardId, toolName: primaryToolName });
+    }
+  } catch (err) {
+    logError("card-evolution", "Primary tool execution failed, using sampleData", err, { cardId, toolName: primaryToolName });
+  }
+
+  // Register card context for future interactions
+  registerCardContext(cardId, {
+    cardId,
+    originalPrompt: evolutionGoal ?? `Evolved ${family} app`,
+    originalResponse: params.cardContent.text ?? "",
+    currentData: data,
+    geminiApiKey: account.geminiApiKey,
+    account,
+    mode: account.mode,
+    actionHistory: [],
+    appToolHint: {
+      toolName: primaryToolName,
+      params: primaryDef.sampleParams,
+      handlerPrefix: spec.toolPrefix,
+    },
+    interactionMode: "tool",
+    toolFamily: spec.toolFamily,
+    signatureId: spec.signatureId,
+    coverageStatus: "covered",
+  });
+
+  // Deliver the evolved app to the card
+  const enhanceResult: EnhanceResult = {
+    data,
+    generatedUI: evolvedApp.templateJSX,
+    cardMode: {
+      interactionMode: "tool",
+      toolFamily: spec.toolFamily,
+      signatureId: spec.signatureId,
+      coverageStatus: "covered",
+    },
+  };
+
+  send({
+    state: "final",
+    targetCardId: cardId,
+    enhanceResult,
+  });
+
+  const elapsed = ((Date.now() - buildStartTime) / 1000).toFixed(1);
+  logAction({
+    ts: Date.now(),
+    type: "action",
+    category: "card-evolution",
+    message: `App "${family}" evolved and re-registered (${spec.tools.length} tools, ${elapsed}s)`,
+    cardId,
+    toolFamily: family,
+  });
+}
+
+// ── App Evolution Prompt (3-phase: audit → evaluate → evolve) ──
+
+function buildAppEvolutionPrompt(
+  params: CardEvolutionParams,
+  appDir: string,
+  family: string,
+): string {
+  const { cardContent, evolutionGoal } = params;
+
+  const extracted = extractCardContent(
+    params.cardType,
+    cardContent.text,
+    cardContent.data,
+    cardContent.taskTerminals,
+  );
+
+  const relativeAppDir = appDir.startsWith(PROJECT_ROOT)
+    ? relative(PROJECT_ROOT, appDir).replace(/\\/g, "/")
+    : appDir;
+
+  const contentExcerpt = extracted.body.slice(0, 8000);
+
+  const goalBlock = evolutionGoal
+    ? `\n## User's Evolution Goal\n${evolutionGoal}\n`
+    : "";
+
+  const summaryBlock = cardContent.summary
+    ? `\nPre-computed Summary:\n- Overview: ${cardContent.summary.overview}\n- Key Outcomes: ${cardContent.summary.keyOutcomes.map((o) => `  - ${o}`).join("\n")}\n`
+    : "";
+
+  return `You are evolving an existing Enso app to make it fundamentally more capable. This is NOT about cosmetic changes — you are improving the app's architecture, data processing, and effectiveness.
+
+## Phase 1: Deep App Audit
+
+Read every file in ${relativeAppDir}/:
+- app.json — tool definitions, parameters, descriptions
+- template.jsx — the UI component
+- executors/*.js — server-side tool implementations
+- Any other files (SKILL.md, lib/, etc.)
+
+Also read CLAUDE-REFERENCE.md for Enso app conventions and format rules.
+
+Understand the app as a complete system: how tools are defined, how executors process data, and how the template renders results.
+
+## Phase 2: Critical Evaluation
+
+The user triggered this evolution from a card that produced the following output. Use it as a diagnostic specimen to assess the app's full stack:
+
+### Card Output (${extracted.cardType})
+Title: ${extracted.title}
+
+${contentExcerpt}
+${summaryBlock}${goalBlock}
+### Evaluate: Tool Architecture (app.json)
+- Are the tools well-decomposed? Should any be split into more focused tools or merged?
+- Are parameters generic enough for reuse across different queries, or too narrow?
+- Are there missing tools that would add significant capability? (e.g., compare, timeline, export, deep-dive)
+- Are tool descriptions clear and specific enough for the LLM to invoke them correctly?
+- Are sampleParams and sampleData representative and useful?
+
+### Evaluate: Data Pipeline (executors)
+- Are executors doing meaningful computation, or just proxying raw API responses?
+- What derived metrics, confidence scores, cross-references, or aggregations should be computed server-side?
+- Is error handling robust? Are edge cases (empty data, partial results, rate limits) handled gracefully?
+- Could data be enriched with additional processing steps, normalization, or structure?
+- Are there opportunities to add caching, batching, or smarter data fetching?
+
+### Evaluate: Presentation & Interaction (template.jsx)
+- Does the template use all available data fields, or ignore some?
+- What interactions does the data support that the UI doesn't offer? (filter, sort, compare, drill-down, export)
+- Is state management clean? Can it handle complex workflows and multiple tool outputs?
+- Are there missing views or modes that would make the app more useful?
+- Is the visual hierarchy effective? Does it guide the user to what matters?
+
+## Phase 3: Evolve the App
+
+Based on your analysis, modify the app files in place at ${relativeAppDir}/.
+
+Prioritize changes that improve the app's fundamental effectiveness:
+1. **Add missing tools** that unlock new capabilities
+2. **Enrich executors** with meaningful data processing, derived metrics, and robust error handling
+3. **Upgrade the template** to leverage all data, add interactive controls, and support new tools
+4. **Improve tool descriptions** so the LLM invokes them more effectively
+5. **Update sampleParams and sampleData** to reflect the enhanced capabilities
+
+Every change should address a specific gap you identified in Phase 2. Do not make changes that are purely cosmetic without also improving substance.
+
+IMPORTANT: This is an in-place evolution of a reusable app. The improvements must work for ANY user of this app, not just the specific content shown in the card output above. Keep all tools parameterized and general-purpose.`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PATH 2: Content Evolution via Orchestration (fallback)
+// ═══════════════════════════════════════════════════════════════════════════
 
 function buildCardEvolutionPlanningPrompt(
   params: CardEvolutionParams,
@@ -146,17 +498,8 @@ function getTypeGuidance(cardType: string, includeResearch?: boolean): string {
   }
 }
 
-// ── Main Entry Point ──
-
-export async function handleCardEvolution(params: CardEvolutionParams): Promise<void> {
+async function evolveViaOrchestration(params: CardEvolutionParams): Promise<void> {
   const { cardId, cardType, evolutionGoal, client, account } = params;
-
-  logAction({
-    ts: Date.now(),
-    type: "action",
-    category: "card-evolution",
-    message: `Card evolution start: ${cardType} card ${cardId.slice(0, 20)}${evolutionGoal ? ` — goal: ${evolutionGoal.slice(0, 80)}` : ""}`,
-  });
 
   try {
     await handleOrchestration({

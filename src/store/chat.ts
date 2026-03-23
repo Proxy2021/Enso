@@ -1684,6 +1684,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     const wsClient = get()._wsClient;
     if (!wsClient) return;
     const MAX_TEXT = 10000;
+    const activeMode = card.appCardMode ?? card.cardMode;
     const msg: ClientMessage = {
       type: "card.evolve",
       cardId,
@@ -1693,6 +1694,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
         data: card.data,
         taskTerminals: card.taskTerminals,
       },
+      appId: activeMode?.appId ?? activeMode?.toolFamily,
+      toolFamily: activeMode?.toolFamily ?? activeMode?.appId,
       evolutionGoal: options?.goal,
       includeResearch: options?.includeResearch,
     };

@@ -277,6 +277,7 @@ export interface ClientMessage {
   };
   cardSummarizeAction?: "summarize";
   // card.evolve fields
+  appId?: string;
   includeResearch?: boolean;
   // card.enhance / card.build_app / card.propose_app fields
   cardText?: string;

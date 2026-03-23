@@ -2357,12 +2357,14 @@ export async function startEnsoServer(opts: {
           }
           case "card.evolve": {
             if (msg.cardId && msg.cardType && msg.cardContent) {
-              runtime.log?.(`[enso] card.evolve: ${msg.cardId} (${msg.cardType}${msg.evolutionGoal ? `, goal="${msg.evolutionGoal.slice(0, 60)}"` : ""})`);
+              runtime.log?.(`[enso] card.evolve: ${msg.cardId} (${msg.cardType}${msg.appId ? `, app=${msg.appId}` : ""}${msg.evolutionGoal ? `, goal="${msg.evolutionGoal.slice(0, 60)}"` : ""})`);
               const { handleCardEvolution } = await import("./card-evolution.js");
               handleCardEvolution({
                 cardId: msg.cardId,
                 cardType: msg.cardType,
                 cardContent: msg.cardContent,
+                appId: msg.appId,
+                toolFamily: msg.toolFamily,
                 evolutionGoal: msg.evolutionGoal,
                 includeResearch: msg.includeResearch,
                 client,
