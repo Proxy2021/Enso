@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "photo_studio",
     "toolPrefix": "enso_photo_studio_",
-    "description": "Professional photo processing studio — 56 styles across Film Stocks, Cinematic, Photographers, and Trending categories. Style Gallery with bilingual educational content, style previews, batch processing, and photo book creation.",
+    "description": "Professional photo processing studio — 56 styles across Film Stocks, Cinematic, Photographers, and Trending categories. Style Gallery with bilingual educational content, style previews, batch processing, photo book creation, export, and processing history.",
     "signatureId": "photo_studio_view",
     "tools": [
       {
@@ -55,7 +55,16 @@
           ],
           "filter": "image",
           "sortBy": "name",
-          "sortDir": "asc"
+          "sortDir": "asc",
+          "folderStats": {
+            "totalSize": 12982712,
+            "totalSizeMB": 12.4,
+            "formatCounts": { "jpg": 3, "png": 1 },
+            "dateRange": { "oldest": "2024-11-10T08:00:00Z", "newest": "2024-11-15T10:30:00Z" }
+          },
+          "recentFolders": [
+            { "path": "/Users/demo/Pictures/Norway", "name": "Norway", "itemCount": 12, "visitedAt": "2024-11-14T09:00:00Z" }
+          ]
         },
         "requiredDataKeys": ["tool"],
         "isPrimary": true
@@ -136,7 +145,7 @@
       },
       {
         "suffix": "batch_process",
-        "description": "Apply a photo processing style to all photos in a directory. Use when the user says: 'batch process my photos', 'style all photos in a folder', 'apply Portra 400 to all'. 28 styles: Film Stocks (Portra, Ektar, Tri-X, etc.), Cinematic (Wong Kar-wai, Blade Runner, etc.), Photographers (Moriyama, Fan Ho, etc.), Trending (Moody Natural, Soft Film, etc.).",
+        "description": "Apply a photo processing style to all photos in a directory OR to specific selected photos. Use when the user says: 'batch process my photos', 'style all photos in a folder', 'apply Portra 400 to all', 'process these selected photos'. Supports 56 styles across Film Stocks, Cinematic, Photographers, and Trending.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -144,6 +153,11 @@
             "collection": {
               "type": "string",
               "description": "Folder path containing photos to batch process"
+            },
+            "paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Optional: specific photo file paths to process (overrides collection-wide processing)"
             },
             "style": {
               "type": "string",
@@ -366,10 +380,18 @@
           "scene": "A dramatic sunset over a coastal harbor with colorful wooden houses reflected in calm water.",
           "recommendedStyle": "nordic_noir",
           "styleName": "Nordic Noir",
+          "styleSignature": "Frozen light, desaturated palette",
+          "styleMood": ["melancholic", "atmospheric"],
+          "styleBestFor": ["landscapes", "architecture"],
+          "styleIntensity": 4,
+          "styleCategory": "Cinematic",
+          "matchConfidence": 75,
           "reason": "The cool Scandinavian harbor scene with overcast skies and muted colors will be enhanced by Nordic Noir's icy desaturation.",
           "caption": "Where the frozen sea meets painted wood — silence rendered in steel and slate.",
           "alternateStyle": "blade_runner",
-          "alternateStyleName": "Blade Runner"
+          "alternateStyleName": "Blade Runner",
+          "altStyleSignature": "Neon-soaked cyberpunk",
+          "altStyleMood": ["futuristic", "dystopian"]
         },
         "requiredDataKeys": ["tool", "recommendedStyle"],
         "isPrimary": false
@@ -429,6 +451,74 @@
           "categories": {
             "Film Stocks": [{ "id": "kodak_portra_400", "name": "Portra 400", "subtitle": "Kodak" }]
           }
+        },
+        "requiredDataKeys": ["tool"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "export_photos",
+        "description": "Export and save processed photos to a chosen directory on the filesystem. Use when the user says: 'export my photos', 'save styled photos', 'copy processed photos to folder', 'download my edits'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Array of photo file paths to export"
+            },
+            "destination": {
+              "type": "string",
+              "description": "Destination directory path (default: ~/Desktop/PhotoStudio_Export)"
+            },
+            "format": {
+              "type": "string",
+              "description": "Output format: original, jpg, png (default: original)"
+            }
+          },
+          "required": ["paths"]
+        },
+        "sampleParams": { "paths": ["/Users/demo/Pictures/processed/sunset_portra.jpg"], "destination": "/Users/demo/Desktop/Export" },
+        "sampleData": {
+          "tool": "enso_photo_studio_export_photos",
+          "destination": "/Users/demo/Desktop/Export",
+          "total": 2,
+          "success": 2,
+          "failed": 0,
+          "results": [
+            { "name": "sunset_portra.jpg", "source": "/path/src", "destination": "/path/dest", "status": "success" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "results"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "history",
+        "description": "View processing history — recent style applications, batch jobs, photo analyses, and exports. Use when the user says: 'show my history', 'what did I process', 'recent edits', 'processing log'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of history entries to return (default: 20)"
+            },
+            "action": {
+              "type": "string",
+              "description": "Filter by action type: apply_style, batch_process, analyze, export (omit for all)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photo_studio_history",
+          "total": 5,
+          "stats": { "total": 5, "styles": 3, "batches": 1, "analyses": 1, "exports": 0 },
+          "topStyles": [{ "style": "kodak_portra_400", "styleName": "kodak portra 400", "count": 2 }],
+          "entries": [
+            { "action": "apply_style", "photoPath": "/path/photo.jpg", "style": "kodak_portra_400", "styleName": "Portra 400", "timestamp": "2024-11-15T10:30:00Z" }
+          ]
         },
         "requiredDataKeys": ["tool"],
         "isPrimary": false

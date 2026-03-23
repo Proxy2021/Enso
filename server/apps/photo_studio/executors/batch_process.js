@@ -1,5 +1,6 @@
 var folderPath = (params.collection || "").trim();
 var style = (params.style || "").trim();
+var specificPaths = params.paths || [];
 
 if (!style) {
   return {
@@ -14,29 +15,42 @@ if (!style) {
 }
 
 // If no folder path, check stored last browsed folder
-if (!folderPath) {
+if (!folderPath && specificPaths.length === 0) {
   var lastFolder = await ctx.store.get("lastBrowsedFolder");
   if (lastFolder) folderPath = lastFolder;
 }
 
-if (!folderPath) {
+if (!folderPath && specificPaths.length === 0) {
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
         tool: "enso_photo_studio_batch_process",
-        error: "No folder specified. Browse a folder first, then batch process."
+        error: "No folder or photos specified. Browse a folder first, then batch process."
       })
     }]
   };
 }
 
 // Call real photo processing tool
-var result = await ctx.callTool("enso_media_process_photos", {
-  inputDir: folderPath,
+var processParams = {
   style: style,
   outputSubfolder: "processed"
-});
+};
+
+// Support processing specific photo paths (from multi-select) or entire directory
+if (specificPaths.length > 0) {
+  processParams.paths = specificPaths;
+  // Derive inputDir from first path for output organization
+  if (!folderPath && specificPaths[0]) {
+    folderPath = specificPaths[0].split("/").slice(0, -1).join("/");
+  }
+  processParams.inputDir = folderPath;
+} else {
+  processParams.inputDir = folderPath;
+}
+
+var result = await ctx.callTool("enso_media_process_photos", processParams);
 
 // Handle errors
 if (!result || !result.success) {
@@ -101,6 +115,27 @@ if (results.length > 0) {
   } catch(e) { /* silently skip collection save errors */ }
 }
 
+// ── Log to processing history ──
+try {
+  var histKey = "history";
+  var histStored = await ctx.store.get(histKey);
+  var histList = [];
+  if (histStored) {
+    try { histList = JSON.parse(histStored); } catch(e) { histList = []; }
+  }
+  histList.unshift({
+    action: "batch_process",
+    folder: folderPath,
+    style: style,
+    total: processed + failed,
+    completed: processed,
+    failed: failed,
+    timestamp: new Date().toISOString()
+  });
+  if (histList.length > 50) histList = histList.slice(0, 50);
+  await ctx.store.set(histKey, JSON.stringify(histList));
+} catch(e) { /* skip */ }
+
 return {
   content: [{
     type: "text",
@@ -114,6 +149,7 @@ return {
       failed: failed,
       status: "complete",
       outputDir: data.outputDir || "",
+      inputDir: folderPath,
       savedToCollection: savedToCollection,
       results: results
     })

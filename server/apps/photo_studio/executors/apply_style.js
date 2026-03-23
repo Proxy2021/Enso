@@ -117,6 +117,27 @@ if (outputFile) {
   } catch(e) { /* silently skip collection save errors */ }
 }
 
+// ── Log to processing history ──
+try {
+  var histKey = "history";
+  var histStored = await ctx.store.get(histKey);
+  var histList = [];
+  if (histStored) {
+    try { histList = JSON.parse(histStored); } catch(e) { histList = []; }
+  }
+  histList.unshift({
+    action: "apply_style",
+    photoPath: photoPath,
+    photoName: photoName,
+    style: style,
+    styleName: styleName,
+    outputFile: data.outputFile || "",
+    timestamp: new Date().toISOString()
+  });
+  if (histList.length > 50) histList = histList.slice(0, 50);
+  await ctx.store.set(histKey, JSON.stringify(histList));
+} catch(e) { /* skip */ }
+
 return {
   content: [{
     type: "text",

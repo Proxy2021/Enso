@@ -73,14 +73,17 @@ if (nonZero.length > 0) {
   } catch(e) { console.warn("[adjust] processing failed:", e?.message || e); /* fall through to return current photo with adjustments metadata */ }
 }
 
-// Use AI to describe the adjustment effect
+// Generate a concise local description (avoid AI call — too slow for real-time slider interaction)
 var desc = "";
 if (nonZero.length > 0) {
-  var adjDesc = nonZero.map(function(e) { return e[0] + ": " + (e[1] > 0 ? "+" : "") + e[1]; }).join(", ");
-  try {
-    var aiResult = await ctx.ask("Briefly describe the visual effect of these photo adjustments: " + adjDesc + ". Be concise in 1 sentence.");
-    if (aiResult.ok) desc = aiResult.text;
-  } catch(e) { /* ignore */ }
+  var parts = [];
+  for (var di = 0; di < nonZero.length; di++) {
+    var dkey = nonZero[di][0];
+    var dval = nonZero[di][1];
+    var direction = dval > 0 ? "+" : "";
+    parts.push(dkey + " " + direction + dval);
+  }
+  desc = parts.join(", ");
 }
 
 return {

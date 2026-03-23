@@ -6,6 +6,13 @@ if (rating < 0) rating = 0;
 if (rating > 5) rating = 5;
 rating = Math.round(rating);
 
+// ── Path normalization ──
+if (path && path.charAt(0) !== '/' && path.charAt(0) !== '~' && !/^[A-Z]:/i.test(path)) {
+  if (path.indexOf('/') > 0) {
+    path = '/' + path;
+  }
+}
+
 if (!path) {
   return {
     content: [{

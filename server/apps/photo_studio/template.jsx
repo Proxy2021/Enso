@@ -1,24 +1,26 @@
 export default function GeneratedUI({ data, onAction }) {
-  // ── Hooks (all at top level) ──
-  const [selectedStyle, setSelectedStyle] = useState("kodak_portra_400");
-  const [collectionName, setCollectionName] = useState("");
-  const [createMode, setCreateMode] = useState(false);
-  const [viewMode, setViewMode] = useState("grid");
-  const [bookPage, setBookPage] = useState(0);
-  const [showStylePicker, setShowStylePicker] = useState(false);
-  const [activeTab, setActiveTab] = useState("Film Stocks");
-  const [previewFilter, setPreviewFilter] = useState("all");
-  const [lightboxUrl, setLightboxUrl] = useState(null);
-  const [lightboxName, setLightboxName] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStyle, setProcessingStyle] = useState("");
-  const [processingCount, setProcessingCount] = useState(0);
-  const [galleryLang, setGalleryLang] = useState("en");
-  const [galleryTab, setGalleryTab] = useState("all");
-  const [galleryAccordion, setGalleryAccordion] = useState(null);
-  const lightboxRef = React.useRef(null);
-  const [pendingAdj, setPendingAdj] = useState(null);
-  const adjTimerRef = React.useRef(null);
+  // ── Hooks (all at top level — var for sandbox TDZ safety) ──
+  var [selectedStyle, setSelectedStyle] = useState("kodak_portra_400");
+  var [collectionName, setCollectionName] = useState("");
+  var [createMode, setCreateMode] = useState(false);
+  var [viewMode, setViewMode] = useState("grid");
+  var [bookPage, setBookPage] = useState(0);
+  var [showStylePicker, setShowStylePicker] = useState(false);
+  var [activeTab, setActiveTab] = useState("Film Stocks");
+  var [previewFilter, setPreviewFilter] = useState("all");
+  var [lightboxUrl, setLightboxUrl] = useState(null);
+  var [lightboxName, setLightboxName] = useState("");
+  var [isProcessing, setIsProcessing] = useState(false);
+  var [processingStyle, setProcessingStyle] = useState("");
+  var [processingCount, setProcessingCount] = useState(0);
+  var [galleryLang, setGalleryLang] = useState("en");
+  var [galleryTab, setGalleryTab] = useState("all");
+  var [galleryAccordion, setGalleryAccordion] = useState(null);
+  var lightboxRef = React.useRef(null);
+  var [pendingAdj, setPendingAdj] = useState(null);
+  var adjTimerRef = React.useRef(null);
+  var [selectedPhotos, setSelectedPhotos] = useState({});
+  var [selectMode, setSelectMode] = useState(false);
 
   // ── Focus lightbox overlay for keyboard navigation ──
   React.useEffect(function() {
@@ -28,18 +30,20 @@ export default function GeneratedUI({ data, onAction }) {
   }, [lightboxUrl]);
 
   // ── Detect tool view ──
-  const tool = data?.tool || "";
-  const isImport = tool === "enso_photo_studio_import_photos";
-  const isApplyStyle = tool === "enso_photo_studio_apply_style";
-  const isBatchProcess = tool === "enso_photo_studio_batch_process";
-  const isCollection = tool === "enso_photo_studio_manage_collection";
-  const isCompare = tool === "enso_photo_studio_compare_versions";
-  const isPhotobook = tool === "enso_photo_studio_photobook";
-  const isAdjust = tool === "enso_photo_studio_adjust";
-  const isPreviewStyles = tool === "enso_photo_studio_preview_styles";
-  const isListStyles = tool === "enso_photo_studio_list_styles";
-  const isAnalyze = tool === "enso_photo_studio_analyze_photo" || tool === "enso_media_analyze_photo";
-  const isStyleGallery = tool === "enso_photo_studio_style_gallery";
+  var tool = data?.tool || "";
+  var isImport = tool === "enso_photo_studio_import_photos";
+  var isApplyStyle = tool === "enso_photo_studio_apply_style";
+  var isBatchProcess = tool === "enso_photo_studio_batch_process";
+  var isCollection = tool === "enso_photo_studio_manage_collection";
+  var isCompare = tool === "enso_photo_studio_compare_versions";
+  var isPhotobook = tool === "enso_photo_studio_photobook";
+  var isAdjust = tool === "enso_photo_studio_adjust";
+  var isPreviewStyles = tool === "enso_photo_studio_preview_styles";
+  var isListStyles = tool === "enso_photo_studio_list_styles";
+  var isAnalyze = tool === "enso_photo_studio_analyze_photo" || tool === "enso_media_analyze_photo";
+  var isStyleGallery = tool === "enso_photo_studio_style_gallery";
+  var isExport = tool === "enso_photo_studio_export_photos";
+  var isHistory = tool === "enso_photo_studio_history";
 
   // ── Reset processing overlay when data changes (batch completes or navigates away) ──
   useEffect(() => {
@@ -51,39 +55,57 @@ export default function GeneratedUI({ data, onAction }) {
   // ── Safety timeout: clear processing overlay after 10 minutes ──
   useEffect(() => {
     if (isProcessing) {
-      const timer = setTimeout(function() { setIsProcessing(false); }, 600000);
+      var timer = setTimeout(function() { setIsProcessing(false); }, 600000);
       return function() { clearTimeout(timer); };
     }
   }, [isProcessing]);
 
   // ── Elapsed time tracker for processing overlay ──
-  const [processingElapsed, setProcessingElapsed] = useState(0);
+  var [processingElapsed, setProcessingElapsed] = useState(0);
   useEffect(() => {
     if (isProcessing) {
       setProcessingElapsed(0);
-      const interval = setInterval(function() { setProcessingElapsed(function(e) { return e + 1; }); }, 1000);
+      var interval = setInterval(function() { setProcessingElapsed(function(e) { return e + 1; }); }, 1000);
       return function() { clearInterval(interval); };
     }
   }, [isProcessing]);
-  const elapsedMin = Math.floor(processingElapsed / 60);
-  const elapsedSec = processingElapsed % 60;
-  const elapsedStr = elapsedMin > 0 ? elapsedMin + "m " + elapsedSec + "s" : elapsedSec + "s";
+  var elapsedMin = Math.floor(processingElapsed / 60);
+  var elapsedSec = processingElapsed % 60;
+  var elapsedStr = elapsedMin > 0 ? elapsedMin + "m " + elapsedSec + "s" : elapsedSec + "s";
 
   // ── Clear pending adjustment when server data arrives ──
   useEffect(() => { setPendingAdj(null); }, [data?.adjustments]);
 
   // ── Helpers ──
-  const getIcon = (name) => {
+  var getIcon = function(name) {
     var I = LucideReact[name];
     return I ? I : LucideReact.Aperture;
   };
-  const formatSize = (bytes) => {
+  var formatSize = function(bytes) {
     if (!bytes) return "";
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
     return (bytes / 1048576).toFixed(1) + " MB";
   };
-  const defaultUi = { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" };
+  var formatDate = function(isoStr) {
+    if (!isoStr) return "";
+    var d = new Date(isoStr);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  };
+  var formatTimeAgo = function(isoStr) {
+    if (!isoStr) return "";
+    var diff = Date.now() - new Date(isoStr).getTime();
+    var mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + "h ago";
+    var days = Math.floor(hrs / 24);
+    return days + "d ago";
+  };
+  var defaultUi = { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-300" };
+  var selectedCount = Object.keys(selectedPhotos).filter(function(k) { return selectedPhotos[k]; }).length;
+  var selectedPaths = Object.keys(selectedPhotos).filter(function(k) { return selectedPhotos[k]; });
 
   // ── Lightbox overlay (full-view photo) ──
   var lightbox = lightboxUrl ? (
@@ -115,7 +137,7 @@ export default function GeneratedUI({ data, onAction }) {
   ) : null;
 
   // ── Processing overlay (shown while batch is running) ──
-  const processingOverlay = isProcessing ? (
+  var processingOverlay = isProcessing ? (
     <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
@@ -237,6 +259,9 @@ export default function GeneratedUI({ data, onAction }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => onAction("history", {})}>
+              <LucideReact.Clock className="w-3.5 h-3.5 mr-1" /> History
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => onAction("style_gallery", {})}>
               <LucideReact.BookOpen className="w-3.5 h-3.5 mr-1" /> Gallery
             </Button>
@@ -258,6 +283,30 @@ export default function GeneratedUI({ data, onAction }) {
             <LucideReact.ImagePlus className="w-8 h-8 text-gray-500 group-hover:text-violet-400 mx-auto mb-2 transition-colors" />
             <div className="text-sm font-medium text-gray-300 group-hover:text-gray-100">Upload Photos from Device</div>
             <div className="text-xs text-gray-500 mt-0.5">Select photos from your phone or computer to style</div>
+          </div>
+        )}
+
+        {/* Recent folders — shown on root view for quick re-access */}
+        {isRoot && data.recentFolders && data.recentFolders.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1">
+              <LucideReact.Clock className="w-3 h-3" /> Recently Opened
+            </div>
+            <div className="space-y-1">
+              {data.recentFolders.map(function(rf, idx) {
+                return (
+                  <button key={idx} onClick={() => onAction("import_photos", { path: rf.path })}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg bg-violet-500/5 border border-violet-500/15 hover:border-violet-500/30 hover:bg-violet-500/10 cursor-pointer transition-all text-left group">
+                    <LucideReact.FolderOpen className="w-4 h-4 text-violet-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-gray-200 truncate">{rf.name}</div>
+                      <div className="text-[10px] text-gray-500">{rf.itemCount} images · {formatTimeAgo(rf.visitedAt)}</div>
+                    </div>
+                    <LucideReact.ChevronRight className="w-3.5 h-3.5 text-gray-600 shrink-0 group-hover:text-violet-400" />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -344,12 +393,35 @@ export default function GeneratedUI({ data, onAction }) {
           </div>
         )}
 
+        {/* Folder stats bar */}
+        {items.length > 0 && data.folderStats && (
+          <div className="flex items-center gap-3 px-3 py-2 bg-gray-800/40 rounded-lg border border-gray-700/30 text-[10px] text-gray-400 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+            <span className="flex items-center gap-1 shrink-0"><LucideReact.HardDrive className="w-3 h-3" /> {data.folderStats.totalSizeMB} MB</span>
+            {Object.keys(data.folderStats.formatCounts || {}).length > 0 && (
+              <span className="shrink-0">{Object.entries(data.folderStats.formatCounts).map(function(e) { return e[1] + " " + e[0].toUpperCase(); }).join(", ")}</span>
+            )}
+            {data.folderStats.dateRange && data.folderStats.dateRange.oldest && (
+              <span className="shrink-0">{formatDate(data.folderStats.dateRange.oldest)} — {formatDate(data.folderStats.dateRange.newest)}</span>
+            )}
+          </div>
+        )}
+
         {/* Photo thumbnails */}
         {items.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">{items.length} photo{items.length !== 1 ? "s" : ""}</div>
+              <div className="flex items-center gap-2">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">{items.length} photo{items.length !== 1 ? "s" : ""}</div>
+                {selectMode && selectedCount > 0 && (
+                  <Badge variant="info" className="text-[9px]">{selectedCount} selected</Badge>
+                )}
+              </div>
               <div className="flex items-center gap-1">
+                <button onClick={() => { setSelectMode(!selectMode); if (selectMode) setSelectedPhotos({}); }}
+                  className={"p-1 rounded cursor-pointer " + (selectMode ? "text-amber-400 bg-amber-500/10" : "text-gray-500 hover:text-gray-300")}
+                  title={selectMode ? "Cancel selection" : "Select photos"}>
+                  <LucideReact.CheckSquare className="w-3.5 h-3.5" />
+                </button>
                 <button onClick={() => setViewMode("grid")} className={"p-1 rounded cursor-pointer " + (viewMode === "grid" ? "text-violet-400 bg-violet-500/10" : "text-gray-500 hover:text-gray-300")}>
                   <LucideReact.LayoutGrid className="w-3.5 h-3.5" />
                 </button>
@@ -362,9 +434,19 @@ export default function GeneratedUI({ data, onAction }) {
             {viewMode === "grid" ? (
               <div className="grid grid-cols-3 gap-2 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
                 {items.map(function(item, idx) {
+                  var isSelected = selectMode && selectedPhotos[item.path];
                   return (
-                    <div key={idx} className="relative group bg-gray-800/60 rounded-xl overflow-hidden border border-gray-700/40 hover:border-violet-500/40 transition-all cursor-pointer"
-                      onClick={function() { if (item.mediaUrl) { setLightboxUrl(item.mediaUrl); setLightboxName(item.name); } }}>
+                    <div key={idx} className={"relative group bg-gray-800/60 rounded-xl overflow-hidden border transition-all cursor-pointer " +
+                      (isSelected ? "border-amber-400/60 ring-1 ring-amber-400/30" : "border-gray-700/40 hover:border-violet-500/40")}
+                      onClick={function() {
+                        if (selectMode) {
+                          var newSel = Object.assign({}, selectedPhotos);
+                          newSel[item.path] = !newSel[item.path];
+                          setSelectedPhotos(newSel);
+                        } else if (item.mediaUrl) {
+                          setLightboxUrl(item.mediaUrl); setLightboxName(item.name);
+                        }
+                      }}>
                       {item.mediaUrl ? (
                         <img src={item.mediaUrl} alt={item.name} loading="lazy" style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover" }} />
                       ) : (
@@ -376,20 +458,32 @@ export default function GeneratedUI({ data, onAction }) {
                         <div className="text-[10px] text-gray-300 truncate">{item.name}</div>
                         <div className="text-[9px] text-gray-500">{formatSize(item.size)}</div>
                       </div>
-                      <div className="absolute top-1 right-1 flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                        <button onClick={function(e) { e.stopPropagation(); onAction("analyze_photo", { path: item.path }); }}
-                          className="p-1.5 rounded-md bg-black/60 text-amber-300 hover:text-amber-200 cursor-pointer backdrop-blur-sm" title="AI Recommend">
-                          <LucideReact.Sparkles className="w-3 h-3" />
-                        </button>
-                        <button onClick={function(e) { e.stopPropagation(); onAction("preview_styles", { photoPath: item.path }); }}
-                          className="p-1.5 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
-                          <LucideReact.Palette className="w-3 h-3" />
-                        </button>
-                        <button onClick={function(e) { e.stopPropagation(); if (item.mediaUrl) { setLightboxUrl(item.mediaUrl); setLightboxName(item.name); } }}
-                          className="p-1.5 rounded-md bg-black/60 text-gray-300 hover:text-white cursor-pointer backdrop-blur-sm">
-                          <LucideReact.Maximize2 className="w-3 h-3" />
-                        </button>
-                      </div>
+                      {/* Selection checkbox */}
+                      {selectMode && (
+                        <div className="absolute top-1 left-1">
+                          <div className={"w-5 h-5 rounded-md border flex items-center justify-center " +
+                            (isSelected ? "bg-amber-500 border-amber-400" : "bg-black/50 border-gray-500/50 backdrop-blur-sm")}>
+                            {isSelected && <LucideReact.Check className="w-3 h-3 text-white" />}
+                          </div>
+                        </div>
+                      )}
+                      {/* Action buttons (hidden in select mode) */}
+                      {!selectMode && (
+                        <div className="absolute top-1 right-1 flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                          <button onClick={function(e) { e.stopPropagation(); onAction("analyze_photo", { path: item.path }); }}
+                            className="p-1.5 rounded-md bg-black/60 text-amber-300 hover:text-amber-200 cursor-pointer backdrop-blur-sm" title="AI Recommend">
+                            <LucideReact.Sparkles className="w-3 h-3" />
+                          </button>
+                          <button onClick={function(e) { e.stopPropagation(); onAction("preview_styles", { photoPath: item.path }); }}
+                            className="p-1.5 rounded-md bg-black/60 text-violet-300 hover:text-violet-200 cursor-pointer backdrop-blur-sm">
+                            <LucideReact.Palette className="w-3 h-3" />
+                          </button>
+                          <button onClick={function(e) { e.stopPropagation(); if (item.mediaUrl) { setLightboxUrl(item.mediaUrl); setLightboxName(item.name); } }}
+                            className="p-1.5 rounded-md bg-black/60 text-gray-300 hover:text-white cursor-pointer backdrop-blur-sm">
+                            <LucideReact.Maximize2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -429,14 +523,32 @@ export default function GeneratedUI({ data, onAction }) {
         {/* Actions bar */}
         {items.length > 0 && (
           <div className="space-y-3 pt-1 border-t border-gray-800/40">
-            <div className="flex gap-2">
+            {/* Selection actions bar */}
+            {selectMode && selectedCount > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <LucideReact.CheckSquare className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-[11px] text-amber-300 flex-1">{selectedCount} photo{selectedCount !== 1 ? "s" : ""} selected</span>
+                <Button size="sm" variant="ghost" onClick={function() {
+                  var allSel = {};
+                  items.forEach(function(it) { allSel[it.path] = true; });
+                  setSelectedPhotos(allSel);
+                }}>Select All</Button>
+                <Button size="sm" variant="ghost" onClick={function() { setSelectedPhotos({}); }}>Clear</Button>
+              </div>
+            )}
+            <div className="flex gap-2 flex-wrap">
               <Button size="sm" variant="outline"
-                onClick={() => onAction("photobook", { paths: items.map(function(it) { return it.path; }), layout: "auto", title: folderName || "Photo Book", folderPath: currentPath })}>
-                <LucideReact.BookOpen className="w-3 h-3 mr-1" /> Photo Book
+                onClick={() => onAction("photobook", { paths: (selectMode && selectedCount > 0 ? selectedPaths : items.map(function(it) { return it.path; })), layout: "auto", title: folderName || "Photo Book", folderPath: currentPath })}>
+                <LucideReact.BookOpen className="w-3 h-3 mr-1" /> Photo Book{selectMode && selectedCount > 0 ? " (" + selectedCount + ")" : ""}
               </Button>
               <Button size="sm" variant={showStylePicker ? "primary" : "outline"} onClick={() => setShowStylePicker(!showStylePicker)}>
-                <LucideReact.Wand2 className="w-3 h-3 mr-1" /> Batch Process
+                <LucideReact.Wand2 className="w-3 h-3 mr-1" /> {selectMode && selectedCount > 0 ? "Process " + selectedCount : "Batch Process"}
               </Button>
+              {selectMode && selectedCount > 0 && (
+                <Button size="sm" variant="outline" onClick={() => onAction("export_photos", { paths: selectedPaths })}>
+                  <LucideReact.Download className="w-3 h-3 mr-1" /> Export
+                </Button>
+              )}
             </div>
 
             {/* Style picker — inline with category tabs */}
@@ -506,8 +618,19 @@ export default function GeneratedUI({ data, onAction }) {
                 </div>
 
                 <div className="flex items-center gap-3 pt-1">
-                  <Button size="sm" variant="primary" onClick={() => { setShowStylePicker(false); setIsProcessing(true); setProcessingStyle(selectedStyle); setProcessingCount(items.length); onAction("batch_process", { collection: currentPath, style: selectedStyle }); }}>
-                    <LucideReact.Play className="w-3 h-3 mr-1" /> Process {items.length} Photo{items.length !== 1 ? "s" : ""}
+                  <Button size="sm" variant="primary" onClick={() => {
+                    var batchCount = selectMode && selectedCount > 0 ? selectedCount : items.length;
+                    var batchParams = { style: selectedStyle };
+                    if (selectMode && selectedCount > 0) {
+                      batchParams.paths = selectedPaths;
+                      batchParams.collection = currentPath;
+                    } else {
+                      batchParams.collection = currentPath;
+                    }
+                    setShowStylePicker(false); setIsProcessing(true); setProcessingStyle(selectedStyle); setProcessingCount(batchCount);
+                    onAction("batch_process", batchParams);
+                  }}>
+                    <LucideReact.Play className="w-3 h-3 mr-1" /> Process {selectMode && selectedCount > 0 ? selectedCount : items.length} Photo{(selectMode && selectedCount > 0 ? selectedCount : items.length) !== 1 ? "s" : ""}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setShowStylePicker(false)}>Cancel</Button>
                 </div>
@@ -1054,7 +1177,15 @@ export default function GeneratedUI({ data, onAction }) {
         <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl p-4 border border-amber-500/30">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <div className="text-[10px] text-amber-400 uppercase tracking-wider font-medium">Best Match</div>
+              <div className="text-[10px] text-amber-400 uppercase tracking-wider font-medium flex items-center gap-2">
+                Best Match
+                {data.matchConfidence > 0 && (
+                  <span className={"px-1.5 py-0.5 rounded-full text-[8px] font-medium " +
+                    (data.matchConfidence >= 70 ? "bg-emerald-500/20 text-emerald-300" : data.matchConfidence >= 40 ? "bg-amber-500/20 text-amber-300" : "bg-gray-500/20 text-gray-400")}>
+                    {data.matchConfidence}% match
+                  </span>
+                )}
+              </div>
               <div className="text-lg font-bold text-amber-200">{recStyleName}</div>
               {styleSignature && <div className="text-[11px] text-amber-100/60 italic mt-0.5 leading-snug">{styleSignature}</div>}
             </div>
@@ -1486,6 +1617,7 @@ export default function GeneratedUI({ data, onAction }) {
     var versions = data.versions || [];
     return (
       <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+        {lightbox}
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", {})}>
             <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
@@ -1494,11 +1626,17 @@ export default function GeneratedUI({ data, onAction }) {
             <div className="text-sm font-semibold text-gray-100">Compare Versions</div>
             <div className="text-[11px] text-gray-500">{original.name || "Photo"} · {versions.length} version{versions.length !== 1 ? "s" : ""}</div>
           </div>
+          {versions.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => onAction("export_photos", { paths: versions.map(function(v) { return v.outputFile || ""; }).filter(Boolean) })}>
+              <LucideReact.Download className="w-3 h-3 mr-1" /> Export All
+            </Button>
+          )}
         </div>
 
         <div className="space-y-1">
           <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Original</div>
-          <div className="rounded-xl overflow-hidden border border-gray-700/40 bg-black/30">
+          <div className="rounded-xl overflow-hidden border border-gray-700/40 bg-black/30 cursor-pointer hover:ring-1 hover:ring-gray-500/40 transition-all"
+            onClick={function() { if (original.url) { setLightboxUrl(original.url); setLightboxName("Original — " + (original.name || "Photo")); } }}>
             {original.url ? (
               <img src={original.url} alt="Original" style={{ width: "100%", height: "180px", objectFit: "cover" }} />
             ) : (
@@ -1511,20 +1649,31 @@ export default function GeneratedUI({ data, onAction }) {
 
         {versions.length > 0 ? (
           <div className="space-y-2">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Styled Versions</div>
-            <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Styled Versions ({versions.length})</div>
+            <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
               {versions.map(function(ver, idx) {
+                var verUrl = ver.mediaUrl || ver.thumbUrl || ver.url || "";
+                var verStyleName = ver.styleName || (ver.style || "").replace(/_/g, " ");
                 return (
-                  <div key={idx} className="rounded-xl overflow-hidden border border-gray-700/40 bg-gray-800/40">
-                    {ver.url ? (
-                      <img src={ver.url} alt={ver.style} loading="lazy" style={{ width: "100%", height: "100px", objectFit: "cover" }} />
+                  <div key={idx} className="rounded-xl overflow-hidden border border-gray-700/40 bg-gray-800/40 cursor-pointer hover:border-violet-500/40 transition-all group"
+                    onClick={function() {
+                      if (verUrl) { setLightboxUrl(verUrl); setLightboxName(verStyleName + " — " + (original.name || "Photo")); }
+                    }}>
+                    {verUrl ? (
+                      <div className="relative">
+                        <img src={verUrl} alt={ver.style} loading="lazy" style={{ width: "100%", height: "120px", objectFit: "cover" }} />
+                        <div className="absolute bottom-1 right-1 p-1 rounded bg-black/50 text-white/70 group-hover:text-white transition-colors">
+                          <LucideReact.Maximize2 className="w-3 h-3 drop-shadow" />
+                        </div>
+                      </div>
                     ) : (
-                      <div style={{ width: "100%", height: "100px" }} className="flex items-center justify-center bg-gray-700/20">
+                      <div style={{ width: "100%", height: "120px" }} className="flex items-center justify-center bg-gray-700/20">
                         <LucideReact.Aperture className="w-8 h-8 text-gray-500" />
                       </div>
                     )}
                     <div className="p-2">
-                      <div className="text-[11px] font-medium text-gray-200">{(ver.style || "").replace(/_/g, " ")}</div>
+                      <div className="text-[11px] font-medium text-gray-200">{verStyleName}</div>
+                      {ver.createdAt && <div className="text-[9px] text-gray-500">{formatTimeAgo(ver.createdAt)}</div>}
                     </div>
                   </div>
                 );
@@ -1537,6 +1686,15 @@ export default function GeneratedUI({ data, onAction }) {
             action={<Button size="sm" onClick={() => onAction("preview_styles", { photoPath: data.photoId })}>
               <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Preview Styles
             </Button>} />
+        )}
+
+        {/* Quick actions */}
+        {versions.length > 0 && (
+          <div className="flex gap-2 flex-wrap pt-1 border-t border-gray-700/40">
+            <Button size="sm" variant="ghost" onClick={() => onAction("preview_styles", { photoPath: data.photoId })}>
+              <LucideReact.Palette className="w-3 h-3 mr-1" /> Try More Styles
+            </Button>
+          </div>
         )}
       </div>
     );
@@ -1736,6 +1894,14 @@ export default function GeneratedUI({ data, onAction }) {
           })}
         </div>
 
+        {/* Adjustment description */}
+        {data.description && data.applied && (
+          <div className="px-3 py-2 bg-gray-800/40 rounded-lg border border-gray-700/30">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-0.5">Current Adjustments</div>
+            <div className="text-[11px] text-gray-300">{data.description}</div>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button size="sm" className="flex-1" onClick={function() {
             var resetParams = { path: data.path };
@@ -1751,6 +1917,201 @@ export default function GeneratedUI({ data, onAction }) {
             <LucideReact.Images className="w-3.5 h-3.5 mr-1" /> Gallery
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── Export Photos View ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isExport) {
+    var expResults = data.results || [];
+    var expSuccess = data.success || 0;
+    var expFailed = data.failed || 0;
+
+    return (
+      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", {})}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-gray-100">Export Complete</div>
+            <div className="text-[11px] text-gray-500 truncate">{data.destination || "Export folder"}</div>
+          </div>
+          <Badge variant={expFailed > 0 ? "warning" : "success"}>
+            {expFailed > 0 ? (
+              <><LucideReact.AlertCircle className="w-3 h-3 mr-1" /> {expFailed} failed</>
+            ) : (
+              <><LucideReact.CheckCircle className="w-3 h-3 mr-1" /> Done</>
+            )}
+          </Badge>
+        </div>
+
+        {/* Summary */}
+        <div className="bg-gray-800/40 rounded-xl p-3 border border-gray-700/40">
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5 text-emerald-400">
+              <LucideReact.CheckCircle className="w-4 h-4" />
+              <span className="font-medium">{expSuccess} exported</span>
+            </div>
+            {expFailed > 0 && (
+              <div className="flex items-center gap-1.5 text-rose-400">
+                <LucideReact.XCircle className="w-4 h-4" />
+                <span className="font-medium">{expFailed} failed</span>
+              </div>
+            )}
+            <div className="text-gray-500">to {(data.destination || "").split("/").pop()}/</div>
+          </div>
+        </div>
+
+        {/* File list */}
+        <div className="space-y-1 max-h-64 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          {expResults.map(function(r, idx) {
+            return (
+              <div key={idx} className={"flex items-center gap-2 px-3 py-2 rounded-lg border " +
+                (r.status === "success" ? "bg-gray-800/40 border-gray-700/30" : "bg-rose-500/5 border-rose-500/20")}>
+                {r.status === "success" ? (
+                  <LucideReact.CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <LucideReact.XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-200 truncate">{r.name}</div>
+                  {r.error && <div className="text-[10px] text-rose-400">{r.error}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => onAction("import_photos", {})}>
+            <LucideReact.ArrowLeft className="w-3 h-3 mr-1" /> Back to Studio
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ── History View ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isHistory) {
+    var histEntries = data.entries || [];
+    var histStats = data.stats || {};
+    var histTopStyles = data.topStyles || [];
+
+    var actionIcons = {
+      apply_style: "Wand2",
+      batch_process: "Layers",
+      analyze: "Sparkles",
+      export: "Download"
+    };
+    var actionColors = {
+      apply_style: "text-violet-400",
+      batch_process: "text-cyan-400",
+      analyze: "text-amber-400",
+      export: "text-emerald-400"
+    };
+    var actionLabels = {
+      apply_style: "Applied style",
+      batch_process: "Batch processed",
+      analyze: "Analyzed",
+      export: "Exported"
+    };
+
+    return (
+      <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 space-y-4">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onAction("import_photos", {})}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-gray-100 flex items-center gap-2">
+              <LucideReact.Clock className="w-4 h-4 text-violet-400" />
+              Processing History
+            </div>
+            <div className="text-[11px] text-gray-500">{data.total || 0} events</div>
+          </div>
+        </div>
+
+        {/* Stats summary */}
+        {(histStats.styles > 0 || histStats.batches > 0 || histStats.analyses > 0) && (
+          <div className="flex gap-3 text-[11px]">
+            {histStats.styles > 0 && (
+              <div className="flex items-center gap-1 text-violet-400">
+                <LucideReact.Wand2 className="w-3 h-3" /> {histStats.styles} styles
+              </div>
+            )}
+            {histStats.batches > 0 && (
+              <div className="flex items-center gap-1 text-cyan-400">
+                <LucideReact.Layers className="w-3 h-3" /> {histStats.batches} batches
+              </div>
+            )}
+            {histStats.analyses > 0 && (
+              <div className="flex items-center gap-1 text-amber-400">
+                <LucideReact.Sparkles className="w-3 h-3" /> {histStats.analyses} analyses
+              </div>
+            )}
+            {histStats.exports > 0 && (
+              <div className="flex items-center gap-1 text-emerald-400">
+                <LucideReact.Download className="w-3 h-3" /> {histStats.exports} exports
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Top styles */}
+        {histTopStyles.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Most Used Styles</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {histTopStyles.map(function(ts) {
+                return (
+                  <span key={ts.style} className="text-[10px] px-2 py-1 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/20">
+                    {ts.styleName} ({ts.count})
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* History entries */}
+        {histEntries.length > 0 ? (
+          <div className="space-y-1.5 max-h-[400px] overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+            {histEntries.map(function(entry, idx) {
+              var IconName = actionIcons[entry.action] || "Circle";
+              var IconComp = LucideReact[IconName] || LucideReact.Circle;
+              var color = actionColors[entry.action] || "text-gray-400";
+              var label = actionLabels[entry.action] || entry.action;
+
+              return (
+                <div key={idx} className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30">
+                  <div className={"mt-0.5 " + color}>
+                    <IconComp className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-gray-200">
+                      {label}
+                      {entry.styleName && <span className="text-violet-300 font-medium"> {entry.styleName}</span>}
+                      {entry.total > 0 && <span className="text-gray-400"> ({entry.completed || entry.total} photos)</span>}
+                    </div>
+                    {entry.photoName && <div className="text-[10px] text-gray-500 truncate">{entry.photoName}</div>}
+                    {entry.folder && <div className="text-[10px] text-gray-500 truncate">{entry.folder.split("/").pop()}/</div>}
+                    {entry.destination && <div className="text-[10px] text-gray-500 truncate">to {entry.destination.split("/").pop()}/</div>}
+                  </div>
+                  <div className="text-[9px] text-gray-600 shrink-0">{formatTimeAgo(entry.timestamp)}</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState icon={<LucideReact.Clock className="w-8 h-8 text-gray-500" />} title="No history yet"
+            description="Your processing history will appear here as you style photos."
+            action={<Button size="sm" onClick={() => onAction("import_photos", {})}>Browse Photos</Button>} />
+        )}
       </div>
     );
   }

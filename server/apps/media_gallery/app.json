@@ -4,19 +4,19 @@
   "spec": {
     "toolFamily": "media_gallery",
     "toolPrefix": "enso_media_gallery_",
-    "description": "Comprehensive media gallery for browsing, viewing, organizing, and searching photos and videos",
+    "description": "Media gallery with browsing, viewing, organizing, searching, and folder analytics for photos and videos",
     "signatureId": "media_gallery_view",
     "tools": [
       {
         "suffix": "browse",
-        "description": "Browse a folder for photos and videos with sorting, filtering, and subfolder navigation. Use when the user says: 'browse my photos', 'show me my gallery', 'open media gallery', 'view my pictures', 'what photos do I have'.",
+        "description": "Browse a folder for photos and videos with sorting, filtering, subfolder navigation, and summary statistics. Returns item list with thumbnails, EXIF data, and folder-level metrics (total size, media counts, date range). Path is optional and defaults to ~/Pictures. Accepts absolute paths (e.g. /Users/name/Photos or C:/Users/name/Photos). Use when the user says: 'browse my photos', 'show me my gallery', 'open media gallery', 'view my pictures', 'what photos do I have', 'open folder', 'show Downloads'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "path": {
               "type": "string",
-              "description": "Directory path to browse (defaults to ~/Pictures)"
+              "description": "Absolute directory path to browse. Use full paths like /Users/name/Photos or ~/Pictures. Defaults to ~/Pictures if omitted."
             },
             "filter": {
               "type": "string",
@@ -329,14 +329,14 @@
       },
       {
         "suffix": "search",
-        "description": "Search photos by natural language query against AI descriptions and tags. Use when the user says: 'find sunset photos', 'search for beach photos', 'find photos of food', 'search my gallery'.",
+        "description": "Search photos and videos by natural language query, matching against AI descriptions, tags, and filenames. Returns results with match reasons and relevance. Path is optional; defaults to the last browsed folder or ~/Pictures. Use when the user says: 'find sunset photos', 'search for beach photos', 'find photos of food', 'search my gallery', 'find all photos with mountains'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "path": {
               "type": "string",
-              "description": "Directory to search within"
+              "description": "Directory to search within (optional, defaults to last browsed folder or ~/Pictures)"
             },
             "query": {
               "type": "string",
@@ -347,7 +347,7 @@
               "description": "Maximum number of results (default: 30)"
             }
           },
-          "required": ["path", "query"]
+          "required": ["query"]
         },
         "sampleParams": { "path": "C:/Users/Photos/Vacation", "query": "sunset ocean" },
         "sampleData": {
@@ -388,7 +388,7 @@
       },
       {
         "suffix": "inspect",
-        "description": "Inspect detailed file metadata including EXIF data for a media file. Use when the user says: 'show file info', 'inspect photo metadata', 'what camera was used'.",
+        "description": "Inspect detailed file metadata including EXIF data, resolution, megapixels, aspect ratio, and orientation for a media file. Use when the user says: 'show file info', 'inspect photo metadata', 'what camera was used', 'file details', 'photo resolution'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -428,6 +428,56 @@
           }
         },
         "requiredDataKeys": ["tool", "name", "path"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "stats",
+        "description": "Analyze a folder to produce rich statistics: file counts by type, total size, date range and timeline, camera/device breakdown, rating distribution, top-rated items, GPS coverage, and AI tagging status. Results are cached for 5 minutes. Use when the user says: 'analyze my photos', 'how many photos do I have', 'show folder statistics', 'summarize my gallery', 'what cameras did I use', 'storage usage', 'photo stats'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory path to analyze"
+            }
+          },
+          "required": ["path"]
+        },
+        "sampleParams": { "path": "C:/Users/Photos/Vacation" },
+        "sampleData": {
+          "tool": "enso_media_gallery_stats",
+          "path": "C:/Users/Photos/Vacation",
+          "totalFiles": 73,
+          "totalSize": 847234567,
+          "imageCount": 65,
+          "videoCount": 8,
+          "dateRange": { "earliest": "2024-08-10T09:00:00Z", "latest": "2024-08-20T18:30:00Z" },
+          "byExtension": { ".jpg": 50, ".raw": 10, ".png": 5, ".mp4": 6, ".mov": 2 },
+          "byCamera": [
+            { "camera": "Canon EOS R5", "count": 30 },
+            { "camera": "iPhone 15 Pro", "count": 25 },
+            { "camera": "Sony A7 IV", "count": 10 },
+            { "camera": "Unknown", "count": 8 }
+          ],
+          "byMonth": [
+            { "month": "2024-08", "count": 73 }
+          ],
+          "ratingDistribution": { "unrated": 30, "1": 5, "2": 8, "3": 12, "4": 10, "5": 8 },
+          "favoriteCount": 12,
+          "topRated": [
+            { "name": "sunset_beach.jpg", "path": "C:/Users/Photos/Vacation/sunset_beach.jpg", "rating": 5, "mediaUrl": "/media/sunset_beach.jpg" },
+            { "name": "drone_coastline.mp4", "path": "C:/Users/Photos/Vacation/drone_coastline.mp4", "rating": 5, "mediaUrl": "/media/drone_coastline.mp4" }
+          ],
+          "avgFileSize": 11606637,
+          "largestFile": { "name": "drone_coastline.mp4", "size": 52345678 },
+          "smallestFile": { "name": "icon.png", "size": 12345 },
+          "subdirectoryCount": 3,
+          "withAI": 58,
+          "withGPS": 42,
+          "avgISO": 640
+        },
+        "requiredDataKeys": ["tool", "path", "totalFiles"],
         "isPrimary": false
       }
     ]

@@ -1,4 +1,12 @@
 var path = (params.path || "").trim();
+
+// ── Path normalization ──
+if (path && path.charAt(0) !== '/' && path.charAt(0) !== '~' && !/^[A-Z]:/i.test(path)) {
+  if (path.indexOf('/') > 0) {
+    path = '/' + path;
+  }
+}
+
 if (!path) {
   return {
     content: [{
