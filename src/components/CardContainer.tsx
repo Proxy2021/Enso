@@ -1037,7 +1037,7 @@ function ViewToggle({ card }: { card: Card }) {
     ((card.appData as Record<string, unknown>)?.metadata as Record<string, unknown>)?.isDeepResearch
   ));
 
-  // Card evolution: 3-segment toggle (Content / Plan / Sessions)
+  // Card evolution: 4-segment toggle (Original / Content / Plan / Sessions)
   if (isCardEvolution) {
     const hasTaskTerminals = !!card.taskTerminals && Object.keys(card.taskTerminals).length > 0;
     const segClass = (active: boolean, pulse?: boolean) =>
@@ -1049,20 +1049,27 @@ function ViewToggle({ card }: { card: Card }) {
     return (
       <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
         <button
+          onClick={() => toggleCardView(card.id, "original")}
+          className={segClass(viewMode === "original")}
+          title="Original card content"
+        >
+          <span className="hidden sm:inline">Original</span>
+          <span className="sm:hidden">Orig</span>
+        </button>
+        <button
           onClick={() => toggleCardView(card.id, "app")}
           className={segClass(viewMode === "app", isBuilding && viewMode === "app")}
-          title="Evolved content"
+          title={isBuilding ? "Evolution in progress" : "Evolved content"}
         >
-          <span className="hidden sm:inline">{isBuilding ? "Building" : "Content"}</span>
-          <span className="sm:hidden">{isBuilding ? "Build" : "Content"}</span>
+          <span className="hidden sm:inline">{isBuilding ? "Building" : "Evolved"}</span>
+          <span className="sm:hidden">{isBuilding ? "Build" : "Evolved"}</span>
         </button>
         <button
           onClick={() => toggleCardView(card.id, "plan")}
           className={segClass(viewMode === "plan", isBuilding && viewMode === "plan")}
           title="Orchestration plan"
         >
-          <span className="hidden sm:inline">Plan</span>
-          <span className="sm:hidden">Plan</span>
+          Plan
         </button>
         {hasTaskTerminals && (
           <button
@@ -1387,6 +1394,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const isEvolution = evolFamily === "evolution"
     || card.appCardMode?.signatureId === "card_evolution_building"
     || card.appCardMode?.signatureId === "focused_archetype_custom";
+  const showOriginalView = isEvolution && card.viewMode === "original";
   const showPlanView = isEvolution && card.viewMode === "plan";
   const showSessionsView = isEvolution && card.viewMode === "sessions" && !!card.taskTerminals;
 
@@ -1783,7 +1791,20 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
             </div>
           </div>
-          {showPlanView ? (
+          {showOriginalView ? (() => {
+            const hasSnapshot = card.standardGeneratedUISnapshot != null;
+            const origType = hasSnapshot ? "dynamic-ui" : "chat";
+            const OrigRenderer = cardRegistry.get(origType)?.renderer ?? Renderer;
+            const origCard: Card = {
+              ...card,
+              type: origType,
+              data: card.standardDataSnapshot ?? card.data,
+              generatedUI: card.standardGeneratedUISnapshot,
+              cardMode: undefined,
+              viewMode: "original",
+            };
+            return <OrigRenderer card={origCard} isActive={isActive} onAction={handleAction} />;
+          })() : showPlanView ? (
             <Renderer
               card={{ ...card, viewMode: "original" }}
               isActive={isActive}
