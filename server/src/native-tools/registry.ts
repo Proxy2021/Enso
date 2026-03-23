@@ -601,6 +601,10 @@ function signatureTitle(signature: ToolTemplate): string {
 }
 
 export function getToolTemplateCode(signature: ToolTemplate): string {
+  // Evolved / dynamically generated templates take precedence over built-in
+  const generatedCode = generatedTemplateCode.get(signature.signatureId);
+  if (generatedCode) return generatedCode;
+
   if (isAlphaRankSignature(signature.signatureId)) {
     return getAlphaRankTemplateCode(signature);
   }
@@ -625,9 +629,6 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   if (isSystemAutoSignature(signature.signatureId)) {
     return getSystemAutoTemplateCode(signature);
   }
-  // Check dynamically generated template code (from Tool Factory)
-  const generatedCode = generatedTemplateCode.get(signature.signatureId);
-  if (generatedCode) return generatedCode;
 
   return `export default function GeneratedUI({ data, onAction }) {
   const rows = Array.isArray(data?.rows)

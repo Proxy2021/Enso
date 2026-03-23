@@ -9,7 +9,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { existsSync, readFileSync, statSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join, dirname, relative } from "path";
 import { fileURLToPath } from "url";
 import { handleOrchestration } from "./orchestrator.js";
@@ -21,7 +21,7 @@ import {
   SHIPPED_APPS_DIR,
   type LoadedApp,
 } from "./app-persistence.js";
-import { executeToolDirect } from "./native-tools/registry.js";
+import { executeToolDirect, registerAppTemplate } from "./native-tools/registry.js";
 import { registerCardContext } from "./outbound.js";
 import { logAction, logError, logFix } from "./action-log.js";
 import { getEnsoPath } from "./utils/home.js";
@@ -64,23 +64,91 @@ function resolveAppDirectory(appId?: string, toolFamily?: string): string | null
   return null;
 }
 
+// ── Native App Resolution ──
+
+interface NativeAppInfo {
+  family: string;
+  signatureId: string;
+  templateFile: string;
+  toolsFile?: string;
+  templateVarName: string;
+}
+
+const NATIVE_APPS: Record<string, NativeAppInfo> = {
+  researcher: {
+    family: "researcher",
+    signatureId: "research_board",
+    templateFile: "server/src/native-tools/templates/researcher.ts",
+    toolsFile: "server/src/researcher-tools.ts",
+    templateVarName: "RESEARCHER_TEMPLATE",
+  },
+  web_browser: {
+    family: "web_browser",
+    signatureId: "remote_browser",
+    templateFile: "server/src/native-tools/templates/browser.ts",
+    templateVarName: "BROWSER_TEMPLATE",
+  },
+  clawhub: {
+    family: "clawhub",
+    signatureId: "clawhub_browse",
+    templateFile: "server/src/native-tools/templates/clawhub.ts",
+    templateVarName: "CLAWHUB_TEMPLATE",
+  },
+  filesystem: {
+    family: "filesystem",
+    signatureId: "filesystem_explorer",
+    templateFile: "server/src/native-tools/templates/filesystem.ts",
+    templateVarName: "FILESYSTEM_TEMPLATE",
+  },
+};
+
+function resolveNativeApp(appId?: string, toolFamily?: string): NativeAppInfo | null {
+  const family = toolFamily ?? appId;
+  if (!family) return null;
+  const info = NATIVE_APPS[family];
+  if (!info) return null;
+  const absPath = join(PROJECT_ROOT, info.templateFile);
+  if (!existsSync(absPath)) return null;
+  return info;
+}
+
+function extractTemplateFromSource(filePath: string, varName: string): string | null {
+  try {
+    const src = readFileSync(filePath, "utf-8");
+    const marker = `const ${varName} = \``;
+    const startIdx = src.indexOf(marker);
+    if (startIdx === -1) return null;
+    const contentStart = startIdx + marker.length;
+    const endIdx = src.lastIndexOf("`;");
+    if (endIdx <= contentStart) return null;
+    return src.slice(contentStart, endIdx);
+  } catch {
+    return null;
+  }
+}
+
 // ── Main Entry Point ──
 
 export async function handleCardEvolution(params: CardEvolutionParams): Promise<void> {
-  const { cardId, cardType, appId, toolFamily, evolutionGoal, client } = params;
+  const { cardId, cardType, appId, toolFamily, evolutionGoal } = params;
 
-  const appDir = resolveAppDirectory(appId, toolFamily);
   const family = toolFamily ?? appId;
+  const appDir = resolveAppDirectory(appId, toolFamily);
+  const nativeApp = !appDir ? resolveNativeApp(appId, toolFamily) : null;
 
   logAction({
     ts: Date.now(),
     type: "action",
     category: "card-evolution",
-    message: `Card evolution start: ${cardType} card ${cardId.slice(0, 20)}${family ? ` (app: ${family})` : ""}${evolutionGoal ? ` — goal: ${evolutionGoal.slice(0, 80)}` : ""}`,
+    message: `Card evolution start: ${cardType} card ${cardId.slice(0, 20)}${family ? ` (app: ${family}, ${appDir ? "dynamic" : nativeApp ? "native" : "none"})` : ""}${evolutionGoal ? ` — goal: ${evolutionGoal.slice(0, 80)}` : ""}`,
   });
 
   if (appDir && family) {
     return evolveAppViaClaude(params, appDir, family);
+  }
+
+  if (nativeApp) {
+    return evolveNativeAppViaClaude(params, nativeApp);
   }
 
   return evolveViaOrchestration(params);
@@ -290,6 +358,173 @@ async function evolveAppViaClaude(
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PATH 1b: Native App Evolution via Claude Code
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function evolveNativeAppViaClaude(
+  params: CardEvolutionParams,
+  nativeApp: NativeAppInfo,
+): Promise<void> {
+  const { cardId, client, account } = params;
+  const { family, signatureId, templateFile, templateVarName } = nativeApp;
+  const runId = randomUUID();
+  const buildStartTime = Date.now();
+
+  const send = (msg: Partial<ServerMessage>) => {
+    client.send({
+      id: randomUUID(),
+      runId,
+      sessionKey: client.sessionKey,
+      seq: 0,
+      timestamp: Date.now(),
+      ...msg,
+    } as ServerMessage);
+  };
+
+  // Put card in building mode
+  send({
+    state: "final",
+    targetCardId: cardId,
+    enhanceResult: {
+      data: null,
+      generatedUI: undefined as unknown as string,
+      cardMode: {
+        interactionMode: "tool",
+        appId: family,
+        toolFamily: family,
+        signatureId: "card_evolution_building",
+      },
+    },
+  });
+
+  // Build the native-app-specific evolution prompt
+  const prompt = buildNativeAppEvolutionPrompt(params, nativeApp);
+
+  // Run Claude Code — streams terminal output to the same card
+  let sessionId: string | undefined;
+  try {
+    const result = await runClaudeCode({
+      prompt,
+      cwd: PROJECT_ROOT,
+      client,
+      runId,
+      targetCardId: cardId,
+      skipPersist: true,
+    });
+    sessionId = result.sessionId;
+  } catch (err) {
+    logError("card-evolution", "Claude Code native evolution error", err, { cardId, family });
+    send({
+      state: "final",
+      targetCardId: cardId,
+      enhanceResult: null as unknown as EnhanceResult,
+    });
+    return;
+  }
+
+  logAction({
+    ts: Date.now(),
+    type: "action",
+    category: "card-evolution",
+    message: `Claude Code session complete (${sessionId}). Extracting evolved template for ${family}...`,
+    cardId,
+  });
+
+  // Extract the evolved template string from the modified source file
+  const absTemplatePath = join(PROJECT_ROOT, templateFile);
+  let templateCode = extractTemplateFromSource(absTemplatePath, templateVarName);
+
+  if (!templateCode) {
+    logError("card-evolution", `Failed to extract template from ${templateFile}`, undefined, { cardId, family });
+    return;
+  }
+
+  // Compile-check the extracted template
+  if (sessionId) {
+    try {
+      const { transform } = await import("sucrase");
+      transform(templateCode, { transforms: ["jsx"], jsxRuntime: "classic" });
+      logAction({ ts: Date.now(), type: "action", category: "card-evolution", message: "Native template compile check: OK", cardId });
+    } catch (compileErr) {
+      logAction({ ts: Date.now(), type: "action", category: "card-evolution", message: "Native template compile error, resuming session to fix", cardId });
+      logError("card-evolution", "Native template compile error, auto-fixing", compileErr, { cardId, family });
+
+      const fixPrompt = [
+        `The template in ${templateFile} has a compile error after your changes:`,
+        "```",
+        String(compileErr),
+        "```",
+        "",
+        `Please fix the ${templateVarName} template string in ${templateFile}.`,
+        "Read CLAUDE-REFERENCE.md for the template format rules.",
+        "Common issues: unclosed JSX tags, invalid expressions, missing parentheses.",
+        "IMPORTANT: The template is a backtick template literal. Do NOT use backticks inside it.",
+      ].join("\n");
+
+      try {
+        await runClaudeCode({
+          prompt: fixPrompt,
+          cwd: PROJECT_ROOT,
+          toolSessionId: sessionId,
+          client,
+          runId: randomUUID(),
+          targetCardId: cardId,
+          skipPersist: true,
+        });
+        templateCode = extractTemplateFromSource(absTemplatePath, templateVarName);
+        if (!templateCode) return;
+        logFix({ description: `Native template compile error in ${family} evolution`, error: String(compileErr), resolution: "Auto-fixed via Claude Code session", category: "card-evolution" });
+      } catch (fixErr) {
+        logError("card-evolution", "Auto-fix session failed", fixErr, { cardId, family });
+      }
+    }
+  }
+
+  // Register the evolved template as an override (takes precedence over built-in)
+  registerAppTemplate(signatureId, templateCode);
+
+  logAction({
+    ts: Date.now(),
+    type: "action",
+    category: "card-evolution",
+    message: `Native template override registered for ${signatureId}`,
+    cardId,
+  });
+
+  // Use the card's existing data — the tools didn't change, only the template
+  const existingData = params.cardContent.data;
+
+  // Deliver the evolved template to the card
+  const enhanceResult: EnhanceResult = {
+    data: existingData,
+    generatedUI: templateCode,
+    cardMode: {
+      interactionMode: "tool",
+      appId: family,
+      toolFamily: family,
+      signatureId,
+      coverageStatus: "covered",
+    },
+  };
+
+  send({
+    state: "final",
+    targetCardId: cardId,
+    enhanceResult,
+  });
+
+  const elapsed = ((Date.now() - buildStartTime) / 1000).toFixed(1);
+  logAction({
+    ts: Date.now(),
+    type: "action",
+    category: "card-evolution",
+    message: `Native app "${family}" evolved (template override active, ${elapsed}s)`,
+    cardId,
+    toolFamily: family,
+  });
+}
+
 // ── App Evolution Prompt (3-phase: audit → evaluate → evolve) ──
 
 function buildAppEvolutionPrompt(
@@ -378,6 +613,100 @@ Prioritize changes that improve the app's fundamental effectiveness:
 Every change should address a specific gap you identified in Phase 2. Do not make changes that are purely cosmetic without also improving substance.
 
 IMPORTANT: This is an in-place evolution of a reusable app. The improvements must work for ANY user of this app, not just the specific content shown in the card output above. Keep all tools parameterized and general-purpose.`;
+}
+
+// ── Native App Evolution Prompt ──
+
+function buildNativeAppEvolutionPrompt(
+  params: CardEvolutionParams,
+  nativeApp: NativeAppInfo,
+): string {
+  const { cardContent, evolutionGoal } = params;
+  const { family, templateFile, toolsFile, templateVarName } = nativeApp;
+
+  const extracted = extractCardContent(
+    params.cardType,
+    cardContent.text,
+    cardContent.data,
+    cardContent.taskTerminals,
+  );
+
+  const contentExcerpt = extracted.body.slice(0, 8000);
+
+  const goalBlock = evolutionGoal
+    ? `\n## User's Evolution Goal\n${evolutionGoal}\n`
+    : "";
+
+  const summaryBlock = cardContent.summary
+    ? `\nPre-computed Summary:\n- Overview: ${cardContent.summary.overview}\n- Key Outcomes: ${cardContent.summary.keyOutcomes.map((o) => `  - ${o}`).join("\n")}\n`
+    : "";
+
+  const toolsBlock = toolsFile
+    ? `- ${toolsFile} — the tool implementations (TypeScript functions that fetch/process data)\n`
+    : "";
+
+  return `You are evolving a built-in Enso native app to make it fundamentally more capable. This is NOT about cosmetic changes — you are improving the app's template, data rendering, and user interaction patterns.
+
+## Phase 1: Deep Template Audit
+
+Read the following source files:
+- ${templateFile} — contains the UI template as a TypeScript template literal (the \`${templateVarName}\` constant)
+${toolsBlock}
+Also read CLAUDE-REFERENCE.md for Enso template conventions and format rules.
+
+The template is stored as a backtick template literal in TypeScript:
+\`\`\`
+const ${templateVarName} = \\\`
+  export default function GeneratedUI({ data, onAction }) {
+    // ... template code ...
+  }
+\\\`;
+\`\`\`
+
+Understand how the template handles different tool outputs, phases, and data shapes.
+${toolsFile ? `Also study the tools file to understand what data fields are available and how data is structured.` : ""}
+
+## Phase 2: Critical Evaluation
+
+The user triggered this evolution from a card that produced the following output. Use it as a diagnostic specimen:
+
+### Card Output (${extracted.cardType})
+Title: ${extracted.title}
+
+${contentExcerpt}
+${summaryBlock}${goalBlock}
+### Evaluate: Template Effectiveness
+- Does the template use all available data fields, or ignore useful ones?
+- Are there interactive controls (filter, sort, search, compare) that the data supports but the template doesn't offer?
+- Is state management clean? Can it handle different phases and tool outputs elegantly?
+- Are there missing views, modes, or visualizations that would make the app more useful?
+- Is the visual hierarchy effective? Does it surface the most important information first?
+- Are error states, loading states, and edge cases handled gracefully?
+
+### Evaluate: Data Utilization
+- What data fields are available from the tools but not rendered?
+- Could derived metrics, summaries, or aggregations be computed from the existing data?
+- Are there opportunities for cross-referencing, comparison, or highlighting patterns?
+
+## Phase 3: Evolve the Template
+
+Modify the template in ${templateFile}. Edit ONLY the \`${templateVarName}\` constant — do NOT change the function signatures, exports, or other code outside the template literal.
+
+CRITICAL RULES for editing the template:
+1. The template is a backtick template literal. Do NOT use backticks inside it — use regular quotes or single quotes instead.
+2. Do NOT use \`const\`, \`let\`, or \`class\` — use \`var\` for variable declarations (this is a sandboxed JSX environment).
+3. Keep the \`export default function GeneratedUI({ data, onAction })\` signature.
+4. Use React hooks (\`useState\`, \`useMemo\`, \`useEffect\`, \`useCallback\`, \`useRef\`) — they are available as globals.
+5. Available UI primitives: \`UICard\`, \`Button\`, \`EmptyState\`, \`Dialog\`, \`Badge\`, \`LucideReact\` icons.
+
+Prioritize changes that improve the template's fundamental effectiveness:
+1. **Surface unused data** that the tools already provide
+2. **Add interactive controls** (filtering, sorting, searching, comparing)
+3. **Improve data visualization** with charts, metrics, and visual hierarchies
+4. **Handle more edge cases** and states robustly
+5. **Enhance the information architecture** so users find what they need faster
+
+Every change should address a specific gap you identified in Phase 2.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
