@@ -120,8 +120,23 @@ ${profileBlock}${memoryRecallBlock}
 - Be concise but thorough
 - When a tool can provide better data than your knowledge, prefer the tool
 - IMPORTANT: For real-time or dynamic information (current time, live data, file listings, system status), ALWAYS use the relevant tool instead of guessing. You do NOT have access to the current time — use a tool if one exists.
+- **Before calling any tool**, write one or two short sentences to the user about what you are doing. That text is shown in chat immediately while the tool runs (users otherwise see an empty card for a long time).
 - Always explain your findings after calling a tool
 - If a tool call fails, explain the error and try an alternative approach`;
+}
+
+/** Shown immediately when the model issues a tool-only turn (no accompanying text). */
+function interimMessageForTool(toolName: string): string {
+  if (toolName.startsWith("enso_researcher_")) {
+    return "I'm searching the web and gathering sources — the interactive research board usually fills in within about 30–60 seconds. I'll add a written summary here when it's ready.";
+  }
+  if (toolName.startsWith("enso_filesystem_") || toolName.startsWith("enso_media_")) {
+    return "Pulling that from your workspace now…";
+  }
+  if (toolName.startsWith("enso_web_browser_") || toolName.startsWith("enso_browser_")) {
+    return "Opening the browser tool to fetch live page data…";
+  }
+  return "Running a tool to get accurate, up-to-date results — one moment.";
 }
 
 // ── Gemini function-calling API ──
@@ -394,6 +409,9 @@ export async function handleStandaloneInbound(params: {
 
   try {
     let finalText = "";
+    let deliverSeq = 0;
+    let chatPrefix = "";
+
     for (let iteration = 0; iteration < 5; iteration++) {
       const response = await callGeminiWithTools({
         apiKey: account.geminiApiKey,
@@ -412,7 +430,28 @@ export async function handleStandaloneInbound(params: {
         const { name, args } = functionCallPart.functionCall;
         logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Tool call: ${name}`, cardId: stableCardId });
 
-        history.push({ role: "model", parts: [{ functionCall: { name, args } }] });
+        const modelPartsForHistory = parts.filter((p) => p.text || p.functionCall);
+        history.push({
+          role: "model",
+          parts: modelPartsForHistory.length > 0 ? modelPartsForHistory : [{ functionCall: { name, args } }],
+        });
+
+        const modelBlurb = textPart?.text?.trim() ?? "";
+        const chunk = modelBlurb || interimMessageForTool(name);
+        chatPrefix = chatPrefix ? `${chatPrefix}\n\n${chunk}` : chunk;
+
+        await deliverEnsoReply({
+          payload: { text: chatPrefix },
+          client,
+          runId,
+          seq: deliverSeq++,
+          account,
+          userMessage: rawBody,
+          targetCardId,
+          cardId: stableCardId,
+          toolMeta,
+          statusSink,
+        });
 
         let toolResult: unknown;
         try {
@@ -440,11 +479,16 @@ export async function handleStandaloneInbound(params: {
 
     trimHistory(history);
 
+    const combined =
+      chatPrefix && finalText.trim()
+        ? `${chatPrefix}\n\n${finalText}`
+        : chatPrefix || finalText;
+
     await deliverEnsoReply({
-      payload: { text: finalText },
+      payload: { text: combined },
       client,
       runId,
-      seq: 0,
+      seq: deliverSeq,
       account,
       userMessage: rawBody,
       targetCardId,

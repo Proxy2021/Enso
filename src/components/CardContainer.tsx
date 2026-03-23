@@ -1518,6 +1518,14 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   }
 
   const isLoading = (card.status === "streaming" || card.enhanceStatus === "loading") && !isDeepBuilding && !isOrchestration;
+  // Progressive researcher (and similar) updates set streaming — but the template + data already
+  // render a useful shell; a full-card overlay would hide it and feel like a blank wait.
+  const hasVisibleDynamicShell =
+    Boolean(card.generatedUI) &&
+    card.data != null &&
+    typeof card.data === "object" &&
+    Object.keys(card.data as Record<string, unknown>).length > 0;
+  const showBlockingLoadOverlay = isLoading && !hasVisibleDynamicShell;
   const loadingLabel = card.enhanceStatus === "loading"
     ? "Enhancing to app"
     : card.operation?.label ?? card.pendingAction;
@@ -1985,7 +1993,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               onImproveWithCode={(instruction) => sendCardAction(card.id, "improve_with_code", { instruction })}
             />
           )}
-          {isLoading && card.type !== "terminal" && card.type !== "shell" && <CardLoadingOverlay action={loadingLabel} />}
+          {showBlockingLoadOverlay && card.type !== "terminal" && card.type !== "shell" && <CardLoadingOverlay action={loadingLabel} />}
         </div>
       )}
 
