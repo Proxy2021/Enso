@@ -10,87 +10,89 @@ export function getResearcherTemplateCode(_signature: ToolTemplate): string {
 
 const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   // ── ALL hooks at top level (React rules) ──
-  const [topicInput, setTopicInput] = useState("");
-  const [followUpInput, setFollowUpInput] = useState("");
-  const [compareInput, setCompareInput] = useState("");
-  const [emailOpen, setEmailOpen] = useState(false);
-  const [emailAddr, setEmailAddr] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [deepDiveInput, setDeepDiveInput] = useState("");
-  const [imgErrors, setImgErrors] = useState({});
-  const [expandedSource, setExpandedSource] = useState(null);
-  const [playingVideos, setPlayingVideos] = useState({});
+  var [topicInput, setTopicInput] = useState("");
+  var [followUpInput, setFollowUpInput] = useState("");
+  var [compareInput, setCompareInput] = useState("");
+  var [emailOpen, setEmailOpen] = useState(false);
+  var [emailAddr, setEmailAddr] = useState("");
+  var [sourceFilter, setSourceFilter] = useState("");
+  var [deepDiveInput, setDeepDiveInput] = useState("");
+  var [imgErrors, setImgErrors] = useState({});
+  var [expandedSource, setExpandedSource] = useState(null);
+  var [playingVideos, setPlayingVideos] = useState({});
 
-  const [shared, setShared] = useState(false);
-  const [narrativeExpanded, setNarrativeExpanded] = useState(false);
-  const [findingFilter, setFindingFilter] = useState("all");
-  const [sourceSort, setSourceSort] = useState("relevance");
-  const [sourcePopup, setSourcePopup] = useState(null);
+  var [shared, setShared] = useState(false);
+  var [narrativeExpanded, setNarrativeExpanded] = useState(false);
+  var [findingFilter, setFindingFilter] = useState("all");
+  var [sourceSort, setSourceSort] = useState("relevance");
+  var [sourcePopup, setSourcePopup] = useState(null);
+  var [searchText, setSearchText] = useState("");
+  var [expandedSectionPreview, setExpandedSectionPreview] = useState(null);
 
   // ── View detection ──
-  const topic = String(data?.topic ?? "");
-  const phase = String(data?.phase ?? "complete");
-  const isWelcome = !topic || data?.category === "welcome";
-  const isSearch = data?.tool === "enso_researcher_search" && !isWelcome;
-  const isDeepDive = data?.tool === "enso_researcher_deep_dive";
-  const isCompare = data?.tool === "enso_researcher_compare";
-  const isFollowUp = data?.tool === "enso_researcher_follow_up";
-  const isEmail = data?.tool === "enso_researcher_send_report";
+  var topic = String(data?.topic ?? "");
+  var phase = String(data?.phase ?? "complete");
+  var isWelcome = !topic || data?.category === "welcome";
+  var isSearch = data?.tool === "enso_researcher_search" && !isWelcome;
+  var isDeepDive = data?.tool === "enso_researcher_deep_dive";
+  var isCompare = data?.tool === "enso_researcher_compare";
+  var isFollowUp = data?.tool === "enso_researcher_follow_up";
+  var isEmail = data?.tool === "enso_researcher_send_report";
 
   // ── Shared data extraction ──
-  const sources = Array.isArray(data?.sources) ? data.sources : [];
-  const keyFindings = Array.isArray(data?.keyFindings) ? data.keyFindings : [];
-  const sections = Array.isArray(data?.sections) ? data.sections : [];
-  const summary = String(data?.summary ?? "");
-  const narrative = String(data?.narrative ?? "");
-  const narrativeParagraphs = narrative ? narrative.split(/\\n\\n+/).filter((p) => p.trim()) : [];
-  const metadata = data?.metadata || {};
-  const images = Array.isArray(data?.images) ? data.images : [];
-  const videos = Array.isArray(data?.videos) ? data.videos : [];
-  const books = Array.isArray(data?.books) ? data.books : [];
-  const movies = Array.isArray(data?.movies) ? data.movies : [];
-  const recommendedVideos = Array.isArray(data?.recommendedVideos) ? data.recommendedVideos : [];
-  const contradictions = Array.isArray(data?.contradictions) ? data.contradictions : [];
-  const searchQueries = Array.isArray(data?.searchQueries) ? data.searchQueries : (Array.isArray(metadata?.searchQueries) ? metadata.searchQueries : []);
-  const gapQueries = Array.isArray(metadata?.gapQueries) ? metadata.gapQueries : [];
-  const galleryImages = images.filter((img) => !imgErrors[img.url]);
-  const handleImgError = (url) => setImgErrors((prev) => ({ ...prev, [url]: true }));
-  const heroImage = images.find((img) => img.sectionIdx === 0) || images[0];
+  var sources = Array.isArray(data?.sources) ? data.sources : [];
+  var keyFindings = Array.isArray(data?.keyFindings) ? data.keyFindings : [];
+  var sections = Array.isArray(data?.sections) ? data.sections : [];
+  var summary = String(data?.summary ?? "");
+  var narrative = String(data?.narrative ?? "");
+  var narrativeParagraphs = narrative ? narrative.split(/\\n\\n+/).filter((p) => p.trim()) : [];
+  var metadata = data?.metadata || {};
+  var images = Array.isArray(data?.images) ? data.images : [];
+  var videos = Array.isArray(data?.videos) ? data.videos : [];
+  var books = Array.isArray(data?.books) ? data.books : [];
+  var movies = Array.isArray(data?.movies) ? data.movies : [];
+  var recommendedVideos = Array.isArray(data?.recommendedVideos) ? data.recommendedVideos : [];
+  var contradictions = Array.isArray(data?.contradictions) ? data.contradictions : [];
+  var searchQueries = Array.isArray(data?.searchQueries) ? data.searchQueries : (Array.isArray(metadata?.searchQueries) ? metadata.searchQueries : []);
+  var gapQueries = Array.isArray(metadata?.gapQueries) ? metadata.gapQueries : [];
+  var galleryImages = images.filter((img) => !imgErrors[img.url]);
+  var handleImgError = (url) => setImgErrors((prev) => ({ ...prev, [url]: true }));
+  var heroImage = images.find((img) => img.sectionIdx === 0) || images[0];
 
   // ── Research history ──
-  const recentTopics = Array.isArray(data?.recentTopics) ? data.recentTopics : [];
-  const timeAgo = (ts) => {
+  var recentTopics = Array.isArray(data?.recentTopics) ? data.recentTopics : [];
+  var timeAgo = (ts) => {
     if (!ts) return "";
-    const diff = Date.now() - ts;
-    const mins = Math.floor(diff / 60000);
+    var diff = Date.now() - ts;
+    var mins = Math.floor(diff / 60000);
     if (mins < 60) return mins + "m ago";
-    const hrs = Math.floor(mins / 60);
+    var hrs = Math.floor(mins / 60);
     if (hrs < 24) return hrs + "h ago";
-    const days = Math.floor(hrs / 24);
+    var days = Math.floor(hrs / 24);
     if (days < 30) return days + "d ago";
     return Math.floor(days / 30) + "mo ago";
   };
 
   // ── YouTube embed helper ──
-  const getYouTubeId = (url) => {
+  var getYouTubeId = (url) => {
     if (!url) return null;
-    const m = url.match(/(?:youtube\\.com[/]watch\\?v=|youtu\\.be[/]|youtube\\.com[/]embed[/])([a-zA-Z0-9_-]{11})/);
+    var m = url.match(/(?:youtube\\.com[/]watch\\?v=|youtu\\.be[/]|youtube\\.com[/]embed[/])([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
   };
-  const togglePlay = (url) => setPlayingVideos((prev) => {
+  var togglePlay = (url) => setPlayingVideos((prev) => {
     if (prev[url]) return {}; // Pausing — clear all
     return { [url]: true };   // Playing — only this one (stops all others)
   });
 
   // ── Finding type styling ──
-  const findingVariant = { fact: "success", trend: "info", insight: "default", warning: "warning" };
-  const findingAccent = { fact: "emerald", trend: "blue", insight: "purple", warning: "amber" };
-  const confidenceVariant = { high: "success", medium: "warning", low: "outline" };
+  var findingVariant = { fact: "success", trend: "info", insight: "default", warning: "warning" };
+  var findingAccent = { fact: "emerald", trend: "blue", insight: "purple", warning: "amber" };
+  var confidenceVariant = { high: "success", medium: "warning", low: "outline" };
 
   // ── Source trust classification ──
-  const getSourceTrust = (domain) => {
+  var getSourceTrust = (domain) => {
     if (!domain) return null;
-    const d = String(domain).toLowerCase();
+    var d = String(domain).toLowerCase();
     if (d.endsWith(".edu") || d.endsWith(".ac.uk") || d.endsWith(".ac.jp")) return { label: "Academic", color: "text-purple-400", bg: "bg-purple-500/10" };
     if (d.endsWith(".gov") || d.endsWith(".int") || d.endsWith(".mil")) return { label: "Gov", color: "text-emerald-400", bg: "bg-emerald-500/10" };
     if (d.endsWith(".org") || ["wikipedia.org", "britannica.com", "nature.com", "science.org", "arxiv.org"].some((t) => d.includes(t))) return { label: "Reference", color: "text-blue-400", bg: "bg-blue-500/10" };
@@ -99,17 +101,17 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   };
 
   // ── Phase checks ──
-  const isLoading = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking", "deep_research"].includes(phase);
-  const hasSynthesis = ["synthesized", "gap_checking", "complete"].includes(phase);
-  const isComplete = phase === "complete";
-  const isAppBuilt = phase === "app_built";
+  var isLoading = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking", "deep_research"].includes(phase);
+  var hasSynthesis = ["synthesized", "gap_checking", "complete"].includes(phase);
+  var isComplete = phase === "complete";
+  var isAppBuilt = phase === "app_built";
 
   // ── Reading time estimate (avg 200 words/min for technical content) ──
-  const wordCount = useMemo(() => {
-    const text = [narrative, summary, ...keyFindings.map((f) => f.text), ...sections.flatMap((s) => [s.summary || "", ...(s.bullets || [])])].join(" ");
+  var wordCount = useMemo(() => {
+    var text = [narrative, summary, ...keyFindings.map((f) => f.text), ...sections.flatMap((s) => [s.summary || "", ...(s.bullets || [])])].join(" ");
     return text.split(/\\s+/).filter((w) => w.length > 0).length;
   }, [narrative, summary, keyFindings, sections]);
-  const readingMinutes = Math.max(1, Math.round(wordCount / 200));
+  var readingMinutes = Math.max(1, Math.round(wordCount / 200));
 
   // ── Finding type counts & confidence distribution ──
   var findingCounts = useMemo(function() {
@@ -170,11 +172,86 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     return s;
   }, [filteredSources, sourceSort]);
 
+  // ── Finding-section relationship mapping (via sourceRef overlap) ──
+  var findingSectionMap = useMemo(function() {
+    var map = {};
+    keyFindings.forEach(function(f, fi) {
+      var fRefs = f.sourceRefs || [];
+      var related = [];
+      sections.forEach(function(s, si) {
+        var sRefs = s.sourceRefs || [];
+        if (fRefs.some(function(r) { return sRefs.indexOf(r) >= 0; })) related.push(si);
+      });
+      map[fi] = related;
+    });
+    return map;
+  }, [keyFindings, sections]);
+
+  // ── Source → findings reverse lookup ──
+  var sourceFindingMap = useMemo(function() {
+    var map = {};
+    keyFindings.forEach(function(f, fi) {
+      (f.sourceRefs || []).forEach(function(si) {
+        if (!map[si]) map[si] = [];
+        map[si].push(fi);
+      });
+    });
+    return map;
+  }, [keyFindings]);
+
+  // ── Section finding counts (how many findings relate to each section) ──
+  var sectionFindingCounts = useMemo(function() {
+    var counts = {};
+    sections.forEach(function(s, si) {
+      var sRefs = s.sourceRefs || [];
+      var count = 0;
+      keyFindings.forEach(function(f) {
+        if ((f.sourceRefs || []).some(function(r) { return sRefs.indexOf(r) >= 0; })) count++;
+      });
+      counts[si] = count;
+    });
+    return counts;
+  }, [sections, keyFindings]);
+
+  // ── Full-text search across all research content ──
+  var searchMatches = useMemo(function() {
+    if (!searchText || searchText.length < 2) return null;
+    var q = searchText.toLowerCase();
+    var mFindings = [];
+    keyFindings.forEach(function(f, i) {
+      if (String(f.text).toLowerCase().includes(q)) mFindings.push(i);
+    });
+    var mSections = [];
+    sections.forEach(function(s, i) {
+      if (String(s.title).toLowerCase().includes(q) || String(s.summary).toLowerCase().includes(q) || (s.bullets || []).some(function(b) { return String(b).toLowerCase().includes(q); })) mSections.push(i);
+    });
+    var mSources = [];
+    sources.forEach(function(s, i) {
+      if (String(s.title).toLowerCase().includes(q) || String(s.domain).toLowerCase().includes(q) || String(s.snippet || "").toLowerCase().includes(q)) mSources.push(i);
+    });
+    return { findings: mFindings, sections: mSections, sources: mSources, total: mFindings.length + mSections.length + mSources.length };
+  }, [searchText, keyFindings, sections, sources]);
+
+  // ── Text highlight helper ──
+  var highlightMatch = function(text, query) {
+    if (!query || query.length < 2) return String(text);
+    var str = String(text);
+    var idx = str.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return str;
+    return (
+      <Fragment>
+        {str.slice(0, idx)}
+        <span className="bg-yellow-500/30 text-yellow-200 rounded px-0.5">{str.slice(idx, idx + query.length)}</span>
+        {str.slice(idx + query.length)}
+      </Fragment>
+    );
+  };
+
   // ── Narrative collapse (show first 3 paragraphs for long content) ──
-  const NARRATIVE_COLLAPSE_THRESHOLD = 4;
+  var NARRATIVE_COLLAPSE_THRESHOLD = 4;
 
   // ── Helper: source reference badges ──
-  const SourceRefs = ({ refs }) => {
+  var SourceRefs = ({ refs }) => {
     if (!refs || refs.length === 0) return null;
     return (
       <span className="inline-flex gap-0.5 ml-1">
@@ -188,12 +265,12 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   };
 
   // ── Helper: skeleton pulse block ──
-  const Skeleton = ({ className }) => (
+  var Skeleton = ({ className }) => (
     <div className={"animate-pulse bg-gray-700/40 rounded " + (className || "")} />
   );
 
   // ── Helper: phase status text ──
-  const phaseLabels = {
+  var phaseLabels = {
     generating_queries: "Generating search queries...",
     searching: "Searching the web...",
     sources: "Gathering sources...",
@@ -205,9 +282,9 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   };
 
   // ── Video card component ──
-  const VideoCard = ({ v, compact }) => {
-    const ytId = getYouTubeId(v.url);
-    const isPlaying = playingVideos[v.url];
+  var VideoCard = ({ v, compact }) => {
+    var ytId = getYouTubeId(v.url);
+    var isPlaying = playingVideos[v.url];
     return (
       <div className="rounded-lg overflow-hidden bg-gray-800/50">
         {isPlaying && ytId ? (
@@ -270,11 +347,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   // VIEW 1: Welcome
   // ═══════════════════════════════════════════
   if (isWelcome) {
-    const handleSearch = () => {
-      const t = topicInput.trim();
+    var handleSearch = () => {
+      var t = topicInput.trim();
       if (t) onAction("search", { topic: t });
     };
-    const allSuggestionGroups = [
+    var allSuggestionGroups = [
       ["AI in healthcare", "CRISPR gene editing breakthroughs", "mRNA vaccine applications beyond COVID"],
       ["Remote work productivity studies", "Electric vehicles vs hydrogen fuel", "Quantum computing applications"],
       ["Mediterranean diet benefits", "Weight loss drugs GLP-1 long-term effects", "How the immune system works"],
@@ -283,10 +360,10 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       ["Renewable energy storage breakthroughs", "Cybersecurity AI-powered threats", "Microplastics in food chain"],
     ];
     // Rotate suggestions based on day to keep content fresh
-    const dayIdx = Math.floor(Date.now() / 86400000) % allSuggestionGroups.length;
-    const allSuggestions = [...allSuggestionGroups[dayIdx], ...allSuggestionGroups[(dayIdx + 1) % allSuggestionGroups.length]];
-    const recentTopicNames = new Set(recentTopics.map((r) => (r.meta?.topic || "").toLowerCase()));
-    const suggestions = allSuggestions.filter((s) => !recentTopicNames.has(s.toLowerCase()));
+    var dayIdx = Math.floor(Date.now() / 86400000) % allSuggestionGroups.length;
+    var allSuggestions = [...allSuggestionGroups[dayIdx], ...allSuggestionGroups[(dayIdx + 1) % allSuggestionGroups.length]];
+    var recentTopicNames = new Set(recentTopics.map((r) => (r.meta?.topic || "").toLowerCase()));
+    var suggestions = allSuggestions.filter((s) => !recentTopicNames.has(s.toLowerCase()));
     return (
       <div className="space-y-4 py-2">
         <div className="text-center space-y-1">
@@ -324,7 +401,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             </div>
             <div className="flex flex-wrap gap-1.5">
               {recentTopics.map((entry) => {
-                const entryTopic = entry.meta?.topic || entry.id || "";
+                var entryTopic = entry.meta?.topic || entry.id || "";
                 return (
                   <div
                     key={entry.id}
@@ -395,10 +472,10 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   // VIEW 3: Deep Dive
   // ═══════════════════════════════════════════
   if (isDeepDive) {
-    const subtopic = String(data?.subtopic ?? "");
-    const content = String(data?.content ?? "");
-    const bullets = Array.isArray(data?.bullets) ? data.bullets : [];
-    const relatedSubtopics = Array.isArray(data?.relatedSubtopics) ? data.relatedSubtopics : [];
+    var subtopic = String(data?.subtopic ?? "");
+    var content = String(data?.content ?? "");
+    var bullets = Array.isArray(data?.bullets) ? data.bullets : [];
+    var relatedSubtopics = Array.isArray(data?.relatedSubtopics) ? data.relatedSubtopics : [];
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -489,15 +566,15 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   // VIEW 4: Comparison
   // ═══════════════════════════════════════════
   if (isCompare) {
-    const topicA = String(data?.topicA ?? "");
-    const topicB = String(data?.topicB ?? "");
-    const similarities = Array.isArray(data?.similarities) ? data.similarities : [];
-    const differences = Array.isArray(data?.differences) ? data.differences : [];
-    const tradeoffs = Array.isArray(data?.tradeoffs) ? data.tradeoffs : [];
-    const verdict = String(data?.verdict ?? "");
-    const parentTopic = topicA || topic;
+    var topicA = String(data?.topicA ?? "");
+    var topicB = String(data?.topicB ?? "");
+    var similarities = Array.isArray(data?.similarities) ? data.similarities : [];
+    var differences = Array.isArray(data?.differences) ? data.differences : [];
+    var tradeoffs = Array.isArray(data?.tradeoffs) ? data.tradeoffs : [];
+    var verdict = String(data?.verdict ?? "");
+    var parentTopic = topicA || topic;
 
-    const ComparisonList = ({ items, accent }) => (
+    var ComparisonList = ({ items, accent }) => (
       <div className="space-y-2">
         {items.map((item, i) => (
           <UICard key={i} accent={accent}>
@@ -562,9 +639,9 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   // VIEW 5: Follow-up
   // ═══════════════════════════════════════════
   if (isFollowUp) {
-    const question = String(data?.question ?? "");
-    const answer = String(data?.answer ?? "");
-    const suggestedFollowUps = Array.isArray(data?.suggestedFollowUps) ? data.suggestedFollowUps : [];
+    var question = String(data?.question ?? "");
+    var answer = String(data?.answer ?? "");
+    var suggestedFollowUps = Array.isArray(data?.suggestedFollowUps) ? data.suggestedFollowUps : [];
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -637,13 +714,13 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   // ═══════════════════════════════════════════
 
   // Count media for tab labels
-  const recVideos = recommendedVideos.map((rv) => videos[rv.index]).filter(Boolean);
-  const otherVideos = videos.filter((_, i) => !recommendedVideos.some((rv) => rv.index === i));
-  const hasMedia = videos.length > 0 || books.length > 0 || movies.length > 0;
-  const mediaCount = videos.length + books.length + movies.length;
+  var recVideos = recommendedVideos.map((rv) => videos[rv.index]).filter(Boolean);
+  var otherVideos = videos.filter((_, i) => !recommendedVideos.some((rv) => rv.index === i));
+  var hasMedia = videos.length > 0 || books.length > 0 || movies.length > 0;
+  var mediaCount = videos.length + books.length + movies.length;
 
   // Build tab list dynamically
-  const tabList = [
+  var tabList = [
     { value: "overview", label: "Overview" },
     ...(sections.length > 0 || !hasSynthesis ? [{ value: "sections", label: "Sections" + (sections.length > 0 ? " (" + sections.length + ")" : "") }] : []),
     ...(hasMedia || !hasSynthesis ? [{ value: "media", label: "Media" + (mediaCount > 0 ? " (" + mediaCount + ")" : "") }] : []),
@@ -709,12 +786,12 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           {/* Phase progress dots */}
           <div className="flex gap-1 shrink-0">
             {["generating_queries", "searching", "synthesizing"].map((p, i) => {
-              const phaseOrder = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking"];
-              const currentIdx = phaseOrder.indexOf(phase);
-              const thisIdx = [0, 1, 3].indexOf(i) >= 0 ? i : i;
-              const dotPhases = [0, 1, 3]; // indices in phaseOrder
-              const isDone = currentIdx > dotPhases[i];
-              const isCurrent = currentIdx === dotPhases[i] || (i === 1 && currentIdx === 2);
+              var phaseOrder = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking"];
+              var currentIdx = phaseOrder.indexOf(phase);
+              var thisIdx = [0, 1, 3].indexOf(i) >= 0 ? i : i;
+              var dotPhases = [0, 1, 3]; // indices in phaseOrder
+              var isDone = currentIdx > dotPhases[i];
+              var isCurrent = currentIdx === dotPhases[i] || (i === 1 && currentIdx === 2);
               return (
                 <div key={i} className={"w-1.5 h-1.5 rounded-full " + (isDone ? "bg-blue-400" : isCurrent ? "bg-blue-400 animate-pulse" : "bg-gray-600")} />
               );
@@ -727,8 +804,10 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       {isComplete && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
+            {data?.depth && <Badge variant={data.depth === "deep" ? "info" : "outline"}>{String(data.depth)}</Badge>}
             <Badge variant="success">{sources.length} sources</Badge>
             {keyFindings.length > 0 && <Badge variant="info">{keyFindings.length} findings</Badge>}
+            {sections.length > 0 && <Badge variant="default">{sections.length} sections</Badge>}
             {contradictions.length > 0 && <Badge variant="warning">{contradictions.length} contradictions</Badge>}
             {gapQueries.length > 0 && <Badge variant="default">gap-checked</Badge>}
             {wordCount > 50 && <span className="flex items-center gap-1 text-[10px] text-gray-500"><LucideReact.Clock className="w-3 h-3" />{readingMinutes} min read</span>}
@@ -815,12 +894,100 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             </div>
           )}
 
+          {/* ── Full-text search ── */}
+          {isComplete && (keyFindings.length > 3 || sections.length > 2 || sources.length > 5) && (
+            <div className="space-y-2">
+              <div className="relative">
+                <Input
+                  placeholder="Search findings, sections, sources..."
+                  value={searchText}
+                  onChange={function(val) { setSearchText(val); }}
+                  icon={<LucideReact.Search className="w-3.5 h-3.5" />}
+                />
+                {searchText.length > 0 && (
+                  <button
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-700/50"
+                    onClick={function() { setSearchText(""); }}
+                  >
+                    <LucideReact.X className="w-3 h-3 text-gray-500" />
+                  </button>
+                )}
+              </div>
+              {searchMatches && searchMatches.total > 0 && (
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-blue-300">{searchMatches.total} matches found</span>
+                    <button className="text-[10px] text-gray-500 hover:text-gray-300" onClick={function() { setSearchText(""); }}>Clear</button>
+                  </div>
+                  {searchMatches.findings.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Findings ({searchMatches.findings.length})</div>
+                      {searchMatches.findings.map(function(fi) {
+                        var f = keyFindings[fi];
+                        return (
+                          <div key={fi} className="flex items-start gap-2 px-2 py-1.5 rounded bg-gray-800/30">
+                            <Badge variant={findingVariant[f.type] || "default"}>{String(f.type)}</Badge>
+                            <div className="text-xs text-gray-300 flex-1">{highlightMatch(f.text, searchText)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {searchMatches.sections.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Sections ({searchMatches.sections.length})</div>
+                      {searchMatches.sections.map(function(si) {
+                        var s = sections[si];
+                        return (
+                          <div key={si} className="px-2 py-1.5 rounded bg-gray-800/30 cursor-pointer hover:bg-gray-700/40" onClick={function() { onAction("deep_dive", { topic: topic, subtopic: s.title }); }}>
+                            <div className="text-xs text-blue-400 font-medium">{highlightMatch(s.title, searchText)}</div>
+                            {s.summary && <div className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{highlightMatch(s.summary, searchText)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {searchMatches.sources.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Sources ({searchMatches.sources.length})</div>
+                      {searchMatches.sources.slice(0, 5).map(function(si) {
+                        var s = sources[si];
+                        return (
+                          <div key={si} className="px-2 py-1.5 rounded bg-gray-800/30 cursor-pointer hover:bg-gray-700/40" onClick={function() { s.url && onAction("open_url", { url: s.url }); }}>
+                            <div className="text-xs text-blue-400">{highlightMatch(s.title, searchText)}</div>
+                            <div className="text-[10px] text-gray-500">{String(s.domain)}</div>
+                          </div>
+                        );
+                      })}
+                      {searchMatches.sources.length > 5 && (
+                        <div className="text-[10px] text-gray-500 px-2">+{searchMatches.sources.length - 5} more sources</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {searchMatches && searchMatches.total === 0 && (
+                <div className="text-xs text-gray-500 text-center py-2">No matches found</div>
+              )}
+            </div>
+          )}
+
           {/* ── Key Findings (prominent, findings-first) ── */}
           {keyFindings.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
                   <LucideReact.Lightbulb className="w-3 h-3" /> Key Findings
+                  <button
+                    className="ml-1 p-1 rounded hover:bg-gray-700/50 transition-opacity opacity-30 hover:opacity-100"
+                    onClick={function() {
+                      var text = keyFindings.map(function(f, i) { return (i + 1) + ". [" + f.type + "/" + f.confidence + "] " + f.text; }).join("\\n");
+                      onAction("__copy_text", { text: text, label: "All Findings" });
+                    }}
+                    title="Copy all findings"
+                  >
+                    <LucideReact.Copy className="w-3 h-3" />
+                  </button>
                 </div>
                 {keyFindings.length > 3 && (
                   <div className="flex items-center gap-1">
@@ -870,6 +1037,19 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                         {String(f.text)}
                         <SourceRefs refs={f.sourceRefs} />
                       </div>
+                      {findingSectionMap[originalIdx] && findingSectionMap[originalIdx].length > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                          <LucideReact.Layers className="w-2.5 h-2.5 text-gray-600 shrink-0" />
+                          {findingSectionMap[originalIdx].map(function(si) {
+                            var sTitle = String(sections[si].title);
+                            return (
+                              <button key={si} className="text-[9px] px-1.5 py-0.5 rounded bg-gray-700/30 text-gray-500 hover:text-blue-300 hover:bg-blue-500/10 transition-colors" onClick={function(e) { e.stopPropagation(); onAction("deep_dive", { topic: topic, subtopic: sections[si].title }); }}>
+                                {sTitle.length > 30 ? sTitle.slice(0, 28) + "..." : sTitle}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </UICard>
                   );
@@ -915,8 +1095,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             {(tab) => {
               // ── OVERVIEW TAB ──
               if (tab === "overview") {
-                const inlineImages = galleryImages.slice(0, 3);
-                const imgInsertIdx = Math.max(1, Math.floor(narrativeParagraphs.length / 3));
+                var inlineImages = galleryImages.slice(0, 3);
+                var imgInsertIdx = Math.max(1, Math.floor(narrativeParagraphs.length / 3));
                 return (
                   <div className="space-y-4 pt-2">
                     {/* Hero image */}
@@ -928,8 +1108,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
                     {/* Narrative with collapse for long content */}
                     {narrativeParagraphs.length > 0 ? (() => {
-                      const isLong = narrativeParagraphs.length > NARRATIVE_COLLAPSE_THRESHOLD;
-                      const visibleParagraphs = isLong && !narrativeExpanded ? narrativeParagraphs.slice(0, NARRATIVE_COLLAPSE_THRESHOLD) : narrativeParagraphs;
+                      var isLong = narrativeParagraphs.length > NARRATIVE_COLLAPSE_THRESHOLD;
+                      var visibleParagraphs = isLong && !narrativeExpanded ? narrativeParagraphs.slice(0, NARRATIVE_COLLAPSE_THRESHOLD) : narrativeParagraphs;
                       return (
                         <div className="space-y-3">
                           {visibleParagraphs.map((p, pi) => (
@@ -973,24 +1153,71 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                       <div className="text-sm text-gray-200 leading-relaxed">{summary}</div>
                     ) : null}
 
-                    {/* Quick explore chips from sections */}
+                    {/* Section preview cards */}
                     {sections.length > 0 && isComplete && (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] text-gray-500 uppercase tracking-wide">Explore deeper</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {sections.slice(0, 5).map((s, i) => (
-                            <button
-                              key={i}
-                              onClick={() => onAction("deep_dive", { topic, subtopic: s.title })}
-                              className="text-[11px] px-2.5 py-1 rounded-full bg-gray-800/60 text-gray-300 border border-gray-700/50 hover:bg-blue-500/15 hover:border-blue-500/30 hover:text-blue-300 transition-colors"
-                            >
-                              {String(s.title)}
-                            </button>
-                          ))}
+                      <div className="space-y-2">
+                        <div className="text-[10px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <LucideReact.Layers className="w-3 h-3" /> Research Sections ({sections.length})
+                        </div>
+                        <div className="space-y-1.5">
+                          {sections.map(function(s, i) {
+                            var isSecExpanded = expandedSectionPreview === i;
+                            var bulletCount = (s.bullets || []).length;
+                            var relatedFindings = sectionFindingCounts[i] || 0;
+                            var refCount = (s.sourceRefs || []).length;
+                            return (
+                              <div key={i} className="rounded-lg bg-gray-800/30 border border-gray-700/30 overflow-hidden">
+                                <div
+                                  className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-gray-700/20 transition-colors"
+                                  onClick={function() { setExpandedSectionPreview(isSecExpanded ? null : i); }}
+                                >
+                                  <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                                    <span className="text-[10px] text-blue-400 font-mono font-bold">{i + 1}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-semibold text-gray-200">{String(s.title)}</div>
+                                    {s.summary && !isSecExpanded && (
+                                      <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">{String(s.summary)}</div>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                      {bulletCount > 0 && <span className="text-[9px] text-gray-500">{bulletCount} points</span>}
+                                      {relatedFindings > 0 && <span className="text-[9px] text-amber-400/70">{relatedFindings} findings</span>}
+                                      {refCount > 0 && <span className="text-[9px] text-gray-600">{refCount} sources</span>}
+                                    </div>
+                                  </div>
+                                  <LucideReact.ChevronDown className={"w-3.5 h-3.5 text-gray-500 transition-transform shrink-0 mt-1 " + (isSecExpanded ? "rotate-180" : "")} />
+                                </div>
+                                {isSecExpanded && (
+                                  <div className="px-3 pb-2.5 border-t border-gray-700/20 pt-2 space-y-2">
+                                    {s.summary && <div className="text-xs text-gray-400 italic">{String(s.summary)}</div>}
+                                    {bulletCount > 0 && (
+                                      <div className="space-y-1">
+                                        {(s.bullets || []).slice(0, 4).map(function(b, bi) {
+                                          return (
+                                            <div key={bi} className="flex gap-1.5 text-[11px] text-gray-300">
+                                              <LucideReact.ChevronRight className="w-3 h-3 mt-0.5 text-blue-400 shrink-0" />
+                                              <span>{String(b)}</span>
+                                            </div>
+                                          );
+                                        })}
+                                        {bulletCount > 4 && <div className="text-[10px] text-gray-600 pl-4">+{bulletCount - 4} more points</div>}
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                      <SourceRefs refs={s.sourceRefs} />
+                                      <Button variant="outline" onClick={function() { onAction("deep_dive", { topic: topic, subtopic: s.title }); }}>
+                                        <LucideReact.ArrowRight className="w-3 h-3" /> Deep Dive
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                         <div className="flex gap-2 mt-1">
                           <Input
-                            placeholder="Or explore a custom subtopic..."
+                            placeholder="Explore a custom subtopic..."
                             value={deepDiveInput}
                             onChange={function(val) { setDeepDiveInput(val); }}
                             onKeyDown={function(e) {
@@ -1080,8 +1307,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                 if (sections.length === 0) {
                   return <EmptyState icon={<LucideReact.Layers className="w-6 h-6" />} title="No sections" description="Sections will appear once synthesis completes" />;
                 }
-                const getSectionImage = (sIdx) => {
-                  const img = images.find((i) => i.sectionIdx === sIdx);
+                var getSectionImage = (sIdx) => {
+                  var img = images.find((i) => i.sectionIdx === sIdx);
                   return img && !imgErrors[img.url] ? img : null;
                 };
                 return (
@@ -1093,7 +1320,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                         content: (
                           <div className="space-y-2">
                             {(() => {
-                              const secImg = getSectionImage(i);
+                              var secImg = getSectionImage(i);
                               return secImg ? (
                                 <div className="w-full h-28 overflow-hidden rounded-lg">
                                   <img src={secImg.url} alt={secImg.title} className="w-full h-full object-cover" onError={() => handleImgError(secImg.url)} referrerPolicy="no-referrer" />
@@ -1171,7 +1398,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                           <LucideReact.BookOpen className="w-3 h-3 text-indigo-400" /> Books ({books.length})
                         </div>
                         {books.map((b, i) => {
-                          const bookUrl = b.url || "https://www.google.com/search?q=" + encodeURIComponent(b.title + (b.author ? " " + b.author : "") + " book");
+                          var bookUrl = b.url || "https://www.google.com/search?q=" + encodeURIComponent(b.title + (b.author ? " " + b.author : "") + " book");
                           return (
                           <UICard key={i} accent="indigo">
                             <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: bookUrl })}>
@@ -1200,11 +1427,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                           <LucideReact.Film className="w-3 h-3 text-rose-400" /> Movies & Shows ({movies.length})
                         </div>
                         {movies.map((m, i) => {
-                          const typeAccent = { movie: "rose", tv: "cyan", documentary: "teal", podcast: "orange" };
-                          const typeIcon = { movie: "Film", tv: "Monitor", documentary: "Clapperboard", podcast: "Mic" };
-                          const IconComp = LucideReact[typeIcon[m.type]] || LucideReact.Film;
-                          const searchSuffix = { movie: "movie", tv: "tv show", documentary: "documentary", podcast: "podcast" };
-                          const movieUrl = m.url || "https://www.google.com/search?q=" + encodeURIComponent(m.title + (m.year ? " " + m.year : "") + " " + (searchSuffix[m.type] || "movie"));
+                          var typeAccent = { movie: "rose", tv: "cyan", documentary: "teal", podcast: "orange" };
+                          var typeIcon = { movie: "Film", tv: "Monitor", documentary: "Clapperboard", podcast: "Mic" };
+                          var IconComp = LucideReact[typeIcon[m.type]] || LucideReact.Film;
+                          var searchSuffix = { movie: "movie", tv: "tv show", documentary: "documentary", podcast: "podcast" };
+                          var movieUrl = m.url || "https://www.google.com/search?q=" + encodeURIComponent(m.title + (m.year ? " " + m.year : "") + " " + (searchSuffix[m.type] || "movie"));
                           return (
                             <UICard key={i} accent={typeAccent[m.type] || "rose"}>
                               <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: movieUrl })}>
@@ -1322,8 +1549,9 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                     </div>
                     <div className="space-y-1">
                       {sortedFilteredSources.slice(0, 25).map((s, i) => {
-                        const isExpanded = expandedSource === i;
-                        const hasContent = s.fullContent && s.fullContent.length > 100;
+                        var origIdx = sources.indexOf(s);
+                        var isExpanded = expandedSource === i;
+                        var hasContent = s.fullContent && s.fullContent.length > 100;
                         return (
                           <div key={i} className="rounded bg-gray-800/30">
                             <div
@@ -1339,6 +1567,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                                 </div>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
+                                {sourceFindingMap[origIdx] && sourceFindingMap[origIdx].length > 0 && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 flex items-center gap-0.5" title={"Cited by " + sourceFindingMap[origIdx].length + " finding(s)"}>
+                                    <LucideReact.Lightbulb className="w-2.5 h-2.5" />{sourceFindingMap[origIdx].length}
+                                  </span>
+                                )}
                                 <div className="w-12">
                                   <Progress value={s.relevance || 0} max={100} variant="blue" />
                                 </div>

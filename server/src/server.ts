@@ -2376,6 +2376,23 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
+          case "card.release": {
+            if (msg.cardId) {
+              const releaseFamily = msg.toolFamily ?? msg.appId;
+              runtime.log?.(`[enso] card.release: ${msg.cardId}${releaseFamily ? ` (family=${releaseFamily})` : ""}`);
+              const { handleCardRelease } = await import("./card-release.js");
+              handleCardRelease({
+                cardId: msg.cardId,
+                family: releaseFamily,
+                client,
+                onRestartRequested: opts.onRestartRequested,
+              }).catch((err) => {
+                logError("card.release", "Release failed", err, { cardId: msg.cardId });
+                runtime.error?.(`[enso] card.release error: ${err instanceof Error ? err.message : String(err)}`);
+              });
+            }
+            break;
+          }
           case "card.enhance":
             if (msg.cardId && msg.cardText) {
               runtime.log?.(`[enso] card enhance: ${msg.cardId}${msg.suggestedFamily ? ` (family=${msg.suggestedFamily})` : ""}`);

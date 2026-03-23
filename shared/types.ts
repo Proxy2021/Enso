@@ -150,6 +150,7 @@ export interface ServerMessage {
     toolName: string;
     error?: string;
   };
+  releaseProgress?: string;
   cardSummary?: {
     overview: string;
     keyOutcomes: string[];
@@ -245,6 +246,7 @@ export interface ClientMessage {
     | "image_research"
     | "card.summarize"
     | "card.evolve"
+    | "card.release"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;

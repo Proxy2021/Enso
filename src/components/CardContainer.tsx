@@ -1351,6 +1351,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const sendCardAction = useChatStore((s) => s.sendCardAction);
   const requestCardSummary = useChatStore((s) => s.requestCardSummary);
   const requestCardEvolution = useChatStore((s) => s.requestCardEvolution);
+  const releaseCard = useChatStore((s) => s.releaseCard);
   const buildApp = useChatStore((s) => s.buildApp);
   const sendMessage = useChatStore((s) => s.sendMessage);
 
@@ -1784,6 +1785,41 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                 </div>
               )}
               {(card.enhanceStatus === "ready" || isDeepBuilding || orchHasBespokeUI) && <ViewToggle card={card} />}
+              {isEvolution && card.status === "complete" && card.appCardMode?.signatureId !== "card_evolution_building" && (
+                <button
+                  onClick={() => releaseCard(card.id)}
+                  disabled={card.releaseStatus === "releasing"}
+                  className={`text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] px-1 sm:px-1.5 py-0.5 rounded-full border transition-all duration-150 flex items-center justify-center gap-1 ${
+                    card.releaseStatus === "done"
+                      ? "border-emerald-500/50 text-emerald-400"
+                      : card.releaseStatus === "releasing"
+                        ? "border-blue-500/50 text-blue-400 animate-pulse cursor-wait"
+                        : "border-gray-600/50 text-gray-500 hover:text-emerald-300 hover:border-emerald-500/50 active:bg-emerald-500/15 active:scale-[0.95]"
+                  }`}
+                  title={card.releaseStatus === "done" ? "Released" : card.releaseStatus === "releasing" ? "Releasing..." : "Commit, push & release"}
+                >
+                  {card.releaseStatus === "releasing" ? (
+                    <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                  ) : card.releaseStatus === "done" ? (
+                    <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  ) : (
+                    <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                      <polyline points="16 6 12 2 8 6" />
+                      <line x1="12" y1="2" x2="12" y2="15" />
+                    </svg>
+                  )}
+                  <span className="hidden sm:inline">{
+                    card.releaseStatus === "done" ? "Released"
+                    : card.releaseStatus === "releasing" ? "Releasing..."
+                    : "Release"
+                  }</span>
+                </button>
+              )}
               {statusLabel !== "ready" && (
                 <div className={`text-[10px] uppercase tracking-wide px-1.5 sm:px-2 py-0.5 rounded-full border ${statusTone}`}>
                   {statusLabel}
@@ -1791,6 +1827,17 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
               )}
             </div>
           </div>
+          {card.releaseProgress && (
+            <div className={`mx-3 mb-2 px-3 py-2 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-line border ${
+              card.releaseStatus === "done"
+                ? card.releaseProgress.includes("FAILED")
+                  ? "bg-red-900/20 border-red-700/40 text-red-300"
+                  : "bg-emerald-900/20 border-emerald-700/40 text-emerald-300"
+                : "bg-blue-900/20 border-blue-700/40 text-blue-300"
+            }`}>
+              {card.releaseProgress}
+            </div>
+          )}
           {showOriginalView ? (() => {
             const hasSnapshot = card.standardGeneratedUISnapshot != null;
             const origType = hasSnapshot ? "dynamic-ui" : "chat";

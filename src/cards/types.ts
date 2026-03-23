@@ -79,6 +79,10 @@ export interface Card {
   cardPodcastScript?: string;
   cardPodcastStatus?: "writing_script" | "rendering_audio" | "ready" | "error";
 
+  // Release status
+  releaseProgress?: string;
+  releaseStatus?: "releasing" | "done";
+
   // Timestamps
   createdAt: number;
   updatedAt: number;

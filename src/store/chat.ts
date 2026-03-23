@@ -134,6 +134,7 @@ interface CardStore {
   toggleSidebar: () => void;
   requestCardSummary: (cardId: string) => void;
   requestCardEvolution: (cardId: string, options?: { goal?: string; includeResearch?: boolean }) => void;
+  releaseCard: (cardId: string) => void;
   setCardSearchQuery: (query: string) => void;
   setCardSearchVisible: (visible: boolean) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
@@ -1701,6 +1702,19 @@ export const useChatStore = create<CardStore>((set, get) => ({
     };
     wsClient.send(msg);
   },
+  releaseCard: (cardId: string) => {
+    const card = get().cards[cardId];
+    if (!card) return;
+    const wsClient = get()._wsClient;
+    if (!wsClient) return;
+    const activeMode = card.appCardMode ?? card.cardMode;
+    wsClient.send({
+      type: "card.release",
+      cardId,
+      appId: activeMode?.appId ?? activeMode?.toolFamily,
+      toolFamily: activeMode?.toolFamily ?? activeMode?.appId,
+    } as ClientMessage);
+  },
   setCardSearchQuery: (query: string) => set({ cardSearchQuery: query }),
   setCardSearchVisible: (visible: boolean) => set((s) => ({
     cardSearchVisible: visible,
@@ -2618,6 +2632,21 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 ...card,
                 autoHealStatus: msg.autoHeal.stage,
                 autoHealError: msg.autoHeal.error,
+                updatedAt: now,
+              },
+            },
+          };
+        }
+
+        // Handle release progress updates
+        if (msg.releaseProgress != null) {
+          return {
+            cards: {
+              ...state.cards,
+              [msg.targetCardId]: {
+                ...card,
+                releaseProgress: msg.releaseProgress,
+                releaseStatus: msg.state === "final" ? "done" : "releasing",
                 updatedAt: now,
               },
             },
