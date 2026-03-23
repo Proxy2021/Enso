@@ -13,8 +13,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   var [topicInput, setTopicInput] = useState("");
   var [followUpInput, setFollowUpInput] = useState("");
   var [compareInput, setCompareInput] = useState("");
-  var [emailOpen, setEmailOpen] = useState(false);
-  var [emailAddr, setEmailAddr] = useState("");
   var [sourceFilter, setSourceFilter] = useState("");
   var [deepDiveInput, setDeepDiveInput] = useState("");
   var [imgErrors, setImgErrors] = useState({});
@@ -36,7 +34,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   var isDeepDive = data?.tool === "enso_researcher_deep_dive";
   var isCompare = data?.tool === "enso_researcher_compare";
   var isFollowUp = data?.tool === "enso_researcher_follow_up";
-  var isEmail = data?.tool === "enso_researcher_send_report";
+
 
   // ── Shared data extraction ──
   var sources = Array.isArray(data?.sources) ? data.sources : [];
@@ -437,35 +435,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     );
   }
 
-  // ═══════════════════════════════════════════
-  // VIEW 6: Email result
-  // ═══════════════════════════════════════════
-  if (isEmail) {
-    return (
-      <div className="space-y-3">
-        <Stat label="Research Report" value={topic || "Report"} accent={data?.success ? "emerald" : "rose"} />
-        <UICard accent={data?.success ? "emerald" : "rose"}>
-          <Badge variant={data?.success ? "success" : "danger"}>{data?.success ? "Sent" : "Not Sent"}</Badge>
-          <div className="text-sm text-gray-200 mt-2">{String(data?.message ?? "")}</div>
-          {data?.recipient && (
-            <div className="text-xs text-gray-400 mt-1">To: {String(data.recipient)}</div>
-          )}
-        </UICard>
-        {data?.fallbackHtml && (
-          <Accordion items={[{
-            value: "html",
-            title: "HTML Report (copy to use)",
-            content: (
-              <div className="max-h-48 overflow-auto">
-                <pre className="text-[10px] text-gray-400 whitespace-pre-wrap break-all">{String(data.fallbackHtml).slice(0, 3000)}</pre>
-              </div>
-            ),
-          }]} />
-        )}
-        <Button variant="primary" onClick={() => onAction("search", { topic })}>Back to Research</Button>
-      </div>
-    );
-  }
 
   // ═══════════════════════════════════════════
   // VIEW 3: Deep Dive
@@ -743,11 +712,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           {isComplete && (
             <Button variant="ghost" onClick={() => onAction("search", { topic: "" })}>
               <LucideReact.Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">New</span>
-            </Button>
-          )}
-          {isComplete && (
-            <Button variant="primary" onClick={() => setEmailOpen(true)}>
-              <LucideReact.Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Email</span>
             </Button>
           )}
         </div>
@@ -1641,18 +1605,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       )}
 
-      {/* Email dialog */}
-      <Dialog open={emailOpen} onClose={() => setEmailOpen(false)} title={"Email Research: " + topic} footer={
-        <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => setEmailOpen(false)}>Cancel</Button>
-          <Button variant="primary" onClick={() => {
-            setEmailOpen(false);
-            onAction("send_report", { recipient: emailAddr, topic, summary, narrative, keyFindings, sections, sources, images, videos });
-          }}>Send Report</Button>
-        </div>
-      }>
-        <Input placeholder="recipient@example.com" value={emailAddr} onChange={(val) => setEmailAddr(val)} icon={<LucideReact.Mail className="w-3.5 h-3.5" />} />
-      </Dialog>
 
       {/* Source preview popup */}
       <Dialog open={sourcePopup !== null} onClose={function() { setSourcePopup(null); }} title={sourcePopup ? String(sourcePopup.title) : ""} footer={
