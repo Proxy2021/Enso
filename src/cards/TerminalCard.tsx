@@ -161,7 +161,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
           ))}
         </div>
       )}
-      <div className="flex items-center gap-1.5 pt-1.5 border-t border-gray-800/50 mt-1">
+      <div className="flex items-center gap-1.5 pt-2 sm:pt-1.5 border-t border-gray-800/50 mt-1">
         <span className="text-green-400 font-bold shrink-0">{"\u276F"}</span>
         <input
           ref={inputRef}
@@ -170,13 +170,13 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask Claude Code..."
-          className="flex-1 bg-transparent text-gray-100 text-sm outline-none placeholder-gray-600 font-mono"
+          className="flex-1 bg-transparent text-gray-100 text-base sm:text-sm outline-none placeholder-gray-600 font-mono"
         />
         <VoiceMic />
         <button
           onClick={handleSubmit}
           disabled={!text.trim()}
-          className="shrink-0 p-1 rounded text-gray-500 hover:text-green-400 active:scale-[0.9] disabled:text-gray-700 disabled:cursor-default transition-all duration-150"
+          className="shrink-0 p-2 sm:p-1 rounded text-gray-500 hover:text-green-400 active:scale-[0.9] disabled:text-gray-700 disabled:cursor-default transition-all duration-150"
           title="Send (Enter)"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -208,7 +208,7 @@ function QuestionOptions({
               <button
                 key={oi}
                 onClick={() => onSelect(opt.label)}
-                className="px-3 py-1.5 text-xs rounded-md border border-gray-700 bg-gray-800/60 text-gray-200 hover:bg-gray-700 hover:border-gray-600 hover:text-white active:bg-gray-600 active:scale-[0.96] transition-all duration-150 cursor-pointer"
+                className="px-4 sm:px-3 py-2.5 sm:py-1.5 text-sm sm:text-xs rounded-md border border-gray-700 bg-gray-800/60 text-gray-200 hover:bg-gray-700 hover:border-gray-600 hover:text-white active:bg-gray-600 active:scale-[0.96] transition-all duration-150 cursor-pointer"
                 title={opt.description}
               >
                 {opt.label}
@@ -433,7 +433,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
           {card.operation?.cancellable && card.operation.operationId && (
             <button
               onClick={() => cancelOperation(card.operation!.operationId)}
-              className="ml-auto px-2 py-0.5 rounded border border-red-700/60 text-red-300 hover:bg-red-900/40 active:bg-red-900/60 active:scale-[0.97] transition-all duration-150"
+              className="ml-auto px-2.5 sm:px-2 py-1 sm:py-0.5 rounded border border-red-700/60 text-red-300 hover:bg-red-900/40 active:bg-red-900/60 active:scale-[0.97] transition-all duration-150 text-xs sm:text-[inherit]"
               title="Cancel current operation"
             >
               Cancel
@@ -447,7 +447,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
         </div>
 
         {/* Content */}
-        <div className="px-3 py-2 max-h-[70vh] overflow-y-auto">
+        <div className="px-2 sm:px-3 py-2 max-h-[60dvh] sm:max-h-[70vh] overflow-y-auto scroll-touch">
           {needsProject ? (
             showSessionPicker ? (
               <SessionPicker cardId={card.id} onDismiss={() => setShowSessionPicker(false)} />

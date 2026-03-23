@@ -120,20 +120,22 @@ export default function WelcomeCard() {
       {/* Feature tiles */}
       <div className="w-full max-w-lg">
         <p className="text-xs text-gray-500 mb-2 px-1">{t("welcome.launchTool")}</p>
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {TEMPLATES.map((tmpl) => (
             <button
               key={tmpl.titleKey}
               onClick={() => handleClick(tmpl)}
               disabled={disabled}
-              className="text-left p-2.5 rounded-xl border border-gray-700/70 bg-gray-900/50 hover:bg-gray-800/70 hover:border-gray-600 active:bg-gray-800 active:scale-[0.96] active:border-gray-500 transition-all duration-150 disabled:opacity-50"
+              className="text-left p-3 sm:p-2.5 rounded-xl border border-gray-700/70 bg-gray-900/50 hover:bg-gray-800/70 hover:border-gray-600 active:bg-gray-800 active:scale-[0.96] active:border-gray-500 transition-all duration-150 disabled:opacity-50 flex sm:block items-center gap-3 sm:gap-0"
             >
-              <span className="text-lg">{tmpl.icon}</span>
-              <div className="text-[11px] font-medium text-gray-200 mt-1">
-                {t(tmpl.titleKey)}
-              </div>
-              <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-2">
-                {t(tmpl.descKey)}
+              <span className="text-xl sm:text-lg">{tmpl.icon}</span>
+              <div className="sm:mt-1">
+                <div className="text-xs sm:text-[11px] font-medium text-gray-200">
+                  {t(tmpl.titleKey)}
+                </div>
+                <div className="text-[11px] sm:text-[10px] text-gray-500 mt-0.5 line-clamp-2">
+                  {t(tmpl.descKey)}
+                </div>
               </div>
             </button>
           ))}
@@ -141,7 +143,7 @@ export default function WelcomeCard() {
       </div>
 
       <div className="mt-4 px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-700/30 max-w-lg w-full">
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-xs text-gray-400 text-center hidden sm:block">
           <span className="text-gray-300 font-medium">/research</span> {t("welcome.hint.research")}
           <span className="mx-1.5 text-gray-600">&middot;</span>
           <span className="text-gray-300 font-medium">/code</span> {t("welcome.hint.code")}
@@ -153,6 +155,14 @@ export default function WelcomeCard() {
           <span className="text-gray-300 font-medium">/discover</span> {t("welcome.hint.discover")}
           <span className="mx-1.5 text-gray-600">&middot;</span>
           <span className="text-gray-300 font-medium">/evolve</span> {t("welcome.hint.evolve")}
+        </p>
+        <p className="text-xs text-gray-400 text-center sm:hidden flex flex-wrap justify-center gap-x-3 gap-y-1">
+          <span className="text-gray-300 font-medium">/research</span>
+          <span className="text-gray-300 font-medium">/code</span>
+          <span className="text-gray-300 font-medium">/shell</span>
+          <span className="text-gray-300 font-medium">/orchestrate</span>
+          <span className="text-gray-300 font-medium">/discover</span>
+          <span className="text-gray-300 font-medium">/evolve</span>
         </p>
         <p className="text-[10px] text-gray-500 text-center mt-1">
           {t("welcome.hint.slashCommands")} &middot; {t("welcome.hint.attachFiles")}

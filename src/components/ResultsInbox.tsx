@@ -207,7 +207,7 @@ export default function ResultsInbox({ show, onClose }: ResultsInboxProps) {
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 
       {/* Sheet */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950 border-t border-gray-800 rounded-t-2xl max-h-[70vh] flex flex-col animate-[slideUp_0.2s_ease-out]">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950 border-t border-gray-800 rounded-t-2xl max-h-[70vh] flex flex-col animate-[slideUp_0.2s_ease-out] pb-[env(safe-area-inset-bottom)]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
           <h2 className="text-sm font-semibold text-gray-200">Completed Tasks</h2>

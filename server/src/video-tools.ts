@@ -8,6 +8,7 @@ import { execFile, execFileSync } from "child_process";
 import { promisify } from "util";
 import { join, basename } from "path";
 import { mkdirSync, existsSync, readdirSync } from "fs";
+import { safeResolvePath } from "./media-tools.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -92,7 +93,9 @@ export async function extractFrames(params: {
 }): Promise<string[]> {
   if (!hasFfmpeg()) throw new Error("FFmpeg is not installed.");
   if (!params.path || !existsSync(params.path)) throw new Error(`Video file not found: ${params.path}`);
-  mkdirSync(params.outputDir, { recursive: true });
+  const safeOut = safeResolvePath(params.outputDir);
+  if (!safeOut.ok) throw new Error(`Invalid output directory: ${safeOut.error}`);
+  mkdirSync(safeOut.path, { recursive: true });
 
   const args: string[] = ["-i", params.path, "-y"];
 
@@ -109,13 +112,13 @@ export async function extractFrames(params: {
     args.push("-vf", `fps=1/${interval}`);
   }
 
-  args.push("-vsync", "vfr", join(params.outputDir, "frame_%04d.jpg"));
+  args.push("-vsync", "vfr", join(safeOut.path, "frame_%04d.jpg"));
   await execFileAsync("ffmpeg", args, { timeout: 120_000 });
 
-  return readdirSync(params.outputDir)
+  return readdirSync(safeOut.path)
     .filter(f => f.startsWith("frame_"))
     .sort()
-    .map(f => join(params.outputDir, f));
+    .map(f => join(safeOut.path, f));
 }
 
 // ── Scene Detection ──
@@ -167,8 +170,10 @@ export async function generateThumbnail(params: {
   const time = params.time ?? 1; // default to 1 second in
   const size = params.size ?? "320x240";
 
-  // Ensure output directory exists
-  const outDir = join(params.outputPath, "..");
+  // Ensure output directory exists — validate path to prevent traversal
+  const safeOutPath = safeResolvePath(params.outputPath);
+  if (!safeOutPath.ok) throw new Error(`Invalid output path: ${safeOutPath.error}`);
+  const outDir = join(safeOutPath.path, "..");
   mkdirSync(outDir, { recursive: true });
 
   await execFileAsync("ffmpeg", [
@@ -176,10 +181,10 @@ export async function generateThumbnail(params: {
     "-ss", String(time),
     "-vframes", "1",
     "-s", size,
-    params.outputPath
+    safeOutPath.path
   ], { timeout: 30_000 });
 
-  return { outputPath: params.outputPath, timestamp: time, size };
+  return { outputPath: safeOutPath.path, timestamp: time, size };
 }
 
 // ── Helpers ──

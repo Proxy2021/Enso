@@ -57,6 +57,25 @@ export const APP_CATALOG: AppEntry[] = [
     signatureId: "clawhub_store",
     description: "ClawHub skill store: browse, search, install and manage OpenClaw skills",
   },
+  {
+    appId: "media_gallery",
+    primaryTool: "enso_media_gallery_browse",
+    actions: ["browse", "view", "favorite", "rate", "collection", "search", "inspect", "stats"],
+    signatureId: "media_gallery_view",
+    description: "Media gallery: browse, search & organize photos and videos with filters, ratings, favorites, collections, and EXIF metadata",
+  },
+  {
+    appId: "photo_studio",
+    primaryTool: "enso_photo_studio_import_photos",
+    actions: [
+      "import_photos", "preview_styles", "apply_style", "batch_process",
+      "list_styles", "manage_collection", "compare_versions", "photobook",
+      "upload_photos", "analyze_photo", "adjust", "style_gallery",
+      "export_photos", "history",
+    ],
+    signatureId: "photo_studio_view",
+    description: "Photo studio: import, edit, apply artistic styles (56 film & creative looks), batch process, AI analysis, adjust, compare, and export photos",
+  },
   // ── Terminal System Apps ──
   {
     appId: "claude_code",
@@ -99,7 +118,7 @@ export function unregisterApp(appId: string): boolean {
 }
 
 /** System apps — core platform capabilities that can't be removed. */
-const SYSTEM_APPS = new Set(["filesystem", "media", "screen", "browser", "claude_code", "shell"]);
+const SYSTEM_APPS = new Set(["filesystem", "media", "screen", "browser", "claude_code", "shell", "media_gallery", "photo_studio"]);
 
 /** List all non-system apps (user-created + shipped). */
 export function getUserApps(): AppEntry[] {

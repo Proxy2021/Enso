@@ -123,14 +123,14 @@ function SidebarToggle() {
   return (
     <button
       onClick={toggleSidebar}
-      className="relative flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200 transition-colors px-1.5 py-1 rounded-lg border border-gray-700/60 bg-gray-800/50"
+      className="relative flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200 active:scale-[0.92] transition-all duration-150 p-2 sm:px-1.5 sm:py-1 rounded-lg border border-gray-700/60 bg-gray-800/50"
       title="Pinned apps"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 17v5" />
         <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1h.5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5H8a1 1 0 0 1 1 1z" />
       </svg>
-      <span className="text-xs">{pinnedCards.length}</span>
+      <span className="text-xs hidden sm:inline">{pinnedCards.length}</span>
     </button>
   );
 }
@@ -140,7 +140,7 @@ function ResultsButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="relative flex items-center text-sm text-gray-400 hover:text-gray-200 transition-colors p-1.5 rounded-lg border border-gray-700/60 bg-gray-800/50"
+      className="relative flex items-center text-sm text-gray-400 hover:text-gray-200 active:scale-[0.92] transition-all duration-150 p-2 sm:p-1.5 rounded-lg border border-gray-700/60 bg-gray-800/50"
       title="Completed tasks"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -189,7 +189,7 @@ function SearchToggle() {
   return (
     <button
       onClick={() => setVisible(!searchVisible)}
-      className={`flex items-center text-sm transition-colors p-1.5 rounded-lg border ${searchVisible ? "text-violet-400 border-violet-500/40 bg-violet-500/10" : "text-gray-400 hover:text-gray-200 border-gray-700/60 bg-gray-800/50"}`}
+      className={`flex items-center text-sm transition-all duration-150 p-2 sm:p-1.5 rounded-lg border active:scale-[0.92] ${searchVisible ? "text-violet-400 border-violet-500/40 bg-violet-500/10" : "text-gray-400 hover:text-gray-200 border-gray-700/60 bg-gray-800/50"}`}
       title="Search cards (Ctrl+F)"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -257,12 +257,12 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <div className="flex flex-col h-dvh text-gray-100">
-        <header className="sticky top-0 z-20 flex items-center justify-between px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-semibold tracking-tight">Enso</h1>
+        <header className="sticky top-0 z-20 flex items-center justify-between px-2 sm:px-2.5 py-1.5 sm:py-2 pt-[max(0.375rem,env(safe-area-inset-top))] sm:pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <h1 className="text-sm sm:text-base font-semibold tracking-tight">Enso</h1>
             <span className="hidden sm:inline"><ActiveModelLabel /></span>
           </div>
-          <div className="flex items-center gap-1 sm:gap-1.5">
+          <div className="flex items-center gap-0.5 sm:gap-1.5">
             <SettingsPanel />
             <span className="hidden sm:flex"><DebugReporter /></span>
             <AppsMenu />

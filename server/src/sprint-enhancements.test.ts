@@ -303,3 +303,81 @@ describe("New app templates compile", () => {
     expect(result.Component).toBeDefined();
   });
 });
+
+// ── Tool visibility: ensure critical tools are exposed to Gemini ──
+
+describe("Tool visibility for Gemini declarations", () => {
+  it("media tools are all registered and visible", async () => {
+    const { createMediaTools } = await import("./media-tools.js");
+    const mediaTools = createMediaTools();
+    expect(mediaTools.length).toBeGreaterThanOrEqual(15);
+
+    // Critical media tools that must be visible
+    const criticalNames = [
+      "enso_media_browse_folder",
+      "enso_media_view_photo",
+      "enso_media_describe_photo",
+      "enso_media_search_photos",
+      "enso_media_process_photos",
+      "enso_media_process_single_photo",
+      "enso_media_list_styles",
+      "enso_media_style_previews",
+      "enso_media_analyze_photo",
+    ];
+    const toolNames = mediaTools.map((t) => t.name);
+    for (const name of criticalNames) {
+      expect(toolNames).toContain(name);
+    }
+  });
+
+  it("all system tools have unique names", async () => {
+    const { createFilesystemTools } = await import("./filesystem-tools.js");
+    const { createMediaTools } = await import("./media-tools.js");
+    const { createSystemTools } = await import("./system-tools.js");
+    const { createMemoryTools } = await import("./memory-tools.js");
+
+    const allTools = [
+      ...createFilesystemTools(),
+      ...createMediaTools(),
+      ...createSystemTools(),
+      ...createMemoryTools(),
+    ];
+    const names = allTools.map((t) => t.name);
+    const uniqueNames = new Set(names);
+    expect(uniqueNames.size).toBe(names.length);
+  });
+
+  it("total system tool count stays under Gemini limit", async () => {
+    const { createFilesystemTools } = await import("./filesystem-tools.js");
+    const { createMediaTools } = await import("./media-tools.js");
+    const { createVideoTools } = await import("./video-tools.js");
+    const { createScreenTools } = await import("./screen-tools.js");
+    const { createBrowserTools } = await import("./browser-tools.js");
+    const { createResearcherTools } = await import("./researcher-tools.js");
+    const { createClawHubTools } = await import("./clawhub-tools.js");
+    const { createMemoryTools } = await import("./memory-tools.js");
+    const { createSystemTools } = await import("./system-tools.js");
+
+    const allTools = [
+      ...createFilesystemTools(),
+      ...createMediaTools(),
+      ...createVideoTools(),
+      // media-ai-gateway adds 3 more tools (contact_sheet, upscale, remove_bg)
+      // but requires sharp at module level so we count them manually
+      ...createScreenTools(),
+      ...createBrowserTools(),
+      ...createResearcherTools(),
+      ...createClawHubTools(),
+      ...createMemoryTools(),
+      ...createSystemTools(),
+    ];
+
+    // +3 for media-ai-gateway tools (not imported due to sharp dependency)
+    const totalCount = allTools.length + 3;
+
+    // Must stay under 100 to avoid Gemini empty response issue
+    expect(totalCount).toBeLessThan(100);
+    // Should have at least 50 tools (all categories represented)
+    expect(totalCount).toBeGreaterThanOrEqual(50);
+  });
+});

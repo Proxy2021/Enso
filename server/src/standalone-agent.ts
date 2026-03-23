@@ -17,7 +17,7 @@ import { logAction, logError } from "./action-log.js";
 import { setLastUserMessage } from "./researcher-tools.js";
 import { GEMINI_MODEL_FAST } from "./ui-generator.js";
 import { callChatLLM } from "./llm-provider.js";
-import { getAllLocalTools, executeLocalTool } from "./tool-registry-local.js";
+import { getAllLocalTools, executeLocalTool, getAllLocalToolNames } from "./tool-registry-local.js";
 import { getMemoryContext, appendDailyMemory } from "./memory-bridge.js";
 import { geminiUrl, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
 import { recordToolCall } from "./native-tools/tool-call-store.js";
@@ -374,26 +374,26 @@ export async function handleStandaloneInbound(params: {
   }
 
   const allTools = getAllLocalTools();
-  // Gemini Flash chokes on 100+ function declarations (returns empty responses).
-  // Only send primary tools (isPrimary === true) from system tools, and first-of-family
-  // from dynamic app tools. This keeps the count manageable (~20-40 tools).
+  // Gemini 2.5 Flash can handle up to ~100 function declarations before returning empty responses.
+  // Include all system tools (registered via registerLocalTool — media, filesystem, video, etc.)
+  // and use family-first dedup only for dynamic app tools to keep count manageable.
+  const registeredNames = new Set(getAllLocalToolNames());
   const tools = (() => {
     const selected: EnsoAgentTool[] = [];
     const seenDynamicFamilies = new Set<string>();
     for (const t of allTools) {
-      // System tools: only include those marked as primary
-      if (t.isPrimary === true) {
+      // System tools (registered in local registry): include all
+      // This ensures media, photo, video, AI, and other built-in tools are always visible
+      if (registeredNames.has(t.name)) {
         selected.push(t);
         continue;
       }
-      // Dynamic app tools (no isPrimary field): include first tool per family
-      if (t.isPrimary === undefined) {
-        const parts = t.name.split("_");
-        const family = parts.length >= 3 ? parts.slice(0, -1).join("_") : t.name;
-        if (!seenDynamicFamilies.has(family)) {
-          seenDynamicFamilies.add(family);
-          selected.push(t);
-        }
+      // Dynamic app tools (user-built): include first tool per family to control count
+      const parts = t.name.split("_");
+      const family = parts.length >= 3 ? parts.slice(0, -1).join("_") : t.name;
+      if (!seenDynamicFamilies.has(family)) {
+        seenDynamicFamilies.add(family);
+        selected.push(t);
       }
     }
     return selected;
@@ -484,8 +484,13 @@ export async function handleStandaloneInbound(params: {
         ? `${chatPrefix}\n\n${finalText}`
         : chatPrefix || finalText;
 
+    // Fallback: ensure the user always gets a response (never silent)
+    const replyText = combined.trim()
+      ? combined
+      : "I wasn't able to process that request. Could you try rephrasing or being more specific?";
+
     await deliverEnsoReply({
-      payload: { text: combined },
+      payload: { text: replyText },
       client,
       runId,
       seq: deliverSeq,

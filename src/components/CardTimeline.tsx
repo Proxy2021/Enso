@@ -227,7 +227,7 @@ export default function CardTimeline() {
           </div>
         </div>
       )}
-      <div className="px-4 py-5">
+      <div className="px-2 sm:px-4 py-3 sm:py-5">
       <div className="max-w-5xl mx-auto">
         {filteredItems.map((item) => {
           if (item.type === "orch-pair") {
@@ -235,8 +235,8 @@ export default function CardTimeline() {
             const termCard = cards[item.termId];
             if (!orchCard || !termCard) return null;
             return (
-              <div key={item.orchId} className="flex gap-3 items-stretch" id={`card-${item.orchId}`}>
-                <div className="w-[220px] flex-shrink-0">
+              <div key={item.orchId} className="flex flex-col sm:flex-row gap-3 sm:items-stretch" id={`card-${item.orchId}`}>
+                <div className="sm:w-[220px] sm:flex-shrink-0">
                   <CardContainer card={orchCard} isActive={item.orchId === lastCardId} />
                 </div>
                 <div className="flex-1 min-w-0" id={`card-${item.termId}`}>

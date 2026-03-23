@@ -285,11 +285,11 @@ export default function ShellCard({ card }: CardRendererProps) {
           )}
         </div>
 
-        {/* Terminal container — responsive height: up to 400px but capped at 50dvh for mobile */}
+        {/* Terminal container — responsive height: up to 400px but capped at 45dvh for mobile */}
         <div
           ref={termRef}
           className="w-full"
-          style={{ height: "min(400px, 50dvh)", padding: "4px" }}
+          style={{ height: "min(400px, 45dvh)", padding: "4px" }}
         />
       </div>
     </div>

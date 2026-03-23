@@ -91,4 +91,49 @@
   .group:active .group-active\:opacity-100 {
     opacity: 1;
   }
+
+  /* Hide scrollbars but keep scrolling (cross-browser) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Momentum scrolling for touch devices */
+  .scroll-touch {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Prevent rubber-band overscroll on mobile while keeping internal scroll */
+@supports (overscroll-behavior: contain) {
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* iOS input zoom prevention: ensure inputs are at least 16px */
+@media (max-width: 639px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Bottom sheet animation for mobile panels */
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); opacity: 0.8; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* Drawer slide animation */
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
 }

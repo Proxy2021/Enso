@@ -62,15 +62,20 @@ export default function SettingsPanel() {
         </svg>
       </button>
       {open && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)}>
           <div
-            className="relative w-full max-w-xl max-h-[90vh] sm:max-h-[85vh] mx-2 sm:mx-4 bg-gray-900 rounded-xl border border-gray-700/80 shadow-2xl flex flex-col"
+            className="relative w-full sm:max-w-xl h-[85dvh] sm:h-auto sm:max-h-[85vh] mx-0 sm:mx-4 bg-gray-900 rounded-t-2xl sm:rounded-xl border-t sm:border border-gray-700/80 shadow-2xl flex flex-col animate-[slideUp_0.2s_ease-out] sm:animate-none"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Drag handle (mobile) */}
+            <div className="sm:hidden flex justify-center pt-2 pb-0 shrink-0">
+              <div className="w-8 h-1 rounded-full bg-gray-600" />
+            </div>
+
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 border-b border-gray-800 shrink-0">
               <h2 className="text-sm font-semibold text-gray-100">{t("settings.title")}</h2>
-              <button onClick={() => setOpen(false)} className="p-1 text-gray-400 hover:text-gray-200 rounded hover:bg-gray-800 transition-all duration-150">
+              <button onClick={() => setOpen(false)} className="p-2 sm:p-1 text-gray-400 hover:text-gray-200 active:scale-[0.9] rounded hover:bg-gray-800 transition-all duration-150">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 6 6 18" /><path d="m6 6 12 12" />
                 </svg>
@@ -78,7 +83,7 @@ export default function SettingsPanel() {
             </div>
 
             {/* Tab bar */}
-            <div className="flex gap-1 px-3 sm:px-4 pt-3 pb-1 shrink-0 border-b border-gray-800/50 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-0.5 sm:gap-1 px-3 sm:px-4 pt-2 sm:pt-3 pb-1 shrink-0 border-b border-gray-800/50 overflow-x-auto scrollbar-hide">
               {([
                 { id: "chatModel" as const, label: t("settings.chatModel") },
                 { id: "claudeCode" as const, label: t("settings.claudeCodeModel") },
@@ -88,7 +93,7 @@ export default function SettingsPanel() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 py-1.5 text-xs rounded-md transition-all duration-150 whitespace-nowrap flex-shrink-0 ${
+                  className={`px-3 py-2 sm:py-1.5 text-xs rounded-md transition-all duration-150 whitespace-nowrap flex-shrink-0 active:scale-[0.95] ${
                     activeTab === tab.id
                       ? "bg-indigo-500/20 text-indigo-300 font-medium"
                       : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
@@ -100,7 +105,7 @@ export default function SettingsPanel() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {activeTab === "language" && <LanguageSection />}
               {activeTab === "chatModel" && <ChatModelSection onClose={() => setOpen(false)} />}
               {activeTab === "claudeCode" && <ClaudeCodeSection onClose={() => setOpen(false)} />}

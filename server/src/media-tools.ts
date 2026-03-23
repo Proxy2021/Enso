@@ -127,7 +127,7 @@ function ok(data: Record<string, unknown>): AgentToolResult {
 }
 
 /** Resolve a user-provided path. Aligned with filesystem-tools.ts — no root restriction. */
-function safeResolvePath(inputPath: string): { ok: true; path: string } | { ok: false; error: string } {
+export function safeResolvePath(inputPath: string): { ok: true; path: string } | { ok: false; error: string } {
   if (!inputPath || !inputPath.trim()) return { ok: false, error: "path is required" };
   let expanded = inputPath.startsWith("~")
     ? join(homedir(), inputPath.slice(1))
@@ -556,11 +556,24 @@ function browseFolder(params: BrowseFolderParams): AgentToolResult {
     return errorResult(`cannot read directory: ${e}`);
   }
 
+  // macOS bundle extensions — these are package directories, not browsable photo folders
+  const MACOS_BUNDLE_EXTENSIONS = new Set([
+    ".photoslibrary", ".photolibrary", ".migratedphotolibrary",
+    ".aplibrary", ".fcpbundle", ".fcpproject",
+    ".app", ".bundle", ".framework", ".plugin",
+    ".localized",
+  ]);
+
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
     const full = join(safe.path, entry.name);
 
     if (entry.isDirectory()) {
+      // Skip macOS bundle directories — they're not browsable photo folders
+      const lowerName = entry.name.toLowerCase();
+      const isMacBundle = [...MACOS_BUNDLE_EXTENSIONS].some(ext => lowerName.endsWith(ext));
+      if (isMacBundle) continue;
+
       // Count media files in subdirectory (1-level only, quick count)
       let count = 0;
       try {
@@ -599,6 +612,11 @@ function browseFolder(params: BrowseFolderParams): AgentToolResult {
 
   const parentPath = dirname(safe.path);
 
+  // When ~/Pictures has no browsable content, add a helpful hint
+  const hint = (items.length === 0 && directories.length === 0 && safe.path.includes("/Pictures"))
+    ? "~/Pictures on macOS typically contains Apple Photos libraries. Try browsing ~ (home) or a specific photo folder instead."
+    : undefined;
+
   return jsonResult({
     tool: "enso_media_browse_folder",
     path: safe.path,
@@ -606,6 +624,7 @@ function browseFolder(params: BrowseFolderParams): AgentToolResult {
     total: items.length,
     items,
     directories,
+    ...(hint ? { hint } : {}),
     filter,
     sortBy,
     sortDir,
@@ -1494,14 +1513,15 @@ async function analyzePhotoForStyle(photoPath: string): Promise<AgentToolResult>
   if (photoSize > 8 * 1024 * 1024) {
     const tmpResized = join(dirname(photoPath), `.analyze_${basename(photoPath)}`);
     try {
-      const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "photo-processor.py");
-      // Use the processor's preview mode just to resize — no style applied
-      execFileSync("python3", ["-c", `
-from PIL import Image
-img = Image.open("${photoPath.replace(/"/g, '\\"')}")
-img.thumbnail((3000, 3000), Image.LANCZOS)
-img.save("${tmpResized.replace(/"/g, '\\"')}", "JPEG", quality=88)
-`], { timeout: 15_000 });
+      // Use sys.argv to avoid command injection via file paths
+      execFileSync("python3", ["-c",
+        "import sys; from PIL import Image; " +
+        "img = Image.open(sys.argv[1]); " +
+        "img.thumbnail((3000, 3000), Image.LANCZOS); " +
+        "img.save(sys.argv[2], 'JPEG', quality=88)",
+        photoPath,
+        tmpResized,
+      ], { timeout: 15_000 });
       if (existsSync(tmpResized) && statSync(tmpResized).size < 10 * 1024 * 1024) {
         visionPhotoPath = tmpResized;
       }

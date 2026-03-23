@@ -134,9 +134,14 @@ export function createSystemTools(): EnsoAgentTool[] {
               memory: `${p.MemMB ?? 0} MB`,
             }));
           } else {
-            const sortFlag = sortBy === "memory" ? "-m" : "-c";
+            // macOS ps doesn't support --sort; use -r (CPU) or -m (memory) flags instead.
+            // Linux ps supports --sort=-%cpu / --sort=-%mem.
+            const isMac = process.platform === "darwin";
+            const psCmd = isMac
+              ? `ps aux ${sortBy === "memory" ? "-m" : "-r"} | head -n ${limit + 1}`
+              : `ps aux --sort=${sortBy === "memory" ? "-%mem" : "-%cpu"} | head -n ${limit + 1}`;
             const raw = execSync(
-              `ps aux --sort=${sortFlag === "-m" ? "-%mem" : "-%cpu"} | head -n ${limit + 1}`,
+              psCmd,
               { encoding: "utf-8", timeout: 10_000 },
             );
             const lines = raw.trim().split("\n").slice(1);

@@ -22,20 +22,20 @@ export default function PinnedSidebar() {
     <>
       {/* Mobile backdrop */}
       <div
-        className="md:hidden fixed inset-0 bg-black/40 z-30"
+        className="md:hidden fixed inset-0 bg-black/50 z-30 transition-opacity"
         onClick={toggleSidebar}
       />
-      <aside className="fixed md:relative right-0 top-0 bottom-0 w-[70vw] max-w-56 sm:w-56 z-40 md:z-0 border-l border-gray-800 bg-gray-950/95 backdrop-blur overflow-y-auto flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 shrink-0">
+      <aside className="fixed md:relative right-0 top-0 bottom-0 w-[75vw] max-w-64 sm:w-56 z-40 md:z-0 border-l border-gray-800 bg-gray-950/95 backdrop-blur overflow-y-auto flex flex-col transition-transform duration-200">
+        <div className="flex items-center justify-between px-3 py-2.5 sm:py-2 border-b border-gray-800 shrink-0 pt-[max(0.625rem,env(safe-area-inset-top))] md:pt-2">
           <span className="text-xs font-medium text-gray-400">Pinned Apps</span>
           <button
             onClick={toggleSidebar}
-            className="w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center text-gray-500 hover:text-gray-300 text-sm leading-none"
+            className="w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center text-gray-500 hover:text-gray-300 active:scale-[0.9] text-lg sm:text-sm leading-none transition-all duration-150"
           >
             &times;
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto py-1">
+        <div className="flex-1 overflow-y-auto py-1 pb-[env(safe-area-inset-bottom)]">
           {pinnedCards.map((id) => {
             const card = cards[id];
             if (!card) return null;
@@ -43,7 +43,7 @@ export default function PinnedSidebar() {
             return (
               <div
                 key={id}
-                className="group flex items-center gap-2 px-3 py-3 sm:py-2 hover:bg-gray-800/60 cursor-pointer transition-all duration-150"
+                className="group flex items-center gap-2 px-3 py-3.5 sm:py-2 hover:bg-gray-800/60 active:bg-gray-800/80 cursor-pointer transition-all duration-150"
                 onClick={() => handleScrollTo(id)}
               >
                 <div className="flex-1 min-w-0">
@@ -56,7 +56,7 @@ export default function PinnedSidebar() {
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); unpinCard(id); }}
-                  className="text-gray-600 hover:text-gray-300 text-xs opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  className="text-gray-600 hover:text-gray-300 active:text-gray-100 text-sm p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0"
                   title="Unpin"
                 >
                   &times;

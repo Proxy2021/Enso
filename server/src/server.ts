@@ -3174,12 +3174,13 @@ export async function startEnsoServer(opts: {
               break;
             }
             const shellTargetCardId = msg.sourceCardId ?? randomUUID();
+            const shellCwd = msg.routing?.cwd ?? projectRoot ?? process.cwd();
             const shellSessionId = shellPty.createShellSession({
               client,
               targetCardId: shellTargetCardId,
               cols: msg.shellCols ?? 80,
               rows: msg.shellRows ?? 24,
-              cwd: msg.routing?.cwd,
+              cwd: shellCwd,
             });
             runtime.log?.(`[enso:shell] created session ${shellSessionId} for card ${shellTargetCardId}`);
             break;

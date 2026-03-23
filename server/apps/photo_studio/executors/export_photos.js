@@ -22,10 +22,10 @@ if (!destination) {
 
 // Ensure destination directory exists
 try {
-  var mkdirResult = await ctx.callTool("enso_terminal_exec", {
-    command: 'mkdir -p "' + destination + '"'
+  await ctx.callTool("enso_fs_create_directory", {
+    path: destination
   });
-} catch(e) { /* best effort */ }
+} catch(e) { /* best effort — may already exist */ }
 
 var results = [];
 var successCount = 0;
@@ -37,12 +37,14 @@ for (var i = 0; i < paths.length; i++) {
   var destPath = destination + "/" + fileName;
 
   try {
-    // Copy file to destination
-    var cpResult = await ctx.callTool("enso_terminal_exec", {
-      command: 'cp "' + srcPath + '" "' + destPath + '"'
+    // Use enso_fs_move_path with copy flag to avoid shell injection
+    var cpResult = await ctx.callTool("enso_fs_move_path", {
+      source: srcPath,
+      destination: destPath,
+      copy: true
     });
 
-    if (cpResult && cpResult.success) {
+    if (cpResult && !cpResult.error) {
       successCount++;
       results.push({
         name: fileName,

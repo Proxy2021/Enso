@@ -8,6 +8,30 @@ import { isNative } from "../lib/platform";
 import { isLikelyNaturalLanguage } from "../utils/nlDetection";
 import { useT } from "../lib/i18n";
 
+/**
+ * Tracks visual viewport offset on mobile when the software keyboard opens.
+ * Adjusts the input container so it stays above the keyboard instead of
+ * being hidden behind it. Falls back gracefully when API is unavailable.
+ */
+function useKeyboardOffset() {
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const diff = window.innerHeight - vv.height - vv.offsetTop;
+      setOffset(Math.max(0, diff));
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+  return offset;
+}
+
 interface SlashCommand {
   command: string;
   label: string;
@@ -135,6 +159,7 @@ export default function ChatInput() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const imageResearchRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+  const keyboardOffset = useKeyboardOffset();
 
   const disabled = connectionState !== "connected";
 
@@ -181,16 +206,16 @@ export default function ChatInput() {
 
   const CANCEL_THRESHOLD_PX = 100;
 
-  // Close attach menu on click outside
+  // Close attach menu on click/touch outside
   useEffect(() => {
     if (!attachMenuOpen) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: PointerEvent) => {
       if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
         setAttachMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
   }, [attachMenuOpen]);
 
   // Filter slash commands based on current input
@@ -405,7 +430,10 @@ export default function ChatInput() {
   }
 
   return (
-    <div className="border-t border-gray-800 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div
+      className="border-t border-gray-800 p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      style={keyboardOffset > 0 ? { paddingBottom: `${keyboardOffset}px` } : undefined}
+    >
       <div className="max-w-3xl mx-auto relative">
         {/* Location error banner */}
         {locationError && (

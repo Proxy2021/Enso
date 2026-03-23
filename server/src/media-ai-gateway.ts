@@ -58,14 +58,14 @@ export async function processMediaAI(task: MediaAITask): Promise<MediaAIResult> 
   }
   return {
     success: false,
-    error: `No AI provider available for "${task.operation}". Configure an API key for Replicate or remove.bg in settings.`,
+    error: `No AI provider available for "${task.operation}". Basic resize is available via sharp. For AI-enhanced processing, set REPLICATE_API_TOKEN (upscaling) or REMOVE_BG_API_KEY (background removal) in your server/.env file.`,
   };
 }
 
 // ── Sharp Basic Provider (available when sharp is installed) ──
 
 export const sharpBasicProvider: MediaAIProvider = {
-  name: "sharp-basic",
+  name: "basic-resize",
   capabilities: ["upscale"],
 
   async isAvailable() {
@@ -93,7 +93,12 @@ export const sharpBasicProvider: MediaAIProvider = {
         return {
           success: true,
           outputPath: task.outputPath,
-          metadata: { width: newWidth, height: newHeight, method: "lanczos3 (sharp)" },
+          metadata: {
+            width: newWidth,
+            height: newHeight,
+            method: "Basic Resize (Lanczos3 interpolation)",
+            note: "This is mathematical interpolation, not AI enhancement. For AI-powered upscaling with detail recovery, configure REPLICATE_API_TOKEN in your environment.",
+          },
         };
       } catch (err: any) {
         return { success: false, error: `Sharp upscale failed: ${err.message}` };

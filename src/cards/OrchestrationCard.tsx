@@ -269,7 +269,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
         <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5 ml-1.5">
           <button
             onClick={() => setView("tasks")}
-            className={`text-[9px] px-2 py-0.5 rounded-full transition-all duration-150 ${
+            className={`text-[10px] sm:text-[9px] px-2.5 sm:px-2 py-1 sm:py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
               view === "tasks" ? "bg-gray-600/60 text-gray-200" : "text-gray-500 hover:text-gray-300"
             }`}
           >
@@ -277,7 +277,7 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
           </button>
           <button
             onClick={() => setView("terminals")}
-            className={`text-[9px] px-2 py-0.5 rounded-full transition-all duration-150 flex items-center gap-1 ${
+            className={`text-[10px] sm:text-[9px] px-2.5 sm:px-2 py-1 sm:py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] flex items-center gap-1 ${
               view === "terminals" ? "bg-violet-500/30 text-violet-200" : "text-gray-500 hover:text-gray-300"
             }`}
           >
@@ -344,8 +344,8 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
             </div>
           ) : (
             <>
-              {/* Terminal tab bar — scrollable */}
-              <div className="flex gap-0.5 overflow-x-auto pb-1 mb-1 scrollbar-none">
+              {/* Terminal tab bar — scrollable with touch-friendly targets */}
+              <div className="flex gap-0.5 overflow-x-auto pb-1 mb-1 scrollbar-none -mx-1 px-1">
                 {orderedTerminals.map((task) => {
                   const isActive = task.taskId === activeTerminalId;
                   const isTaskRunning = task.status === "running";
@@ -353,17 +353,17 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
                     <button
                       key={task.taskId}
                       onClick={() => setActiveTerminalId(task.taskId)}
-                      className={`flex items-center gap-1 whitespace-nowrap px-2 py-1 rounded-t-lg text-[9px] transition-all duration-150 flex-shrink-0 ${
+                      className={`flex items-center gap-1 whitespace-nowrap px-2.5 sm:px-2 py-1.5 sm:py-1 rounded-t-lg text-[10px] sm:text-[9px] transition-all duration-150 flex-shrink-0 active:scale-[0.97] ${
                         isActive
                           ? "bg-[#0d1117] text-gray-200 border border-b-0 border-gray-700/60"
-                          : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/40"
+                          : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/40 active:bg-gray-800/60"
                       }`}
                     >
                       {isTaskRunning && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse flex-shrink-0" />}
                       {!isTaskRunning && task.status === "completed" && <span className="text-green-400 flex-shrink-0">{"\u2713"}</span>}
                       {!isTaskRunning && task.status === "failed" && <span className="text-red-400 flex-shrink-0">{"\u2717"}</span>}
                       <span>{ROLE_EMOJI[task.agentRole]}</span>
-                      <span className="max-w-[120px] truncate">{shortTitle(task.title)}</span>
+                      <span className="max-w-[100px] sm:max-w-[120px] truncate">{shortTitle(task.title)}</span>
                     </button>
                   );
                 })}
@@ -404,14 +404,14 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
         {isPaused ? (
           <button
             onClick={() => resumeOrchestration(plan.orchestrationId)}
-            className="w-full text-[9px] py-1 rounded bg-blue-600/80 hover:bg-blue-500 active:bg-blue-400 active:scale-[0.97] text-white transition-all duration-150"
+            className="w-full text-[10px] sm:text-[9px] py-2 sm:py-1 rounded bg-blue-600/80 hover:bg-blue-500 active:bg-blue-400 active:scale-[0.97] text-white transition-all duration-150"
           >
             {t("orchestration.resume")}
           </button>
         ) : (
           <button
             onClick={() => pauseOrchestration(plan.orchestrationId)}
-            className="w-full text-[9px] py-1 rounded bg-gray-700/60 hover:bg-gray-600 active:bg-gray-500 active:scale-[0.97] text-gray-400 transition-all duration-150"
+            className="w-full text-[10px] sm:text-[9px] py-2 sm:py-1 rounded bg-gray-700/60 hover:bg-gray-600 active:bg-gray-500 active:scale-[0.97] text-gray-400 transition-all duration-150"
           >
             {t("orchestration.pause")}
           </button>
@@ -435,8 +435,8 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
   return (
     <div>
       <div
-        className={`flex items-center gap-1.5 py-1 px-1.5 rounded text-[10px] ${
-          hasTerminal ? "cursor-pointer hover:bg-gray-700/30" : ""
+        className={`flex items-center gap-1.5 py-2 sm:py-1 px-2 sm:px-1.5 rounded text-[11px] sm:text-[10px] ${
+          hasTerminal ? "cursor-pointer hover:bg-gray-700/30 active:bg-gray-700/50" : ""
         } ${
           task.status === "running" ? "bg-blue-500/10 text-gray-200" :
           task.status === "completed" ? "text-gray-400" :
@@ -448,7 +448,7 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
           if (hasTerminal) setExpanded(!expanded);
         }}
       >
-        <span className="flex-shrink-0 w-3.5 text-center">
+        <span className="flex-shrink-0 w-4 sm:w-3.5 text-center">
           {task.status === "completed" ? (
             <span className="text-green-400">{"\u2713"}</span>
           ) : task.status === "failed" ? (
@@ -468,13 +468,13 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
             {onOpenTerminal && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenTerminal(task.taskId); }}
-                className="text-[8px] text-gray-500 hover:text-violet-300 px-1 rounded transition-colors"
+                className="text-[9px] sm:text-[8px] text-gray-500 hover:text-violet-300 active:text-violet-200 p-1 rounded transition-colors"
                 title="Open in terminal view"
               >
                 {"\u2197"}
               </button>
             )}
-            <span className="text-[8px] text-gray-500">
+            <span className="text-[9px] sm:text-[8px] text-gray-500">
               {expanded ? "\u25BC" : "\u25B6"}
             </span>
           </span>
