@@ -4,7 +4,7 @@ import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
 import AppsMenu from "./components/AppsMenu";
 import PinnedSidebar from "./components/PinnedSidebar";
-import ConversationSidebar from "./components/ConversationSidebar";
+import ConversationSidebar, { toggleMobileConversations } from "./components/ConversationSidebar";
 import ConnectionPicker from "./components/ConnectionPicker";
 import SetupWizard from "./components/SetupWizard";
 
@@ -107,11 +107,11 @@ function ConnectionDot() {
   return (
     <button
       onClick={() => setShowPicker(true)}
-      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors max-w-[4.5rem] truncate"
+      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 active:scale-[0.95] transition-all duration-150 px-2 py-1.5 sm:py-1 rounded-lg border border-gray-700/60 bg-gray-800/50 max-w-[7rem] sm:max-w-[8rem] truncate"
       title="Connection settings"
     >
       <div className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />
-      <span className="hidden sm:inline">{active ? active.name : state}</span>
+      <span className="truncate text-[11px]">{active ? active.name : state}</span>
     </button>
   );
 }
@@ -259,12 +259,21 @@ export default function App() {
       <div className="flex flex-col h-dvh text-gray-100">
         <header className="sticky top-0 z-20 flex items-center justify-between px-2 sm:px-2.5 py-1.5 sm:py-2 pt-[max(0.375rem,env(safe-area-inset-top))] sm:pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
           <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              onClick={toggleMobileConversations}
+              className="sm:hidden flex items-center text-gray-400 hover:text-gray-200 active:scale-[0.92] transition-all duration-150 p-1.5 rounded-lg"
+              title="Conversations"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
             <h1 className="text-sm sm:text-base font-semibold tracking-tight">Enso</h1>
             <span className="hidden sm:inline"><ActiveModelLabel /></span>
           </div>
           <div className="flex items-center gap-0.5 sm:gap-1.5">
             <SettingsPanel />
-            <span className="hidden sm:flex"><DebugReporter /></span>
+            <DebugReporter />
             <AppsMenu />
             <SearchToggle />
             <ResultsButton onClick={() => setShowResults(true)} />

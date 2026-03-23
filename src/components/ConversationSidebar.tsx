@@ -2,18 +2,9 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useChatStore, type ConversationEntry } from "../store/chat";
 import { useT } from "../lib/i18n";
 
-function useKeyboardVisible() {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const check = () => {
-      setVisible(vv.height < window.innerHeight * 0.75);
-    };
-    vv.addEventListener("resize", check);
-    return () => vv.removeEventListener("resize", check);
-  }, []);
-  return visible;
+let _toggleMobileOpen: (() => void) | null = null;
+export function toggleMobileConversations() {
+  _toggleMobileOpen?.();
 }
 
 export default function ConversationSidebar() {
@@ -28,7 +19,12 @@ export default function ConversationSidebar() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const keyboardVisible = useKeyboardVisible();
+
+  // Expose toggle for the header button
+  useEffect(() => {
+    _toggleMobileOpen = () => setMobileOpen((o) => !o);
+    return () => { _toggleMobileOpen = null; };
+  }, []);
 
   // Swipe-to-close: track horizontal swipe on the drawer
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -157,20 +153,6 @@ export default function ConversationSidebar() {
 
   return (
     <>
-      {!keyboardVisible && (
-        <button
-          type="button"
-          className="sm:hidden fixed bottom-[max(4.5rem,calc(4.5rem+env(safe-area-inset-bottom)-1rem))] left-3 z-30 px-3 py-2 rounded-xl border border-gray-700 bg-gray-900/95 text-xs text-gray-300 shadow-lg active:scale-[0.95] active:bg-gray-800 transition-all duration-150 backdrop-blur-sm"
-          onClick={() => setMobileOpen((o) => !o)}
-        >
-          <span className="flex items-center gap-1.5">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            {t("conversations.chats")}
-          </span>
-        </button>
-      )}
       <div className="hidden sm:flex flex-shrink-0 h-full min-h-0">{list}</div>
       {mobileOpen && (
         <div className="sm:hidden fixed inset-0 z-40 flex">
