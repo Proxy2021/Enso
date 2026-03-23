@@ -9,7 +9,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname, relative } from "path";
 import { fileURLToPath } from "url";
 import { handleOrchestration } from "./orchestrator.js";
@@ -18,6 +18,7 @@ import { runClaudeCode } from "./claude-code.js";
 import {
   loadAllApps,
   registerLoadedApp,
+  persistTemplateFix,
   SHIPPED_APPS_DIR,
   type LoadedApp,
 } from "./app-persistence.js";
@@ -124,6 +125,66 @@ function extractTemplateFromSource(filePath: string, varName: string): string | 
     return src.slice(contentStart, endIdx);
   } catch {
     return null;
+  }
+}
+
+// ── Template Sanitization ──
+// The client sandbox uses `new Function(...)` which means `var` (function-scoped,
+// hoisted) works correctly, but `const`/`let` (block-scoped, TDZ) can cause
+// "Cannot access X before initialization" runtime errors when variables are
+// referenced before their declaration line. Claude Code sometimes ignores the
+// `var`-only instruction, so we auto-fix it deterministically after extraction.
+
+interface SanitizeResult {
+  code: string;
+  fixes: string[];
+}
+
+function sanitizeTemplate(templateCode: string): SanitizeResult {
+  const fixes: string[] = [];
+
+  // Replace const/let with var inside the component body.
+  // Match `const `, `let ` at the start of a line (with optional leading whitespace)
+  // but NOT inside strings or comments.
+  let sanitized = templateCode.replace(
+    /^(\s*)(const|let)\s+/gm,
+    (match, indent, keyword) => {
+      fixes.push(`${keyword} → var`);
+      return `${indent}var `;
+    },
+  );
+
+  if (fixes.length > 0) {
+    const unique = [...new Set(fixes)];
+    fixes.length = 0;
+    fixes.push(`Replaced ${unique.length > 1 ? `${unique.join(", ")}` : unique[0]} declarations with var (${sanitized.split(/\bvar\s/).length - 1} total)`);
+  }
+
+  return { code: sanitized, fixes };
+}
+
+/**
+ * For native apps: write the sanitized template back into the .ts source file,
+ * replacing the content of the template literal.
+ */
+function writeSanitizedTemplateToSource(
+  filePath: string,
+  varName: string,
+  sanitizedCode: string,
+): boolean {
+  try {
+    const src = readFileSync(filePath, "utf-8");
+    const marker = `const ${varName} = \``;
+    const startIdx = src.indexOf(marker);
+    if (startIdx === -1) return false;
+    const contentStart = startIdx + marker.length;
+    const endIdx = src.lastIndexOf("`;");
+    if (endIdx <= contentStart) return false;
+    const newSrc = src.slice(0, contentStart) + sanitizedCode + src.slice(endIdx);
+    writeFileSync(filePath, newSrc, "utf-8");
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -242,6 +303,14 @@ async function evolveAppViaClaude(
     return;
   }
 
+  // Sanitize template: const/let → var (prevents TDZ runtime errors in sandbox)
+  const sanitized = sanitizeTemplate(evolvedApp.templateJSX);
+  if (sanitized.fixes.length > 0) {
+    evolvedApp.templateJSX = sanitized.code;
+    persistTemplateFix(family, sanitized.code);
+    logAction({ ts: Date.now(), type: "action", category: "card-evolution", message: `Template sanitized: ${sanitized.fixes.join("; ")}`, cardId });
+  }
+
   // Compile-check the template, auto-fix if broken
   if (sessionId) {
     try {
@@ -276,6 +345,12 @@ async function evolveAppViaClaude(
         allApps = loadAllApps();
         evolvedApp = allApps.find((a) => a.spec.toolFamily === family);
         if (!evolvedApp) return;
+        // Re-sanitize after Claude Code fix
+        const reSanitized = sanitizeTemplate(evolvedApp.templateJSX);
+        if (reSanitized.fixes.length > 0) {
+          evolvedApp.templateJSX = reSanitized.code;
+          persistTemplateFix(family, reSanitized.code);
+        }
         logFix({ description: `Template compile error in ${family} evolution`, error: String(compileErr), resolution: "Auto-fixed via Claude Code session", category: "card-evolution" });
       } catch (fixErr) {
         logError("card-evolution", "Auto-fix session failed", fixErr, { cardId, family });
@@ -440,6 +515,14 @@ async function evolveNativeAppViaClaude(
     return;
   }
 
+  // Sanitize template: const/let → var (prevents TDZ runtime errors in sandbox)
+  const sanitized = sanitizeTemplate(templateCode);
+  if (sanitized.fixes.length > 0) {
+    templateCode = sanitized.code;
+    writeSanitizedTemplateToSource(absTemplatePath, templateVarName, sanitized.code);
+    logAction({ ts: Date.now(), type: "action", category: "card-evolution", message: `Native template sanitized: ${sanitized.fixes.join("; ")}`, cardId });
+  }
+
   // Compile-check the extracted template
   if (sessionId) {
     try {
@@ -474,6 +557,12 @@ async function evolveNativeAppViaClaude(
         });
         templateCode = extractTemplateFromSource(absTemplatePath, templateVarName);
         if (!templateCode) return;
+        // Re-sanitize after Claude Code fix
+        const reSanitized = sanitizeTemplate(templateCode);
+        if (reSanitized.fixes.length > 0) {
+          templateCode = reSanitized.code;
+          writeSanitizedTemplateToSource(absTemplatePath, templateVarName, reSanitized.code);
+        }
         logFix({ description: `Native template compile error in ${family} evolution`, error: String(compileErr), resolution: "Auto-fixed via Claude Code session", category: "card-evolution" });
       } catch (fixErr) {
         logError("card-evolution", "Auto-fix session failed", fixErr, { cardId, family });
@@ -603,6 +692,12 @@ ${summaryBlock}${goalBlock}
 
 Based on your analysis, modify the app files in place at ${relativeAppDir}/.
 
+CRITICAL SANDBOX RULES for template.jsx (violations cause runtime crashes):
+- **NEVER use \`const\`, \`let\`, or \`class\`** — use \`var\` for ALL variable declarations. The template runs inside \`new Function(...)\` where \`const\`/\`let\` cause "Cannot access X before initialization" TDZ errors. \`var\` hoists safely.
+- **Declare variables before use** — any \`useMemo\` callback that references a variable must appear AFTER that variable's declaration in source order.
+- No imports — everything is pre-injected into the sandbox scope.
+- No backticks inside template strings.
+
 Prioritize changes that improve the app's fundamental effectiveness:
 1. **Add missing tools** that unlock new capabilities
 2. **Enrich executors** with meaningful data processing, derived metrics, and robust error handling
@@ -692,12 +787,14 @@ ${summaryBlock}${goalBlock}
 
 Modify the template in ${templateFile}. Edit ONLY the \`${templateVarName}\` constant — do NOT change the function signatures, exports, or other code outside the template literal.
 
-CRITICAL RULES for editing the template:
+CRITICAL SANDBOX RULES (violations cause runtime crashes):
 1. The template is a backtick template literal. Do NOT use backticks inside it — use regular quotes or single quotes instead.
-2. Do NOT use \`const\`, \`let\`, or \`class\` — use \`var\` for variable declarations (this is a sandboxed JSX environment).
-3. Keep the \`export default function GeneratedUI({ data, onAction })\` signature.
-4. Use React hooks (\`useState\`, \`useMemo\`, \`useEffect\`, \`useCallback\`, \`useRef\`) — they are available as globals.
-5. Available UI primitives: \`UICard\`, \`Button\`, \`EmptyState\`, \`Dialog\`, \`Badge\`, \`LucideReact\` icons.
+2. **NEVER use \`const\`, \`let\`, or \`class\`** — use \`var\` for ALL variable declarations. The template runs inside \`new Function(...)\` where \`const\`/\`let\` cause "Cannot access X before initialization" TDZ errors. \`var\` hoists safely.
+3. **Declare variables before use** — even with \`var\`, any \`useMemo\` callback that references a variable must appear AFTER that variable's declaration in source order.
+4. Keep the \`export default function GeneratedUI({ data, onAction })\` signature.
+5. Use React hooks (\`useState\`, \`useMemo\`, \`useEffect\`, \`useCallback\`, \`useRef\`) — they are available as globals.
+6. Available UI primitives: \`UICard\`, \`Button\`, \`EmptyState\`, \`Dialog\`, \`Badge\`, \`LucideReact\` icons.
+7. No imports — everything is pre-injected into the sandbox scope.
 
 Prioritize changes that improve the template's fundamental effectiveness:
 1. **Surface unused data** that the tools already provide

@@ -23,6 +23,9 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
   const [shared, setShared] = useState(false);
   const [narrativeExpanded, setNarrativeExpanded] = useState(false);
+  const [findingFilter, setFindingFilter] = useState("all");
+  const [sourceSort, setSourceSort] = useState("relevance");
+  const [sourcePopup, setSourcePopup] = useState(null);
 
   // ── View detection ──
   const topic = String(data?.topic ?? "");
@@ -71,7 +74,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   // ── YouTube embed helper ──
   const getYouTubeId = (url) => {
     if (!url) return null;
-    const m = url.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})/);
+    const m = url.match(/(?:youtube\\.com[/]watch\\?v=|youtu\\.be[/]|youtube\\.com[/]embed[/])([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
   };
   const togglePlay = (url) => setPlayingVideos((prev) => {
@@ -108,6 +111,65 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   }, [narrative, summary, keyFindings, sections]);
   const readingMinutes = Math.max(1, Math.round(wordCount / 200));
 
+  // ── Finding type counts & confidence distribution ──
+  var findingCounts = useMemo(function() {
+    var counts = { fact: 0, trend: 0, insight: 0, warning: 0 };
+    keyFindings.forEach(function(f) { if (counts[f.type] !== undefined) counts[f.type]++; });
+    return counts;
+  }, [keyFindings]);
+
+  var confidenceDist = useMemo(function() {
+    var dist = { high: 0, medium: 0, low: 0 };
+    keyFindings.forEach(function(f) { if (dist[f.confidence] !== undefined) dist[f.confidence]++; });
+    return dist;
+  }, [keyFindings]);
+
+  var confidenceScore = useMemo(function() {
+    if (keyFindings.length === 0) return 0;
+    var score = keyFindings.reduce(function(sum, f) {
+      return sum + (f.confidence === "high" ? 3 : f.confidence === "medium" ? 2 : 1);
+    }, 0);
+    return Math.round((score / (keyFindings.length * 3)) * 100);
+  }, [keyFindings]);
+
+  // ── Source type breakdown ──
+  var sourceTypeCounts = useMemo(function() {
+    var counts = {};
+    sources.forEach(function(s) {
+      var trust = getSourceTrust(s.domain);
+      var label = trust ? trust.label : "Web";
+      counts[label] = (counts[label] || 0) + 1;
+    });
+    return counts;
+  }, [sources]);
+
+  // ── Filtered findings ──
+  var filteredFindings = useMemo(function() {
+    if (findingFilter === "all") return keyFindings;
+    return keyFindings.filter(function(f) { return f.type === findingFilter; });
+  }, [keyFindings, findingFilter]);
+
+  // ── Filtered sources ──
+  var filteredSources = sourceFilter
+    ? sources.filter(function(s) {
+        return String(s.title).toLowerCase().includes(sourceFilter.toLowerCase()) ||
+          String(s.domain).toLowerCase().includes(sourceFilter.toLowerCase());
+      })
+    : sources;
+
+  // ── Sorted sources ──
+  var sortedFilteredSources = useMemo(function() {
+    var s = filteredSources.slice();
+    if (sourceSort === "relevance") return s.sort(function(a, b) { return (b.relevance || 0) - (a.relevance || 0); });
+    if (sourceSort === "alpha") return s.sort(function(a, b) { return String(a.title).localeCompare(String(b.title)); });
+    if (sourceSort === "domain") return s.sort(function(a, b) {
+      var aT = getSourceTrust(a.domain);
+      var bT = getSourceTrust(b.domain);
+      return (bT ? 1 : 0) - (aT ? 1 : 0) || String(a.domain).localeCompare(String(b.domain));
+    });
+    return s;
+  }, [filteredSources, sourceSort]);
+
   // ── Narrative collapse (show first 3 paragraphs for long content) ──
   const NARRATIVE_COLLAPSE_THRESHOLD = 4;
 
@@ -117,7 +179,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
     return (
       <span className="inline-flex gap-0.5 ml-1">
         {refs.slice(0, 3).map((idx) => (
-          <span key={idx} className="text-[9px] px-1 py-0.5 rounded bg-gray-700/50 text-gray-400 font-mono cursor-pointer hover:bg-gray-600/50" onClick={(e) => { e.stopPropagation(); setExpandedSource(idx); }}>
+          <span key={idx} className="text-[9px] px-1 py-0.5 rounded bg-gray-700/50 text-gray-400 font-mono cursor-pointer hover:bg-blue-500/30 hover:text-blue-300 transition-colors" onClick={(e) => { e.stopPropagation(); setSourcePopup(sources[idx] || null); }}>
             {idx + 1}
           </span>
         ))}
@@ -574,13 +636,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   // VIEW 2: Research Overview — progressive rendering
   // ═══════════════════════════════════════════
 
-  const filteredSources = sourceFilter
-    ? sources.filter((s) =>
-        String(s.title).toLowerCase().includes(sourceFilter.toLowerCase()) ||
-        String(s.domain).toLowerCase().includes(sourceFilter.toLowerCase())
-      )
-    : sources;
-
   // Count media for tab labels
   const recVideos = recommendedVideos.map((rv) => videos[rv.index]).filter(Boolean);
   const otherVideos = videos.filter((_, i) => !recommendedVideos.some((rv) => rv.index === i));
@@ -670,17 +725,48 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
       {/* ── Complete status badges ── */}
       {isComplete && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="success">{sources.length} sources</Badge>
-          {keyFindings.length > 0 && <Badge variant="info">{keyFindings.length} findings</Badge>}
-          {contradictions.length > 0 && <Badge variant="warning">{contradictions.length} contradictions</Badge>}
-          {gapQueries.length > 0 && <Badge variant="default">gap-checked</Badge>}
-          {wordCount > 50 && <span className="flex items-center gap-1 text-[10px] text-gray-500"><LucideReact.Clock className="w-3 h-3" />{readingMinutes} min read</span>}
-          {data?.fromHistory && (
-            <span className="flex items-center gap-1 text-[10px] text-gray-500">
-              <LucideReact.BookOpen className="w-3 h-3" /> from library
-              <button className="text-blue-400 hover:text-blue-300 ml-1" onClick={() => onAction("search", { topic, depth: data?.depth || "standard", force: true })}>refresh</button>
-            </span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="success">{sources.length} sources</Badge>
+            {keyFindings.length > 0 && <Badge variant="info">{keyFindings.length} findings</Badge>}
+            {contradictions.length > 0 && <Badge variant="warning">{contradictions.length} contradictions</Badge>}
+            {gapQueries.length > 0 && <Badge variant="default">gap-checked</Badge>}
+            {wordCount > 50 && <span className="flex items-center gap-1 text-[10px] text-gray-500"><LucideReact.Clock className="w-3 h-3" />{readingMinutes} min read</span>}
+            {data?.fromHistory && (
+              <span className="flex items-center gap-1 text-[10px] text-gray-500">
+                <LucideReact.BookOpen className="w-3 h-3" /> from library
+                <button className="text-blue-400 hover:text-blue-300 ml-1" onClick={() => onAction("search", { topic, depth: data?.depth || "standard", force: true })}>refresh</button>
+              </span>
+            )}
+          </div>
+          {(Object.keys(sourceTypeCounts).length > 1 || keyFindings.length >= 3) && (
+            <div className="flex items-center gap-3 flex-wrap">
+              {Object.keys(sourceTypeCounts).length > 1 && (
+                <div className="flex items-center gap-1">
+                  {Object.entries(sourceTypeCounts).map(function(entry) {
+                    var typeColors = { Academic: "text-purple-400 bg-purple-500/10", Gov: "text-emerald-400 bg-emerald-500/10", Reference: "text-blue-400 bg-blue-500/10", News: "text-cyan-400 bg-cyan-500/10", Web: "text-gray-400 bg-gray-500/10" };
+                    return (
+                      <span key={entry[0]} className={"text-[9px] px-1.5 py-0.5 rounded " + (typeColors[entry[0]] || "text-gray-400 bg-gray-500/10")}>
+                        {entry[0]} {entry[1]}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {keyFindings.length >= 3 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] text-gray-500">Confidence:</span>
+                  <div className="flex items-center gap-0.5">
+                    <div className="w-16 h-1.5 rounded-full bg-gray-700 overflow-hidden flex">
+                      {confidenceDist.high > 0 && <div className="h-full bg-emerald-400" style={{ width: (confidenceDist.high / keyFindings.length * 100) + "%" }} />}
+                      {confidenceDist.medium > 0 && <div className="h-full bg-amber-400" style={{ width: (confidenceDist.medium / keyFindings.length * 100) + "%" }} />}
+                      {confidenceDist.low > 0 && <div className="h-full bg-gray-500" style={{ width: (confidenceDist.low / keyFindings.length * 100) + "%" }} />}
+                    </div>
+                    <span className="text-[9px] text-gray-500">{confidenceScore}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -732,17 +818,53 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           {/* ── Key Findings (prominent, findings-first) ── */}
           {keyFindings.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                <LucideReact.Lightbulb className="w-3 h-3" /> Key Findings
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="text-[11px] text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <LucideReact.Lightbulb className="w-3 h-3" /> Key Findings
+                </div>
+                {keyFindings.length > 3 && (
+                  <div className="flex items-center gap-1">
+                    {[
+                      { key: "all", label: "All", count: keyFindings.length },
+                      { key: "fact", label: "Facts", count: findingCounts.fact },
+                      { key: "trend", label: "Trends", count: findingCounts.trend },
+                      { key: "insight", label: "Insights", count: findingCounts.insight },
+                      { key: "warning", label: "Warnings", count: findingCounts.warning },
+                    ].filter(function(f) { return f.key === "all" || f.count > 0; }).map(function(f) {
+                      var isActive = findingFilter === f.key;
+                      var activeColors = { all: "bg-gray-600 text-gray-100", fact: "bg-emerald-500/20 text-emerald-300", trend: "bg-blue-500/20 text-blue-300", insight: "bg-purple-500/20 text-purple-300", warning: "bg-amber-500/20 text-amber-300" };
+                      return (
+                        <button
+                          key={f.key}
+                          onClick={function() { setFindingFilter(findingFilter === f.key ? "all" : f.key); }}
+                          className={"text-[10px] px-2 py-0.5 rounded-full transition-colors " + (isActive ? (activeColors[f.key] || "bg-gray-600 text-gray-100") : "bg-gray-800/50 text-gray-500 hover:text-gray-300")}
+                        >
+                          {f.label}{f.count > 0 && f.key !== "all" ? " " + f.count : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <div className="grid gap-2" style={{ gridTemplateColumns: keyFindings.length === 1 ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))" }}>
-                {keyFindings.map((f, i) => (
-                  <UICard key={i} accent={findingAccent[f.type] || "blue"}>
+              <div className="grid gap-2" style={{ gridTemplateColumns: filteredFindings.length === 1 ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))" }}>
+                {filteredFindings.map(function(f) {
+                  var originalIdx = keyFindings.indexOf(f);
+                  return (
+                  <UICard key={originalIdx} accent={findingAccent[f.type] || "blue"}>
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-mono text-gray-500 bg-gray-800/50 w-5 h-5 rounded-full flex items-center justify-center shrink-0">{i + 1}</span>
+                        <span className="text-[10px] font-mono text-gray-500 bg-gray-800/50 w-5 h-5 rounded-full flex items-center justify-center shrink-0">{originalIdx + 1}</span>
                         <Badge variant={findingVariant[f.type] || "default"}>{String(f.type)}</Badge>
                         <Badge variant={confidenceVariant[f.confidence] || "outline"}>{String(f.confidence)}</Badge>
+                        <button
+                          className="ml-auto p-0.5 rounded hover:bg-gray-700/50 transition-opacity"
+                          style={{ opacity: 0.3 }}
+                          onMouseEnter={function(e) { e.currentTarget.style.opacity = "1"; }}
+                          onMouseLeave={function(e) { e.currentTarget.style.opacity = "0.3"; }}
+                          onClick={function(e) { e.stopPropagation(); onAction("__copy_text", { text: String(f.text), label: "Finding" }); }}
+                        >
+                          <LucideReact.Copy className="w-3 h-3 text-gray-500" />
+                        </button>
                       </div>
                       <div className="text-sm text-gray-200 leading-relaxed">
                         {String(f.text)}
@@ -750,8 +872,14 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                       </div>
                     </div>
                   </UICard>
-                ))}
+                  );
+                })}
               </div>
+              {filteredFindings.length === 0 && findingFilter !== "all" && (
+                <div className="text-xs text-gray-500 text-center py-2">
+                  No {findingFilter} findings. <button className="text-blue-400 hover:text-blue-300" onClick={function() { setFindingFilter("all"); }}>Show all</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -859,6 +987,26 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                               {String(s.title)}
                             </button>
                           ))}
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            placeholder="Or explore a custom subtopic..."
+                            value={deepDiveInput}
+                            onChange={function(val) { setDeepDiveInput(val); }}
+                            onKeyDown={function(e) {
+                              if (e.key === "Enter" && deepDiveInput.trim()) {
+                                onAction("deep_dive", { topic: topic, subtopic: deepDiveInput.trim() });
+                                setDeepDiveInput("");
+                              }
+                            }}
+                            icon={<LucideReact.Compass className="w-3.5 h-3.5" />}
+                          />
+                          <Button variant="outline" onClick={function() {
+                            if (deepDiveInput.trim()) {
+                              onAction("deep_dive", { topic: topic, subtopic: deepDiveInput.trim() });
+                              setDeepDiveInput("");
+                            }
+                          }}>Dive</Button>
                         </div>
                       </div>
                     )}
@@ -1116,6 +1264,26 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                       onChange={(val) => setSourceFilter(val)}
                       icon={<LucideReact.Filter className="w-3.5 h-3.5" />}
                     />
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex gap-1">
+                        {[
+                          { key: "relevance", label: "Best" },
+                          { key: "alpha", label: "A-Z" },
+                          { key: "domain", label: "Type" },
+                        ].map(function(opt) {
+                          return (
+                            <button
+                              key={opt.key}
+                              onClick={function() { setSourceSort(opt.key); }}
+                              className={"text-[10px] px-2 py-0.5 rounded transition-colors " + (sourceSort === opt.key ? "bg-blue-500/20 text-blue-300" : "bg-gray-800/50 text-gray-500 hover:text-gray-300")}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <span className="text-[10px] text-gray-600">{sortedFilteredSources.length} sources</span>
+                    </div>
                     <div className="flex gap-1.5 mb-2">
                       <Button
                         variant="outline"
@@ -1153,7 +1321,7 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                       </Button>
                     </div>
                     <div className="space-y-1">
-                      {filteredSources.slice(0, 25).map((s, i) => {
+                      {sortedFilteredSources.slice(0, 25).map((s, i) => {
                         const isExpanded = expandedSource === i;
                         const hasContent = s.fullContent && s.fullContent.length > 100;
                         return (
@@ -1269,6 +1437,36 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       }>
         <Input placeholder="recipient@example.com" value={emailAddr} onChange={(val) => setEmailAddr(val)} icon={<LucideReact.Mail className="w-3.5 h-3.5" />} />
+      </Dialog>
+
+      {/* Source preview popup */}
+      <Dialog open={sourcePopup !== null} onClose={function() { setSourcePopup(null); }} title={sourcePopup ? String(sourcePopup.title) : ""} footer={
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={function() { setSourcePopup(null); }}>Close</Button>
+          {sourcePopup && sourcePopup.url && <Button variant="primary" onClick={function() { onAction("open_url", { url: sourcePopup.url }); }}><LucideReact.ExternalLink className="w-3.5 h-3.5" /> Open Source</Button>}
+        </div>
+      }>
+        {sourcePopup && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-400">{String(sourcePopup.domain || "")}</span>
+              {(function() { var trust = getSourceTrust(sourcePopup.domain); return trust ? <span className={"text-[9px] px-1.5 py-0.5 rounded " + trust.bg + " " + trust.color}>{trust.label}</span> : null; })()}
+              {sourcePopup.relevance > 0 && (
+                <div className="flex items-center gap-1">
+                  <div className="w-12"><Progress value={sourcePopup.relevance || 0} max={100} variant="blue" /></div>
+                  <span className="text-[9px] text-gray-500">{sourcePopup.relevance}%</span>
+                </div>
+              )}
+            </div>
+            {sourcePopup.snippet && <div className="text-sm text-gray-300 leading-relaxed">{String(sourcePopup.snippet)}</div>}
+            {sourcePopup.fullContent && sourcePopup.fullContent.length > 100 && (
+              <div className="mt-2 border-t border-gray-700/30 pt-2 max-h-48 overflow-y-auto">
+                <div className="text-[10px] text-gray-500 uppercase mb-1">Extracted content</div>
+                <div className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{String(sourcePopup.fullContent).slice(0, 2000)}</div>
+              </div>
+            )}
+          </div>
+        )}
       </Dialog>
     </div>
   );

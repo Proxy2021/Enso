@@ -644,10 +644,12 @@ const MY_FAMILY_TEMPLATE = `export default function GeneratedUI({ data, onAction
 
 | Rule | Details |
 |------|---------|
+| **`var` only** | Use `var` for ALL variable declarations — **never `const` or `let`**. The template runs inside `new Function(...)` where `const`/`let` are block-scoped and cause "Cannot access X before initialization" TDZ errors. `var` is function-scoped and hoists safely. |
 | **No imports** | Everything is pre-injected. `useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`, `Fragment` from React. |
 | **No DOM access** | No `document`, `window`, `fetch`, `XMLHttpRequest`, `localStorage`. |
 | **No globals** | No `console`, `process`, `require`, `eval`. |
 | **Hooks at top level** | ALL `useState`/`useEffect` MUST be before any `if`/`return`. React hooks rule — conditional hooks cause "Rendered more hooks" crash. |
+| **Declare before use** | Every variable must be declared before its first reference in code order. Even with `var` hoisting, `useMemo` callbacks that reference later-declared variables will fail. |
 | **EnsoUI components** | `<Button>`, `<Tabs>`, `<DataTable>`, `<Badge>`, `<Stat>`, `<UICard>`, `<Progress>`, `<Accordion>`, `<Dialog>`, `<Select>`, `<Input>`, `<Switch>`, `<Slider>`, `<Separator>`, `<EmptyState>` — all destructured, use directly. |
 | **Namespace access** | `<EnsoUI.Tooltip>` (avoids Recharts collision), `<EnsoUI.VideoPlayer>` for video. |
 | **Recharts** | `<BarChart>`, `<LineChart>`, `<PieChart>`, `<Bar>`, `<Line>`, `<Pie>`, `<XAxis>`, `<YAxis>`, `<CartesianGrid>`, `<Tooltip>` (this is Recharts Tooltip), `<Legend>`, `<ResponsiveContainer>`, etc. |
