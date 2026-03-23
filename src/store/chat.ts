@@ -133,7 +133,6 @@ interface CardStore {
   clearConversation: () => void;
   toggleSidebar: () => void;
   requestCardSummary: (cardId: string) => void;
-  requestCardPodcast: (cardId: string) => void;
   requestCardEvolution: (cardId: string, options?: { goal?: string; includeResearch?: boolean }) => void;
   setCardSearchQuery: (query: string) => void;
   setCardSearchVisible: (visible: boolean) => void;
@@ -1676,44 +1675,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
         data: card.data,
         taskTerminals: card.taskTerminals,
       },
-      cardSummarizeAction: "summarize",
     };
     wsClient.send(msg);
-  },
-  requestCardPodcast: (cardId: string) => {
-    const card = get().cards[cardId];
-    if (!card) return;
-    const wsClient = get()._wsClient;
-    if (!wsClient) return;
-    if (card.cardSummary) {
-      // Summary already exists, just request podcast
-      const msg: ClientMessage = {
-        type: "card.summarize",
-        cardId,
-        cardType: card.type,
-        cardContent: {
-          text: card.text?.slice(0, 10000),
-          data: card.data,
-          taskTerminals: card.taskTerminals,
-        },
-        cardSummarizeAction: "podcast",
-      };
-      wsClient.send(msg);
-    } else {
-      // Need both summary + podcast
-      const msg: ClientMessage = {
-        type: "card.summarize",
-        cardId,
-        cardType: card.type,
-        cardContent: {
-          text: card.text?.slice(0, 10000),
-          data: card.data,
-          taskTerminals: card.taskTerminals,
-        },
-        cardSummarizeAction: "podcast",
-      };
-      wsClient.send(msg);
-    }
   },
   requestCardEvolution: (cardId: string, options?: { goal?: string; includeResearch?: boolean }) => {
     const card = get().cards[cardId];

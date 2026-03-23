@@ -1436,6 +1436,11 @@ export async function startEnsoServer(opts: {
 
         switch (msg.type) {
           case "chat.send":
+            // Guard: reject empty/whitespace-only messages with no media
+            if (!msg.text?.trim() && (!msg.mediaUrls || msg.mediaUrls.length === 0)) {
+              runtime.log?.(`[enso] chat.send: ignoring empty message`);
+              break;
+            }
             // Persist user bubble to card history — but skip tool-routed
             // messages (e.g. claude-code prompts contain system instructions
             // that shouldn't appear as user messages in history).
@@ -2253,13 +2258,11 @@ export async function startEnsoServer(opts: {
           case "card.summarize": {
             if (msg.cardId && msg.cardType && msg.cardContent) {
               const sumCardId = msg.cardId;
-              const sumAction = msg.cardSummarizeAction ?? "summarize";
               const chatModel = client.chatModel ?? DEFAULT_CHAT_MODEL;
               const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
 
-              runtime.log?.(`[enso] card.summarize: ${sumCardId} (${msg.cardType}, action=${sumAction})`);
+              runtime.log?.(`[enso] card.summarize: ${sumCardId} (${msg.cardType})`);
 
-              // Send "generating" status immediately
               send({
                 id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
                 state: "delta", targetCardId: sumCardId,
@@ -2267,7 +2270,6 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
 
-              // Fire-and-forget so we don't block the WS loop
               (async () => {
                 try {
                   const { summarizeCard } = await import("./card-summarizer.js");
@@ -2280,6 +2282,7 @@ export async function startEnsoServer(opts: {
                     providerKeys,
                   });
 
+                  // Deliver text summary immediately so the user sees results fast
                   send({
                     id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
                     state: "delta", targetCardId: sumCardId,
@@ -2288,56 +2291,55 @@ export async function startEnsoServer(opts: {
                     timestamp: Date.now(),
                   });
 
-                  if (sumAction === "podcast") {
+                  // Automatically follow up with podcast generation
+                  send({
+                    id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
+                    state: "delta", targetCardId: sumCardId,
+                    cardPodcastStatus: "writing_script",
+                    timestamp: Date.now(),
+                  });
+
+                  try {
+                    const { generatePodcastAudio } = await import("./podcast.js");
+                    const slug = sumCardId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 60);
+                    const result = await generatePodcastAudio({
+                      content: {
+                        title: summary.overview.slice(0, 100),
+                        summary: summary.overview,
+                        keyPoints: summary.keyOutcomes,
+                        narrative: summary.narrative,
+                      },
+                      audioSlug: slug,
+                      subdirectory: "card-summaries",
+                      model: chatModel,
+                      providerKeys,
+                      onProgress: (status) => {
+                        send({
+                          id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
+                          state: "delta", targetCardId: sumCardId,
+                          cardPodcastStatus: status,
+                          timestamp: Date.now(),
+                        });
+                      },
+                    });
+
                     send({
                       id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
                       state: "delta", targetCardId: sumCardId,
-                      cardPodcastStatus: "writing_script",
+                      cardAudioUrl: result.audioUrl,
+                      cardPodcastScript: result.script,
+                      cardPodcastStatus: "ready",
                       timestamp: Date.now(),
                     });
-
-                    try {
-                      const { generatePodcastAudio } = await import("./podcast.js");
-                      const slug = sumCardId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 60);
-                      const result = await generatePodcastAudio({
-                        content: {
-                          title: summary.overview.slice(0, 100),
-                          summary: summary.overview,
-                          keyPoints: summary.keyOutcomes,
-                          narrative: summary.narrative,
-                        },
-                        audioSlug: slug,
-                        subdirectory: "card-summaries",
-                        model: chatModel,
-                        providerKeys,
-                        onProgress: (status) => {
-                          send({
-                            id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
-                            state: "delta", targetCardId: sumCardId,
-                            cardPodcastStatus: status,
-                            timestamp: Date.now(),
-                          });
-                        },
-                      });
-
-                      send({
-                        id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
-                        state: "delta", targetCardId: sumCardId,
-                        cardAudioUrl: result.audioUrl,
-                        cardPodcastScript: result.script,
-                        cardPodcastStatus: "ready",
-                        timestamp: Date.now(),
-                      });
-                    } catch (podErr) {
-                      logError("card.summarize", "podcast generation failed", podErr, { cardId: sumCardId });
-                      send({
-                        id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
-                        state: "delta", targetCardId: sumCardId,
-                        cardPodcastStatus: "error",
-                        cardSummaryError: podErr instanceof Error ? podErr.message : String(podErr),
-                        timestamp: Date.now(),
-                      });
-                    }
+                  } catch (podErr) {
+                    logError("card.summarize", "podcast generation failed", podErr, { cardId: sumCardId });
+                    send({
+                      id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
+                      state: "delta", targetCardId: sumCardId,
+                      cardPodcastStatus: "error",
+                      cardSummaryError: podErr instanceof Error ? podErr.message : String(podErr),
+                      timestamp: Date.now(),
+                    });
                   }
                 } catch (err) {
                   logError("card.summarize", "summarization failed", err, { cardId: sumCardId });

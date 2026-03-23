@@ -57,7 +57,7 @@ function tryReconstructContext(
   const p = (payload ?? {}) as Record<string, unknown>;
 
   // ── Researcher family ──
-  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "generate_podcast", "send_report", "delete_history", "clear_all_history", "build_from_research", "monitor_topic"];
+  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "send_report", "delete_history", "clear_all_history", "build_from_research", "monitor_topic"];
   if (researcherActions.includes(action) || (p.topic && typeof p.topic === "string")) {
     const account = getActiveAccount();
     if (!account) return null;

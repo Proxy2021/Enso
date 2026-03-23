@@ -33,7 +33,7 @@ const APP_LABELS: Record<string, string> = {
   clawhub: "ClawHub",
 };
 
-function SummaryPanel({ card }: { card: Card }) {
+function SummaryPanel({ card, isPodcastGenerating }: { card: Card; isPodcastGenerating?: boolean }) {
   const [narrativeExpanded, setNarrativeExpanded] = useState(false);
   const [scriptExpanded, setScriptExpanded] = useState(false);
   const summary = card.cardSummary;
@@ -57,7 +57,7 @@ function SummaryPanel({ card }: { card: Card }) {
           <div className="mt-2 space-y-1">
             {summary.keyOutcomes.map((outcome, i) => (
               <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-400">
-                <span className="text-amber-500 mt-0.5 shrink-0">{"•"}</span>
+                <span className="text-amber-500 mt-0.5 shrink-0">{"\u2022"}</span>
                 <span>{outcome}</span>
               </div>
             ))}
@@ -81,6 +81,15 @@ function SummaryPanel({ card }: { card: Card }) {
           </div>
         )}
       </div>
+
+      {isPodcastGenerating && !card.cardAudioUrl && (
+        <div className="px-3 py-2 border-t border-cyan-500/15 bg-cyan-500/5 flex items-center gap-2">
+          <div className="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+          <span className="text-[11px] text-cyan-400">
+            {card.cardPodcastStatus === "rendering_audio" ? "Recording podcast audio..." : "Writing podcast script..."}
+          </span>
+        </div>
+      )}
 
       {card.cardAudioUrl && (
         <div id={`summary-audio-${card.id}`} className="px-3 py-2 border-t border-amber-500/15 bg-cyan-500/5">
@@ -1143,7 +1152,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const removeCard = useChatStore((s) => s.removeCard);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
   const requestCardSummary = useChatStore((s) => s.requestCardSummary);
-  const requestCardPodcast = useChatStore((s) => s.requestCardPodcast);
   const requestCardEvolution = useChatStore((s) => s.requestCardEvolution);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
@@ -1187,8 +1195,6 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const SUMMARIZABLE = new Set(["chat", "terminal", "orchestration", "dynamic-ui"]);
   const canSummarize = card.role === "assistant" && card.status === "complete"
     && SUMMARIZABLE.has(card.type) && !card.cardSummary && card.cardSummaryStatus !== "generating";
-  const hasSummary = !!card.cardSummary;
-  const canPodcast = hasSummary && !card.cardAudioUrl && card.cardPodcastStatus !== "writing_script" && card.cardPodcastStatus !== "rendering_audio";
   const isSummaryGenerating = card.cardSummaryStatus === "generating";
   const isPodcastGenerating = card.cardPodcastStatus === "writing_script" || card.cardPodcastStatus === "rendering_audio";
 
@@ -1573,14 +1579,14 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                   <span className="hidden sm:inline">Research</span>
                 </button>
               )}
-              {(canSummarize || isSummaryGenerating) && (
+              {(canSummarize || isSummaryGenerating || isPodcastGenerating) && (
                 <button
                   onClick={() => requestCardSummary(card.id)}
-                  disabled={isSummaryGenerating}
+                  disabled={isSummaryGenerating || isPodcastGenerating}
                   className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-amber-300 hover:border-amber-500/50 active:bg-amber-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Summarize this card"
+                  title="Summarize and generate podcast"
                 >
-                  {isSummaryGenerating ? (
+                  {isSummaryGenerating || isPodcastGenerating ? (
                     <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1590,24 +1596,10 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                       <line x1="16" y1="17" x2="8" y2="17" />
                     </svg>
                   )}
-                  <span className="hidden sm:inline">{isSummaryGenerating ? "Summarizing..." : "Summarize"}</span>
+                  <span className="hidden sm:inline">{isSummaryGenerating ? "Summarizing..." : isPodcastGenerating ? (card.cardPodcastStatus === "rendering_audio" ? "Recording..." : "Writing script...") : "Summarize"}</span>
                 </button>
               )}
-              {(canPodcast || isPodcastGenerating) && (
-                <button
-                  onClick={() => requestCardPodcast(card.id)}
-                  disabled={isPodcastGenerating}
-                  className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-cyan-300 hover:border-cyan-500/50 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Generate AI podcast from summary"
-                >
-                  {isPodcastGenerating ? (
-                    <><div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /><span className="hidden sm:inline">{card.cardPodcastStatus === "rendering_audio" ? "Recording..." : "Writing..."}</span></>
-                  ) : (
-                    <><svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6" /><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" /></svg><span className="hidden sm:inline">Listen</span></>
-                  )}
-                </button>
-              )}
-              {card.cardAudioUrl && (
+              {card.cardAudioUrl && !isPodcastGenerating && (
                 <button
                   onClick={() => {
                     const el = document.getElementById(`summary-audio-${card.id}`);
@@ -1677,7 +1669,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                 <span className="text-xs text-amber-400">Generating summary...</span>
               </div>
             ) : (
-              <SummaryPanel card={card} />
+              <SummaryPanel card={card} isPodcastGenerating={isPodcastGenerating} />
             )
           )}
           {isAppView && card.appBuildSummary && !buildSummaryDismissed && (

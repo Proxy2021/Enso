@@ -275,7 +275,7 @@ export interface ClientMessage {
     data?: unknown;
     taskTerminals?: Record<string, { text: string; status: string }>;
   };
-  cardSummarizeAction?: "summarize" | "podcast";
+  cardSummarizeAction?: "summarize";
   // card.evolve fields
   includeResearch?: boolean;
   // card.enhance / card.build_app / card.propose_app fields

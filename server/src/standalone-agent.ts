@@ -1,9 +1,9 @@
 /**
- * standalone-agent.ts — Direct Gemini-powered agent for standalone mode.
+ * standalone-agent.ts — Chat agent for standalone mode.
  *
  * Replaces the OpenClaw agent pipeline (`inbound.ts`) when running without OpenClaw.
- * Uses Gemini Flash with function calling to handle chat messages, invoke registered
- * tools, and deliver responses via the same `deliverEnsoReply()` path.
+ * Supports multi-provider LLM via callChatLLM (respecting the user's chatModel),
+ * with Gemini function-calling as a fallback for tool-use scenarios.
  */
 
 import { randomUUID } from "crypto";
@@ -15,10 +15,11 @@ import { deliverEnsoReply } from "./outbound.js";
 import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { logAction, logError } from "./action-log.js";
 import { setLastUserMessage } from "./researcher-tools.js";
-import { GEMINI_MODEL_FAST, callGeminiLLMWithRetry } from "./ui-generator.js";
+import { GEMINI_MODEL_FAST } from "./ui-generator.js";
+import { callChatLLM } from "./llm-provider.js";
 import { getAllLocalTools, executeLocalTool } from "./tool-registry-local.js";
 import { getMemoryContext, appendDailyMemory } from "./memory-bridge.js";
-import { geminiUrl, DEFAULT_MAX_OUTPUT_TOKENS, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
+import { geminiUrl, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
 
 // ── Conversation history (in-memory, per session) ──
 
@@ -238,7 +239,9 @@ export async function handleStandaloneInbound(params: {
 }): Promise<void> {
   const { message, account, runtime, client, routing, targetCardId, statusSink } = params;
 
-  let rawBody = message.text?.trim() ?? "";
+  let rawBody = (message.text ?? "")
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060\u2028\u2029]/g, "")
+    .trim();
   const mediaUrls = message.mediaUrls ?? [];
   if (!rawBody && mediaUrls.length === 0) return;
 
@@ -270,10 +273,57 @@ export async function handleStandaloneInbound(params: {
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Chat: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
   setLastUserMessage(rawBody);
 
-  // Check API key
+  const userChatModel = client.chatModel;
+  const isGeminiModel = !userChatModel || userChatModel.startsWith("gemini-");
+  const providerKeys: Record<string, string> = {
+    ...account.providerKeys,
+    ...(account.geminiApiKey ? { gemini: account.geminiApiKey } : {}),
+  };
+
+  // When the user selected a non-Gemini model, route through callChatLLM
+  // for a simple text response (tool calling is Gemini-only).
+  if (!isGeminiModel) {
+    const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
+    try {
+      const tools = getAllLocalTools();
+      const systemPrompt = buildSystemPrompt(tools);
+      const answer = await callChatLLM({
+        prompt: rawBody,
+        systemPrompt,
+        model: userChatModel,
+        providerKeys,
+      });
+      await deliverEnsoReply({
+        payload: { text: answer },
+        client,
+        runId,
+        seq: 0,
+        account,
+        userMessage: rawBody,
+        targetCardId,
+        cardId: stableCardId,
+        toolMeta,
+        statusSink,
+      });
+    } catch (err) {
+      logError("standalone-agent", `callChatLLM failed for ${userChatModel}`, err, { cardId: stableCardId });
+      client.send({
+        id: randomUUID(),
+        runId,
+        sessionKey,
+        seq: 0,
+        state: "error",
+        text: `Error from ${userChatModel}: ${err instanceof Error ? err.message : String(err)}`,
+        timestamp: Date.now(),
+      });
+    }
+    return;
+  }
+
+  // Gemini path: function-calling agent loop
   if (!account.geminiApiKey) {
     await deliverEnsoReply({
-      payload: { text: "No Gemini API key configured. Please set GEMINI_API_KEY in your .env file." },
+      payload: { text: "No Gemini API key configured. Please set GEMINI_API_KEY in your .env file or select a different chat model in Settings." },
       client,
       runId,
       seq: 0,
@@ -286,19 +336,16 @@ export async function handleStandaloneInbound(params: {
     return;
   }
 
-  // Get all registered tools
   const tools = getAllLocalTools();
   const systemPrompt = buildSystemPrompt(tools);
   const functionDeclarations = tools.map(toolToFunctionDeclaration);
 
-  // Build conversation history
   const history = getSessionHistory(sessionKey);
   history.push({ role: "user", parts: [{ text: rawBody }] });
 
   const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
 
   try {
-    // Tool calling loop (max 5 iterations to prevent infinite loops)
     let finalText = "";
     for (let iteration = 0; iteration < 5; iteration++) {
       const response = await callGeminiWithTools({
@@ -311,7 +358,6 @@ export async function handleStandaloneInbound(params: {
       const candidate = response.candidates?.[0];
       const parts = candidate?.content?.parts ?? [];
 
-      // Check for function calls
       const functionCallPart = parts.find((p) => p.functionCall);
       const textPart = parts.find((p) => p.text);
 
@@ -319,10 +365,8 @@ export async function handleStandaloneInbound(params: {
         const { name, args } = functionCallPart.functionCall;
         logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Tool call: ${name}`, cardId: stableCardId });
 
-        // Record the model's function call in history
         history.push({ role: "model", parts: [{ functionCall: { name, args } }] });
 
-        // Execute the tool
         let toolResult: unknown;
         try {
           const result = await executeLocalTool(name, args);
@@ -332,17 +376,14 @@ export async function handleStandaloneInbound(params: {
           logError("standalone-agent", `Tool ${name} failed`, err, { cardId: stableCardId });
         }
 
-        // Add function response to history
         history.push({
           role: "user",
           parts: [{ functionResponse: { name, response: toolResult } }],
         });
 
-        // Continue the loop — model will see the tool result and may call another tool or respond
         continue;
       }
 
-      // Text response — we're done
       finalText = textPart?.text ?? "";
       history.push({ role: "model", parts: [{ text: finalText }] });
       break;
@@ -350,7 +391,6 @@ export async function handleStandaloneInbound(params: {
 
     trimHistory(history);
 
-    // Deliver the response
     await deliverEnsoReply({
       payload: { text: finalText },
       client,
@@ -364,14 +404,21 @@ export async function handleStandaloneInbound(params: {
       statusSink,
     });
   } catch (err) {
-    logError("standalone-agent", "Agent call failed", err, { cardId: stableCardId });
+    logError("standalone-agent", "Gemini agent call failed", err, { cardId: stableCardId });
+
+    // Friendly message for common Gemini errors instead of raw API errors
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const userFriendly = errMsg.includes("400")
+      ? "I couldn't process that request. Please try rephrasing your message."
+      : `An error occurred: ${errMsg}`;
+
     client.send({
       id: randomUUID(),
       runId,
       sessionKey,
       seq: 0,
       state: "error",
-      text: `An error occurred: ${err instanceof Error ? err.message : String(err)}`,
+      text: userFriendly,
       timestamp: Date.now(),
     });
   }

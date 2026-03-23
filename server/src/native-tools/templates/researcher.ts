@@ -22,8 +22,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const [playingVideos, setPlayingVideos] = useState({});
 
   const [shared, setShared] = useState(false);
-  const [podcastLoading, setPodcastLoading] = useState(false);
-  const [scriptExpanded, setScriptExpanded] = useState(false);
   const [narrativeExpanded, setNarrativeExpanded] = useState(false);
 
   // ── View detection ──
@@ -52,10 +50,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const contradictions = Array.isArray(data?.contradictions) ? data.contradictions : [];
   const searchQueries = Array.isArray(data?.searchQueries) ? data.searchQueries : (Array.isArray(metadata?.searchQueries) ? metadata.searchQueries : []);
   const gapQueries = Array.isArray(metadata?.gapQueries) ? metadata.gapQueries : [];
-  const audioUrl = data?.audioUrl || null;
-  const podcastScript = data?.podcastScript || null;
-  const podcastStatus = data?.podcastStatus || null;
-  const podcastError = data?.podcastError || null;
   const galleryImages = images.filter((img) => !imgErrors[img.url]);
   const handleImgError = (url) => setImgErrors((prev) => ({ ...prev, [url]: true }));
   const heroImage = images.find((img) => img.sectionIdx === 0) || images[0];
@@ -103,8 +97,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
 
   // ── Phase checks ──
   const isLoading = ["generating_queries", "searching", "sources", "synthesizing", "gap_checking", "deep_research"].includes(phase);
-  const hasSynthesis = ["synthesized", "gap_checking", "complete", "generating_podcast"].includes(phase);
-  const isComplete = phase === "complete" || phase === "generating_podcast";
+  const hasSynthesis = ["synthesized", "gap_checking", "complete"].includes(phase);
+  const isComplete = phase === "complete";
   const isAppBuilt = phase === "app_built";
 
   // ── Reading time estimate (avg 200 words/min for technical content) ──
@@ -610,27 +604,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           <div className="text-base font-semibold text-gray-100 truncate">{topic}</div>
         </div>
         <div className="flex gap-1 sm:gap-1.5 shrink-0 flex-wrap justify-end">
-          {isComplete && !audioUrl && (
-            <Button variant="ghost" onClick={() => {
-              setPodcastLoading(true);
-              onAction("generate_podcast", { topic });
-            }} disabled={podcastLoading}>
-              {podcastLoading
-                ? <><div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /> <span className="hidden sm:inline">{podcastStatus === "rendering_audio" ? "Recording..." : "Writing..."}</span></>
-                : podcastError
-                  ? <><LucideReact.AlertCircle className="w-3.5 h-3.5 text-rose-400" /> <span className="hidden sm:inline">Retry</span></>
-                  : <><LucideReact.Podcast className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Listen</span></>
-              }
-            </Button>
-          )}
-          {isComplete && audioUrl && (
-            <Button variant="ghost" onClick={() => {
-              const el = document.getElementById("research-audio-player");
-              if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); }
-            }}>
-              <LucideReact.Headphones className="w-3.5 h-3.5 text-cyan-400" /> <span className="hidden sm:inline">Podcast</span>
-            </Button>
-          )}
           {isComplete && (
             <Button variant="ghost" onClick={() => onAction("__share_research_image", { topic })}>
               <LucideReact.Image className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Image</span>
@@ -747,50 +720,6 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
       {/* ══════════════════════════════════════
           SYNTHESIZED / COMPLETE CONTENT
          ══════════════════════════════════════ */}
-      {/* ── Audio Player (when podcast is ready) ── */}
-      {audioUrl && (
-        <div id="research-audio-player" className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3 space-y-2">
-          <div className="flex items-center gap-2 text-[11px] text-cyan-400 uppercase tracking-wide">
-            <LucideReact.Headphones className="w-3.5 h-3.5" /> AI Podcast Overview
-          </div>
-          <audio controls preload="metadata" className="w-full h-10" style={{ borderRadius: "8px" }}>
-            <source src={audioUrl} type="audio/wav" />
-            Your browser does not support audio playback.
-          </audio>
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] text-gray-500">Two AI hosts discuss the key findings from this research</div>
-            {podcastScript && (
-              <button
-                onClick={() => setScriptExpanded(!scriptExpanded)}
-                className="flex items-center gap-1 text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
-              >
-                <LucideReact.FileText className="w-3 h-3" />
-                <span>{scriptExpanded ? "Hide" : "Show"} Transcript</span>
-                <svg className={"w-3 h-3 transition-transform " + (scriptExpanded ? "rotate-180" : "")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
-              </button>
-            )}
-          </div>
-          {scriptExpanded && podcastScript && (
-            <div className="mt-2 pt-2 border-t border-cyan-500/20 max-h-[300px] overflow-y-auto text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">
-              {podcastScript.split(/\\n/).map((line, i) => {
-                const hostMatch = line.match(/^(Host [AB]):\\s*(.*)/);
-                if (hostMatch) {
-                  const isA = hostMatch[1] === "Host A";
-                  return (
-                    <div key={i} className="mb-2">
-                      <span className={"font-semibold " + (isA ? "text-cyan-400" : "text-purple-400")}>{hostMatch[1]}:</span>{" "}
-                      <span>{hostMatch[2]}</span>
-                    </div>
-                  );
-                }
-                if (!line.trim()) return null;
-                return <div key={i} className="mb-2 text-gray-400 italic">{line}</div>;
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       {hasSynthesis && (
         <>
           {/* ── Summary preview (brief context before findings) ── */}

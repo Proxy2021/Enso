@@ -2721,78 +2721,6 @@ async function researcherClearAllHistory(): Promise<AgentToolResult> {
   return researcherSearch({ topic: "" } as SearchParams);
 }
 
-// ── Podcast generation (delegated to shared podcast.ts pipeline) ──
-
-async function researcherGeneratePodcast(params: { topic: string }): Promise<AgentToolResult> {
-  const topic = params.topic?.trim();
-  if (!topic) return errorResult("No topic specified");
-
-  const cached = researchHistory.load(topicSlug(topic)) ?? researchHistory.load(topicSlug(topic));
-  if (!cached) return errorResult(`No research found for "${topic}". Run a search first.`);
-
-  const fullResult = (audioUrl: string, script?: string) => jsonResult({
-    tool: "enso_researcher_search",
-    depth: "standard",
-    phase: "complete",
-    ...cached,
-    audioUrl,
-    podcastScript: script ?? cached.podcastScript ?? undefined,
-  });
-
-  if (cached.audioUrl) return fullResult(cached.audioUrl, cached.podcastScript);
-
-  try {
-    const { generatePodcastAudio } = await import("./podcast.js");
-
-    // Resolve LLM model + provider keys for script generation
-    let model = GEMINI_MODEL_UTILITY;
-    let providerKeys: Record<string, string> = {};
-    try {
-      const { getActiveAccount } = await import("./server.js");
-      const acct = getActiveAccount();
-      if (acct) {
-        providerKeys = { ...acct.providerKeys, gemini: acct.geminiApiKey };
-        // Use the user's chat model if available, otherwise default
-        if (acct.geminiApiKey) providerKeys.gemini = acct.geminiApiKey;
-      }
-    } catch { /* standalone mode */ }
-
-    const result = await generatePodcastAudio({
-      content: {
-        title: cached.topic,
-        summary: cached.summary ?? "",
-        keyPoints: (cached.keyFindings ?? []).slice(0, 6)
-          .map((f) => `[${f.type}] ${f.text}`),
-        contradictions: (cached.contradictions ?? []).slice(0, 3)
-          .map((c) => `${c.claim}: ${c.perspectives.join(" vs ")}`),
-        narrative: cached.narrative,
-      },
-      audioSlug: topicSlug(topic),
-      subdirectory: "researcher",
-      model,
-      providerKeys,
-      onProgress: (status) => {
-        pushProgress({ tool: "enso_researcher_search", topic, phase: "generating_podcast", podcastStatus: status });
-      },
-    });
-
-    cached.audioUrl = result.audioUrl;
-    cached.podcastScript = result.script;
-    researchHistory.save(topicSlug(topic), cached, buildResearchMeta(cached, "standard"));
-
-    return fullResult(result.audioUrl, result.script);
-  } catch (err) {
-    logError("researcher", "podcast generation failed", err, { topic });
-    return jsonResult({
-      tool: "enso_researcher_search",
-      depth: "standard",
-      phase: "complete",
-      ...cached,
-      podcastError: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
 // ── Research Recall (cross-topic knowledge) ──
 
 async function researcherRecall(params: { query: string; maxResults?: number }): Promise<AgentToolResult> {
@@ -2938,21 +2866,6 @@ export function createResearcherTools(): EnsoAgentTool[] {
       },
       execute: async (_callId: string, params: Record<string, unknown>) =>
         researcherSendReport(params as SendReportParams),
-    } as EnsoAgentTool,
-    {
-      name: "enso_researcher_generate_podcast",
-      label: "Generate Research Podcast",
-      description: "Generate an AI podcast audio overview of research findings using text-to-speech. Requires completed research.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          topic: { type: "string", description: "Research topic to generate podcast for" },
-        },
-        required: ["topic"],
-      },
-      execute: async (_callId: string, params: Record<string, unknown>) =>
-        researcherGeneratePodcast(params as { topic: string }),
     } as EnsoAgentTool,
     {
       name: "enso_researcher_delete_history",
