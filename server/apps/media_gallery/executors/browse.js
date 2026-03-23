@@ -11,9 +11,9 @@ if (path && path.charAt(0) !== '/' && path.charAt(0) !== '~' && !/^[A-Z]:/i.test
   }
 }
 
-// Default to ~/Pictures when no path given
+// Default to home directory when no path given
 if (!path) {
-  path = "~/Pictures";
+  path = "~";
 }
 
 var toolParams = { path: path };
@@ -22,13 +22,6 @@ if (sortBy !== "name") toolParams.sortBy = sortBy;
 if (sortDir !== "asc") toolParams.sortDir = sortDir;
 
 var result = await ctx.callTool("enso_media_browse_folder", toolParams);
-
-// If ~/Pictures doesn't exist, fall back to home directory
-if (!result.success && path === "~/Pictures") {
-  toolParams.path = "~";
-  result = await ctx.callTool("enso_media_browse_folder", toolParams);
-  if (result.success) path = "~";
-}
 
 if (!result.success) {
   return {

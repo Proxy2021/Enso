@@ -9,14 +9,14 @@
     "tools": [
       {
         "suffix": "browse",
-        "description": "Browse a folder for photos and videos with sorting, filtering, subfolder navigation, and summary statistics. Returns item list with thumbnails, EXIF data, and folder-level metrics (total size, media counts, date range). Path is optional and defaults to ~/Pictures. Accepts absolute paths (e.g. /Users/name/Photos or C:/Users/name/Photos). Use when the user says: 'browse my photos', 'show me my gallery', 'open media gallery', 'view my pictures', 'what photos do I have', 'open folder', 'show Downloads'.",
+        "description": "Browse a folder for photos and videos with sorting, filtering, subfolder navigation, and summary statistics. Returns item list with thumbnails, EXIF data, and folder-level metrics (total size, media counts, date range). Path is optional and defaults to home directory. Accepts absolute paths (e.g. /Users/name/Photos or C:/Users/name/Photos). Use when the user says: 'browse my photos', 'show me my gallery', 'open media gallery', 'view my pictures', 'what photos do I have', 'open folder', 'show Downloads'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "path": {
               "type": "string",
-              "description": "Absolute directory path to browse. Use full paths like /Users/name/Photos or ~/Pictures. Defaults to ~/Pictures if omitted."
+              "description": "Absolute directory path to browse. Use full paths like /Users/name/Photos or ~/Pictures. Defaults to home directory if omitted."
             },
             "filter": {
               "type": "string",
@@ -336,7 +336,7 @@
           "properties": {
             "path": {
               "type": "string",
-              "description": "Directory to search within (optional, defaults to last browsed folder or ~/Pictures)"
+              "description": "Directory to search within (optional, defaults to last browsed folder or home directory)"
             },
             "query": {
               "type": "string",
