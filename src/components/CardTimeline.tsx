@@ -154,50 +154,44 @@ export default function CardTimeline() {
     }
   });
 
-  if (cardOrder.length === 0) {
-    return (
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <WelcomeCard />
-      </div>
-    );
-  }
-
   // Build render items: detect orchestration+terminal pairs for side-by-side layout
   const renderItems: Array<
     | { type: "single"; id: string }
     | { type: "orch-pair"; orchId: string; termId: string }
-  > = [];
-  const pairedTerminals = new Set<string>();
+  > = useMemo(() => {
+    const items: Array<
+      | { type: "single"; id: string }
+      | { type: "orch-pair"; orchId: string; termId: string }
+    > = [];
+    const pairedTerminals = new Set<string>();
 
-  for (let i = 0; i < cardOrder.length; i++) {
-    const id = cardOrder[i];
-    const card = cards[id];
-    if (!card) continue;
+    for (let i = 0; i < cardOrder.length; i++) {
+      const id = cardOrder[i];
+      const card = cards[id];
+      if (!card) continue;
 
-    // Detect orchestration card in executing/paused state followed by its terminal card
-    if (card.type === "orchestration") {
-      const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
-      const progress = orchData?.orchestrationProgress;
-      const plan = progress?.plan || orchData?.orchestrationPlan;
-      const isExecuting = plan?.status === "executing" || plan?.status === "paused";
+      if (card.type === "orchestration") {
+        const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
+        const progress = orchData?.orchestrationProgress;
+        const plan = progress?.plan || orchData?.orchestrationPlan;
+        const isExecuting = plan?.status === "executing" || plan?.status === "paused";
 
-      if (isExecuting) {
-        // Look for the next terminal card (should be the one right after)
-        const nextId = cardOrder[i + 1];
-        const nextCard = nextId ? cards[nextId] : undefined;
-        if (nextCard && nextCard.type === "terminal") {
-          renderItems.push({ type: "orch-pair", orchId: id, termId: nextId });
-          pairedTerminals.add(nextId);
-          continue;
+        if (isExecuting) {
+          const nextId = cardOrder[i + 1];
+          const nextCard = nextId ? cards[nextId] : undefined;
+          if (nextCard && nextCard.type === "terminal") {
+            items.push({ type: "orch-pair", orchId: id, termId: nextId });
+            pairedTerminals.add(nextId);
+            continue;
+          }
         }
       }
+
+      if (pairedTerminals.has(id)) continue;
+      items.push({ type: "single", id });
     }
-
-    // Skip terminals that are already paired
-    if (pairedTerminals.has(id)) continue;
-
-    renderItems.push({ type: "single", id });
-  }
+    return items;
+  }, [cardOrder, cards]);
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return renderItems;
@@ -214,6 +208,14 @@ export default function CardTimeline() {
   }, [renderItems, searchQuery, cards]);
 
   const matchCount = searchQuery.trim() ? filteredItems.length : 0;
+
+  if (cardOrder.length === 0) {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <WelcomeCard />
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="flex-1 overflow-y-auto">
