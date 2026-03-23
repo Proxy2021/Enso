@@ -211,7 +211,11 @@ export async function summarizeCard(params: {
     const cleaned = raw
       .replace(/^```(?:json)?\s*/m, "")
       .replace(/\s*```$/m, "")
-      .trim();
+      .trim()
+      .replace(/[\x00-\x1f\x7f]/g, (ch) => {
+        if (ch === "\n" || ch === "\r" || ch === "\t") return ch;
+        return "";
+      });
     const parsed = JSON.parse(cleaned) as CardSummary;
 
     if (!parsed.overview || !Array.isArray(parsed.keyOutcomes)) {
