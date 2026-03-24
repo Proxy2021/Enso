@@ -43,7 +43,11 @@ function MeIcon({ active }: { active: boolean }) {
 export default function MobileTabBar() {
   const { t } = useT();
   const mobileTab = useChatStore((s) => s.mobileTab);
+  const mobileShowChat = useChatStore((s) => s.mobileShowChat);
   const setMobileTab = useChatStore((s) => s.setMobileTab);
+
+  // Hide bottom tabs when inside a conversation
+  if (mobileTab === "chat" && mobileShowChat) return null;
 
   const tabs: Array<{ id: MobileTab; labelKey: string; Icon: typeof ChatIcon }> = [
     { id: "chat", labelKey: "mobile.tab.chat", Icon: ChatIcon },
