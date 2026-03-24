@@ -58,6 +58,12 @@ export const LLM_RESEARCH_TIMEOUT_MS = 45_000;
 export const LLM_PRO_TIMEOUT_MS = 90_000;
 export const BRAVE_SEARCH_TIMEOUT_MS = 10_000;
 
+// ── BytePlus Seedance (video generation) ──
+
+export const BYTEPLUS_API_KEY = process.env.BYTEPLUS_API_KEY ?? "";
+export const SEEDANCE_BASE_URL = process.env.SEEDANCE_BASE_URL ?? "https://ark.ap-southeast.bytepluses.com/api/v3";
+export const SEEDANCE_MODEL = process.env.SEEDANCE_MODEL ?? "seedance-1-5-pro-251215";
+
 // ── Size limits ──
 
 export const MAX_MEDIA_FILE_SIZE = 300 * 1024 * 1024; // 300 MB

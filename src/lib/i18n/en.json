@@ -130,6 +130,12 @@
   "settings.saving": "Saving...",
   "settings.historyStorageHint": "Chat history is stored on the server and restored on reconnect",
   "settings.memoryStorageHint": "Stored securely on your Enso server",
+  "settings.apiKeys": "API Keys",
+  "settings.apiKeysHint": "Service API keys for Enso's features. Keys are stored in server/.env and take effect immediately.",
+  "settings.apiKeysStorageHint": "Keys are stored in server/.env on your Enso server — never sent to third parties",
+  "settings.notConfigured": "Not set",
+  "settings.getApiKey": "Get API key →",
+  "settings.remove": "Remove",
 
   "builder.title": "Build App with Claude Code",
   "builder.description": "Describe what app you want. Claude Code will design and build it in a live terminal session.",

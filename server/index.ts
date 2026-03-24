@@ -25,6 +25,7 @@ import { registerResearcherTools, createResearcherTools } from "./src/researcher
 import { registerClawHubTools, createClawHubTools } from "./src/clawhub-tools.js";
 import { createMemoryTools } from "./src/memory-tools.js";
 import { createSystemTools } from "./src/system-tools.js";
+import { registerSeedanceTools, createSeedanceTools } from "./src/seedance-tools.js";
 import { registerLocalTool } from "./src/tool-registry-local.js";
 import { APP_CATALOG } from "./src/app-catalog.js";
 import { readFileSync } from "node:fs";
@@ -62,6 +63,12 @@ function loadEnvFile(): void {
 
 loadEnvFile();
 
+// Load API keys from ~/.enso/api-keys.json + migrate from server/.env
+import { loadApiKeys, migrateFromEnvFile } from "./src/api-keys.js";
+const pluginDir = dirname(fileURLToPath(import.meta.url));
+migrateFromEnvFile(resolve(pluginDir, "..", ".env"));
+loadApiKeys();
+
 /** Register tools in the local registry (always) for standalone agent + card actions. */
 function registerAllToolsLocally(): void {
   const allToolSets = [
@@ -75,6 +82,7 @@ function registerAllToolsLocally(): void {
     createClawHubTools(),
     createMemoryTools(),
     createSystemTools(),
+    createSeedanceTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {
@@ -128,6 +136,7 @@ const plugin = {
     });
     registerMediaTools(api as unknown as EnsoPluginApi);
     registerVideoTools(api as unknown as EnsoPluginApi);
+    registerSeedanceTools(api as unknown as EnsoPluginApi);
     registerMediaProcessingTools(api as unknown as EnsoPluginApi);
     registerScreenTools(api as unknown as EnsoPluginApi);
     maybeRegisterFallbackToolFamily({

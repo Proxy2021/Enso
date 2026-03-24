@@ -43,6 +43,11 @@ function loadEnvFile(): void {
 
 loadEnvFile();
 
+// ── Load API keys from ~/.enso/api-keys.json + migrate from .env ──
+import { loadApiKeys, migrateFromEnvFile } from "./src/api-keys.js";
+migrateFromEnvFile(resolve(__dirname, ".env"));
+loadApiKeys();
+
 // ── Imports (after env load so API keys are available) ──
 
 import { resolveEnsoAccount } from "./src/accounts.js";
@@ -59,6 +64,7 @@ import { createResearcherTools } from "./src/researcher-tools.js";
 import { createClawHubTools } from "./src/clawhub-tools.js";
 import { createMemoryTools } from "./src/memory-tools.js";
 import { createSystemTools } from "./src/system-tools.js";
+import { createSeedanceTools } from "./src/seedance-tools.js";
 import { startSelfHealing } from "./src/self-heal.js";
 
 // ── Exit codes ──
@@ -78,6 +84,7 @@ function registerAllTools(): void {
     createClawHubTools(),
     createMemoryTools(),
     createSystemTools(),
+    createSeedanceTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

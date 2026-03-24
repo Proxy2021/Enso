@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useChatStore } from "../store/chat";
 import { useT, SUPPORTED_LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
 import { useMemoryApi } from "../hooks/useMemoryApi";
+import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 
 // ── Claude Code Presets ─────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ function findPreset(model: string, thinking: string): ModelPreset {
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
-type SettingsTab = "language" | "chatModel" | "claudeCode" | "memory";
+type SettingsTab = "language" | "chatModel" | "claudeCode" | "memory" | "apiKeys";
 
 // ── Memory sub-tabs ─────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export default function SettingsPanel() {
               {([
                 { id: "chatModel" as const, label: t("settings.chatModel") },
                 { id: "claudeCode" as const, label: t("settings.claudeCodeModel") },
+                { id: "apiKeys" as const, label: t("settings.apiKeys") },
                 { id: "memory" as const, label: t("settings.memory") },
                 { id: "language" as const, label: t("settings.language") },
               ]).map((tab) => (
@@ -109,6 +111,7 @@ export default function SettingsPanel() {
               {activeTab === "language" && <LanguageSection />}
               {activeTab === "chatModel" && <ChatModelSection onClose={() => setOpen(false)} />}
               {activeTab === "claudeCode" && <ClaudeCodeSection onClose={() => setOpen(false)} />}
+              {activeTab === "apiKeys" && <ServiceKeysSection />}
               {activeTab === "memory" && <MemorySection />}
             </div>
           </div>
@@ -498,6 +501,173 @@ function MemorySection() {
       <p className="text-[10px] text-gray-600 text-center pt-2">
         {memTab === "history" ? t("settings.historyStorageHint") : t("settings.memoryStorageHint")}
       </p>
+    </div>
+  );
+}
+
+// ── Service API Keys Section ─────────────────────────────────────────────────
+
+interface ServiceKey {
+  id: string;
+  envVar: string;
+  label: string;
+  description: string;
+  setupUrl: string;
+  configured: boolean;
+  maskedValue: string;
+}
+
+function ServiceKeysSection() {
+  const [keys, setKeys] = useState<ServiceKey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [keyInput, setKeyInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const { t } = useT();
+
+  const fetchKeys = useCallback(async () => {
+    try {
+      const base = getBackendBaseUrl();
+      const res = await fetch(`${base}/api/service-keys`, { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setKeys(data.keys ?? []);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchKeys(); }, [fetchKeys]);
+
+  const handleSave = async (id: string) => {
+    setSaving(true);
+    try {
+      const base = getBackendBaseUrl();
+      const res = await fetch(`${base}/api/service-keys/${id}`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ value: keyInput.trim() }),
+      });
+      if (res.ok) {
+        setEditingId(null);
+        setKeyInput("");
+        await fetchKeys();
+      }
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    setSaving(true);
+    try {
+      const base = getBackendBaseUrl();
+      await fetch(`${base}/api/service-keys/${id}`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ value: "" }),
+      });
+      setEditingId(null);
+      setKeyInput("");
+      await fetchKeys();
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-500 mb-3">{t("settings.apiKeysHint")}</p>
+
+      {keys.map((sk) => (
+        <div key={sk.id} className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-3 space-y-2">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-medium text-gray-200">{sk.label}</span>
+              <p className="text-[10px] text-gray-500">{sk.description}</p>
+            </div>
+            {sk.configured ? (
+              <span className="text-[10px] text-green-500 flex items-center gap-0.5 shrink-0">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                {t("settings.configured")}
+              </span>
+            ) : (
+              <span className="text-[10px] text-gray-600 shrink-0">{t("settings.notConfigured")}</span>
+            )}
+          </div>
+
+          {/* Current value or env var */}
+          <div className="flex items-center gap-2">
+            <code className="text-[10px] text-gray-500 bg-gray-900/60 px-1.5 py-0.5 rounded font-mono">{sk.envVar}</code>
+            {sk.configured && editingId !== sk.id && (
+              <span className="text-[10px] text-gray-400 font-mono">{sk.maskedValue}</span>
+            )}
+            <span className="flex-1" />
+            {editingId !== sk.id && (
+              <button
+                onClick={() => { setEditingId(sk.id); setKeyInput(""); }}
+                className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                {sk.configured ? t("settings.edit") : t("settings.setUp")}
+              </button>
+            )}
+          </div>
+
+          {/* Edit form */}
+          {editingId === sk.id && (
+            <div className="space-y-2 pt-1">
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder={t("settings.apiKeyPlaceholder")}
+                  className="flex-1 px-2.5 py-1.5 text-xs bg-gray-900 border border-gray-700 rounded text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-indigo-500/50 font-mono"
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && keyInput.trim() && handleSave(sk.id)}
+                />
+                <button
+                  onClick={() => handleSave(sk.id)}
+                  disabled={!keyInput.trim() || saving}
+                  className="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors disabled:opacity-40"
+                >
+                  {saving ? "..." : t("settings.save")}
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <a
+                  href={sk.setupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                >
+                  {t("settings.getApiKey")}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                </a>
+                <div className="flex items-center gap-2">
+                  {sk.configured && (
+                    <button onClick={() => handleDelete(sk.id)} disabled={saving} className="text-[10px] text-red-400 hover:text-red-300 transition-colors disabled:opacity-40">
+                      {t("settings.remove")}
+                    </button>
+                  )}
+                  <button onClick={() => setEditingId(null)} className="text-[10px] text-gray-500 hover:text-gray-400 transition-colors">
+                    {t("settings.cancel")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <p className="text-[10px] text-gray-600 text-center pt-2">{t("settings.apiKeysStorageHint")}</p>
     </div>
   );
 }

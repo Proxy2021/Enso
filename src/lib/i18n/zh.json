@@ -130,6 +130,12 @@
   "settings.saving": "保存中...",
   "settings.historyStorageHint": "聊天记录存储在服务器上，重新连接时自动恢复",
   "settings.memoryStorageHint": "安全存储在你的 Enso 服务器上",
+  "settings.apiKeys": "API 密钥",
+  "settings.apiKeysHint": "Enso 各项功能所需的服务 API 密钥。密钥保存在 server/.env，立即生效。",
+  "settings.apiKeysStorageHint": "密钥存储在 Enso 服务器的 server/.env 文件中 — 不会发送给第三方",
+  "settings.notConfigured": "未设置",
+  "settings.getApiKey": "获取 API 密钥 →",
+  "settings.remove": "移除",
 
   "builder.title": "用 Claude Code 构建应用",
   "builder.description": "描述你想要的应用。Claude Code 会在实时终端中设计和构建。",

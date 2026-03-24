@@ -1238,6 +1238,41 @@ export async function startEnsoServer(opts: {
     res.json({ workspaces });
   });
 
+  // ── Service API Keys Management ──
+  // Persisted in ~/.enso/api-keys.json — easy to copy between machines
+
+  const { loadApiKeys, saveApiKey, getServiceKeyDefinitions } = await import("./api-keys.js");
+
+  app.get("/api/service-keys", (_req, res) => {
+    const defs = getServiceKeyDefinitions();
+    const keys = defs.map((sk) => {
+      const value = process.env[sk.envVar] ?? "";
+      return {
+        ...sk,
+        configured: !!value,
+        maskedValue: value ? value.slice(0, 4) + "..." + value.slice(-4) : "",
+      };
+    });
+    res.json({ keys });
+  });
+
+  app.put("/api/service-keys/:id", (req, res) => {
+    const { id } = req.params;
+    const { value } = req.body ?? {};
+    const defs = getServiceKeyDefinitions();
+    const sk = defs.find((k) => k.id === id);
+    if (!sk) { res.status(404).json({ error: "Unknown service key" }); return; }
+    if (typeof value !== "string") { res.status(400).json({ error: "value is required" }); return; }
+
+    try {
+      saveApiKey(sk.id, sk.envVar, value);
+      runtime.log?.(`[enso] Service key updated: ${sk.id} (${sk.envVar})`);
+      res.json({ success: true, configured: !!value });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to save key" });
+    }
+  });
+
   // ── Growth Marketing & Sales API ──
 
   try {
