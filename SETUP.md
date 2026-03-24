@@ -19,12 +19,30 @@ The script walks you through everything interactively:
 - **Install location** — choose where the source lives (default `~/Enso`)
 - **Chat AI model** — pick from Gemini, OpenAI, Anthropic, DeepSeek, Ollama, or OpenRouter
 - **Service API keys** — Brave Search and others for web research
-- **Claude Code** — install CLI + authenticate (API key or subscription)
+- **Claude Code** — install CLI + authenticate (API key, OAuth subscription, or skip)
 - **Remote access** — automatic `<your-name>.enso.net` via Cloudflare tunnel
-- **Build** — frontend + mobile APK (if Android tools available)
+- **App personalization** — tell Enso your name, role, and preferred app name. Claude Code redesigns the entire welcome experience for your workflow — custom layout, domain-specific prompts, reordered tools. Not theming — actual source code modification.
+- **Build** — frontend + mobile APK (installs JDK 21 + Android SDK if needed)
 - **Server start** — guardian-supervised with auto-restart
 
-At the end, you get a QR code to download the mobile app on your phone.
+At the end, you get a QR code to download the mobile app. The APK auto-connects to your server — no manual configuration needed on the phone.
+
+### App Personalization
+
+The setup asks 3 questions: your name, what you do, and what to call your app. Based on your answers, Claude Code redesigns the source code to create a purpose-built experience:
+
+| User Role | App Name | What Changes |
+|-----------|----------|-------------|
+| Tech Founder | Atlas | Command center layout, deal flow prompts, market research focus |
+| Developer | Forge | Code-first tiles, debugging prompts, terminal prominent |
+| Researcher | Nexus | Deep dive layout, literature review prompts, data analysis focus |
+| Investor | Signal | Bloomberg-style aesthetic, tabbed intelligence feed (Deal Flow / Due Diligence / Portfolio) |
+| Creative | Studio | Media-forward layout, content calendar prompts, visual tools |
+| Product Manager | Compass | Sprint/roadmap layout, RICE scoring prompts, team coordination |
+
+This is not configuration — Claude Code directly modifies `App.tsx`, `WelcomeCard.tsx`, `en.json`, `manifest.json`, and `capacitor.config.ts`. Your codebase IS your custom app. Future `/evolve` sprints continue to refine it.
+
+See [PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md) for screenshots and details.
 
 ### Non-interactive mode
 

@@ -4,12 +4,13 @@
 
 ## Vision
 
-**Enso — an AI sandbox that generates complete solutions. It discovers project opportunities, assembles AI teams to build, self-evolves, and ships products.** It can run standalone or as an OpenClaw channel plugin.
+**Enso — an AI sandbox that generates complete solutions. It discovers project opportunities, assembles AI teams to build, self-evolves, and ships products.** Every installation includes the complete source code and build pipeline — users own the factory, not just the product. It can run standalone or as an OpenClaw channel plugin.
 
 **Core principles:**
 - **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline, delivering the most useful format for each answer — interactive research boards, data visualizations, photo studios, file managers — not walls of text. No LLM call needed for rendering.
 - **AI teams for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
 - **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
+- **User owns the factory** — Each installation is a complete codebase with build tools. During setup, Claude Code personalizes the source code based on who the user is — redesigning the UI, writing role-specific prompts, reordering tools. The resulting APK is a custom app, not a configured generic one. Future `/evolve` sprints continue modifying the same source.
 - **AI-native project management** — Each project has a team of AI agents (Project Leader, Architect, Engineer, QA, Marketing, Sales, AI Strategist) and customer personas that autonomously discover, build, and evolve projects through iterative sprints with real browser testing, code implementation, and validation cycles.
 
 ## Architecture Overview
@@ -62,9 +63,19 @@ server/                       # Enso server (the backend)
     ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
     ├── *-tools.ts            # System app implementations (filesystem, workspace, media, screen, travel, meal)
     ├── app-catalog.ts          # APP_CATALOG definitions (system + app entries)
+    ├── tunnel-registry.ts    # Cloudflare tunnel provisioning for <name>.enso.net
     └── native-tools/         # App action bridge
         ├── registry.ts       # App tool discovery + template registry
         └── templates/        # Pre-built JSX templates per app
+
+scripts/                       # Setup and maintenance scripts
+├── personalize-prompt.md      # Claude Code prompt for deep UI personalization
+├── personalize.cjs            # Deterministic fallback personalization (6 persona templates)
+├── install.sh / install.ps1   # Legacy install scripts (superseded by ./setup)
+└── qr-terminal.js             # QR code generator for mobile deep links
+
+setup                          # One-command setup script (bash, macOS/Linux)
+setup.ps1                      # One-command setup script (Windows PowerShell)
 
 shared/types.ts               # Protocol types shared between frontend and server
 ```
@@ -400,6 +411,59 @@ Apps render in two styles:
 ## Tech Stack
 
 Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + xterm.js + Vite 6. Backend: Express 4 + ws 8 + node-pty (standalone or started by OpenClaw). Language: TypeScript 5.7 strict, ESM. LLM: Gemini (via API key).
+
+## One-Command Setup
+
+New users get a complete environment with a single command. See [SETUP.md](SETUP.md) for full details.
+
+```bash
+./setup           # macOS/Linux
+.\setup.ps1       # Windows
+```
+
+The setup script handles everything interactively:
+1. **Install location** — user chooses where the source lives (default `~/Enso`)
+2. **Dependencies** — Node.js check, `npm install`
+3. **Chat AI model** — choose from 6 LLM providers (Gemini, OpenAI, Anthropic, DeepSeek, Ollama, OpenRouter)
+4. **Service API keys** — Brave Search for web research
+5. **Claude Code** — install CLI + authenticate (API key, OAuth/subscription, or skip)
+6. **Remote access** — automatic `<name>.enso.net` tunnel via Cloudflare (calls tunnel registry API on master instance)
+7. **App personalization** — user answers 3 questions (name, role, app name), Claude Code redesigns the UI
+8. **Build** — frontend + APK (installs JDK 21 + Android SDK if needed)
+9. **Server start** — guardian-supervised with watchdog
+
+Non-interactive mode via environment variables: `ENSO_LLM_CHOICE=1 ENSO_USER_ROLE="developer" ./setup`
+
+### App Personalization
+
+During setup, the user's role drives **deep source code customization** via Claude Code:
+- Claude Code reads the user's profile and directly modifies `App.tsx`, `WelcomeCard.tsx`, `en.json`, `manifest.json`, `capacitor.config.ts`
+- Not theming or config — actual source code changes committed to the user's repo
+- Each persona gets a fundamentally different welcome screen layout, domain-specific prompts, reordered tools
+- Examples: "Atlas" (founder) gets a command center with tabbed deal flow panels; "Signal" (investor) gets a Bloomberg-terminal aesthetic with monospace headers; "Nexus" (researcher) gets a literature-focused deep dive layout
+
+The deterministic fallback (`scripts/personalize.cjs`) runs if Claude Code isn't available, matching against 6 persona templates: `tech-founder`, `developer`, `researcher`, `investor`, `creative`, `product-manager`.
+
+See [PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md) for examples of all 6 persona apps.
+
+Key files: `setup` (bash entry point), `scripts/personalize-prompt.md` (Claude Code prompt), `scripts/personalize.cjs` (fallback)
+
+### APK Auto-Connect
+
+During setup, the server's URL and access token are baked into the frontend build via Vite `define`:
+- `__ENSO_DEFAULT_BACKEND__`, `__ENSO_DEFAULT_TOKEN__`, `__ENSO_DEFAULT_NAME__` in `vite.config.ts`
+- `App.tsx` checks these on first native launch — if present, auto-creates a backend entry and connects immediately, bypassing the SetupWizard
+- The resulting APK connects to the server that built it with zero user configuration
+
+### Tunnel Registry
+
+A master Enso instance can provision Cloudflare tunnels for other installations, giving each a `<name>.enso.net` subdomain.
+
+- **File**: `server/src/tunnel-registry.ts`
+- **Activation**: Only mounts when `CLOUDFLARE_API_TOKEN` env var is set
+- **Endpoints**: `GET /api/tunnel/check`, `POST /api/tunnel/register`, `DELETE /api/tunnel/:specifier`, `GET /api/tunnel/list`
+- **Required env vars** (master only): `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`
+- **Registry file**: `~/.enso/tunnel-registry.json`
 
 ## Development
 

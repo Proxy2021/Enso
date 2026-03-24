@@ -6,6 +6,8 @@
 
 Enso is an AI sandbox powered by [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) and a multi-provider LLM layer. It doesn't just chat — it **builds**. Ask a question and get the most useful format for that answer — research boards, data visualizations, interactive tools, AI-generated podcasts. Give it a complex goal and it assembles a full AI team — researchers, architects, builders, coders, reviewers — to plan, build, test, and ship in parallel. Give it a project and it evolves it autonomously, sprint after sprint. Click **Evolve** on any card and a focused multi-agent sprint transforms it into a polished interactive app — right on the card.
 
+**Every user owns the factory.** Each Enso installation includes the complete source code and build pipeline. During setup, Claude Code personalizes the entire app — redesigning the UI, writing domain-specific prompts, reordering tools — based on who you are. The resulting mobile app is truly yours: a developer gets "Forge" with code-first layouts, an investor gets "Signal" with a Bloomberg-terminal aesthetic, a researcher gets "Nexus" with literature-focused deep dive tools. Future `/evolve` sprints continue to modify the same source code, making each user's app diverge further over time. This is not theming — it's recompilation with a new identity.
+
 ---
 
 ## What Enso Does
@@ -169,25 +171,19 @@ Complex tasks (builds, orchestrations, deep research, Claude Code sessions) run 
 
 ## Quick Start
 
-### Windows
-
-```powershell
-git clone https://github.com/Proxy2021/Enso.git
-cd Enso
-.\scripts\install.ps1
-```
-
-### macOS / Linux
+Get the source code onto your machine, then run one command:
 
 ```bash
-git clone https://github.com/Proxy2021/Enso.git
-cd Enso
-./scripts/install.sh
+# macOS / Linux
+./setup
+
+# Windows PowerShell
+.\setup.ps1
 ```
 
-The install script handles dependencies, OpenClaw onboarding (model + API key setup), build, and server start. A QR code appears at the end for connecting your phone.
+The setup handles everything interactively: install location, LLM provider + API key, Claude Code authentication, remote access via `<name>.enso.net`, **app personalization** (Claude Code redesigns the UI for your role), frontend + APK build, and server start. At the end you get a QR code to download the mobile app — it auto-connects to your server.
 
-See **[SETUP.md](SETUP.md)** for the full setup guide.
+See **[SETUP.md](SETUP.md)** for the full guide and **[PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md)** for examples of personalized apps.
 
 ---
 
@@ -233,7 +229,11 @@ server/              OpenClaw channel plugin (backend)
     └── *-tools.ts            System capabilities (filesystem, media, screen, browser, etc.)
 
 shared/types.ts               WebSocket protocol types (shared frontend ↔ backend)
-scripts/                      Install scripts, QR code tools
+scripts/                      Setup tools
+├── personalize-prompt.md     Claude Code prompt for deep UI personalization
+├── personalize.cjs           Deterministic fallback (6 persona templates)
+└── qr-terminal.js            QR code for mobile deep links
+setup / setup.ps1             One-command setup (bash / PowerShell)
 ```
 
 ---
@@ -261,10 +261,11 @@ Requires a running OpenClaw gateway with the Enso plugin enabled. Vite proxies `
 
 | Document | Contents |
 |----------|----------|
-| **[SETUP.md](SETUP.md)** | Installation, prerequisites, phone setup, troubleshooting |
-| **[server/SETUP.md](server/SETUP.md)** | Plugin configuration, remote access, Cloudflare Tunnel, multi-machine |
+| **[SETUP.md](SETUP.md)** | One-command setup, personalization, prerequisites, troubleshooting |
+| **[PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md)** | 6 persona apps with screenshots — Atlas, Forge, Nexus, Signal, Studio, Compass |
 | **[CLAUDE-REFERENCE.md](CLAUDE-REFERENCE.md)** | App building API, ExecutorContext, template rules, EnsoUI components |
 | **[CLAUDE.md](CLAUDE.md)** | Full architecture reference for AI-assisted development |
+| **[PROJECTS.md](PROJECTS.md)** | Project import, AI team generation, evolution sprints |
 
 ---
 
