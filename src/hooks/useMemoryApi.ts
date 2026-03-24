@@ -62,7 +62,14 @@ export function useMemoryApi() {
           headers: authHeaders(),
         });
       }
+      // Clear local card state + reset to default conversation
       useChatStore.setState({ cardOrder: [], cards: {} });
+      // Refresh conversation list (server recreated a single empty default chat)
+      const refreshList = useChatStore.getState().refreshConversationsList;
+      if (refreshList) await refreshList();
+      // Switch to the default conversation
+      const selectConv = useChatStore.getState().selectConversation;
+      if (selectConv) selectConv("default");
       return true;
     } catch {
       return false;

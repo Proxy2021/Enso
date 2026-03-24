@@ -1362,6 +1362,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
 
   const [showEvolveMenu, setShowEvolveMenu] = useState(false);
   const evolveMenuRef = useRef<HTMLDivElement>(null);
+  const [evolvePrompt, setEvolvePrompt] = useState<null | string>(null);
+  const evolveInputRef = useRef<HTMLTextAreaElement>(null);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [playAppRevealAnim, setPlayAppRevealAnim] = useState(false);
@@ -1801,7 +1803,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                   {showEvolveMenu && (
                     <div className="absolute top-full right-0 mt-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[190px] z-[200]">
                       <button
-                        onClick={() => { setShowEvolveMenu(false); requestCardEvolution(card.id); }}
+                        onClick={() => { setShowEvolveMenu(false); setEvolvePrompt(""); setTimeout(() => evolveInputRef.current?.focus(), 50); }}
                         className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
                       >
                         <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1994,6 +1996,56 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             />
           )}
           {showBlockingLoadOverlay && card.type !== "terminal" && card.type !== "shell" && <CardLoadingOverlay action={loadingLabel} />}
+
+          {/* ── Evolve instruction overlay ── */}
+          {evolvePrompt !== null && (
+            <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 rounded-xl">
+              <div className="w-full max-w-md space-y-3">
+                <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+                  </svg>
+                  Evolve This Card
+                </h3>
+                <div className="text-[11px] text-gray-400">
+                  Add specific instructions for improvement, or leave blank to evolve based on the current card context.
+                </div>
+                <textarea
+                  ref={evolveInputRef}
+                  value={evolvePrompt}
+                  onChange={e => setEvolvePrompt(e.target.value)}
+                  placeholder="e.g., Improve the data visualization, add filtering, fix mobile layout..."
+                  rows={3}
+                  className="w-full bg-gray-800/80 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-violet-500/60 resize-none"
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      requestCardEvolution(card.id, { goal: evolvePrompt.trim() || undefined });
+                      setEvolvePrompt(null);
+                    }
+                    if (e.key === "Escape") setEvolvePrompt(null);
+                  }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      requestCardEvolution(card.id, { goal: evolvePrompt.trim() || undefined });
+                      setEvolvePrompt(null);
+                    }}
+                    className="flex-1 px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium rounded-lg transition-colors active:scale-[0.98]"
+                  >
+                    {evolvePrompt?.trim() ? "🧬 Evolve with Instructions" : "🧬 Evolve (auto)"}
+                  </button>
+                  <button
+                    onClick={() => setEvolvePrompt(null)}
+                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
