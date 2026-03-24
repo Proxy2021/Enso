@@ -3139,6 +3139,17 @@ export const useChatStore = create<CardStore>((set, get) => ({
           createdAt: now,
           updatedAt: now,
         };
+        // Remove thinking placeholder when first real assistant card arrives (final path)
+        const thinkingId = state._thinkingCardId;
+        if (thinkingId) {
+          const { [thinkingId]: _, ...cardsWithoutThinking } = state.cards;
+          return {
+            ...storeUpdates,
+            _thinkingCardId: null,
+            cardOrder: [...state.cardOrder.filter(id => id !== thinkingId), cardId],
+            cards: { ...cardsWithoutThinking, [cardId]: card },
+          };
+        }
         return {
           ...storeUpdates,
           cardOrder: [...state.cardOrder, cardId],

@@ -7,6 +7,7 @@ import { VoiceOverlay } from "./VoiceOverlay";
 import { isNative } from "../lib/platform";
 import { isLikelyNaturalLanguage } from "../utils/nlDetection";
 import { useT } from "../lib/i18n";
+import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 
 /**
  * Tracks visual viewport offset on mobile when the software keyboard opens.
@@ -160,6 +161,11 @@ export default function ChatInput() {
   const imageResearchRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const keyboardOffset = useKeyboardOffset();
+
+  // Image research preview state
+  const [irPreview, setIrPreview] = useState<{
+    file: File; localUrl: string; topic: string; loading: boolean; serverPath: string;
+  } | null>(null);
 
   const disabled = connectionState !== "connected";
 
@@ -370,10 +376,40 @@ export default function ChatInput() {
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length > 0) {
-      // Image-research: auto-send immediately, no staging
+      // Image-research: show preview modal for user to review/edit the topic
       if (e.target === imageResearchRef.current) {
         e.target.value = "";
-        sendMessageWithMedia("", files, "image_research");
+        const file = files[0];
+        const localUrl = URL.createObjectURL(file);
+        setIrPreview({ file, localUrl, topic: "", loading: true, serverPath: "" });
+
+        // Upload image then analyze in background
+        (async () => {
+          try {
+            const baseUrl = getBackendBaseUrl();
+            const { compressImageFile } = await import("../lib/media-actions");
+            const compressed = await compressImageFile(file);
+            const uploadRes = await fetch(`${baseUrl}/upload`, {
+              method: "POST",
+              headers: authHeaders({ "Content-Type": compressed.type }),
+              body: compressed,
+            });
+            if (!uploadRes.ok) throw new Error("Upload failed");
+            const { filePath } = await uploadRes.json();
+
+            // Analyze with vision
+            const analyzeRes = await fetch(`${baseUrl}/api/image-analyze`, {
+              method: "POST",
+              headers: authHeaders({ "Content-Type": "application/json" }),
+              body: JSON.stringify({ imagePath: filePath }),
+            });
+            const { topic } = analyzeRes.ok ? await analyzeRes.json() : { topic: "" };
+
+            setIrPreview(prev => prev ? { ...prev, topic, loading: false, serverPath: filePath } : null);
+          } catch {
+            setIrPreview(prev => prev ? { ...prev, topic: "", loading: false } : null);
+          }
+        })();
         return;
       }
       setAttachedFiles((prev) => [...prev, ...files]);
@@ -435,6 +471,71 @@ export default function ChatInput() {
       style={keyboardOffset > 0 ? { paddingBottom: `${keyboardOffset}px` } : undefined}
     >
       <div className="max-w-3xl mx-auto relative">
+        {/* Image research preview modal */}
+        {irPreview && (
+          <div className="mb-3 bg-gray-800/90 border border-gray-600/60 rounded-xl p-3 shadow-lg">
+            <div className="flex gap-3">
+              {/* Image thumbnail */}
+              <div className="shrink-0">
+                <img src={irPreview.localUrl} alt="Preview" className="w-20 h-20 object-cover rounded-lg border border-gray-600" />
+              </div>
+              {/* Topic area */}
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] text-gray-400 mb-1 flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/></svg>
+                  {irPreview.loading ? "Analyzing image..." : "Research topic (edit if needed)"}
+                </div>
+                {irPreview.loading ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-gray-400">Extracting topic from image...</span>
+                  </div>
+                ) : (
+                  <textarea
+                    className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:border-indigo-500 outline-none resize-none"
+                    rows={2}
+                    value={irPreview.topic}
+                    onChange={e => setIrPreview(prev => prev ? { ...prev, topic: e.target.value } : null)}
+                    placeholder="Describe what to research..."
+                    autoFocus
+                  />
+                )}
+              </div>
+            </div>
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={() => { URL.revokeObjectURL(irPreview.localUrl); setIrPreview(null); }}
+                className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <div className="flex gap-1.5 ml-auto">
+                {([
+                  { label: "Research", icon: "\uD83D\uDD0D", prefix: "" },
+                  { label: "Similar", icon: "\uD83D\uDDBC\uFE0F", prefix: "Find similar images and alternatives: " },
+                  { label: "Shop", icon: "\uD83D\uDED2", prefix: "Find prices, reviews, and where to buy: " },
+                  { label: "Translate", icon: "\uD83C\uDF10", prefix: "Translate all text visible in this image. Detected content: " },
+                ] as const).map(action => (
+                  <button
+                    key={action.label}
+                    onClick={() => {
+                      const topic = action.prefix + irPreview.topic.trim();
+                      const file = irPreview.file;
+                      URL.revokeObjectURL(irPreview.localUrl);
+                      setIrPreview(null);
+                      sendMessageWithMedia(topic, [file], "image_research");
+                    }}
+                    disabled={irPreview.loading || !irPreview.topic.trim()}
+                    className="px-2.5 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-200 text-[11px] font-medium rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <span className="text-xs">{action.icon}</span> {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         {/* Location error banner */}
         {locationError && (
           <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-red-900/50 border border-red-700 text-red-300 text-sm">

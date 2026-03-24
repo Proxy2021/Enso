@@ -1336,6 +1336,26 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // Analyze an uploaded image with Gemini Vision and return a research topic
+  app.post("/api/image-analyze", express.json({ limit: "1mb" }), async (req, res) => {
+    try {
+      const { imagePath } = req.body;
+      if (!imagePath) { res.status(400).json({ error: "imagePath required" }); return; }
+      const apiKey = account?.geminiApiKey;
+      if (!apiKey) { res.status(400).json({ error: "Gemini API key not configured" }); return; }
+
+      const { topic } = await analyzeImageForResearch({
+        imagePath,
+        userText: "",
+        apiKey,
+      });
+      res.json({ topic });
+    } catch (err: any) {
+      logError("image-analyze", "Vision analysis failed", err);
+      res.json({ topic: "" }); // Return empty topic — user can type manually
+    }
+  });
+
   // Transcribe audio from the browser (voice input on native)
   // Accepts either raw audio body or JSON { audio: base64, mimeType: string }
   app.post("/transcribe", express.json({ limit: "20mb" }), express.raw({ type: () => true, limit: "20mb" }), async (req, res) => {
@@ -2333,11 +2353,21 @@ export async function startEnsoServer(opts: {
             runtime.log?.(`[enso] image-research: analyzing image for research topic`);
             try {
               const imagePath = msg.mediaUrls[0];
-              const { topic, depth } = await analyzeImageForResearch({
-                imagePath,
-                userText: msg.text || "",
-                apiKey: account.geminiApiKey,
-              });
+              // If user provided edited text (from preview modal), use it directly — skip vision
+              let topic: string;
+              let depth: "quick" | "standard" = "standard";
+              if (msg.text && msg.text.trim()) {
+                topic = msg.text.trim();
+                runtime.log?.(`[enso] image-research: using user-provided topic (skipping vision)`);
+              } else {
+                const result = await analyzeImageForResearch({
+                  imagePath,
+                  userText: "",
+                  apiKey: account.geminiApiKey,
+                });
+                topic = result.topic;
+                depth = result.depth;
+              }
               runtime.log?.(`[enso] image-research: topic="${topic.slice(0, 80)}" depth=${depth}`);
               await routeToResearch({
                 topic,
