@@ -313,41 +313,43 @@ async function routeToImageSearch(params: {
 
   // Build inline JSX template for image grid
   const gridTemplate = `
-var data = props.data || {};
-var images = data.images || [];
-var topic = data.topic || "";
+function App(props) {
+  var data = props.data || {};
+  var images = data.images || [];
+  var topic = data.topic || "";
 
-return (
-  <div style={{ padding: "12px" }}>
-    <div style={{ fontSize: "13px", fontWeight: 600, color: "#e5e7eb", marginBottom: "8px" }}>
-      Similar images: {topic}
-    </div>
-    {images.length === 0 ? (
-      <div style={{ color: "#9ca3af", fontSize: "12px", textAlign: "center", padding: "24px 0" }}>
-        No similar images found
+  return (
+    <div style={{ padding: "12px" }}>
+      <div style={{ fontSize: "13px", fontWeight: 600, color: "#e5e7eb", marginBottom: "8px" }}>
+        Similar images: {topic}
       </div>
-    ) : (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
-        {images.map(function(img, i) {
-          return (
-            <a key={i} href={img.pageUrl} target="_blank" rel="noopener noreferrer"
-               style={{ display: "block", borderRadius: "8px", overflow: "hidden", border: "1px solid #374151", position: "relative", aspectRatio: "1", background: "#111827" }}>
-              <img src={img.url} alt={img.title}
-                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                   onError={function(e) { e.target.style.display = "none"; }} />
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 6px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: "9px", color: "#d1d5db", lineHeight: "1.2" }}>
-                {img.title.length > 40 ? img.title.slice(0, 40) + "..." : img.title}
-              </div>
-            </a>
-          );
-        })}
+      {images.length === 0 ? (
+        <div style={{ color: "#9ca3af", fontSize: "12px", textAlign: "center", padding: "24px 0" }}>
+          No similar images found
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
+          {images.map(function(img, i) {
+            return (
+              <a key={i} href={img.pageUrl} target="_blank" rel="noopener noreferrer"
+                 style={{ display: "block", borderRadius: "8px", overflow: "hidden", border: "1px solid #374151", position: "relative", aspectRatio: "1", background: "#111827" }}>
+                <img src={img.url} alt={img.title}
+                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                     onError={function(e) { e.target.style.display = "none"; }} />
+                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 6px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: "9px", color: "#d1d5db", lineHeight: "1.2" }}>
+                  {img.title.length > 40 ? img.title.slice(0, 40) + "..." : img.title}
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px", textAlign: "right" }}>
+        {images.length} images via Brave Search
       </div>
-    )}
-    <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px", textAlign: "right" }}>
-      {images.length} images via Brave Search
     </div>
-  </div>
-);`;
+  );
+}`;
 
   const cardId = randomUUID();
   send({
