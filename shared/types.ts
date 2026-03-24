@@ -246,6 +246,7 @@ export interface ClientMessage {
     | "evolution.start"
     | "discovery.start"
     | "image_research"
+    | "image_search"
     | "card.summarize"
     | "card.evolve"
     | "card.release"

@@ -114,7 +114,7 @@ interface CardStore {
   connect: () => void;
   disconnect: () => void;
   sendMessage: (text: string, routing?: ToolRouting, sourceCardId?: string) => void;
-  sendMessageWithMedia: (text: string, mediaFiles: File[], intent?: "image_research") => Promise<void>;
+  sendMessageWithMedia: (text: string, mediaFiles: File[], intent?: "image_research" | "image_search") => Promise<void>;
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
   enhanceCard: (cardId: string) => void;
   enhanceCardWithFamily: (cardId: string, family: string) => void;
@@ -742,7 +742,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
     });
   },
 
-  sendMessageWithMedia: async (text: string, mediaFiles: File[], intent?: "image_research") => {
+  sendMessageWithMedia: async (text: string, mediaFiles: File[], intent?: "image_research" | "image_search") => {
     const id = uuidv4();
     const now = Date.now();
 
@@ -830,7 +830,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
     // Send to server via WebSocket
     get()._wsClient?.send({
-      type: intent === "image_research" ? "image_research" : "chat.send",
+      type: intent === "image_research" ? "image_research" : intent === "image_search" ? "image_search" : "chat.send",
       conversationId: get().activeConversationId,
       text,
       mediaUrls: serverPaths,

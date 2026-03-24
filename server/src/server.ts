@@ -297,6 +297,76 @@ async function routeToResearch(params: {
 }
 
 /**
+ * Image-only search — returns a grid of similar images via Brave Image Search.
+ * No research narrative, just a visual grid with clickable thumbnails.
+ */
+async function routeToImageSearch(params: {
+  topic: string;
+  sessionKey: string;
+  client: ConnectedClient;
+}): Promise<void> {
+  const { topic, sessionKey, client } = params;
+  const send = (m: ServerMessage) => client.send(m);
+
+  const { braveImageSearch } = await import("./researcher-tools.js");
+  const images = await braveImageSearch(`${topic}`, 10);
+
+  // Build inline JSX template for image grid
+  const gridTemplate = `
+var data = props.data || {};
+var images = data.images || [];
+var topic = data.topic || "";
+
+return (
+  <div style={{ padding: "12px" }}>
+    <div style={{ fontSize: "13px", fontWeight: 600, color: "#e5e7eb", marginBottom: "8px" }}>
+      Similar images: {topic}
+    </div>
+    {images.length === 0 ? (
+      <div style={{ color: "#9ca3af", fontSize: "12px", textAlign: "center", padding: "24px 0" }}>
+        No similar images found
+      </div>
+    ) : (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
+        {images.map(function(img, i) {
+          return (
+            <a key={i} href={img.pageUrl} target="_blank" rel="noopener noreferrer"
+               style={{ display: "block", borderRadius: "8px", overflow: "hidden", border: "1px solid #374151", position: "relative", aspectRatio: "1", background: "#111827" }}>
+              <img src={img.url} alt={img.title}
+                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                   onError={function(e) { e.target.style.display = "none"; }} />
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 6px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: "9px", color: "#d1d5db", lineHeight: "1.2" }}>
+                {img.title.length > 40 ? img.title.slice(0, 40) + "..." : img.title}
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    )}
+    <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px", textAlign: "right" }}>
+      {images.length} images via Brave Search
+    </div>
+  </div>
+);`;
+
+  const cardId = randomUUID();
+  send({
+    id: cardId,
+    runId: randomUUID(),
+    sessionKey,
+    seq: 0,
+    state: "final",
+    data: {
+      tool: "enso_image_search",
+      topic,
+      images: images.map(r => ({ url: r.thumbnail, title: r.title, pageUrl: r.url })),
+    },
+    generatedUI: gridTemplate,
+    timestamp: Date.now(),
+  });
+}
+
+/**
  * Analyze an image with Gemini Vision and extract a research topic.
  */
 async function analyzeImageForResearch(params: {
@@ -2403,6 +2473,37 @@ export async function startEnsoServer(opts: {
                   text: "Sorry, I couldn't analyze this image. Please try again or describe what you'd like to research.",
                   timestamp: Date.now() });
               }
+            }
+            break;
+          }
+
+          case "image_search": {
+            // Image-only search — returns a grid of similar images, no research narrative
+            if (!msg.text?.trim()) {
+              send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                text: "No search topic provided.", timestamp: Date.now() });
+              break;
+            }
+            const isConvId = resolveConversationId(client, msg);
+            // Persist user bubble with image (if any)
+            if (msg.mediaUrls?.length) {
+              const isUserCardId = randomUUID();
+              persistCard(clientId, isConvId, {
+                id: isUserCardId, runId: isUserCardId, type: "user-bubble", role: "user",
+                text: msg.text || "", mediaUrls: msg.mediaUrls, timestamp: Date.now(),
+              });
+            }
+            runtime.log?.(`[enso] image-search: topic="${msg.text.slice(0, 80)}"`);
+            try {
+              await routeToImageSearch({
+                topic: msg.text.trim(),
+                sessionKey,
+                client,
+              });
+            } catch (err) {
+              logError("image-search", "Image search failed", err);
+              send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                text: "Image search failed. Please try again.", timestamp: Date.now() });
             }
             break;
           }

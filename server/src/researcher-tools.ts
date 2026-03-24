@@ -115,7 +115,7 @@ interface BraveWebResult {
   description: string;
 }
 
-interface BraveImageResult {
+export interface BraveImageResult {
   title: string;
   url: string;       // page URL
   thumbnail: string; // image src
@@ -695,7 +695,7 @@ async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[
   }
 }
 
-async function braveImageSearch(query: string, count = 8): Promise<BraveImageResult[]> {
+export async function braveImageSearch(query: string, count = 8): Promise<BraveImageResult[]> {
   const apiKey = getBraveApiKey();
   if (!apiKey) return [];
 

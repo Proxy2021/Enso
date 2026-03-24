@@ -512,11 +512,11 @@ export default function ChatInput() {
               </button>
               <div className="flex gap-1.5 ml-auto">
                 {([
-                  { label: "Research", icon: "\uD83D\uDD0D", prefix: "" },
-                  { label: "Similar", icon: "\uD83D\uDDBC\uFE0F", prefix: "Find similar images and alternatives: " },
-                  { label: "Shop", icon: "\uD83D\uDED2", prefix: "Find prices, reviews, and where to buy: " },
-                  { label: "Translate", icon: "\uD83C\uDF10", prefix: "Translate all text visible in this image. Detected content: " },
-                ] as const).map(action => (
+                  { label: "Research", icon: "\uD83D\uDD0D", prefix: "", intent: "image_research" as const },
+                  { label: "Similar", icon: "\uD83D\uDDBC\uFE0F", prefix: "", intent: "image_search" as const },
+                  { label: "Shop", icon: "\uD83D\uDED2", prefix: "Find prices, reviews, and where to buy: ", intent: "image_research" as const },
+                  { label: "Translate", icon: "\uD83C\uDF10", prefix: "Translate all text visible in this image. Detected content: ", intent: "image_research" as const },
+                ]).map(action => (
                   <button
                     key={action.label}
                     onClick={() => {
@@ -524,7 +524,7 @@ export default function ChatInput() {
                       const file = irPreview.file;
                       URL.revokeObjectURL(irPreview.localUrl);
                       setIrPreview(null);
-                      sendMessageWithMedia(topic, [file], "image_research");
+                      sendMessageWithMedia(topic, [file], action.intent);
                     }}
                     disabled={irPreview.loading || !irPreview.topic.trim()}
                     className="px-2.5 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-200 text-[11px] font-medium rounded-lg transition-colors flex items-center gap-1"
