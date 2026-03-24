@@ -2094,9 +2094,34 @@ export async function startEnsoServer(opts: {
                     useGeminiPlanning: isImplicit,
                     chatModel: client.chatModel,
                     skipApproval: isImplicit,
-                  }).catch((err) => {
+                  }).catch(async (err) => {
                     logError("orchestrator", "Auto-routed orchestration failed", err);
                     runtime.error?.(`[enso] orchestrator error: ${err instanceof Error ? err.message : String(err)}`);
+                    // Fall back to normal agent pipeline so the user gets a response
+                    runtime.log?.(`[enso] orchestrator failed, falling back to agent pipeline`);
+                    try {
+                      await handleInbound({
+                        message: {
+                          messageId: randomUUID(),
+                          sessionId: sessionKey,
+                          senderNick: `user_${connectionId}`,
+                          text: msg.text,
+                          mediaUrls: msg.mediaUrls,
+                          timestamp: Date.now(),
+                        },
+                        account,
+                        config,
+                        runtime,
+                        client,
+                      });
+                    } catch (fallbackErr) {
+                      logError("orchestrator", "Fallback to agent also failed", fallbackErr);
+                      send({
+                        id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
+                        state: "final", text: `Sorry, I encountered an error processing your request. Please try again.`,
+                        timestamp: Date.now(),
+                      } as ServerMessage);
+                    }
                   });
                   break;
                 }
@@ -2154,8 +2179,33 @@ export async function startEnsoServer(opts: {
                       classification: { ...classification, complexity: "orchestrated" },
                       client,
                       account,
-                    }).catch((err) => {
+                    }).catch(async (err) => {
                       logError("orchestrator", "Archetype-escalated orchestration failed", err);
+                      // Fall back to normal agent pipeline so the user gets a response
+                      runtime.log?.(`[enso] archetype orchestration failed, falling back to agent pipeline`);
+                      try {
+                        await handleInbound({
+                          message: {
+                            messageId: randomUUID(),
+                            sessionId: sessionKey,
+                            senderNick: `user_${connectionId}`,
+                            text: msg.text,
+                            mediaUrls: msg.mediaUrls,
+                            timestamp: Date.now(),
+                          },
+                          account,
+                          config,
+                          runtime,
+                          client,
+                        });
+                      } catch (fallbackErr) {
+                        logError("orchestrator", "Archetype fallback to agent also failed", fallbackErr);
+                        send({
+                          id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
+                          state: "final", text: `Sorry, I encountered an error processing your request. Please try again.`,
+                          timestamp: Date.now(),
+                        } as ServerMessage);
+                      }
                     });
                     break;
                   }
