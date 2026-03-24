@@ -463,10 +463,76 @@ else
 fi
 
 # ═══════════════════════════════════════════════════════════════════════
-#  Step 7: Build
+#  Step 7: Personalize Your App
 # ═══════════════════════════════════════════════════════════════════════
 
-step "Step 7: Build"
+step "Step 7: Personalize Your App"
+
+echo "  Tell me a bit about yourself so I can customize your app."
+echo "  (Press Enter to skip and use the default Enso experience)"
+echo
+
+USER_NAME=$(prompt_with_default "Your name" "$(whoami)" "${ENSO_USER_NAME:-}")
+USER_ROLE=$(prompt_secret "  What do you do? (e.g., developer, researcher, investor): " "${ENSO_USER_ROLE:-}")
+echo
+
+GENOME_APP_NAME=""
+if [ -n "$USER_ROLE" ]; then
+  CUSTOM_APP_NAME=$(prompt_with_default "What would you like to call your app?" "" "${ENSO_APP_NAME:-}")
+  [ -z "$CUSTOM_APP_NAME" ] && CUSTOM_APP_NAME="Enso"
+
+  # Strategy: Use Claude Code for deep personalization if available,
+  # fall back to deterministic script if not
+  PERSONALIZED=false
+
+  if command -v claude &>/dev/null && [ -z "${CLAUDECODE:-}" ]; then
+    echo
+    echo "  → Designing your personalized app with Claude Code..."
+    echo "    (This takes ~30-60 seconds for a bespoke experience)"
+    echo
+
+    # Build the prompt from template
+    PROMPT_TEMPLATE=$(cat "$REPO_DIR/scripts/personalize-prompt.md")
+    PROMPT=$(echo "$PROMPT_TEMPLATE" | \
+      sed "s/{{USER_NAME}}/$USER_NAME/g" | \
+      sed "s/{{USER_ROLE}}/$(echo "$USER_ROLE" | sed 's/[&/\]/\\&/g')/g" | \
+      sed "s/{{APP_NAME}}/$CUSTOM_APP_NAME/g")
+
+    # Run Claude Code in non-interactive mode
+    if cd "$REPO_DIR" && claude -p "$PROMPT" \
+        --model sonnet \
+        --permission-mode bypassPermissions \
+        --allowedTools "Read Edit Write Glob Grep" \
+        2>&1 | tail -5; then
+      PERSONALIZED=true
+      GENOME_APP_NAME="$CUSTOM_APP_NAME"
+      ok "Claude Code personalized your app: $CUSTOM_APP_NAME"
+    else
+      warn "Claude Code session failed — falling back to quick personalization"
+    fi
+  fi
+
+  # Fallback: deterministic persona-based personalization
+  if [ "$PERSONALIZED" = false ]; then
+    PERSONALIZE_JSON="{\"userName\":\"$USER_NAME\",\"userRole\":\"$(echo "$USER_ROLE" | sed 's/"/\\"/g')\",\"appName\":\"$CUSTOM_APP_NAME\"}"
+    PERSONALIZE_OUTPUT=$(cd "$REPO_DIR" && node scripts/personalize.cjs "$PERSONALIZE_JSON" 2>&1)
+    echo "$PERSONALIZE_OUTPUT" | grep -v "^PERSONALIZE_RESULT:" || true
+
+    RESULT_LINE=$(echo "$PERSONALIZE_OUTPUT" | grep "^PERSONALIZE_RESULT:" | sed 's/^PERSONALIZE_RESULT://')
+    if [ -n "$RESULT_LINE" ]; then
+      GENOME_APP_NAME=$(echo "$RESULT_LINE" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).appName))")
+      ok "Your app \"$GENOME_APP_NAME\" is ready (quick personalization)"
+    fi
+  fi
+else
+  info "Using default Enso experience"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 8: Build
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 8: Build"
 
 # Determine the server URL for APK auto-connect
 # Priority: tunnel URL > LAN IP > localhost
@@ -496,7 +562,7 @@ ENSO_DEFAULT_BACKEND="$APK_BACKEND_URL" \
 ENSO_DEFAULT_TOKEN="$ACCESS_TOKEN" \
 ENSO_DEFAULT_NAME="$(hostname)" \
 npm run build 2>&1 | tail -1
-ok "Frontend built (default backend: $APK_BACKEND_URL)"
+ok "Frontend built: ${GENOME_APP_NAME:-Enso} (backend: $APK_BACKEND_URL)"
 
 # APK build
 APK_PATH="$REPO_DIR/android/app/build/outputs/apk/release/app-release.apk"
@@ -636,10 +702,10 @@ if [ -d "$REPO_DIR/android" ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════════════
-#  Step 8: Install CLI + Start Server
+#  Step 9: Install CLI + Start Server
 # ═══════════════════════════════════════════════════════════════════════
 
-step "Step 8: Start Server"
+step "Step 9: Start Server"
 
 # CLI config
 CLI_JSON="$ENSO_DIR/cli.json"
