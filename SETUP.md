@@ -1,20 +1,62 @@
 # Enso Setup Guide
 
-Get Enso running in minutes. No external dependencies beyond Node.js.
+## One-Command Setup (Recommended)
 
-## Prerequisites
+Get a complete Enso environment — chat AI, Claude Code, remote access, and mobile app — with a single command:
+
+1. **Get the Enso source code** onto your machine (download, clone, copy — any method)
+2. **Run the setup script:**
+
+```bash
+# macOS / Linux
+./setup
+
+# Windows PowerShell
+.\setup.ps1
+```
+
+The script walks you through everything interactively:
+- **Install location** — choose where the source lives (default `~/Enso`)
+- **Chat AI model** — pick from Gemini, OpenAI, Anthropic, DeepSeek, Ollama, or OpenRouter
+- **Service API keys** — Brave Search and others for web research
+- **Claude Code** — install CLI + authenticate (API key or subscription)
+- **Remote access** — automatic `<your-name>.enso.net` via Cloudflare tunnel
+- **Build** — frontend + mobile APK (if Android tools available)
+- **Server start** — guardian-supervised with auto-restart
+
+At the end, you get a QR code to download the mobile app on your phone.
+
+### Non-interactive mode
+
+Pre-set environment variables to skip prompts (useful for automation):
+
+```bash
+ENSO_INSTALL_PATH=~/Enso \
+ENSO_LLM_CHOICE=1 \
+ENSO_GEMINI_KEY=your-key \
+ENSO_BRAVE_KEY=your-key \
+ENSO_CLAUDE_AUTH=3 \
+ENSO_TUNNEL=n \
+./setup
+```
+
+---
+
+## Manual Setup
+
+If you prefer step-by-step control, follow the instructions below.
+
+### Prerequisites
 
 - **Node.js 22+** — [nodejs.org](https://nodejs.org/) or `nvm install 22`
 - **Git** — to clone the repository
-- **Gemini API key** — for AI chat and UI generation ([aistudio.google.com](https://aistudio.google.com/apikey))
+- **An LLM API key** — Gemini (free), OpenAI, Anthropic, DeepSeek, or OpenRouter
 - **Claude Code** (optional) — for `/code`, Build App, orchestration, and evolution features
-
-## Quick Start
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/nicobailon/Enso.git
+git clone <your-enso-source>
 cd Enso
 npm install
 ```

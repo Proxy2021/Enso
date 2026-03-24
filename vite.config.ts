@@ -8,6 +8,12 @@ const API_TARGET = `http://localhost:${API_PORT}`;
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    // Build-time config for APK auto-connect (set during ./setup APK build)
+    "__ENSO_DEFAULT_BACKEND__": JSON.stringify(process.env.ENSO_DEFAULT_BACKEND || ""),
+    "__ENSO_DEFAULT_TOKEN__": JSON.stringify(process.env.ENSO_DEFAULT_TOKEN || ""),
+    "__ENSO_DEFAULT_NAME__": JSON.stringify(process.env.ENSO_DEFAULT_NAME || ""),
+  },
   resolve: {
     alias: {
       "@shared": path.resolve(__dirname, "shared"),

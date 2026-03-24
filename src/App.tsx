@@ -8,9 +8,14 @@ import ConversationSidebar, { toggleMobileConversations } from "./components/Con
 import ConnectionPicker from "./components/ConnectionPicker";
 import SetupWizard from "./components/SetupWizard";
 
-import { parseDeepLink, setActiveBackend, getActiveBackend, loadBackends } from "./lib/connection";
+import { parseDeepLink, setActiveBackend, getActiveBackend, loadBackends, addBackend } from "./lib/connection";
 import { isNative } from "./lib/platform";
 import { initDeepLinkListener } from "./lib/deep-link-handler";
+
+// Build-time defaults (injected by ./setup during APK build)
+declare const __ENSO_DEFAULT_BACKEND__: string;
+declare const __ENSO_DEFAULT_TOKEN__: string;
+declare const __ENSO_DEFAULT_NAME__: string;
 import UpdateBanner from "./components/UpdateBanner";
 import DebugReporter from "./components/DebugReporter";
 import SettingsPanel from "./components/SettingsPanel";
@@ -227,10 +232,20 @@ export default function App() {
       return () => disconnect();
     }
 
-    // Native: no backends saved at all → show setup wizard (first launch)
+    // Native: no backends saved at all → auto-connect if default baked in, else setup wizard
     if (isNative && !getActiveBackend()) {
       const savedBackends = loadBackends();
       if (savedBackends.length === 0) {
+        // Check for build-time default backend (baked into APK during ./setup)
+        const defaultUrl = typeof __ENSO_DEFAULT_BACKEND__ !== "undefined" ? __ENSO_DEFAULT_BACKEND__ : "";
+        const defaultToken = typeof __ENSO_DEFAULT_TOKEN__ !== "undefined" ? __ENSO_DEFAULT_TOKEN__ : "";
+        if (defaultUrl && defaultToken) {
+          const defaultName = typeof __ENSO_DEFAULT_NAME__ !== "undefined" ? __ENSO_DEFAULT_NAME__ : "Enso Server";
+          const config = addBackend({ name: defaultName, url: defaultUrl, token: defaultToken });
+          setActiveBackend(config.id);
+          connectToBackend(config);
+          return () => disconnect();
+        }
         useChatStore.getState().setShowSetupWizard(true);
       } else {
         useChatStore.getState().setShowConnectionPicker(true);

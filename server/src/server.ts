@@ -683,6 +683,13 @@ export async function startEnsoServer(opts: {
     createReadStream(apkPath).pipe(res);
   });
 
+  // ── Tunnel registry (unauthenticated — only active on master instances) ──
+  if (process.env.CLOUDFLARE_API_TOKEN) {
+    const { tunnelRoutes } = await import("./tunnel-registry.js");
+    app.use("/api/tunnel", express.json(), tunnelRoutes);
+    runtime.log?.("[enso] tunnel registry enabled (master mode)");
+  }
+
   // ── Demo assets (public — shipped showcase images for Photo Studio) ──
   const demoDir = join(pluginDir, "..", "apps", "photo_studio", "demo");
   if (existsSync(demoDir)) {

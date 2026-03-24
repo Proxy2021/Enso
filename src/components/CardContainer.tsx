@@ -1364,6 +1364,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const evolveMenuRef = useRef<HTMLDivElement>(null);
   const [evolvePrompt, setEvolvePrompt] = useState<null | string>(null);
   const evolveInputRef = useRef<HTMLTextAreaElement>(null);
+  const [buildAppPrompt, setBuildAppPrompt] = useState<null | string>(null);
+  const buildAppInputRef = useRef<HTMLTextAreaElement>(null);
   const [buildSummaryDismissed, setBuildSummaryDismissed] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [playAppRevealAnim, setPlayAppRevealAnim] = useState(false);
@@ -1815,15 +1817,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
                       </button>
                       <div className="h-px bg-gray-700/50 mx-2" />
                       <button
-                        onClick={() => {
-                          setShowEvolveMenu(false);
-                          const data = (isAppView ? card.appData : card.data) as Record<string, unknown> | undefined;
-                          const topic = typeof data?.topic === "string" ? data.topic
-                            : typeof data?.title === "string" ? data.title
-                            : typeof data?.query === "string" ? data.query
-                            : (card.text ?? "").trim().split("\n")[0]?.slice(0, 200) || "card content";
-                          buildApp(card.id, card.text ?? "", `Build a new app based on this card's context: ${topic}`);
-                        }}
+                        onClick={() => { setShowEvolveMenu(false); setBuildAppPrompt(""); setTimeout(() => buildAppInputRef.current?.focus(), 50); }}
                         className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700/50 transition-all duration-150 flex items-center gap-2"
                       >
                         <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2048,6 +2042,74 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           )}
         </div>
       )}
+
+          {/* ── Build New App instruction overlay ── */}
+          {buildAppPrompt !== null && (
+            <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 rounded-xl">
+              <div className="w-full max-w-md space-y-3">
+                <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" />
+                  </svg>
+                  Build New App
+                </h3>
+                <div className="text-[11px] text-gray-400">
+                  Describe what kind of app to build from this card's content, or leave blank for an auto-generated app.
+                </div>
+                <textarea
+                  ref={buildAppInputRef}
+                  value={buildAppPrompt}
+                  onChange={e => setBuildAppPrompt(e.target.value)}
+                  placeholder="e.g., Build an interactive comparison table, a timeline explorer, a quiz app..."
+                  rows={3}
+                  className="w-full bg-gray-800/80 border border-gray-600/60 rounded-lg px-3 py-2 text-xs text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-amber-500/60 resize-none"
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      const data = (isAppView ? card.appData : card.data) as Record<string, unknown> | undefined;
+                      const topic = typeof data?.topic === "string" ? data.topic
+                        : typeof data?.title === "string" ? data.title
+                        : typeof data?.query === "string" ? data.query
+                        : (card.text ?? "").trim().split("\n")[0]?.slice(0, 200) || "card content";
+                      const userInstr = buildAppPrompt.trim();
+                      const instruction = userInstr
+                        ? `${userInstr}\n\nContext from card: ${topic}`
+                        : `Build a new app based on this card's context: ${topic}`;
+                      buildApp(card.id, card.text ?? "", instruction);
+                      setBuildAppPrompt(null);
+                    }
+                    if (e.key === "Escape") setBuildAppPrompt(null);
+                  }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const data = (isAppView ? card.appData : card.data) as Record<string, unknown> | undefined;
+                      const topic = typeof data?.topic === "string" ? data.topic
+                        : typeof data?.title === "string" ? data.title
+                        : typeof data?.query === "string" ? data.query
+                        : (card.text ?? "").trim().split("\n")[0]?.slice(0, 200) || "card content";
+                      const userInstr = buildAppPrompt?.trim();
+                      const instruction = userInstr
+                        ? `${userInstr}\n\nContext from card: ${topic}`
+                        : `Build a new app based on this card's context: ${topic}`;
+                      buildApp(card.id, card.text ?? "", instruction);
+                      setBuildAppPrompt(null);
+                    }}
+                    className="flex-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-lg transition-colors active:scale-[0.98]"
+                  >
+                    {buildAppPrompt?.trim() ? "🔨 Build with Instructions" : "🔨 Build App (auto)"}
+                  </button>
+                  <button
+                    onClick={() => setBuildAppPrompt(null)}
+                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
     </div>
   );

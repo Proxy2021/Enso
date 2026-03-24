@@ -1,0 +1,790 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Enso Setup — One command to set up a complete self-evolving AI sandbox.
+#
+#  Usage:  ./setup
+#  Or with pre-set values (non-interactive / testing):
+#    ENSO_INSTALL_PATH=~/Enso \
+#    ENSO_LLM_CHOICE=1 \
+#    ENSO_GEMINI_KEY=xxx \
+#    ENSO_BRAVE_KEY=xxx \
+#    ENSO_CLAUDE_AUTH=2 \
+#    ENSO_TUNNEL=n \
+#    ./setup
+# ═══════════════════════════════════════════════════════════════════════
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENSO_DIR="$HOME/.enso"
+PORT=3001
+
+# ── Helpers ────────────────────────────────────────────────────────────
+
+banner() {
+  echo
+  echo "  ╔═══════════════════════════════════════╗"
+  echo "  ║          Enso Setup                   ║"
+  echo "  ║   AI sandbox that builds itself.      ║"
+  echo "  ╚═══════════════════════════════════════╝"
+  echo
+}
+
+step() {
+  echo
+  echo "── $1 ──────────────────────────────────────────"
+  echo
+}
+
+ok()   { echo "  ✓ $1"; }
+warn() { echo "  ⚠ $1"; }
+fail() { echo "  ✗ $1"; exit 1; }
+info() { echo "  ℹ $1"; }
+
+prompt_with_default() {
+  local prompt="$1" default="$2" env_override="$3"
+  # If env var is set, use it (non-interactive mode)
+  if [ -n "$env_override" ]; then
+    echo "$env_override"
+    return
+  fi
+  read -rp "  $prompt [$default]: " value
+  echo "${value:-$default}"
+}
+
+prompt_yn() {
+  local prompt="$1" default="$2" env_override="${3:-}"
+  if [ -n "$env_override" ]; then
+    echo "$env_override"
+    return
+  fi
+  read -rp "  $prompt [$default]: " value
+  value="${value:-$default}"
+  echo "$value"
+}
+
+prompt_secret() {
+  local prompt="$1" env_override="${2:-}"
+  if [ -n "$env_override" ]; then
+    echo "$env_override"
+    return
+  fi
+  read -rp "  $prompt" value
+  echo "$value"
+}
+
+# ── Banner ─────────────────────────────────────────────────────────────
+
+banner
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 1: Install Location
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 1: Install Location"
+
+echo "  Where do you want to install Enso?"
+echo "  This is where the source code will live for self-evolution."
+echo
+
+DEFAULT_PATH="$HOME/Enso"
+INSTALL_PATH=$(prompt_with_default "Install path" "$DEFAULT_PATH" "${ENSO_INSTALL_PATH:-}")
+
+# Expand ~ if present
+INSTALL_PATH="${INSTALL_PATH/#\~/$HOME}"
+
+SOURCE_DIR="$SCRIPT_DIR"
+TARGET_DIR="$INSTALL_PATH"
+
+# Resolve real paths for comparison
+SOURCE_REAL=$(cd "$SOURCE_DIR" && pwd -P)
+TARGET_REAL=""
+if [ -d "$TARGET_DIR" ]; then
+  TARGET_REAL=$(cd "$TARGET_DIR" && pwd -P)
+fi
+
+if [ "$SOURCE_REAL" != "$TARGET_REAL" ]; then
+  echo
+  echo "  → Copying source to $INSTALL_PATH..."
+  mkdir -p "$TARGET_DIR"
+  rsync -a \
+    --exclude='node_modules' \
+    --exclude='.git' \
+    --exclude='dist' \
+    --exclude='android/app/build' \
+    --exclude='.claude' \
+    "$SOURCE_DIR/" "$TARGET_DIR/"
+
+  cd "$TARGET_DIR"
+
+  # Init git for self-evolution tracking
+  if [ ! -d .git ]; then
+    echo "  → Initializing git repository..."
+    git init -q
+    git add -A
+    git commit -q -m "Initial Enso setup"
+  fi
+  ok "Source installed at $INSTALL_PATH"
+else
+  cd "$TARGET_DIR"
+  ok "Already at install location: $INSTALL_PATH"
+fi
+
+REPO_DIR="$(pwd)"
+SERVER_DIR="$REPO_DIR/server"
+ENV_FILE="$SERVER_DIR/.env"
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 2: Prerequisites
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 2: Prerequisites"
+
+# Check Node.js
+if ! command -v node &>/dev/null; then
+  echo "  Node.js not found. Attempting to install..."
+  if command -v brew &>/dev/null; then
+    brew install node@22
+  elif command -v nvm &>/dev/null; then
+    nvm install 22
+  else
+    fail "Node.js 22+ not found. Install from https://nodejs.org/ or via nvm."
+  fi
+fi
+
+NODE_MAJOR=$(node -e "console.log(process.version.split('.')[0].slice(1))")
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  fail "Node.js $NODE_MAJOR found, but 22+ is required. Upgrade: nvm install 22"
+fi
+ok "Node.js $(node --version)"
+
+# npm install
+echo "  → Installing dependencies..."
+npm install --no-audit --no-fund 2>&1 | tail -1
+ok "Dependencies installed"
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 3: Chat AI Model
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 3: Chat AI Model"
+
+echo "  Choose your primary chat AI:"
+echo
+echo "  [1] Google Gemini     — free tier, recommended"
+echo "  [2] OpenAI            — GPT-4o, GPT-4o Mini"
+echo "  [3] Anthropic         — Claude Sonnet, Haiku"
+echo "  [4] DeepSeek          — affordable reasoning"
+echo "  [5] Ollama            — local, free, no API key"
+echo "  [6] OpenRouter        — hundreds of models, one key"
+echo
+
+LLM_CHOICE=$(prompt_with_default "Choice" "1" "${ENSO_LLM_CHOICE:-}")
+
+# Map choice to provider details
+case "$LLM_CHOICE" in
+  1) LLM_ID="gemini";     LLM_NAME="Google Gemini";  LLM_ENV="GEMINI_API_KEY";     LLM_URL="https://aistudio.google.com/apikey" ;;
+  2) LLM_ID="openai";     LLM_NAME="OpenAI";         LLM_ENV="OPENAI_API_KEY";     LLM_URL="https://platform.openai.com/api-keys" ;;
+  3) LLM_ID="anthropic";  LLM_NAME="Anthropic";      LLM_ENV="ANTHROPIC_API_KEY";  LLM_URL="https://console.anthropic.com/settings/keys" ;;
+  4) LLM_ID="deepseek";   LLM_NAME="DeepSeek";       LLM_ENV="DEEPSEEK_API_KEY";   LLM_URL="https://platform.deepseek.com/api_keys" ;;
+  5) LLM_ID="ollama";     LLM_NAME="Ollama (Local)";  LLM_ENV="";                   LLM_URL="https://ollama.com" ;;
+  6) LLM_ID="openrouter";  LLM_NAME="OpenRouter";     LLM_ENV="OPENROUTER_API_KEY"; LLM_URL="https://openrouter.ai/keys" ;;
+  *) LLM_ID="gemini";     LLM_NAME="Google Gemini";  LLM_ENV="GEMINI_API_KEY";     LLM_URL="https://aistudio.google.com/apikey" ;;
+esac
+
+LLM_KEY=""
+if [ -n "$LLM_ENV" ]; then
+  echo
+  echo "  Enter your $LLM_NAME API key:"
+  echo "  (Get one at $LLM_URL)"
+  LLM_KEY=$(prompt_secret "  Key: " "${ENSO_GEMINI_KEY:-${ENSO_LLM_KEY:-}}")
+  echo
+fi
+
+# Write providers.json
+mkdir -p "$ENSO_DIR"
+if [ -n "$LLM_KEY" ]; then
+  node -e "
+const fs = require('fs');
+const path = '$ENSO_DIR/providers.json';
+let cfg = {};
+try { cfg = JSON.parse(fs.readFileSync(path, 'utf-8')); } catch {}
+if (!cfg.apiKeys) cfg.apiKeys = {};
+cfg.apiKeys['$LLM_ID'] = '$LLM_KEY';
+fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
+"
+fi
+
+# Write access token + LLM key to server/.env
+ACCESS_TOKEN=$(node -e "console.log(require('crypto').randomUUID())")
+MACHINE_NAME=$(hostname)
+
+if [ -f "$ENV_FILE" ]; then
+  # Read existing token
+  EXISTING_TOKEN=$(sed -n 's/^ENSO_ACCESS_TOKEN=//p' "$ENV_FILE" 2>/dev/null || true)
+  [ -n "$EXISTING_TOKEN" ] && ACCESS_TOKEN="$EXISTING_TOKEN"
+
+  # Add LLM key if not already present
+  if [ -n "$LLM_ENV" ] && [ -n "$LLM_KEY" ]; then
+    if ! grep -q "^${LLM_ENV}=" "$ENV_FILE" 2>/dev/null; then
+      echo "${LLM_ENV}=${LLM_KEY}" >> "$ENV_FILE"
+    fi
+  fi
+else
+  {
+    [ -n "$LLM_ENV" ] && [ -n "$LLM_KEY" ] && echo "${LLM_ENV}=${LLM_KEY}"
+    echo "ENSO_ACCESS_TOKEN=${ACCESS_TOKEN}"
+    echo "ENSO_MACHINE_NAME=${MACHINE_NAME}"
+  } > "$ENV_FILE"
+fi
+
+# Ensure access token is present
+if ! grep -q "^ENSO_ACCESS_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+  echo "ENSO_ACCESS_TOKEN=${ACCESS_TOKEN}" >> "$ENV_FILE"
+fi
+
+# Re-read the actual token
+ACCESS_TOKEN=$(sed -n 's/^ENSO_ACCESS_TOKEN=//p' "$ENV_FILE" 2>/dev/null || echo "$ACCESS_TOKEN")
+
+ok "Chat AI: $LLM_NAME"
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 4: Service API Keys
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 4: Service API Keys (optional)"
+
+echo "  Brave Search enables web research in Enso."
+echo "  Get a free key at: https://brave.com/search/api/"
+echo
+
+BRAVE_KEY=$(prompt_secret "  Brave Search API key (Enter to skip): " "${ENSO_BRAVE_KEY:-}")
+echo
+
+if [ -n "$BRAVE_KEY" ]; then
+  node -e "
+const fs = require('fs');
+const path = '$ENSO_DIR/api-keys.json';
+let keys = {};
+try { keys = JSON.parse(fs.readFileSync(path, 'utf-8')); } catch {}
+keys.brave = '$BRAVE_KEY';
+fs.writeFileSync(path, JSON.stringify(keys, null, 2) + '\n');
+"
+  ok "Brave Search configured"
+else
+  info "Skipped — can be added later in Enso Settings"
+fi
+
+info "More service keys (video, image, etc.) available in Enso Settings"
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 5: Claude Code (self-evolution engine)
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 5: Claude Code (self-evolution engine)"
+
+echo "  Claude Code powers /code, Build App, orchestration,"
+echo "  and self-evolution sprints (/evolve)."
+echo
+
+CLAUDE_INSTALLED=false
+if command -v claude &>/dev/null; then
+  CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
+  ok "Claude Code already installed: $CLAUDE_VERSION"
+  CLAUDE_INSTALLED=true
+else
+  INSTALL_CLAUDE=$(prompt_yn "Install Claude Code CLI? (Y/n)" "Y" "${ENSO_INSTALL_CLAUDE:-}")
+  if [[ "$INSTALL_CLAUDE" =~ ^[Yy]$ ]] || [ "$INSTALL_CLAUDE" = "Y" ]; then
+    echo "  → Installing @anthropic-ai/claude-code..."
+    npm install -g @anthropic-ai/claude-code 2>&1 | tail -3
+    if command -v claude &>/dev/null; then
+      ok "Claude Code installed: $(claude --version 2>/dev/null || echo '')"
+      CLAUDE_INSTALLED=true
+    else
+      warn "Installation may have succeeded but 'claude' not found in PATH"
+    fi
+  else
+    info "Skipped — install later: npm install -g @anthropic-ai/claude-code"
+  fi
+fi
+
+# Authentication
+if [ "$CLAUDE_INSTALLED" = true ]; then
+  AUTH_STATUS=$(claude auth status 2>/dev/null || echo '{"loggedIn":false}')
+  IS_LOGGED_IN=$(echo "$AUTH_STATUS" | node -e "
+    let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
+      try { console.log(JSON.parse(d).loggedIn ? 'yes' : 'no'); }
+      catch { console.log('no'); }
+    });" 2>/dev/null || echo "no")
+
+  if [ "$IS_LOGGED_IN" = "yes" ]; then
+    ok "Claude Code already authenticated"
+  else
+    echo
+    echo "  How do you authenticate with Anthropic?"
+    echo
+    echo "  [1] API Key         — pay-per-token, enter key now"
+    echo "  [2] Subscription    — Claude Pro/Team/Max (opens browser)"
+    echo "  [3] Skip            — set up later"
+    echo
+
+    AUTH_CHOICE=$(prompt_with_default "Choice" "2" "${ENSO_CLAUDE_AUTH:-}")
+
+    case "$AUTH_CHOICE" in
+      1)
+        ANTHRO_KEY=$(prompt_secret "  Anthropic API key: " "${ENSO_ANTHROPIC_KEY:-}")
+        echo
+        if [ -n "$ANTHRO_KEY" ]; then
+          # Add to server/.env
+          if grep -q "^ANTHROPIC_API_KEY=" "$ENV_FILE" 2>/dev/null; then
+            sed -i.bak "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${ANTHRO_KEY}|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+          else
+            echo "ANTHROPIC_API_KEY=${ANTHRO_KEY}" >> "$ENV_FILE"
+          fi
+          export ANTHROPIC_API_KEY="$ANTHRO_KEY"
+          ok "API key saved"
+        fi
+        ;;
+      2)
+        echo "  → Opening browser for OAuth login..."
+        claude auth login 2>&1 || warn "OAuth login returned an error — you can retry later with: claude auth login"
+        # Check if it worked
+        AUTH_CHECK=$(claude auth status 2>/dev/null || echo '{"loggedIn":false}')
+        LOGGED_IN=$(echo "$AUTH_CHECK" | node -e "
+          let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
+            try { console.log(JSON.parse(d).loggedIn ? 'yes' : 'no'); }
+            catch { console.log('no'); }
+          });" 2>/dev/null || echo "no")
+        if [ "$LOGGED_IN" = "yes" ]; then
+          ok "Claude Code authenticated"
+        else
+          warn "Authentication incomplete — run 'claude auth login' to retry"
+        fi
+        ;;
+      3|*)
+        info "Skipped — authenticate later: claude auth login"
+        ;;
+    esac
+  fi
+fi
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 6: Remote Access (enso.net)
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 6: Remote Access"
+
+echo "  Set up remote access via enso.net?"
+echo "  Your Enso will be available at: <name>.enso.net"
+echo
+
+SETUP_TUNNEL=$(prompt_yn "Set up remote access? (Y/n)" "Y" "${ENSO_TUNNEL:-}")
+TUNNEL_URL=""
+
+if [[ "$SETUP_TUNNEL" =~ ^[Yy]$ ]] || [ "$SETUP_TUNNEL" = "Y" ]; then
+  # Suggest specifier from hostname
+  SUGGESTED=$(hostname | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+  [ -z "$SUGGESTED" ] && SUGGESTED="my-enso"
+
+  echo "  Choose your machine name:"
+  SPECIFIER=$(prompt_with_default "Name" "$SUGGESTED" "${ENSO_TUNNEL_NAME:-}")
+
+  # Sanitize
+  SPECIFIER=$(echo "$SPECIFIER" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+
+  # Read registry URL from env or default
+  REGISTRY_URL="${ENSO_REGISTRY_URL:-http://localhost:$PORT}"
+
+  echo "  → Registering ${SPECIFIER}.enso.net..."
+
+  # Try to call the tunnel registry API
+  REGISTER_RESULT=$(curl -sf -X POST "${REGISTRY_URL}/api/tunnel/register" \
+    -H "Content-Type: application/json" \
+    -d "{\"specifier\":\"${SPECIFIER}\",\"accessToken\":\"${ACCESS_TOKEN}\"}" 2>/dev/null || echo "FAILED")
+
+  if [ "$REGISTER_RESULT" != "FAILED" ] && echo "$REGISTER_RESULT" | node -e "
+    let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
+      try { const j=JSON.parse(d); process.exit(j.tunnelToken ? 0 : 1); }
+      catch { process.exit(1); }
+    });" 2>/dev/null; then
+
+    TUNNEL_TOKEN=$(echo "$REGISTER_RESULT" | node -e "
+      let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
+        console.log(JSON.parse(d).tunnelToken);
+      });")
+    TUNNEL_URL=$(echo "$REGISTER_RESULT" | node -e "
+      let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{
+        console.log(JSON.parse(d).publicUrl);
+      });")
+
+    # Install cloudflared if needed
+    if ! command -v cloudflared &>/dev/null; then
+      echo "  → Installing cloudflared..."
+      if command -v brew &>/dev/null; then
+        brew install cloudflared 2>&1 | tail -1
+      elif [ "$(uname)" = "Linux" ]; then
+        curl -L --output /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+        chmod +x /tmp/cloudflared
+        sudo mv /tmp/cloudflared /usr/local/bin/
+      fi
+    fi
+
+    if command -v cloudflared &>/dev/null; then
+      echo "  → Configuring tunnel..."
+      cloudflared service install "$TUNNEL_TOKEN" 2>/dev/null || true
+      ok "Remote: $TUNNEL_URL"
+
+      # Save to .env
+      if grep -q "^ENSO_TUNNEL_SPECIFIER=" "$ENV_FILE" 2>/dev/null; then
+        sed -i.bak "s|^ENSO_TUNNEL_SPECIFIER=.*|ENSO_TUNNEL_SPECIFIER=${SPECIFIER}|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+      else
+        echo "ENSO_TUNNEL_SPECIFIER=${SPECIFIER}" >> "$ENV_FILE"
+      fi
+      if grep -q "^ENSO_PUBLIC_URL=" "$ENV_FILE" 2>/dev/null; then
+        sed -i.bak "s|^ENSO_PUBLIC_URL=.*|ENSO_PUBLIC_URL=${TUNNEL_URL}|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+      else
+        echo "ENSO_PUBLIC_URL=${TUNNEL_URL}" >> "$ENV_FILE"
+      fi
+    else
+      warn "cloudflared not installed — install manually: brew install cloudflared"
+    fi
+  else
+    warn "Tunnel registry not available — tunnel setup skipped"
+    info "You can set up remote access later. See SETUP.md for Cloudflare Tunnel instructions."
+    # Still save the specifier for later
+    if grep -q "^ENSO_TUNNEL_SPECIFIER=" "$ENV_FILE" 2>/dev/null; then
+      sed -i.bak "s|^ENSO_TUNNEL_SPECIFIER=.*|ENSO_TUNNEL_SPECIFIER=${SPECIFIER}|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+    else
+      echo "ENSO_TUNNEL_SPECIFIER=${SPECIFIER}" >> "$ENV_FILE"
+    fi
+  fi
+else
+  info "Skipped — set up later via SETUP.md"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 7: Build
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 7: Build"
+
+# Determine the server URL for APK auto-connect
+# Priority: tunnel URL > LAN IP > localhost
+LAN_IPS_EARLY=$(node -e "
+const os = require('os');
+const ips = [];
+for (const ifaces of Object.values(os.networkInterfaces())) {
+  for (const i of ifaces || []) {
+    if (i.family === 'IPv4' && !i.internal) ips.push(i.address);
+  }
+}
+console.log(ips.join(','));
+")
+PRIMARY_IP_EARLY=$(echo "$LAN_IPS_EARLY" | cut -d',' -f1)
+[ -z "$PRIMARY_IP_EARLY" ] && PRIMARY_IP_EARLY="localhost"
+
+if [ -n "$TUNNEL_URL" ]; then
+  APK_BACKEND_URL="$TUNNEL_URL"
+else
+  APK_BACKEND_URL="http://${PRIMARY_IP_EARLY}:${PORT}"
+fi
+
+# Build frontend with baked-in default backend for APK auto-connect
+echo "  → Building frontend..."
+cd "$REPO_DIR"
+ENSO_DEFAULT_BACKEND="$APK_BACKEND_URL" \
+ENSO_DEFAULT_TOKEN="$ACCESS_TOKEN" \
+ENSO_DEFAULT_NAME="$(hostname)" \
+npm run build 2>&1 | tail -1
+ok "Frontend built (default backend: $APK_BACKEND_URL)"
+
+# APK build
+APK_PATH="$REPO_DIR/android/app/build/outputs/apk/release/app-release.apk"
+APK_BUILT=false
+
+if [ -d "$REPO_DIR/android" ]; then
+  # Check for Java — must actually work (macOS has a shim that shows a dialog)
+  JAVA_WORKS=false
+  if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+    JAVA_WORKS=true
+  elif java -version &>/dev/null 2>&1; then
+    JAVA_WORKS=true
+  fi
+
+  # Offer to install Java/Android SDK if not present
+  if [ "$JAVA_WORKS" = false ]; then
+    echo
+    echo "  Android build tools (Java + Android SDK) are needed for the mobile app."
+
+    INSTALL_ANDROID=$(prompt_yn "Install Android build tools? (Y/n)" "Y" "${ENSO_INSTALL_ANDROID:-}")
+    if [[ "$INSTALL_ANDROID" =~ ^[Yy]$ ]] || [ "$INSTALL_ANDROID" = "Y" ]; then
+
+      # Install JDK 17
+      if [ "$(uname)" = "Darwin" ]; then
+        if command -v brew &>/dev/null; then
+          echo "  → Installing JDK 17 via Homebrew..."
+          brew install openjdk@21 2>&1 | tail -3
+          # Symlink so system Java wrappers find it
+          if [ -d "$(brew --prefix openjdk@21)/libexec/openjdk.jdk" ]; then
+            sudo ln -sfn "$(brew --prefix openjdk@21)/libexec/openjdk.jdk" /Library/Java/JavaVirtualMachines/openjdk-21.jdk 2>/dev/null || true
+            export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
+            export PATH="$JAVA_HOME/bin:$PATH"
+          fi
+        else
+          warn "Homebrew not found — install JDK 17 manually"
+        fi
+      elif [ "$(uname)" = "Linux" ]; then
+        if command -v apt-get &>/dev/null; then
+          echo "  → Installing JDK 17 via apt..."
+          sudo apt-get update -qq && sudo apt-get install -y -qq openjdk-21-jdk 2>&1 | tail -3
+          export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-$(dpkg --print-architecture)"
+        elif command -v yum &>/dev/null; then
+          echo "  → Installing JDK 17 via yum..."
+          sudo yum install -y java-21-openjdk-devel 2>&1 | tail -3
+          export JAVA_HOME="/usr/lib/jvm/java-21-openjdk"
+        fi
+      fi
+
+      # Verify Java installed
+      if [ -n "${JAVA_HOME:-}" ] && "${JAVA_HOME}/bin/java" -version &>/dev/null 2>&1; then
+        ok "JDK 17 installed"
+        JAVA_WORKS=true
+      elif java -version &>/dev/null 2>&1; then
+        ok "Java installed"
+        JAVA_WORKS=true
+      else
+        warn "Java installation may have failed"
+      fi
+
+      # Install Android SDK command-line tools
+      if [ "$JAVA_WORKS" = true ]; then
+        ANDROID_SDK_ROOT="${ANDROID_HOME:-$HOME/Android/Sdk}"
+        if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools" ]; then
+          echo "  → Installing Android SDK command-line tools..."
+          mkdir -p "$ANDROID_SDK_ROOT"
+
+          if [ "$(uname)" = "Darwin" ]; then
+            CMDLINE_URL="https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip"
+          else
+            CMDLINE_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          fi
+
+          curl -sL "$CMDLINE_URL" -o /tmp/cmdline-tools.zip
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools-tmp" 2>/dev/null
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools-tmp/cmdline-tools/"* "$ANDROID_SDK_ROOT/cmdline-tools/latest/" 2>/dev/null || true
+          rm -rf "$ANDROID_SDK_ROOT/cmdline-tools-tmp" /tmp/cmdline-tools.zip
+
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+
+          # Accept licenses and install required SDK packages
+          echo "  → Accepting SDK licenses and installing build tools..."
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses &>/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
+            2>&1 | tail -3
+
+          ok "Android SDK installed at $ANDROID_SDK_ROOT"
+        else
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          ok "Android SDK already installed"
+        fi
+      fi
+    else
+      info "Skipped — install later and run: npm run android:build-apk"
+    fi
+  fi
+
+  if [ "$JAVA_WORKS" = true ]; then
+    echo
+    echo "  → Building mobile app (APK)..."
+    echo "  → Syncing web assets to Android..."
+    npx cap sync android 2>&1 | tail -1
+
+    echo "  → Building release APK..."
+    cd "$REPO_DIR/android"
+
+    # Set JAVA_HOME if not set but java exists
+    if [ -z "${JAVA_HOME:-}" ] && command -v java &>/dev/null; then
+      JAVA_DIR=$(dirname "$(dirname "$(readlink -f "$(which java)")")" 2>/dev/null || echo "")
+      [ -n "$JAVA_DIR" ] && [ -d "$JAVA_DIR" ] && export JAVA_HOME="$JAVA_DIR"
+    fi
+
+    if ./gradlew assembleRelease 2>&1 | tail -3; then
+      if [ -f "$APK_PATH" ]; then
+        APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+        ok "APK built: $APK_SIZE"
+        ok "APK auto-connects to: $APK_BACKEND_URL"
+        APK_BUILT=true
+      else
+        warn "Gradle completed but APK not found at expected path"
+      fi
+    else
+      warn "APK build failed — you can build later: npm run android:build-apk"
+    fi
+    cd "$REPO_DIR"
+  else
+    echo
+    warn "Android build tools not available. Skipping APK build."
+    info "To build the mobile app later:"
+    info "  1. Install JDK 21+: brew install openjdk@21"
+    info "  2. Install Android SDK command-line tools"
+    info "  3. Run: npm run android:build-apk"
+  fi
+fi
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Step 8: Install CLI + Start Server
+# ═══════════════════════════════════════════════════════════════════════
+
+step "Step 8: Start Server"
+
+# CLI config
+CLI_JSON="$ENSO_DIR/cli.json"
+BIN_SCRIPT="$REPO_DIR/bin/enso"
+
+mkdir -p "$ENSO_DIR"
+node -e "
+const fs = require('fs');
+fs.writeFileSync('$CLI_JSON', JSON.stringify({
+  server: 'http://localhost:$PORT',
+  token: '$ACCESS_TOKEN'
+}, null, 2));
+"
+
+# Make wrapper executable + symlink
+if [ -f "$BIN_SCRIPT" ]; then
+  chmod +x "$BIN_SCRIPT"
+  if [ -w /usr/local/bin ]; then
+    ln -sf "$BIN_SCRIPT" /usr/local/bin/enso
+  elif command -v sudo &>/dev/null; then
+    sudo ln -sf "$BIN_SCRIPT" /usr/local/bin/enso 2>/dev/null || true
+  else
+    mkdir -p "$HOME/bin"
+    ln -sf "$BIN_SCRIPT" "$HOME/bin/enso"
+  fi
+fi
+
+# Start guardian
+echo "  → Starting server (guardian-supervised)..."
+cd "$REPO_DIR"
+npx tsx server/guardian.ts &
+GUARDIAN_PID=$!
+disown $GUARDIAN_PID 2>/dev/null || true
+
+echo -n "  Waiting for server"
+SERVER_READY=false
+for i in $(seq 1 30); do
+  if curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
+    echo
+    ok "Server running on port $PORT"
+    SERVER_READY=true
+    break
+  fi
+  echo -n "."
+  sleep 1
+done
+if [ "$SERVER_READY" = false ]; then
+  echo
+  warn "Server did not respond within 30s — check logs"
+fi
+
+# Watchdog
+WATCHDOG="$REPO_DIR/install-watchdog.sh"
+if [ -f "$WATCHDOG" ]; then
+  chmod +x "$WATCHDOG"
+  bash "$WATCHDOG" 2>/dev/null && ok "Watchdog installed" || true
+fi
+
+# Save setup info
+SETUP_JSON="$ENSO_DIR/enso-setup.json"
+LAN_IPS=$(node -e "
+const os = require('os');
+const ips = [];
+for (const ifaces of Object.values(os.networkInterfaces())) {
+  for (const i of ifaces || []) {
+    if (i.family === 'IPv4' && !i.internal) ips.push(i.address);
+  }
+}
+console.log(ips.join(','));
+")
+PRIMARY_IP=$(echo "$LAN_IPS" | cut -d',' -f1)
+[ -z "$PRIMARY_IP" ] && PRIMARY_IP="localhost"
+
+node -e "
+const fs = require('fs');
+fs.writeFileSync('$SETUP_JSON', JSON.stringify({
+  installPath: '$REPO_DIR',
+  accessToken: '$ACCESS_TOKEN',
+  machineName: '$(hostname)',
+  port: $PORT,
+  llmProvider: '$LLM_ID',
+  tunnelSpecifier: '${SPECIFIER:-}',
+  tunnelUrl: '${TUNNEL_URL:-}',
+  apkBuilt: $( [ "$APK_BUILT" = true ] && echo "true" || echo "false" ),
+  lanAddresses: '$LAN_IPS'.split(',').filter(Boolean),
+  installedAt: new Date().toISOString()
+}, null, 2));
+"
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Summary
+# ═══════════════════════════════════════════════════════════════════════
+
+echo
+echo "════════════════════════════════════════════════════"
+echo "  Enso is ready!"
+echo "════════════════════════════════════════════════════"
+echo
+echo "  Installed at:  $REPO_DIR"
+echo "  Chat AI:       $LLM_NAME"
+
+if [ "$CLAUDE_INSTALLED" = true ]; then
+  echo "  Claude Code:   Installed ✓"
+else
+  echo "  Claude Code:   Not installed"
+fi
+
+if [ -n "$TUNNEL_URL" ]; then
+  echo "  Remote:        $TUNNEL_URL"
+fi
+echo "  Local:         http://localhost:$PORT"
+
+# APK download info
+if [ "$APK_BUILT" = true ]; then
+  echo
+  echo "  📱 Install on your phone:"
+  if [ -n "$TUNNEL_URL" ]; then
+    APK_URL="${TUNNEL_URL}/api/apk"
+  else
+    APK_URL="http://${PRIMARY_IP}:${PORT}/api/apk"
+  fi
+  echo "     Download: $APK_URL"
+  echo
+  # QR code
+  QR_SCRIPT="$REPO_DIR/scripts/qr-terminal.js"
+  if [ -f "$QR_SCRIPT" ]; then
+    node "$QR_SCRIPT" "$APK_URL" 2>/dev/null || true
+  fi
+fi
+
+# Connection deep link for mobile
+DEEP_LINK_BASE="http://${PRIMARY_IP}:${PORT}"
+[ -n "$TUNNEL_URL" ] && DEEP_LINK_BASE="$TUNNEL_URL"
+ENCODED_TOKEN=$(node -e "console.log(encodeURIComponent('$ACCESS_TOKEN'))")
+ENCODED_NAME=$(node -e "console.log(encodeURIComponent('$(hostname)'))")
+DEEP_LINK="enso://connect?backend=${DEEP_LINK_BASE}&token=${ENCODED_TOKEN}&name=${ENCODED_NAME}"
+
+echo
+echo "  Get started:"
+echo "    - Open http://localhost:5173 (dev) or http://localhost:$PORT (prod)"
+echo "    - Type /code hello  — test Claude Code"
+echo "    - Type /evolve      — run a self-evolution sprint"
+echo "    - CLI: enso chat \"Hello!\""
+echo
+
+# Guardian continues running in the background
+# To stop: kill the guardian process or use restart.sh
+echo "  Guardian PID: $GUARDIAN_PID (running in background)"
