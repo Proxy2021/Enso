@@ -2299,52 +2299,15 @@ export async function startEnsoServer(opts: {
                   break;
                 }
 
-                // "simple" — router provides the answer directly (or escalates to agent with tools)
-                const userChatModel = client.chatModel ?? DEFAULT_CHAT_MODEL;
-                const isUserGemini = userChatModel.startsWith("gemini-");
-
-                if (classification.answer && !isUserGemini) {
-                  // User selected a non-Gemini model — call their preferred model
-                  dismissProcessing();
-                  runtime.log?.(`[enso] task-router: simple → calling ${userChatModel} for "${msg.text.slice(0, 60)}"`);
-                  try {
-                    const { callChatLLM } = await import("./llm-provider.js");
-                    const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
-                    const modelAnswer = await callChatLLM({ prompt: msg.text, model: userChatModel, providerKeys });
-                    const answerCardId = randomUUID();
-                    const answerRunId = randomUUID();
-                    send({
-                      id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
-                      state: "final", text: modelAnswer, timestamp: Date.now(),
-                    });
-                    persistConv({
-                      id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
-                      text: modelAnswer, timestamp: Date.now(),
-                    });
-                    sendFollowUpsAndExtractMemory({ userMessage: msg.text, assistantText: modelAnswer, cardId: answerCardId, sessionKey, send, account, language: client.language });
-                  } catch (llmErr) {
-                    logError("task-router", `callChatLLM failed for ${userChatModel}`, llmErr);
-                    // Fallback: use the Gemini classifier answer
-                    const answerCardId = randomUUID();
-                    const answerRunId = randomUUID();
-                    send({
-                      id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
-                      state: "final", text: classification.answer, timestamp: Date.now(),
-                    });
-                    persistConv({
-                      id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
-                      text: classification.answer, timestamp: Date.now(),
-                    });
-                  }
-                } else if (classification.answer) {
-                  // For Gemini users: always route to standalone agent so it can use
-                  // function calling (tool invocation + auto-enhance). The task-router
-                  // answer is a bonus — used only when quality gate passes AND no dynamic tools.
+                // "simple" — router provides the answer directly (or escalates to Claude Code)
+                if (classification.answer) {
+                  // Has classifier answer — check dynamic tools and quality gate
                   const { getAllDynamicTools } = await import("./native-tools/registry.js");
                   const hasDynamicTools = getAllDynamicTools().length > 0;
-                  const gate = hasDynamicTools ? { pass: false, reason: "dynamic-tools" } : qualityGate(classification.answer, msg.text);
-                  if (!gate.pass) {
-                    runtime.log?.(`[enso] simple → agent (${gate.reason}): "${msg.text.slice(0, 60)}"`);
+
+                  if (hasDynamicTools) {
+                    // Dynamic tools need agent pipeline for tool invocation
+                    runtime.log?.(`[enso] simple → agent (dynamic-tools): "${msg.text.slice(0, 60)}"`);
                     await handleInbound({
                       message: {
                         messageId: randomUUID(),
@@ -2363,91 +2326,75 @@ export async function startEnsoServer(opts: {
                     });
                     dismissProcessing();
                   } else {
-                    dismissProcessing();
-                    runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
-                    const answerCardId = randomUUID();
-                    const answerRunId = randomUUID();
+                    const gate = qualityGate(classification.answer, msg.text);
+                    if (!gate.pass) {
+                      // Quality issue — delegate to Claude Code for a better answer
+                      runtime.log?.(`[enso] simple → Claude Code (quality-gate:${gate.reason}): "${msg.text.slice(0, 60)}"`);
+                      dismissProcessing();
+                      const ccRunId = randomUUID();
+                      const ccCardId = randomUUID();
+                      await runClaudeCode({
+                        prompt: msg.text,
+                        cwd: ensoProjectPath,
+                        client,
+                        runId: ccRunId,
+                        targetCardId: ccCardId,
+                      });
+                    } else {
+                      // Quality gate passed — return classifier answer inline
+                      dismissProcessing();
+                      runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
+                      const answerCardId = randomUUID();
+                      const answerRunId = randomUUID();
 
-                    // Headline-first: send first paragraph as delta for perceived speed
-                    const firstParaEnd = classification.answer.indexOf("\n\n");
-                    if (firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50) {
+                      // Headline-first: send first paragraph as delta for perceived speed
+                      const firstParaEnd = classification.answer.indexOf("\n\n");
+                      if (firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50) {
+                        send({
+                          id: answerCardId,
+                          runId: answerRunId,
+                          sessionKey,
+                          seq: 0,
+                          state: "delta",
+                          text: classification.answer.slice(0, firstParaEnd),
+                          timestamp: Date.now(),
+                        });
+                        await new Promise(r => setTimeout(r, 100));
+                      }
+
                       send({
                         id: answerCardId,
                         runId: answerRunId,
                         sessionKey,
-                        seq: 0,
-                        state: "delta",
-                        text: classification.answer.slice(0, firstParaEnd),
+                        seq: firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50 ? 1 : 0,
+                        state: "final",
+                        text: classification.answer,
                         timestamp: Date.now(),
                       });
-                      await new Promise(r => setTimeout(r, 100));
+                      persistConv({
+                        id: answerCardId,
+                        runId: answerRunId,
+                        type: "chat",
+                        role: "assistant",
+                        text: classification.answer,
+                        timestamp: Date.now(),
+                      });
+                      sendFollowUpsAndExtractMemory({ userMessage: msg.text, assistantText: classification.answer, cardId: answerCardId, sessionKey, send, account, language: client.language });
                     }
-
-                    send({
-                      id: answerCardId,
-                      runId: answerRunId,
-                      sessionKey,
-                      seq: firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50 ? 1 : 0,
-                      state: "final",
-                      text: classification.answer,
-                      timestamp: Date.now(),
-                    });
-                    persistConv({
-                      id: answerCardId,
-                      runId: answerRunId,
-                      type: "chat",
-                      role: "assistant",
-                      text: classification.answer,
-                      timestamp: Date.now(),
-                    });
-                    sendFollowUpsAndExtractMemory({ userMessage: msg.text, assistantText: classification.answer, cardId: answerCardId, sessionKey, send, account, language: client.language });
-                  }
-                } else if (!isUserGemini) {
-                  // No classifier answer + non-Gemini model — call user's model directly
-                  dismissProcessing();
-                  runtime.log?.(`[enso] task-router: simple (no answer) → calling ${userChatModel}`);
-                  try {
-                    const { callChatLLM } = await import("./llm-provider.js");
-                    const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
-                    const modelAnswer = await callChatLLM({ prompt: msg.text, model: userChatModel, providerKeys });
-                    const answerCardId = randomUUID();
-                    const answerRunId = randomUUID();
-                    send({
-                      id: answerCardId, runId: answerRunId, sessionKey, seq: 0,
-                      state: "final", text: modelAnswer, timestamp: Date.now(),
-                    });
-                    persistConv({
-                      id: answerCardId, runId: answerRunId, type: "chat", role: "assistant",
-                      text: modelAnswer, timestamp: Date.now(),
-                    });
-                  } catch (llmErr) {
-                    logError("task-router", `callChatLLM failed for ${userChatModel}`, llmErr);
-                    send({
-                      id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
-                      state: "error", text: `Error: ${llmErr instanceof Error ? llmErr.message : String(llmErr)}`,
-                      timestamp: Date.now(),
-                    });
                   }
                 } else {
-                  // No answer (classification fallback or heuristic) — route to normal agent for a real response
-                  runtime.log?.(`[enso] task-router: simple with no answer → routing to agent`);
-                  await handleInbound({
-                    message: {
-                      messageId: randomUUID(),
-                      sessionId: sessionKey,
-                      senderNick: `user_${connectionId}`,
-                      text: msg.text,
-                      mediaUrls: msg.mediaUrls,
-                      timestamp: Date.now(),
-                    },
-                    account,
-                    config,
-                    runtime,
-                    client,
-                    routing: msg.routing,
-                    statusSink,
-                  });
+                  // No classifier answer — delegate to Claude Code (all models)
+                  runtime.log?.(`[enso] task-router: simple with no answer → Claude Code`);
                   dismissProcessing();
+                  const ccRunId = randomUUID();
+                  const ccCardId = randomUUID();
+                  await runClaudeCode({
+                    prompt: msg.text,
+                    cwd: ensoProjectPath,
+                    client,
+                    runId: ccRunId,
+                    targetCardId: ccCardId,
+                  });
                 }
               } catch (routerErr: any) {
                 // Error boundary (E2 Sprint 11): show user-friendly message + recovery chips
