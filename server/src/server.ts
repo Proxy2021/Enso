@@ -11,6 +11,7 @@ import type { EnsoRuntime } from "./local-types.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
 import { handleInbound } from "./agent-adapter.js";
+import { injectCardContext } from "./standalone-agent.js";
 import { handleCardEnhance, handlePluginCardAction, createScopedShareContext, getCardState } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
@@ -1758,7 +1759,12 @@ export async function startEnsoServer(opts: {
               break;
             }
             const convId = resolveConversationId(client, msg);
-            const persistConv = (record: CardRecord) => persistCard(clientId, convId, record);
+            const persistConv = (record: CardRecord) => {
+              persistCard(clientId, convId, record);
+              // Inject all card types into agent's in-memory conversation history
+              // so follow-up questions have full context (research, tool results, etc.)
+              try { injectCardContext(convId, record); } catch { /* best effort */ }
+            };
             // Persist user bubble to card history — but skip tool-routed
             // messages (e.g. claude-code prompts contain system instructions
             // that shouldn't appear as user messages in history).
@@ -1846,6 +1852,8 @@ export async function startEnsoServer(opts: {
                     text: msg.text,
                     mediaUrls: msg.mediaUrls,
                     timestamp: Date.now(),
+                    conversationId: convId,
+                    clientId: connectionId,
                   },
                   account, config, runtime, client,
                   routing: msg.routing,
@@ -2334,102 +2342,27 @@ export async function startEnsoServer(opts: {
                   break;
                 }
 
-                // "simple" — router provides the answer directly (or escalates to Claude Code)
-                if (classification.answer) {
-                  // Has classifier answer — check dynamic tools and quality gate
-                  const { getAllDynamicTools } = await import("./native-tools/registry.js");
-                  const hasDynamicTools = getAllDynamicTools().length > 0;
-
-                  if (hasDynamicTools) {
-                    // Dynamic tools need agent pipeline for tool invocation
-                    runtime.log?.(`[enso] simple → agent (dynamic-tools): "${msg.text.slice(0, 60)}"`);
-                    await handleInbound({
-                      message: {
-                        messageId: randomUUID(),
-                        sessionId: sessionKey,
-                        senderNick: `user_${connectionId}`,
-                        text: msg.text,
-                        mediaUrls: msg.mediaUrls,
-                        timestamp: Date.now(),
-                      },
-                      account,
-                      config,
-                      runtime,
-                      client,
-                      routing: msg.routing,
-                      statusSink,
-                    });
-                    dismissProcessing();
-                  } else {
-                    const gate = qualityGate(classification.answer, msg.text);
-                    if (!gate.pass) {
-                      // Quality issue — delegate to Claude Code for a better answer
-                      runtime.log?.(`[enso] simple → Claude Code (quality-gate:${gate.reason}): "${msg.text.slice(0, 60)}"`);
-                      dismissProcessing();
-                      const ccRunId = randomUUID();
-                      const ccCardId = randomUUID();
-                      await runClaudeCode({
-                        prompt: msg.text,
-                        cwd: ensoProjectPath,
-                        client,
-                        runId: ccRunId,
-                        targetCardId: ccCardId,
-                      });
-                    } else {
-                      // Quality gate passed — return classifier answer inline
-                      dismissProcessing();
-                      runtime.log?.(`[enso] task-router: simple → "${msg.text.slice(0, 60)}"`);
-                      const answerCardId = randomUUID();
-                      const answerRunId = randomUUID();
-
-                      // Headline-first: send first paragraph as delta for perceived speed
-                      const firstParaEnd = classification.answer.indexOf("\n\n");
-                      if (firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50) {
-                        send({
-                          id: answerCardId,
-                          runId: answerRunId,
-                          sessionKey,
-                          seq: 0,
-                          state: "delta",
-                          text: classification.answer.slice(0, firstParaEnd),
-                          timestamp: Date.now(),
-                        });
-                        await new Promise(r => setTimeout(r, 100));
-                      }
-
-                      send({
-                        id: answerCardId,
-                        runId: answerRunId,
-                        sessionKey,
-                        seq: firstParaEnd > 20 && firstParaEnd < classification.answer.length - 50 ? 1 : 0,
-                        state: "final",
-                        text: classification.answer,
-                        timestamp: Date.now(),
-                      });
-                      persistConv({
-                        id: answerCardId,
-                        runId: answerRunId,
-                        type: "chat",
-                        role: "assistant",
-                        text: classification.answer,
-                        timestamp: Date.now(),
-                      });
-                      sendFollowUpsAndExtractMemory({ userMessage: msg.text, assistantText: classification.answer, cardId: answerCardId, sessionKey, send, account, language: client.language });
-                    }
-                  }
-                } else {
-                  // No classifier answer — delegate to Claude Code (all models)
-                  runtime.log?.(`[enso] task-router: simple with no answer → Claude Code`);
-                  dismissProcessing();
-                  const ccRunId = randomUUID();
-                  const ccCardId = randomUUID();
-                  await runClaudeCode({
-                    prompt: msg.text,
-                    cwd: ensoProjectPath,
+                // "simple" — always route through agent for per-conversation context
+                {
+                  runtime.log?.(`[enso] simple → agent: "${msg.text.slice(0, 60)}"`);
+                  await handleInbound({
+                    message: {
+                      messageId: randomUUID(),
+                      sessionId: sessionKey,
+                      senderNick: `user_${connectionId}`,
+                      text: msg.text,
+                      mediaUrls: msg.mediaUrls,
+                      timestamp: Date.now(),
+                      conversationId: convId,
+                    },
+                    account,
+                    config,
+                    runtime,
                     client,
-                    runId: ccRunId,
-                    targetCardId: ccCardId,
+                    routing: msg.routing,
+                    statusSink,
                   });
+                  dismissProcessing();
                 }
               } catch (routerErr: any) {
                 // Error boundary (E2 Sprint 11): show user-friendly message + recovery chips
@@ -2465,6 +2398,7 @@ export async function startEnsoServer(opts: {
                   text: msg.text ?? "",
                   mediaUrls: msg.mediaUrls,
                   timestamp: Date.now(),
+                  conversationId: convId,
                 },
                 account,
                 config,
@@ -2508,6 +2442,7 @@ export async function startEnsoServer(opts: {
                   senderNick: `user_${connectionId}`,
                   text: actionText,
                   timestamp: Date.now(),
+                  conversationId: convId,
                 },
                 account,
                 config,

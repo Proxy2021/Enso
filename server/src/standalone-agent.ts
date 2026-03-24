@@ -18,25 +18,31 @@ import { setLastUserMessage } from "./researcher-tools.js";
 import { GEMINI_MODEL_FAST } from "./ui-generator.js";
 import { callChatLLM } from "./llm-provider.js";
 import { getAllLocalTools, executeLocalTool, getAllLocalToolNames } from "./tool-registry-local.js";
-import { getMemoryContext, appendDailyMemory } from "./memory-bridge.js";
+import { getMemoryContext, appendDailyMemory, loadCardHistory } from "./memory-bridge.js";
+import type { CardRecord } from "./memory-bridge.js";
 import { geminiUrl, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
 import { recordToolCall } from "./native-tools/tool-call-store.js";
 
-// ── Conversation history (in-memory, per session) ──
+// ── Conversation history (in-memory, per conversation thread) ──
 
 interface ConversationEntry {
   role: "user" | "model";
   parts: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown } }>;
 }
 
-const sessionHistories = new Map<string, ConversationEntry[]>();
-const MAX_HISTORY = 40; // Keep last N turns per session
+const conversationHistories = new Map<string, ConversationEntry[]>();
+const MAX_HISTORY = 40; // Keep last N turns per conversation
 
-function getSessionHistory(sessionKey: string): ConversationEntry[] {
-  let history = sessionHistories.get(sessionKey);
+/**
+ * Get or create conversation history.
+ * Key is conversationId (per-thread) — NOT sessionKey (per-browser).
+ * This ensures switching conversations gives the agent a clean/separate context.
+ */
+function getConversationHistory(conversationId: string): ConversationEntry[] {
+  let history = conversationHistories.get(conversationId);
   if (!history) {
     history = [];
-    sessionHistories.set(sessionKey, history);
+    conversationHistories.set(conversationId, history);
   }
   return history;
 }
@@ -79,6 +85,106 @@ function flushOlderEntriesToMemory(history: ConversationEntry[]): void {
     });
   } catch {
     // Best effort — never fail the main flow
+  }
+}
+
+// ── Card context injection (all card types → agent history) ──
+
+const MAX_SUMMARY_LEN = 500;
+
+function summarizeCardData(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const d = data as Record<string, unknown>;
+  const parts: string[] = [];
+  if (d.tool) parts.push(`tool=${d.tool}`);
+  if (d.query) parts.push(`query="${String(d.query).slice(0, 80)}"`);
+  if (Array.isArray(d.findings)) parts.push(`${d.findings.length} findings`);
+  if (Array.isArray(d.results)) parts.push(`${d.results.length} results`);
+  if (d.status) parts.push(`status=${d.status}`);
+  if (d.goal) parts.push(`goal="${String(d.goal).slice(0, 80)}"`);
+  return parts.join(", ");
+}
+
+function cardToEntry(record: CardRecord): ConversationEntry | null {
+  const role: "user" | "model" = record.role === "user" ? "user" : "model";
+
+  // User messages
+  if (record.role === "user" && record.text) {
+    return { role: "user", parts: [{ text: record.text.slice(0, MAX_SUMMARY_LEN) }] };
+  }
+
+  // Assistant chat with text
+  if (record.role === "assistant" && record.text) {
+    const text = record.text.slice(0, MAX_SUMMARY_LEN);
+
+    // Tag non-chat card types so the agent knows the source
+    if (record.type === "terminal" || record.toolMeta?.toolId === "claude-code") {
+      return { role: "model", parts: [{ text: `[Claude Code session] ${text}` }] };
+    }
+    if (record.type === "shell" || record.toolMeta?.toolId === "shell") {
+      return { role: "model", parts: [{ text: `[Terminal] ${text}` }] };
+    }
+    if (record.type === "dynamic-ui" || record.generatedUI) {
+      const dataSummary = summarizeCardData(record.data);
+      const label = record.cardMode?.toolFamily ?? "App";
+      return { role: "model", parts: [{ text: `[${label}] ${text}${dataSummary ? ` (${dataSummary})` : ""}` }] };
+    }
+    if (record.type === "orchestration") {
+      return { role: "model", parts: [{ text: `[Orchestration] ${text}` }] };
+    }
+    if (record.type === "mission") {
+      return { role: "model", parts: [{ text: `[Mission] ${text}` }] };
+    }
+
+    return { role: "model", parts: [{ text }] };
+  }
+
+  // Cards with data but no text (tool results, research cards)
+  if (record.role === "assistant" && record.data) {
+    const dataSummary = summarizeCardData(record.data);
+    if (dataSummary) {
+      const label = record.cardMode?.toolFamily ?? record.type ?? "Result";
+      return { role: "model", parts: [{ text: `[${label}] ${dataSummary}` }] };
+    }
+  }
+
+  return null; // Skip cards with no useful content
+}
+
+/**
+ * Inject a non-agent card into the conversation's in-memory history.
+ * Called from server.ts after persistCard() for cards NOT created by the agent loop.
+ */
+export function injectCardContext(conversationId: string, record: CardRecord): void {
+  const entry = cardToEntry(record);
+  if (!entry) return;
+
+  const history = getConversationHistory(conversationId);
+  history.push(entry);
+  trimHistory(history);
+}
+
+/**
+ * Hydrate agent history from persisted journal on cold start.
+ * Called when the in-memory history is empty (server restart or first message).
+ */
+function hydrateFromJournal(clientId: string, conversationId: string): number {
+  try {
+    const records = loadCardHistory(clientId, conversationId, 20);
+    if (records.length === 0) return 0;
+
+    const history = getConversationHistory(conversationId);
+    let count = 0;
+    for (const record of records) {
+      const entry = cardToEntry(record);
+      if (entry) {
+        history.push(entry);
+        count++;
+      }
+    }
+    return count;
+  } catch {
+    return 0;
   }
 }
 
@@ -306,8 +412,19 @@ export async function handleStandaloneInbound(params: {
   const runId = randomUUID();
   const stableCardId = targetCardId ?? randomUUID();
   const sessionKey = client.sessionKey;
+  const conversationId = message.conversationId ?? "default";
+  const clientId = message.clientId;
 
-  logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Chat: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
+  // Hydrate from journal on cold start (server restart or first message in this conversation)
+  const existingHistory = getConversationHistory(conversationId);
+  if (existingHistory.length === 0 && clientId) {
+    const hydrated = hydrateFromJournal(clientId, conversationId);
+    if (hydrated > 0) {
+      logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Hydrated ${hydrated} turns from journal for conv=${conversationId.slice(0, 20)}` });
+    }
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Chat [conv=${conversationId.slice(0, 20)}]: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
   setLastUserMessage(rawBody);
 
   const userChatModel = client.chatModel;
@@ -402,7 +519,8 @@ export async function handleStandaloneInbound(params: {
   const functionDeclarations = tools.map(toolToFunctionDeclaration);
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Sending ${functionDeclarations.length} tools to Gemini (filtered from ${allTools.length})`, cardId: stableCardId });
 
-  const history = getSessionHistory(sessionKey);
+  const history = getConversationHistory(conversationId);
+  logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `History for conv=${conversationId.slice(0, 20)}: ${history.length} turns` });
   history.push({ role: "user", parts: [{ text: rawBody }] });
 
   const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;

@@ -32,6 +32,10 @@ export type EnsoInboundMessage = {
   text: string;
   mediaUrls?: string[];
   timestamp: number;
+  /** Conversation thread ID — enables per-conversation history isolation. */
+  conversationId?: string;
+  /** Browser client ID — needed to load card journal from disk. */
+  clientId?: string;
 };
 
 /** Interactive Questions (from Claude Code AskUserQuestion) */
