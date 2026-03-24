@@ -2,6 +2,7 @@ import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
 import { getDocCollection, type DocMeta } from "./persistence.js";
 import { sendHtmlEmail } from "./email.js";
 import { logAction, logError } from "./action-log.js";
+import { toProxiedImageUrl } from "./utils/proxy-url.js";
 import {
   BRAVE_WEB_SEARCH,
   BRAVE_IMAGE_SEARCH,
@@ -797,7 +798,7 @@ function matchImagesToSections(
     if (bestIdx >= 0 && bestScore > 0) {
       usedImages.add(bestIdx);
       result.push({
-        url: rawImages[bestIdx].thumbnail,
+        url: toProxiedImageUrl(rawImages[bestIdx].thumbnail),
         title: rawImages[bestIdx].title,
         pageUrl: rawImages[bestIdx].url,
         sectionIdx: sIdx,
@@ -809,7 +810,7 @@ function matchImagesToSections(
   for (let i = 0; i < rawImages.length; i++) {
     if (usedImages.has(i) || !rawImages[i].thumbnail) continue;
     result.push({
-      url: rawImages[i].thumbnail,
+      url: toProxiedImageUrl(rawImages[i].thumbnail),
       title: rawImages[i].title,
       pageUrl: rawImages[i].url,
       sectionIdx: -1,
@@ -1725,7 +1726,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     sections: [],
     sources: sources.slice(0, 25),
     images: matchImagesToSections([], rawImages),
-    videos: rawVideos.slice(0, 12),
+    videos: rawVideos.slice(0, 12).map((v) => ({ ...v, thumbnail: toProxiedImageUrl(v.thumbnail) })),
     books: [],
     movies: [],
     recommendedVideos: [],
@@ -1792,7 +1793,10 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     }));
 
     // Match images + build video list (no LLM needed)
-    const videos: ResearchVideo[] = rawVideos.slice(0, 12);
+    const videos: ResearchVideo[] = rawVideos.slice(0, 12).map((v) => ({
+      ...v,
+      thumbnail: toProxiedImageUrl(v.thumbnail),
+    }));
 
     // Push Phase A results immediately — user sees summary+findings while Phase B runs
     pushProgress({
@@ -2173,7 +2177,7 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
   ]);
   const sources = deduplicateAndScore(batches);
   const deepDiveImages: ResearchImage[] = rawImages.slice(0, 6).map((img) => ({
-    url: img.thumbnail,
+    url: toProxiedImageUrl(img.thumbnail),
     title: img.title,
     pageUrl: img.url,
   }));

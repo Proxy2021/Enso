@@ -17,6 +17,7 @@ import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { transcribeAudio, transcribeAudioBuffer } from "./transcribe.js";
 import { APP_CATALOG } from "./app-catalog.js";
+import { toProxiedImageUrl } from "./utils/proxy-url.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
 import { classifyTask, qualityGate } from "./task-router.js";
@@ -362,7 +363,7 @@ function App(props) {
     data: {
       tool: "enso_image_search",
       topic,
-      images: images.map(r => ({ url: r.thumbnail, title: r.title, pageUrl: r.url })),
+      images: images.map(r => ({ url: toProxiedImageUrl(r.thumbnail), title: r.title, pageUrl: r.url })),
     },
     generatedUI: gridTemplate,
     timestamp: Date.now(),
@@ -852,6 +853,39 @@ export async function startEnsoServer(opts: {
     } else {
       res.setHeader("Content-Length", fileSize);
       createReadStream(filePath).pipe(res);
+    }
+  });
+
+  // ── External image proxy (before auth — uses non-guessable base64url URLs) ──
+  app.get("/media/proxy/:encodedUrl", async (req, res) => {
+    let url: string;
+    try {
+      url = Buffer.from(req.params.encodedUrl, "base64url").toString("utf-8");
+    } catch {
+      res.status(400).json({ error: "Invalid encoded URL" });
+      return;
+    }
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      res.status(400).json({ error: "Only HTTP(S) URLs allowed" });
+      return;
+    }
+    try {
+      const upstream = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Enso/1.0)" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!upstream.ok) {
+        res.status(upstream.status).json({ error: "Upstream fetch failed" });
+        return;
+      }
+      const ct = upstream.headers.get("content-type") || "image/jpeg";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.setHeader("Content-Length", buf.length);
+      res.send(buf);
+    } catch {
+      res.status(502).json({ error: "Failed to fetch image" });
     }
   });
 
