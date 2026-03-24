@@ -27,6 +27,7 @@ import { loadProject, ensureDefaultProject, getProjectBranch } from "./project-m
 import type { Project, Persona, TeamAgent } from "./project-manager.js";
 import { APP_CATALOG } from "./app-catalog.js";
 import { loadAllApps, SHIPPED_APPS_DIR } from "./app-persistence.js";
+import { getWorkspace } from "./orchestration-workspace.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const PLUGIN_DIR = dirname(__filename);
@@ -82,6 +83,9 @@ function buildEvolutionPlanningPrompt(
   const { personas, teamAgents, validationPersonaIds } = project;
   const testUrl = project.testUrl || "http://localhost:5173";
 
+  // Resolve workspace for absolute artifact paths
+  const workspace = getWorkspace(orchestrationId);
+
   // Persona catalog
   const personaCatalog = personas.map((p) => {
     const scenarioList = p.testScenarios.map((s, j) => `  ${j + 1}. ${s}`).join("\n");
@@ -95,19 +99,21 @@ function buildEvolutionPlanningPrompt(
     ].join("\n");
   });
 
-  // Browser testing template
+  // Browser testing template — use absolute workspace paths
+  const personasDir = workspace ? workspace.personasDir : "./";
+  const screenshotsDir = workspace ? workspace.screenshotsDir : "./evolution-screenshots";
   const browserTestTemplate = [
     `**Instructions for browser-based persona testing:**`,
-    `1. Write a Node.js script \`test-persona-<PERSONA_ID>.mjs\` using Puppeteer (already installed in node_modules) that:`,
+    `1. Write a Node.js script to \`${personasDir}/test-<PERSONA_ID>.mjs\` using Puppeteer (already installed in node_modules) that:`,
     `   - Launches a headless browser and navigates to ${testUrl}`,
     `   - Waits for the page to load`,
     `   - IMPORTANT: NEVER type messages that would trigger evolution sprints or discovery sessions (e.g. "evolve", "run evolution", "discover projects", clicking Evolve/Discover tiles). These spawn massive multi-agent sessions that crash the sprint via rate limits. Other operations (orchestrations, builds, /code, /shell, /mission) are fine.`,
     `   - For each test scenario: types the message, clicks Send, waits for response (10-30s), takes a screenshot`,
-    `   - Saves screenshots to ./evolution-screenshots/`,
+    `   - Saves screenshots to \`${screenshotsDir}/\``,
     `   - Outputs a JSON summary of each scenario result`,
-    `2. Execute the script: \`node test-persona-<PERSONA_ID>.mjs\``,
+    `2. Execute the script: \`node ${personasDir}/test-<PERSONA_ID>.mjs\``,
     `3. Analyze the screenshots and results from the persona's perspective`,
-    `4. Write a detailed report to \`.evolution-persona-<PERSONA_ID>.md\` with:`,
+    `4. Write a detailed report to \`${personasDir}/<PERSONA_ID>.md\` with:`,
     `   - Each scenario: what was tried, what happened, assessment`,
     `   - Ratings (1-10): ease_of_use, speed, quality, delight, discoverability`,
     `   - Top 3 friction points`,
@@ -182,7 +188,7 @@ function buildEvolutionPlanningPrompt(
     `  4. You may MODIFY project.json to: adjust personas, change agent goals, update vision`,
     `  5. Set priorities for what THIS sprint should focus on`,
     `  6. DECIDE which 2-3 personas to test (from the catalog below) based on sprint focus`,
-    `  7. Write \`.evolution-team-project-leader.md\` with your meta-evaluation, selected personas, and sprint priorities`,
+    `  7. Write \`${workspace ? workspace.teamReportPath("project-leader") : ".evolution-team-project-leader.md"}\` with your meta-evaluation, selected personas, and sprint priorities`,
     ``,
     `## Phase 1: Persona Testing (runs FIRST — before team agents)`,
     ``,
@@ -201,14 +207,14 @@ function buildEvolutionPlanningPrompt(
     `- **Task ID:** pl-triage`,
     `- **Agent role:** architect`,
     `- **Dependencies:** ALL persona-* tasks from Phase 1`,
-    `- **Instructions:** You are ${projectLeader?.name || "the Project Leader"} again. Read ALL persona test reports (\`.evolution-persona-*.md\`).`,
+    `- **Instructions:** You are ${projectLeader?.name || "the Project Leader"} again. Read ALL persona test reports from \`${personasDir}/\` (files named \`<persona-id>.md\`).`,
     `  1. Summarize the key findings across all personas`,
     `  2. Identify the top pain points and opportunities`,
     `  3. DECIDE which team agents to involve for THIS sprint:`,
     `     - **Always include:** Architect (${coreEngAgents.find(a => a.id === "architect")?.name}), Engineering Manager (${coreEngAgents.find(a => a.id === "engineering-manager")?.name}), QA/Test Manager (${coreEngAgents.find(a => a.id === "test-manager")?.name})`,
     `     - **Include if relevant:** Marketing Director (${optionalAgents.find(a => a.id === "marketing-director")?.name}), Sales/Adoption Lead (${optionalAgents.find(a => a.id === "sales-director")?.name}), AI Strategist (${optionalAgents.find(a => a.id === "ai-technology-strategist")?.name})`,
     `  4. For each agent you DON'T include, explain briefly why (e.g., "Marketing not needed — sprint is purely technical")`,
-    `  5. Write \`.evolution-pl-triage.md\` with: persona summary, selected agents with rationale, preliminary enhancement ideas`,
+    `  5. Write \`${workspace ? workspace.evolutionFilePath("pl-triage") : ".evolution-pl-triage.md"}\` with: persona summary, selected agents with rationale, preliminary enhancement ideas`,
     ``,
     `  Available team agents:`,
     agentDescriptions,
@@ -222,11 +228,11 @@ function buildEvolutionPlanningPrompt(
     `- **Agent role:** <agent's agentRole>`,
     `- **Dependencies:** pl-triage`,
     `- **Instructions:** Evaluate the project from your unique perspective as <role>.`,
-    `  1. Read the PL triage report (\`.evolution-pl-triage.md\`) to understand persona findings and sprint priorities`,
+    `  1. Read the PL triage report (\`${workspace ? workspace.evolutionFilePath("pl-triage") : ".evolution-pl-triage.md"}\`) to understand persona findings and sprint priorities`,
     `  2. Review the project's current state relevant to your role`,
     `  3. Perform web research if relevant to your role`,
     `  4. Evaluate against your goals`,
-    `  5. Write \`.evolution-team-<agent-id>.md\` with your evaluation, findings, and recommendations`,
+    `  5. Write \`${workspace ? workspace.outputsDir + "/team-<agent-id>.md" : ".evolution-team-<agent-id>.md"}\` with your evaluation, findings, and recommendations`,
     ``,
     `### Core Engineering Agents (always included):`,
     ...coreEngAgents.map(a => [
@@ -249,7 +255,7 @@ function buildEvolutionPlanningPrompt(
     `- **Task ID:** synthesis-and-design`,
     `- **Agent role:** architect`,
     `- **Dependencies:** ALL team-* tasks from Phase 3 AND pl-triage`,
-    `- **Instructions:** Read ALL \`.evolution-persona-*.md\`, \`.evolution-pl-triage.md\`, and \`.evolution-team-*.md\` files.`,
+    `- **Instructions:** Read ALL persona reports from \`${personasDir}/\` (files named \`<persona-id>.md\`), the PL triage at \`${workspace ? workspace.evolutionFilePath("pl-triage") : ".evolution-pl-triage.md"}\`, and all team reports from \`${workspace ? workspace.outputsDir + "/" : "./"}team-*.md\`.`,
     ``,
     `  PART 1 — SYNTHESIS: Identify common themes across BOTH customer personas AND team agents. Categorize: UX Issues, Missing Features, Performance Issues, Bugs, Strategic Gaps. Rank by cross-report impact.`,
     ``,
@@ -265,7 +271,7 @@ function buildEvolutionPlanningPrompt(
     `  PART 4 — DESIGN: For each chosen enhancement, design the CONCRETE technical solution. Read the project codebase. For each: technical design, affected files, implementation approach, risks.`,
     `  When extending existing apps: read the current app.json, template.jsx, and executors/ to ensure compatibility.`,
     ``,
-    `  Write \`.evolution-synthesis.md\`, \`.evolution-discussion.md\`, AND \`.evolution-design.md\`.`,
+    `  Write \`${workspace ? workspace.evolutionFilePath("synthesis") : ".evolution-synthesis.md"}\`, \`${workspace ? workspace.evolutionFilePath("discussion") : ".evolution-discussion.md"}\`, AND \`${workspace ? workspace.evolutionFilePath("design") : ".evolution-design.md"}\`.`,
     ``,
     `## Phase 5: Engineering Implementation`,
     ``,
@@ -280,7 +286,7 @@ function buildEvolutionPlanningPrompt(
     `- **Dependencies:** synthesis-and-design`,
     ``,
     `Each implement task MUST follow these rules:`,
-    `  Read \`.evolution-design.md\`. IMPLEMENT the changes in the actual project codebase at ${project.codebasePath}.`,
+    `  Read \`${workspace ? workspace.evolutionFilePath("design") : ".evolution-design.md"}\`. IMPLEMENT the changes in the actual project codebase at ${project.codebasePath}.`,
     ``,
     `  SPRINT RESPONSIBILITY PRINCIPLE: Every bug, regression, broken feature, or enhancement identified during Phases 0-4 that was prioritized for this sprint MUST be addressed in implementation. The evolution sprint exists to make the system better — deferring known problems defeats the purpose. If the design doc lists it, you implement it.`,
     ``,
@@ -291,7 +297,7 @@ function buildEvolutionPlanningPrompt(
     `  - Make surgical, minimal changes`,
     `  - Follow existing code conventions`,
     `  - When extending an app, preserve all existing tools and template views`,
-    `  - Write \`.evolution-implementation.md\` listing every file changed`,
+    `  - Write \`${workspace ? workspace.evolutionFilePath("implementation") : ".evolution-implementation.md"}\` listing every file changed`,
     `  SAFETY — ABSOLUTELY FORBIDDEN (violating these will CRASH the sprint):`,
     `  - NEVER restart, stop, or kill any server/gateway process — it kills the running sprint`,
     `  - NEVER run restart.ps1, restart.sh, or any restart scripts`,
@@ -310,10 +316,10 @@ function buildEvolutionPlanningPrompt(
     `- **Agent role:** reviewer`,
     `- **Dependencies:** implement (or implement-a AND implement-b if split)`,
     `- **Instructions:** Validate the implementation:`,
-    `  1. Read \`.evolution-implementation.md\` and all changed source files`,
+    `  1. Read \`${workspace ? workspace.evolutionFilePath("implementation") : ".evolution-implementation.md"}\` and all changed source files`,
     `  2. Run \`npx tsc --noEmit\` — this is MANDATORY, record exact output`,
     `  3. Check for regressions, code quality issues, missing edge cases`,
-    `  4. Write \`.evolution-review.md\` with:`,
+    `  4. Write \`${workspace ? workspace.evolutionFilePath("review") : ".evolution-review.md"}\` with:`,
     `     - **VERDICT: PASS** or **VERDICT: FAIL** as the FIRST LINE (mandatory)`,
     `     - Build output (exact tsc output)`,
     `     - Issues table: severity | file | description`,
@@ -330,16 +336,16 @@ function buildEvolutionPlanningPrompt(
     `- **Agent role:** coder`,
     `- **Dependencies:** review`,
     `- **Instructions:** Re-test as the persona. Focus on CODE QUALITY of changes and existing behavior.`,
-    `  1. Read \`.evolution-implementation.md\` and changed source files`,
-    `  2. Read original report \`.evolution-persona-<persona-id>.md\` for baseline`,
-    `  3. Write Puppeteer re-test script and execute it`,
-    `  4. Write \`.evolution-retest-<persona-id>.md\` with before/after comparison`,
+    `  1. Read \`${workspace ? workspace.evolutionFilePath("implementation") : ".evolution-implementation.md"}\` and changed source files`,
+    `  2. Read original persona report from \`${personasDir}/<persona-id>.md\` for baseline`,
+    `  3. Write Puppeteer re-test script to \`${personasDir}/retest-<persona-id>.mjs\` and execute it`,
+    `  4. Write \`${personasDir}/retest-<persona-id>.md\` with before/after comparison`,
     ``,
     `### Build Evolution Dashboard`,
     `- **Task ID:** build-dashboard`,
     `- **Agent role:** builder`,
     `- **Dependencies:** review`,
-    `- **Instructions:** Read ALL evolution files. Build a BESPOKE interactive dashboard. Write EXACTLY \`.orchestration-ui.jsx\`. Under 500KB. NO import statements. Use var (not const/let). All hooks at top level. Use EnsoUI components + Recharts.`,
+    `- **Instructions:** Read ALL evolution files from \`${workspace ? workspace.outputsDir : "./"}\` and persona reports from \`${personasDir}/\`. Build a BESPOKE interactive dashboard. Write EXACTLY \`${workspace ? workspace.dashboardPath : ".orchestration-ui.jsx"}\`. Under 500KB. NO import statements. Use var (not const/let). All hooks at top level. Use EnsoUI components + Recharts.`,
     `  Tabs: Overview | Personas | Team | Implementation | Validation | Backlog`,
     ``,
     `### Project Leader Meta-Review & Resolution Verification`,
@@ -360,7 +366,7 @@ function buildEvolutionPlanningPrompt(
     `  5. NEXT SPRINT SEED: Based on unresolved items and new insights, list 3-5 specific focus areas.`,
     `     These are not deferred tasks — they are discovery seeds for the next sprint's Phase 0.`,
     `  6. Update project.json with: adjusted goals, sprint priorities, role adjustments, resolution status`,
-    `  7. Write \`.evolution-meta-review.md\` with:`,
+    `  7. Write \`${workspace ? workspace.evolutionFilePath("meta-review") : ".evolution-meta-review.md"}\` with:`,
     `     - Sprint effectiveness score and justification`,
     `     - Resolution audit table (issue | status | evidence | notes)`,
     `     - App ecosystem health assessment`,
@@ -474,13 +480,15 @@ export async function handleEvolutionSprint(params: {
       planningModel: "opus",
       planningPromptBuilder: (orchestrationId, planFilePath) =>
         buildEvolutionPlanningPrompt(project, goal || "", orchestrationId, planFilePath),
-      onComplete: (_orchId, status) => {
+      onComplete: (orchId, status) => {
         try {
+          const ws = getWorkspace(orchId);
           const meta = archiveEvolutionSprint(
             sprintId,
             goal || "Full product assessment",
             project.codebasePath,
             projectId,
+            ws?.rootDir,
           );
           if (meta) {
             logAction({
@@ -489,7 +497,7 @@ export async function handleEvolutionSprint(params: {
               category: "evolution",
               message: `Sprint archived for "${project.name}" (${status}): ${meta.files.length} files, ${meta.phases.personas.count} personas, dashboard: ${meta.phases.dashboard}`,
             });
-            cleanEvolutionTempFiles(project.codebasePath);
+            cleanEvolutionTempFiles(project.codebasePath, ws?.rootDir);
           }
         } catch (err) {
           logError("evolution", "Failed to archive sprint", err);

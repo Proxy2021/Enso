@@ -19,6 +19,12 @@ import { fileURLToPath } from "url";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, statSync } from "fs";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { executeDAG, cancelAllRunningTasks } from "./orchestrator-engine.js";
+import { createWorkspace, getWorkspace, type OrchestrationWorkspace } from "./orchestration-workspace.js";
+import {
+  registerOrchestration, unregisterOrchestration,
+  updateOrchestrationStatus, updateOrchestrationCounts,
+  type OrchestrationType,
+} from "./session-registry.js";
 import {
   loadAllApps,
   registerLoadedApp,
@@ -68,6 +74,8 @@ const activeOrchestrations = new Map<
     taskSessionIds: Map<string, string>; // taskId → sessionId
     maxConcurrency: number; // default 4
     onComplete?: (orchestrationId: string, status: "completed" | "failed") => void;
+    workspace?: OrchestrationWorkspace; // Managed artifact directory
+    orchestrationType?: OrchestrationType; // For session registry
   }
 >();
 
@@ -318,6 +326,9 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
   const runId = randomUUID();
   const isInlineEvolution = !!params.targetCardId;
   const bootstrapCardId = params.targetCardId ?? randomUUID();
+
+  // Create managed workspace for all orchestration artifacts
+  const workspace = createWorkspace(orchestrationId);
   const terminalCardId = bootstrapCardId;
 
   logAction({
@@ -393,6 +404,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
         status: "executing",
       };
 
+      const orchType: OrchestrationType = params.onComplete ? "evolution" : "orchestration";
       activeOrchestrations.set(orchestrationId, {
         plan, client, account,
         sharedContext: new Map(),
@@ -400,8 +412,16 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
         aborted: false, taskRunIds: new Map(), taskSessionIds: new Map(),
         maxConcurrency: params.maxConcurrency ?? 4,
         onComplete: params.onComplete,
+        workspace,
+        orchestrationType: orchType,
       });
       persistOrchestration(orchestrationId, plan);
+      registerOrchestration({
+        orchestrationId, type: orchType, goal: userMessage, status: "executing",
+        startedAt: Date.now(), taskCount: plan.tasks.length,
+        completedCount: 0, failedCount: 0, runningCount: 0,
+        workspaceDir: workspace.rootDir,
+      });
 
       logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Fast plan ready: ${plan.tasks.length} tasks, ${plan.agents.length} agents` });
 
@@ -422,7 +442,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
   }
 
   // ── Full Claude Code planning path ──
-  const planFilePath = join(PROJECT_ROOT, `server/.orchestration-${orchestrationId}.json`);
+  const planFilePath = workspace.planPath;
   const planningPrompt = params.planningPromptBuilder
     ? params.planningPromptBuilder(orchestrationId, planFilePath)
     : buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath);
@@ -459,6 +479,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
     };
 
     // Store in active orchestrations
+    const orchType2: OrchestrationType = params.onComplete ? "evolution" : "orchestration";
     activeOrchestrations.set(orchestrationId, {
       plan,
       client,
@@ -471,10 +492,18 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       taskSessionIds: new Map(),
       maxConcurrency: params.maxConcurrency ?? 4,
       onComplete: params.onComplete,
+      workspace,
+      orchestrationType: orchType2,
     });
 
     // Persist to disk
     persistOrchestration(orchestrationId, plan);
+    registerOrchestration({
+      orchestrationId, type: orchType2, goal: userMessage, status: "executing",
+      startedAt: Date.now(), taskCount: plan.tasks.length,
+      completedCount: 0, failedCount: 0, runningCount: 0,
+      workspaceDir: workspace.rootDir,
+    });
 
     logAction({
       ts: Date.now(),
@@ -588,18 +617,27 @@ export async function handleOrchestrationApprove(params: {
         maxConcurrency: orch.maxConcurrency,
         get onComplete() { return orch.onComplete; },
       },
-      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx),
+      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx, orch.workspace),
       onTaskStart: (taskId) => {
         updateOrchestrationProgress(orchestrationId, "task_started", taskId);
+        const running = orch.plan.tasks.filter(t => t.status === "running").length;
+        updateOrchestrationCounts(orchestrationId, { running });
       },
       onTaskDone: (taskId, summary) => {
         updateOrchestrationProgress(orchestrationId, "task_completed", taskId);
+        const completed = orch.plan.tasks.filter(t => t.status === "completed").length;
+        const running = orch.plan.tasks.filter(t => t.status === "running").length;
+        updateOrchestrationCounts(orchestrationId, { completed, running });
       },
       onTaskFail: (taskId, error) => {
         updateOrchestrationProgress(orchestrationId, "task_failed", taskId, error);
+        const failed = orch.plan.tasks.filter(t => t.status === "failed").length;
+        const running = orch.plan.tasks.filter(t => t.status === "running").length;
+        updateOrchestrationCounts(orchestrationId, { failed, running });
       },
       cwd: PROJECT_ROOT,
       maxConcurrency: orch.maxConcurrency,
+      workspace: orch.workspace,
     });
 
     // Check for bespoke one-off UI — Claude Code may write as .orchestration-ui.jsx
@@ -619,7 +657,7 @@ export async function handleOrchestrationApprove(params: {
     finalizeOrchestration(orch);
 
     // Clean up temp files
-    cleanupOrchestrationTempFiles(orch.plan);
+    cleanupOrchestrationTempFiles(orch.plan, orch.workspace);
 
   } catch (err) {
     logError("orchestrator", "DAG execution error", err, { orchestrationId });
@@ -646,6 +684,7 @@ export function handleOrchestrationPause(orchestrationId: string): void {
   cancelAllRunningTasks(orch as any);
 
   persistOrchestration(orchestrationId, orch.plan);
+  updateOrchestrationStatus(orchestrationId, "paused");
 
   logAction({
     ts: Date.now(),
@@ -666,14 +705,82 @@ export async function handleOrchestrationResume(params: {
   account: ResolvedEnsoAccount;
 }): Promise<void> {
   const { orchestrationId, client, account } = params;
-  const orch = activeOrchestrations.get(orchestrationId);
-  if (!orch) return;
+  let orch = activeOrchestrations.get(orchestrationId);
+
+  // Lazy recovery: if not in memory (e.g. after server restart), rebuild from disk
+  if (!orch) {
+    const plan = loadOrchestration(orchestrationId);
+    if (!plan) {
+      logError("orchestrator", "Resume: orchestration not found in memory or on disk", null, { orchestrationId });
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey,
+        seq: 0, state: "error", text: "Orchestration not found. It may have been completed or removed.",
+        timestamp: Date.now(),
+      } as ServerMessage);
+      return;
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Recovering orchestration from disk: ${orchestrationId}` });
+
+    // Rebuild shared context from completed task output files
+    const ws = getWorkspace(orchestrationId);
+    const sharedContext = new Map<string, string>();
+    for (const task of plan.tasks) {
+      if (task.status === "completed") {
+        // Try to read the task's output to rebuild context
+        const output = readTaskOutput(task, ws);
+        if (output) sharedContext.set(task.taskId, output.slice(0, 500));
+      }
+    }
+
+    const bootstrapCardId = randomUUID();
+    orch = {
+      plan,
+      client,
+      account,
+      sharedContext,
+      bootstrapCardId,
+      terminalCardId: bootstrapCardId,
+      aborted: false,
+      taskRunIds: new Map(),
+      taskSessionIds: new Map(),
+      maxConcurrency: 4,
+      workspace: ws,
+    };
+    activeOrchestrations.set(orchestrationId, orch);
+
+    // Register in session registry
+    registerOrchestration({
+      orchestrationId,
+      type: "orchestration",
+      goal: plan.goal,
+      status: "resuming",
+      startedAt: Date.now(),
+      taskCount: plan.tasks.length,
+      completedCount: plan.tasks.filter(t => t.status === "completed").length,
+      failedCount: plan.tasks.filter(t => t.status === "failed").length,
+      runningCount: 0,
+      workspaceDir: ws?.rootDir,
+    });
+
+    // Send the plan to the frontend so it can display the orchestration card
+    client.send({
+      id: bootstrapCardId, runId: randomUUID(), sessionKey: client.sessionKey,
+      seq: 0, state: "delta", timestamp: Date.now(),
+      text: `Resuming orchestration: ${plan.goal}`,
+      cardType: "orchestration",
+      targetCardId: bootstrapCardId,
+      orchestrationPlan: plan,
+      orchestrationProgress: { orchestrationId, eventType: "resumed" as any, plan },
+    } as any);
+  }
 
   orch.plan.status = "executing";
   orch.aborted = false;
   orch.client = client; // Update in case of reconnection
   orch.account = account;
   persistOrchestration(orchestrationId, orch.plan);
+  updateOrchestrationStatus(orchestrationId, "executing");
 
   // Reset "running" tasks back to pending (they were interrupted)
   for (const task of orch.plan.tasks) {
@@ -702,18 +809,27 @@ export async function handleOrchestrationResume(params: {
         maxConcurrency: orch.maxConcurrency,
         get onComplete() { return orch.onComplete; },
       },
-      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx),
+      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx, orch.workspace),
       onTaskStart: (taskId) => {
         updateOrchestrationProgress(orchestrationId, "task_started", taskId);
+        const running = orch.plan.tasks.filter(t => t.status === "running").length;
+        updateOrchestrationCounts(orchestrationId, { running });
       },
       onTaskDone: (taskId, summary) => {
         updateOrchestrationProgress(orchestrationId, "task_completed", taskId);
+        const completed = orch.plan.tasks.filter(t => t.status === "completed").length;
+        const running = orch.plan.tasks.filter(t => t.status === "running").length;
+        updateOrchestrationCounts(orchestrationId, { completed, running });
       },
       onTaskFail: (taskId, error) => {
         updateOrchestrationProgress(orchestrationId, "task_failed", taskId, error);
+        const failed = orch.plan.tasks.filter(t => t.status === "failed").length;
+        const running = orch.plan.tasks.filter(t => t.status === "running").length;
+        updateOrchestrationCounts(orchestrationId, { failed, running });
       },
       cwd: PROJECT_ROOT,
       maxConcurrency: orch.maxConcurrency,
+      workspace: orch.workspace,
     });
 
     const bespokeUIPath = findBespokeUIFile(orchestrationId);
@@ -727,7 +843,7 @@ export async function handleOrchestrationResume(params: {
       logError("orchestrator", "Post-build registration failed (non-fatal)", regErr, { orchestrationId });
     }
     finalizeOrchestration(orch);
-    cleanupOrchestrationTempFiles(orch.plan);
+    cleanupOrchestrationTempFiles(orch.plan, orch.workspace);
   } catch (err) {
     if (!orch.aborted) {
       logError("orchestrator", "Resume execution error", err, { orchestrationId });
@@ -752,6 +868,8 @@ export function handleOrchestrationCancel(orchestrationId: string): void {
 
   persistOrchestration(orchestrationId, orch.plan);
   activeOrchestrations.delete(orchestrationId);
+  updateOrchestrationStatus(orchestrationId, "cancelled");
+  unregisterOrchestration(orchestrationId);
 
   logAction({
     ts: Date.now(),
@@ -1117,6 +1235,7 @@ function buildTaskPrompt(
   task: OrchestrationTask,
   plan: OrchestrationPlan,
   completedContext: Map<string, string>,
+  workspace?: OrchestrationWorkspace,
 ): string {
   const parts: string[] = [
     `You are a ${task.agentRole.charAt(0).toUpperCase() + task.agentRole.slice(1)} Agent working on a larger orchestrated goal.`,
@@ -1156,7 +1275,9 @@ function buildTaskPrompt(
       const dep = plan.tasks.find(t => t.taskId === depId);
       const summary = completedContext.get(depId) || "Completed";
       parts.push(`- **${dep?.title || depId}**: ${summary}`);
-      parts.push(`  Read full output: server/.orchestration-output-${depId}.md or server/.orchestration-research-${depId}.md`);
+      const depOutputPath = workspace ? workspace.taskOutputPath(depId) : `server/.orchestration-output-${depId}.md`;
+      const depResearchPath = workspace ? workspace.taskResearchPath(depId) : `server/.orchestration-research-${depId}.md`;
+      parts.push(`  Read full output: ${depOutputPath} or ${depResearchPath}`);
     }
     parts.push(``);
   }
@@ -1196,27 +1317,31 @@ function buildTaskPrompt(
     parts.push(``);
   }
 
+  // Output path resolution — workspace when available, legacy fallback
+  const taskOutputFile = workspace ? workspace.taskOutputPath(task.taskId) : `server/.orchestration-output-${task.taskId}.md`;
+  const taskResearchFile = workspace ? workspace.taskResearchPath(task.taskId) : `server/.orchestration-research-${task.taskId}.md`;
+
   if (task.outputType === "research") {
     parts.push(`## Output`);
-    parts.push(`Write your research findings to: server/.orchestration-research-${task.taskId}.md`);
+    parts.push(`Write your research findings to: ${taskResearchFile}`);
     parts.push(`Structure the file with clear sections and data.`);
   }
 
   if (task.outputType === "decision" || task.outputType === "document") {
     parts.push(`## Output`);
-    parts.push(`Write your output to: server/.orchestration-output-${task.taskId}.md`);
+    parts.push(`Write your output to: ${taskOutputFile}`);
   }
 
   if (task.outputType === "review") {
     parts.push(`## Output`);
-    parts.push(`Write your review findings to: server/.orchestration-output-${task.taskId}.md`);
+    parts.push(`Write your review findings to: ${taskOutputFile}`);
     parts.push(`Include: issues found, suggestions for improvement, and an overall assessment.`);
   }
 
   if (task.outputType === "code") {
     parts.push(`## Output`);
     parts.push(`Write your code/scripts to appropriate files in the project.`);
-    parts.push(`Also write a summary to: server/.orchestration-output-${task.taskId}.md`);
+    parts.push(`Also write a summary to: ${taskOutputFile}`);
   }
 
   // Structured summary block requirement
@@ -1231,7 +1356,8 @@ function buildTaskPrompt(
   const isBespokeBuilder = task.agentRole === "builder" && task.outputType !== "app";
   if (isBespokeBuilder) {
     parts.push(`## Bespoke UI Instructions`);
-    parts.push(`Write a single interactive JSX file named EXACTLY \`.orchestration-ui.jsx\` in the current working directory.`);
+    const dashboardFile = workspace ? workspace.dashboardPath : `.orchestration-ui.jsx`;
+    parts.push(`Write a single interactive JSX file to EXACTLY: ${dashboardFile}`);
     parts.push(`Embed all data as \`var\` declarations. Use EnsoUI components, Recharts, Lucide icons.`);
     parts.push(`NULL SAFETY: use optional chaining (?.) and fallbacks (??, ||) everywhere.`);
     parts.push(`Tabs: <Tabs tabs={[...]}>{(tab) => tab === "a" ? <A/> : <B/>}</Tabs>`);
@@ -1704,7 +1830,9 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     orch.plan.status = "completed";
     updateOrchestrationProgress(orchId, "completed");
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration completed: ${orchId}` });
+    updateOrchestrationStatus(orchId, "completed");
     try { orch.onComplete?.(orchId, "completed"); } catch { /* best effort */ }
+    unregisterOrchestration(orchId);
   } else if (allDone && anyFailed) {
     // Some tasks failed but the session finished
     const completed = orch.plan.tasks.filter(t => t.status === "completed").length;
@@ -1713,7 +1841,9 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     orch.plan.status = status;
     updateOrchestrationProgress(orchId, status);
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration finished: ${completed} completed, ${failed} failed` });
+    updateOrchestrationStatus(orchId, status);
     try { orch.onComplete?.(orchId, status as "completed" | "failed"); } catch { /* best effort */ }
+    unregisterOrchestration(orchId);
   }
   // If tasks are still pending, leave status as "executing" (shouldn't happen)
 }
@@ -1729,7 +1859,11 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
  * Claude Code may write it as .orchestration-ui.jsx, or with the ID in the name.
  */
 function findBespokeUIFile(orchestrationId: string): string | undefined {
-  // Exact filename candidates
+  // Check workspace first (preferred path)
+  const ws = getWorkspace(orchestrationId);
+  if (ws && existsSync(ws.dashboardPath)) return ws.dashboardPath;
+
+  // Legacy: exact filename candidates in project root
   const exactCandidates = [
     join(PROJECT_ROOT, ".orchestration-ui.jsx"),
     join(PROJECT_ROOT, "server", ".orchestration-ui.jsx"),
@@ -1738,12 +1872,11 @@ function findBespokeUIFile(orchestrationId: string): string | undefined {
   const exact = exactCandidates.find(p => existsSync(p));
   if (exact) return exact;
 
-  // ID-based filename patterns — Claude sometimes includes the ID
+  // Legacy: ID-based filename patterns — Claude sometimes includes the ID
   const searchDirs = [PROJECT_ROOT, join(PROJECT_ROOT, "server"), join(PLUGIN_DIR, "..")];
   for (const dir of searchDirs) {
     try {
       const files = readdirSync(dir);
-      // Match patterns like .orchestration-<id>.orchestration-ui.jsx or .orchestration-<id>-ui.jsx
       const match = files.find(f =>
         f.includes("orchestration") && f.endsWith("-ui.jsx") && f.startsWith(".")
       );
@@ -1879,11 +2012,16 @@ function blockDependents(plan: OrchestrationPlan, failedTaskId: string): void {
 /**
  * Read a task's output file (research, decision, document).
  */
-function readTaskOutput(task: OrchestrationTask): string | null {
-  const filePaths = [
-    join(PROJECT_ROOT, `server/.orchestration-research-${task.taskId}.md`),
-    join(PROJECT_ROOT, `server/.orchestration-output-${task.taskId}.md`),
-  ];
+function readTaskOutput(task: OrchestrationTask, workspace?: OrchestrationWorkspace): string | null {
+  const filePaths: string[] = [];
+  // Workspace paths (preferred)
+  if (workspace) {
+    filePaths.push(workspace.taskResearchPath(task.taskId));
+    filePaths.push(workspace.taskOutputPath(task.taskId));
+  }
+  // Legacy paths (fallback)
+  filePaths.push(join(PROJECT_ROOT, `server/.orchestration-research-${task.taskId}.md`));
+  filePaths.push(join(PROJECT_ROOT, `server/.orchestration-output-${task.taskId}.md`));
 
   for (const fp of filePaths) {
     if (existsSync(fp)) {
@@ -1901,11 +2039,20 @@ function readTaskOutput(task: OrchestrationTask): string | null {
 /**
  * Clean up temporary orchestration files after completion.
  */
-function cleanupOrchestrationTempFiles(plan: OrchestrationPlan): void {
+function cleanupOrchestrationTempFiles(plan: OrchestrationPlan, workspace?: OrchestrationWorkspace): void {
   try {
+    const orchId = plan.orchestrationId;
+
+    // If workspace exists and this is NOT an evolution sprint (which archives first), clean it up
+    if (workspace) {
+      workspace.cleanup();
+      logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Cleaned up workspace for orchestration ${orchId}` });
+      return;
+    }
+
+    // Legacy cleanup: scan server/ directory for scattered files
     const pluginDir = join(PROJECT_ROOT, "server");
     const files = readdirSync(pluginDir);
-    const orchId = plan.orchestrationId;
     const taskIds = plan.tasks.map(t => t.taskId);
 
     for (const file of files) {

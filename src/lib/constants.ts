@@ -21,6 +21,8 @@ export const API = {
   APK: "/api/apk",
   SHARE_CREATE: "/api/create-share",
   SHARE_TOKEN: "/api/share-token",
+  SESSIONS: "/api/sessions",
+  ORCHESTRATIONS_ACTIVE: "/api/orchestrations/active",
   CLAUDE_COMMANDS: "/api/claude-commands",
   WS_DEBUG: "/api/ws-debug",
   CARD_STATE: (cardId: string) => `/api/card/${cardId}/state`,

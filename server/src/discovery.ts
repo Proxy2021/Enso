@@ -15,6 +15,7 @@ import { randomUUID } from "crypto";
 import { handleOrchestration } from "./orchestrator.js";
 import { logAction, logError } from "./action-log.js";
 import { archiveDiscoveryResults, cleanDiscoveryTempFiles } from "./discovery-archive.js";
+import { getWorkspace } from "./orchestration-workspace.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 
@@ -98,14 +99,15 @@ export async function handleDiscovery(params: DiscoveryParams): Promise<void> {
         });
         // Archive discovery artifacts
         try {
+          const ws = getWorkspace(orchId);
           const discoveryId = `discovery-${Date.now()}-${randomUUID().slice(0, 8)}`;
-          const meta = archiveDiscoveryResults(discoveryId, focusLabel, PROJECT_ROOT);
+          const meta = archiveDiscoveryResults(discoveryId, focusLabel, PROJECT_ROOT, ws?.rootDir);
           if (meta) {
             logAction({
               ts: Date.now(), type: "action", category: "discovery",
               message: `Discovery archived (${status}): ${meta.files.length} files, dashboard: ${meta.phases.deliverables.dashboard}`,
             });
-            cleanDiscoveryTempFiles(PROJECT_ROOT);
+            cleanDiscoveryTempFiles(PROJECT_ROOT, ws?.rootDir);
           }
         } catch (err) {
           logError("discovery", "Failed to archive discovery results", err);
@@ -125,6 +127,7 @@ function buildDiscoveryPlanningPrompt(
   orchestrationId: string,
   planFilePath: string,
 ): string {
+  const workspace = getWorkspace(orchestrationId);
   const lines: string[] = [];
 
   lines.push(`# AI VC Discovery Sprint — Planning`);
@@ -356,7 +359,7 @@ function buildDiscoveryPlanningPrompt(
   lines.push(`**${VC_TEAM.pitchArchitect.name}** (Head of Investment Intelligence) creates TWO deliverables:`);
   lines.push(``);
   lines.push(`#### Deliverable 1: Interactive Investment Dashboard`);
-  lines.push(`Write a bespoke React JSX dashboard to exactly \`.orchestration-ui.jsx\` (this filename triggers rendering in the UI).`);
+  lines.push(`Write a bespoke React JSX dashboard to exactly \`${workspace ? workspace.dashboardPath : ".orchestration-ui.jsx"}\` (this filename triggers rendering in the UI).`);
   lines.push(``);
   lines.push(`**AVAILABLE LIBRARIES**: React 19, Recharts (import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'), lucide-react icons. Use ResponsiveContainer for all charts. Use Tooltip on every chart for hover interactivity.`);
   lines.push(``);
@@ -397,7 +400,7 @@ function buildDiscoveryPlanningPrompt(
   lines.push(`- **VC Process** tab: Summary of how the discovery was conducted — phases, participants, methodology`);
   lines.push(``);
   lines.push(`#### Deliverable 2: Investment Memo (PPT-style document)`);
-  lines.push(`Write a comprehensive investment memo to \`investment-memo.md\` structured as a presentation deck:`);
+  lines.push(`Write a comprehensive investment memo to \`${workspace ? workspace.outputsDir + "/investment-memo.md" : "investment-memo.md"}\` structured as a presentation deck:`);
   lines.push(``);
   lines.push(`**CRITICAL REQUIREMENTS for Investment Memo:**`);
   lines.push(`- Start with a 1-page EXECUTIVE SUMMARY (Slide 0) that fits on a single screen: verdict badges, key metrics table, top 3 risks, recommended action. This is the "board slide."`);
@@ -477,7 +480,7 @@ function buildDiscoveryPlanningPrompt(
   lines.push(`5. Phase 4 (deliverables): 1 task, depends on Phase 3b`);
   lines.push(`6. Task descriptions must be COMPLETE and SELF-CONTAINED — agents only see their own task description`);
   lines.push(`7. Every task must end with a <!-- STRUCTURED_SUMMARY {JSON} --> block`);
-  lines.push(`8. Phase 4 builder MUST write dashboard to exactly \`.orchestration-ui.jsx\` AND memo to \`investment-memo.md\``);
+  lines.push(`8. Phase 4 builder MUST write dashboard to exactly \`${workspace ? workspace.dashboardPath : ".orchestration-ui.jsx"}\` AND memo to \`${workspace ? workspace.outputsDir + "/investment-memo.md" : "investment-memo.md"}\``);
   lines.push(`9. Research tasks must include SPECIFIC web search queries — don't be vague`);
   lines.push(`10. All monetary figures in USD`);
   lines.push(`11. Recommendations must be ACTIONABLE — specific enough that we can immediately create an Enso project and start building`);

@@ -19,7 +19,7 @@
  *       └── output-*.md
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync, rmSync } from "fs";
 import { join, basename, resolve } from "path";
 import { logAction, logError } from "./action-log.js";
 import { getEnsoPath } from "./utils/home.js";
@@ -46,13 +46,15 @@ export interface DiscoveryMeta {
 // ── Archive ──
 
 /**
- * Archive a discovery sprint — collects all discovery artifacts from the project
- * root and organizes them into a persistent directory.
+ * Archive a discovery sprint — collects all discovery artifacts into a persistent directory.
+ * When `workspaceDir` is provided, scans the orchestration workspace structure.
+ * Otherwise falls back to scanning the project root for legacy artifact files.
  */
 export function archiveDiscoveryResults(
   discoveryId: string,
   focus: string,
   projectRoot: string,
+  workspaceDir?: string,
 ): DiscoveryMeta | null {
   try {
     mkdirSync(DISCOVERIES_DIR, { recursive: true });
@@ -70,80 +72,135 @@ export function archiveDiscoveryResults(
     let hasDashboard = false;
     let hasMemo = false;
 
-    // Scan project root and common subdirectories for discovery artifacts
-    const dirsToScan = [projectRoot];
-    for (const sub of ["server", "src"]) {
-      const subPath = join(projectRoot, sub);
-      if (existsSync(subPath)) dirsToScan.push(subPath);
-    }
+    if (workspaceDir && existsSync(workspaceDir)) {
+      // ── Workspace-based archival ──
+      // Workspace structure:
+      //   outputs/<taskId>.md — task output files (sourcing, pitches, committee, etc.)
+      //   outputs/investment-memo.md
+      //   dashboard-ui.jsx
 
-    // Collect all candidate files across directories
-    const candidates: { file: string; srcDir: string }[] = [];
-    for (const dir of dirsToScan) {
-      try {
-        for (const f of readdirSync(dir)) {
-          candidates.push({ file: f, srcDir: dir });
+      // 1. Scan outputs/ dir for task outputs
+      const wsOutputsDir = join(workspaceDir, "outputs");
+      if (existsSync(wsOutputsDir)) {
+        try {
+          for (const file of readdirSync(wsOutputsDir)) {
+            const srcPath = join(wsOutputsDir, file);
+            try { if (!statSync(srcPath).isFile()) continue; } catch { continue; }
+
+            let destSubdir = "";
+            let destName = file;
+
+            if (file.includes("sourcing") && file.endsWith(".md")) {
+              destSubdir = "sourcing";
+            } else if (file.startsWith("investment-pitch-") || (file.startsWith("pitch-") && file.endsWith(".md"))) {
+              destSubdir = "pitches";
+            } else if (file === "investment-recommendation.md" || file.startsWith("committee-")) {
+              destSubdir = "committee";
+            } else if (file === "investment-memo.md") {
+              hasMemo = true;
+              destSubdir = "";
+            } else if (file.endsWith(".md")) {
+              destSubdir = "outputs";
+              destName = `output-${file}`;
+            } else {
+              continue;
+            }
+
+            const destDir = destSubdir ? join(discDir, destSubdir) : discDir;
+            try {
+              copyFileSync(srcPath, join(destDir, destName));
+              const relPath = destSubdir ? `${destSubdir}/${destName}` : destName;
+              if (!allFiles.includes(relPath)) {
+                allFiles.push(relPath);
+                if (destSubdir === "sourcing") sourcingFiles.push(relPath);
+                else if (destSubdir === "pitches") pitchFiles.push(relPath);
+                else if (destSubdir === "committee") committeeFiles.push(relPath);
+              }
+            } catch (err) { logError("discovery-archive", `Failed to copy ${file}`, err); }
+          }
+        } catch (err) { logError("discovery-archive", "Failed to scan workspace outputs dir", err); }
+      }
+
+      // 2. Dashboard from workspace root
+      const wsDashboard = join(workspaceDir, "dashboard-ui.jsx");
+      if (existsSync(wsDashboard)) {
+        try {
+          copyFileSync(wsDashboard, join(discDir, "dashboard-ui.jsx"));
+          hasDashboard = true;
+          allFiles.push("dashboard-ui.jsx");
+        } catch (err) { logError("discovery-archive", "Failed to copy dashboard", err); }
+      }
+
+    } else {
+      // ── Legacy fallback: scan project root for discovery artifacts ──
+      const dirsToScan = [projectRoot];
+      for (const sub of ["server", "src"]) {
+        const subPath = join(projectRoot, sub);
+        if (existsSync(subPath)) dirsToScan.push(subPath);
+      }
+
+      const candidates: { file: string; srcDir: string }[] = [];
+      for (const dir of dirsToScan) {
+        try {
+          for (const f of readdirSync(dir)) {
+            candidates.push({ file: f, srcDir: dir });
+          }
+        } catch { /* dir not readable */ }
+      }
+
+      for (const { file, srcDir } of candidates) {
+        const srcPath = join(srcDir, file);
+        try { if (!statSync(srcPath).isFile()) continue; } catch { continue; }
+
+        let destName: string | null = null;
+        let destSubdir = "";
+
+        if (file.startsWith(".orchestration-output-") && file.includes("sourcing")) {
+          destName = file.replace(".orchestration-output-", "");
+          destSubdir = "sourcing";
         }
-      } catch { /* dir not readable */ }
-    }
-
-    for (const { file, srcDir } of candidates) {
-      const srcPath = join(srcDir, file);
-      try { if (!statSync(srcPath).isFile()) continue; } catch { continue; }
-
-      let destName: string | null = null;
-      let destSubdir = "";
-
-      // Phase 1: Sourcing reports (match actual orchestrator output names)
-      if (file.startsWith(".orchestration-output-") && file.includes("sourcing")) {
-        destName = file.replace(".orchestration-output-", "");
-        destSubdir = "sourcing";
-      }
-      // Phase 2: Partner pitches
-      else if (file.startsWith("investment-pitch-")) {
-        destName = file;
-        destSubdir = "pitches";
-      }
-      // Phase 3: Committee challenge & recommendation (single or multi-critic)
-      else if (file === "investment-recommendation.md") {
-        destName = file;
-        destSubdir = "committee";
-      }
-      else if (file.startsWith(".orchestration-output-committee-")) {
-        destName = file.replace(".orchestration-output-", "");
-        destSubdir = "committee";
-      }
-      // Phase 4: Deliverables
-      else if (file === ".orchestration-ui.jsx") {
-        destName = "dashboard-ui.jsx";
-        hasDashboard = true;
-      }
-      else if (file === "investment-memo.md") {
-        destName = file;
-        hasMemo = true;
-      }
-      // Raw task outputs
-      else if (file.startsWith(".orchestration-output-")) {
-        destName = file.replace(".orchestration-output-", "output-");
-        destSubdir = "outputs";
-      }
-      else {
-        continue; // Not a discovery artifact
-      }
-
-      const destDir = destSubdir ? join(discDir, destSubdir) : discDir;
-      const destPath = join(destDir, destName);
-      try {
-        copyFileSync(srcPath, destPath);
-        const relPath = destSubdir ? `${destSubdir}/${destName}` : destName;
-        if (!allFiles.includes(relPath)) {
-          allFiles.push(relPath);
-          if (destSubdir === "sourcing") sourcingFiles.push(relPath);
-          else if (destSubdir === "pitches") pitchFiles.push(relPath);
-          else if (destSubdir === "committee") committeeFiles.push(relPath);
+        else if (file.startsWith("investment-pitch-")) {
+          destName = file;
+          destSubdir = "pitches";
         }
-      } catch (err) {
-        logError("discovery-archive", `Failed to copy ${file}`, err);
+        else if (file === "investment-recommendation.md") {
+          destName = file;
+          destSubdir = "committee";
+        }
+        else if (file.startsWith(".orchestration-output-committee-")) {
+          destName = file.replace(".orchestration-output-", "");
+          destSubdir = "committee";
+        }
+        else if (file === ".orchestration-ui.jsx") {
+          destName = "dashboard-ui.jsx";
+          hasDashboard = true;
+        }
+        else if (file === "investment-memo.md") {
+          destName = file;
+          hasMemo = true;
+        }
+        else if (file.startsWith(".orchestration-output-")) {
+          destName = file.replace(".orchestration-output-", "output-");
+          destSubdir = "outputs";
+        }
+        else {
+          continue;
+        }
+
+        const destDir = destSubdir ? join(discDir, destSubdir) : discDir;
+        const destPath = join(destDir, destName);
+        try {
+          copyFileSync(srcPath, destPath);
+          const relPath = destSubdir ? `${destSubdir}/${destName}` : destName;
+          if (!allFiles.includes(relPath)) {
+            allFiles.push(relPath);
+            if (destSubdir === "sourcing") sourcingFiles.push(relPath);
+            else if (destSubdir === "pitches") pitchFiles.push(relPath);
+            else if (destSubdir === "committee") committeeFiles.push(relPath);
+          }
+        } catch (err) {
+          logError("discovery-archive", `Failed to copy ${file}`, err);
+        }
       }
     }
 
@@ -185,9 +242,22 @@ export function archiveDiscoveryResults(
 }
 
 /**
- * Clean up discovery temp files from project root after archiving.
+ * Clean up discovery temp files after archiving.
+ * When `workspaceDir` is provided, simply removes the entire workspace directory.
+ * Otherwise falls back to pattern-matching cleanup in the project root.
  */
-export function cleanDiscoveryTempFiles(projectRoot: string): void {
+export function cleanDiscoveryTempFiles(projectRoot: string, workspaceDir?: string): void {
+  // If workspace dir is provided, just remove it entirely
+  if (workspaceDir && existsSync(workspaceDir)) {
+    try {
+      rmSync(workspaceDir, { recursive: true, force: true });
+      return;
+    } catch {
+      // Fall through to legacy cleanup
+    }
+  }
+
+  // Legacy fallback: pattern-matching cleanup in project root
   const patterns = [
     /^investment-pitch-.*\.md$/,
     /^investment-recommendation\.md$/,

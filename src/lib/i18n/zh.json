@@ -32,6 +32,8 @@
   "welcome.tile.discover.desc": "发现市场机会",
   "welcome.tile.evolve": "进化项目",
   "welcome.tile.evolve.desc": "AI 迭代改进",
+  "welcome.tile.sessions": "会话管理",
+  "welcome.tile.sessions.desc": "监控活跃会话",
 
   "welcome.prompt.research": "研究 2026 年 CRISPR 基因编辑的突破性进展",
   "welcome.prompt.compare": "对比 Salesforce、HubSpot 和 Pipedrive 哪个更适合初创公司",

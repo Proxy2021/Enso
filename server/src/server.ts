@@ -1170,6 +1170,74 @@ export async function startEnsoServer(opts: {
     res.send(content);
   });
 
+  // ── Session & Orchestration Management API ──
+
+  app.get("/api/sessions", async (_req, res) => {
+    const { getSystemStatus } = await import("./session-registry.js");
+    res.json(getSystemStatus());
+  });
+
+  app.delete("/api/sessions/:runId", async (req, res) => {
+    try {
+      cancelClaudeCodeRun(req.params.runId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to cancel session" });
+    }
+  });
+
+  app.get("/api/orchestrations/active", async (_req, res) => {
+    const { getActiveOrchestrations } = await import("./session-registry.js");
+    res.json({ orchestrations: getActiveOrchestrations() });
+  });
+
+  app.delete("/api/orchestrations/:id", async (req, res) => {
+    try {
+      const { handleOrchestrationCancel } = await import("./orchestrator.js");
+      handleOrchestrationCancel(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to cancel orchestration" });
+    }
+  });
+
+  app.post("/api/orchestrations/:id/pause", async (req, res) => {
+    try {
+      const { handleOrchestrationPause } = await import("./orchestrator.js");
+      handleOrchestrationPause(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to pause orchestration" });
+    }
+  });
+
+  app.post("/api/orchestrations/:id/resume", async (_req, res) => {
+    // Resume requires a client and account (WebSocket context), so we return
+    // guidance to use the existing WebSocket protocol for resume operations.
+    res.status(400).json({ error: "Use WebSocket orchestration.resume for resume operations (requires active client context)" });
+  });
+
+  app.get("/api/orchestrations/recoverable", async (_req, res) => {
+    const { listWorkspaces } = await import("./orchestration-workspace.js");
+    const { getActiveOrchestrations } = await import("./session-registry.js");
+    const { loadOrchestration } = await import("./orchestrator.js");
+    const active = new Set(getActiveOrchestrations().map((o) => o.orchestrationId));
+    const workspaces = listWorkspaces()
+      .filter((ws) => !active.has(ws.orchestrationId))
+      .map((ws) => {
+        const plan = loadOrchestration(ws.orchestrationId);
+        return {
+          orchestrationId: ws.orchestrationId,
+          rootDir: ws.rootDir,
+          goal: plan?.goal,
+          status: plan?.status,
+          taskCount: plan?.tasks?.length ?? 0,
+          completedCount: plan?.tasks?.filter((t: any) => t.status === "completed").length ?? 0,
+        };
+      });
+    res.json({ workspaces });
+  });
+
   // ── Growth Marketing & Sales API ──
 
   try {
@@ -1885,14 +1953,21 @@ export async function startEnsoServer(opts: {
                 }
 
 
-                const classification = await classifyTask({
-                  userMessage: msg.text,
-                  conversationHistory: recentHistory,
-                  geminiApiKey: account.geminiApiKey,
-                  mediaUrls: msg.mediaUrls,
-                  chatModel: client.chatModel,
-                  providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey },
-                });
+                // Timeout guard: ensure classification never hangs forever (e.g. under memory pressure)
+                const CLASSIFY_TIMEOUT_MS = 45_000;
+                const classification = await Promise.race([
+                  classifyTask({
+                    userMessage: msg.text,
+                    conversationHistory: recentHistory,
+                    geminiApiKey: account.geminiApiKey,
+                    mediaUrls: msg.mediaUrls,
+                    chatModel: client.chatModel,
+                    providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey },
+                  }),
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("Classification timed out")), CLASSIFY_TIMEOUT_MS),
+                  ),
+                ]);
 
                 // Emit classification result status
                 send({
@@ -2378,21 +2453,25 @@ export async function startEnsoServer(opts: {
                 // Error boundary (E2 Sprint 11): show user-friendly message + recovery chips
                 const errMessage = routerErr?.message || "An unexpected error occurred";
                 runtime.log?.(`[enso] chat error: ${routerErr?.stack || errMessage}`);
-                // Dismiss the processing indicator if still active
-                send({ id: randomUUID(), runId: processingRunId, sessionKey, seq: 99, state: "final", text: "", timestamp: Date.now() });
-                // Send user-friendly error message (not raw error badge)
-                const errCardId = randomUUID();
-                send({
-                  id: errCardId, runId: randomUUID(), sessionKey, seq: 1, state: "final", timestamp: Date.now(),
-                  text: errMessage,
-                  followUps: {
-                    cardId: errCardId,
-                    suggestions: [
-                      { label: "Try again", prompt: "Try again" },
-                      { label: "Browse Files", prompt: "Open the file browser" },
-                    ],
-                  },
-                });
+                try {
+                  // Dismiss the processing indicator if still active
+                  send({ id: randomUUID(), runId: processingRunId, sessionKey, seq: 99, state: "final", text: "", timestamp: Date.now() });
+                  // Send user-friendly error message (not raw error badge)
+                  const errCardId = randomUUID();
+                  send({
+                    id: errCardId, runId: randomUUID(), sessionKey, seq: 1, state: "final", timestamp: Date.now(),
+                    text: errMessage,
+                    followUps: {
+                      cardId: errCardId,
+                      suggestions: [
+                        { label: "Try again", prompt: "Try again" },
+                        { label: "Browse Files", prompt: "Open the file browser" },
+                      ],
+                    },
+                  });
+                } catch (sendErr) {
+                  runtime.log?.(`[enso] chat error boundary: failed to send error to client: ${sendErr}`);
+                }
               }
             } else if (msg.text || (msg.mediaUrls && msg.mediaUrls.length > 0)) {
               // Fallback for: media-only messages, IM mode, no Gemini key, or explicit routing

@@ -23,6 +23,7 @@ const TEMPLATES: Template[] = [
   { icon: "\uD83D\uDDA5\uFE0F", titleKey: "welcome.tile.terminal", descKey: "welcome.tile.terminal.desc", prompt: "/shell" },
   { icon: "\uD83D\uDD2C", titleKey: "welcome.tile.discover", descKey: "welcome.tile.discover.desc", prompt: "/discover" },
   { icon: "\uD83E\uDDEC", titleKey: "welcome.tile.evolve", descKey: "welcome.tile.evolve.desc", prompt: "/evolve" },
+  { icon: "\uD83D\uDCCA", titleKey: "welcome.tile.sessions", descKey: "welcome.tile.sessions.desc", prompt: "/sessions" },
 ];
 
 interface SuggestedPrompt {

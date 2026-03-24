@@ -9,9 +9,16 @@ import OrchestrationCard from "./OrchestrationCard";
 import EvolutionHistoryCard from "./EvolutionHistoryCard";
 import DiscoveryHistoryCard from "./DiscoveryHistoryCard";
 import ProjectsCard from "./ProjectsCard";
+import SessionDashboardCard from "./SessionDashboardCard";
 import { ThinkingCard } from "../components/ThinkingCard";
 
 // Register built-in card types (order matters — first match wins in resolve)
+
+cardRegistry.register({
+  type: "session-dashboard",
+  renderer: SessionDashboardCard,
+  match: () => false,
+});
 
 cardRegistry.register({
   type: "projects",

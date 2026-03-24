@@ -498,6 +498,21 @@ export const useChatStore = create<CardStore>((set, get) => ({
         return;
       }
 
+      // "/sessions" command — open session dashboard
+      if (text.trim() === "/sessions") {
+        const id = uuidv4();
+        const now = Date.now();
+        const card: Card = {
+          id, runId: id, type: "session-dashboard", role: "assistant",
+          status: "complete", display: "expanded", createdAt: now, updatedAt: now,
+        };
+        set((s) => ({
+          cardOrder: [...s.cardOrder, id],
+          cards: { ...s.cards, [id]: card },
+        }));
+        return;
+      }
+
       // "/projects" command — open projects manager
       if (text.trim() === "/projects") {
         const id = uuidv4();

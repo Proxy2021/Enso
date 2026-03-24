@@ -223,6 +223,32 @@ The **Project Leader decides which personas to involve per sprint** based on the
 - **Safety rules**: Implementation tasks are forbidden from restarting servers, pushing to git, or modifying versions
 - **Sprint persistence**: Full reports, screenshots, dashboards saved to `~/.enso/projects/<id>/sprints/sprint-<timestamp>/`
 
+#### Orchestration Workspace
+
+All orchestration artifacts (task outputs, persona scripts, screenshots, dashboards) are managed in a workspace directory — never scattered across the project root.
+
+- **Location**: `~/.enso/orchestrations/<orchestrationId>/` with subdirs: `outputs/`, `personas/`, `personas/screenshots/`
+- **Lifecycle**: Created on orchestration start → agents write here during execution → archived (evolution) or cleaned up (regular) on completion → workspace persists on interruption for inspection/resume
+- **Module**: `server/src/orchestration-workspace.ts` — `createWorkspace()`, `getWorkspace()`, `listWorkspaces()`, workspace path resolvers (`taskOutputPath`, `personaReportPath`, `dashboardPath`, etc.)
+- **Legacy fallback**: `readTaskSummary()` and `findBespokeUIFile()` check workspace paths first, fall back to legacy `server/.orchestration-*` paths for backward compatibility
+
+#### Session Registry & Management Dashboard
+
+Centralized tracking of all active Claude Code sessions and orchestrations with REST API and frontend dashboard.
+
+- **Registry**: `server/src/session-registry.ts` — `registerSession()`, `unregisterSession()`, `registerOrchestration()`, `getSystemStatus()`
+- **Hooks**: `claude-code.ts` registers/unregisters on session start/end; `orchestrator.ts` registers orchestrations with task count tracking
+- **REST API**:
+  - `GET /api/sessions` — all sessions + orchestrations
+  - `DELETE /api/sessions/:runId` — cancel a Claude Code session
+  - `GET /api/orchestrations/active` — active orchestrations
+  - `DELETE /api/orchestrations/:id` — cancel orchestration
+  - `POST /api/orchestrations/:id/pause` — pause orchestration
+  - `GET /api/orchestrations/recoverable` — interrupted orchestrations that can be resumed
+- **Frontend**: `/sessions` command or "Sessions" tile on WelcomeCard → `SessionDashboardCard` with live polling, stop/pause/resume controls
+- **Resume after restart**: `handleOrchestrationResume()` supports lazy recovery — if orchestration is not in memory (e.g., after server restart), rebuilds from persisted plan on disk, reconstructs shared context from completed task outputs
+- Key files: `session-registry.ts`, `orchestration-workspace.ts` (backend), `SessionDashboardCard.tsx` (frontend)
+
 #### Running & Monitoring Evolution Sprints
 
 **Prerequisites**:

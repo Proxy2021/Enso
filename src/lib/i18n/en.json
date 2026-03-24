@@ -32,6 +32,8 @@
   "welcome.tile.discover.desc": "Find market opportunities",
   "welcome.tile.evolve": "Evolve Project",
   "welcome.tile.evolve.desc": "AI sprint improvements",
+  "welcome.tile.sessions": "Sessions",
+  "welcome.tile.sessions.desc": "Monitor active sessions",
 
   "welcome.prompt.research": "Research CRISPR gene editing breakthroughs in 2026",
   "welcome.prompt.compare": "Compare Salesforce vs HubSpot vs Pipedrive for startups",

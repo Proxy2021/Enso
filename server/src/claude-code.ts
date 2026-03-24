@@ -11,6 +11,7 @@ import {
   OLLAMA_BASE_URL,
 } from "./config.js";
 import { persistCard, DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
+import { registerSession, unregisterSession, updateSessionId as registryUpdateSessionId } from "./session-registry.js";
 
 const activeAbortControllers = new Map<string, AbortController>();
 const activeTasks = new Map<string, string>(); // taskId → description
@@ -172,6 +173,17 @@ export async function runClaudeCode(params: {
 
   const abortController = new AbortController();
   activeAbortControllers.set(runId, abortController);
+
+  // Register with session registry for dashboard visibility
+  registerSession({
+    sessionId: toolSessionId ?? "",
+    runId,
+    type: params.skipPersist ? "orchestration-task" : "claude-code",
+    description: prompt.slice(0, 200),
+    startedAt: Date.now(),
+    status: "running",
+    model: params.model,
+  });
 
   let sessionId = toolSessionId ?? "";
   let resumeId: string | undefined = toolSessionId;
@@ -403,6 +415,7 @@ export async function runClaudeCode(params: {
       // Capture session ID from any message that has it
       if ("session_id" in message && message.session_id) {
         sessionId = message.session_id as string;
+        registryUpdateSessionId(runId, sessionId);
       }
 
       // ── System messages (init, tasks) ──
@@ -897,6 +910,7 @@ export async function runClaudeCode(params: {
   } finally {
     clearHeartbeat();
     activeAbortControllers.delete(runId);
+    unregisterSession(runId);
     // Clean up any lingering task entries from this session
     for (const taskId of sessionTaskIds) {
       activeTasks.delete(taskId);

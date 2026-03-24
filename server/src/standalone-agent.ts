@@ -510,14 +510,18 @@ export async function handleStandaloneInbound(params: {
       ? "I couldn't process that request. Please try rephrasing your message."
       : `An error occurred: ${errMsg}`;
 
-    client.send({
-      id: randomUUID(),
-      runId,
-      sessionKey,
-      seq: 0,
-      state: "error",
-      text: userFriendly,
-      timestamp: Date.now(),
-    });
+    try {
+      client.send({
+        id: randomUUID(),
+        runId,
+        sessionKey,
+        seq: 0,
+        state: "error",
+        text: userFriendly,
+        timestamp: Date.now(),
+      });
+    } catch (sendErr) {
+      logError("standalone-agent", "Failed to send error to client", sendErr, { cardId: stableCardId });
+    }
   }
 }

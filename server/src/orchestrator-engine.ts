@@ -14,6 +14,7 @@ import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { logAction, logError } from "./action-log.js";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
+import type { OrchestrationWorkspace } from "./orchestration-workspace.js";
 
 // ── Semaphore ──
 
@@ -69,6 +70,7 @@ export interface DAGExecutorParams {
   onTaskFail: (taskId: string, error: string) => void;
   cwd: string;
   maxConcurrency?: number;
+  workspace?: OrchestrationWorkspace;
 }
 
 // ── DAG Executor ──
@@ -78,7 +80,7 @@ export interface DAGExecutorParams {
  * with a concurrency semaphore. Each task gets its own Claude Code session.
  */
 export async function executeDAG(params: DAGExecutorParams): Promise<void> {
-  const { plan, orch, buildTaskPrompt, onTaskStart, onTaskDone, onTaskFail, cwd, maxConcurrency = 4 } = params;
+  const { plan, orch, buildTaskPrompt, onTaskStart, onTaskDone, onTaskFail, cwd, maxConcurrency = 4, workspace } = params;
 
   const semaphore = new Semaphore(maxConcurrency);
   const completedSet = new Set<string>();
@@ -166,7 +168,7 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
           if (orch.aborted) return;
 
           // Task completed — parse output file for summary
-          const summary = readTaskSummary(task.taskId) || `Task ${task.taskId} completed`;
+          const summary = readTaskSummary(task.taskId, workspace) || `Task ${task.taskId} completed`;
           task.status = "completed";
           task.resultSummary = summary;
           completedSet.add(task.taskId);
@@ -182,13 +184,13 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
 
           // ── Fix-Verify Loop: Check for FAIL verdict on review tasks ──
           if (task.taskId === "review" || task.agentRole === "reviewer") {
-            const verdict = extractVerdict(task.taskId);
+            const verdict = extractVerdict(task.taskId, workspace);
             if (verdict === "FAIL" && !plan.tasks.some(t => t.taskId === "fix-cycle")) {
               // Inject a fix task into the plan
               const fixTask: OrchestrationTask = {
                 taskId: "fix-cycle",
                 title: "Fix Build Issues (automated fix cycle)",
-                description: buildFixTaskDescription(task.taskId),
+                description: buildFixTaskDescription(task.taskId, workspace),
                 agentRole: "coder",
                 dependsOn: [task.taskId],
                 outputType: "code",
@@ -318,12 +320,17 @@ function blockDependents(
  * If a STRUCTURED_SUMMARY block exists, parse it and return a compact string.
  * Otherwise, extract first meaningful lines up to 500 chars.
  */
-function readTaskSummary(taskId: string): string | null {
+function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): string | null {
 
-  const candidates = [
-    join(process.cwd(), `server/.orchestration-output-${taskId}.md`),
-    join(process.cwd(), `server/.orchestration-research-${taskId}.md`),
-  ];
+  const candidates: string[] = [];
+  // Workspace paths (preferred)
+  if (workspace) {
+    candidates.push(workspace.taskOutputPath(taskId));
+    candidates.push(workspace.taskResearchPath(taskId));
+  }
+  // Legacy paths (fallback)
+  candidates.push(join(process.cwd(), `server/.orchestration-output-${taskId}.md`));
+  candidates.push(join(process.cwd(), `server/.orchestration-research-${taskId}.md`));
 
   for (const filePath of candidates) {
     if (existsSync(filePath)) {
@@ -372,12 +379,15 @@ function readTaskSummary(taskId: string): string | null {
 /**
  * Extract VERDICT: PASS/FAIL from a review task's output file.
  */
-function extractVerdict(taskId: string): "PASS" | "FAIL" | null {
+function extractVerdict(taskId: string, workspace?: OrchestrationWorkspace): "PASS" | "FAIL" | null {
 
-  const candidates = [
-    join(process.cwd(), `server/.orchestration-output-${taskId}.md`),
-    join(process.cwd(), `server/.evolution-review.md`),
-  ];
+  const candidates: string[] = [];
+  if (workspace) {
+    candidates.push(workspace.taskOutputPath(taskId));
+    candidates.push(workspace.evolutionFilePath("review"));
+  }
+  candidates.push(join(process.cwd(), `server/.orchestration-output-${taskId}.md`));
+  candidates.push(join(process.cwd(), `server/.evolution-review.md`));
 
   for (const filePath of candidates) {
     if (existsSync(filePath)) {
@@ -407,16 +417,19 @@ function extractVerdict(taskId: string): "PASS" | "FAIL" | null {
 /**
  * Build the description for a dynamically injected fix task.
  */
-function buildFixTaskDescription(reviewTaskId: string): string {
+function buildFixTaskDescription(reviewTaskId: string, workspace?: OrchestrationWorkspace): string {
+  const reviewPath = workspace ? workspace.taskOutputPath(reviewTaskId) : `server/.orchestration-output-${reviewTaskId}.md`;
+  const reviewAlt = workspace ? workspace.evolutionFilePath("review") : `server/.evolution-review.md`;
+  const fixOutputPath = workspace ? workspace.taskOutputPath("fix-cycle") : `server/.orchestration-output-fix-cycle.md`;
   return [
     `A review task found build errors or critical issues. Your job is to fix them.`,
     ``,
-    `1. Read the review output: server/.orchestration-output-${reviewTaskId}.md`,
-    `   (or server/.evolution-review.md)`,
+    `1. Read the review output: ${reviewPath}`,
+    `   (or ${reviewAlt})`,
     `2. Identify ALL issues marked as FAIL or critical`,
     `3. Fix each issue in the actual source code`,
     `4. Run \`npx tsc --noEmit\` to verify the build passes`,
-    `5. Write a summary of all fixes to: server/.orchestration-output-fix-cycle.md`,
+    `5. Write a summary of all fixes to: ${fixOutputPath}`,
     ``,
     `SAFETY RULES (same as all sprint tasks):`,
     `- NEVER modify package.json, package-lock.json, or any lock files`,
