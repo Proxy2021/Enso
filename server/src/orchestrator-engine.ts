@@ -278,15 +278,13 @@ function createTaskClient(
   virtualCardId: string,
   orch: ActiveOrchestration,
 ): ConnectedClient {
-  const originalSend = originalClient.send.bind(originalClient);
-
   return {
     ...originalClient,
     send: (msg: ServerMessage) => {
-      // Route messages targeting the virtual card to the original client
-      // with the virtual card ID preserved — the store will route it
-      // to the correct task terminal
-      originalSend(msg);
+      // Resolve send at call time (NOT via .bind()) so that after a WebSocket
+      // reconnect — where the server replaces client.send in-place — task
+      // messages route through the new, live socket instead of the stale one.
+      orch.client.send(msg);
     },
   };
 }
