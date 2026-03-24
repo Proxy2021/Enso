@@ -627,6 +627,40 @@ export default function ChatInput() {
           </div>
         )}
 
+        {/* Mobile quick action chips — horizontal scrolling row like Doubao */}
+        {!activeShellSessionId && !showMenu && (
+          <div className="sm:hidden flex gap-2 mb-2.5 overflow-x-auto scrollbar-hide pb-0.5">
+            <button
+              onClick={() => { setText("/research "); textareaRef.current?.focus(); }}
+              disabled={disabled}
+              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+            >
+              <span className="text-sm">&#x1f50d;</span> {t("mobile.quickAction.research")}
+            </button>
+            <button
+              onClick={() => { setText("/code "); textareaRef.current?.focus(); }}
+              disabled={disabled}
+              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+            >
+              <span className="text-sm">&#x1f4bb;</span> {t("mobile.quickAction.code")}
+            </button>
+            <button
+              onClick={() => imageResearchRef.current?.click()}
+              disabled={disabled}
+              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+            >
+              <span className="text-sm">&#x1f4f7;</span> {t("attach.camera")}
+            </button>
+            <button
+              onClick={() => sendMessage("/orchestrate")}
+              disabled={disabled}
+              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+            >
+              <span className="text-sm">&#x26a1;</span> {t("mobile.quickAction.orchestrate")}
+            </button>
+          </div>
+        )}
+
         {/* Shell mode indicator banner — enhanced for visibility */}
         {activeShellSessionId && (
           <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2.5 rounded-lg bg-amber-900/50 border-2 border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.15)]">

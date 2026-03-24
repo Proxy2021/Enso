@@ -4,9 +4,12 @@ import CardTimeline from "./components/CardTimeline";
 import ChatInput from "./components/ChatInput";
 import AppsMenu from "./components/AppsMenu";
 import PinnedSidebar from "./components/PinnedSidebar";
-import ConversationSidebar, { toggleMobileConversations } from "./components/ConversationSidebar";
+import ConversationSidebar from "./components/ConversationSidebar";
 import ConnectionPicker from "./components/ConnectionPicker";
 import SetupWizard from "./components/SetupWizard";
+import MobileTabBar from "./components/MobileTabBar";
+import MobileConversationList from "./components/MobileConversationList";
+import WelcomeCard from "./components/WelcomeCard";
 
 import { parseDeepLink, setActiveBackend, getActiveBackend, loadBackends, addBackend } from "./lib/connection";
 import { isNative } from "./lib/platform";
@@ -24,6 +27,7 @@ import BackgroundTaskBar from "./components/BackgroundTaskBar";
 import ResultsInbox, { useUnseenCount } from "./components/ResultsInbox";
 import { reportError } from "./lib/error-reporter";
 import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
+import { useT } from "./lib/i18n";
 // Initialize card registry (registers all built-in card types)
 import "./cards";
 
@@ -186,6 +190,144 @@ function ActiveModelLabel() {
   );
 }
 
+/** Mobile chat header with back button and conversation title */
+function MobileChatHeader() {
+  const setMobileShowChat = useChatStore((s) => s.setMobileShowChat);
+  const activeId = useChatStore((s) => s.activeConversationId);
+  const conversations = useChatStore((s) => s.conversationsList);
+  const activeTitle = conversations.find((c) => c.id === activeId)?.title ?? "Chat";
+
+  return (
+    <header className="sm:hidden flex items-center gap-2 px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/90 backdrop-blur-lg">
+      <button
+        onClick={() => setMobileShowChat(false)}
+        className="flex items-center justify-center w-9 h-9 rounded-xl text-gray-400 hover:text-gray-200 active:scale-[0.92] active:bg-gray-800 transition-all duration-150"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+      </button>
+      <h1 className="flex-1 text-sm font-semibold text-gray-200 truncate">{activeTitle}</h1>
+      <SettingsPanel />
+    </header>
+  );
+}
+
+/** Mobile "Me" tab — settings, connection, profile */
+function MobileSettingsView() {
+  const { t } = useT();
+  const state = useChatStore((s) => s.connectionState);
+  const setShowPicker = useChatStore((s) => s.setShowConnectionPicker);
+  const active = getActiveBackend();
+  const cardCount = useChatStore((s) => s.cardOrder.length);
+  const chatModel = useChatStore((s) => s.chatModel);
+
+  return (
+    <div className="flex-1 overflow-y-auto mobile-view-enter">
+      <div className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
+        <h1 className="text-xl font-bold text-gray-100 tracking-tight mb-6">{t("mobile.tab.me")}</h1>
+        <div className="space-y-3">
+          {/* Profile card */}
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-900/60 border border-gray-800/60">
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <span className="text-white text-xl font-bold">E</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-base font-semibold text-gray-100">Enso</p>
+              <p className="text-xs text-gray-500">AI Sandbox</p>
+            </div>
+          </div>
+
+          {/* Connection */}
+          <button
+            onClick={() => setShowPicker(true)}
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50 active:bg-gray-800/60 transition-all"
+          >
+            <div className={`w-3 h-3 rounded-full shrink-0 ${state === "connected" ? "bg-emerald-400" : state === "connecting" ? "bg-amber-400 animate-pulse" : "bg-red-400"}`} />
+            <div className="flex-1 text-left min-w-0">
+              <p className="text-sm font-medium text-gray-200">{active ? active.name : "Not connected"}</p>
+              <p className="text-xs text-gray-500 capitalize">{state}</p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+
+          {/* Settings */}
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-200">{t("settings.title")}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{chatModel ? `Model: ${chatModel}` : ""}</p>
+            </div>
+            <SettingsPanel />
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50">
+              <p className="text-2xl font-bold text-gray-200">{cardCount}</p>
+              <p className="text-xs text-gray-500 mt-1">{t("settings.cardsInSession")}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50">
+              <p className="text-2xl font-bold text-gray-200">{state === "connected" ? "Online" : "Offline"}</p>
+              <p className="text-xs text-gray-500 mt-1">Status</p>
+            </div>
+          </div>
+
+          {/* Debug reporter */}
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-200">Debug</p>
+              <p className="text-xs text-gray-500">Report issues & view logs</p>
+            </div>
+            <DebugReporter />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Mobile tab content switcher */
+function MobileMainContent() {
+  const mobileTab = useChatStore((s) => s.mobileTab);
+  const mobileShowChat = useChatStore((s) => s.mobileShowChat);
+
+  if (mobileTab === "chat") {
+    if (mobileShowChat) {
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 mobile-chat-enter">
+          <MobileChatHeader />
+          <CardTimeline />
+          <BackgroundTaskBar />
+          <ChatInput />
+        </div>
+      );
+    }
+    return <MobileConversationList />;
+  }
+
+  if (mobileTab === "tools") {
+    return (
+      <div className="flex-1 overflow-y-auto mobile-view-enter">
+        <WelcomeCard />
+      </div>
+    );
+  }
+
+  if (mobileTab === "inbox") {
+    return (
+      <div className="flex-1 overflow-y-auto mobile-view-enter">
+        <ResultsInbox show onClose={() => {}} asPage />
+      </div>
+    );
+  }
+
+  if (mobileTab === "me") {
+    return <MobileSettingsView />;
+  }
+
+  return null;
+}
+
 function SearchToggle() {
   const searchVisible = useChatStore((s) => s.cardSearchVisible);
   const setVisible = useChatStore((s) => s.setCardSearchVisible);
@@ -272,21 +414,13 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <div className="flex flex-col h-dvh text-gray-100">
-        <header className="sticky top-0 z-20 flex items-center justify-between px-2 sm:px-2.5 py-1.5 sm:py-2 pt-[max(0.375rem,env(safe-area-inset-top))] sm:pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              onClick={toggleMobileConversations}
-              className="sm:hidden flex items-center text-gray-400 hover:text-gray-200 active:scale-[0.92] transition-all duration-150 p-1.5 rounded-lg"
-              title="Conversations"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </button>
-            <h1 className="text-sm sm:text-base font-semibold tracking-tight">Enso</h1>
-            <span className="hidden sm:inline"><ActiveModelLabel /></span>
+        {/* Desktop header (hidden on mobile — mobile uses tab-specific headers) */}
+        <header className="hidden sm:flex sticky top-0 z-20 items-center justify-between px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] border-b border-gray-800/80 bg-gray-950/70 backdrop-blur supports-[backdrop-filter]:bg-gray-950/55">
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold tracking-tight">Enso</h1>
+            <ActiveModelLabel />
           </div>
-          <div className="flex items-center gap-0.5 sm:gap-1.5">
+          <div className="flex items-center gap-1.5">
             <SettingsPanel />
             <DebugReporter />
             <AppsMenu />
@@ -296,9 +430,12 @@ export default function App() {
             <ConnectionDot />
           </div>
         </header>
+
         <UpdateBanner />
         <ConnectionBanner />
-        <div className="flex flex-1 overflow-hidden min-h-0">
+
+        {/* Desktop layout */}
+        <div className="hidden sm:flex flex-1 overflow-hidden min-h-0">
           <ConversationSidebar />
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             <CardTimeline />
@@ -307,6 +444,15 @@ export default function App() {
           </div>
           <PinnedSidebar />
         </div>
+
+        {/* Mobile layout */}
+        <div className="sm:hidden flex-1 flex flex-col overflow-hidden min-h-0">
+          <MobileMainContent />
+        </div>
+
+        {/* Mobile tab bar */}
+        <MobileTabBar />
+
         <ToastContainer />
         <ResultsInbox show={showResults} onClose={() => setShowResults(false)} />
         <ConnectionPicker />

@@ -280,5 +280,15 @@
   "terminal.askPlaceholder": "向Claude Code提问...",
   "results.claudeCode": "Claude Code",
   "results.claudeCodeSession": "Claude Code 会话",
-  "results.deepResearch": "深度研究"
+  "results.deepResearch": "深度研究",
+
+  "mobile.tab.chat": "对话",
+  "mobile.tab.tools": "探索",
+  "mobile.tab.inbox": "收件箱",
+  "mobile.tab.me": "我的",
+  "mobile.noConversations": "暂无对话",
+  "mobile.quickAction.research": "研究",
+  "mobile.quickAction.code": "代码",
+  "mobile.quickAction.build": "构建应用",
+  "mobile.quickAction.orchestrate": "编排"
 }

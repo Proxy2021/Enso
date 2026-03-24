@@ -137,3 +137,23 @@
   from { transform: translateX(-100%); }
   to   { transform: translateX(0); }
 }
+
+/* Mobile tab content transitions */
+@keyframes mobileViewFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.mobile-view-enter {
+  animation: mobileViewFadeIn 0.2s ease-out both;
+}
+
+/* Mobile chat slide-in from right */
+@keyframes mobileChatSlideIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.mobile-chat-enter {
+  animation: mobileChatSlideIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

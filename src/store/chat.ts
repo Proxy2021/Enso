@@ -46,6 +46,7 @@ export interface ConversationEntry {
   title: string;
   createdAt: number;
   updatedAt: number;
+  preview?: string;
 }
 
 export interface ProjectInfo {
@@ -110,6 +111,10 @@ interface CardStore {
   cardSearchQuery: string;
   cardSearchVisible: boolean;
 
+  // Mobile navigation
+  mobileTab: "chat" | "tools" | "inbox" | "me";
+  mobileShowChat: boolean;
+
   // Actions
   connect: () => void;
   disconnect: () => void;
@@ -171,6 +176,8 @@ interface CardStore {
   releaseCard: (cardId: string) => void;
   setCardSearchQuery: (query: string) => void;
   setCardSearchVisible: (visible: boolean) => void;
+  setMobileTab: (tab: "chat" | "tools" | "inbox" | "me") => void;
+  setMobileShowChat: (show: boolean) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -325,6 +332,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
   showSidebar: false,
   cardSearchQuery: "",
   cardSearchVisible: false,
+  mobileTab: "chat" as const,
+  mobileShowChat: false,
+
+  setMobileTab: (tab) => set({ mobileTab: tab, mobileShowChat: false }),
+  setMobileShowChat: (show) => set({ mobileShowChat: show }),
 
   connect: () => {
     const existing = get()._wsClient;
@@ -748,6 +760,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cards: { ...s.cards, [id]: card, [thinkingId]: thinkingCard },
       _thinkingCardId: thinkingId,
       isWaiting: true,
+      mobileShowChat: true,
     }));
     get()._wsClient?.send({
       type: "chat.send",
@@ -1891,6 +1904,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       _pendingCodeText: null,
       _thinkingCardId: null,
       recentTopics: [],
+      mobileShowChat: true,
     });
     if (ws) ws.send({ type: "chat.history", historyCount: 50, conversationId: id });
   },

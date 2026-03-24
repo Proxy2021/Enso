@@ -172,9 +172,10 @@ export function useUnseenCount(): number {
 interface ResultsInboxProps {
   show: boolean;
   onClose: () => void;
+  asPage?: boolean;
 }
 
-export default function ResultsInbox({ show, onClose }: ResultsInboxProps) {
+export default function ResultsInbox({ show, onClose, asPage }: ResultsInboxProps) {
   const cards = useChatStore((s) => s.cards);
   const cardOrder = useChatStore((s) => s.cardOrder);
   const [seen, setSeen] = useState(loadSeen);
@@ -199,7 +200,57 @@ export default function ResultsInbox({ show, onClose }: ResultsInboxProps) {
     });
   }, [results]);
 
-  if (!show) return null;
+  if (!show && !asPage) return null;
+
+  if (asPage) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3 flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-100 tracking-tight">Inbox</h1>
+          {results.some((r) => !r.seen) && (
+            <button onClick={markAllSeen} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+              Mark all read
+            </button>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto px-3">
+          {results.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-600 text-sm">
+              <span className="text-3xl mb-3">&#x1f4ed;</span>
+              No completed tasks yet
+            </div>
+          ) : (
+            results.map((r) => (
+              <button
+                key={r.cardId}
+                onClick={() => {
+                  markSeen(r.cardId);
+                  scrollToCard(r.cardId);
+                  useChatStore.getState().setMobileTab("chat");
+                  useChatStore.getState().setMobileShowChat(true);
+                }}
+                className={`w-full flex items-start gap-3 px-4 py-3.5 rounded-2xl mb-1 transition-all duration-150 text-left ${
+                  !r.seen ? "bg-gray-900/60" : "active:bg-gray-800/60"
+                }`}
+              >
+                <div className="mt-1.5 w-2 flex-shrink-0">
+                  {!r.seen && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
+                </div>
+                <span className="text-base mt-0.5 flex-shrink-0">{TYPE_ICONS[r.type]}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium ${r.success ? "text-gray-200" : "text-red-400"}`}>{r.title}</span>
+                    <span className="text-[10px] text-gray-600 ml-auto flex-shrink-0">{timeAgo(r.completedAt)}</span>
+                  </div>
+                  {r.subtitle && <div className="text-[11px] text-gray-500 truncate mt-0.5">{r.subtitle}</div>}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

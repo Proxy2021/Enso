@@ -280,5 +280,15 @@
   "terminal.askPlaceholder": "Ask Claude Code...",
   "results.claudeCode": "Claude Code",
   "results.claudeCodeSession": "Claude Code session",
-  "results.deepResearch": "Deep research"
+  "results.deepResearch": "Deep research",
+
+  "mobile.tab.chat": "Chat",
+  "mobile.tab.tools": "Explore",
+  "mobile.tab.inbox": "Inbox",
+  "mobile.tab.me": "Me",
+  "mobile.noConversations": "No conversations yet",
+  "mobile.quickAction.research": "Research",
+  "mobile.quickAction.code": "Code",
+  "mobile.quickAction.build": "Build App",
+  "mobile.quickAction.orchestrate": "Orchestrate"
 }
