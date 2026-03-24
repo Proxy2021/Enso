@@ -8,7 +8,7 @@ import type { AgentStep, ToolBuildSummary } from "@shared/types";
 import { AppBuilderDialog } from "./AppBuilderDialog";
 
 import { useVoiceInput } from "./VoiceMicButton";
-import { getActiveBackend } from "../lib/connection";
+import { getActiveBackend, resolveMediaUrl } from "../lib/connection";
 import { isNative } from "../lib/platform";
 import { nativeShare } from "../lib/native-share";
 import TerminalContent from "./TerminalContent";
@@ -101,7 +101,7 @@ function SummaryPanel({ card, isPodcastGenerating }: { card: Card; isPodcastGene
             AI Podcast Overview
           </div>
           <audio controls preload="metadata" className="w-full h-10" style={{ borderRadius: "8px" }}>
-            <source src={card.cardAudioUrl} type="audio/wav" />
+            <source src={resolveMediaUrl(card.cardAudioUrl)} type="audio/wav" />
             Your browser does not support audio playback.
           </audio>
           <div className="flex items-center justify-between mt-1">
