@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 import { cardRegistry } from "../cards";
 import type { Card } from "../cards/types";
@@ -1301,9 +1302,10 @@ function CardContextMenu({ x, y, onRemove, onClose, cardText }: { x: number; y: 
 }
 
 function CapabilityDiscoveryBar({ card }: { card: Card }) {
+  const { cards, cardOrder } = useChatStore(
+    useShallow((s) => ({ cards: s.cards, cardOrder: s.cardOrder }))
+  );
   const sendMessage = useChatStore((s) => s.sendMessage);
-  const cards = useChatStore((s) => s.cards);
-  const cardOrder = useChatStore((s) => s.cardOrder);
 
   const userQuery = useMemo(() => {
     const thisIdx = cardOrder.indexOf(card.id);

@@ -104,7 +104,7 @@ export const sharpBasicProvider: MediaAIProvider = {
         return { success: false, error: `Sharp upscale failed: ${err instanceof Error ? err.message : String(err)}` };
       }
     }
-    return { success: false, error: `Operation "${task.operation}" is not supported by the basic-resize provider. Supported operations: ${sharpBasicProvider.capabilities.join(", ")}. For AI-powered processing, configure a cloud AI provider.` };
+    return { success: false, error: `Operation "${task.operation}" is not supported by the ${sharpBasicProvider.name} provider. Supported operations: ${sharpBasicProvider.capabilities.join(", ")}. For AI-powered processing, configure a cloud AI provider.` };
   },
 };
 

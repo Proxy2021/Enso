@@ -8,6 +8,7 @@
  * Normal agent responses use the typing indicator instead.
  */
 
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 import { isOrchestrationCardData } from "@shared/types";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
@@ -22,8 +23,9 @@ type BackgroundTask = {
 
 /** Derive active background tasks from card state. */
 function useBackgroundTasks(): BackgroundTask[] {
-  const cardOrder = useChatStore((s) => s.cardOrder);
-  const cards = useChatStore((s) => s.cards);
+  const { cardOrder, cards } = useChatStore(
+    useShallow((s) => ({ cardOrder: s.cardOrder, cards: s.cards }))
+  );
 
   const tasks: BackgroundTask[] = [];
   for (const id of cardOrder) {

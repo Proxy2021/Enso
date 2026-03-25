@@ -13,19 +13,17 @@ interface VoiceMicButtonProps {
   className?: string;
 }
 
-/**
- * Reusable microphone button with platform-adaptive voice input.
- * Native (Android): prefers native SpeechRecognizer, falls back to MediaRecorder + server.
- * Web: uses Web Speech API (Chrome/Edge/Firefox).
- */
-export function VoiceMicButton({ onTranscript, size = "sm", className = "" }: VoiceMicButtonProps) {
-  const speech = useSpeechRecognition(onTranscript);
-  const recorder = useVoiceRecorder(onTranscript);
-  const nativeSpeech = useNativeSpeech(onTranscript);
-  const voice = isNative
-    ? (nativeSpeech.isSupported ? nativeSpeech : recorder)
-    : speech;
+interface MicButtonUIProps {
+  voice: {
+    isSupported?: boolean;
+    isListening: boolean;
+    toggleListening: () => void;
+  };
+  size: "sm" | "md";
+  className: string;
+}
 
+function MicButtonUI({ voice, size, className }: MicButtonUIProps) {
   if (!voice.isSupported) return null;
 
   const isListening = voice.isListening;
@@ -39,7 +37,7 @@ export function VoiceMicButton({ onTranscript, size = "sm", className = "" }: Vo
         isListening
           ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
           : "text-gray-400 hover:text-gray-200"
-      } ${size === "sm" ? "p-1.5" : "px-3 py-2.5 rounded-xl"} ${className}`}
+      } ${size === "sm" ? "p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center" : "px-3 py-2.5 rounded-xl"} ${className}`}
       title={isListening ? "Stop recording" : "Voice input"}
     >
       {isListening && (
@@ -63,6 +61,31 @@ export function VoiceMicButton({ onTranscript, size = "sm", className = "" }: Vo
       </svg>
     </button>
   );
+}
+
+/** Web: only instantiates Web Speech API hook */
+function WebVoiceMicButton({ onTranscript, size = "sm", className = "" }: VoiceMicButtonProps) {
+  const speech = useSpeechRecognition(onTranscript);
+  return <MicButtonUI voice={speech} size={size} className={className} />;
+}
+
+/** Native: instantiates native speech + recorder fallback (but NOT web speech) */
+function NativeVoiceMicButton({ onTranscript, size = "sm", className = "" }: VoiceMicButtonProps) {
+  const nativeSpeech = useNativeSpeech(onTranscript);
+  const recorder = useVoiceRecorder(onTranscript);
+  const voice = nativeSpeech.isSupported ? nativeSpeech : recorder;
+  return <MicButtonUI voice={voice} size={size} className={className} />;
+}
+
+/**
+ * Reusable microphone button with platform-adaptive voice input.
+ * Native (Android): prefers native SpeechRecognizer, falls back to MediaRecorder + server.
+ * Web: uses Web Speech API (Chrome/Edge/Firefox).
+ *
+ * Only instantiates hooks for the active platform to avoid wasted resources.
+ */
+export function VoiceMicButton(props: VoiceMicButtonProps) {
+  return isNative ? <NativeVoiceMicButton {...props} /> : <WebVoiceMicButton {...props} />;
 }
 
 /**

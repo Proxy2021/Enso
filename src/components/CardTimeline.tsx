@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
@@ -129,10 +130,14 @@ function SearchBar() {
 }
 
 export default function CardTimeline() {
-  const cardOrder = useChatStore((s) => s.cardOrder);
-  const cards = useChatStore((s) => s.cards);
-  const isWaiting = useChatStore((s) => s.isWaiting);
-  const searchQuery = useChatStore((s) => s.cardSearchQuery);
+  const { cardOrder, cards, isWaiting, searchQuery } = useChatStore(
+    useShallow((s) => ({
+      cardOrder: s.cardOrder,
+      cards: s.cards,
+      isWaiting: s.isWaiting,
+      searchQuery: s.cardSearchQuery,
+    }))
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -152,12 +157,31 @@ export default function CardTimeline() {
   useEffect(() => {
     if (!isStreaming || !containerRef.current) return;
 
-    const el = containerRef.current;
-    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-    if (isNearBottom) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  });
+    let rafId: number;
+    const onScroll = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+        if (isNearBottom) {
+          bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+      });
+    };
+
+    // Initial scroll check
+    onScroll();
+
+    // Use MutationObserver to watch for content changes during streaming
+    const observer = new MutationObserver(onScroll);
+    observer.observe(containerRef.current, { childList: true, subtree: true, characterData: true });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, [isStreaming]);
 
   // Build render items: detect orchestration+terminal pairs for side-by-side layout
   const renderItems: Array<
@@ -234,13 +258,16 @@ export default function CardTimeline() {
       )}
       <div className="px-2 sm:px-4 py-3 sm:py-5">
       <div className="max-w-5xl mx-auto">
-        {filteredItems.map((item) => {
+        {filteredItems.map((item, idx) => {
+          const isLastItem = idx === filteredItems.length - 1;
+          const containClass = isLastItem && isStreaming ? "card-contain-streaming" : "card-contain";
+
           if (item.type === "orch-pair") {
             const orchCard = cards[item.orchId];
             const termCard = cards[item.termId];
             if (!orchCard || !termCard) return null;
             return (
-              <div key={item.orchId} className="flex flex-col sm:flex-row gap-3 sm:items-stretch" id={`card-${item.orchId}`}>
+              <div key={item.orchId} className={`${containClass} flex flex-col sm:flex-row gap-3 sm:items-stretch`} id={`card-${item.orchId}`}>
                 <div className="sm:w-[220px] sm:flex-shrink-0">
                   <CardContainer card={orchCard} isActive={item.orchId === lastCardId} />
                 </div>
@@ -253,7 +280,7 @@ export default function CardTimeline() {
           const card = cards[item.id];
           if (!card) return null;
           return (
-            <div key={item.id} id={`card-${item.id}`}>
+            <div key={item.id} className={containClass} id={`card-${item.id}`}>
               <CardContainer card={card} isActive={item.id === lastCardId} />
             </div>
           );

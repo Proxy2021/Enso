@@ -3508,6 +3508,22 @@ export async function startEnsoServer(opts: {
             runtime.log?.(`[enso:shell] destroyed session ${msg.shellSessionId}`);
             break;
           }
+          case "card.persist": {
+            const rec = msg.cardRecord;
+            if (rec) {
+              const convId = resolveConversationId(client, msg);
+              persistCard(clientId, convId, {
+                id: rec.id,
+                runId: rec.runId,
+                type: rec.type,
+                role: rec.role,
+                text: rec.text,
+                data: rec.data as Record<string, unknown> | undefined,
+                timestamp: rec.timestamp,
+              });
+            }
+            break;
+          }
           case "client.error": {
             const ce = msg.clientError;
             if (ce) {

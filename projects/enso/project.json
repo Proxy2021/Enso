@@ -347,17 +347,41 @@
     }
   ],
   "validationPersonaIds": [
-    "creative-professional",
+    "indie-developer",
     "developer",
-    "product-studio"
+    "startup-founder"
   ],
   "sprintNotes": {
     "sprint14": {
-      "theme": "STREAMING + VALIDATION",
-      "mandatoryP0": ["Fix I1+I2 build errors", "Marco re-test (3rd sprint overdue)", "Implement SSE streaming from ADR-004"],
-      "p1": ["Projects tab enrichment", "MCP client architecture design"],
-      "p2": ["Media Suite app consolidation design", "Fix stale media-ai-gateway error string"],
-      "mechanismUpdates": ["tsc --noEmit mandatory implementation exit gate", "PL Phase 0 directives binding", "Post-fix persona re-test (Phase 5.5b)"]
+      "theme": "MOBILE CHAT EXPERIENCE — Doubao-Inspired UX",
+      "mandatoryP0": [
+        "Chat input layout redesign (Doubao-style mode toggle, contextual send)",
+        "Push-to-send voice UX enhancement (waveform, timer, haptics)",
+        "Fix stale media-ai-gateway error string (line 107)"
+      ],
+      "p1": [
+        "Virtual scrolling for CardTimeline",
+        "React.memo + CSS containment on cards",
+        "Scroll-to-bottom FAB with unread count",
+        "Mobile chat transition animation"
+      ],
+      "p2": [
+        "Code splitting for heavy card types",
+        "Store selector optimization",
+        "Message appear animation"
+      ],
+      "deferred": [
+        "SSE Streaming (ADR-004)",
+        "MCP client architecture",
+        "Projects tab enrichment",
+        "Marco re-test (4th sprint)"
+      ],
+      "mechanismUpdates": [
+        "tsc --noEmit mandatory exit gate (enforced)",
+        "Mobile-first review at 375px viewport",
+        "Implementation self-assessment includes tsc exit code"
+      ],
+      "buildStatus": "PASS — I1+I2 already resolved"
     }
   },
   "createdAt": 1773909300324,

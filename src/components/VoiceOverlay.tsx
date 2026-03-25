@@ -1,8 +1,11 @@
+import { useState, useEffect } from "react";
+
 interface VoiceOverlayProps {
   transcript: string;
   isInCancelZone: boolean;
   isFallbackRecorder: boolean;
   isTranscribing: boolean;
+  startTime: number;
 }
 
 export function VoiceOverlay({
@@ -10,12 +13,28 @@ export function VoiceOverlay({
   isInCancelZone,
   isFallbackRecorder,
   isTranscribing,
+  startTime,
 }: VoiceOverlayProps) {
   const displayText = isFallbackRecorder
     ? (isTranscribing ? "Transcribing..." : "Recording...")
     : (transcript || "Listening...");
 
   const hasRealText = !isFallbackRecorder && !!transcript;
+
+  // Recording timer
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startTime) return;
+    setElapsed(0);
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+  const timerText = `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
   return (
     <div
@@ -60,23 +79,27 @@ export function VoiceOverlay({
         </p>
       </div>
 
-      {/* Recording indicator (bottom) */}
+      {/* Recording indicator (bottom) — waveform + timer */}
       <div className={`flex flex-col items-center gap-3 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 transition-all duration-200 ${
         isInCancelZone ? "opacity-30" : "opacity-100"
       }`}>
-        <div className="relative">
-          <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
-          <span className="relative block w-16 h-16 rounded-full bg-red-500/20 border-2 border-red-500/60 flex items-center justify-center">
-            <svg
-              width="28" height="28" viewBox="0 0 24 24" fill="none"
-              stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            >
-              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" x2="12" y1="19" y2="22" />
-            </svg>
-          </span>
+        {/* Waveform bars */}
+        <div className="flex items-center justify-center gap-1 h-16">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="w-1 bg-red-400 rounded-full"
+              style={{
+                animation: `waveform ${0.7 + i * 0.08}s ease-in-out ${i * 0.1}s infinite alternate`,
+                height: "24px",
+              }}
+            />
+          ))}
         </div>
+        {/* Timer */}
+        <span className="text-base font-mono text-red-400/80 tabular-nums">
+          {timerText}
+        </span>
         <span className="text-sm text-gray-400">
           {isInCancelZone ? "" : "Release to send"}
         </span>

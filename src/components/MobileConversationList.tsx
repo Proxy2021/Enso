@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore, type ConversationEntry } from "../store/chat";
 import { useT } from "../lib/i18n";
 
@@ -49,13 +50,17 @@ function formatTimeCompact(ts?: number): string {
 
 export default function MobileConversationList() {
   const { t } = useT();
-  const conversationsList = useChatStore((s) => s.conversationsList);
-  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const { conversationsList, activeConversationId, connectionState } = useChatStore(
+    useShallow((s) => ({
+      conversationsList: s.conversationsList,
+      activeConversationId: s.activeConversationId,
+      connectionState: s.connectionState,
+    }))
+  );
   const selectConversation = useChatStore((s) => s.selectConversation);
   const startNewChat = useChatStore((s) => s.startNewChat);
   const deleteConversationById = useChatStore((s) => s.deleteConversationById);
   const renameConversationById = useChatStore((s) => s.renameConversationById);
-  const connectionState = useChatStore((s) => s.connectionState);
   const disabled = connectionState !== "connected";
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -107,7 +112,7 @@ export default function MobileConversationList() {
           <button
             onClick={() => void startNewChat()}
             disabled={disabled}
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-[0.92] transition-all duration-150 disabled:opacity-40"
+            className="flex items-center justify-center w-11 h-11 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-[0.92] transition-all duration-150 disabled:opacity-40"
             title={t("conversations.newChat")}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

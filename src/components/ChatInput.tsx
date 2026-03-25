@@ -19,13 +19,19 @@ function useKeyboardOffset() {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+    let rafId = 0;
     const update = () => {
-      const diff = window.innerHeight - vv.height - vv.offsetTop;
-      setOffset(Math.max(0, diff));
+      if (rafId) return; // already scheduled
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const diff = window.innerHeight - vv.height - vv.offsetTop;
+        setOffset(Math.max(0, diff));
+      });
     };
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     return () => {
+      cancelAnimationFrame(rafId);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
     };
@@ -140,6 +146,13 @@ function getFileExt(file: File): string {
   return parts.length > 1 ? parts.pop()!.toUpperCase() : "";
 }
 
+/** Trigger haptic feedback (Android/vibrate-capable browsers). Gracefully no-ops on iOS. */
+function haptic(pattern: number | number[] = 50) {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    navigator.vibrate(pattern);
+  }
+}
+
 export default function ChatInput() {
   const [text, setText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -161,6 +174,40 @@ export default function ChatInput() {
   const imageResearchRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const keyboardOffset = useKeyboardOffset();
+
+  // Stable blob URL map for attachment image previews — avoids creating new
+  // blob URLs on every render and revokes stale ones to prevent memory leaks.
+  const blobUrlMapRef = useRef<Map<File, string>>(new Map());
+  const getFileBlobUrl = useCallback((file: File): string => {
+    const map = blobUrlMapRef.current;
+    let url = map.get(file);
+    if (!url) {
+      url = URL.createObjectURL(file);
+      map.set(file, url);
+    }
+    return url;
+  }, []);
+  // Revoke blob URLs for files that have been removed
+  useEffect(() => {
+    const map = blobUrlMapRef.current;
+    const currentFiles = new Set(attachedFiles);
+    for (const [file, url] of map) {
+      if (!currentFiles.has(file)) {
+        URL.revokeObjectURL(url);
+        map.delete(file);
+      }
+    }
+  }, [attachedFiles]);
+  // Cleanup all blob URLs on unmount
+  useEffect(() => {
+    const map = blobUrlMapRef.current;
+    return () => {
+      for (const url of map.values()) {
+        URL.revokeObjectURL(url);
+      }
+      map.clear();
+    };
+  }, []);
 
   // Image research preview state
   const [irPreview, setIrPreview] = useState<{
@@ -186,6 +233,7 @@ export default function ChatInput() {
   // Push-to-talk state
   const [pttActive, setPttActive] = useState(false);
   const [pttCancelZone, setPttCancelZone] = useState(false);
+  const [pttStartTime, setPttStartTime] = useState(0);
   const pttAccumulatedRef = useRef("");
   const pttStartYRef = useRef(0);
   const pttActiveRef = useRef(false);
@@ -468,7 +516,7 @@ export default function ChatInput() {
   return (
     <div
       className="border-t border-gray-800 p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
-      style={keyboardOffset > 0 ? { paddingBottom: `${keyboardOffset}px` } : undefined}
+      style={keyboardOffset > 0 ? { paddingBottom: `max(${keyboardOffset}px, env(safe-area-inset-bottom))` } : undefined}
     >
       <div className="max-w-3xl mx-auto relative">
         {/* Image research preview modal */}
@@ -555,7 +603,7 @@ export default function ChatInput() {
                 >
                   {cat === "image" ? (
                     <img
-                      src={URL.createObjectURL(file)}
+                      src={getFileBlobUrl(file)}
                       alt={file.name}
                       className="h-16 w-16 object-cover"
                     />
@@ -586,9 +634,9 @@ export default function ChatInput() {
                   )}
                   <button
                     onClick={() => removeFile(i)}
-                    className="absolute top-0 right-0 bg-gray-900/80 text-gray-300 hover:text-white active:text-white rounded-bl-lg px-1.5 py-0.5 text-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-2 -right-2 flex items-center justify-center w-11 h-11 text-gray-300 hover:text-white active:text-white text-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                   >
-                    &times;
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-gray-900/80 text-[10px]">&times;</span>
                   </button>
                 </div>
               );
@@ -737,10 +785,11 @@ export default function ChatInput() {
             isInCancelZone={pttCancelZone}
             isFallbackRecorder={isFallbackRecorder}
             isTranscribing={"isTranscribing" in recorder && recorder.isTranscribing}
+            startTime={pttStartTime}
           />
         )}
 
-        <div className="flex gap-2">
+        <div className="flex items-end gap-1.5 sm:gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -792,6 +841,19 @@ export default function ChatInput() {
 
             {attachMenuOpen && (
               <div className="absolute bottom-full left-0 mb-1 w-48 bg-gray-800 border border-gray-600/60 rounded-lg shadow-[0_-4px_20px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                {/* Image research — mobile only (desktop has dedicated button) */}
+                <button
+                  key="image-research"
+                  onClick={() => { setAttachMenuOpen(false); imageResearchRef.current?.click(); }}
+                  className="sm:hidden w-full text-left px-3 py-3 flex items-center gap-3 text-gray-300 hover:bg-gray-700/50 active:bg-gray-600/50 active:scale-[0.98] transition-all duration-150"
+                >
+                  <span className="text-indigo-400 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="3" /><path d="m16 16-1.9-1.9" />
+                    </svg>
+                  </span>
+                  <span className="text-xs">Research image</span>
+                </button>
                 {ATTACH_CATEGORIES.map((cat) => (
                   <button
                     key={cat.id}
@@ -806,11 +868,11 @@ export default function ChatInput() {
             )}
           </div>
 
-          {/* Image-to-Research button */}
+          {/* Image-to-Research button — hidden on mobile, moved to attach menu */}
           <button
             onClick={() => imageResearchRef.current?.click()}
             disabled={disabled}
-            className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 active:scale-[0.95] disabled:opacity-50 text-indigo-400 hover:text-indigo-300 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
+            className="hidden sm:flex bg-gray-800 hover:bg-gray-700 active:bg-gray-600 active:scale-[0.95] disabled:opacity-50 text-indigo-400 hover:text-indigo-300 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
             title="Upload image to research"
           >
             {/* ScanSearch icon — magnifying glass with scan corners */}
@@ -850,13 +912,23 @@ export default function ChatInput() {
             }`}
             style={{ maxHeight: "200px" }}
           />
-          {speechSupported && (
-            <button
-              disabled={disabled}
-              className="relative px-3 py-2.5 rounded-xl text-sm transition-all duration-150 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 disabled:opacity-50 select-none touch-none"
-              title="Hold to talk"
-              aria-label="Hold to talk"
-              onPointerDown={(e) => {
+          {/* Mobile: contextual mic/send toggle */}
+          {(() => {
+            const hasContent = text.trim().length > 0 || attachedFiles.length > 0 || !!activeShellSessionId;
+            const micIcon = (
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
+            );
+            const sendIcon = (
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" />
+              </svg>
+            );
+            const pttHandlers = {
+              onPointerDown: (e: React.PointerEvent) => {
                 if (disabled) return;
                 e.preventDefault();
                 (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -866,9 +938,11 @@ export default function ChatInput() {
                 pttCancelRef.current = false;
                 setPttActive(true);
                 setPttCancelZone(false);
+                setPttStartTime(Date.now());
+                haptic(30);
                 voice.startListening();
-              }}
-              onPointerMove={(e) => {
+              },
+              onPointerMove: (e: React.PointerEvent) => {
                 if (!pttActiveRef.current) return;
                 const dy = pttStartYRef.current - e.clientY;
                 const inCancel = dy > CANCEL_THRESHOLD_PX;
@@ -876,8 +950,8 @@ export default function ChatInput() {
                   pttCancelRef.current = inCancel;
                   setPttCancelZone(inCancel);
                 }
-              }}
-              onPointerUp={() => {
+              },
+              onPointerUp: () => {
                 if (!pttActiveRef.current) return;
                 pttActiveRef.current = false;
                 const wasCancelled = pttCancelRef.current;
@@ -886,48 +960,84 @@ export default function ChatInput() {
 
                 if (wasCancelled) {
                   voice.cancelListening();
+                  haptic([30, 50, 30]);
                 } else {
                   voice.cancelListening();
+                  haptic(15);
                   const finalText = (pttAccumulatedRef.current + (voice.interimTranscript ? (pttAccumulatedRef.current ? " " : "") + voice.interimTranscript : "")).trim();
                   if (finalText) {
                     sendMessage(finalText);
                   }
                 }
                 pttAccumulatedRef.current = "";
-              }}
-              onPointerCancel={() => {
+              },
+              onPointerCancel: () => {
                 if (!pttActiveRef.current) return;
                 pttActiveRef.current = false;
                 setPttActive(false);
                 setPttCancelZone(false);
                 voice.cancelListening();
                 pttAccumulatedRef.current = "";
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" x2="12" y1="19" y2="22" />
-              </svg>
-            </button>
-          )}
-          <button
-            onClick={handleSend}
-            disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
-            className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 disabled:hover:bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
-          >
-            Send
-          </button>
+              },
+            };
+
+            return (
+              <>
+                {/* Mobile toggle: mic when empty, send when has content */}
+                <div className="sm:hidden">
+                  {hasContent ? (
+                    <button
+                      onClick={handleSend}
+                      disabled={disabled}
+                      className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
+                    >
+                      {sendIcon}
+                    </button>
+                  ) : speechSupported ? (
+                    <button
+                      disabled={disabled}
+                      className="relative px-3 py-2.5 rounded-xl text-sm transition-all duration-150 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 disabled:opacity-50 select-none touch-none"
+                      title="Hold to talk"
+                      aria-label="Hold to talk"
+                      {...pttHandlers}
+                    >
+                      {micIcon}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSend}
+                      disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
+                      className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
+                    >
+                      {sendIcon}
+                    </button>
+                  )}
+                </div>
+
+                {/* Desktop: show both mic and send side by side (unchanged) */}
+                <div className="hidden sm:flex items-center gap-2">
+                  {speechSupported && (
+                    <button
+                      disabled={disabled}
+                      className="relative px-3 py-2.5 rounded-xl text-sm transition-all duration-150 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 disabled:opacity-50 select-none touch-none"
+                      title="Hold to talk"
+                      aria-label="Hold to talk"
+                      {...pttHandlers}
+                    >
+                      {micIcon}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleSend}
+                    disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
+                    className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 disabled:hover:bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
+                  >
+                    Send
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

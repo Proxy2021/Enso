@@ -250,6 +250,7 @@ export interface ClientMessage {
     | "card.summarize"
     | "card.evolve"
     | "card.release"
+    | "card.persist"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;
@@ -305,6 +306,16 @@ export interface ClientMessage {
   shellInput?: string;
   shellCols?: number;
   shellRows?: number;
+  // card.persist fields — persist a client-created card to server journal
+  cardRecord?: {
+    id: string;
+    runId: string;
+    type: string;
+    role: "user" | "assistant";
+    text?: string;
+    data?: unknown;
+    timestamp: number;
+  };
   // client.error fields
   clientError?: {
     message: string;

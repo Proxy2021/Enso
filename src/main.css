@@ -110,6 +110,13 @@
   100% { transform: translateX(100%); }
 }
 
+/* Voice recording waveform animation */
+@keyframes waveform {
+  0% { height: 8px; opacity: 0.4; }
+  50% { height: 32px; opacity: 1; }
+  100% { height: 12px; opacity: 0.6; }
+}
+
 /* Brief brightness flash on tap — gives instant "substance" feedback */
 @keyframes tap-flash {
   0%   { filter: brightness(1); }
@@ -185,6 +192,19 @@
   .scroll-touch {
     -webkit-overflow-scrolling: touch;
   }
+}
+
+/* Card containment — skip rendering off-screen cards during scroll */
+.card-contain {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+  contain: layout paint;
+}
+
+/* During streaming, the last card should not be contained (dynamic height) */
+.card-contain-streaming {
+  content-visibility: visible;
+  contain: none;
 }
 
 /* Prevent rubber-band overscroll on mobile while keeping internal scroll */

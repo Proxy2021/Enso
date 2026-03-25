@@ -58,11 +58,16 @@ function deriveConversationTitle(msg: string): string {
   if (t.startsWith("/research ")) {
     return t.slice(10).trim().slice(0, 60) || "Research";
   }
-  if (t.startsWith("/mission")) {
-    return "Mission Planner";
-  }
-  if (t.startsWith("/shell")) {
-    return "Terminal";
+  if (t.startsWith("/mission")) return "Mission Planner";
+  if (t.startsWith("/shell")) return "Terminal";
+  if (t === "/evolution-history") return "Evolution History";
+  if (t === "/discovery-history") return "Discovery History";
+  if (t === "/sessions") return "Session Dashboard";
+  if (t === "/projects") return "Projects";
+  if (t === "/help") return "Help";
+  if (t.startsWith("/orchestrate")) {
+    const rest = t.slice(12).trim();
+    return rest ? `Orchestrate: ${rest}`.slice(0, 60) : "Orchestration";
   }
   const firstLine = t.split("\n")[0]?.trim() ?? t;
   const chars = Array.from(firstLine);
@@ -445,6 +450,38 @@ export const useChatStore = create<CardStore>((set, get) => ({
     let displayText = text;
     let finalRouting = routing;
 
+    /** Add a card to store, persist it to the server journal, and auto-title the conversation */
+    const addLocalCard = (card: Card, commandText?: string) => {
+      set((s) => ({
+        cardOrder: [...s.cardOrder, card.id],
+        cards: { ...s.cards, [card.id]: card },
+      }));
+      get()._wsClient?.send({
+        type: "card.persist",
+        conversationId: get().activeConversationId,
+        cardRecord: {
+          id: card.id,
+          runId: card.runId,
+          type: card.type,
+          role: card.role,
+          text: card.text,
+          data: card.data,
+          timestamp: card.updatedAt ?? Date.now(),
+        },
+      });
+      if (commandText) {
+        const convId = get().activeConversationId;
+        const conv = get().conversationsList.find((c) => c.id === convId);
+        const curTitle = conv?.title?.trim().toLowerCase() ?? "";
+        if (!curTitle || curTitle === "new chat" || curTitle === "chat") {
+          const title = deriveConversationTitle(commandText);
+          if (title && title.toLowerCase() !== "new chat") {
+            get().renameConversationById(convId, title);
+          }
+        }
+      }
+    };
+
     // Skip slash-command interception when routing is already set
     // (e.g. terminal input sends with claude-code routing — text should
     // go to Claude Code as-is, not be intercepted as a slash command)
@@ -453,7 +490,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (text.trim() === "/help") {
         const id = uuidv4();
         const now = Date.now();
-        const card: Card = {
+        addLocalCard({
           id, runId: id, type: "chat", role: "assistant",
           status: "complete", display: "expanded",
           text: `## Available Commands
@@ -472,11 +509,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
 
 **Tips:** Type / to see autocomplete suggestions. Attach files with +. Every response can become an app.`,
           createdAt: now, updatedAt: now,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-        }));
+        }, text.trim());
         return;
       }
 
@@ -494,7 +527,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           : "";
         const id = uuidv4();
         const now = Date.now();
-        const card: Card = {
+        addLocalCard({
           id,
           runId: id,
           type: "orchestration",
@@ -504,11 +537,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
           createdAt: now,
           updatedAt: now,
           data: goal ? { orchestrationGoal: goal } : undefined,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-        }));
+        }, text.trim());
         return;
       }
 
@@ -517,14 +546,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (text.trim() === "/evolution-history") {
         const id = uuidv4();
         const now = Date.now();
-        const card: Card = {
+        addLocalCard({
           id, runId: id, type: "evolution-history", role: "assistant",
           status: "complete", display: "expanded", createdAt: now, updatedAt: now,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-        }));
+        }, text.trim());
         return;
       }
 
@@ -532,14 +557,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (text.trim() === "/discovery-history") {
         const id = uuidv4();
         const now = Date.now();
-        const card: Card = {
+        addLocalCard({
           id, runId: id, type: "discovery-history", role: "assistant",
           status: "complete", display: "expanded", createdAt: now, updatedAt: now,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-        }));
+        }, text.trim());
         return;
       }
 
@@ -547,14 +568,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (text.trim() === "/sessions") {
         const id = uuidv4();
         const now = Date.now();
-        const card: Card = {
+        addLocalCard({
           id, runId: id, type: "session-dashboard", role: "assistant",
           status: "complete", display: "expanded", createdAt: now, updatedAt: now,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-        }));
+        }, text.trim());
         return;
       }
 
@@ -562,14 +579,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
       if (text.trim() === "/projects") {
         const id = uuidv4();
         const now = Date.now();
-        const card: Card = {
+        addLocalCard({
           id, runId: id, type: "projects", role: "assistant",
           status: "complete", display: "expanded", createdAt: now, updatedAt: now,
-        };
-        set((s) => ({
-          cardOrder: [...s.cardOrder, id],
-          cards: { ...s.cards, [id]: card },
-        }));
+        }, text.trim());
         return;
       }
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore, type ConversationEntry } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { AppIcon } from "./EvolveView";
@@ -10,14 +11,18 @@ export function toggleMobileConversations() {
 
 export default function ConversationSidebar() {
   const { t } = useT();
-  const conversationsList = useChatStore((s) => s.conversationsList);
-  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const { conversationsList, activeConversationId, connectionState, apps } = useChatStore(
+    useShallow((s) => ({
+      conversationsList: s.conversationsList,
+      activeConversationId: s.activeConversationId,
+      connectionState: s.connectionState,
+      apps: s.apps,
+    }))
+  );
   const selectConversation = useChatStore((s) => s.selectConversation);
   const startNewChat = useChatStore((s) => s.startNewChat);
   const deleteConversationById = useChatStore((s) => s.deleteConversationById);
   const renameConversationById = useChatStore((s) => s.renameConversationById);
-  const connectionState = useChatStore((s) => s.connectionState);
-  const apps = useChatStore((s) => s.apps);
   const fetchApps = useChatStore((s) => s.fetchApps);
   const runApp = useChatStore((s) => s.runApp);
   const [editingId, setEditingId] = useState<string | null>(null);

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
@@ -143,8 +144,9 @@ function scrollToCard(cardId: string) {
 // ── Main exports ──
 
 export function useUnseenCount(): number {
-  const cards = useChatStore((s) => s.cards);
-  const cardOrder = useChatStore((s) => s.cardOrder);
+  const { cards, cardOrder } = useChatStore(
+    useShallow((s) => ({ cards: s.cards, cardOrder: s.cardOrder }))
+  );
   const [seen, setSeen] = useState(loadSeen);
 
   // Refresh seen set when cards change (in case markSeen was called)
@@ -168,8 +170,9 @@ interface ResultsInboxProps {
 }
 
 export default function ResultsInbox({ show, onClose, asPage }: ResultsInboxProps) {
-  const cards = useChatStore((s) => s.cards);
-  const cardOrder = useChatStore((s) => s.cardOrder);
+  const { cards, cardOrder } = useChatStore(
+    useShallow((s) => ({ cards: s.cards, cardOrder: s.cardOrder }))
+  );
   const [seen, setSeen] = useState(loadSeen);
 
   const results = deriveResults(cards, cardOrder, seen);

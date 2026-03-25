@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 
 function truncate(text: string | undefined, max: number): string {
@@ -6,9 +7,13 @@ function truncate(text: string | undefined, max: number): string {
 }
 
 export default function PinnedSidebar() {
-  const pinnedCards = useChatStore((s) => s.pinnedCards);
-  const cards = useChatStore((s) => s.cards);
-  const showSidebar = useChatStore((s) => s.showSidebar);
+  const { pinnedCards, cards, showSidebar } = useChatStore(
+    useShallow((s) => ({
+      pinnedCards: s.pinnedCards,
+      cards: s.cards,
+      showSidebar: s.showSidebar,
+    }))
+  );
   const toggleSidebar = useChatStore((s) => s.toggleSidebar);
   const unpinCard = useChatStore((s) => s.unpinCard);
 

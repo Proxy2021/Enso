@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { TabHeader, MobileViewHeader } from "./TabNavigation";
@@ -133,10 +134,11 @@ function truncate(text: string, max: number): string {
 
 export default function TasksView() {
   const { t } = useT();
+  const { cardOrder, cards } = useChatStore(
+    useShallow((s) => ({ cardOrder: s.cardOrder, cards: s.cards }))
+  );
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const setChatViewOpen = useChatStore((s) => s.setChatViewOpen);
-  const cardOrder = useChatStore((s) => s.cardOrder);
-  const cards = useChatStore((s) => s.cards);
   const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
 
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
