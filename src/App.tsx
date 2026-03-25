@@ -163,8 +163,7 @@ function SearchToggle() {
 /** Chat tab header — shows search, pinned sidebar, settings (desktop only) */
 function ChatTabHeader() {
   return (
-    <div className="hidden sm:flex items-center justify-between px-3 py-2 border-b border-gray-800/60 bg-gray-950/50">
-      <span className="text-sm font-medium text-gray-300">Chat</span>
+    <div className="hidden sm:flex items-center justify-end px-3 py-1.5 border-b border-gray-800/60 bg-gray-950/50">
       <div className="flex items-center gap-1.5">
         <SearchToggle />
         <SidebarToggle />

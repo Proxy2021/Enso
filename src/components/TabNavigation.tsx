@@ -69,9 +69,9 @@ export function DesktopTabRail() {
   const setActiveTab = useChatStore((s) => s.setActiveTab);
 
   return (
-    <nav className="hidden sm:flex flex-col flex-shrink-0 w-14 border-r border-gray-800/80 bg-gray-950/90 pt-3 pb-2 items-center gap-1">
+    <nav className="hidden sm:flex flex-col flex-shrink-0 w-[60px] border-r border-gray-800/80 bg-gray-950/90 pt-3 pb-2 items-center gap-1">
       <div className="mb-3 flex items-center justify-center">
-        <span className="text-sm font-bold tracking-tight text-indigo-400">E</span>
+        <span className="text-[13px] font-bold tracking-tight text-indigo-400">Enso</span>
       </div>
       {TABS.map(({ id, labelKey, Icon }) => {
         const active = activeTab === id;
@@ -79,7 +79,7 @@ export function DesktopTabRail() {
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`relative flex flex-col items-center justify-center w-12 py-2 rounded-xl transition-all duration-150 group ${
+            className={`relative flex flex-col items-center justify-center w-13 py-2 rounded-xl transition-all duration-150 group ${
               active
                 ? "text-indigo-400 bg-indigo-500/10"
                 : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
