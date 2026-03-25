@@ -62,10 +62,13 @@ function isCompletedLongRunning(card: Card): boolean {
     const plan = orchData?.orchestrationProgress?.plan || orchData?.orchestrationPlan;
     return plan?.status === "completed" || plan?.status === "failed";
   }
-  if (card.appGeneratedUI && card.standardDataSnapshot) return true;
+  // Deep research: must have the standardGeneratedUISnapshot (set only by deep research build),
+  // not just appGeneratedUI which is set by card evolution / auto-enhance
+  if (card.standardGeneratedUISnapshot && card.appGeneratedUI) return true;
+  // Phase-based research with generated UI (researcher tool)
   const toolName = (card.data && typeof card.data === "object" && "tool" in card.data)
     ? (card.data as { tool?: string }).tool : undefined;
-  if (toolName?.includes("research") && card.generatedUI) return true;
+  if (toolName === "enso_researcher_search" && card.generatedUI) return true;
   return false;
 }
 
@@ -215,6 +218,27 @@ export default function TasksView() {
 
   const completedTasks = useMemo(() => deriveCompleted(cards, cardOrder), [cards, cardOrder]);
 
+  // Build lookup maps: session runId → cardId, orchestrationId → cardId
+  const { sessionToCard, orchToCard } = useMemo(() => {
+    const s2c: Record<string, string> = {};
+    const o2c: Record<string, string> = {};
+    for (const cid of cardOrder) {
+      const c = cards[cid];
+      if (!c) continue;
+      // Terminal cards store their session's toolSessionId
+      if (c.type === "terminal" && c.toolMeta?.toolSessionId) {
+        s2c[c.toolMeta.toolSessionId] = cid;
+      }
+      // Orchestration cards store orchestrationId in data
+      if (c.type === "orchestration") {
+        const od = isOrchestrationCardData(c.data) ? c.data : undefined;
+        const oid = od?.orchestrationProgress?.orchestrationId || od?.orchestrationPlan?.orchestrationId;
+        if (oid) o2c[oid] = cid;
+      }
+    }
+    return { sessionToCard: s2c, orchToCard: o2c };
+  }, [cards, cardOrder]);
+
   const hasActive = activeSessions.length > 0 || activeOrchs.length > 0;
 
   return (
@@ -254,14 +278,20 @@ export default function TasksView() {
           <section>
             <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">Active Orchestrations</h2>
             <div className="space-y-2">
-              {activeOrchs.map((o) => (
+              {activeOrchs.map((o) => {
+                const cardId = orchToCard[o.orchestrationId];
+                return (
                 <div key={o.orchestrationId} className="rounded-xl border border-gray-700/50 bg-gray-800/40 px-4 py-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
+                    <div
+                      className={`flex-1 min-w-0 ${cardId ? "cursor-pointer" : ""}`}
+                      onClick={cardId ? () => navigateToCard(cardId) : undefined}
+                    >
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded border ${typeBadge(o.type)}`}>{o.type}</span>
                         <span className={`text-[10px] font-medium ${o.status === "executing" || o.status === "running" ? "text-green-400" : o.status === "paused" ? "text-yellow-400" : "text-blue-400"}`}>{o.status}</span>
                         <span className="text-[10px] text-gray-500 tabular-nums">{formatElapsedTime(o.startedAt)}</span>
+                        {cardId && <span className="text-[10px] text-indigo-400/60 ml-auto">↗ view</span>}
                       </div>
                       <p className="text-sm text-gray-300 leading-snug">{truncate(o.goal, 120)}</p>
                       <div className="flex items-center gap-3 mt-2">
@@ -281,7 +311,7 @@ export default function TasksView() {
                     </div>
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           </section>
         )}
@@ -291,19 +321,27 @@ export default function TasksView() {
           <section>
             <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">Active Sessions</h2>
             <div className="space-y-2">
-              {activeSessions.map((s) => (
+              {activeSessions.map((s) => {
+                // Find card: direct session match, or via parent orchestration
+                const cardId = sessionToCard[s.sessionId] || sessionToCard[s.runId]
+                  || (s.orchestrationId ? orchToCard[s.orchestrationId] : undefined);
+                return (
                 <div key={s.runId} className="rounded-xl border border-gray-700/50 bg-gray-800/40 px-4 py-3 flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className={`flex-1 min-w-0 ${cardId ? "cursor-pointer" : ""}`}
+                    onClick={cardId ? () => navigateToCard(cardId) : undefined}
+                  >
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded border ${typeBadge(s.type)}`}>{s.type}</span>
                       <span className="text-[10px] text-gray-500 tabular-nums">{formatElapsedTime(s.startedAt)}</span>
                       {s.model && <span className="text-[10px] text-gray-600">{s.model}</span>}
+                      {cardId && <span className="text-[10px] text-indigo-400/60 ml-auto">↗ view</span>}
                     </div>
                     <p className="text-sm text-gray-300 truncate">{truncate(s.description, 100)}</p>
                   </div>
                   <button onClick={() => doAction("DELETE", `/api/sessions/${s.runId}`, `stop-${s.runId}`)} disabled={!!actionInFlight} className="px-2.5 py-1 text-[10px] font-medium rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors disabled:opacity-50 shrink-0 cursor-pointer">Stop</button>
                 </div>
-              ))}
+              );})}
             </div>
           </section>
         )}
