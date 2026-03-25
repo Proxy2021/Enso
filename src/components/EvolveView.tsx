@@ -4,6 +4,7 @@ import { useT } from "../lib/i18n";
 import { formatDate } from "../lib/time-utils";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { SystemEnhanceDialog } from "./SystemEnhanceDialog";
+import { MobileViewHeader } from "./TabNavigation";
 import type { AppInfo } from "@shared/types";
 
 // ── App Icon ──
@@ -162,8 +163,10 @@ export default function EvolveView() {
   const systemApps = apps.filter((a) => a.system || a.shipped);
 
   return (
-    <div className="flex-1 overflow-y-auto mobile-view-enter">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-8">
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0 mobile-view-enter">
+      <MobileViewHeader title={t("tab.evolve")} />
+      <div className="flex-1 overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 sm:py-6 space-y-6 sm:space-y-8">
 
         {/* Quick Actions */}
         <section>
@@ -209,7 +212,7 @@ export default function EvolveView() {
               {userApps.length > 0 && (
                 <div className="mb-4">
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">User Apps</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {userApps.map((app) => (
                       <AppCard key={app.appId} app={app} onRun={runApp} onDelete={deleteApp} onEvolve={openEvolveApp} />
                     ))}
@@ -218,7 +221,7 @@ export default function EvolveView() {
               )}
               <div>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">System & Shipped</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {systemApps.map((app) => (
                     <AppCard key={app.appId} app={app} onRun={runApp} onEvolve={openEvolveApp} />
                   ))}
@@ -302,8 +305,8 @@ export default function EvolveView() {
         </section>
 
       </div>
+      </div>
 
-      {/* Dialogs */}
       {showEnhanceDialog && (
         <SystemEnhanceDialog onClose={() => setShowEnhanceDialog(false)} />
       )}
@@ -339,12 +342,12 @@ function QuickAction({ icon, label, sublabel, accent, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-2 p-4 rounded-2xl border bg-gradient-to-b transition-all active:scale-[0.97] cursor-pointer ${accentClasses[accent] ?? accentClasses.purple}`}
+      className={`flex flex-col items-center gap-1.5 p-3 sm:p-4 rounded-2xl border bg-gradient-to-b transition-all active:scale-[0.97] cursor-pointer ${accentClasses[accent] ?? accentClasses.purple}`}
     >
-      <div className="w-8 h-8 flex items-center justify-center">{icon}</div>
+      <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center">{icon}</div>
       <div className="text-center">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-[10px] text-gray-500 mt-0.5">{sublabel}</p>
+        <p className="text-xs sm:text-sm font-medium">{label}</p>
+        <p className="text-[10px] text-gray-500 mt-0.5 hidden sm:block">{sublabel}</p>
       </div>
     </button>
   );
@@ -352,21 +355,21 @@ function QuickAction({ icon, label, sublabel, accent, onClick }: {
 
 function AppCard({ app, onRun, onDelete, onEvolve }: { app: AppInfo; onRun: (id: string) => void; onDelete?: (id: string) => void; onEvolve?: (id: string) => void }) {
   return (
-    <div className="flex flex-col gap-2 px-3 py-2.5 rounded-xl border border-gray-800/50 bg-gray-900/30 hover:bg-gray-800/30 transition-colors">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <AppIcon appId={app.appId} size={28} />
-        <div className="min-w-0">
-          <p className="text-sm text-gray-200 truncate">{app.appId}</p>
-          <p className="text-[10px] text-gray-500 truncate">{app.description}</p>
+    <div className="flex flex-col gap-1.5 px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border border-gray-800/50 bg-gray-900/30 hover:bg-gray-800/30 active:bg-gray-800/40 transition-colors">
+      <div className="flex items-center gap-2 min-w-0">
+        <AppIcon appId={app.appId} size={24} />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs sm:text-sm text-gray-200 truncate">{app.appId}</p>
+          <p className="text-[9px] sm:text-[10px] text-gray-500 truncate">{app.description}</p>
         </div>
       </div>
       <div className="flex items-center gap-1">
         {onEvolve && (
-          <button onClick={() => onEvolve(app.appId)} className="px-2 py-1 text-[10px] rounded bg-purple-500/10 text-purple-400 border border-purple-500/25 hover:bg-purple-500/20 transition-colors cursor-pointer">Evolve</button>
+          <button onClick={() => onEvolve(app.appId)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-purple-500/10 text-purple-400 border border-purple-500/25 hover:bg-purple-500/20 active:bg-purple-500/25 transition-colors cursor-pointer">Evolve</button>
         )}
-        <button onClick={() => onRun(app.toolFamily)} className="px-2 py-1 text-[10px] rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 hover:bg-indigo-500/20 transition-colors cursor-pointer">Run</button>
+        <button onClick={() => onRun(app.toolFamily)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 hover:bg-indigo-500/20 active:bg-indigo-500/25 transition-colors cursor-pointer">Run</button>
         {onDelete && (
-          <button onClick={() => onDelete(app.toolFamily)} className="px-2 py-1 text-[10px] rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors cursor-pointer">Del</button>
+          <button onClick={() => onDelete(app.toolFamily)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 active:bg-red-500/25 transition-colors cursor-pointer">Del</button>
         )}
       </div>
     </div>

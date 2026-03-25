@@ -6,6 +6,7 @@ import { useMemoryApi } from "../hooks/useMemoryApi";
 import { MemorySection } from "./SettingsPanel";
 import SettingsPanel from "./SettingsPanel";
 import DebugReporter from "./DebugReporter";
+import { MobileViewHeader } from "./TabNavigation";
 import { useTheme } from "../lib/theme";
 
 export default function SettingsView() {
@@ -27,8 +28,10 @@ export default function SettingsView() {
   const userRole = extractRole(memory?.user ?? null);
 
   return (
-    <div className="flex-1 overflow-y-auto mobile-view-enter">
-      <div className="max-w-lg mx-auto px-4 sm:px-6 py-4 sm:py-6">
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0 mobile-view-enter">
+      <MobileViewHeader title={t("tab.me")} />
+      <div className="flex-1 overflow-y-auto">
+      <div className="max-w-lg mx-auto px-4 sm:px-6 py-3 sm:py-6">
 
         <div className="space-y-3">
           {/* Profile card — shows real user data from memory API */}
@@ -132,6 +135,7 @@ export default function SettingsView() {
             <DebugReporter />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
-import { TabHeader } from "./TabNavigation";
+import { TabHeader, MobileViewHeader } from "./TabNavigation";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
 import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
@@ -249,9 +249,10 @@ export default function TasksView() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 mobile-view-enter">
+      <MobileViewHeader title={t("tab.tasks")}>{stopAllButton}</MobileViewHeader>
       <TabHeader>{stopAllButton}</TabHeader>
       <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 sm:py-4 pb-6 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-4 pb-6 space-y-6">
 
         {error && (
           <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">{error}</div>

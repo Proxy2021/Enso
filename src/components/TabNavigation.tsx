@@ -17,6 +17,17 @@ export function TabHeader({ children }: { children?: ReactNode }) {
   );
 }
 
+/** Lightweight mobile header with safe area padding and optional title + controls.
+ *  Shown only on mobile (sm:hidden). Provides consistent top chrome across all tabs. */
+export function MobileViewHeader({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <header className="sm:hidden flex items-center justify-between px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5 bg-gray-950/90 backdrop-blur-lg shrink-0">
+      <h1 className="text-lg font-bold text-gray-100 tracking-tight">{title}</h1>
+      {children && <div className="flex items-center gap-2">{children}</div>}
+    </header>
+  );
+}
+
 const ICON_SIZE = 20;
 
 function ChatIcon({ active }: { active: boolean }) {

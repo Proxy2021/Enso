@@ -3,7 +3,7 @@ import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { timeAgo, formatDate } from "../lib/time-utils";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
-import { TabHeader } from "./TabNavigation";
+import { TabHeader, MobileViewHeader } from "./TabNavigation";
 import { Sparkline, deriveTrend } from "./Sparkline";
 
 // ── Types ──
@@ -151,7 +151,7 @@ export default function ProjectsView() {
   if (view === "import") {
     return (
       <div className="flex-1 overflow-y-auto mobile-view-enter">
-        <div className="max-w-lg mx-auto px-4 sm:px-6 py-6">
+        <div className="max-w-lg mx-auto px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-6 py-6">
           <button onClick={() => setView("list")} className="text-sm text-gray-400 hover:text-gray-200 mb-4 cursor-pointer">← Back</button>
           <div className="space-y-4">
             <div>
@@ -189,29 +189,29 @@ export default function ProjectsView() {
     const p = selectedProject;
     return (
       <div className="flex-1 overflow-y-auto mobile-view-enter">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 py-4 sm:py-6">
           <button onClick={() => setView("list")} className="text-sm text-gray-400 hover:text-gray-200 mb-3 cursor-pointer">← Back</button>
 
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-100">{p.name}</h2>
-              <p className="text-xs text-gray-500 mt-0.5">{p.codebasePath}</p>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-semibold text-gray-100 truncate">{p.name}</h2>
+              <p className="text-xs text-gray-500 mt-0.5 truncate">{p.codebasePath}</p>
             </div>
             <button
               onClick={() => evolveProject(p)}
-              className="px-4 py-2 text-sm font-medium rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition-colors cursor-pointer"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 active:bg-purple-500/40 transition-colors cursor-pointer shrink-0"
             >
               Evolve
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 border-b border-gray-800/60 mb-4">
+          <div className="flex gap-1 border-b border-gray-800/60 mb-4 overflow-x-auto scrollbar-hide">
             {(["overview", "team", "personas", "sprints"] as DetailTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setDetailTab(tab)}
-                className={`px-3 py-2 text-xs font-medium capitalize rounded-t-lg transition-colors cursor-pointer ${detailTab === tab ? "text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-400" : "text-gray-500 hover:text-gray-300"}`}
+                className={`px-3 py-2 text-xs font-medium capitalize rounded-t-lg transition-colors cursor-pointer shrink-0 ${detailTab === tab ? "text-indigo-400 bg-indigo-500/10 border-b-2 border-indigo-400" : "text-gray-500 hover:text-gray-300 active:text-gray-200"}`}
               >
                 {tab}
               </button>
@@ -244,7 +244,7 @@ export default function ProjectsView() {
                       return <span className={`text-[10px] font-medium ${s.class}`}>{s.label}</span>;
                     })()}
                   </div>
-                  <Sparkline data={p.sprintScoreTrend} width={280} height={32} />
+                  <div className="w-full"><Sparkline data={p.sprintScoreTrend} width={240} height={32} /></div>
                   <div className="flex justify-between mt-1.5">
                     <span className="text-[10px] text-gray-600">Sprint 1</span>
                     <span className="text-[10px] text-gray-600">Sprint {p.sprintScoreTrend.length}</span>
@@ -338,9 +338,10 @@ export default function ProjectsView() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 mobile-view-enter">
+      <MobileViewHeader title={t("tab.projects")}>{importButton}</MobileViewHeader>
       <TabHeader>{importButton}</TabHeader>
       <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 sm:py-6 space-y-4">
 
         {error && (
           <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">{error}</div>
@@ -380,8 +381,8 @@ export default function ProjectsView() {
                 <div className="cursor-pointer" onClick={() => openDetail(project)}>
                   {project.description && <p className="text-xs text-gray-500 line-clamp-2">{project.description}</p>}
                 </div>
-                <div className="flex items-center justify-between mt-2.5">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center justify-between mt-2.5 gap-2">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-wrap">
                     <span className="text-[10px] text-gray-600">{project.teamAgents?.length ?? 0} agents</span>
                     <span className="text-[10px] text-gray-600">{project.personas?.length ?? 0} personas</span>
                     {project.lastSprint != null && (
@@ -399,7 +400,7 @@ export default function ProjectsView() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); evolveProject(project); }}
-                    className="px-2.5 py-1 text-[10px] font-medium rounded-lg bg-purple-500/15 text-purple-300 border border-purple-500/25 hover:bg-purple-500/25 transition-colors shrink-0 cursor-pointer"
+                    className="px-2.5 py-1 text-[10px] font-medium rounded-lg bg-purple-500/15 text-purple-300 border border-purple-500/25 hover:bg-purple-500/25 active:bg-purple-500/35 transition-colors shrink-0 cursor-pointer"
                   >
                     Evolve
                   </button>
