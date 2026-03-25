@@ -226,8 +226,8 @@ export default function ResultsInbox({ show, onClose, asPage }: ResultsInboxProp
                 onClick={() => {
                   markSeen(r.cardId);
                   scrollToCard(r.cardId);
-                  useChatStore.getState().setMobileTab("chat");
-                  useChatStore.getState().setMobileShowChat(true);
+                  useChatStore.getState().setActiveTab("chat");
+                  useChatStore.getState().setChatViewOpen(true);
                 }}
                 className={`w-full flex items-start gap-3 px-4 py-3.5 rounded-2xl mb-1 transition-all duration-150 text-left ${
                   !r.seen ? "bg-gray-900/60" : "active:bg-gray-800/60"

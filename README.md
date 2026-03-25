@@ -69,6 +69,20 @@ Use Enso → notice a gap → /code "add a stock tracker"
 
 The platform evolves from within. No separate IDE. No deployment pipeline.
 
+### Navigate Everything — 5-Tab Universal Layout
+
+Enso organizes all capabilities into a **5-tab navigation** that works identically on desktop (left rail) and mobile (bottom bar):
+
+| Tab | What It Does |
+|-----|-------------|
+| **Chat** | Conversations with Enso — conversation list, chat timeline, pinned apps |
+| **Tasks** | Command center — active sessions, orchestrations, completed tasks, recoverable runs |
+| **Evolve** | Self-evolution hub — evolve sprints, discover opportunities, build apps, system enhance |
+| **Projects** | External codebase management — import projects, AI teams, personas, project-scoped sprints |
+| **Me** | Profile, connection management, settings, debug |
+
+The **Evolve** tab embodies "evolve everything" — every aspect of Enso (apps, platform code, prompts, UI) can be improved from this single hub.
+
 ### Discover Opportunities — AI VC
 
 Enso includes an AI venture capital team that discovers high-potential project opportunities. Type **`/discover`** with an optional focus area and a 5-person VC team runs a full investment process:

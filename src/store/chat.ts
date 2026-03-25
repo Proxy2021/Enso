@@ -111,9 +111,9 @@ interface CardStore {
   cardSearchQuery: string;
   cardSearchVisible: boolean;
 
-  // Mobile navigation
-  mobileTab: "chat" | "tools" | "inbox" | "me";
-  mobileShowChat: boolean;
+  // Tab navigation (universal — desktop rail + mobile bottom bar)
+  activeTab: "chat" | "tasks" | "evolve" | "projects" | "me";
+  chatViewOpen: boolean;
 
   // Actions
   connect: () => void;
@@ -176,8 +176,8 @@ interface CardStore {
   releaseCard: (cardId: string) => void;
   setCardSearchQuery: (query: string) => void;
   setCardSearchVisible: (visible: boolean) => void;
-  setMobileTab: (tab: "chat" | "tools" | "inbox" | "me") => void;
-  setMobileShowChat: (show: boolean) => void;
+  setActiveTab: (tab: "chat" | "tasks" | "evolve" | "projects" | "me") => void;
+  setChatViewOpen: (open: boolean) => void;
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -332,11 +332,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
   showSidebar: false,
   cardSearchQuery: "",
   cardSearchVisible: false,
-  mobileTab: "chat" as const,
-  mobileShowChat: false,
+  activeTab: "chat" as const,
+  chatViewOpen: false,
 
-  setMobileTab: (tab) => set({ mobileTab: tab, mobileShowChat: false }),
-  setMobileShowChat: (show) => set({ mobileShowChat: show }),
+  setActiveTab: (tab) => set({ activeTab: tab, chatViewOpen: false }),
+  setChatViewOpen: (open) => set({ chatViewOpen: open }),
 
   connect: () => {
     const existing = get()._wsClient;
@@ -760,7 +760,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       cards: { ...s.cards, [id]: card, [thinkingId]: thinkingCard },
       _thinkingCardId: thinkingId,
       isWaiting: true,
-      mobileShowChat: true,
+      chatViewOpen: true,
     }));
     get()._wsClient?.send({
       type: "chat.send",
@@ -1904,7 +1904,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       _pendingCodeText: null,
       _thinkingCardId: null,
       recentTopics: [],
-      mobileShowChat: true,
+      chatViewOpen: true,
     });
     if (ws) ws.send({ type: "chat.history", historyCount: 50, conversationId: id });
   },

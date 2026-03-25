@@ -34,7 +34,7 @@ Enso has two layers:
 src/                          # React frontend (Vite entry)
 ├── App.tsx                   # Root layout
 ├── cards/                    # Card renderers (DynamicUICard, TerminalCard, ShellCard, etc.)
-├── components/               # CardTimeline, CardContainer, ChatInput, ConversationSidebar, MarkdownText, ConnectionPicker, ToastContainer, BackgroundTaskBar, ResultsInbox
+├── components/               # TabNavigation, TasksView, EvolveView, ProjectsView, SettingsView, CardTimeline, CardContainer, ChatInput, ConversationSidebar, MarkdownText, ConnectionPicker, ToastContainer, BackgroundTaskBar
 ├── store/chat.ts             # Zustand state
 ├── lib/                      # ws-client, sandbox (Sucrase JSX→JS), enso-ui (17 components), connection manager, notifications, useElapsedTime
 └── types.ts
@@ -81,6 +81,24 @@ shared/types.ts               # Protocol types shared between frontend and serve
 ```
 
 ## Key Concepts
+
+### 5-Tab Universal Navigation
+
+The app uses a **universal 5-tab navigation** that renders as a left rail on desktop and a bottom bar on mobile. Both platforms share the same tab state (`activeTab` in Zustand) and content views.
+
+| Tab | Purpose | Key Components |
+|-----|---------|---------------|
+| **Chat** | Conversations with Enso | ConversationSidebar + CardTimeline + ChatInput + PinnedSidebar |
+| **Tasks** | Command center for active/completed/recoverable sessions | TasksView (polls `/api/sessions`) |
+| **Evolve** | Self-evolution hub — evolve everything | EvolveView (quick actions, app ecosystem, sprint/discovery history) |
+| **Projects** | External codebase management | ProjectsView (project list, import, detail with team/personas/sprints) |
+| **Me** | Profile, connection, settings | SettingsView (connection, model picker, debug) |
+
+- **Desktop**: `DesktopTabRail` (~56px left rail with icons + labels) + tab content fills remaining space
+- **Mobile**: `MobileTabBar` (bottom bar, hides when inside a chat conversation)
+- **State**: `activeTab` (which tab is shown), `chatViewOpen` (whether a conversation is open on mobile)
+- **No desktop header**: All header functions (search, settings, apps menu, connection) are absorbed into their respective tabs
+- Key files: `src/components/TabNavigation.tsx`, `src/components/TasksView.tsx`, `src/components/EvolveView.tsx`, `src/components/ProjectsView.tsx`, `src/components/SettingsView.tsx`, `src/App.tsx`
 
 ### WebSocket Protocol
 
