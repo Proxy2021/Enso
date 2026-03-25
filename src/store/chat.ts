@@ -41,6 +41,38 @@ function shouldSkipEmptyHistoryRecord(rec: CardHistoryRecord, resolvedType: stri
   return !textTrim && !hasMedia && !hasData && !hasUI && !hasSteps && !hasApp;
 }
 
+/** Derive a short sidebar title from a command string. */
+function deriveConversationTitle(msg: string): string {
+  const t = msg.trim();
+  if (t.startsWith("/evolve")) {
+    const rest = t.slice(7).trim();
+    return rest ? `Evolve: ${rest}`.slice(0, 60) : "Evolution Sprint";
+  }
+  if (t.startsWith("/discover")) {
+    const rest = t.slice(9).trim();
+    return rest ? `Discover: ${rest}`.slice(0, 60) : "AI Discovery";
+  }
+  if (t.startsWith("/code ")) {
+    return t.slice(6).trim().slice(0, 60) || "Claude Code";
+  }
+  if (t.startsWith("/research ")) {
+    return t.slice(10).trim().slice(0, 60) || "Research";
+  }
+  if (t.startsWith("/mission")) {
+    return "Mission Planner";
+  }
+  if (t.startsWith("/shell")) {
+    return "Terminal";
+  }
+  const firstLine = t.split("\n")[0]?.trim() ?? t;
+  const chars = Array.from(firstLine);
+  if (chars.length <= 60) return firstLine;
+  let out = chars.slice(0, 60).join("");
+  const lastSpace = out.lastIndexOf(" ");
+  if (lastSpace > 24) out = out.slice(0, lastSpace).trimEnd();
+  return `${out}…`;
+}
+
 export interface ConversationEntry {
   id: string;
   title: string;
@@ -167,7 +199,8 @@ interface CardStore {
   clearConversation: () => void;
   refreshConversationsList: () => Promise<void>;
   selectConversation: (id: string) => void;
-  startNewChat: () => Promise<void>;
+  startNewChat: (title?: string) => Promise<void>;
+  launchCommandInNewChat: (message: string) => Promise<void>;
   deleteConversationById: (id: string) => Promise<void>;
   renameConversationById: (id: string, title: string) => Promise<void>;
   toggleSidebar: () => void;
@@ -1909,13 +1942,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
     if (ws) ws.send({ type: "chat.history", historyCount: 50, conversationId: id });
   },
 
-  startNewChat: async () => {
+  startNewChat: async (title?: string) => {
     try {
       const clientId = getClientId();
       const res = await fetch(`${getBackendBaseUrl()}${API.CONVERSATIONS}`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ clientId }),
+        body: JSON.stringify({ clientId, ...(title ? { title } : {}) }),
         signal: AbortSignal.timeout(TIMINGS.API_FETCH_TIMEOUT),
       });
       if (!res.ok) return;
@@ -1925,6 +1958,13 @@ export const useChatStore = create<CardStore>((set, get) => ({
     } catch {
       // best-effort
     }
+  },
+
+  launchCommandInNewChat: async (message: string) => {
+    const title = deriveConversationTitle(message);
+    await get().startNewChat(title);
+    get().sendMessage(message);
+    set({ activeTab: "chat", chatViewOpen: true });
   },
 
   deleteConversationById: async (id: string) => {
@@ -2137,8 +2177,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
       set((s) => ({
         cardOrder: [...s.cardOrder, id],
         cards: { ...s.cards, [id]: card },
-        apps: [], // Clear apps list since all were deleted
+        apps: s.apps.filter((a) => !families.includes(a.toolFamily)),
       }));
+      get().fetchApps();
       return;
     }
 

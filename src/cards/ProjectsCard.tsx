@@ -285,7 +285,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             const result = compileComponent(jsx);
             if ("Component" in result) { setSprintDashComp(() => result.Component); setSprintDashError(null); }
             else { setSprintDashError(result.error); setSprintDashComp(null); }
-          } catch (err: any) { setSprintDashError(err.message); setSprintDashComp(null); }
+          } catch (err: unknown) { setSprintDashError(err instanceof Error ? err.message : String(err)); setSprintDashComp(null); }
         }
       });
     }
@@ -315,7 +315,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             const result = compileComponent(jsx);
             if ("Component" in result) { setDiscoveryDashComp(() => result.Component); setDiscoveryDashError(null); }
             else { setDiscoveryDashError(result.error); setDiscoveryDashComp(null); }
-          } catch (err: any) { setDiscoveryDashError(err.message); setDiscoveryDashComp(null); }
+          } catch (err: unknown) { setDiscoveryDashError(err instanceof Error ? err.message : String(err)); setDiscoveryDashComp(null); }
         }
       });
     }
@@ -375,8 +375,8 @@ export default function ProjectsCard({ card }: CardRendererProps) {
       setView("detail");
       setDetailTab("overview");
       setImportForm({ name: "", codebasePath: "", description: "", vision: "", testUrl: "", testCommand: "" });
-    } catch (err: any) {
-      setImportError(err.message || "Failed to create project");
+    } catch (err: unknown) {
+      setImportError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setGenerating(false);
     }

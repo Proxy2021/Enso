@@ -1529,7 +1529,10 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     card.data != null &&
     typeof card.data === "object" &&
     Object.keys(card.data as Record<string, unknown>).length > 0;
-  const showBlockingLoadOverlay = isLoading && !hasVisibleDynamicShell;
+  // Don't cover chat cards that already have visible streaming text — let the
+  // user read the progressive response instead of staring at a shimmer overlay.
+  const hasVisibleStreamingText = card.type === "chat" && Boolean(card.text);
+  const showBlockingLoadOverlay = isLoading && !hasVisibleDynamicShell && !hasVisibleStreamingText;
   const loadingLabel = card.enhanceStatus === "loading"
     ? "Enhancing to app"
     : card.operation?.label ?? card.pendingAction;

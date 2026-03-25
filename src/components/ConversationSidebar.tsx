@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useChatStore, type ConversationEntry } from "../store/chat";
 import { useT } from "../lib/i18n";
+import { AppIcon } from "./EvolveView";
 
 let _toggleMobileOpen: (() => void) | null = null;
 export function toggleMobileConversations() {
@@ -16,9 +17,15 @@ export default function ConversationSidebar() {
   const deleteConversationById = useChatStore((s) => s.deleteConversationById);
   const renameConversationById = useChatStore((s) => s.renameConversationById);
   const connectionState = useChatStore((s) => s.connectionState);
+  const apps = useChatStore((s) => s.apps);
+  const fetchApps = useChatStore((s) => s.fetchApps);
+  const runApp = useChatStore((s) => s.runApp);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [appsOpen, setAppsOpen] = useState(false);
+
+  useEffect(() => { if (appsOpen) fetchApps(); }, [appsOpen, fetchApps]);
 
   // Expose toggle for the header button
   useEffect(() => {
@@ -147,6 +154,49 @@ export default function ConversationSidebar() {
             )}
           </div>
         ))}
+      </div>
+
+      {/* Apps launcher */}
+      <div className="flex-shrink-0 border-t border-gray-800/80">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setAppsOpen((o) => !o)}
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-colors cursor-pointer"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          <span className="flex-1 text-left font-medium">Apps</span>
+          <svg
+            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className={`transition-transform duration-150 ${appsOpen ? "rotate-180" : ""}`}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {appsOpen && (
+          <div className="max-h-48 overflow-y-auto px-1.5 pb-1.5 space-y-0.5">
+            {apps.length === 0 ? (
+              <p className="text-[10px] text-gray-600 text-center py-3">No apps installed</p>
+            ) : apps.map((app) => (
+              <button
+                key={app.appId}
+                type="button"
+                disabled={disabled}
+                onClick={() => { runApp(app.toolFamily); setMobileOpen(false); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-gray-800/60 active:bg-gray-800/80 transition-colors disabled:opacity-40"
+                title={app.description}
+              >
+                <AppIcon appId={app.appId} size={20} />
+                <span className="text-xs text-gray-300 truncate">{app.appId}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

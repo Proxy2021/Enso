@@ -355,7 +355,7 @@ function ClaudeCodeSection({ onClose }: { onClose: () => void }) {
 
 // ── Memory Section (absorbed from MemoryPanel) ──────────────────────────────
 
-function MemorySection() {
+export function MemorySection() {
   const [memTab, setMemTab] = useState<MemoryTab>("user");
   const { memory, loading, saving, clearing, historyCount, fetchMemory, saveMemory, clearHistory } = useMemoryApi();
   const [editing, setEditing] = useState(false);
@@ -523,17 +523,23 @@ function ServiceKeysSection() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { t } = useT();
 
   const fetchKeys = useCallback(async () => {
     try {
+      setError(null);
       const base = getBackendBaseUrl();
       const res = await fetch(`${base}/api/service-keys`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setKeys(data.keys ?? []);
+      } else {
+        setError(`Failed to load keys (${res.status})`);
       }
-    } catch { /* ignore */ }
+    } catch {
+      setError("Could not connect to server");
+    }
     setLoading(false);
   }, []);
 
@@ -551,9 +557,14 @@ function ServiceKeysSection() {
       if (res.ok) {
         setEditingId(null);
         setKeyInput("");
+        setError(null);
         await fetchKeys();
+      } else {
+        setError(`Failed to save key (${res.status})`);
       }
-    } catch { /* ignore */ }
+    } catch {
+      setError("Could not connect to server");
+    }
     setSaving(false);
   };
 
@@ -561,15 +572,22 @@ function ServiceKeysSection() {
     setSaving(true);
     try {
       const base = getBackendBaseUrl();
-      await fetch(`${base}/api/service-keys/${id}`, {
+      const res = await fetch(`${base}/api/service-keys/${id}`, {
         method: "PUT",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ value: "" }),
       });
-      setEditingId(null);
-      setKeyInput("");
-      await fetchKeys();
-    } catch { /* ignore */ }
+      if (res.ok) {
+        setEditingId(null);
+        setKeyInput("");
+        setError(null);
+        await fetchKeys();
+      } else {
+        setError(`Failed to remove key (${res.status})`);
+      }
+    } catch {
+      setError("Could not connect to server");
+    }
     setSaving(false);
   };
 
@@ -577,6 +595,15 @@ function ServiceKeysSection() {
     return (
       <div className="flex items-center justify-center py-8">
         <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error && keys.length === 0) {
+    return (
+      <div className="text-center py-6">
+        <p className="text-sm text-red-400">{error}</p>
+        <button onClick={fetchKeys} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Retry</button>
       </div>
     );
   }

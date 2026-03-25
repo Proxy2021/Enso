@@ -1,0 +1,360 @@
+{
+  "version": 1,
+  "createdAt": 1711324800000,
+  "spec": {
+    "toolFamily": "intake_form_builder",
+    "toolPrefix": "enso_intake_form_builder_",
+    "description": "Patient intake form builder with drag-and-drop fields, HIPAA compliance checklist, form preview, and JSON schema export for healthcare practices",
+    "signatureId": "intake_form_builder_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "description": "List all saved patient intake form templates with summary statistics (field count, PHI fields, compliance score). Use when the user says: 'show my forms', 'list intake forms', 'browse form templates', 'open form builder'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filter": {
+              "type": "string",
+              "description": "Filter forms by status: all, draft, published (default: all)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_intake_form_builder_browse",
+          "total": 3,
+          "forms": [
+            {
+              "id": "form_1",
+              "title": "New Patient Intake Form",
+              "status": "published",
+              "fieldCount": 12,
+              "phiFieldCount": 8,
+              "complianceScore": 90,
+              "createdAt": "2024-03-15T10:00:00Z",
+              "updatedAt": "2024-03-20T14:30:00Z"
+            },
+            {
+              "id": "form_2",
+              "title": "Pediatric Intake Form",
+              "status": "draft",
+              "fieldCount": 15,
+              "phiFieldCount": 10,
+              "complianceScore": 70,
+              "createdAt": "2024-03-18T09:00:00Z",
+              "updatedAt": "2024-03-18T09:00:00Z"
+            },
+            {
+              "id": "form_3",
+              "title": "Specialist Referral Form",
+              "status": "published",
+              "fieldCount": 8,
+              "phiFieldCount": 5,
+              "complianceScore": 100,
+              "createdAt": "2024-03-10T11:00:00Z",
+              "updatedAt": "2024-03-22T16:00:00Z"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "forms"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "create",
+        "description": "Create a new patient intake form from scratch or from a template. Specify a template type to pre-populate with standard fields. Use when the user says: 'create a new form', 'start new intake form', 'make a patient form'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Form title (default: 'New Patient Intake Form')"
+            },
+            "template": {
+              "type": "string",
+              "description": "Template type: blank, standard, pediatric, specialist (default: standard)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "template": "standard" },
+        "sampleData": {
+          "tool": "enso_intake_form_builder_create",
+          "formId": "form_new_1",
+          "title": "New Patient Intake Form",
+          "template": "standard",
+          "fields": [
+            { "id": "f1", "type": "text", "label": "First Name", "phi": true, "required": true, "validation": "none" },
+            { "id": "f2", "type": "text", "label": "Last Name", "phi": true, "required": true, "validation": "none" },
+            { "id": "f3", "type": "date", "label": "Date of Birth", "phi": true, "required": true, "validation": "date" },
+            { "id": "f4", "type": "text", "label": "Phone Number", "phi": true, "required": true, "validation": "phone" },
+            { "id": "f5", "type": "email", "label": "Email Address", "phi": false, "required": false, "validation": "email" },
+            { "id": "f6", "type": "textarea", "label": "Chief Complaint", "phi": true, "required": true, "validation": "none" },
+            { "id": "f7", "type": "textarea", "label": "Current Medications", "phi": true, "required": false, "validation": "none" },
+            { "id": "f8", "type": "textarea", "label": "Allergies", "phi": true, "required": true, "validation": "none" },
+            { "id": "f9", "type": "consent", "label": "HIPAA Notice Acknowledgment", "phi": false, "required": true, "validation": "none" },
+            { "id": "f10", "type": "consent", "label": "Treatment Consent", "phi": false, "required": true, "validation": "none" }
+          ],
+          "complianceScore": 80,
+          "fieldCount": 10,
+          "phiFieldCount": 6
+        },
+        "requiredDataKeys": ["tool", "formId", "fields"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "edit",
+        "description": "Edit a field in an existing form — update label, placeholder, validation, required status, or PHI flag. Use when the user says: 'edit field', 'change field label', 'make field required', 'mark as PHI'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formId": {
+              "type": "string",
+              "description": "Form ID to edit"
+            },
+            "fieldId": {
+              "type": "string",
+              "description": "Field ID to edit"
+            },
+            "label": {
+              "type": "string",
+              "description": "New label text"
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Set required status"
+            },
+            "phi": {
+              "type": "boolean",
+              "description": "Set PHI flag"
+            },
+            "validation": {
+              "type": "string",
+              "description": "Validation type: none, email, phone, date, ssn"
+            }
+          },
+          "required": ["formId", "fieldId"]
+        },
+        "sampleParams": { "formId": "form_1", "fieldId": "f1", "required": true },
+        "sampleData": {
+          "tool": "enso_intake_form_builder_edit",
+          "formId": "form_1",
+          "fieldId": "f1",
+          "field": {
+            "id": "f1",
+            "type": "text",
+            "label": "First Name",
+            "phi": true,
+            "required": true,
+            "validation": "none",
+            "placeholder": "Enter first name"
+          },
+          "message": "Field updated successfully"
+        },
+        "requiredDataKeys": ["tool", "formId", "fieldId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "preview",
+        "description": "Generate a full preview of a patient intake form showing how it will appear to patients. Use when the user says: 'preview the form', 'show form preview', 'how will it look'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formId": {
+              "type": "string",
+              "description": "Form ID to preview"
+            }
+          },
+          "required": ["formId"]
+        },
+        "sampleParams": { "formId": "form_1" },
+        "sampleData": {
+          "tool": "enso_intake_form_builder_preview",
+          "formId": "form_1",
+          "title": "New Patient Intake Form",
+          "fields": [
+            { "id": "f1", "type": "text", "label": "First Name", "phi": true, "required": true, "placeholder": "Enter first name" },
+            { "id": "f2", "type": "text", "label": "Last Name", "phi": true, "required": true, "placeholder": "Enter last name" },
+            { "id": "f3", "type": "date", "label": "Date of Birth", "phi": true, "required": true, "placeholder": "MM/DD/YYYY" },
+            { "id": "f4", "type": "text", "label": "Phone Number", "phi": true, "required": true, "placeholder": "(555) 123-4567" },
+            { "id": "f5", "type": "textarea", "label": "Chief Complaint", "phi": true, "required": true, "placeholder": "Describe primary reason for visit" },
+            { "id": "f6", "type": "consent", "label": "HIPAA Notice Acknowledgment", "phi": false, "required": true }
+          ],
+          "sections": [
+            { "title": "Demographics", "fieldIds": ["f1", "f2", "f3", "f4"] },
+            { "title": "Medical", "fieldIds": ["f5"] },
+            { "title": "Consent", "fieldIds": ["f6"] }
+          ],
+          "previewMode": true
+        },
+        "requiredDataKeys": ["tool", "formId", "fields"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "compliance",
+        "description": "Run HIPAA compliance check on a form, scoring privacy notice, data minimization, authorization, patient rights, and security categories. Use when the user says: 'check compliance', 'HIPAA check', 'is my form compliant', 'compliance score'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formId": {
+              "type": "string",
+              "description": "Form ID to check"
+            }
+          },
+          "required": ["formId"]
+        },
+        "sampleParams": { "formId": "form_1" },
+        "sampleData": {
+          "tool": "enso_intake_form_builder_compliance",
+          "formId": "form_1",
+          "title": "New Patient Intake Form",
+          "overallScore": 80,
+          "checkedItems": 8,
+          "totalItems": 10,
+          "categories": [
+            {
+              "name": "Privacy Notice",
+              "items": [
+                { "label": "HIPAA Notice of Privacy Practices included", "checked": true, "auto": true, "required": true },
+                { "label": "Patient acknowledgment signature field", "checked": true, "auto": true, "required": true }
+              ]
+            },
+            {
+              "name": "Data Minimization",
+              "items": [
+                { "label": "Only necessary PHI fields included", "checked": true, "auto": false, "required": true },
+                { "label": "SSN collection justified", "checked": true, "auto": true, "required": true }
+              ]
+            },
+            {
+              "name": "Authorization",
+              "items": [
+                { "label": "Treatment consent field present", "checked": true, "auto": true, "required": true },
+                { "label": "ROI authorization if sharing data", "checked": false, "auto": false, "required": false }
+              ]
+            },
+            {
+              "name": "Patient Rights",
+              "items": [
+                { "label": "Right to access notice", "checked": true, "auto": false, "required": true },
+                { "label": "Right to amend notice", "checked": false, "auto": false, "required": true }
+              ]
+            },
+            {
+              "name": "Security",
+              "items": [
+                { "label": "Form transmission encryption noted", "checked": true, "auto": false, "required": true },
+                { "label": "Access control acknowledgment", "checked": false, "auto": false, "required": false }
+              ]
+            }
+          ],
+          "recommendations": [
+            "Add a 'Release of Information' consent field for data sharing compliance",
+            "Include notice about patient's right to amend their records"
+          ]
+        },
+        "requiredDataKeys": ["tool", "formId", "overallScore", "categories"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "export",
+        "description": "Export a form as a JSON schema document with full field definitions, PHI metadata, compliance score, and section layout. Use when the user says: 'export form', 'download JSON', 'get form schema', 'export intake form'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formId": {
+              "type": "string",
+              "description": "Form ID to export"
+            },
+            "format": {
+              "type": "string",
+              "description": "Export format: json_schema, fhir, csv_template (default: json_schema)"
+            }
+          },
+          "required": ["formId"]
+        },
+        "sampleParams": { "formId": "form_1", "format": "json_schema" },
+        "sampleData": {
+          "tool": "enso_intake_form_builder_export",
+          "formId": "form_1",
+          "format": "json_schema",
+          "title": "New Patient Intake Form",
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "New Patient Intake Form",
+            "version": "1.0.0",
+            "fields": [
+              { "id": "f1", "type": "text", "label": "First Name", "required": true, "phi": true },
+              { "id": "f2", "type": "text", "label": "Last Name", "required": true, "phi": true },
+              { "id": "f3", "type": "date", "label": "Date of Birth", "required": true, "phi": true }
+            ],
+            "metadata": { "totalFields": 10, "phiFields": 6, "requiredFields": 7, "complianceScore": 80 }
+          },
+          "exportedAt": "2024-03-20T14:30:00Z"
+        },
+        "requiredDataKeys": ["tool", "formId", "format", "schema"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "manage",
+        "description": "Manage forms: add/remove/reorder fields, duplicate form, delete form, change status. Use when the user says: 'add a field', 'remove field', 'delete form', 'reorder fields', 'publish form', 'duplicate form'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: add_field, remove_field, reorder, duplicate, delete, set_status"
+            },
+            "formId": {
+              "type": "string",
+              "description": "Form ID to manage"
+            },
+            "fieldType": {
+              "type": "string",
+              "description": "Field type for add_field: text, date, select, textarea, email, consent"
+            },
+            "fieldLabel": {
+              "type": "string",
+              "description": "Label for new field"
+            },
+            "fieldId": {
+              "type": "string",
+              "description": "Field ID for remove/reorder"
+            },
+            "position": {
+              "type": "number",
+              "description": "New position index for reorder"
+            },
+            "status": {
+              "type": "string",
+              "description": "New status for set_status: draft, published"
+            }
+          },
+          "required": ["action", "formId"]
+        },
+        "sampleParams": { "action": "add_field", "formId": "form_1", "fieldType": "text", "fieldLabel": "Middle Name" },
+        "sampleData": {
+          "tool": "enso_intake_form_builder_manage",
+          "action": "add_field",
+          "formId": "form_1",
+          "message": "Field 'Middle Name' added to form",
+          "fieldCount": 11,
+          "fields": [
+            { "id": "f1", "type": "text", "label": "First Name", "phi": true, "required": true },
+            { "id": "f_new", "type": "text", "label": "Middle Name", "phi": true, "required": false },
+            { "id": "f2", "type": "text", "label": "Last Name", "phi": true, "required": true }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action", "formId"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

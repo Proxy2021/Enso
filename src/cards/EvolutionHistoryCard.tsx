@@ -67,8 +67,8 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
               setDashError(result.error);
             }
             setDashError(null);
-          } catch (err: any) {
-            setDashError(err.message || "Failed to compile dashboard");
+          } catch (err: unknown) {
+            setDashError(err instanceof Error ? err.message : "Failed to compile dashboard");
             setDashboardComp(null);
           }
         }

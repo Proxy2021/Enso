@@ -92,8 +92,8 @@ export default function SessionDashboardCard({ card }: CardRendererProps) {
       const data = await res.json();
       setStatus(data);
       setError(null);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch session status");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch session status");
     }
   }, []);
 
@@ -117,8 +117,8 @@ export default function SessionDashboardCard({ card }: CardRendererProps) {
       }
       // Refresh immediately after action
       await fetchStatus();
-    } catch (err: any) {
-      setError(err.message || "Action failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Action failed");
     } finally {
       setActionInFlight(null);
     }

@@ -18,10 +18,12 @@ function hasOnlyBackgroundTasks(
   cards: Record<string, Card>,
   cardOrder: string[],
 ): boolean {
-  let hasStreamingAgent = false;
+  let hasAnyStreaming = false;
+  let hasForegroundStreaming = false;
   for (const id of cardOrder) {
     const c = cards[id];
     if (!c || c.status !== "streaming") continue;
+    hasAnyStreaming = true;
     if (
       c.type === "terminal" ||
       c.type === "shell" ||
@@ -30,9 +32,12 @@ function hasOnlyBackgroundTasks(
     ) {
       continue; // background task — skip
     }
-    hasStreamingAgent = true;
+    hasForegroundStreaming = true;
   }
-  return !hasStreamingAgent;
+  // Only suppress the typing indicator when there ARE streaming cards
+  // and all of them are background tasks. If nothing is streaming yet,
+  // return false so the typing indicator still shows during initial wait.
+  return hasAnyStreaming && !hasForegroundStreaming;
 }
 
 function TypingIndicator() {

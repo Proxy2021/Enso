@@ -1,7 +1,21 @@
+import type { ReactNode } from "react";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
+import SettingsPanel from "./SettingsPanel";
+import DebugReporter from "./DebugReporter";
 
 type TabId = "chat" | "tasks" | "evolve" | "projects" | "me";
+
+/** Controls-only header bar for tabs that need action buttons. Desktop only.
+ *  No title — the active tab in the rail already labels the view. */
+export function TabHeader({ children }: { children?: ReactNode }) {
+  if (!children) return null;
+  return (
+    <div className="hidden sm:flex items-center justify-end px-4 py-1.5 border-b border-gray-800/60 bg-gray-950/50 shrink-0">
+      <div className="flex items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
 
 const ICON_SIZE = 20;
 
@@ -96,6 +110,10 @@ export function DesktopTabRail() {
           </button>
         );
       })}
+      <div className="mt-auto pt-2 flex flex-col items-center gap-3">
+        <SettingsPanel />
+        <DebugReporter />
+      </div>
     </nav>
   );
 }

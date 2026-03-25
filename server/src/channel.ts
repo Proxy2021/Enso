@@ -159,6 +159,6 @@ export const ensoPlugin: ChannelPlugin<ResolvedEnsoAccount> = {
     },
   },
   streaming: {
-    blockStreamingCoalesceDefaults: { minChars: 50, idleMs: 100 },
+    blockStreamingCoalesceDefaults: { minChars: 4, idleMs: 16 },
   },
 };

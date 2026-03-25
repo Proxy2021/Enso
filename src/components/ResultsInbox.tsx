@@ -7,8 +7,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
-import { formatElapsed } from "../lib/useElapsedTime";
 import { TOOL_ID_CLAUDE_CODE, TIMINGS } from "../lib/constants";
+import { timeAgo } from "../lib/time-utils";
 
 // ── Seen tracking (persisted to localStorage) ──
 
@@ -138,14 +138,6 @@ const TYPE_ICONS: Record<string, string> = {
 function scrollToCard(cardId: string) {
   const el = document.getElementById(`card-${cardId}`);
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-function timeAgo(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 // ── Main exports ──

@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
+import { TabHeader } from "./TabNavigation";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
-import { formatElapsed } from "../lib/useElapsedTime";
 import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
+import { timeAgo, formatElapsedTime } from "../lib/time-utils";
 
 // ── Types (mirrors session-registry.ts) ──
 
@@ -109,23 +110,6 @@ function deriveCompleted(cards: Record<string, Card>, cardOrder: string[]): Comp
 
 // ── Helpers ──
 
-function formatElapsedTime(startedAt: number): string {
-  const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-  if (elapsed < 60) return `${elapsed}s`;
-  if (elapsed < 3600) return `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`;
-  const h = Math.floor(elapsed / 3600);
-  const m = Math.floor((elapsed % 3600) / 60);
-  return `${h}h ${m}m`;
-}
-
-function timeAgo(ts: number): string {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
-
 function typeBadge(type: string): string {
   switch (type) {
     case "evolution": return "bg-purple-500/20 text-purple-300 border-purple-500/30";
@@ -178,8 +162,8 @@ export default function TasksView() {
         setRecoverables(recData.recoverable ?? []);
       }
       setError(null);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch");
     }
   }, []);
 
@@ -195,8 +179,8 @@ export default function TasksView() {
       const res = await fetch(`${getBackendBaseUrl()}${path}`, { method, headers: authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await fetchStatus();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Action failed");
     } finally {
       setActionInFlight(null);
     }
@@ -241,33 +225,33 @@ export default function TasksView() {
 
   const hasActive = activeSessions.length > 0 || activeOrchs.length > 0;
 
+  const stopAllButton = hasActive ? (
+    <button
+      onClick={() => {
+        setActionInFlight("stop-all");
+        const baseUrl = getBackendBaseUrl();
+        const headers = authHeaders();
+        const promises: Promise<any>[] = [];
+        for (const s of activeSessions) {
+          promises.push(fetch(`${baseUrl}/api/sessions/${s.runId}`, { method: "DELETE", headers }).catch(() => {}));
+        }
+        for (const o of activeOrchs) {
+          promises.push(fetch(`${baseUrl}/api/orchestrations/${o.orchestrationId}`, { method: "DELETE", headers }).catch(() => {}));
+        }
+        Promise.allSettled(promises).then(() => fetchStatus()).finally(() => setActionInFlight(null));
+      }}
+      disabled={actionInFlight === "stop-all"}
+      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 transition-colors disabled:opacity-50 cursor-pointer"
+    >
+      {actionInFlight === "stop-all" ? "Stopping..." : "Stop All"}
+    </button>
+  ) : null;
+
   return (
-    <div className="flex-1 overflow-y-auto mobile-view-enter">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-100">{t("tab.tasks")}</h1>
-          {hasActive && (
-            <button
-              onClick={() => {
-                setActionInFlight("stop-all");
-                const baseUrl = getBackendBaseUrl();
-                const headers = authHeaders();
-                const promises: Promise<any>[] = [];
-                for (const s of activeSessions) {
-                  promises.push(fetch(`${baseUrl}/api/sessions/${s.runId}`, { method: "DELETE", headers }).catch(() => {}));
-                }
-                for (const o of activeOrchs) {
-                  promises.push(fetch(`${baseUrl}/api/orchestrations/${o.orchestrationId}`, { method: "DELETE", headers }).catch(() => {}));
-                }
-                Promise.allSettled(promises).then(() => fetchStatus()).finally(() => setActionInFlight(null));
-              }}
-              disabled={actionInFlight === "stop-all"}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              {actionInFlight === "stop-all" ? "Stopping..." : "Stop All"}
-            </button>
-          )}
-        </div>
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0 mobile-view-enter">
+      <TabHeader>{stopAllButton}</TabHeader>
+      <div className="flex-1 overflow-y-auto">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 sm:py-4 pb-6 space-y-6">
 
         {error && (
           <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">{error}</div>
@@ -402,6 +386,7 @@ export default function TasksView() {
             </div>
           </section>
         )}
+      </div>
       </div>
     </div>
   );

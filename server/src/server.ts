@@ -1836,6 +1836,26 @@ export async function startEnsoServer(opts: {
                 }
               }
             }
+            // Tool-routed messages still need auto-titling (the bubble itself
+            // is not persisted because it contains system prompts, but the
+            // conversation should still get a meaningful name).
+            if (msg.text && msg.routing?.toolId) {
+              const hadPrior = conversationJournalHasUserMessage(clientId, convId);
+              if (!hadPrior) {
+                const titled = maybeAutotitleConversation(clientId, convId, msg.text);
+                if (titled) {
+                  send({
+                    id: randomUUID(),
+                    runId: randomUUID(),
+                    sessionKey,
+                    seq: 0,
+                    state: "final",
+                    conversationsList: listConversations(clientId),
+                    timestamp: Date.now(),
+                  });
+                }
+              }
+            }
             // Direct tool invocation — bypass OpenClaw pipeline entirely
             if (msg.routing?.toolId === "claude-code" && msg.text) {
               runtime.log?.(`[enso] direct claude-code: "${msg.text.slice(0, 60)}"`);

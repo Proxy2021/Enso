@@ -6,7 +6,7 @@ import PinnedSidebar from "./components/PinnedSidebar";
 import ConversationSidebar from "./components/ConversationSidebar";
 import ConnectionPicker from "./components/ConnectionPicker";
 import SetupWizard from "./components/SetupWizard";
-import { DesktopTabRail, MobileTabBar } from "./components/TabNavigation";
+import { DesktopTabRail, MobileTabBar, TabHeader } from "./components/TabNavigation";
 import MobileConversationList from "./components/MobileConversationList";
 import TasksView from "./components/TasksView";
 import EvolveView from "./components/EvolveView";
@@ -16,6 +16,7 @@ import SettingsView from "./components/SettingsView";
 import { parseDeepLink, setActiveBackend, getActiveBackend, loadBackends, addBackend } from "./lib/connection";
 import { isNative } from "./lib/platform";
 import { initDeepLinkListener } from "./lib/deep-link-handler";
+import { useTheme } from "./lib/theme";
 
 declare const __ENSO_DEFAULT_BACKEND__: string;
 declare const __ENSO_DEFAULT_TOKEN__: string;
@@ -160,16 +161,13 @@ function SearchToggle() {
   );
 }
 
-/** Chat tab header — shows search, pinned sidebar, settings (desktop only) */
+/** Chat tab controls — search + pinned sidebar (settings moved to rail) */
 function ChatTabHeader() {
   return (
-    <div className="hidden sm:flex items-center justify-end px-3 py-1.5 border-b border-gray-800/60 bg-gray-950/50">
-      <div className="flex items-center gap-1.5">
-        <SearchToggle />
-        <SidebarToggle />
-        <SettingsPanel />
-      </div>
-    </div>
+    <TabHeader>
+      <SearchToggle />
+      <SidebarToggle />
+    </TabHeader>
   );
 }
 
@@ -239,6 +237,7 @@ export default function App() {
   const loadSharedCard = useChatStore((s) => s.loadSharedCard);
 
   useKeyboardShortcuts();
+  useTheme(); // ensure theme attribute is applied on mount
 
   useEffect(() => {
     const deepLink = parseDeepLink();

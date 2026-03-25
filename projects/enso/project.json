@@ -7,10 +7,10 @@
   "codebasePath": "D:/Github/Enso",
   "techStack": "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
   "testUrl": "http://localhost:5173",
-  "lastSprint": 12,
-  "lastSprintScore": 7.5,
-  "currentSprint": 13,
-  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5],
+  "lastSprint": 13,
+  "lastSprintScore": 7.0,
+  "currentSprint": 14,
+  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0],
   "teamAgents": [
     {
       "id": "project-leader",
@@ -26,14 +26,15 @@
       "perspective": "Am I building the right things? Is the team effective? Is the product coherent?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 12 RESULT (7.5/10): Fix-and-validate sprint succeeded. isPrimary filter replaced with system-vs-dynamic distinction — all 22+ system tools now visible to Gemini. Silent failures eliminated via fallback handler. 3 security vulns fixed (command injection, shell injection, path traversal). App catalog wired for photo_studio + media_gallery. Build clean: 202/202 tests.",
-        "Sprint 12 RESOLVED: isPrimary filter, silent failures, 3 security vulns, app catalog gaps, gallery macOS bundles, sharp mislabeling, /shell CWD, broken test suites (both now passing), macOS ps compatibility. 11 of 24 issues resolved.",
-        "Sprint 12 DEFERRED (justified): Context bleed (/code↔orchestration), /code project picker, progress feedback, WebSocket drops, god module decomposition, cardContexts persistence, research-to-action pipeline.",
-        "Sprint 12 PARTIALLY RESOLVED: Dynamic app family grouping (mitigated via catalog routing, not fixed algorithmically). E2E test coverage (visibility tests added, no integration tests).",
-        "Sprint 13 SEEDS: (1) Re-test Marco post-fix to confirm 3.6→6.5+ improvement, (2) E2E test framework design, (3) Progress feedback architecture, (4) Context management overhaul, (5) AI provider pipeline activation (wire Replicate + remove.bg).",
-        "Sprint 13 THEME RECOMMENDATION: CONSOLIDATION — re-validate personas, close E2E test gap, wire AI providers, design progress feedback. Not a feature sprint.",
-        "MECHANISM: 5-enhancement cap worked well in Sprint 12. Add Phase 5.5 (Persona Re-Test) post-implementation. Require E2E smoke test for every modified tool.",
-        "Sprint score trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5]. Pattern confirmed: fix sprints recover 1.5-2.0 points. Mean: 6.93."
+        "Sprint 13 RESULT (7.0/10): Consolidation sprint. 3 cross-persona bugs fixed (connection status, typing indicator, error swallowing). 5 enhancements: time-utils extraction, code hygiene, launchCommandInNewChat store action, streaming ADR, test expansion (+12 tests, 379 total). Build FAILS at exit due to I1 (duplicate interface) and I2 (mock type error) — trivial fixes missed by implementation.",
+        "Sprint 13 RESOLVED: Connection status bug (B1), typing indicator suppression (B2), silent error swallowing in EvolveView/SettingsPanel (F4), timeAgo duplication (4→1), formatDate duplication (2→1), extractName regex case, dead code in EvolveView, unused import in TasksView, launchCommandInNewChat 4-site pattern → 1 store action.",
+        "Sprint 13 UNRESOLVED (must fix Sprint 14 P0): I1 — duplicate launchCommandInNewChat in CardStore interface (chat.ts:182, delete line). I2 — mock missing _msg:string type (chat-actions.test.ts:77,84). Both are 1-line fixes blocking tsc --noEmit.",
+        "Sprint 13 DEFERRED (justified): Projects tab enrichment (3-5/10 by 2 personas), /code project picker, research library scoping, MCP integration, image generation, persistent memory, god module decomposition, app consolidation (Media/Research/File suites).",
+        "Sprint 13 PROCESS DEVIATION: Marco re-test mandated by PL but not performed (Priya substituted). Stale error string in media-ai-gateway dropped without justification. Implementation self-reported 10/10 correctness with build-breaking defects.",
+        "Sprint 14 SEEDS: (1) Fix I1+I2 and Marco re-test (P0 mandatory), (2) Implement streaming responses from ADR-004 (P0), (3) Projects tab enrichment (P1), (4) MCP client architecture design (P1), (5) Media Suite app consolidation (P2).",
+        "Sprint 14 THEME RECOMMENDATION: STREAMING + VALIDATION — implement SSE streaming (biggest competitive gap at 2/10), validate Marco re-test, enrich Projects tab. Feature sprint with streaming as centerpiece.",
+        "MECHANISM UPDATE: Add mandatory tsc --noEmit exit gate for implementation tracks. PL Phase 0 directives must be binding or deviations documented. Implementation must report compiler exit code in self-assessment.",
+        "Sprint score trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0]. Mean: 6.93. Oscillation continues — consolidation sprints stabilize but don't peak."
       ]
     },
     {
@@ -95,13 +96,14 @@
       "perspective": "Is this architecturally sound? Will it scale? Are we creating tech debt?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 12 DELIVERED: ADR-001 (wire dead tools via registerAppTool) IMPLEMENTED. ADR-003 (fallback response handler) IMPLEMENTED. ADR-002 (fix family grouping) MITIGATED via catalog routing — full fix deferred to Sprint 13.",
-        "Sprint 12 DELIVERED: 4-layer root cause analysis of Sprint 11 failure. Architecture review rated 5/10 — functional when tools are wired (Researcher 8-9/10 proves it) but accumulating systemic debt.",
-        "Architecture health: 6/10 (up from 5.5). Tool visibility fixed. God modules unchanged: server.ts (3433 LOC), researcher-tools.ts (2936 LOC). ADR-004 PROPOSED: Decompose server.ts in Sprint 14.",
-        "Sprint 13 ASSIGNMENT: (1) Fix dynamic app family grouping with prefix-aware algorithm (ADR-002), (2) Design CardContextStore (SQLite-backed), (3) Design progress feedback architecture (streaming indicators), (4) Design intent-based tool selection (replace first-of-family filter).",
+        "Sprint 13 DELIVERED: ADR-004 (Streaming Response Architecture) written — SSE over /api/chat/stream, 3-phase feedback model (classifying→processing→streaming→complete), TypeScript StreamEvent contracts. Ready for Sprint 14 implementation.",
+        "Sprint 13 DELIVERED: time-utils.ts centralization eliminates timeAgo/formatDate duplication. launchCommandInNewChat store action eliminates 4-site race condition pattern. Code-level consolidation foundation laid.",
+        "Architecture health: 6.5/10 (up from 6.0). Frontend code quality improved via deduplication and store action extraction. God modules unchanged: server.ts (3,721 LOC), researcher-tools.ts (2,936 LOC).",
+        "Sprint 14 ASSIGNMENT: (1) Implement SSE streaming from ADR-004, (2) Design MCP client architecture, (3) Projects tab enrichment architecture, (4) Begin Media Suite consolidation design (4 apps → 1).",
+        "App consolidation opportunities identified: Media Suite (media_gallery + photo_studio + video_studio + seedance, 31→~20 tools), Research Suite (researcher + market_intelligence, 14→~10), File Manager (filesystem + file_organizer, 17→~13).",
         "In-memory cardContexts lost on restart — SQLite-backed CardContextStore still needed.",
         "Context bleed between /code and orchestration sessions — design session isolation architecture.",
-        "media-ai-gateway.ts provider registry still empty — need to wire sharpBasicProvider and cloud providers into the registration pipeline."
+        "media-ai-gateway.ts provider registry still empty and stale error string ('sharp-basic provider') unfixed — carried from Sprint 12."
       ]
     },
     {
@@ -119,13 +121,13 @@
       "perspective": "Is this code production-ready? Are conventions followed? Will it break anything?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 12 RESULT: Build CLEAN, 202/202 tests passing. 3 security vulns FIXED (command injection, shell injection, path traversal). Review verdict: PASS (9/10 correctness, 9/10 completeness, 9/10 code quality).",
-        "Sprint 12 WIN: 3 security fixes follow best practice — eliminate attack surfaces, not sanitize inputs. sys.argv for Python, fs tools for file ops, safeResolvePath for path validation.",
-        "Sprint 12 WIN: Previously broken test suites (filesystem-tools.test.ts, workspace-media-tools.test.ts) now passing — 3/3 and 1/1 respectively. Fixed silently between sprints (process concern: changes untracked).",
-        "Sprint 12 ISSUE: Stale error string in media-ai-gateway.ts:107 — still says 'sharp-basic provider' after rename to 'basic-resize'. Cosmetic, minor.",
-        "Sprint 13 ASSIGNMENT: (1) Wire AI providers into media-ai-gateway registry, (2) Fix dynamic app family grouping algorithm, (3) Implement progress feedback streaming, (4) Address stale error string in media-ai-gateway.ts.",
+        "Sprint 13 RESULT: Review verdict FAIL due to tsc --noEmit exit code 2. Two defects: I1 (duplicate launchCommandInNewChat in CardStore interface, chat.ts:182) and I2 (mock missing parameter type, chat-actions.test.ts:77,84). Both trivial 1-line fixes. Implementation self-reported 10/10 correctness — calibration needed.",
+        "Sprint 13 WIN: Fix cycle quality excellent (9/10). 3 bugs fixed with root cause analysis + 16 regression tests. Code hygiene sweep and store action extraction reduce future bug surface.",
+        "Sprint 13 CARRIED: Stale error string in media-ai-gateway.ts:107 — still says 'sharp-basic provider'. Now carried across 2 sprints (identified Sprint 12, still unfixed Sprint 13). Quick win that keeps getting deprioritized.",
+        "Sprint 14 ASSIGNMENT: (1) Fix I1+I2 build errors immediately, (2) Enforce tsc --noEmit as implementation exit gate, (3) Review streaming implementation for code quality, (4) Stale error string in media-ai-gateway.ts (3rd sprint carrying this).",
         "No CI/CD pipeline — every commit to main is unvalidated. Build pipeline is minimal (tsc -b && vite build) with no lint or test step.",
-        "E2E test gap: unit tests mock away the LLM→tool integration point. Need integration tests that verify tool invocation from natural language input."
+        "E2E test gap persists: 12 new unit tests added (379 total) but zero E2E coverage. Unit tests mock away the LLM→tool integration point.",
+        "PROCESS: Implementation tracks must run tsc --noEmit (not just vitest) before reporting completion. vitest uses esbuild which skips full type-checking — this is how I1/I2 slipped through."
       ]
     },
     {
@@ -142,13 +144,14 @@
       "perspective": "Does this actually work? What edge cases are we missing? Is quality improving?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 12 RESULT: Build PASS (202/202 tests, tsc clean). 4 new tool visibility regression tests added. Previously broken test suites now passing. Only 1 test failure: enso_system_processes on macOS (FIXED in sprint).",
-        "Sprint 12 WIN: Test suites improved from ~95% to 99.7% pass rate. Test count: 348→202 (some test reorganization). All 22 suites pass except 1 minor macOS-specific issue (fixed).",
-        "Sprint 12 CRITICAL GAP: Zero E2E test coverage for LLM→tool pipeline. The exact failure path that caused Sprint 11's regression has no automated test. Tool visibility tests check the filter output but not the full message→classification→tool→response pipeline.",
-        "Sprint 12 GAP: Persona testing done PRE-fix only. No validated post-fix persona scores. Marco estimated at 6.5+ but unconfirmed.",
-        "Sprint 13 ASSIGNMENT: (1) Design and implement lightweight E2E test framework — 5 critical paths: research, browse files, photo studio, media gallery, /code. (2) Re-test Marco's 6 scenarios post-fix. (3) Add integration test for app-catalog routing. (4) Propose automated persona replay framework.",
-        "Quality trend: Sprint 9 (5.87) → Sprint 10 (8.0) → Sprint 11 (6.0) → Sprint 12 (7.5). Oscillation confirms fix-validate sprints recover 1.5-2.0 points.",
-        "CardContext reconstruction (tryReconstructContext) is still fragile and untested."
+        "Sprint 13 RESULT: 379 tests passing (up from 367). 12 new tests: 9 time-utils, 3 chat store actions. Fix cycle added 16 regression tests for B1/B2 fixes. BUT tsc --noEmit FAILS due to I1+I2 — tests pass because vitest/esbuild skips type-checking.",
+        "Sprint 13 WIN: Test coverage improved from 0% to partial for modified code. time-utils.test.ts and chat-actions.test.ts provide regression protection for deduplicated code and new store action.",
+        "Sprint 13 GAP: Marco re-test STILL not performed. PL mandated it as Sprint 13 P0 #1 but persona was swapped to Priya. Now 2 sprints without Marco validation. Sprint 12 media fixes remain unconfirmed.",
+        "Sprint 13 GAP: No post-fix persona re-test. Projected score improvement (6.87→7.3-7.8) is unconfirmed. Add Phase 5.5b (post-fix persona re-run) to mechanism.",
+        "Sprint 14 ASSIGNMENT: (1) Marco re-test (mandatory, 3rd sprint overdue), (2) Add component tests for TabNavigation and SettingsView, (3) Design E2E smoke test framework, (4) Validate streaming implementation with persona scenarios.",
+        "Quality trend: Sprint 9 (5.87) → Sprint 10 (8.0) → Sprint 11 (6.0) → Sprint 12 (7.5) → Sprint 13 (7.0). Consolidation sprints stabilize scores but don't peak. Mean: 6.93.",
+        "CardContext reconstruction (tryReconstructContext) is still fragile and untested.",
+        "PROCESS: vitest passing ≠ build passing. Require tsc --noEmit as implementation exit gate. Sprint 13 would have scored 7.5+ if this gate existed."
       ]
     },
     {
@@ -172,13 +175,14 @@
       "perspective": "What new AI tech exists that we are not leveraging? How do we stay ahead of the curve?",
       "agentRole": "researcher",
       "painPoints": [
-        "Sprint 12 DELIVERED: Full AI provider audit. Replicate Real-ESRGAN ($0.0025/img, 0.7-1.8s), remove.bg, Gemini Vision all fully implemented. Photo engine: 60+ algorithms, 200+ styles. All production-grade but were invisible due to isPrimary filter (now FIXED).",
-        "Sprint 12 DELIVERED: Sharp lanczos3 relabeled as 'Basic Resize' with Replicate config hint. Error messages now guide users to configure API keys.",
-        "Sprint 12 KEY FINDING: Enso's photo engine (H&D film curves, LAB color, luminosity masking, 200+ style recipes) is SUPERIOR to external neural style transfer APIs. Do not replace it.",
-        "Sprint 13 ASSIGNMENT: (1) Wire AI providers into media-ai-gateway registry (sharp as basic tier, Replicate as AI tier, remove.bg for background removal). (2) Add Gemini video understanding for content-aware scene analysis. (3) Design multi-tier upscaling UX (Quick/Enhanced/Maximum). (4) Add Replicate RMBG as budget background removal tier.",
+        "Sprint 13 DELIVERED: Streaming Response ADR (ADR-004) — SSE architecture with 3-phase feedback model. Addresses the #1 competitive gap (Streaming UX: 2/10 vs Cursor 9/10). Ready for Sprint 14 implementation (estimated 2-3 days).",
+        "Sprint 13 FINDING: Competitive positioning — Enso leads in orchestration (8/10), self-evolution (9/10, unique), research (9/10). Gaps: streaming (2/10), MCP ecosystem (0/10), persistent memory (2/10), media (3/10).",
+        "Sprint 13 CARRIED: media-ai-gateway provider registry still empty. Provider registration is async/silent — may be failing without indication. Stale 'sharp-basic provider' error string unfixed for 2 sprints.",
+        "Sprint 14 ASSIGNMENT: (1) Implement SSE streaming from ADR-004, (2) Design MCP client architecture (34,700+ TS SDK dependents, 75+ connectors — 0 integration today), (3) Verify media-ai-gateway provider registration with logging, (4) Evaluate Claude 4.6 Adaptive Thinking for orchestration overhead reduction (40-60% potential).",
+        "KEY FINDING (Sprint 12, still valid): Enso's photo engine (H&D film curves, LAB color, luminosity masking, 200+ style recipes) is SUPERIOR to external neural style transfer APIs. Do not replace it.",
         "Monthly AI cost for active photographer: ~$2.20/month (or $0.23 with budget providers). Negligible and sustainable.",
         "Model cascading (60-70% cost reduction) not yet adopted — route simple queries to cheaper models.",
-        "No persistent agent memory across sessions or sprints. Context propagation via STRUCTURED_SUMMARY JSON — working but limited."
+        "No persistent agent memory across sessions or sprints. Context propagation via STRUCTURED_SUMMARY JSON — working but limited. MCP could enable external memory providers."
       ]
     }
   ],
@@ -345,8 +349,17 @@
   "validationPersonaIds": [
     "creative-professional",
     "developer",
-    "indie-developer"
+    "product-studio"
   ],
+  "sprintNotes": {
+    "sprint14": {
+      "theme": "STREAMING + VALIDATION",
+      "mandatoryP0": ["Fix I1+I2 build errors", "Marco re-test (3rd sprint overdue)", "Implement SSE streaming from ADR-004"],
+      "p1": ["Projects tab enrichment", "MCP client architecture design"],
+      "p2": ["Media Suite app consolidation design", "Fix stale media-ai-gateway error string"],
+      "mechanismUpdates": ["tsc --noEmit mandatory implementation exit gate", "PL Phase 0 directives binding", "Post-fix persona re-test (Phase 5.5b)"]
+    }
+  },
   "createdAt": 1773909300324,
-  "updatedAt": 1774915200000
+  "updatedAt": 1774915200013
 }

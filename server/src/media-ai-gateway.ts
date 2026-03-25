@@ -58,7 +58,7 @@ export async function processMediaAI(task: MediaAITask): Promise<MediaAIResult> 
   }
   return {
     success: false,
-    error: `No AI provider available for "${task.operation}". Basic resize is available via sharp. For AI-enhanced processing, set REPLICATE_API_TOKEN (upscaling) or REMOVE_BG_API_KEY (background removal) in your server/.env file.`,
+    error: `No AI provider available for "${task.operation}". Basic resize is available via sharp. For AI-enhanced processing, configure a cloud AI provider in your server/.env file.`,
   };
 }
 
@@ -97,14 +97,14 @@ export const sharpBasicProvider: MediaAIProvider = {
             width: newWidth,
             height: newHeight,
             method: "Basic Resize (Lanczos3 interpolation)",
-            note: "This is mathematical interpolation, not AI enhancement. For AI-powered upscaling with detail recovery, configure REPLICATE_API_TOKEN in your environment.",
+            note: "This is mathematical interpolation, not AI enhancement. For AI-powered upscaling with detail recovery, configure a cloud AI provider in your environment.",
           },
         };
-      } catch (err: any) {
-        return { success: false, error: `Sharp upscale failed: ${err.message}` };
+      } catch (err: unknown) {
+        return { success: false, error: `Sharp upscale failed: ${err instanceof Error ? err.message : String(err)}` };
       }
     }
-    return { success: false, error: "Unsupported operation for sharp-basic provider" };
+    return { success: false, error: `Operation "${task.operation}" is not supported by the basic-resize provider. Supported operations: ${sharpBasicProvider.capabilities.join(", ")}. For AI-powered processing, configure a cloud AI provider.` };
   },
 };
 
@@ -194,9 +194,10 @@ export async function createContactSheet(params: {
       .toFile(outputPath);
 
     return { outputPath, photoCount: files.length, dimensions: { width, height } };
-  } catch (err: any) {
+  } catch (err: unknown) {
     // sharp not available — fallback to simple file listing
-    if (err.message?.includes("Cannot find module") || err.code === "MODULE_NOT_FOUND") {
+    const errObj = err instanceof Error ? err : null;
+    if (errObj?.message?.includes("Cannot find module") || (err as NodeJS.ErrnoException)?.code === "MODULE_NOT_FOUND") {
       throw new Error(
         `Contact sheet generation requires the 'sharp' image library. ` +
         `Found ${files.length} images in the folder. ` +
@@ -244,8 +245,8 @@ export function createMediaProcessingTools(): EnsoAgentTool[] {
           const p = params as ContactSheetParams;
           const result = await createContactSheet(p);
           return jsonResult(result);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(err instanceof Error ? err.message : String(err));
         }
       },
     } as EnsoAgentTool,
@@ -276,8 +277,8 @@ export function createMediaProcessingTools(): EnsoAgentTool[] {
           });
           if (!result.success) return errorResult(result.error || "Upscale failed");
           return jsonResult(result);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(err instanceof Error ? err.message : String(err));
         }
       },
     } as EnsoAgentTool,
@@ -307,8 +308,8 @@ export function createMediaProcessingTools(): EnsoAgentTool[] {
           });
           if (!result.success) return errorResult(result.error || "Background removal failed");
           return jsonResult(result);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(err instanceof Error ? err.message : String(err));
         }
       },
     } as EnsoAgentTool,

@@ -10,6 +10,10 @@
     color-scheme: dark;
   }
 
+  [data-theme="light"] {
+    color-scheme: light;
+  }
+
   body {
     @apply bg-gray-950 text-gray-100 antialiased;
     background-image:
@@ -19,10 +23,86 @@
     min-height: 100dvh;
   }
 
+  [data-theme="light"] body {
+    @apply bg-gray-50 text-gray-900;
+    background-image:
+      radial-gradient(circle at 20% -10%, rgba(99, 102, 241, 0.06), transparent 38%),
+      radial-gradient(circle at 80% 0%, rgba(56, 189, 248, 0.04), transparent 32%),
+      radial-gradient(circle at 50% 120%, rgba(139, 92, 246, 0.03), transparent 30%);
+  }
+
   /* Remove default mobile tap highlight — we provide our own */
   * {
     -webkit-tap-highlight-color: transparent;
   }
+}
+
+/* ── Light theme overrides ───────────────────────────────────────────────── */
+/* Remap dark Tailwind grays to light equivalents via specificity override   */
+[data-theme="light"] {
+  /* Background swaps: dark → light */
+  .bg-gray-950 { background-color: #f9fafb !important; } /* gray-50 */
+  .bg-gray-900 { background-color: #ffffff !important; }
+  .bg-gray-900\/60, .bg-gray-900\/40 { background-color: rgba(255, 255, 255, 0.85) !important; }
+  .bg-gray-800 { background-color: #f3f4f6 !important; } /* gray-100 */
+  .bg-gray-800\/60, .bg-gray-800\/50, .bg-gray-800\/40, .bg-gray-800\/80 { background-color: rgba(243, 244, 246, 0.8) !important; }
+  .bg-gray-700 { background-color: #e5e7eb !important; } /* gray-200 */
+  .bg-gray-700\/60 { background-color: rgba(229, 231, 235, 0.6) !important; }
+  .bg-gray-950\/90 { background-color: rgba(249, 250, 251, 0.95) !important; }
+
+  /* Text swaps: light text → dark text */
+  .text-gray-100 { color: #111827 !important; } /* gray-900 */
+  .text-gray-200 { color: #1f2937 !important; } /* gray-800 */
+  .text-gray-300 { color: #374151 !important; } /* gray-700 */
+  .text-gray-400 { color: #6b7280 !important; } /* gray-500 */
+  .text-gray-500 { color: #9ca3af !important; } /* gray-400 */
+  .text-gray-600 { color: #d1d5db !important; } /* gray-300 */
+  .text-white { color: #ffffff !important; }
+
+  /* Border swaps */
+  .border-gray-800, .border-gray-800\/80, .border-gray-800\/60, .border-gray-800\/50 {
+    border-color: rgba(229, 231, 235, 0.8) !important; /* gray-200 */
+  }
+  .border-gray-700, .border-gray-700\/80, .border-gray-700\/60, .border-gray-700\/50 {
+    border-color: rgba(209, 213, 219, 0.6) !important; /* gray-300 */
+  }
+  .border-gray-600 { border-color: #d1d5db !important; }
+
+  /* Input/form overrides */
+  input, textarea, select {
+    background-color: #ffffff !important;
+    border-color: #d1d5db !important;
+    color: #111827 !important;
+  }
+  input::placeholder, textarea::placeholder {
+    color: #9ca3af !important;
+  }
+
+  /* Placeholder text */
+  .placeholder\:text-gray-600::placeholder { color: #9ca3af !important; }
+
+  /* Backdrop */
+  .bg-black\/60 { background-color: rgba(0, 0, 0, 0.3) !important; }
+
+  /* Hover states */
+  .hover\:bg-gray-800:hover { background-color: #e5e7eb !important; }
+  .hover\:bg-gray-800\/60:hover { background-color: rgba(229, 231, 235, 0.6) !important; }
+  .hover\:bg-gray-700\/60:hover { background-color: rgba(209, 213, 219, 0.6) !important; }
+  .hover\:bg-gray-600:hover { background-color: #d1d5db !important; }
+  .hover\:text-gray-200:hover { color: #1f2937 !important; }
+  .hover\:text-gray-400:hover { color: #6b7280 !important; }
+
+  /* Active states */
+  .active\:bg-gray-800:active { background-color: #e5e7eb !important; }
+
+  /* Scrollbar for light theme */
+  * {
+    scrollbar-color: #d1d5db #f3f4f6;
+  }
+
+  /* Shadow adjustments — lighter shadows */
+  .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1) !important; }
+  .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05) !important; }
 }
 
 @keyframes shimmer {

@@ -106,8 +106,8 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
               setDashError(result.error);
               setDashboardComp(null);
             }
-          } catch (err: any) {
-            setDashError(err.message || "Failed to compile dashboard");
+          } catch (err: unknown) {
+            setDashError(err instanceof Error ? err.message : "Failed to compile dashboard");
             setDashboardComp(null);
           }
         }
