@@ -91,6 +91,16 @@ export function createWSClient(options: WSClientOptions): WSClient {
 
   wsDebug("init", `clientId=${clientId} native=${isNative} url=${options.url}`);
 
+  const msgBuffer: ServerMessage[] = [];
+  let rafScheduled = false;
+  function flushMsgBuffer() {
+    rafScheduled = false;
+    const batch = msgBuffer.splice(0);
+    for (const msg of batch) {
+      options.onMessage(msg);
+    }
+  }
+
   function connect() {
     intentionalClose = false;
     // Skip if already connected or connecting
@@ -134,7 +144,11 @@ export function createWSClient(options: WSClientOptions): WSClient {
     ws.onmessage = (event) => {
       try {
         const msg: ServerMessage = JSON.parse(event.data);
-        options.onMessage(msg);
+        msgBuffer.push(msg);
+        if (!rafScheduled) {
+          rafScheduled = true;
+          requestAnimationFrame(flushMsgBuffer);
+        }
       } catch {
         console.error("[WS] Failed to parse message");
         reportError("Failed to parse WebSocket message", "ws");

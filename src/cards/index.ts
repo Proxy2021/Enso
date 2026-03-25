@@ -1,16 +1,18 @@
+import { lazy } from "react";
 import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 import { cardRegistry } from "./registry";
 import ChatCard from "./ChatCard";
 import UserBubbleCard from "./UserBubbleCard";
-import TerminalCard from "./TerminalCard";
-import ShellCard from "./ShellCard";
-import DynamicUICard from "./DynamicUICard";
-import OrchestrationCard from "./OrchestrationCard";
-import EvolutionHistoryCard from "./EvolutionHistoryCard";
-import DiscoveryHistoryCard from "./DiscoveryHistoryCard";
-import ProjectsCard from "./ProjectsCard";
-import SessionDashboardCard from "./SessionDashboardCard";
 import { ThinkingCard } from "../components/ThinkingCard";
+
+const TerminalCard = lazy(() => import("./TerminalCard"));
+const ShellCard = lazy(() => import("./ShellCard"));
+const DynamicUICard = lazy(() => import("./DynamicUICard"));
+const OrchestrationCard = lazy(() => import("./OrchestrationCard"));
+const EvolutionHistoryCard = lazy(() => import("./EvolutionHistoryCard"));
+const DiscoveryHistoryCard = lazy(() => import("./DiscoveryHistoryCard"));
+const ProjectsCard = lazy(() => import("./ProjectsCard"));
+const SessionDashboardCard = lazy(() => import("./SessionDashboardCard"));
 
 // Register built-in card types (order matters — first match wins in resolve)
 

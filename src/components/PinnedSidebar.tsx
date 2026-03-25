@@ -20,7 +20,12 @@ export default function PinnedSidebar() {
   if (!showSidebar || pinnedCards.length === 0) return null;
 
   function handleScrollTo(cardId: string) {
-    document.getElementById(`card-${cardId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const globalScroll = (window as unknown as Record<string, unknown>).__ensoScrollToCard as ((id: string) => void) | undefined;
+    if (globalScroll) {
+      globalScroll(cardId);
+    } else {
+      document.getElementById(`card-${cardId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
 
   return (

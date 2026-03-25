@@ -98,7 +98,7 @@ export default function ConversationSidebar() {
         {conversationsList.map((c) => (
           <div
             key={c.id}
-            className={`group relative rounded-lg border transition-colors ${
+            className={`group relative rounded-lg border transition-colors contain-row ${
               c.id === activeConversationId
                 ? "border-indigo-500/50 bg-indigo-500/10"
                 : "border-transparent hover:bg-gray-800/60 active:bg-gray-800/80"

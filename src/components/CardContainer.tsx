@@ -1,8 +1,7 @@
-import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 import { cardRegistry } from "../cards";
 import type { Card } from "../cards/types";
-import { useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import React, { Suspense, useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useElapsedTime, formatElapsed, estimateDuration } from "../lib/useElapsedTime";
 import { isOrchestrationCardData } from "@shared/types";
 import type { AgentStep, ToolBuildSummary } from "@shared/types";
@@ -162,6 +161,16 @@ function getCardLabel(card: Card, effectiveType: string): string {
   }
   if (effectiveType === "chat") return "Enso";
   return effectiveType.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function CardSkeleton() {
+  return (
+    <div className="rounded-xl bg-gray-900/60 border border-gray-700/40 p-4 animate-pulse">
+      <div className="h-3 bg-gray-700/50 rounded-full w-2/3 mb-3" />
+      <div className="h-3 bg-gray-700/50 rounded-full w-1/2 mb-2" />
+      <div className="h-3 bg-gray-700/50 rounded-full w-3/4" />
+    </div>
+  );
 }
 
 interface CardContainerProps {
@@ -1301,21 +1310,8 @@ function CardContextMenu({ x, y, onRemove, onClose, cardText }: { x: number; y: 
   );
 }
 
-function CapabilityDiscoveryBar({ card }: { card: Card }) {
-  const { cards, cardOrder } = useChatStore(
-    useShallow((s) => ({ cards: s.cards, cardOrder: s.cardOrder }))
-  );
+function CapabilityDiscoveryBar({ card, userQuery }: { card: Card; userQuery: string | null }) {
   const sendMessage = useChatStore((s) => s.sendMessage);
-
-  const userQuery = useMemo(() => {
-    const thisIdx = cardOrder.indexOf(card.id);
-    if (thisIdx < 0) return null;
-    for (let i = thisIdx - 1; i >= 0; i--) {
-      const c = cards[cardOrder[i]];
-      if (c?.role === "user" && c.text) return c.text.trim();
-    }
-    return null;
-  }, [card.id, cardOrder, cards]);
 
   if (!userQuery) return null;
   const isSlashCommand = userQuery.startsWith("/");
@@ -1350,7 +1346,7 @@ function CapabilityDiscoveryBar({ card }: { card: Card }) {
   );
 }
 
-export default function CardContainer({ card, isActive }: CardContainerProps) {
+function CardContainerInner({ card, isActive }: CardContainerProps) {
   const collapseCard = useChatStore((s) => s.collapseCard);
   const expandCard = useChatStore((s) => s.expandCard);
   const removeCard = useChatStore((s) => s.removeCard);
@@ -1361,6 +1357,16 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const buildApp = useChatStore((s) => s.buildApp);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const completeAutoAppReveal = useChatStore((s) => s.completeAutoAppReveal);
+
+  const precedingUserQuery = useChatStore(useCallback((s) => {
+    const idx = s.cardOrder.indexOf(card.id);
+    if (idx < 0) return null;
+    for (let i = idx - 1; i >= 0; i--) {
+      const c = s.cards[s.cardOrder[i]];
+      if (c?.role === "user" && c.text) return c.text.trim();
+    }
+    return null;
+  }, [card.id]));
 
   const [showEvolveMenu, setShowEvolveMenu] = useState(false);
   const evolveMenuRef = useRef<HTMLDivElement>(null);
@@ -1499,7 +1505,11 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
   const icon = TYPE_ICONS[effectiveType] ?? "\uD83D\uDCCB";
 
   if (card.type === "thinking") {
-    return <Renderer card={card} isActive={isActive} onAction={handleAction} />;
+    return (
+      <Suspense fallback={<CardSkeleton />}>
+        <Renderer card={card} isActive={isActive} onAction={handleAction} />
+      </Suspense>
+    );
   }
 
   if (card.type === "user-bubble") {
@@ -1706,6 +1716,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
           <span className="truncate text-gray-400">{truncate(card.text, 60)}</span>
         </button>
       ) : (
+        <Suspense fallback={<CardSkeleton />}>
         <div data-card-id={card.id} className={`relative rounded-2xl border border-gray-700/70 bg-gray-900/40 backdrop-blur-sm shadow-[0_10px_26px_rgba(0,0,0,0.28)] ${isActive ? "ring-1 ring-indigo-400/35" : ""}`}>
           <div className="flex items-center justify-between px-2 sm:px-3 py-1.5 border-b border-gray-700/60">
             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
@@ -1985,7 +1996,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             <AgentSteps steps={card.steps} />
           )}
           {card.role === "assistant" && card.status === "complete" && card.type === "chat" && !card.generatedUI && !isAppView && !isLoading && (
-            <CapabilityDiscoveryBar card={card} />
+            <CapabilityDiscoveryBar card={card} userQuery={precedingUserQuery} />
           )}
           {isAppView && !isLoading && (
             <RefineFooter
@@ -2046,6 +2057,7 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
             </div>
           )}
         </div>
+      </Suspense>
       )}
 
           {/* ── Build New App instruction overlay ── */}
@@ -2119,3 +2131,8 @@ export default function CardContainer({ card, isActive }: CardContainerProps) {
     </div>
   );
 }
+
+const CardContainer = React.memo(CardContainerInner, (prev, next) =>
+  prev.card === next.card && prev.isActive === next.isActive
+);
+export default CardContainer;

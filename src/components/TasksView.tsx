@@ -192,8 +192,13 @@ export default function TasksView() {
     setActiveTab("chat");
     setChatViewOpen(true);
     setTimeout(() => {
-      const el = document.getElementById(`card-${cardId}`);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const globalScroll = (window as unknown as Record<string, unknown>).__ensoScrollToCard as ((id: string) => void) | undefined;
+      if (globalScroll) {
+        globalScroll(cardId);
+      } else {
+        const el = document.getElementById(`card-${cardId}`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
     }, 150);
   }, [setActiveTab, setChatViewOpen]);
 

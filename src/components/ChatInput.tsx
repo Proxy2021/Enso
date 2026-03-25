@@ -260,6 +260,85 @@ export default function ChatInput() {
 
   const CANCEL_THRESHOLD_PX = 100;
 
+  // Long-press detection for Doubao-style unified input (mobile only)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [textareaPttFlash, setTextareaPttFlash] = useState(false);
+
+  const handleTextareaTouchStart = useCallback((e: React.TouchEvent) => {
+    if (disabled || !speechSupported) return;
+    const touch = e.touches[0];
+    longPressTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    pttStartYRef.current = touch.clientY;
+
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
+      textareaRef.current?.blur();
+      pttAccumulatedRef.current = "";
+      pttActiveRef.current = true;
+      pttCancelRef.current = false;
+      setPttActive(true);
+      setPttCancelZone(false);
+      setPttStartTime(Date.now());
+      setTextareaPttFlash(true);
+      haptic(30);
+      voice.startListening();
+      setTimeout(() => setTextareaPttFlash(false), 400);
+    }, 300);
+  }, [disabled, speechSupported, voice]);
+
+  const handleTextareaTouchMove = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    const start = longPressTouchStartRef.current;
+    if (start && longPressTimerRef.current) {
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+    if (pttActiveRef.current) {
+      const dy = pttStartYRef.current - touch.clientY;
+      const inCancel = dy > CANCEL_THRESHOLD_PX;
+      if (inCancel !== pttCancelRef.current) {
+        pttCancelRef.current = inCancel;
+        setPttCancelZone(inCancel);
+        haptic(10);
+      }
+    }
+  }, []);
+
+  const handleTextareaTouchEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (!pttActiveRef.current) return;
+    pttActiveRef.current = false;
+    const wasCancelled = pttCancelRef.current;
+    setPttActive(false);
+    setPttCancelZone(false);
+    if (wasCancelled) {
+      voice.cancelListening();
+      haptic([30, 50, 30]);
+    } else {
+      voice.cancelListening();
+      haptic(15);
+      const finalText = (pttAccumulatedRef.current + (voice.interimTranscript ? (pttAccumulatedRef.current ? " " : "") + voice.interimTranscript : "")).trim();
+      if (finalText) {
+        sendMessage(finalText);
+      }
+    }
+    pttAccumulatedRef.current = "";
+  }, [voice, sendMessage]);
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    };
+  }, []);
+
   // Close attach menu on click/touch outside
   useEffect(() => {
     if (!attachMenuOpen) return;
@@ -515,7 +594,7 @@ export default function ChatInput() {
 
   return (
     <div
-      className="border-t border-gray-800 p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      className="border-t border-gray-800 p-2 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       style={keyboardOffset > 0 ? { paddingBottom: `max(${keyboardOffset}px, env(safe-area-inset-bottom))` } : undefined}
     >
       <div className="max-w-3xl mx-auto relative">
@@ -677,34 +756,34 @@ export default function ChatInput() {
 
         {/* Mobile quick action chips — horizontal scrolling row like Doubao */}
         {!activeShellSessionId && !showMenu && (
-          <div className="sm:hidden flex gap-2 mb-2.5 overflow-x-auto scrollbar-hide pb-0.5">
+          <div className="sm:hidden flex gap-1.5 mb-2 overflow-x-auto scrollbar-hide pb-0.5">
             <button
               onClick={() => { setText("/research "); textareaRef.current?.focus(); }}
               disabled={disabled}
-              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+              className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-700/50 bg-gray-900/40 text-[11px] text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
             >
-              <span className="text-sm">&#x1f50d;</span> {t("mobile.quickAction.research")}
+              <span className="text-xs">&#x1f50d;</span> {t("mobile.quickAction.research")}
             </button>
             <button
               onClick={() => { setText("/code "); textareaRef.current?.focus(); }}
               disabled={disabled}
-              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+              className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-700/50 bg-gray-900/40 text-[11px] text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
             >
-              <span className="text-sm">&#x1f4bb;</span> {t("mobile.quickAction.code")}
+              <span className="text-xs">&#x1f4bb;</span> {t("mobile.quickAction.code")}
             </button>
             <button
               onClick={() => imageResearchRef.current?.click()}
               disabled={disabled}
-              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+              className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-700/50 bg-gray-900/40 text-[11px] text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
             >
-              <span className="text-sm">&#x1f4f7;</span> {t("attach.camera")}
+              <span className="text-xs">&#x1f4f7;</span> {t("attach.camera")}
             </button>
             <button
               onClick={() => sendMessage("/orchestrate")}
               disabled={disabled}
-              className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-700/50 bg-gray-900/40 text-xs text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
+              className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-700/50 bg-gray-900/40 text-[11px] text-gray-300 active:bg-gray-800 active:scale-[0.96] transition-all disabled:opacity-40"
             >
-              <span className="text-sm">&#x26a1;</span> {t("mobile.quickAction.orchestrate")}
+              <span className="text-xs">&#x26a1;</span> {t("mobile.quickAction.orchestrate")}
             </button>
           </div>
         )}
@@ -789,7 +868,7 @@ export default function ChatInput() {
           />
         )}
 
-        <div className="flex items-end gap-1.5 sm:gap-2">
+        <div className="flex items-end gap-1 sm:gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -902,29 +981,32 @@ export default function ChatInput() {
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Disconnected..." : activeShellSessionId ? "Shell command..." : "Message..."}
+            onTouchStart={handleTextareaTouchStart}
+            onTouchMove={handleTextareaTouchMove}
+            onTouchEnd={handleTextareaTouchEnd}
+            placeholder={disabled ? "Disconnected..." : activeShellSessionId ? "Shell command..." : (speechSupported ? "Message or hold to talk..." : "Message...")}
             disabled={disabled}
             rows={1}
-            className={`flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none placeholder-gray-500 disabled:opacity-50 overflow-y-auto ${
-              activeShellSessionId
-                ? "ring-2 ring-amber-500/60 focus:ring-amber-500"
-                : "focus:ring-2 focus:ring-indigo-500"
+            className={`flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none placeholder-gray-500 disabled:opacity-50 overflow-y-auto transition-all duration-200 ${
+              textareaPttFlash
+                ? "scale-[0.98] ring-2 ring-violet-500/80"
+                : activeShellSessionId
+                  ? "ring-2 ring-amber-500/60 focus:ring-amber-500"
+                  : "focus:ring-2 focus:ring-indigo-500"
             }`}
             style={{ maxHeight: "200px" }}
           />
-          {/* Mobile: contextual mic/send toggle */}
           {(() => {
-            const hasContent = text.trim().length > 0 || attachedFiles.length > 0 || !!activeShellSessionId;
+            const sendIcon = (
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" />
+              </svg>
+            );
             const micIcon = (
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                 <line x1="12" x2="12" y1="19" y2="22" />
-              </svg>
-            );
-            const sendIcon = (
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" />
               </svg>
             );
             const pttHandlers = {
@@ -957,7 +1039,6 @@ export default function ChatInput() {
                 const wasCancelled = pttCancelRef.current;
                 setPttActive(false);
                 setPttCancelZone(false);
-
                 if (wasCancelled) {
                   voice.cancelListening();
                   haptic([30, 50, 30]);
@@ -983,38 +1064,18 @@ export default function ChatInput() {
 
             return (
               <>
-                {/* Mobile toggle: mic when empty, send when has content */}
+                {/* Mobile: send-only button (PTT is via textarea long-press) */}
                 <div className="sm:hidden">
-                  {hasContent ? (
-                    <button
-                      onClick={handleSend}
-                      disabled={disabled}
-                      className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
-                    >
-                      {sendIcon}
-                    </button>
-                  ) : speechSupported ? (
-                    <button
-                      disabled={disabled}
-                      className="relative px-3 py-2.5 rounded-xl text-sm transition-all duration-150 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 disabled:opacity-50 select-none touch-none"
-                      title="Hold to talk"
-                      aria-label="Hold to talk"
-                      {...pttHandlers}
-                    >
-                      {micIcon}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleSend}
-                      disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
-                      className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
-                    >
-                      {sendIcon}
-                    </button>
-                  )}
+                  <button
+                    onClick={handleSend}
+                    disabled={disabled || (!text.trim() && attachedFiles.length === 0 && !activeShellSessionId)}
+                    className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 active:scale-[0.95] disabled:opacity-50 text-white px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150"
+                  >
+                    {sendIcon}
+                  </button>
                 </div>
 
-                {/* Desktop: show both mic and send side by side (unchanged) */}
+                {/* Desktop: mic + send side by side */}
                 <div className="hidden sm:flex items-center gap-2">
                   {speechSupported && (
                     <button

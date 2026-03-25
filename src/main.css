@@ -207,6 +207,17 @@
   contain: none;
 }
 
+/* GPU-accelerated scroll containers */
+.gpu-scroll {
+  transform: translateZ(0);
+  will-change: scroll-position;
+}
+
+/* Paint isolation for list rows */
+.contain-row {
+  contain: content;
+}
+
 /* Prevent rubber-band overscroll on mobile while keeping internal scroll */
 @supports (overscroll-behavior: contain) {
   body {
@@ -246,6 +257,7 @@
 
 .mobile-view-enter {
   animation: mobileViewFadeIn 0.2s ease-out both;
+  will-change: transform, opacity;
 }
 
 /* Mobile chat slide-in from right */
@@ -256,6 +268,7 @@
 
 .mobile-chat-enter {
   animation: mobileChatSlideIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {

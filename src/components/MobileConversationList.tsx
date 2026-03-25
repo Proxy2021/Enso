@@ -149,7 +149,7 @@ export default function MobileConversationList() {
           const showActions = currentOffset >= 60;
 
           return (
-            <div key={c.id} className="relative overflow-hidden rounded-2xl mb-1">
+            <div key={c.id} className="relative overflow-hidden rounded-2xl mb-1 contain-row">
               {/* Swipe-reveal action buttons */}
               {isSwiping && (
                 <div className="absolute right-0 top-0 bottom-0 flex items-stretch">

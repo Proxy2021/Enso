@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface VoiceOverlayProps {
   transcript: string;
@@ -6,6 +6,7 @@ interface VoiceOverlayProps {
   isFallbackRecorder: boolean;
   isTranscribing: boolean;
   startTime: number;
+  audioLevels?: number[];
 }
 
 export function VoiceOverlay({
@@ -14,6 +15,7 @@ export function VoiceOverlay({
   isFallbackRecorder,
   isTranscribing,
   startTime,
+  audioLevels,
 }: VoiceOverlayProps) {
   const displayText = isFallbackRecorder
     ? (isTranscribing ? "Transcribing..." : "Recording...")
@@ -21,8 +23,14 @@ export function VoiceOverlay({
 
   const hasRealText = !isFallbackRecorder && !!transcript;
 
-  // Recording timer
   const [elapsed, setElapsed] = useState(0);
+  const [entered, setEntered] = useState(false);
+  const prevCancelRef = useRef(isInCancelZone);
+
+  useEffect(() => {
+    requestAnimationFrame(() => setEntered(true));
+  }, []);
+
   useEffect(() => {
     if (!startTime) return;
     setElapsed(0);
@@ -32,16 +40,38 @@ export function VoiceOverlay({
     return () => clearInterval(interval);
   }, [startTime]);
 
+  useEffect(() => {
+    if (isInCancelZone !== prevCancelRef.current) {
+      prevCancelRef.current = isInCancelZone;
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate(10);
+      }
+    }
+  }, [isInCancelZone]);
+
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
   const timerText = `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
+  const barCount = 7;
+  const defaultLevels = Array.from({ length: barCount }, () => 0.3);
+  const levels = audioLevels && audioLevels.length >= barCount
+    ? audioLevels.slice(0, barCount)
+    : defaultLevels;
+
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col transition-colors duration-200 ${
-        isInCancelZone ? "bg-black/90" : "bg-black/80"
+      className={`fixed inset-0 z-[100] flex flex-col transition-all duration-300 ${
+        entered ? "opacity-100" : "opacity-0 translate-y-4"
       }`}
-      style={{ touchAction: "none" }}
+      style={{
+        touchAction: "none",
+        background: isInCancelZone
+          ? "rgba(0,0,0,0.92)"
+          : "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+      }}
     >
       {/* Cancel zone indicator (top) */}
       <div
@@ -79,28 +109,37 @@ export function VoiceOverlay({
         </p>
       </div>
 
-      {/* Recording indicator (bottom) — waveform + timer */}
-      <div className={`flex flex-col items-center gap-3 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 transition-all duration-200 ${
+      {/* Recording indicator (bottom) — horizontal timer + waveform */}
+      <div className={`flex flex-col items-center gap-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 transition-all duration-200 ${
         isInCancelZone ? "opacity-30" : "opacity-100"
       }`}>
-        {/* Waveform bars */}
-        <div className="flex items-center justify-center gap-1 h-16">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="w-1 bg-red-400 rounded-full"
-              style={{
-                animation: `waveform ${0.7 + i * 0.08}s ease-in-out ${i * 0.1}s infinite alternate`,
-                height: "24px",
-              }}
-            />
-          ))}
+        <div className="flex items-center gap-4">
+          <span className="text-base font-mono text-red-400/80 tabular-nums w-12 text-right">
+            {timerText}
+          </span>
+          <div className="flex items-center justify-center gap-[3px] h-10">
+            {levels.map((level, i) => {
+              const h = audioLevels
+                ? Math.max(6, Math.min(36, level * 36))
+                : undefined;
+              return (
+                <div
+                  key={i}
+                  className="w-[3px] bg-red-400 rounded-full transition-[height] duration-75"
+                  style={
+                    h != null
+                      ? { height: `${h}px` }
+                      : {
+                          animation: `waveform ${0.7 + i * 0.08}s ease-in-out ${i * 0.1}s infinite alternate`,
+                          height: "16px",
+                        }
+                  }
+                />
+              );
+            })}
+          </div>
         </div>
-        {/* Timer */}
-        <span className="text-base font-mono text-red-400/80 tabular-nums">
-          {timerText}
-        </span>
-        <span className="text-sm text-gray-400">
+        <span className="text-base font-medium text-gray-300">
           {isInCancelZone ? "" : "Release to send"}
         </span>
       </div>

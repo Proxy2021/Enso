@@ -1,5 +1,6 @@
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useEffect, useRef, useMemo, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useChatStore } from "../store/chat";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
@@ -129,6 +130,12 @@ function SearchBar() {
   );
 }
 
+const CardItem = React.memo(function CardItem({ cardId, isActive }: { cardId: string; isActive: boolean }) {
+  const card = useChatStore((s) => s.cards[cardId]);
+  if (!card) return null;
+  return <CardContainer card={card} isActive={isActive} />;
+});
+
 export default function CardTimeline() {
   const { cardOrder, cards, isWaiting, searchQuery } = useChatStore(
     useShallow((s) => ({
@@ -138,50 +145,24 @@ export default function CardTimeline() {
       searchQuery: s.cardSearchQuery,
     }))
   );
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const lastCardId = cardOrder[cardOrder.length - 1];
-
-  // Scroll to bottom only when new cards are added or waiting state changes.
-  // Avoid scrolling on every delta (which changes `cards` ref constantly).
   const cardCount = cardOrder.length;
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [cardCount, isWaiting]);
 
-  // For streaming content: keep scrolled to bottom if already near bottom.
-  // Use a separate effect that watches the last card's status.
-  const lastCard = lastCardId ? cards[lastCardId] : undefined;
-  const isStreaming = lastCard?.status === "streaming";
-  useEffect(() => {
-    if (!isStreaming || !containerRef.current) return;
-
-    let rafId: number;
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-        if (isNearBottom) {
-          bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-        }
-      });
-    };
-
-    // Initial scroll check
-    onScroll();
-
-    // Use MutationObserver to watch for content changes during streaming
-    const observer = new MutationObserver(onScroll);
-    observer.observe(containerRef.current, { childList: true, subtree: true, characterData: true });
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, [isStreaming]);
+  const lastCardStatus = useChatStore(useCallback(
+    (s) => {
+      const id = s.cardOrder[s.cardOrder.length - 1];
+      return id ? s.cards[id]?.status : undefined;
+    }, []
+  ));
+  const lastCardUpdatedAt = useChatStore(useCallback(
+    (s) => {
+      const id = s.cardOrder[s.cardOrder.length - 1];
+      return id ? s.cards[id]?.updatedAt : undefined;
+    }, []
+  ));
+  const isStreaming = lastCardStatus === "streaming";
 
   // Build render items: detect orchestration+terminal pairs for side-by-side layout
   const renderItems: Array<
@@ -237,6 +218,64 @@ export default function CardTimeline() {
   }, [renderItems, searchQuery, cards]);
 
   const matchCount = searchQuery.trim() ? filteredItems.length : 0;
+  const showTyping = isWaiting && !hasOnlyBackgroundTasks(cards, cardOrder);
+  const totalCount = filteredItems.length + (showTyping ? 1 : 0);
+
+  const rowVirtualizer = useVirtualizer({
+    count: totalCount,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 200,
+    overscan: 3,
+  });
+
+  // Auto-scroll to bottom when new cards arrive or during streaming
+  useEffect(() => {
+    if (totalCount > 0) {
+      rowVirtualizer.scrollToIndex(totalCount - 1, { align: "end" });
+    }
+  }, [cardCount, isWaiting]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isStreaming || !containerRef.current) return;
+    const el = containerRef.current;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    if (isNearBottom && totalCount > 0) {
+      rowVirtualizer.scrollToIndex(totalCount - 1, { align: "end" });
+    }
+  }, [isStreaming, lastCardUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Expose a scroll-to-card helper via a stable element id → index map
+  const cardIdToIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredItems.forEach((item, idx) => {
+      if (item.type === "orch-pair") {
+        map.set(item.orchId, idx);
+        map.set(item.termId, idx);
+      } else {
+        map.set(item.id, idx);
+      }
+    });
+    return map;
+  }, [filteredItems]);
+
+  // Patch global scrollToCard: BackgroundTaskBar uses getElementById,
+  // but virtualized rows may not be in DOM. Override with scrollToIndex.
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>;
+    const orig = w.__ensoScrollToCard as ((id: string) => void) | undefined;
+    w.__ensoScrollToCard = (cardId: string) => {
+      const idx = cardIdToIndex.get(cardId);
+      if (idx != null) {
+        rowVirtualizer.scrollToIndex(idx, { align: "center", behavior: "smooth" });
+      } else {
+        const el = document.getElementById(`card-${cardId}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    };
+    return () => {
+      w.__ensoScrollToCard = orig;
+    };
+  }, [cardIdToIndex, rowVirtualizer]);
 
   if (cardOrder.length === 0) {
     return (
@@ -247,7 +286,7 @@ export default function CardTimeline() {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto">
+    <div ref={containerRef} className="flex-1 overflow-y-auto gpu-scroll">
       <SearchBar />
       {searchQuery.trim() && (
         <div className="px-4 pb-1">
@@ -257,37 +296,82 @@ export default function CardTimeline() {
         </div>
       )}
       <div className="px-2 sm:px-4 py-3 sm:py-5">
-      <div className="max-w-5xl mx-auto">
-        {filteredItems.map((item, idx) => {
-          const isLastItem = idx === filteredItems.length - 1;
-          const containClass = isLastItem && isStreaming ? "card-contain-streaming" : "card-contain";
+        <div
+          className="max-w-5xl mx-auto relative"
+          style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const idx = virtualRow.index;
 
-          if (item.type === "orch-pair") {
-            const orchCard = cards[item.orchId];
-            const termCard = cards[item.termId];
-            if (!orchCard || !termCard) return null;
+            if (idx >= filteredItems.length) {
+              return (
+                <div
+                  key="typing"
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <TypingIndicator />
+                </div>
+              );
+            }
+
+            const item = filteredItems[idx];
+            const isLastItem = idx === filteredItems.length - 1;
+            const containClass = isLastItem && isStreaming ? "" : "card-contain";
+
+            if (item.type === "orch-pair") {
+              return (
+                <div
+                  key={item.orchId}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  className={`${containClass} flex flex-col sm:flex-row gap-3 sm:items-stretch`}
+                  id={`card-${item.orchId}`}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div className="sm:w-[220px] sm:flex-shrink-0">
+                    <CardItem cardId={item.orchId} isActive={item.orchId === lastCardId} />
+                  </div>
+                  <div className="flex-1 min-w-0" id={`card-${item.termId}`}>
+                    <CardItem cardId={item.termId} isActive={item.termId === lastCardId} />
+                  </div>
+                </div>
+              );
+            }
+
             return (
-              <div key={item.orchId} className={`${containClass} flex flex-col sm:flex-row gap-3 sm:items-stretch`} id={`card-${item.orchId}`}>
-                <div className="sm:w-[220px] sm:flex-shrink-0">
-                  <CardContainer card={orchCard} isActive={item.orchId === lastCardId} />
-                </div>
-                <div className="flex-1 min-w-0" id={`card-${item.termId}`}>
-                  <CardContainer card={termCard} isActive={item.termId === lastCardId} />
-                </div>
+              <div
+                key={item.id}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                className={containClass}
+                id={`card-${item.id}`}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <CardItem cardId={item.id} isActive={item.id === lastCardId} />
               </div>
             );
-          }
-          const card = cards[item.id];
-          if (!card) return null;
-          return (
-            <div key={item.id} className={containClass} id={`card-${item.id}`}>
-              <CardContainer card={card} isActive={item.id === lastCardId} />
-            </div>
-          );
-        })}
-        {isWaiting && !hasOnlyBackgroundTasks(cards, cardOrder) && <TypingIndicator />}
-        <div ref={bottomRef} />
-      </div>
+          })}
+        </div>
       </div>
     </div>
   );

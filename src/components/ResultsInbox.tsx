@@ -137,8 +137,13 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 function scrollToCard(cardId: string) {
-  const el = document.getElementById(`card-${cardId}`);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  const globalScroll = (window as unknown as Record<string, unknown>).__ensoScrollToCard as ((id: string) => void) | undefined;
+  if (globalScroll) {
+    globalScroll(cardId);
+  } else {
+    const el = document.getElementById(`card-${cardId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 // ── Main exports ──
