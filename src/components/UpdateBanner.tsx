@@ -80,7 +80,7 @@ export default function UpdateBanner() {
       : 0;
 
   return (
-    <div className="mx-4 mt-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3">
+    <div className="mx-4 mt-[max(0.5rem,env(safe-area-inset-top))] rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3">
       {state === "available" && (
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
