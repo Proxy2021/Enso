@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useChatStore } from "../store/chat";
-import { useT } from "../lib/i18n";
+import { useT, SUPPORTED_LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
 import { getActiveBackend } from "../lib/connection";
 import { useMemoryApi } from "../hooks/useMemoryApi";
 import { MemorySection } from "./SettingsPanel";
@@ -92,6 +92,9 @@ export default function SettingsView() {
             </button>
           </div>
 
+          {/* Language */}
+          <LanguagePicker />
+
           {/* Connection */}
           <button
             onClick={() => setShowPicker(true)}
@@ -136,6 +139,41 @@ export default function SettingsView() {
           </div>
         </div>
       </div>
+      </div>
+    </div>
+  );
+}
+
+function LanguagePicker() {
+  const language = useChatStore((s) => s.language);
+  const setLanguage = useChatStore((s) => s.setLanguage);
+  const { t } = useT();
+
+  return (
+    <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50">
+      <div className="w-9 h-9 rounded-xl bg-gray-800/60 flex items-center justify-center shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400">
+          <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-200">{t("settings.language")}</p>
+        <p className="text-xs text-gray-500">{LOCALE_LABELS[language]}</p>
+      </div>
+      <div className="flex gap-1.5">
+        {SUPPORTED_LOCALES.map((loc: Locale) => (
+          <button
+            key={loc}
+            onClick={() => setLanguage(loc)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
+              language === loc
+                ? "bg-indigo-500/20 border border-indigo-500/50 text-indigo-300"
+                : "bg-gray-800/60 border border-gray-700 text-gray-400 hover:bg-gray-700/60"
+            }`}
+          >
+            {LOCALE_LABELS[loc]}
+          </button>
+        ))}
       </div>
     </div>
   );
