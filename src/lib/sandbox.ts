@@ -46,6 +46,44 @@ function findDeclaredNames(code: string): Set<string> {
   return names;
 }
 
+/**
+ * Wrap React so that createElement auto-stringifies plain objects
+ * passed as children.  Prevents React error #31 ("Objects are not
+ * valid as a React child") which is the most common template crash.
+ */
+function buildSafeReact(): typeof React {
+  const orig = React.createElement;
+  function safeChild(c: unknown): unknown {
+    if (
+      c !== null &&
+      c !== undefined &&
+      typeof c === "object" &&
+      !React.isValidElement(c) &&
+      !Array.isArray(c) &&
+      typeof (c as Iterable<unknown>)[Symbol.iterator] !== "function"
+    ) {
+      try { return JSON.stringify(c); } catch { return String(c); }
+    }
+    return c;
+  }
+  const safe = Object.create(React);
+  safe.createElement = function (
+    type: unknown,
+    props: unknown,
+    ...children: unknown[]
+  ) {
+    return (orig as Function).call(
+      React,
+      type,
+      props,
+      ...children.map(safeChild),
+    );
+  };
+  return safe;
+}
+
+const SafeReact = buildSafeReact();
+
 export function compileComponent(jsxCode: string): CompileResult | CompileError {
   try {
     // Transform JSX to JS using Sucrase
@@ -151,7 +189,7 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
 
     // Execute in controlled scope — no DOM, no network, no globals
     const factory = new Function("React", "Recharts", "LucideReact", "EnsoUI", wrappedCode);
-    const Component = factory(React, Recharts, LucideReact, EnsoUI);
+    const Component = factory(SafeReact, Recharts, LucideReact, EnsoUI);
 
     if (typeof Component !== "function") {
       return { error: "Generated code did not produce a valid component function" };
