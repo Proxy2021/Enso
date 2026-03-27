@@ -1357,6 +1357,7 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
   const buildApp = useChatStore((s) => s.buildApp);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const completeAutoAppReveal = useChatStore((s) => s.completeAutoAppReveal);
+  const toggleCardView = useChatStore((s) => s.toggleCardView);
 
   const precedingUserQuery = useChatStore(useCallback((s) => {
     const idx = s.cardOrder.indexOf(card.id);
@@ -1558,6 +1559,10 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
 
   function handleAction(action: string, payload?: unknown) {
     if (isLoading) return;
+    if (action === "_switch_original") {
+      toggleCardView(card.id, "original");
+      return;
+    }
     if (action === "open_url" && typeof (payload as Record<string,unknown>)?.url === "string") {
       window.open((payload as Record<string,unknown>).url as string, "_blank", "noopener");
       return;

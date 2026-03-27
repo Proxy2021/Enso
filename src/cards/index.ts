@@ -13,8 +13,15 @@ const EvolutionHistoryCard = lazy(() => import("./EvolutionHistoryCard"));
 const DiscoveryHistoryCard = lazy(() => import("./DiscoveryHistoryCard"));
 const ProjectsCard = lazy(() => import("./ProjectsCard"));
 const SessionDashboardCard = lazy(() => import("./SessionDashboardCard"));
+const TodoListCard = lazy(() => import("./TodoListCard"));
 
 // Register built-in card types (order matters — first match wins in resolve)
+
+cardRegistry.register({
+  type: "todo-list",
+  renderer: TodoListCard,
+  match: (msg) => !!(msg.data && typeof msg.data === "object" && "todoList" in (msg.data as Record<string, unknown>)),
+});
 
 cardRegistry.register({
   type: "session-dashboard",

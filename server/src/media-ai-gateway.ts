@@ -44,6 +44,7 @@ const providers: MediaAIProvider[] = [];
 
 export function registerMediaAIProvider(provider: MediaAIProvider): void {
   providers.push(provider);
+  console.log(`[media-ai-gateway] Registered provider: ${provider.name} (capabilities: ${provider.capabilities.join(", ")})`);
 }
 
 export async function processMediaAI(task: MediaAITask): Promise<MediaAIResult> {
@@ -64,7 +65,7 @@ export async function processMediaAI(task: MediaAITask): Promise<MediaAIResult> 
 
 // ── Sharp Basic Provider (available when sharp is installed) ──
 
-export const sharpBasicProvider: MediaAIProvider = {
+export const basicResizeProvider: MediaAIProvider = {
   name: "basic-resize",
   capabilities: ["upscale"],
 
@@ -104,12 +105,12 @@ export const sharpBasicProvider: MediaAIProvider = {
         return { success: false, error: `Sharp upscale failed: ${err instanceof Error ? err.message : String(err)}` };
       }
     }
-    return { success: false, error: `Operation "${task.operation}" is not supported by the ${sharpBasicProvider.name} provider. Supported operations: ${sharpBasicProvider.capabilities.join(", ")}. For AI-powered processing, configure a cloud AI provider.` };
+    return { success: false, error: `Operation "${task.operation}" is not supported by the ${basicResizeProvider.name} provider. Supported operations: ${basicResizeProvider.capabilities.join(", ")}. For AI-powered processing, configure a cloud AI provider.` };
   },
 };
 
 // Register default provider
-registerMediaAIProvider(sharpBasicProvider);
+registerMediaAIProvider(basicResizeProvider);
 
 // ── Cloud AI Provider Registration (E5) ──
 

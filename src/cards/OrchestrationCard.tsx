@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import TerminalContent from "../components/TerminalContent";
@@ -32,7 +32,7 @@ const ROLE_LABEL_KEYS: Record<AgentRole, string> = {
   reviewer: "orchestration.role.reviewer",
 };
 
-export default function OrchestrationCard({ card }: CardRendererProps) {
+export default function OrchestrationCardInner({ card }: CardRendererProps) {
   const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
   const plan = orchData?.orchestrationPlan;
   const progress = orchData?.orchestrationProgress;

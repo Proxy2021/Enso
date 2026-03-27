@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
 import AppSuggestion from "../components/AppSuggestion";
@@ -7,7 +7,7 @@ import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
-export default function ChatCard({ card }: CardRendererProps) {
+function ChatCardInner({ card }: CardRendererProps) {
   const hasMedia = Boolean(card.mediaUrls?.length);
   const showRestart = (card.data as Record<string, unknown> | undefined)?.restartPrompt === true;
 
@@ -58,3 +58,6 @@ function RestartButton() {
     </button>
   );
 }
+
+const ChatCard = React.memo(ChatCardInner);
+export default ChatCard;

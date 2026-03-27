@@ -45,6 +45,12 @@ function FixButton({
         </svg>
         {t("card.fixWithCode")}
       </button>
+      <button
+        onClick={() => onAction("_switch_original")}
+        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-gray-600/50 bg-gray-700/20 text-gray-400 hover:text-gray-200 hover:bg-gray-700/40 active:scale-[0.96] transition-all duration-150"
+      >
+        View Original
+      </button>
     </div>
   );
 }
