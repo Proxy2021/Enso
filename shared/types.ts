@@ -349,6 +349,28 @@ export type OrchestrationTaskStatus =
   | "blocked"
   | "awaiting_approval";
 
+/** Structured result parsed from agent STRUCTURED_SUMMARY blocks */
+export interface TaskStructuredResult {
+  verdict?: string;
+  confidence?: string;
+  keyFindings?: Array<{
+    id?: string;
+    title: string;
+    impact?: "high" | "medium" | "low";
+  }>;
+  ratings?: Record<string, number>;
+  recommendations?: Array<{
+    title: string;
+    priority?: string;
+    effort?: string;
+  }>;
+  technicalDebt?: Array<{
+    id?: string;
+    item: string;
+    severity?: string;
+  }>;
+}
+
 export interface OrchestrationTask {
   taskId: string;
   title: string;
@@ -362,6 +384,7 @@ export interface OrchestrationTask {
   terminalCardId?: string;
   sessionId?: string;
   resultSummary?: string;
+  structuredResult?: TaskStructuredResult;
   error?: string;
 }
 

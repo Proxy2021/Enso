@@ -9,7 +9,7 @@
 import { randomUUID } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
-import type { OrchestrationPlan, OrchestrationTask } from "@shared/types.js";
+import type { OrchestrationPlan, OrchestrationTask, TaskStructuredResult } from "@shared/types.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { logAction, logError } from "./action-log.js";
 import type { ConnectedClient } from "./server.js";
@@ -168,18 +168,20 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
           if (orch.aborted) return;
 
           // Task completed — parse output file for summary
-          const summary = readTaskSummary(task.taskId, workspace) || `Task ${task.taskId} completed`;
+          const summaryResult = readTaskSummary(task.taskId, workspace);
+          const summaryText = summaryResult?.text || `Task ${task.taskId} completed`;
           task.status = "completed";
-          task.resultSummary = summary;
+          task.resultSummary = summaryText;
+          task.structuredResult = summaryResult?.structured;
           completedSet.add(task.taskId);
-          orch.sharedContext.set(task.taskId, summary);
-          onTaskDone(task.taskId, summary);
+          orch.sharedContext.set(task.taskId, summaryText);
+          onTaskDone(task.taskId, summaryText);
 
           logAction({
             ts: Date.now(),
             type: "action",
             category: "orchestrator",
-            message: `DAG: task ${task.taskId} completed — ${summary.slice(0, 100)}`,
+            message: `DAG: task ${task.taskId} completed — ${summaryText.slice(0, 100)}`,
           });
 
           // ── Fix-Verify Loop: Check for FAIL verdict on review tasks ──
@@ -315,12 +317,18 @@ function blockDependents(
   }
 }
 
+interface TaskSummaryResult {
+  text: string;
+  structured?: TaskStructuredResult;
+}
+
 /**
  * Try to read the task's output file for a summary.
- * If a STRUCTURED_SUMMARY block exists, parse it and return a compact string.
- * Otherwise, extract first meaningful lines up to 500 chars.
+ * If a STRUCTURED_SUMMARY block exists, parse it and return both the
+ * compact text string (for context injection) and the full structured object
+ * (for rich UI rendering). Otherwise, extract first meaningful lines.
  */
-function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): string | null {
+function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): TaskSummaryResult | null {
 
   const candidates: string[] = [];
   // Workspace paths (preferred)
@@ -354,8 +362,19 @@ function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): st
                   .map(([k, v]) => `${k}:${v}`)
                   .join(", ")
               : "";
-            return `[${verdict}] ${findings}${ratingsStr ? ` | Ratings: ${ratingsStr}` : ""}`
+            const text = `[${verdict}] ${findings}${ratingsStr ? ` | Ratings: ${ratingsStr}` : ""}`
               .slice(0, 500);
+
+            // Preserve the full structured object for rich UI rendering
+            const structured: TaskStructuredResult = {};
+            if (parsed.verdict) structured.verdict = parsed.verdict;
+            if (parsed.confidence) structured.confidence = parsed.confidence;
+            if (Array.isArray(parsed.keyFindings)) structured.keyFindings = parsed.keyFindings;
+            if (parsed.ratings && typeof parsed.ratings === "object") structured.ratings = parsed.ratings;
+            if (Array.isArray(parsed.recommendations)) structured.recommendations = parsed.recommendations;
+            if (Array.isArray(parsed.technicalDebt)) structured.technicalDebt = parsed.technicalDebt;
+
+            return { text, structured };
           } catch {
             // JSON parse failed — fall through to plain text extraction
           }
@@ -365,10 +384,11 @@ function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): st
         const lines = content.split("\n").filter(
           (l: string) => l.trim() && !l.startsWith("#")
         );
-        return lines.slice(0, 5).join(" ").trim().slice(0, 500)
+        const text = lines.slice(0, 5).join(" ").trim().slice(0, 500)
           || `Output written to ${filePath}`;
+        return { text };
       } catch {
-        return `Output written to ${filePath}`;
+        return { text: `Output written to ${filePath}` };
       }
     }
   }

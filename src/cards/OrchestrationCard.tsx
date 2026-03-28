@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
 import TerminalContent from "../components/TerminalContent";
+import TaskSummaryPanel, { verdictColor, ratingColor, IMPACT_DOT, PRIORITY_STYLE } from "../components/TaskSummaryPanel";
 import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 import {
@@ -45,7 +46,7 @@ export default function OrchestrationCardInner({ card }: CardRendererProps) {
       {phase === "input" && <InputPhase cardId={card.id} />}
       {phase === "planning" && <PlanningPhase goal={currentPlan?.goal} />}
       {phase === "review" && currentPlan && <ReviewPhase plan={currentPlan} />}
-      {phase === "executing" && currentPlan && <ExecutingPhase plan={currentPlan} taskTerminals={taskTerminals} />}
+      {phase === "executing" && currentPlan && <ExecutingPhase plan={currentPlan} taskTerminals={taskTerminals} progress={progress} />}
       {phase === "complete" && currentPlan && <CompletePhase plan={currentPlan} taskTerminals={taskTerminals} />}
       {phase === "error" && <ErrorPhase error={progress?.error} plan={currentPlan} />}
     </div>
@@ -213,7 +214,7 @@ function ReviewPhase({ plan }: { plan: OrchestrationPlan }) {
 
 type ExecutingView = "tasks" | "terminals";
 
-function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskTerminals?: Record<string, { text: string; status: string }> }) {
+function ExecutingPhase({ plan, taskTerminals, progress }: { plan: OrchestrationPlan; taskTerminals?: Record<string, { text: string; status: string }>; progress?: OrchestrationProgress }) {
   const approveOrchestration = useChatStore((s) => s.approveOrchestration);
   const pauseOrchestration = useChatStore((s) => s.pauseOrchestration);
   const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
@@ -221,6 +222,14 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
 
   const [view, setView] = useState<ExecutingView>("tasks");
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const [lastCompletedTaskId, setLastCompletedTaskId] = useState<string | null>(null);
+
+  // Track auto-expand for the most recently completed task
+  useEffect(() => {
+    if (progress?.eventType === "task_completed" && progress.taskId) {
+      setLastCompletedTaskId(progress.taskId);
+    }
+  }, [progress?.eventType, progress?.taskId]);
 
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const running = plan.tasks.filter((t) => t.status === "running").length;
@@ -317,20 +326,34 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
         </div>
       )}
 
-      {/* Tasks View: compact pipeline with expandable terminals */}
+      {/* Tasks View: compact pipeline with expandable terminals + phase groups */}
       {view === "tasks" && (
         <div className="space-y-0.5">
-          {plan.tasks.map((task, i) => (
-            <CompactTaskRow
-              key={task.taskId}
-              task={task}
-              index={i}
-              terminalData={taskTerminals?.[task.taskId]}
-              onOpenTerminal={(taskId) => {
-                setActiveTerminalId(taskId);
-                setView("terminals");
-              }}
-            />
+          {groupTasksByPhase(plan.tasks).map((group) => (
+            <div key={group.phase || "ungrouped"}>
+              {group.phase && (
+                <div className="flex items-center gap-2 mt-2.5 mb-1 first:mt-0">
+                  <div className="h-px flex-1 bg-gray-700/40" />
+                  <span className="text-[9px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap">
+                    {group.phase}
+                  </span>
+                  <div className="h-px flex-1 bg-gray-700/40" />
+                </div>
+              )}
+              {group.tasks.map((task, i) => (
+                <CompactTaskRow
+                  key={task.taskId}
+                  task={task}
+                  index={i}
+                  terminalData={taskTerminals?.[task.taskId]}
+                  autoExpand={task.taskId === lastCompletedTaskId}
+                  onOpenTerminal={(taskId) => {
+                    setActiveTerminalId(taskId);
+                    setView("terminals");
+                  }}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -421,23 +444,41 @@ function ExecutingPhase({ plan, taskTerminals }: { plan: OrchestrationPlan; task
   );
 }
 
-/** Compact task row with expandable terminal content for parallel tasks */
-function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
+/** Compact task row with expandable terminal/summary content for parallel tasks */
+function CompactTaskRow({ task, index, terminalData, onOpenTerminal, autoExpand }: {
   task: OrchestrationTask;
   index: number;
   terminalData?: { text: string; status: string };
   onOpenTerminal?: (taskId: string) => void;
+  autoExpand?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const userToggled = useRef(false);
   const hasTerminal = !!terminalData?.text;
-  const isRunning = task.status === "running";
+  const hasSummary = task.status === "completed" && !!(task.structuredResult || task.resultSummary);
+  const canExpand = hasTerminal || hasSummary;
+  const [highlight, setHighlight] = useState(false);
+
+  // Auto-expand on task completion
+  useEffect(() => {
+    if (autoExpand && !userToggled.current) {
+      setExpanded(true);
+      setHighlight(true);
+      const timer = setTimeout(() => {
+        if (!userToggled.current) setExpanded(false);
+        setHighlight(false);
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [autoExpand]);
 
   return (
     <div>
       <div
-        className={`flex items-center gap-1.5 py-2 sm:py-1 px-2 sm:px-1.5 rounded text-[11px] sm:text-[10px] ${
-          hasTerminal ? "cursor-pointer hover:bg-gray-700/30 active:bg-gray-700/50" : ""
+        className={`flex items-center gap-1.5 py-2 sm:py-1 px-2 sm:px-1.5 rounded text-[11px] sm:text-[10px] transition-all duration-500 ${
+          canExpand ? "cursor-pointer hover:bg-gray-700/30 active:bg-gray-700/50" : ""
         } ${
+          highlight ? "bg-green-500/10" :
           task.status === "running" ? "bg-blue-500/10 text-gray-200" :
           task.status === "completed" ? "text-gray-400" :
           task.status === "failed" ? "text-red-400/80" :
@@ -445,7 +486,10 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
           "text-gray-500"
         }`}
         onClick={() => {
-          if (hasTerminal) setExpanded(!expanded);
+          if (canExpand) {
+            userToggled.current = true;
+            setExpanded(!expanded);
+          }
         }}
       >
         <span className="flex-shrink-0 w-4 sm:w-3.5 text-center">
@@ -463,9 +507,15 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
         </span>
         <span className="flex-shrink-0">{ROLE_EMOJI[task.agentRole]}</span>
         <span className="truncate flex-1">{task.title}</span>
-        {hasTerminal && (
+        {/* Collapsed teaser for completed tasks with structured results */}
+        {!expanded && hasSummary && task.structuredResult?.verdict && (
+          <span className={`px-1 py-0.5 rounded-full text-[8px] font-medium border flex-shrink-0 ${verdictColor(task.structuredResult.verdict)}`}>
+            {task.structuredResult.verdict}
+          </span>
+        )}
+        {canExpand && (
           <span className="flex-shrink-0 flex items-center gap-1">
-            {onOpenTerminal && (
+            {hasTerminal && onOpenTerminal && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenTerminal(task.taskId); }}
                 className="text-[9px] sm:text-[8px] text-gray-500 hover:text-violet-300 active:text-violet-200 p-1 rounded transition-colors"
@@ -480,7 +530,16 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
           </span>
         )}
       </div>
-      {/* Expandable inline terminal preview */}
+      {/* Expandable content: summary panel or terminal */}
+      {expanded && hasSummary && (
+        <div className="ml-5 mt-0.5 mb-1">
+          <TaskSummaryPanel
+            structuredResult={task.structuredResult}
+            resultSummary={task.resultSummary}
+            expanded={true}
+          />
+        </div>
+      )}
       {expanded && hasTerminal && (
         <div className="ml-5 mt-0.5 mb-1 rounded-lg border border-gray-700/50 overflow-hidden">
           <TerminalContent
@@ -498,74 +557,191 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal }: {
 
 // ── Phase: Complete ──
 
+type CompleteTab = "summary" | "tasks" | "logs";
+
 function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskTerminals?: Record<string, { text: string; status: string }> }) {
   const { t } = useT();
+  const [tab, setTab] = useState<CompleteTab>("summary");
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const failed = plan.tasks.filter((t) => t.status === "failed").length;
   const appTasks = plan.tasks.filter((t) => t.outputType === "app" && t.status === "completed");
-  const [showTerminals, setShowTerminals] = useState(false);
-  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
-
   const terminalTasks = plan.tasks.filter((t) => taskTerminals?.[t.taskId]?.text);
+  const hasStructured = plan.tasks.some((t) => t.structuredResult);
+  const { allFindings, avgRatings, allRecs, issues } = aggregateResults(plan.tasks);
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">{"\u2705"}</span>
         <h3 className="text-sm font-semibold text-green-300">{t("orchestration.missionComplete")}</h3>
       </div>
 
-      {/* Goal summary */}
-      <div className="mb-3 p-2 rounded-lg bg-green-500/5 border border-green-500/20">
+      {/* Goal */}
+      <div className="mb-2 p-2 rounded-lg bg-green-500/5 border border-green-500/20">
         <p className="text-xs text-gray-300 line-clamp-2">{plan.goal}</p>
       </div>
 
-      <p className="text-xs text-gray-400 mb-3">
-        {t("orchestration.tasksCompleted").replace("{completed}", String(completed))}
-        {failed > 0 ? t("orchestration.tasksFailed").replace("{failed}", String(failed)) : ""}
-        {" \u00B7 "}{t("orchestration.agentsDeployed").replace("{count}", String(plan.agents.length))}
-      </p>
-
-      {/* Built apps highlight */}
-      {appTasks.length > 0 && (
-        <div className="mb-3 p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
-          <div className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-1.5">
-            {t("orchestration.appsBuilt")}
-          </div>
-          <div className="space-y-1">
-            {appTasks.map((t) => (
-              <div key={t.taskId} className="flex items-center gap-2 text-xs text-gray-300">
-                <span>{"\uD83D\uDD28"}</span>
-                <span>{t.title}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        {plan.tasks.map((task, i) => (
-          <TaskRow key={task.taskId} task={task} index={i} />
-        ))}
-      </div>
-
-      {/* Terminal history toggle */}
-      {terminalTasks.length > 0 && (
-        <div className="mt-3 pt-2 border-t border-gray-700/30">
+      {/* Tab bar */}
+      <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5 mb-3">
+        {(["summary", "tasks", "logs"] as const).map((t) => (
           <button
+            key={t}
             onClick={() => {
-              setShowTerminals(!showTerminals);
-              if (!activeTerminalId && terminalTasks.length > 0) {
+              setTab(t);
+              if (t === "logs" && !activeTerminalId && terminalTasks.length > 0) {
                 setActiveTerminalId(terminalTasks[0].taskId);
               }
             }}
-            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+            className={`text-[10px] sm:text-[9px] px-3 sm:px-2.5 py-1 sm:py-0.5 rounded-full transition-all duration-150 capitalize ${
+              tab === t ? "bg-gray-600/60 text-gray-200" : "text-gray-500 hover:text-gray-300"
+            }`}
           >
-            {showTerminals ? "\u25BC" : "\u25B6"} {t("orchestration.sessionLogs").replace("{count}", String(terminalTasks.length))}
+            {t === "summary" ? "Summary" : t === "tasks" ? `Tasks (${plan.tasks.length})` : `Logs (${terminalTasks.length})`}
           </button>
+        ))}
+      </div>
 
-          {showTerminals && (
-            <div className="mt-2">
+      {/* ─── Summary Tab ─── */}
+      {tab === "summary" && (
+        <div className="space-y-3">
+          {/* Stats bar */}
+          <div className="flex flex-wrap gap-3 text-[10px]">
+            <div className="flex items-center gap-1">
+              <span className="text-green-400">{"\u2713"}</span>
+              <span className="text-gray-400">{completed} completed</span>
+            </div>
+            {failed > 0 && (
+              <div className="flex items-center gap-1">
+                <span className="text-red-400">{"\u2717"}</span>
+                <span className="text-gray-400">{failed} failed</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <span className="text-blue-400">{"\uD83E\uDD16"}</span>
+              <span className="text-gray-400">{plan.agents.length} agents</span>
+            </div>
+          </div>
+
+          {/* Apps built */}
+          {appTasks.length > 0 && (
+            <div className="p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
+              <div className="text-[9px] font-semibold text-blue-400 uppercase tracking-wider mb-1.5">
+                {t("orchestration.appsBuilt")}
+              </div>
+              <div className="space-y-1">
+                {appTasks.map((t) => (
+                  <div key={t.taskId} className="flex items-center gap-2 text-xs text-gray-300">
+                    <span>{"\uD83D\uDD28"}</span>
+                    <span>{t.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Issues found */}
+          {issues.length > 0 && (
+            <div className="p-2.5 rounded-lg bg-red-500/5 border border-red-500/20">
+              <div className="text-[9px] font-semibold text-red-400 uppercase tracking-wider mb-1.5">Issues Found</div>
+              <div className="space-y-1">
+                {issues.map((issue, i) => (
+                  <div key={i} className="flex items-start gap-1.5 text-[10px]">
+                    <span className="text-red-400 flex-shrink-0">{"\u26A0"}</span>
+                    <span className="text-gray-300">{issue.taskTitle}</span>
+                    <span className={`px-1 py-0.5 rounded-full text-[8px] font-medium border ml-auto flex-shrink-0 ${verdictColor(issue.verdict)}`}>
+                      {issue.verdict}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Aggregated Ratings */}
+          {avgRatings.length > 0 && (
+            <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Scorecard</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {avgRatings.map(({ key, value }) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 w-28 truncate capitalize">
+                      {key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim()}
+                    </span>
+                    <div className="flex-1 h-2 bg-gray-700/50 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${ratingColor(value)}`}
+                        style={{ width: `${Math.min(value / 10 * 100, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-gray-300 w-8 text-right tabular-nums font-medium">{value}/10</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Key Decisions & Outcomes */}
+          {allFindings.length > 0 && (
+            <SummaryFindingsSection findings={allFindings} />
+          )}
+
+          {/* Top Recommendations */}
+          {allRecs.length > 0 && (
+            <SummaryRecsSection recs={allRecs} />
+          )}
+
+          {/* Fallback when no structured data */}
+          {!hasStructured && allFindings.length === 0 && (
+            <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Task Results</div>
+              <div className="space-y-1.5">
+                {plan.tasks.filter((t) => t.status === "completed" && t.resultSummary).map((task) => (
+                  <div key={task.taskId} className="flex items-start gap-1.5 text-[10px]">
+                    <span className="flex-shrink-0">{ROLE_EMOJI[task.agentRole]}</span>
+                    <div>
+                      <span className="text-gray-300 font-medium">{shortTitle(task.title)}: </span>
+                      <span className="text-gray-400">{task.resultSummary!.slice(0, 150)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tasks Tab ─── */}
+      {tab === "tasks" && (
+        <div className="space-y-1.5">
+          {groupTasksByPhase(plan.tasks).map((group) => (
+            <div key={group.phase || "ungrouped"}>
+              {group.phase && (
+                <div className="flex items-center gap-2 mt-2.5 mb-1 first:mt-0">
+                  <div className="h-px flex-1 bg-gray-700/40" />
+                  <span className="text-[9px] text-gray-500 uppercase tracking-wider font-medium whitespace-nowrap">
+                    {group.phase}
+                  </span>
+                  <div className="h-px flex-1 bg-gray-700/40" />
+                </div>
+              )}
+              {group.tasks.map((task, i) => (
+                <TaskRow key={task.taskId} task={task} index={i} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ─── Logs Tab ─── */}
+      {tab === "logs" && (
+        <div>
+          {terminalTasks.length === 0 ? (
+            <div className="text-center py-6 text-xs text-gray-500">No session logs available</div>
+          ) : (
+            <>
               <div className="flex gap-0.5 overflow-x-auto pb-1 mb-1 scrollbar-none">
                 {terminalTasks.map((task) => (
                   <button
@@ -594,9 +770,68 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
                   />
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Aggregated findings section for the summary tab */
+function SummaryFindingsSection({ findings }: { findings: Array<{ title: string; impact?: "high" | "medium" | "low"; role: AgentRole }> }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? findings : findings.slice(0, 8);
+
+  return (
+    <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
+      <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Key Decisions & Outcomes</div>
+      <div className="space-y-1">
+        {visible.map((f, i) => (
+          <div key={i} className="flex items-start gap-1.5 text-[10px]">
+            <span className={`w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 ${IMPACT_DOT[f.impact || "low"]}`} />
+            <span className="text-gray-300 flex-1">{f.title}</span>
+            <span className="text-[8px] flex-shrink-0">{ROLE_EMOJI[f.role]}</span>
+          </div>
+        ))}
+      </div>
+      {findings.length > 8 && (
+        <button onClick={() => setShowAll(!showAll)} className="text-[9px] text-blue-400 hover:text-blue-300 mt-1">
+          {showAll ? "Show less" : `Show ${findings.length - 8} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Aggregated recommendations section for the summary tab */
+function SummaryRecsSection({ recs }: { recs: Array<{ title: string; priority?: string; effort?: string; role: AgentRole }> }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? recs : recs.slice(0, 6);
+
+  return (
+    <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
+      <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Top Recommendations</div>
+      <div className="space-y-1">
+        {visible.map((r, i) => (
+          <div key={i} className="flex items-start gap-1.5 text-[10px]">
+            {r.priority && (
+              <span className={`px-1 py-0.5 rounded text-[8px] font-medium flex-shrink-0 ${PRIORITY_STYLE[r.priority] || "text-gray-400 bg-gray-500/15"}`}>
+                {r.priority}
+              </span>
+            )}
+            <span className="text-gray-300 flex-1">{r.title}</span>
+            <span className="text-[8px] flex-shrink-0">{ROLE_EMOJI[r.role]}</span>
+            {r.effort && (
+              <span className="text-[8px] text-gray-500 flex-shrink-0">{r.effort}</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {recs.length > 6 && (
+        <button onClick={() => setShowAll(!showAll)} className="text-[9px] text-blue-400 hover:text-blue-300 mt-1">
+          {showAll ? "Show less" : `Show ${recs.length - 6} more`}
+        </button>
       )}
     </div>
   );
@@ -637,9 +872,11 @@ function TaskRow({ task, index, showDescription }: { task: OrchestrationTask; in
   const [expanded, setExpanded] = useState(false);
   const { t } = useT();
 
+  const hasSummary = !!(task.structuredResult || task.resultSummary);
+
   return (
     <div
-      className={`flex items-start gap-2 text-xs p-2 rounded-lg cursor-pointer transition-all duration-150 ${
+      className={`text-xs p-2 rounded-lg cursor-pointer transition-all duration-150 ${
         task.status === "running" ? "bg-blue-500/5 border border-blue-500/20" :
         task.status === "completed" ? "bg-green-500/5" :
         task.status === "failed" ? "bg-red-500/5" :
@@ -649,67 +886,163 @@ function TaskRow({ task, index, showDescription }: { task: OrchestrationTask; in
       }`}
       onClick={() => setExpanded((e) => !e)}
     >
-      <div className="w-5 pt-0.5 flex-shrink-0">
-        {task.status === "completed" ? (
-          <span className="text-green-400">{"\u2713"}</span>
-        ) : task.status === "failed" ? (
-          <span className="text-red-400">{"\u2717"}</span>
-        ) : task.status === "running" ? (
-          <Spinner size="sm" />
-        ) : task.status === "awaiting_approval" ? (
-          <span className="text-amber-400">{"\u26A0"}</span>
-        ) : task.status === "blocked" ? (
-          <span className="text-gray-600">{"\u2298"}</span>
-        ) : (
-          <span className="text-gray-600">{index + 1}</span>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className={`${
-            task.status === "running" ? "text-gray-200" :
-            task.status === "completed" ? "text-gray-300" :
-            task.status === "failed" ? "text-red-300" :
-            "text-gray-400"
-          }`}>
-            {task.title}
-          </span>
-          <span className="text-[10px]">{ROLE_EMOJI[task.agentRole]}</span>
-          {task.requiresApproval && task.status === "pending" && (
-            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              {t("orchestration.approval")}
-            </span>
+      <div className="flex items-start gap-2">
+        <div className="w-5 pt-0.5 flex-shrink-0">
+          {task.status === "completed" ? (
+            <span className="text-green-400">{"\u2713"}</span>
+          ) : task.status === "failed" ? (
+            <span className="text-red-400">{"\u2717"}</span>
+          ) : task.status === "running" ? (
+            <Spinner size="sm" />
+          ) : task.status === "awaiting_approval" ? (
+            <span className="text-amber-400">{"\u26A0"}</span>
+          ) : task.status === "blocked" ? (
+            <span className="text-gray-600">{"\u2298"}</span>
+          ) : (
+            <span className="text-gray-600">{index + 1}</span>
           )}
         </div>
-        {task.dependsOn.length > 0 && (
-          <div className="text-[10px] text-gray-600 mt-0.5">
-            {t("orchestration.dependsOn")} {task.dependsOn.join(", ")}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`${
+              task.status === "running" ? "text-gray-200" :
+              task.status === "completed" ? "text-gray-300" :
+              task.status === "failed" ? "text-red-300" :
+              "text-gray-400"
+            }`}>
+              {task.title}
+            </span>
+            <span className="text-[10px]">{ROLE_EMOJI[task.agentRole]}</span>
+            {task.requiresApproval && task.status === "pending" && (
+              <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                {t("orchestration.approval")}
+              </span>
+            )}
+            {hasSummary && task.status === "completed" && (
+              <span className="text-[9px] text-gray-500 ml-auto">{expanded ? "\u25BC" : "\u25B6"}</span>
+            )}
           </div>
-        )}
-        {/* Show description in review phase or when expanded */}
-        {(showDescription || expanded) && task.description && (
-          <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">
-            {task.description.length > 200 && !expanded
-              ? task.description.slice(0, 200) + "..."
-              : task.description}
-          </div>
-        )}
-        {task.resultSummary && task.status === "completed" && (
-          <div className="text-[10px] text-green-500/70 mt-0.5 truncate">
-            {task.resultSummary.slice(0, 120)}
-          </div>
-        )}
-        {task.error && (
-          <div className="text-[10px] text-red-400/70 mt-0.5 truncate">
-            {task.error}
-          </div>
-        )}
+          {task.dependsOn.length > 0 && (
+            <div className="text-[10px] text-gray-600 mt-0.5">
+              {t("orchestration.dependsOn")} {task.dependsOn.join(", ")}
+            </div>
+          )}
+          {(showDescription || expanded) && task.description && (
+            <div className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+              {task.description.length > 200 && !expanded
+                ? task.description.slice(0, 200) + "..."
+                : task.description}
+            </div>
+          )}
+          {/* Summary: collapsed teaser or expanded panel */}
+          {task.status === "completed" && (
+            <TaskSummaryPanel
+              structuredResult={task.structuredResult}
+              resultSummary={task.resultSummary}
+              expanded={expanded}
+            />
+          )}
+          {task.error && (
+            <div className="text-[10px] text-red-400/70 mt-0.5 truncate">
+              {task.error}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 // ── Helpers ──
+
+/** Group tasks by Phase N: prefix for evolution sprints */
+function groupTasksByPhase(tasks: OrchestrationTask[]): Array<{ phase: string | null; tasks: OrchestrationTask[] }> {
+  const groups: Array<{ phase: string | null; tasks: OrchestrationTask[] }> = [];
+  let currentPhase: string | null = null;
+
+  for (const task of tasks) {
+    const phaseMatch = task.title.match(/^Phase (\d+):/);
+    const phase = phaseMatch ? `Phase ${phaseMatch[1]}` : null;
+
+    if (phase !== currentPhase || groups.length === 0) {
+      groups.push({ phase, tasks: [task] });
+      currentPhase = phase;
+    } else {
+      groups[groups.length - 1].tasks.push(task);
+    }
+  }
+  return groups;
+}
+
+/** Aggregate structured results across all completed tasks for the overview summary */
+function aggregateResults(tasks: OrchestrationTask[]): {
+  allFindings: Array<{ title: string; impact?: "high" | "medium" | "low"; role: AgentRole }>;
+  avgRatings: Array<{ key: string; value: number; count: number }>;
+  allRecs: Array<{ title: string; priority?: string; effort?: string; role: AgentRole }>;
+  issues: Array<{ taskTitle: string; verdict: string; role: AgentRole }>;
+} {
+  const allFindings: Array<{ title: string; impact?: "high" | "medium" | "low"; role: AgentRole }> = [];
+  const ratingsMap = new Map<string, { sum: number; count: number }>();
+  const allRecs: Array<{ title: string; priority?: string; effort?: string; role: AgentRole }> = [];
+  const issues: Array<{ taskTitle: string; verdict: string; role: AgentRole }> = [];
+
+  for (const task of tasks) {
+    if (task.status !== "completed") continue;
+    const sr = task.structuredResult;
+    if (!sr) continue;
+
+    // Collect findings
+    if (sr.keyFindings) {
+      for (const f of sr.keyFindings) {
+        allFindings.push({ title: f.title, impact: f.impact, role: task.agentRole });
+      }
+    }
+
+    // Accumulate ratings
+    if (sr.ratings) {
+      for (const [k, v] of Object.entries(sr.ratings)) {
+        const existing = ratingsMap.get(k);
+        if (existing) {
+          existing.sum += v;
+          existing.count += 1;
+        } else {
+          ratingsMap.set(k, { sum: v, count: 1 });
+        }
+      }
+    }
+
+    // Collect recommendations
+    if (sr.recommendations) {
+      for (const r of sr.recommendations) {
+        allRecs.push({ ...r, role: task.agentRole });
+      }
+    }
+
+    // Track issues (FAIL verdicts or negative signals)
+    if (sr.verdict) {
+      const v = sr.verdict.toUpperCase();
+      if (v === "FAIL" || v.includes("CRITICAL") || v.includes("POOR")) {
+        issues.push({ taskTitle: task.title, verdict: sr.verdict, role: task.agentRole });
+      }
+    }
+  }
+
+  // Sort findings by impact (high first)
+  const impactOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  allFindings.sort((a, b) => (impactOrder[a.impact || "low"] || 2) - (impactOrder[b.impact || "low"] || 2));
+
+  // Sort recs by priority (P0 first)
+  allRecs.sort((a, b) => (a.priority || "P9").localeCompare(b.priority || "P9"));
+
+  // Average ratings
+  const avgRatings = Array.from(ratingsMap.entries()).map(([key, { sum, count }]) => ({
+    key,
+    value: Math.round((sum / count) * 10) / 10,
+    count,
+  }));
+
+  return { allFindings, avgRatings, allRecs, issues };
+}
 
 /** Shorten task titles for terminal tabs */
 function shortTitle(title: string): string {

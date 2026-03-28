@@ -577,6 +577,187 @@ export function PromptSuggestion({ suggestion, onSelect }: { suggestion: string;
   );
 }
 
+// ── Session Summary Bar ──
+
+function parseCostString(cost: string): { cost?: string; turns?: string; duration?: string; inputTokens?: string; outputTokens?: string; cacheTokens?: string; context?: string } {
+  const parts = cost.split("|").map(s => s.trim());
+  const result: ReturnType<typeof parseCostString> = {};
+  for (const p of parts) {
+    if (p.startsWith("$")) result.cost = p;
+    else if (p.endsWith("s") && /^\d/.test(p)) result.duration = p;
+    else if (p.includes("turn")) result.turns = p;
+    else if (p.endsWith("in")) result.inputTokens = formatTokens(p.slice(0, -2)) + " in";
+    else if (p.endsWith("out")) result.outputTokens = formatTokens(p.slice(0, -3)) + " out";
+    else if (p.endsWith("cache")) result.cacheTokens = formatTokens(p.slice(0, -5)) + " cached";
+    else if (p.startsWith("ctx:")) result.context = p.slice(4);
+  }
+  return result;
+}
+
+function SessionSummaryBar({ entry }: { entry: TerminalEntry }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Aggregate across the entry
+  const allTools = entry.toolActivities;
+  const allFiles = entry.filesChanged;
+  const allBash = entry.bashCommands;
+  const totalFilesSaved = allFiles.reduce((sum, f) => sum + f.saved.length, 0);
+  const totalFilesFailed = allFiles.reduce((sum, f) => sum + f.failed.length, 0);
+  const totalFiles = totalFilesSaved + totalFilesFailed;
+
+  // Skip if there's nothing meaningful to show
+  if (allTools.length === 0 && totalFiles === 0 && allBash.length === 0) return null;
+
+  // Parse cost for compact display
+  const costParsed = entry.cost ? parseCostString(entry.cost) : null;
+
+  // Group tools by name for expanded view
+  const toolCounts = new Map<string, number>();
+  for (const t of allTools) {
+    toolCounts.set(t.toolName, (toolCounts.get(t.toolName) || 0) + 1);
+  }
+
+  return (
+    <div className="mt-2 pl-3">
+      {/* Collapsed bar */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-800/40 border border-gray-700/30 hover:bg-gray-800/60 transition-all duration-150 text-left"
+      >
+        <span className="text-[9px] text-gray-500">{expanded ? "\u25BC" : "\u25B6"}</span>
+        <span className="text-[10px] font-medium text-gray-400">Session Summary</span>
+        <div className="flex items-center gap-2 ml-auto text-[9px] text-gray-500">
+          {totalFiles > 0 && (
+            <span className="flex items-center gap-0.5">
+              <span>{"\uD83D\uDCC4"}</span>
+              {totalFiles} file{totalFiles !== 1 ? "s" : ""}
+            </span>
+          )}
+          {allTools.length > 0 && (
+            <span className="flex items-center gap-0.5">
+              <span>{"\u2699\uFE0F"}</span>
+              {allTools.length} tool{allTools.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          {allBash.length > 0 && (
+            <span className="flex items-center gap-0.5">
+              <span>{"\uD83D\uDCBB"}</span>
+              {allBash.length} cmd{allBash.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          {costParsed?.cost && (
+            <span>{costParsed.cost}</span>
+          )}
+          {costParsed?.duration && (
+            <span>{costParsed.duration}</span>
+          )}
+        </div>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="mt-1.5 space-y-2">
+          {/* Files Changed */}
+          {totalFiles > 0 && (
+            <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Files Changed</div>
+              <div className="space-y-0.5">
+                {allFiles.flatMap(f => f.saved).map((name, i) => (
+                  <div key={`s-${i}`} className="flex items-center gap-1.5 text-[10px]">
+                    <span className="text-green-400">{"\u2713"}</span>
+                    <span className="text-gray-300 font-mono truncate">{name}</span>
+                  </div>
+                ))}
+                {allFiles.flatMap(f => f.failed).map((name, i) => (
+                  <div key={`f-${i}`} className="flex items-center gap-1.5 text-[10px]">
+                    <span className="text-red-400">{"\u2717"}</span>
+                    <span className="text-red-300 font-mono truncate">{name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tools Used */}
+          {toolCounts.size > 0 && (
+            <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Tools Used</div>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(toolCounts.entries()).map(([name, count]) => (
+                  <span key={name} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-700/40 text-[10px] text-gray-300">
+                    <span className="text-[9px]">{TOOL_ICONS[name] ?? "\u2699\uFE0F"}</span>
+                    <span>{name}</span>
+                    {count > 1 && <span className="text-gray-500">{"\u00D7"}{count}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Commands Run */}
+          {allBash.length > 0 && (
+            <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Commands Run</div>
+              <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
+                {allBash.map((c, i) => (
+                  <div key={i} className="text-[10px] font-mono text-gray-400 truncate">
+                    <span className="text-green-500">$</span> {c.command}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cost Breakdown */}
+          {costParsed && (
+            <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Cost Breakdown</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+                {costParsed.cost && (
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Cost: </span>
+                    <span className="text-gray-300 font-medium">{costParsed.cost}</span>
+                  </div>
+                )}
+                {costParsed.turns && (
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Turns: </span>
+                    <span className="text-gray-300">{costParsed.turns}</span>
+                  </div>
+                )}
+                {costParsed.duration && (
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Duration: </span>
+                    <span className="text-gray-300">{costParsed.duration}</span>
+                  </div>
+                )}
+                {costParsed.inputTokens && (
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Input: </span>
+                    <span className="text-gray-300">{costParsed.inputTokens}</span>
+                  </div>
+                )}
+                {costParsed.outputTokens && (
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Output: </span>
+                    <span className="text-gray-300">{costParsed.outputTokens}</span>
+                  </div>
+                )}
+                {costParsed.cacheTokens && (
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Cache: </span>
+                    <span className="text-gray-300">{costParsed.cacheTokens}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Terminal Block (single entry) ──
 
 export function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntry; isFirst?: boolean; onInput?: (text: string) => void }) {
@@ -625,6 +806,7 @@ export function TerminalBlock({ entry, isFirst, onInput }: { entry: TerminalEntr
         )}
       </div>
       {entry.cost && <CostFooter cost={entry.cost} />}
+      {entry.status === "complete" && <SessionSummaryBar entry={entry} />}
       {entry.connectionLost && (
         <div className="flex items-center gap-1.5 text-amber-400 text-xs mt-2 pl-3">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
