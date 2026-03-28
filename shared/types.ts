@@ -96,6 +96,8 @@ export interface ServerMessage {
   seq: number;
   state: "delta" | "final" | "error";
   text?: string;
+  /** Which conversation thread this message belongs to (for cross-conversation isolation). */
+  conversationId?: string;
   data?: unknown;
   generatedUI?: string;
   mediaUrls?: string[];

@@ -48,6 +48,7 @@ interface BuildViaClaude {
 
 export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<void> {
   const { conversationContext, client, account } = params;
+  const capturedConvId = client.conversationId ?? DEFAULT_CONVERSATION_ID;
   const cardId = params.cardId ?? params.targetCardId ?? randomUUID();
   const cardText = params.cardText ?? params.instruction ?? params.originalText ?? "";
   const buildAppDefinition = params.buildAppDefinition ?? "";
@@ -298,7 +299,7 @@ async function postBuildRegistration(
   });
 
   // Persist enhance result to card journal so it survives page reload
-  persistCard(params.client.id, params.client.conversationId ?? DEFAULT_CONVERSATION_ID, {
+  persistCard(params.client.id, capturedConvId, {
     id: cardId,
     runId: "",
     type: "chat",

@@ -91,7 +91,7 @@ function tryReconstructContext(
   // from the stored data, cardMode, and appCardMode fields.
   const account = getActiveAccount();
   if (account) {
-    const rec = findCardRecordForClient(client.id, cardId, client.conversationId);
+    const rec = findCardRecordForClient(client.id, cardId, capturedConvId);
     if (rec) {
       const mode = rec.appCardMode ?? rec.cardMode;
       const data = rec.appData ?? rec.data;
@@ -143,6 +143,7 @@ export async function handlePluginCardAction(params: {
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }): Promise<void> {
   const { cardId, mode, client, config, runtime, statusSink } = params;
+  const capturedConvId = client.conversationId ?? DEFAULT_CONVERSATION_ID;
   let { action, payload } = params;
   const operationId = randomUUID();
   const sendOperation = (stage: OperationStage, label: string, message?: string) => {
@@ -696,7 +697,7 @@ export async function handlePluginCardAction(params: {
       });
 
       // Persist the new card to history
-      persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
+      persistCard(client.id, capturedConvId, {
         id: newCardId,
         runId: "",
         type: "dynamic-ui",
@@ -728,7 +729,7 @@ export async function handlePluginCardAction(params: {
       });
 
       // Persist card update to history (merges with existing record)
-      persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
+      persistCard(client.id, capturedConvId, {
         id: cardId,
         runId: "",
         type: "dynamic-ui",
@@ -1130,7 +1131,7 @@ Requirements:
             });
 
             // Persist both standard and deep research data to card history
-            persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
+            persistCard(client.id, capturedConvId, {
               id: cardId,
               runId: "",
               type: "dynamic-ui",

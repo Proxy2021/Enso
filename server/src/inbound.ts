@@ -36,6 +36,7 @@ export async function handleEnsoInbound(params: {
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }): Promise<void> {
   const { message, account, config, runtime, client, routing, targetCardId, statusSink } = params;
+  const capturedConvId = message.conversationId;
   const core = getEnsoRuntime();
 
   let rawBody = message.text?.trim() ?? "";
@@ -177,6 +178,7 @@ export async function handleEnsoInbound(params: {
           steps: steps.length > 0 ? [...steps] : undefined,
           toolMeta,
           statusSink,
+          conversationId: capturedConvId,
         });
       },
       onError: (err, info) => {

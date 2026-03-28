@@ -56,8 +56,10 @@ export async function deliverEnsoReply(params: {
   steps?: AgentStep[];
   toolMeta?: { toolId: string; toolSessionId?: string };
   statusSink?: (patch: { lastOutboundAt?: number }) => void;
+  conversationId?: string;
 }): Promise<void> {
   const { payload, client, runId, seq, targetCardId, toolMeta, statusSink } = params;
+  const convId = params.conversationId ?? client.conversationId ?? DEFAULT_CONVERSATION_ID;
 
   // Use last step's text as primary content when multi-block steps are available
   const lastStepText = params.steps?.length
@@ -99,6 +101,7 @@ export async function deliverEnsoReply(params: {
       state: "final",
       text,
       toolMeta,
+      conversationId: convId,
       mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
       ...(targetCardId ? { targetCardId } : {}),
       timestamp: Date.now(),
@@ -118,7 +121,7 @@ export async function deliverEnsoReply(params: {
       timestamp: msg.timestamp,
     };
     toolRecord.type = resolveCardType(toolRecord);
-    persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, toolRecord);
+    persistCard(client.id, convId, toolRecord);
     return;
   }
 
@@ -129,6 +132,7 @@ export async function deliverEnsoReply(params: {
     seq,
     state: "final",
     text,
+    conversationId: convId,
     mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
     steps: params.steps && params.steps.length > 1 ? params.steps : undefined,
     ...(targetCardId ? { targetCardId } : {}),
@@ -150,7 +154,7 @@ export async function deliverEnsoReply(params: {
     timestamp: msg.timestamp,
   };
   chatRecord.type = resolveCardType(chatRecord);
-  persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, chatRecord);
+  persistCard(client.id, convId, chatRecord);
 
   // ── Follow-up suggestions ──
   if (!toolMeta && !targetCardId && text.length > 30) {
@@ -181,7 +185,7 @@ export async function deliverEnsoReply(params: {
     const recentCall = consumeRecentToolCall();
     if (recentCall) {
       didAutoEnhance = true;
-      autoEnhanceFromToolCall(recentCall, msgId, client, params.account).catch((err) => {
+      autoEnhanceFromToolCall(recentCall, msgId, client, params.account, convId).catch((err) => {
         logError("delivery", "Auto-enhance failed (non-fatal)", err, { cardId: msgId });
       });
     }
@@ -307,7 +311,9 @@ async function autoEnhanceFromToolCall(
   cardId: string,
   client: ConnectedClient,
   account: ResolvedEnsoAccount,
+  conversationId?: string,
 ): Promise<void> {
+  const convId = conversationId ?? client.conversationId ?? DEFAULT_CONVERSATION_ID;
   // 1. Parse tool result data from the captured call
   const data = parseToolCallResult(toolCall.result);
   if (!data) {
@@ -419,7 +425,7 @@ async function autoEnhanceFromToolCall(
   logAction({ ts: Date.now(), type: "action", category: "delivery", message: `Auto-enhanced: ${toolName} → ${template.toolFamily}/${template.signatureId}`, cardId });
 
   // Persist enhance update to card history (merges with existing card record)
-  persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
+  persistCard(client.id, convId, {
     id: cardId,
     runId: "",
     type: "chat",

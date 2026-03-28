@@ -2441,6 +2441,14 @@ export const useChatStore = create<CardStore>((set, get) => ({
     set((state) => {
       const now = Date.now();
 
+      // ── Conversation isolation: skip new card creation for other conversations ──
+      // If the server says this message belongs to conversation X, but the user
+      // has switched to conversation Y, don't create new cards in the current view.
+      // Updates to existing cards (targetCardId already in state) still apply.
+      const wrongConversation =
+        msg.conversationId &&
+        msg.conversationId !== state.activeConversationId;
+
       // ── Route card updates by targetCardId ──
       if (msg.targetCardId) {
         let card = state.cards[msg.targetCardId];
@@ -3083,6 +3091,15 @@ export const useChatStore = create<CardStore>((set, get) => ({
       }
 
       // ── Normal card flow ──
+      // If this message belongs to a different conversation, don't render it
+      // (server already persisted it; it'll appear when the user navigates back).
+      if (wrongConversation) {
+        if (msg.state === "final" || msg.state === "error") {
+          return { isWaiting: false };
+        }
+        return state;
+      }
+
       // Find existing card by runId (assistant role)
       const existingId = state.cardOrder.find(
         (id) => state.cards[id]?.runId === msg.runId && state.cards[id]?.role === "assistant",

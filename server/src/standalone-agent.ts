@@ -467,6 +467,7 @@ export async function handleStandaloneInbound(params: {
         cardId: stableCardId,
         toolMeta,
         statusSink,
+        conversationId,
       });
     } catch (err) {
       logError("standalone-agent", `callChatLLM failed for ${userChatModel}`, err, { cardId: stableCardId });
@@ -495,6 +496,7 @@ export async function handleStandaloneInbound(params: {
       targetCardId,
       cardId: stableCardId,
       statusSink,
+      conversationId,
     });
     return;
   }
@@ -578,6 +580,7 @@ export async function handleStandaloneInbound(params: {
           cardId: stableCardId,
           toolMeta,
           statusSink,
+          conversationId,
         });
 
         let toolResult: unknown;
@@ -627,6 +630,7 @@ export async function handleStandaloneInbound(params: {
       cardId: stableCardId,
       toolMeta,
       statusSink,
+      conversationId,
     });
   } catch (err) {
     logError("standalone-agent", "Gemini agent call failed", err, { cardId: stableCardId });

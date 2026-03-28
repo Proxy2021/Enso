@@ -108,6 +108,9 @@ export async function runClaudeCode(params: {
   skipPersist?: boolean;
 }): Promise<{ sessionId: string }> {
   const { prompt: rawPrompt, cwd, toolSessionId, client, runId, targetCardId } = params;
+  // Capture conversationId at invocation time — client.conversationId may change
+  // if the user switches conversations while the session is running.
+  const capturedConvId = client.conversationId ?? DEFAULT_CONVERSATION_ID;
 
   if (!rawPrompt.trim()) {
     return { sessionId: toolSessionId ?? "" };
@@ -282,7 +285,7 @@ export async function runClaudeCode(params: {
         ? accumulatedText.slice(0, maxPersistLen) + "\n... (truncated)"
         : accumulatedText;
       if (textForHistory.trim()) {
-        persistCard(client.id, client.conversationId ?? DEFAULT_CONVERSATION_ID, {
+        persistCard(client.id, capturedConvId, {
           id: targetCardId ?? `${runId}-0`,
           runId,
           type: "terminal",
