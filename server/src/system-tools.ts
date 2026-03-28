@@ -4,7 +4,10 @@
 
 import os from "node:os";
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type { EnsoAgentTool } from "./local-types.js";
+import { getActiveClientId } from "./runtime.js";
+import { logError } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -232,6 +235,65 @@ export function createSystemTools(): EnsoAgentTool[] {
         } catch (err) {
           return errorResult(`Failed to get disk info: ${(err as Error).message}`);
         }
+      },
+    },
+
+    // ── Claude Code session launcher ──
+    // Enables the agent to escalate tasks that require code writing, file operations,
+    // web research, or multi-step execution to a Claude Code session.
+    {
+      name: "enso_launch_task_session",
+      label: "Launch Task Session",
+      description: "Launch a Claude Code session for tasks that require writing code, fixing bugs, building apps, file operations, web research with live data, data analysis, deployments, or any multi-step execution. Use this when you cannot fulfill the request with your available tools — when the task needs actual code to be written, files to be modified, commands to be run, or live web data to be fetched.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          task: {
+            type: "string",
+            description: "The full task description to pass to the Claude Code session. Include all relevant context from the user's request.",
+          },
+        },
+        required: ["task"],
+      },
+      execute: async (_callId, params) => {
+        const task = (params as { task: string }).task;
+        if (!task?.trim()) {
+          return errorResult("Task description is required");
+        }
+
+        const clientId = getActiveClientId();
+        if (!clientId) {
+          return errorResult("No active client — cannot launch session");
+        }
+
+        // Dynamically import to avoid circular dependencies
+        const { getConnectedClient } = await import("./server.js");
+        const { runClaudeCode } = await import("./claude-code.js");
+
+        const client = getConnectedClient(clientId);
+        if (!client) {
+          return errorResult("Client disconnected");
+        }
+
+        const runId = randomUUID();
+        const targetCardId = randomUUID();
+
+        // Fire-and-forget: the session streams results back via WebSocket
+        runClaudeCode({
+          prompt: task,
+          client,
+          runId,
+          targetCardId,
+        }).catch((err) => {
+          logError("enso_launch_task_session", "Claude Code session failed", err);
+        });
+
+        return jsonResult({
+          tool: "enso_launch_task_session",
+          status: "session_started",
+          message: `Claude Code session launched for: ${task.slice(0, 100)}`,
+        });
       },
     },
   ];

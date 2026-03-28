@@ -750,7 +750,20 @@ export const useChatStore = create<CardStore>((set, get) => ({
         });
       }
 
-      get()._wsClient?.send({
+      const wsClient = get()._wsClient;
+      if (!wsClient) {
+        // WS not connected — revert card to "complete" so input stays usable
+        set((s) => {
+          const card = s.cards[termCardId!];
+          if (!card) return s;
+          return {
+            cards: { ...s.cards, [termCardId!]: { ...card, status: "complete", updatedAt: Date.now() } },
+            isWaiting: false,
+          };
+        });
+        return;
+      }
+      wsClient.send({
         type: "chat.send",
         conversationId: get().activeConversationId,
         text: displayText,
@@ -2668,6 +2681,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 [msg.targetCardId]: {
                   ...card,
                   status: "complete",
+                  pendingQuestions: undefined,
                   display: isDeepResearchTerminal ? "collapsed" : card.display,
                   toolMeta: newToolMeta,
                   operation: msg.operation,
@@ -2689,6 +2703,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                   ...card,
                   text: (card.text ?? "") + (msg.text ?? "Error occurred."),
                   status: "error",
+                  pendingQuestions: undefined,
                   toolMeta: card.toolMeta, // preserve existing session + cwd
                   operation: msg.operation,
                   cardMode: msg.cardMode ?? card.cardMode,
@@ -2995,7 +3010,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 ...card,
                 text: (card.text ?? "") + (msg.text ?? ""),
                 status: hasQuestions ? "complete" : "streaming",
-                toolMeta: msg.toolMeta ?? card.toolMeta,
+                toolMeta: { ...card.toolMeta, ...msg.toolMeta, cwd: card.toolMeta?.cwd ?? msg.toolMeta?.cwd },
                 operation: msg.operation ?? card.operation,
                 cardMode: msg.cardMode ?? card.cardMode,
                 ...(hasQuestions ? { pendingQuestions: msg.questions } : {}),
@@ -3008,6 +3023,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
         const storeUpdates: Partial<CardStore> = { isWaiting: false };
 
         if (msg.state === "final") {
+          const newToolMeta = {
+            ...card.toolMeta,
+            toolId: TOOL_ID_CLAUDE_CODE,
+            ...(msg.toolMeta?.toolSessionId ? { toolSessionId: msg.toolMeta.toolSessionId } : {}),
+          };
           if (msg.toolMeta?.toolSessionId) {
             storeUpdates.codeSessionId = msg.toolMeta.toolSessionId;
             localStorage.setItem(STORAGE_KEYS.CODE_SESSION_ID, msg.toolMeta.toolSessionId);
@@ -3025,9 +3045,9 @@ export const useChatStore = create<CardStore>((set, get) => ({
               ...state.cards,
               [cardId]: {
                 ...card,
-                // Don't replace text — deltas already delivered the full output
                 status: "complete",
-                toolMeta: msg.toolMeta ?? card.toolMeta,
+                pendingQuestions: undefined,
+                toolMeta: newToolMeta,
                 operation: msg.operation,
                 cardMode: msg.cardMode ?? card.cardMode,
                 updatedAt: now,
@@ -3049,6 +3069,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
                 ...card,
                 text: (card.text ?? "") + (msg.text ?? "Error occurred."),
                 status: "error",
+                pendingQuestions: undefined,
                 toolMeta: errorToolMeta,
                 operation: msg.operation,
                 cardMode: msg.cardMode ?? card.cardMode,

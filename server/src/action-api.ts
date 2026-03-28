@@ -94,37 +94,13 @@ export function createActionRouter(deps: {
           timestamp: Date.now(),
         });
       } else {
-        const { classifyTask } = await import("./task-router.js");
-        const classification = account.geminiApiKey
-          ? await classifyTask({ userMessage: text, conversationHistory: [], geminiApiKey: account.geminiApiKey, chatModel: client.chatModel, providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey } })
-          : { complexity: "simple" as const, answer: undefined, reasoning: "no gemini key" };
-
-        if (classification.complexity === "research") {
-          const topic = classification.researchTopic || text;
-          const depth = classification.researchDepth === "quick" ? "quick" : "standard";
-          await routeToResearchAPI({ topic, depth: depth as "quick" | "standard", text, client, account, config, runtime });
-        } else if (classification.complexity === "orchestrated") {
-          const { handleOrchestration } = await import("./orchestrator.js");
-          await handleOrchestration({ userMessage: text, classification, client, account });
-        } else if (classification.complexity === "one-off") {
-          const { runClaudeCode } = await import("./claude-code.js");
-          await runClaudeCode({ prompt: text, client, runId });
-        } else if (classification.answer && isGeminiModel) {
-          // Gemini fast path: use the classifier's inline answer directly
-          client.send({
-            id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
-            state: "final", text: classification.answer, timestamp: Date.now(),
-          });
-        } else {
-          // Call the user's selected chat model
-          const { callChatLLM } = await import("./llm-provider.js");
-          const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
-          const answer = await callChatLLM({ prompt: text, model: chatModel, providerKeys });
-          client.send({
-            id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
-            state: "final", text: answer, timestamp: Date.now(),
-          });
-        }
+        const { callChatLLM } = await import("./llm-provider.js");
+        const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
+        const answer = await callChatLLM({ prompt: text, model: chatModel, providerKeys });
+        client.send({
+          id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
+          state: "final", text: answer, timestamp: Date.now(),
+        });
       }
     } catch (err) {
       logError("action-api", "chat failed", err);

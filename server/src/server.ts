@@ -20,7 +20,7 @@ import { APP_CATALOG } from "./app-catalog.js";
 import { toProxiedImageUrl } from "./utils/proxy-url.js";
 import { logAction, logError, logFix, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
-import { classifyTask, qualityGate } from "./task-router.js";
+import { setActiveClientId } from "./runtime.js";
 import {
   persistCard,
   loadCardHistory,
@@ -32,7 +32,6 @@ import {
   writeEnsoMemory,
   getMemoryContext,
   getRecentConversationTopics,
-  invalidateContextCache,
   listConversations,
   createConversation,
   renameConversation,
@@ -43,8 +42,6 @@ import {
   DEFAULT_CONVERSATION_ID,
 } from "./memory-bridge.js";
 import type { CardRecord } from "./memory-bridge.js";
-import { generateFollowUps } from "./followup-generator.js";
-import { extractAndPersistMemory } from "./memory-extractor.js";
 import { MAX_MEDIA_FILE_SIZE, WS_PING_INTERVAL_MS, WS_DISCONNECT_CLEANUP_MS, DEFAULT_CHAT_MODEL, HOME_DIR, ENSO_HOME } from "./config.js";
 
 export type ConnectedClient = {
@@ -408,98 +405,6 @@ Reply with ONLY the research topic as a single line of plain text (no JSON, no m
   }
 
   return { topic, depth: "standard" };
-}
-
-// ── App Intent Matcher (E1: Chat-to-App Routing Fix) ──
-// Pre-classification check: does the user's message match a registered app?
-
-const APP_INTENT_PATTERNS: Array<{
-  pattern: RegExp;
-  toolFamily: string;
-  confidence: number;
-}> = [
-  // Media Gallery — browsing, viewing, organizing photos
-  { pattern: /\b(media\s+gallery|photo\s+gallery|browse\s+(my\s+)?photo|view\s+(my\s+)?photo|show\s+(me\s+)?(my\s+)?(favorite\s+|recent\s+)?photo|organize\s+photo|photo\s+collections?\b|my\s+gallery|open\s+(the\s+)?gallery)\b/i, toolFamily: "media_gallery", confidence: 0.9 },
-  { pattern: /\b(rate\s+(my\s+|this\s+)?photo|favorite\s+(my\s+)?photo|search\s+(my\s+)?photo|photo\s+search|find\s+(my\s+)?photo|my\s+photos|my\s+pictures|browse\s+photos|browse\s+pictures)\b/i, toolFamily: "media_gallery", confidence: 0.85 },
-  { pattern: /\b(show\s+(me\s+)?(my\s+)?collections|list\s+collections|open\s+gallery|view\s+gallery|show\s+gallery|browse\s+(my\s+)?gallery|browse\s+(the\s+)?pictures)\b/i, toolFamily: "media_gallery", confidence: 0.85 },
-
-  // Photo Studio — editing, styling, processing photos
-  { pattern: /\b(photo\s+studio|style\s+gallery|apply\s+(a\s+)?style|photo\s+processing|film\s+stock|cinematic\s+style|artistic\s+style|photo\s+style|open\s+(the\s+)?studio)\b/i, toolFamily: "photo_studio", confidence: 0.9 },
-  { pattern: /\b(batch\s+process|style\s+preview|portra\s+400|wong\s+kar[- ]?wai|blade\s+runner|nordic\s+noir|photo\s*book|create\s+(a\s+)?photo\s*book)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
-  { pattern: /\b(adjust\s+(a\s+|my\s+|this\s+)?photo|photo\s+adjust|increase\s+contrast|add\s+grain|edit\s+(my\s+|a\s+|this\s+)?photo|analyze\s+(this\s+|my\s+|a\s+)?photo|compare\s+(photo\s+)?versions|show\s+(me\s+)?(all\s+)?styles|list\s+styles|artistic\s+styles)\b/i, toolFamily: "photo_studio", confidence: 0.85 },
-
-];
-
-function matchAppIntent(message: string): { appId: string; toolFamily: string; confidence: number } | null {
-  // Skip messages that are clearly about programming/research, not app usage
-  if (/\b(research|build|implement|code|script|deploy|write\s+a|help\s+me\s+write)\b/i.test(message) &&
-      !/\b(photo\s+studio|media\s+gallery|open|browse|show\s+me|launch)\b/i.test(message)) {
-    return null;
-  }
-
-  for (const { pattern, toolFamily, confidence } of APP_INTENT_PATTERNS) {
-    if (pattern.test(message)) {
-      return { appId: toolFamily, toolFamily, confidence };
-    }
-  }
-  return null;
-}
-
-function inferAppParams(message: string, primaryTool: any): Record<string, unknown> {
-  const params: Record<string, unknown> = {};
-
-  // Extract path hints from message
-  const pathMatch = message.match(/\b(~\/\S+|[A-Z]:\\[^\s,]+|\/[a-z][^\s,]+)\b/i);
-  if (pathMatch && primaryTool.parameters?.properties?.path) {
-    params.path = pathMatch[1];
-  }
-
-  // Extract style hints
-  const styleMatch = message.match(/\b(portra\s*400|ektar|tri-?x|wong\s+kar[- ]?wai|blade\s+runner|nordic\s+noir|moriyama|fan\s+ho|moody\s+natural|soft\s+film)\b/i);
-  if (styleMatch && primaryTool.parameters?.properties?.style) {
-    params.style = styleMatch[1].toLowerCase().replace(/[\s-]+/g, "_");
-  }
-
-  return params;
-}
-
-/**
- * Send follow-up suggestions and trigger memory extraction for direct-path responses.
- * Called from the "simple" task router path which bypasses deliverEnsoReply().
- */
-function sendFollowUpsAndExtractMemory(params: {
-  userMessage: string;
-  assistantText: string;
-  cardId: string;
-  sessionKey: string;
-  send: (msg: ServerMessage) => void;
-  account: ResolvedEnsoAccount;
-  language?: string;
-}): void {
-  const { userMessage, assistantText, cardId, sessionKey, send: sendFn, account, language } = params;
-
-  // Follow-ups
-  if (assistantText.length > 30) {
-    const suggestions = generateFollowUps({ userMessage, assistantText, language });
-    if (suggestions.length > 0) {
-      sendFn({
-        id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
-        followUps: { cardId, suggestions },
-        timestamp: Date.now(),
-      });
-    }
-  }
-
-  // Memory extraction (fire-and-forget)
-  const hasLLM = account.geminiApiKey || Object.keys(account.providerKeys ?? {}).length > 0;
-  if (userMessage.length > 20 && assistantText.length > 50 && hasLLM) {
-    extractAndPersistMemory({
-      userMessage,
-      assistantResponse: assistantText,
-      geminiApiKey: account.geminiApiKey,
-      providerKeys: account.providerKeys,
-    }).then(() => invalidateContextCache()).catch(() => {});
-  }
 }
 
 export async function startEnsoServer(opts: {
@@ -1958,454 +1863,30 @@ export async function startEnsoServer(opts: {
                   break; // Exit the chat.send case
                 }
 
-                // Build recent conversation context for the classifier
-                const recentCards = loadCardHistory(clientId, convId, 10);
-                const recentHistory = recentCards
-                  .filter((c) => c.text)
-                  .slice(-5)
-                  .map((c) => `${c.role}: ${c.text!.slice(0, 300)}`);
+                // ── Agent-first dispatch ──
+                // All messages go through the agent pipeline, which has access to:
+                // 1. All registered app tools (world_clock, photo_studio, media_gallery, etc.)
+                // 2. System tools (filesystem, media, browser, researcher, etc.)
+                // 3. enso_launch_task_session — agent escalates to Claude Code when needed
+                //
+                // The agent decides: answer directly, call an app tool, or launch Claude Code.
 
-                // ── Pre-classification: check for app intent (E1 routing fix) ──
-                const appIntent = matchAppIntent(msg.text);
-                if (appIntent && appIntent.confidence >= 0.85) {
-                  runtime.log?.(`[enso] app-intent: matched "${appIntent.toolFamily}" (confidence=${appIntent.confidence}) for: "${msg.text.slice(0, 60)}"`);
-                  // Dismiss the processing indicator
-                  send({
-                    id: randomUUID(),
-                    runId: processingRunId,
-                    sessionKey,
-                    seq: 99,
-                    state: "final",
-                    text: "",
-                    timestamp: Date.now(),
-                  });
-                  // Launch the matched app — same pattern as apps.run
-                  try {
-                    const { loadAllApps } = await import("./app-persistence.js");
-                    const { executeToolDirect } = await import("./native-tools/registry.js");
-                    const apps = loadAllApps();
-                    const app = apps.find((a) => a.spec.toolFamily === appIntent.toolFamily);
-
-                    if (app) {
-                      const primary = app.spec.tools.find((t: any) => t.isPrimary) ?? app.spec.tools[0];
-                      const primaryToolName = `${app.spec.toolPrefix}${primary.suffix}`;
-                      const inferredParams = inferAppParams(msg.text, primary);
-
-                      const result = await executeToolDirect(primaryToolName, { ...primary.sampleParams, ...inferredParams });
-                      const data = result.success && result.data != null ? result.data : primary.sampleData;
-
-                      const { registerCardContext } = await import("./outbound.js");
-                      const cardId = randomUUID();
-                      registerCardContext(cardId, {
-                        cardId,
-                        originalPrompt: msg.text,
-                        originalResponse: "",
-                        currentData: structuredClone(data),
-                        geminiApiKey: account.geminiApiKey,
-                        account,
-                        mode: "full",
-                        actionHistory: [],
-                        appToolHint: {
-                          toolName: primaryToolName,
-                          params: inferredParams,
-                          handlerPrefix: app.spec.toolPrefix,
-                        },
-                        interactionMode: "tool",
-                        toolFamily: app.spec.toolFamily,
-                        signatureId: app.spec.signatureId,
-                        coverageStatus: "covered",
-                      });
-
-                      const appCardMsg = {
-                        id: cardId,
-                        runId: randomUUID(),
-                        sessionKey,
-                        seq: 0,
-                        state: "final" as const,
-                        data,
-                        generatedUI: app.templateJSX,
-                        cardMode: {
-                          interactionMode: "tool" as const,
-                          toolFamily: app.spec.toolFamily,
-                          signatureId: app.spec.signatureId,
-                          coverageStatus: "covered" as const,
-                        },
-                        timestamp: Date.now(),
-                      };
-                      send(appCardMsg);
-
-                      persistConv({
-                        id: cardId,
-                        runId: appCardMsg.runId,
-                        type: "dynamic-ui",
-                        role: "assistant",
-                        data,
-                        generatedUI: app.templateJSX,
-                        cardMode: appCardMsg.cardMode,
-                        timestamp: appCardMsg.timestamp,
-                      });
-
-                      break; // Exit the chat.send handler
-                    } else {
-                      const allFamilies = apps.map((a) => a.spec.toolFamily).join(", ");
-                      runtime.log?.(`[enso] app-intent: app "${appIntent.toolFamily}" not found among ${apps.length} loaded apps: [${allFamilies}]`);
-                    }
-                  } catch (appErr) {
-                    runtime.log?.(`[enso] app-intent: launch failed, falling through to classifier: ${String(appErr)}`);
-                    // Fall through to classifyTask
-                  }
-                }
-
-
-                // Timeout guard: ensure classification never hangs forever (e.g. under memory pressure)
-                const CLASSIFY_TIMEOUT_MS = 45_000;
-                const classification = await Promise.race([
-                  classifyTask({
-                    userMessage: msg.text,
-                    conversationHistory: recentHistory,
-                    geminiApiKey: account.geminiApiKey,
-                    mediaUrls: msg.mediaUrls,
-                    chatModel: client.chatModel,
-                    providerKeys: { ...account.providerKeys, gemini: account.geminiApiKey },
-                  }),
-                  new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error("Classification timed out")), CLASSIFY_TIMEOUT_MS),
-                  ),
-                ]);
-
-                // Emit classification result status
+                // Dismiss the processing indicator before the agent creates its own card
                 send({
                   id: randomUUID(),
                   runId: processingRunId,
                   sessionKey,
-                  seq: 1,
-                  state: "delta",
-                  operation: {
-                    operationId: processingRunId,
-                    stage: "processing",
-                    label: classification.complexity === "research"
-                      ? "Searching for information..."
-                      : classification.complexity === "orchestrated"
-                      ? "Planning a multi-step approach..."
-                      : classification.complexity === "one-off"
-                      ? "Preparing to work on your task..."
-                      : "Composing a response...",
-                    cancellable: false,
-                  },
+                  seq: 99,
+                  state: "final",
+                  text: "",
                   timestamp: Date.now(),
                 });
 
-                // Dismiss the processing indicator card before each path creates its own card
-                const dismissProcessing = () => {
-                  send({
-                    id: randomUUID(),
-                    runId: processingRunId,
-                    sessionKey,
-                    seq: 99,
-                    state: "final",
-                    text: "",
-                    timestamp: Date.now(),
-                  });
-                };
+                // Set active client so tools (e.g. enso_launch_task_session) can access it
+                setActiveClientId(clientId);
 
-                // Post-classification visualization intent override
-                // When Gemini classifies as "simple" but user clearly wants a
-                // dashboard/chart/visualization, re-route to Claude agent
-                const vizKeywords = /\b(dashboard|chart|graph|visualize|visualization|KPI\s*(board|display|view)|metrics?\s+(display|board|view|visual)|show\s+(me\s+)?(the\s+)?data\s+in\s+(chart|graph|visual)|interactive\s+(chart|graph|dashboard))\b/i;
-                const vizModifiers = /\b(executive|quarterly|monthly|annual|real-?time|live)\b/i;
-
-                if (
-                  classification.complexity === "simple" &&
-                  vizKeywords.test(msg.text) &&
-                  (vizModifiers.test(msg.text) ||
-                   /\b(showing|display|create|build|generate)\b/i.test(msg.text))
-                ) {
-                  runtime.log?.(`[enso] viz-override: reclassifying "${msg.text.slice(0, 60)}" from simple to agent`);
-                  dismissProcessing();
-                  await handleInbound({
-                    message: {
-                      messageId: randomUUID(),
-                      sessionId: sessionKey,
-                      senderNick: `user_${connectionId}`,
-                      text: msg.text,
-                      mediaUrls: msg.mediaUrls,
-                      timestamp: Date.now(),
-                    },
-                    account,
-                    config,
-                    runtime,
-                    client,
-                    routing: msg.routing,
-                    statusSink,
-                  });
-                  break;
-                }
-
-                // Post-classification media-action override (E1 Sprint 11)
-                // When Gemini classifies media action requests as "simple", re-route to
-                // the agent pipeline where registered tools (video, media processing,
-                // contact sheet, upscale, etc.) are available for execution.
-                const mediaActionVerbs = /\b(upscale|upres|super.?res|enlarge|enhance|sharpen|denoise|remove\s+(the\s+)?background|background\s+remov|transparent|cut\s*out|contact\s+sheet|proof\s+sheet|thumbnail\s+grid|photo\s+grid|extract\s+frames?|scene\s+detect|detect\s+scenes?|video\s+(inspect|analyz|highlight|thumbnail)|frame\s+extract|color\s+(grade|grading|match|correct)|batch\s+(convert|resize|rename|export|process)|generate\s+thumbnail|highlight\s+reel|crop\s+faces?|watermark|create\s+(a\s+)?(contact|proof)\s+sheet)\b/i;
-
-                // Exclude conceptual questions ("what is upscaling?", "how does scene detection work?")
-                const mediaConceptual = /\b(what\s+(is|are)|how\s+(do|does|to|can)|explain|tell\s+me\s+about|difference\s+between)\b/i;
-
-                if (
-                  classification.complexity === "simple" &&
-                  mediaActionVerbs.test(msg.text) &&
-                  !mediaConceptual.test(msg.text)
-                ) {
-                  runtime.log?.(`[enso] media-action-override: reclassifying "${msg.text.slice(0, 60)}" from simple to agent`);
-                  dismissProcessing();
-                  await handleInbound({
-                    message: {
-                      messageId: randomUUID(),
-                      sessionId: sessionKey,
-                      senderNick: `user_${connectionId}`,
-                      text: msg.text,
-                      mediaUrls: msg.mediaUrls,
-                      timestamp: Date.now(),
-                    },
-                    account,
-                    config,
-                    runtime,
-                    client,
-                    routing: msg.routing,
-                    statusSink,
-                  });
-                  break;
-                }
-
-                // Post-classification app intent override (E1 routing fix)
-                // When Gemini classifies as "simple" or "one-off" but user clearly wants a media app,
-                // intercept and launch the matched app instead of routing to Claude Code Terminal.
-                if (
-                  (classification.complexity === "simple" || classification.complexity === "one-off") &&
-                  appIntent &&
-                  appIntent.confidence >= 0.7
-                ) {
-                  runtime.log?.(`[enso] app-override: reclassifying "${msg.text.slice(0, 60)}" from ${classification.complexity} to app (${appIntent.toolFamily})`);
-                  dismissProcessing();
-                  try {
-                    const { loadAllApps: loadApps2 } = await import("./app-persistence.js");
-                    const { executeToolDirect: execTool2 } = await import("./native-tools/registry.js");
-                    const apps2 = loadApps2();
-                    const app2 = apps2.find((a) => a.spec.toolFamily === appIntent.toolFamily);
-
-                    if (app2) {
-                      const primary2 = app2.spec.tools.find((t: any) => t.isPrimary) ?? app2.spec.tools[0];
-                      const toolName2 = `${app2.spec.toolPrefix}${primary2.suffix}`;
-                      const params2 = inferAppParams(msg.text, primary2);
-
-                      const result2 = await execTool2(toolName2, { ...primary2.sampleParams, ...params2 });
-                      const data2 = result2.success && result2.data != null ? result2.data : primary2.sampleData;
-
-                      const { registerCardContext: regCtx2 } = await import("./outbound.js");
-                      const cardId2 = randomUUID();
-                      regCtx2(cardId2, {
-                        cardId: cardId2,
-                        originalPrompt: msg.text,
-                        originalResponse: "",
-                        currentData: structuredClone(data2),
-                        geminiApiKey: account.geminiApiKey,
-                        account,
-                        mode: "full",
-                        actionHistory: [],
-                        appToolHint: {
-                          toolName: toolName2,
-                          params: params2,
-                          handlerPrefix: app2.spec.toolPrefix,
-                        },
-                        interactionMode: "tool",
-                        toolFamily: app2.spec.toolFamily,
-                        signatureId: app2.spec.signatureId,
-                        coverageStatus: "covered",
-                      });
-
-                      const overrideMsg = {
-                        id: cardId2,
-                        runId: randomUUID(),
-                        sessionKey,
-                        seq: 0,
-                        state: "final" as const,
-                        data: data2,
-                        generatedUI: app2.templateJSX,
-                        cardMode: {
-                          interactionMode: "tool" as const,
-                          toolFamily: app2.spec.toolFamily,
-                          signatureId: app2.spec.signatureId,
-                          coverageStatus: "covered" as const,
-                        },
-                        timestamp: Date.now(),
-                      };
-                      send(overrideMsg);
-
-                      persistConv({
-                        id: cardId2,
-                        runId: overrideMsg.runId,
-                        type: "dynamic-ui",
-                        role: "assistant",
-                        data: data2,
-                        generatedUI: app2.templateJSX,
-                        cardMode: overrideMsg.cardMode,
-                        timestamp: overrideMsg.timestamp,
-                      });
-
-                      break;
-                    } else {
-                      runtime.log?.(`[enso] app-override: app "${appIntent.toolFamily}" not found among ${apps2.length} loaded apps`);
-                    }
-                  } catch (overrideErr) {
-                    runtime.log?.(`[enso] app-override: launch failed, continuing with classification: ${String(overrideErr)}`);
-                    // Fall through to normal classification handling
-                  }
-                }
-
-                if (classification.complexity === "orchestrated") {
-                  const isImplicit = classification.implicit === true;
-                  runtime.log?.(`[enso] task-router: orchestrated${isImplicit ? " (implicit)" : ""} → "${msg.text.slice(0, 60)}"`);
-                  dismissProcessing();
-                  const { handleOrchestration } = await import("./orchestrator.js");
-                  handleOrchestration({
-                    userMessage: msg.text,
-                    classification,
-                    client,
-                    account,
-                    // For implicitly detected multi-step tasks: use fast LLM planning
-                    useGeminiPlanning: isImplicit,
-                    chatModel: client.chatModel,
-                    skipApproval: isImplicit,
-                  }).catch(async (err) => {
-                    logError("orchestrator", "Auto-routed orchestration failed", err);
-                    runtime.error?.(`[enso] orchestrator error: ${err instanceof Error ? err.message : String(err)}`);
-                    // Fall back to normal agent pipeline so the user gets a response
-                    runtime.log?.(`[enso] orchestrator failed, falling back to agent pipeline`);
-                    try {
-                      await handleInbound({
-                        message: {
-                          messageId: randomUUID(),
-                          sessionId: sessionKey,
-                          senderNick: `user_${connectionId}`,
-                          text: msg.text,
-                          mediaUrls: msg.mediaUrls,
-                          timestamp: Date.now(),
-                        },
-                        account,
-                        config,
-                        runtime,
-                        client,
-                      });
-                    } catch (fallbackErr) {
-                      logError("orchestrator", "Fallback to agent also failed", fallbackErr);
-                      send({
-                        id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
-                        state: "final", text: `Sorry, I encountered an error processing your request. Please try again.`,
-                        timestamp: Date.now(),
-                      } as ServerMessage);
-                    }
-                  });
-                  break;
-                }
-
-                if (classification.complexity === "research") {
-                  const topic = classification.researchTopic || msg.text;
-                  // Deep research is only triggered via ✨ button on completed cards, never from initial classification
-                  const depth = (classification.researchDepth === "quick" ? "quick" : "standard") as "quick" | "standard";
-                  runtime.log?.(`[enso] task-router: research → "${topic.slice(0, 60)}" (depth=${depth})`);
-
-                  // Dismiss processing card before routeToResearch creates the researcher card
-                  dismissProcessing();
-
-                  try {
-                    await routeToResearch({
-                      topic,
-                      depth,
-                      originalText: msg.text,
-                      sessionKey,
-                      client,
-                      account,
-                      config,
-                      runtime,
-                      connectionId,
-                    });
-                  } catch (researchErr) {
-                    logError("task-router", "Research routing failed, falling through to agent", researchErr);
-                    runtime.log?.(`[enso] task-router: research routing failed, falling through`);
-                    await handleInbound({
-                      message: {
-                        messageId: randomUUID(),
-                        sessionId: sessionKey,
-                        senderNick: `user_${connectionId}`,
-                        text: msg.text,
-                        mediaUrls: msg.mediaUrls,
-                        timestamp: Date.now(),
-                      },
-                      account,
-                      config,
-                      runtime,
-                      client,
-                    });
-                  }
-                  break;
-                }
-
-                if (classification.complexity === "one-off") {
-                  dismissProcessing();
-                  // One-off tasks with archetypes get escalated to orchestrator for bespoke UI output
-                  if (classification.archetype && classification.archetype !== "general") {
-                    runtime.log?.(`[enso] task-router: one-off with archetype "${classification.archetype}" → escalating to orchestrator`);
-                    const { handleOrchestration } = await import("./orchestrator.js");
-                    handleOrchestration({
-                      userMessage: msg.text,
-                      classification: { ...classification, complexity: "orchestrated" },
-                      client,
-                      account,
-                    }).catch(async (err) => {
-                      logError("orchestrator", "Archetype-escalated orchestration failed", err);
-                      // Fall back to normal agent pipeline so the user gets a response
-                      runtime.log?.(`[enso] archetype orchestration failed, falling back to agent pipeline`);
-                      try {
-                        await handleInbound({
-                          message: {
-                            messageId: randomUUID(),
-                            sessionId: sessionKey,
-                            senderNick: `user_${connectionId}`,
-                            text: msg.text,
-                            mediaUrls: msg.mediaUrls,
-                            timestamp: Date.now(),
-                          },
-                          account,
-                          config,
-                          runtime,
-                          client,
-                        });
-                      } catch (fallbackErr) {
-                        logError("orchestrator", "Archetype fallback to agent also failed", fallbackErr);
-                        send({
-                          id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
-                          state: "final", text: `Sorry, I encountered an error processing your request. Please try again.`,
-                          timestamp: Date.now(),
-                        } as ServerMessage);
-                      }
-                    });
-                    break;
-                  }
-                  runtime.log?.(`[enso] task-router: one-off → "${msg.text.slice(0, 60)}"`);
-                  const runId = randomUUID();
-                  const targetCardId = randomUUID();
-                  await runClaudeCode({
-                    prompt: msg.text,
-                    cwd: ensoProjectPath,
-                    client,
-                    runId,
-                    targetCardId,
-                  });
-                  break;
-                }
-
-                // "simple" — always route through agent for per-conversation context
-                {
-                  runtime.log?.(`[enso] simple → agent: "${msg.text.slice(0, 60)}"`);
+                try {
+                  runtime.log?.(`[enso] → agent pipeline: "${msg.text.slice(0, 60)}"`);
                   await handleInbound({
                     message: {
                       messageId: randomUUID(),
@@ -2423,7 +1904,8 @@ export async function startEnsoServer(opts: {
                     routing: msg.routing,
                     statusSink,
                   });
-                  dismissProcessing();
+                } finally {
+                  setActiveClientId(null);
                 }
               } catch (routerErr: any) {
                 // Error boundary (E2 Sprint 11): show user-friendly message + recovery chips
@@ -2503,7 +1985,7 @@ export async function startEnsoServer(opts: {
                   senderNick: `user_${connectionId}`,
                   text: actionText,
                   timestamp: Date.now(),
-                  conversationId: convId,
+                  conversationId: resolveConversationId(client, msg),
                 },
                 account,
                 config,
