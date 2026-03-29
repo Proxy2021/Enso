@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "video_studio",
     "toolPrefix": "enso_video_studio_",
-    "description": "AI video generation studio: create production-level 短视频 (short videos) for Douyin/TikTok/RedNote with full project planning, batch generation, viral format templates, scene-by-scene captions and audio cues — plus single clip generation, image animation, prompt crafting, and gallery management",
+    "description": "AI video generation studio: create production-level 短视频 (short videos) for Douyin/TikTok/RedNote with full project planning, batch generation, viral format templates, scene-by-scene captions and audio cues — plus photo story (auto-animate a list of static photos into a narrative video), single clip generation, image animation, prompt crafting, and gallery management",
     "signatureId": "video_studio_view",
     "tools": [
       {
@@ -606,6 +606,111 @@
           ]
         },
         "requiredDataKeys": ["tool", "templates"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "photo_story",
+        "description": "Create a short video from a list of static photos. Provide image file paths and a theme/concept — AI generates a narrative arc, assigns cinematic motion directions (zoom, pan, Ken Burns, parallax) to each photo, animates every image into a video clip using Seedance I2V, and returns a complete photo story with captions and audio cues. Perfect for travel albums, product showcases, event highlights, lifestyle vlogs, and memories. Supports all platforms (Douyin/TikTok 9:16, RedNote 3:4, Bilibili 16:9).",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image_paths": {
+              "type": "array",
+              "description": "Array of absolute file paths to the images to animate. Supports JPG, PNG, WEBP. Order matters — determines narrative sequence. Example: [\"/Users/you/Photos/trip1.jpg\", \"/Users/you/Photos/trip2.jpg\"]"
+            },
+            "concept": {
+              "type": "string",
+              "description": "The story or theme that connects your photos (any language). E.g., '我们的日本之旅' or 'A weekend road trip through the mountains'"
+            },
+            "platform": {
+              "type": "string",
+              "description": "Target platform: douyin, tiktok, rednote, bilibili, youtube_shorts, wechat. Determines aspect ratio. Default: douyin"
+            },
+            "style": {
+              "type": "string",
+              "description": "Visual style: cinematic, vlog, documentary, romantic, dramatic, travel. Default: cinematic"
+            },
+            "duration_per_photo": {
+              "type": "number",
+              "description": "Duration in seconds for each animated clip (4-15). Default: 5. Total video length = photos × duration."
+            },
+            "generate_audio": {
+              "type": "boolean",
+              "description": "Generate AI audio for each clip. Default: true"
+            },
+            "image_descriptions": {
+              "type": "array",
+              "description": "Optional: brief text descriptions of each photo to help AI create better motion directions. E.g., ['Sunset over Tokyo skyline', 'Ramen shop at night']. Must match image_paths order."
+            }
+          },
+          "required": ["image_paths", "concept"]
+        },
+        "sampleParams": {
+          "image_paths": ["/Users/you/Photos/tokyo1.jpg", "/Users/you/Photos/tokyo2.jpg", "/Users/you/Photos/tokyo3.jpg"],
+          "concept": "三天东京之旅，从浅草到涩谷",
+          "platform": "rednote",
+          "style": "cinematic",
+          "duration_per_photo": 5,
+          "image_descriptions": ["Senso-ji temple at golden hour", "Shibuya crossing at night with neon lights", "Ramen shop owner smiling"]
+        },
+        "sampleData": {
+          "tool": "enso_video_studio_photo_story",
+          "projectTitle": "三天东京之旅",
+          "concept": "三天东京之旅，从浅草到涩谷",
+          "platform": "rednote",
+          "platformName": "小红书 RedNote",
+          "ratio": "3:4",
+          "resolution": "1080p",
+          "narrativeOverview": "A cinematic journey through Tokyo's contrasts — ancient temples bathed in golden light, the electric chaos of Shibuya, and the warmth of a humble ramen master.",
+          "totalPhotos": 3,
+          "successCount": 3,
+          "failedCount": 0,
+          "durationPerPhoto": 5,
+          "totalDuration": 15,
+          "musicGenre": "Lo-fi Japanese",
+          "musicMood": "nostalgic",
+          "hashtags": ["#东京旅行", "#日本", "#小红书旅行"],
+          "frames": [
+            {
+              "number": 1,
+              "imagePath": "/Users/you/Photos/tokyo1.jpg",
+              "imageFileName": "tokyo1.jpg",
+              "motionPrompt": "Slow Ken Burns zoom-in from wide temple view to close-up details of lanterns, warm amber color grade, gentle drift upward",
+              "caption": "浅草，时光静止",
+              "audioNote": "Gentle shamisen melody opens",
+              "purpose": "opener",
+              "status": "success",
+              "url": "/media/seedance_i2v_1711267200.mp4",
+              "taskId": "cgt-i2v-001"
+            },
+            {
+              "number": 2,
+              "imagePath": "/Users/you/Photos/tokyo2.jpg",
+              "imageFileName": "tokyo2.jpg",
+              "motionPrompt": "Slow pan left to right across neon-lit crossing, micro-zoom in on center, cinematic teal-orange color grade",
+              "caption": "涩谷，城市的心跳",
+              "audioNote": "Beat drops, energy peaks",
+              "purpose": "peak",
+              "status": "success",
+              "url": "/media/seedance_i2v_1711267210.mp4",
+              "taskId": "cgt-i2v-002"
+            },
+            {
+              "number": 3,
+              "imagePath": "/Users/you/Photos/tokyo3.jpg",
+              "imageFileName": "tokyo3.jpg",
+              "motionPrompt": "Gentle push-in with slight upward tilt, warm bokeh, shallow depth of field widens slowly, nostalgic film grain",
+              "caption": "关注，下次一起去",
+              "audioNote": "Music fades to warm close",
+              "purpose": "cta",
+              "status": "success",
+              "url": "/media/seedance_i2v_1711267220.mp4",
+              "taskId": "cgt-i2v-003"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "frames"],
         "isPrimary": false
       }
     ]

@@ -5,6 +5,13 @@ export default function GeneratedUI({ data, onAction }) {
   var [selectedTemplate, setSelectedTemplate] = useState(null);
   // Landing state
   var [landingMode, setLandingMode] = useState("short_video");
+  // Photo story state
+  var [psImagePathsText, setPsImagePathsText] = useState(""); // newline-separated paths
+  var [psConcept, setPsConcept] = useState("");
+  var [psPlatform, setPsPlatform] = useState("douyin");
+  var [psStyle, setPsStyle] = useState("cinematic");
+  var [psDuration, setPsDuration] = useState(5);
+  var [psDescriptions, setPsDescriptions] = useState(""); // newline-separated optional descriptions
   var [svPlatform, setSvPlatform] = useState("douyin");
   var [svCategory, setSvCategory] = useState("lifestyle");
   var [svDuration, setSvDuration] = useState(30);
@@ -446,6 +453,142 @@ export default function GeneratedUI({ data, onAction }) {
   }
 
   // ══════════════════════════════════════════════════════════════════════
+  // ── Photo Story Result ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_photo_story") {
+    var psFrames = data.frames || [];
+    var psTotalPhotos = data.totalPhotos || psFrames.length;
+    var psSuccess = data.successCount || 0;
+    var psFailed = data.failedCount || 0;
+    var psRatio = data.ratio || "9:16";
+    var psRatioCss = psRatio.replace(":", "/");
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <LucideReact.ImagePlay size={18} className="text-purple-400 flex-shrink-0" />
+            <span className="text-sm font-bold text-white truncate">{String(data.projectTitle || "Photo Story")}</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant="purple">{String(data.platformName || data.platform || "Douyin")}</Badge>
+            <Badge variant="success">{String(psSuccess)}/{String(psTotalPhotos)} done</Badge>
+            {psFailed > 0 ? <Badge variant="danger">{String(psFailed)} failed</Badge> : null}
+          </div>
+        </div>
+
+        {/* Narrative overview */}
+        {data.narrativeOverview ? (
+          <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-xs text-gray-400 italic">
+            {String(data.narrativeOverview)}
+          </div>
+        ) : null}
+
+        {/* Stats row */}
+        <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500">
+          <span className="flex items-center gap-1"><LucideReact.Images size={11} />{String(psTotalPhotos)} photos</span>
+          <span className="flex items-center gap-1"><LucideReact.Maximize size={11} />{String(psRatio)}</span>
+          <span className="flex items-center gap-1"><LucideReact.Clock size={11} />{String(data.durationPerPhoto || 5)}s/clip · {String(data.totalDuration || 0)}s total</span>
+          {data.musicGenre ? <span className="flex items-center gap-1"><LucideReact.Music size={11} />{String(data.musicGenre)}</span> : null}
+          {data.musicMood ? <Badge variant="outline">{String(data.musicMood)}</Badge> : null}
+        </div>
+
+        {/* Progress */}
+        <Progress value={psTotalPhotos > 0 ? (psSuccess / psTotalPhotos) * 100 : 0} />
+
+        {/* Frames */}
+        <div className="space-y-3">
+          {psFrames.map(function(frame, idx) {
+            return (
+              <div key={idx} className={"rounded-xl border overflow-hidden " + (frame.status === "success" ? "border-white/15" : "border-red-500/20")}>
+                {/* Video player if generated */}
+                {frame.status === "success" && frame.url ? (
+                  <video
+                    src={frame.url}
+                    controls
+                    className="w-full bg-black"
+                    style={{ maxHeight: "320px" }}
+                  />
+                ) : null}
+
+                {/* Frame info */}
+                <div className="p-3 space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-gray-500">#{String(frame.number)}</span>
+                      <span className="text-xs text-gray-400 truncate max-w-32">{String(frame.imageFileName || frame.imagePath || "")}</span>
+                      {frame.purpose ? <Badge variant={purposeVariant(frame.purpose)}>{String(frame.purpose)}</Badge> : null}
+                    </div>
+                    <Badge variant={frame.status === "success" ? "success" : "danger"}>
+                      {frame.status === "success" ? "✓ Animated" : "✗ Failed"}
+                    </Badge>
+                  </div>
+
+                  {/* Motion prompt */}
+                  <div className="flex items-start gap-2">
+                    <LucideReact.Move size={11} className="text-blue-400/70 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs text-gray-500">{String(frame.motionPrompt || "")}</span>
+                  </div>
+
+                  {/* Caption */}
+                  {frame.caption ? (
+                    <div className="flex items-start gap-2">
+                      <LucideReact.Type size={11} className="text-yellow-400/70 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs text-yellow-300">"{String(frame.caption)}"</span>
+                    </div>
+                  ) : null}
+
+                  {/* Audio note */}
+                  {frame.audioNote ? (
+                    <div className="flex items-start gap-2">
+                      <LucideReact.Music size={11} className="text-purple-400/70 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs text-gray-500">{String(frame.audioNote)}</span>
+                    </div>
+                  ) : null}
+
+                  {/* Error */}
+                  {frame.status === "failed" ? (
+                    <div className="flex items-start gap-2">
+                      <LucideReact.AlertCircle size={11} className="text-red-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs text-red-400">{String(frame.error || "Animation failed")}</span>
+                    </div>
+                  ) : null}
+
+                  {/* Retry button for failed frames */}
+                  {frame.status === "failed" ? (
+                    <Button variant="outline" size="sm" icon={<LucideReact.RefreshCw size={11} />}
+                      onClick={function() { onAction("animate", { image_path: frame.imagePath, prompt: frame.motionPrompt, duration: data.durationPerPhoto || 5, resolution: "1080p", ratio: psRatio }); }}>
+                      Retry
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Hashtags */}
+        {data.hashtags && data.hashtags.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {data.hashtags.map(function(tag, i) {
+              return <span key={i} className="text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-full border border-blue-400/20">{String(tag)}</span>;
+            })}
+          </div>
+        ) : null}
+
+        {/* Bottom actions */}
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" icon={<LucideReact.Grid3x3 size={13} />}
+            onClick={function() { onAction("gallery", {}); }}>Gallery</Button>
+          <Button variant="ghost" icon={<LucideReact.Home size={13} />}
+            onClick={function() { onAction("view", {}); }}>Studio</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
   // ── Landing / Studio Home ──
   // ══════════════════════════════════════════════════════════════════════
   if (tool === "enso_video_studio_view") {
@@ -511,10 +654,11 @@ export default function GeneratedUI({ data, onAction }) {
         {/* Mode Tabs */}
         <div className="flex gap-1.5 flex-wrap">
           {[
-            { id: "short_video", label: "🎬 短视频", icon: null },
-            { id: "single", label: "Single Clip", icon: null },
-            { id: "multi", label: "Multi-Scene", icon: null },
-            { id: "animate", label: "Animate", icon: null }
+            { id: "short_video", label: "🎬 短视频" },
+            { id: "photo_story", label: "📸 Photo Story" },
+            { id: "single", label: "Single Clip" },
+            { id: "multi", label: "Multi-Scene" },
+            { id: "animate", label: "Animate" }
           ].map(function(tab) {
             return (
               <Button key={tab.id}
@@ -589,6 +733,109 @@ export default function GeneratedUI({ data, onAction }) {
                 onAction("short_video", { concept: svConcept, platform: svPlatform, category: svCategory, target_duration: svDuration, hook_style: svHookStyle });
               }}>
               Plan 短视频 Project
+            </Button>
+          </div>
+        ) : null}
+
+        {/* ── Photo Story ── */}
+        {landingMode === "photo_story" ? (
+          <div className="space-y-3">
+            {/* Explainer */}
+            <div className="p-3 rounded-lg bg-purple-500/8 border border-purple-500/20 text-xs text-purple-300 space-y-1">
+              <p className="font-semibold">📸 → 🎬 Photo Story</p>
+              <p className="text-purple-400/80">Paste your image file paths below. Each photo will be animated with cinematic motion (zoom, pan, Ken Burns) and woven into a narrative with captions and audio cues.</p>
+            </div>
+
+            {/* Image paths */}
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-400">Image Paths <span className="text-gray-600">(one per line)</span></p>
+              <textarea
+                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none font-mono"
+                rows={4}
+                placeholder={"/Users/you/Photos/trip1.jpg\n/Users/you/Photos/trip2.jpg\n/Users/you/Photos/trip3.jpg"}
+                value={psImagePathsText}
+                onChange={function(e) { setPsImagePathsText(e.target.value); }}
+              />
+              <p className="text-xs text-gray-600">
+                {psImagePathsText.trim() ? String(psImagePathsText.trim().split("\n").filter(function(l) { return l.trim(); }).length) + " photos" : "No photos yet"}
+                {" · "}Supports JPG, PNG, WEBP · Order determines narrative sequence
+              </p>
+            </div>
+
+            {/* Concept */}
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-400">Story Theme / Concept</p>
+              <textarea
+                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
+                rows={2}
+                placeholder="What story do these photos tell? e.g., '我们的东京三日游' or 'Product launch event highlights' or 'Before and after home renovation'"
+                value={psConcept}
+                onChange={function(e) { setPsConcept(e.target.value); }}
+              />
+            </div>
+
+            {/* Optional descriptions */}
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Photo Descriptions <span className="text-gray-600">(optional — one per line, helps AI create better motions)</span></p>
+              <textarea
+                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
+                rows={3}
+                placeholder={"Senso-ji temple at golden hour\nShibuya crossing at night\nRamen shop owner smiling"}
+                value={psDescriptions}
+                onChange={function(e) { setPsDescriptions(e.target.value); }}
+              />
+            </div>
+
+            {/* Platform + Style */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500">Platform</p>
+                <Select
+                  options={[
+                    { value: "douyin", label: "🎵 抖音 Douyin" }, { value: "tiktok", label: "🎶 TikTok" },
+                    { value: "rednote", label: "📕 小红书" }, { value: "bilibili", label: "📺 Bilibili" },
+                    { value: "youtube_shorts", label: "▶️ YT Shorts" }, { value: "wechat", label: "💬 微信视频号" }
+                  ]}
+                  value={psPlatform}
+                  onChange={function(v) { setPsPlatform(v); }}
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500">Style</p>
+                <Select
+                  options={[
+                    { value: "cinematic", label: "Cinematic" }, { value: "vlog", label: "Vlog" },
+                    { value: "documentary", label: "Documentary" }, { value: "romantic", label: "Romantic" },
+                    { value: "dramatic", label: "Dramatic" }, { value: "travel", label: "Travel" }
+                  ]}
+                  value={psStyle}
+                  onChange={function(v) { setPsStyle(v); }}
+                />
+              </div>
+            </div>
+
+            {/* Duration per photo */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">Duration per Photo</p>
+                <span className="text-xs font-mono text-purple-400">{String(psDuration)}s / photo
+                  {psImagePathsText.trim() ? (" · " + String(psImagePathsText.trim().split("\n").filter(function(l) { return l.trim(); }).length * psDuration) + "s total") : ""}
+                </span>
+              </div>
+              <Slider min={4} max={10} step={1} value={psDuration} onChange={function(v) { setPsDuration(v); }} showValue={false} />
+            </div>
+
+            {/* Generate button */}
+            <Button variant="primary" icon={<LucideReact.ImagePlay size={14} />}
+              disabled={!psImagePathsText.trim() || !psConcept.trim()}
+              onClick={function() {
+                var paths = psImagePathsText.trim().split("\n").map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
+                var descs = psDescriptions.trim() ? psDescriptions.trim().split("\n").map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; }) : [];
+                var actionParams = { image_paths: paths, concept: psConcept, platform: psPlatform, style: psStyle, duration_per_photo: psDuration };
+                if (descs.length > 0) actionParams.image_descriptions = descs;
+                onAction("photo_story", actionParams);
+              }}>
+              Create Photo Story
             </Button>
           </div>
         ) : null}

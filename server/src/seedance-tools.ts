@@ -36,7 +36,7 @@ const DEFAULT_MODEL =
   process.env.SEEDANCE_MODEL ?? "seedance-1-5-pro-251215";
 const POLL_INTERVAL_MS = 15_000; // BytePlus recommends 15s
 const TIMEOUT_MS = 10 * 60_000; // 10 minutes — extended for long clips on paid tier
-const MAX_DURATION = 15; // Paid tier supports up to 15s per clip
+const MAX_DURATION = 30; // Client-side guard; actual limit is API-tier-dependent (standard: ~10s, pro paid: ~15-30s)
 
 function getApiKey(): string {
   return process.env.BYTEPLUS_API_KEY ?? "";
@@ -210,7 +210,7 @@ export function createSeedanceTools(): EnsoAgentTool[] {
           },
           duration: {
             type: "number",
-            description: `Video duration in seconds (4-${MAX_DURATION}). Default: 5. Paid tier unlocks up to ${MAX_DURATION}s per clip.`,
+            description: `Video duration in seconds (4-${MAX_DURATION}). Default: 5. Actual max depends on your BytePlus tier — standard ~10s, paid pro potentially higher. API will return an error if your tier doesn't support the requested duration.`,
           },
           resolution: {
             type: "string",
