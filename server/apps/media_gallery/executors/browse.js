@@ -79,12 +79,24 @@ for (var i = 0; i < items.length; i++) {
   }
 }
 
+// Compute resolution tiers
+var resTiers = { "4K+": 0, "2K": 0, "HD": 0, "SD": 0 };
+for (var ri = 0; ri < items.length; ri++) {
+  var rExif = items[ri].exif || {};
+  var maxDim = Math.max(rExif.width || 0, rExif.height || 0);
+  if (maxDim >= 3840) resTiers["4K+"]++;
+  else if (maxDim >= 2560) resTiers["2K"]++;
+  else if (maxDim >= 1280) resTiers["HD"]++;
+  else if (maxDim > 0) resTiers["SD"]++;
+}
+
 data.summary = {
   totalSize: totalSize,
   imageCount: imageCount,
   videoCount: videoCount,
   favoriteCount: favoriteCount,
   ratedCount: ratedCount,
+  resolutionTiers: resTiers,
   dateRange: (earliestDate && latestDate) ? {
     earliest: new Date(earliestDate).toISOString(),
     latest: new Date(latestDate).toISOString()

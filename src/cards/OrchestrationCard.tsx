@@ -33,7 +33,7 @@ const ROLE_LABEL_KEYS: Record<AgentRole, string> = {
   reviewer: "orchestration.role.reviewer",
 };
 
-export default function OrchestrationCardInner({ card }: CardRendererProps) {
+function OrchestrationCardInner({ card }: CardRendererProps) {
   const orchData = isOrchestrationCardData(card.data) ? card.data : undefined;
   const plan = orchData?.orchestrationPlan;
   const progress = orchData?.orchestrationProgress;
@@ -1072,3 +1072,6 @@ function Spinner({ size = "md" }: { size?: "sm" | "md" }) {
     </svg>
   );
 }
+
+const OrchestrationCard = React.memo(OrchestrationCardInner);
+export default OrchestrationCard;

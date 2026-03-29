@@ -84,6 +84,22 @@ export default function GeneratedUI({ data, onAction }) {
   var collAddName = collNameState[0];
   var setCollAddName = collNameState[1];
 
+  var detailCollState = useState(false);
+  var showDetailColl = detailCollState[0];
+  var setShowDetailColl = detailCollState[1];
+
+  var detailCollNameState = useState("");
+  var detailCollName = detailCollNameState[0];
+  var setDetailCollName = detailCollNameState[1];
+
+  var searchLaunchState = useState(false);
+  var showSearchLaunch = searchLaunchState[0];
+  var setShowSearchLaunch = searchLaunchState[1];
+
+  var searchLaunchInputState = useState("");
+  var searchLaunchInput = searchLaunchInputState[0];
+  var setSearchLaunchInput = searchLaunchInputState[1];
+
   useEffect(function() {
     if (lightboxIdx >= 0 && lbRef.current) lbRef.current.focus();
   }, [lightboxIdx]);
@@ -108,6 +124,7 @@ export default function GeneratedUI({ data, onAction }) {
   var isCollections = tool === "enso_media_gallery_collection";
   var isInspect = tool === "enso_media_gallery_inspect";
   var isStats = tool === "enso_media_gallery_stats";
+  var isDuplicates = tool === "enso_media_gallery_duplicates";
   var isPhotoLike = isPhoto || isFavoriteResult || isRateResult || isInspect;
 
   var items = (data && data.items) ? data.items : [];
@@ -128,6 +145,27 @@ export default function GeneratedUI({ data, onAction }) {
     }
     return result;
   }, [items, searchQuery, favOnly]);
+
+  var dateGroups = useMemo(function() {
+    var groups = {};
+    for (var di = 0; di < filtered.length; di++) {
+      var dItem = filtered[di];
+      var dDate = (dItem.exif && dItem.exif.dateTaken) || dItem.modifiedAt || "";
+      var dKey = "Unknown";
+      if (dDate) {
+        try {
+          var dd = new Date(dDate);
+          if (!isNaN(dd.getTime())) dKey = dd.toISOString().substring(0, 10);
+        } catch(e) {}
+      }
+      if (!groups[dKey]) groups[dKey] = [];
+      groups[dKey].push(dItem);
+    }
+    var sorted = Object.keys(groups).sort().reverse();
+    return sorted.map(function(k) {
+      return { date: k, label: k === "Unknown" ? "Unknown Date" : fmtDate(k), items: groups[k] };
+    });
+  }, [filtered]);
 
   // ── Error view ──
   if (data && data.error) {
@@ -375,6 +413,86 @@ export default function GeneratedUI({ data, onAction }) {
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  // ── Duplicates View ──
+  // ════════════════════════════════════════════════════════════════════════
+  if (isDuplicates) {
+    var dupeGroups = data.groups || [];
+    return (
+      <div className="bg-gray-900 rounded-2xl p-3 border border-gray-800 space-y-3">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={function() { onAction("browse", { path: data.path || "." }); }}>
+            <LucideReact.ArrowLeft className="w-3.5 h-3.5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-gray-100 truncate">Duplicate Detection</div>
+            <div className="text-[11px] text-gray-500 truncate">{data.path || ""}</div>
+          </div>
+        </div>
+
+        {/* KPI row */}
+        <div className="grid grid-cols-3 gap-2">
+          <Stat label="Scanned" value={data.totalScanned || 0} accent="blue" />
+          <Stat label="Dupe Groups" value={data.duplicateGroups || 0} accent="amber" />
+          <Stat label="Potential Savings" value={fmtSize(data.potentialSavings || 0)} accent="rose" />
+        </div>
+
+        {dupeGroups.length === 0 ? (
+          <EmptyState
+            icon={<LucideReact.CheckCircle className="w-8 h-8 text-emerald-400" />}
+            title="No duplicates found"
+            description="This folder looks clean!"
+            action={<Button size="sm" onClick={function() { onAction("browse", { path: data.path || "." }); }}>Browse</Button>}
+          />
+        ) : (
+          <div className="space-y-3">
+            {dupeGroups.map(function(group, gi) {
+              var isSize = group.matchType === "exact_size";
+              return (
+                <div key={gi} className="bg-gray-800/60 rounded-xl p-3 border border-gray-700/40">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant={isSize ? "warning" : "info"}>
+                      {isSize ? "Same Size" : "Same Resolution"}
+                    </Badge>
+                    <span className="text-[11px] text-gray-400">
+                      {group.count} files
+                      {isSize ? " \u00b7 " + fmtSize(group.size) + " each" : " \u00b7 " + (group.resolution || "")}
+                    </span>
+                    {group.waste > 0 && (
+                      <span className="text-[10px] text-rose-400 ml-auto">{fmtSize(group.waste)} wasted</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {group.items.map(function(item, ii) {
+                      return (
+                        <button key={ii} onClick={function() { onAction("view", { path: item.path }); }}
+                          className="relative bg-gray-700/40 rounded-lg overflow-hidden border border-gray-600/30 hover:border-amber-500/40 cursor-pointer text-left transition-all">
+                          {item.mediaUrl ? (
+                            <img src={item.mediaUrl} alt={item.name} loading="lazy"
+                              style={{ width: "100%", height: "70px", objectFit: "cover" }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "70px" }} className="flex items-center justify-center bg-gray-700/30">
+                              <LucideReact.Image className="w-5 h-5 text-gray-500" />
+                            </div>
+                          )}
+                          <div className="px-1.5 py-1">
+                            <div className="text-[9px] text-gray-300 truncate">{item.name}</div>
+                            <div className="text-[8px] text-gray-500">{fmtSize(item.size)}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   // ── Home / Drives View ──
   // ════════════════════════════════════════════════════════════════════════
   if (isDrives) {
@@ -524,14 +642,34 @@ export default function GeneratedUI({ data, onAction }) {
           }]} />
         )}
 
-        {/* Cross-app navigation */}
-        {data.type === "image" && (
-          <div className="flex gap-2 flex-wrap">
+        {/* Add to Collection */}
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="ghost" onClick={function() { setShowDetailColl(!showDetailColl); setDetailCollName(""); }}>
+            <LucideReact.FolderPlus className="w-3.5 h-3.5 mr-1" /> Add to Collection
+          </Button>
+          {/* Cross-app navigation */}
+          {data.type === "image" && (
             <Button size="sm" variant="outline" onClick={function() { onAction("__cross_app", { target: "photo_studio", tool: "preview_styles", params: { photoPath: data.path } }); }}>
-              <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Style in Photo Studio
+              <LucideReact.Palette className="w-3.5 h-3.5 mr-1" /> Style
             </Button>
-            <Button size="sm" variant="ghost" onClick={function() { onAction("__cross_app", { target: "photo_studio", tool: "adjust", params: { path: data.path } }); }}>
-              <LucideReact.SlidersHorizontal className="w-3.5 h-3.5 mr-1" /> Adjust
+          )}
+        </div>
+        {showDetailColl && (
+          <div className="flex gap-1.5">
+            <div className="flex-1">
+              <Input placeholder="Collection name..." value={detailCollName}
+                onChange={function(v) { setDetailCollName(v); }} size="sm" />
+            </div>
+            <Button size="sm" variant="primary" onClick={function() {
+              if (detailCollName.trim()) {
+                onAction("collection", { action: "create", collectionName: detailCollName.trim() });
+                onAction("collection", { action: "add", collectionName: detailCollName.trim(), photoPath: data.path });
+                setDetailCollName("");
+                setShowDetailColl(false);
+              }
+            }}>Add</Button>
+            <Button size="sm" variant="ghost" onClick={function() { setShowDetailColl(false); }}>
+              <LucideReact.X className="w-3 h-3" />
             </Button>
           </div>
         )}
@@ -784,6 +922,21 @@ export default function GeneratedUI({ data, onAction }) {
             })}
           </div>
         </div>
+        {/* Search launcher */}
+        <button onClick={function() { setShowSearchLaunch(!showSearchLaunch); setSearchLaunchInput(""); }}
+          className={"p-1.5 rounded-lg hover:bg-gray-800 cursor-pointer shrink-0 transition-all " +
+            (showSearchLaunch ? "text-blue-400 bg-blue-500/10" : "text-gray-400 hover:text-blue-400")}
+          title="AI Search">
+          <LucideReact.Search className="w-4 h-4" />
+        </button>
+        {/* Duplicates button */}
+        {items.length > 3 && (
+          <button onClick={function() { onAction("duplicates", { path: currentPath }); }}
+            className="p-1.5 rounded-lg hover:bg-gray-800 cursor-pointer text-gray-400 hover:text-amber-400 shrink-0 transition-all"
+            title="Find duplicates">
+            <LucideReact.Copy className="w-4 h-4" />
+          </button>
+        )}
         {/* Stats button */}
         {items.length > 0 && (
           <button onClick={function() { onAction("stats", { path: currentPath }); }}
@@ -827,6 +980,34 @@ export default function GeneratedUI({ data, onAction }) {
               {fmtDate(summary.dateRange.earliest)} — {fmtDate(summary.dateRange.latest)}
             </span>
           )}
+          {summary.resolutionTiers && summary.resolutionTiers["4K+"] > 0 && (
+            <span className="flex items-center gap-1">
+              <LucideReact.Monitor className="w-3 h-3 text-violet-400" />
+              {summary.resolutionTiers["4K+"]} 4K+
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Search Launcher ── */}
+      {showSearchLaunch && (
+        <div className="flex gap-1.5">
+          <div className="flex-1">
+            <Input placeholder="AI search (e.g. sunset, food, people)..." value={searchLaunchInput}
+              onChange={function(v) { setSearchLaunchInput(v); }}
+              icon={<LucideReact.Sparkles className="w-3.5 h-3.5" />} size="sm" />
+          </div>
+          <Button size="sm" variant="primary"
+            onClick={function() {
+              if (searchLaunchInput.trim()) {
+                onAction("search", { path: currentPath, query: searchLaunchInput.trim() });
+                setShowSearchLaunch(false);
+                setSearchLaunchInput("");
+              }
+            }}>Search</Button>
+          <Button size="sm" variant="ghost" onClick={function() { setShowSearchLaunch(false); }}>
+            <LucideReact.X className="w-3 h-3" />
+          </Button>
         </div>
       )}
 
@@ -890,6 +1071,12 @@ export default function GeneratedUI({ data, onAction }) {
             className={"px-2 py-1 cursor-pointer transition-all " +
               (viewMode === "list" ? "bg-blue-500/15 text-blue-300" : "text-gray-500 hover:text-gray-300")}>
             <LucideReact.List className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={function() { setViewMode("timeline"); }}
+            className={"px-2 py-1 cursor-pointer transition-all " +
+              (viewMode === "timeline" ? "bg-blue-500/15 text-blue-300" : "text-gray-500 hover:text-gray-300")}
+            title="Timeline view">
+            <LucideReact.Calendar className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -1016,6 +1203,79 @@ export default function GeneratedUI({ data, onAction }) {
             );
           })}
         </div>
+      ) : viewMode === "timeline" ? (
+        <div className="space-y-3 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          {dateGroups.map(function(group) {
+            return (
+              <div key={group.date}>
+                <div className="flex items-center gap-2 mb-1.5 sticky top-0 z-10 bg-gray-900 py-1">
+                  <LucideReact.Calendar className="w-3 h-3 text-blue-400" />
+                  <span className="text-xs font-semibold text-gray-200">{group.label}</span>
+                  <span className="text-[10px] text-gray-500">{group.items.length} items</span>
+                  <div className="flex-1 border-t border-gray-700/40" />
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {group.items.map(function(item, idx) {
+                    var tlIsVideo = item.type === "video";
+                    return (
+                      <button key={item.path || idx}
+                        onClick={function() {
+                          if (selectMode) {
+                            setSelected(function(prev) {
+                              var next = new Set(prev);
+                              if (next.has(item.path)) next.delete(item.path);
+                              else next.add(item.path);
+                              return next;
+                            });
+                          } else {
+                            onAction("view", { path: item.path });
+                          }
+                        }}
+                        className={"relative bg-gray-800/50 rounded-md overflow-hidden border cursor-pointer transition-all " +
+                          (selectMode && selected.has(item.path) ? "border-blue-500/60 ring-1 ring-blue-500/30" : "border-gray-700/20 hover:border-blue-500/40")}>
+                        {selectMode && (
+                          <div className="absolute top-1 left-1 z-10">
+                            <div className={"w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all " +
+                              (selected.has(item.path) ? "bg-blue-500 border-blue-500" : "border-white/50 bg-black/30")}>
+                              {selected.has(item.path) && <LucideReact.Check className="w-2.5 h-2.5 text-white" />}
+                            </div>
+                          </div>
+                        )}
+                        {item.mediaUrl ? (
+                          <img src={tlIsVideo ? (item.thumbnailUrl || item.mediaUrl) : item.mediaUrl}
+                            alt={item.name} loading="lazy"
+                            style={{ width: "100%", height: "80px", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ width: "100%", height: "80px" }} className="flex items-center justify-center bg-gray-700/30">
+                            <LucideReact.Image className="w-4 h-4 text-gray-500" />
+                          </div>
+                        )}
+                        {tlIsVideo && (
+                          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "80px" }}
+                            className="flex items-center justify-center bg-black/25">
+                            <LucideReact.Play className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                        {item.isFavorite && (
+                          <div className="absolute top-0.5 right-0.5">
+                            <LucideReact.Heart className="w-2.5 h-2.5 text-rose-400 fill-current drop-shadow" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {dateGroups.length === 0 && (
+            <EmptyState
+              icon={<LucideReact.Calendar className="w-8 h-8" />}
+              title="No dated items"
+              description="Items without dates cannot be shown in timeline view."
+            />
+          )}
+        </div>
       ) : (
         <div className="space-y-1 max-h-96 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
           {filtered.map(function(item, idx) {
@@ -1048,6 +1308,7 @@ export default function GeneratedUI({ data, onAction }) {
                   </div>
                   <div className="text-[10px] text-gray-500">
                     {fmtDate((item.exif && item.exif.dateTaken) || item.modifiedAt)} {"\u00b7"} {fmtSize(item.size)}
+                    {item.exif && item.exif.width ? " \u00b7 " + item.exif.width + "\u00d7" + item.exif.height : ""}
                   </div>
                 </div>
               </button>
@@ -1208,6 +1469,8 @@ export default function GeneratedUI({ data, onAction }) {
                   <div className="text-[11px] text-gray-400">
                     {fmtDate((photo.exif && photo.exif.dateTaken) || photo.modifiedAt)}
                     {" \u00b7 "}{fmtSize(photo.size)}
+                    {photo.exif && photo.exif.width ? " \u00b7 " + photo.exif.width + "\u00d7" + photo.exif.height : ""}
+                    {photo.exif && photo.exif.cameraMake ? " \u00b7 " + ((photo.exif.cameraMake || "") + " " + (photo.exif.cameraModel || "")).trim() : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-3">

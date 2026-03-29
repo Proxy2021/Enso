@@ -418,6 +418,7 @@ export async function startEnsoServer(opts: {
   /** Callback when a client requests server restart (code 78). */
   onRestartRequested?: () => void;
 }): Promise<{ stop: (isRestart?: boolean) => Promise<void> }> {
+  console.log(`[Enso] Server starting at ${new Date().toISOString()}`);
   const { account, config, runtime, statusSink } = opts;
   const port = account.port;
   activePort = port;

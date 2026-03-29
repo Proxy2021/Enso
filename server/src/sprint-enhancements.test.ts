@@ -122,15 +122,16 @@ describe("ExecutorContext utilities", () => {
 // ── WS3: System tools ──
 
 describe("System tools", () => {
-  it("createSystemTools() returns 3 tools", async () => {
+  it("createSystemTools() returns 4 tools", async () => {
     const { createSystemTools } = await import("./system-tools.js");
     const tools = createSystemTools();
 
-    expect(tools).toHaveLength(3);
+    expect(tools).toHaveLength(4);
     const names = tools.map((t) => t.name);
     expect(names).toContain("enso_system_info");
     expect(names).toContain("enso_system_processes");
     expect(names).toContain("enso_system_disk");
+    expect(names).toContain("enso_launch_task_session");
   });
 
   it("enso_system_info executes successfully", async () => {

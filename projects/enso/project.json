@@ -7,10 +7,10 @@
   "codebasePath": "D:/Github/Enso",
   "techStack": "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
   "testUrl": "http://localhost:5173",
-  "lastSprint": 14,
-  "lastSprintScore": 4.5,
-  "currentSprint": 15,
-  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5],
+  "lastSprint": 15,
+  "lastSprintScore": 6.0,
+  "currentSprint": 16,
+  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0],
   "teamAgents": [
     {
       "id": "project-leader",
@@ -26,15 +26,15 @@
       "perspective": "Am I building the right things? Is the team effective? Is the product coherent?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 14 RESULT (4.5/10): ALL-TIME LOW. Build BROKEN (OrchestrationCard missing export default). 1/5 P0 items completed (20%). Sprint signature deliverable (Doubao mode toggle) not implemented. Marco re-test STILL not executed — now 5 sprints overdue. Planning phase was excellent; execution collapsed completely.",
-        "Sprint 14 RESOLVED: media-ai-gateway error string (3 sprints overdue, finally closed — sharpBasicProvider → basicResizeProvider). ChatCard React.memo correctly applied. Provider registration logging added.",
-        "Sprint 14 BROKEN (NEW REGRESSION): OrchestrationCard.tsx renamed to OrchestrationCardInner but React.memo wrapper + export default never added. Build fails with tsc --noEmit exit code 2. 2-line fix required.",
-        "Sprint 14 UNRESOLVED (carried to Sprint 15 P0): Doubao mode toggle (sprint theme), stale ref read during render (ChatInput L258), array index as React key (ChatInput L680), scroll-to-bottom FAB, Marco re-test (5 sprints overdue).",
-        "Sprint 14 PROCESS FAILURES: (1) Marco re-test ignored for 5th sprint despite BLOCKING GATE declaration, (2) No implementation reports produced, (3) 6 items skipped without justification, (4) Half-done work shipped (OrchestrationCard), (5) Build gate violated.",
-        "Sprint 14 PERSONA SCORES: Jordan Kim 6.2/10, Priya Sharma 6.6/10, Marco Reyes NOT TESTED. Key findings: 70% mobile buttons under 44px, research cards 6x scroll depth on mobile, empty Evolve tab.",
-        "Sprint 15 MANDATE: (1) Fix OrchestrationCard build break FIRST, (2) Execute Marco re-test in Phase 0 before planning, (3) Complete Sprint 14 undelivered P0s, (4) Begin server.ts decomposition. Scope cap: 3 carried P0 + 1 new P1.",
-        "MECHANISM UPDATE: Implementation phases MUST produce reports. No report = phase not complete. tsc --noEmit verified after EACH file change, not just at sprint end. Any item not completed requires documented justification.",
-        "Sprint score trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5]. Mean: 6.74. All-time low reached. Sprint 15 target: 7.0 (recovery)."
+        "Sprint 15 RESULT (6.0/10): Recovery from all-time low (4.5) but below 7.0 target. Build green throughout — tsc enforcement worked. 4/6 P0 items completed. Doubao toggle delivered. Marco finally tested (4.2/10). Photo Studio misrouting fix (P0-NEW-1) designed but never assigned — process gap.",
+        "Sprint 15 RESOLVED: OrchestrationCard React.memo wrapper applied (was broken Sprint 14). ChatInput stale ref L258 fixed via state mirror pattern. Doubao mode toggle implemented (Sprint 14 carryover). Marco re-test executed (5 sprints overdue, finally done).",
+        "Sprint 15 UNRESOLVED: Photo Studio misrouting — designed as P0-NEW-1 with concrete plan but not assigned to implementation agent. /code client connection failure — conditional item, investigation never started. Both carry to Sprint 16.",
+        "Sprint 15 PERSONA SCORES: Marco 4.2/10 (first test), Jordan 6.4/10 (+0.2), Priya 4.8/10 (-1.8 REGRESSION). Average: 5.1/10. Key insight: backend 8/10 but frontend execution 4-5/10. AI routes intent correctly but selects wrong tools.",
+        "Sprint 15 NEW FINDINGS: (1) Photo Studio card appears for non-photo requests (trust-destroying), (2) /code completely broken, (3) 86-90% touch targets under 44px WCAG, (4) 27-29s latency for creative workflows, (5) Project selector blocks every code/shell interaction.",
+        "Sprint 15 PROCESS WIN: Build stayed green (tsc after every change). Implementation reports produced. Marco tested in Phase 0 as mandated.",
+        "Sprint 15 PROCESS FAILURE: Design→implementation handoff gap — P0-NEW-1 had no agent assignment. Phase 4 design doc must include explicit assignment matrix.",
+        "Sprint 16 MANDATE: (1) Fix Photo Studio misrouting (carry P0), (2) Touch target enforcement 44px, (3) ChatInput decomposition (now ~1,200 LOC), (4) /code client connection investigation, (5) Project selector auto-context.",
+        "Sprint score trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0]. Mean: 6.69. Recovery underway but not at target."
       ]
     },
     {
@@ -96,14 +96,14 @@
       "perspective": "Is this architecturally sound? Will it scale? Are we creating tech debt?",
       "agentRole": "architect",
       "painPoints": [
-        "Sprint 14 RESULT: Architecture health holds at 6.5/10. media-ai-gateway error string RESOLVED (basicResizeProvider rename + logging). ChatCard memo correctly applied. OrchestrationCard memo BROKEN (missing export default — build regression).",
-        "Sprint 14 FINDING: Only 8 apps exist in server/apps/ vs 18 tracked — 10 are phantom entries (built-in capabilities or never created). App tracking must be corrected.",
-        "Architecture health: 6.5/10 (unchanged). God modules still at: server.ts (3,757 LOC), researcher-tools.ts (2,940 LOC), orchestrator.ts (2,101 LOC). ChatInput.tsx at 1,106 LOC.",
-        "Sprint 15 ASSIGNMENT: (1) Fix OrchestrationCard build break, (2) Begin server.ts decomposition (Express Router extraction — api-routes.ts, media-router.ts, project-router.ts), (3) Design MCP client architecture, (4) Evaluate ChatInput decomposition after mode toggle delivery.",
-        "App consolidation corrected: Media Suite (media_gallery 8 + photo_studio 14 + video_studio blueprint = ~22 tools after dedup). Research Suite and File Manager consolidation were based on phantom apps.",
+        "Sprint 15 RESULT: Architecture health 5.5/10 (down from 6.5). OrchestrationCard memo RESOLVED. ChatInput stale ref RESOLVED. Photo Studio misrouting root cause identified: agent tool selection, NOT server routing. Media gallery uncommitted changes validated as production-ready (8/10).",
+        "Sprint 15 KEY INSIGHT: Photo Studio misrouting is in agent-adapter tool selection, not server.ts routing. Fix is in tool descriptions + agent prompt guardrails. Intent classification is 100% accurate — tool matching downstream fails.",
+        "Architecture health: 5.5/10. God modules: server.ts (3,239 LOC, down from 3,757), ChatInput.tsx (~1,200 LOC after Doubao toggle, up from 1,147). OrchestrationCard.tsx (1,074 LOC). researcher-tools.ts (2,940 LOC).",
+        "Sprint 16 ASSIGNMENT: (1) ChatInput decomposition — extract usePushToTalk hook first, then SlashMenu, SendControls. (2) Fix Photo Studio tool descriptions (import_photos too broad). (3) Begin server.ts router extraction. (4) Add agent tool selection regression tests.",
+        "App ecosystem: 10 registered apps, 9 in server/apps/. media_gallery (9 tools) and photo_studio (14 tools) should remain SEPARATE — 21/23 tools unique, distinct domains. Fix the boundary, don't merge.",
         "In-memory cardContexts lost on restart — SQLite-backed CardContextStore still needed. Design ready but deferred.",
-        "ADR-004 (SSE Streaming) approved Sprint 13, still not implemented — 2 sprints deferred.",
-        "media-ai-gateway.ts provider registry is FUNCTIONAL (not empty as previously reported). sharpBasicProvider renamed to basicResizeProvider. Cloud providers fail silently — logging now added."
+        "ADR-004 (SSE Streaming) approved Sprint 13, still not implemented — 3 sprints deferred. Build now stable, blocker cleared.",
+        "media-ai-gateway.ts provider registry is FUNCTIONAL. basicResizeProvider working. Cloud providers fail silently — logging added Sprint 14."
       ]
     },
     {
@@ -121,14 +121,14 @@
       "perspective": "Is this code production-ready? Are conventions followed? Will it break anything?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 14 RESULT: Review verdict FAIL. Build BROKEN — OrchestrationCard.tsx renamed to OrchestrationCardInner but missing React.memo wrapper + export default. tsc --noEmit exits code 2. 2-line fix needed. This is the SECOND consecutive sprint with build-breaking implementation.",
-        "Sprint 14 WIN: media-ai-gateway rename is clean (zero stale references). ChatCard memo follows CardContainer pattern correctly. Code quality of completed changes is 7/10.",
-        "Sprint 14 CRITICAL FAILURE: 4/5 P0 items not implemented. No implementation reports produced. Execution phase is a black box — cannot diagnose what went wrong without reports.",
-        "Sprint 14 RESOLVED: media-ai-gateway stale error string (3 sprints overdue, finally closed). I1+I2 build errors from Sprint 13 were already resolved pre-sprint.",
-        "Sprint 15 ASSIGNMENT: (1) Fix OrchestrationCard export default immediately, (2) Verify tsc --noEmit after EVERY file change (not just at sprint end), (3) Require implementation reports with documented tsc exit codes, (4) Review mode toggle + bug fix implementations.",
-        "ChatInput.tsx at 1,106 LOC — EM recommends extracting SendControls sub-component before adding mode toggle. Stale ref (L258) and array key (L680) bugs still present.",
-        "No CI/CD pipeline — every commit to main is unvalidated. Build pipeline is minimal.",
-        "PROCESS ENFORCEMENT: Implementation self-assessment inflation persists (Sprint 13: 10/10 with build errors; Sprint 14: no assessment at all). Implementation phases MUST produce reports with tsc exit codes."
+        "Sprint 15 RESULT: Review verdict PASS. Build green throughout. Code quality 9/10. OrchestrationCard memo applied correctly. ChatInput stale ref fixed via state mirror. Doubao toggle implemented cleanly (~40 additive lines). Media gallery changes validated as production-ready.",
+        "Sprint 15 WIN: tsc enforcement after every file change WORKED — build stayed green for first time in 3 sprints. Implementation reports produced by both agents. Both changes verified with documented tsc exit codes.",
+        "Sprint 15 GAP: Photo Studio misrouting fix (P0-NEW-1) designed but never assigned to implementation agent. Design→implementation handoff needs explicit assignment matrix.",
+        "Sprint 15 RESOLVED: OrchestrationCard React.memo (was broken Sprint 14). ChatInput stale ref L258 (state mirror pattern). Array index key L680 (was already fixed pre-sprint).",
+        "Sprint 16 ASSIGNMENT: (1) ChatInput decomposition — now ~1,200 LOC, must decompose before adding more features. (2) Review Photo Studio misrouting fix implementation. (3) Enforce assignment matrix in design phase. (4) Continue tsc enforcement.",
+        "ChatInput.tsx at ~1,200 LOC — architect recommends decomposition order: usePushToTalk hook, SlashMenu, SendControls, AttachMenu, ToastNotifications. Sprint 16 P0.",
+        "No CI/CD pipeline — every commit to main is unvalidated. Sprint 16: add GitHub Actions workflow with vitest run.",
+        "PROCESS WIN: Implementation self-assessment is now accurate (9/10 correctness confirmed by review). Reports with tsc exit codes are working."
       ]
     },
     {
@@ -145,14 +145,14 @@
       "perspective": "Does this actually work? What edge cases are we missing? Is quality improving?",
       "agentRole": "reviewer",
       "painPoints": [
-        "Sprint 14 RESULT: FAIL. Marco re-test NOT EXECUTED for 5th consecutive sprint despite BLOCKING GATE declaration. Test count unchanged at 379/26 files. Build broken by implementation. Only 2/3 persona tests executed (Jordan 6.2, Priya 6.6).",
-        "Sprint 14 CRITICAL: Marco re-test blocking gate violated for FIFTH time. Test script exists (test-creative-professional.mjs, 448 lines). No results generated, no error logged, no explanation. SYSTEMIC PROCESS FAILURE.",
-        "Sprint 14 FINDING: Test coverage at 14% (26/185 files). Zero tests for: media-ai-gateway error logic, TabNavigation, VoiceMicButton, VoiceOverlay, all 10 card types, all dialogs, tryReconstructContext (110+ LOC fragile pattern matching).",
-        "Sprint 14 FINDING: Mobile touch targets critically undersized — 70% buttons under 44px (Priya), 21% desktop under 44px (Jordan). Research cards create 6x scroll depth on mobile.",
-        "Sprint 15 ASSIGNMENT: (1) Execute Marco re-test IN PHASE 0 — block all other phases until complete, (2) Add media-ai-gateway unit tests (5 tests, 15 min), (3) Add tryReconstructContext tests (11 tests, 30 min), (4) Design Playwright E2E smoke test framework.",
-        "Quality trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5]. Mean: 6.74 (down from 6.93). ALL-TIME LOW reached.",
-        "CardContext reconstruction (tryReconstructContext) STILL untested. 110+ lines of fragile pattern-matching with zero coverage.",
-        "PROCESS: Marco re-test must be Sprint 15 Phase 0. If not completed before Phase 1, ALL other phases are blocked. No more deferrals."
+        "Sprint 15 RESULT: PARTIAL PASS. Marco re-test FINALLY EXECUTED (4.2/10). All 3 persona tests completed (Marco 4.2, Jordan 6.4, Priya 4.8). Pre-existing test failure (sprint-enhancements.test.ts stale assertion) fixed — 359/359 passing. But zero P0 targets have dedicated tests.",
+        "Sprint 15 WIN: Marco testing gate enforced for first time in 5 sprints. Phase 0 enforcement worked. 3/3 personas tested.",
+        "Sprint 15 FINDING: Test coverage ~15% (26/175 files). Zero tests for P0 sprint targets — 5 sprints running with 0% P0 coverage. Priya regressed -1.8 points, proving untested changes introduce bugs.",
+        "Sprint 15 FINDING: 86-90% touch targets under 44px WCAG minimum (Jordan audit). Action chips 28px, sidebar 32px, close button 9px. Systematic design system gap.",
+        "Sprint 16 ASSIGNMENT: (1) Add agent tool selection regression tests (prevent Photo Studio misrouting recurrence), (2) Target 25% test coverage, (3) Add npm test script to package.json, (4) Design GitHub Actions CI workflow, (5) Write ChatInput component behavior tests before decomposition.",
+        "Quality trend: [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0]. Mean: 6.69. Recovery from all-time low but persona scores declining (average 5.1).",
+        "Persona test scripts well-designed but not CI-integrated. Jordan's getPageMetrics() should be reused as Sprint 16 acceptance test for touch target enforcement.",
+        "PROCESS: Marco test was executed this sprint — gate enforcement works. Continue testing all 3 personas every sprint. Consider rotating 4th persona."
       ]
     },
     {
@@ -236,6 +236,15 @@
         "Build a product: 'Create a simple todo app with categories, priorities, and a Kanban board view'",
         "Use deep research: 'Deep dive into indie SaaS growth strategies that work without a marketing budget'",
         "Open /shell and run 'npm test' to check the current test suite status"
+      ],
+      "history": [
+        { "sprintId": 15, "sprintDate": 1743206400000, "finding": "Scored 4.8/10 — REGRESSION from 6.6. Photo Studio card appeared for todo app request (trust-destroying). /code fails entirely with client connection error. Project selector blocks every coding task.", "resolved": false }
+      ],
+      "unresolvedFrustrations": [
+        "Photo Studio card misrouting for non-photo requests (code/shell/build)",
+        "/code command fails with 'no active client to connect to' error",
+        "Claude Code Terminal stuck at project selection every time",
+        "AI personas don't learn from previous sprint feedback"
       ]
     },
     {
@@ -286,6 +295,15 @@
         "Browse and run an existing app, then try refining it with a text instruction to test the refine flow",
         "Use deep research: 'Deep dive into observability best practices for Node.js microservices'",
         "Open /shell and explore the project structure — run 'ls server/src/' and 'npm test'"
+      ],
+      "history": [
+        { "sprintId": 15, "sprintDate": 1743206400000, "finding": "Scored 6.4/10 (+0.2 from Sprint 14). Intent classification 100% accurate. 86-90% touch targets under 44px WCAG. Backend rated 8/10, UX rated 5/10. Project selector adds friction on every coding task.", "resolved": false }
+      ],
+      "unresolvedFrustrations": [
+        "86-90% of touch targets undersized (action chips 28px, sidebar 32px, close button 9px)",
+        "Project selector interrupts every coding task — no auto-selection",
+        "Terminal sessions stack without lifecycle management",
+        "Mobile send via programmatic input fails on 375px viewport"
       ]
     },
     {
@@ -344,6 +362,15 @@
         "Use deep research: 'Deep dive into the latest AI image processing models in 2026 — upscaling, background removal, style transfer — which ones have production-grade APIs?'",
         "Ask Enso: 'Match the color grading of this reference photo across all 30 images in this folder'",
         "Orchestrate: 'For this wedding shoot: AI-cull the photos, batch color-grade, generate a contact sheet PDF, and create Instagram-optimized exports'"
+      ],
+      "history": [
+        { "sprintId": 15, "sprintDate": 1743206400000, "finding": "Scored 4.2/10. Backend media tools exist (9 tools) but AI cannot surface them correctly. Asked for duplicates, got film presets. 27-29s response latency unusable. Film stock descriptions genuinely impressed.", "resolved": false }
+      ],
+      "unresolvedFrustrations": [
+        "AI routing mismatch — duplicate/EXIF requests routed to wrong tools",
+        "Response latency 27-29s per interaction unusable for creative workflows",
+        "Gallery opened on wrong path — no smart photo directory discovery",
+        "Media gallery tools exist but are hidden behind NL with no dashboard"
       ]
     }
   ],
@@ -359,7 +386,7 @@
         "Fix OrchestrationCard.tsx build break — add React.memo wrapper + export default (2-line fix, MUST BE FIRST ACTION)",
         "Execute Marco Reyes persona re-test — Phase 0, blocks all other phases (5 SPRINTS OVERDUE)",
         "Complete Doubao-style chat input mode toggle — Sprint 14 signature deliverable, still undelivered",
-        "Fix ChatInput stale ref read during render (L258) + array index as React key (L680)"
+        "Fix ChatInput stale ref read during render (L258) — array index key at L680 ALREADY FIXED (uses key={action.label})"
       ],
       "p1": [
         "Complete OrchestrationCard React.memo (fix the broken implementation)",
@@ -386,8 +413,29 @@
         "Any item not completed requires documented justification (blocker, dependency, time constraint)",
         "No half-done work: if you rename a function, complete the refactor in the same change"
       ],
-      "buildStatus": "BROKEN — OrchestrationCard missing export default (tsc exit code 2)",
-      "sprintScore14Result": "4.5/10 — ALL-TIME LOW. Build broken, 1/5 P0s done, Marco re-test 5x violated."
+      "buildStatus": "PASS — tsc --noEmit exits 0 throughout sprint. React.memo applied. Stale ref fixed. Doubao toggle delivered.",
+      "sprintScore14Result": "4.5/10 — ALL-TIME LOW. Build broken, 1/5 P0s done, Marco re-test 5x violated.",
+      "sprintScore15Result": "6.0/10 — Recovery from all-time low. 4/6 P0s done. Build green. Marco tested (4.2). Photo Studio misrouting not fixed (assignment gap). Priya regressed -1.8."
+    },
+    "sprint16": {
+      "theme": "EXECUTION PIPELINE RELIABILITY — Fix the Frontend Surfacing Gap",
+      "mandatoryP0": [
+        "Fix Photo Studio misrouting — tighten import_photos tool description in photo_studio/app.json (P0 carry from Sprint 15, designed but not implemented)",
+        "Touch target enforcement (44px minimum) — design system approach, not file-by-file patches. 86-90% violations per Jordan.",
+        "ChatInput.tsx decomposition — extract usePushToTalk hook first (~120 lines), then SlashMenu (~100 lines). Component at ~1,200 LOC ceiling.",
+        "/code client connection investigation — core developer feature broken. 2-hour timebox, fallback to improved error message."
+      ],
+      "p1": [
+        "Project selector auto-context — eliminate project picker friction for /code and /shell",
+        "Agent tool selection regression tests — prevent misrouting recurrence",
+        "Add npm test script to package.json + vitest coverage config"
+      ],
+      "deferred": [
+        "SSE Streaming (ADR-004) — 3 sprints deferred, build now stable",
+        "MCP client architecture — design phase, 4+ sprints in backlog",
+        "server.ts decomposition — Sprint 16-17 roadmap",
+        "Session lifecycle management — UI architecture change"
+      ]
     },
     "sprint14": {
       "theme": "MOBILE CHAT EXPERIENCE — Doubao-Inspired UX",

@@ -35,6 +35,13 @@ export interface TeamAgent {
   painPoints?: string[];
 }
 
+export interface SprintFinding {
+  sprintId: string;
+  sprintDate: number;  // timestamp ms
+  finding: string;
+  resolved: boolean;
+}
+
 export interface Persona {
   id: string;
   name: string;
@@ -43,6 +50,9 @@ export interface Persona {
   goals: string[];
   frustrations: string[];
   testScenarios: string[];
+  // Evolving fields — updated by PL meta-review after each sprint
+  history?: SprintFinding[];
+  unresolvedFrustrations?: string[];
 }
 
 export interface Project {
@@ -464,4 +474,27 @@ export function setProjectBranch(projectId: string, branch: string): void {
   if (!project) return;
   project.branch = branch;
   saveProject(project);
+}
+
+// ── Project Brain ──
+
+/**
+ * Absolute path to the project's brain.md.
+ * Enso project → repo's projects/enso/brain.md (git-tracked).
+ * All others → ~/.enso/projects/<id>/brain.md
+ */
+export function getProjectBrainPath(projectId: string): string {
+  return join(projectDir(projectId), "brain.md");
+}
+
+/** Load the project brain. Returns null if it doesn't exist yet. */
+export function loadProjectBrain(projectId: string): string | null {
+  try {
+    const brainPath = getProjectBrainPath(projectId);
+    if (!existsSync(brainPath)) return null;
+    return readFileSync(brainPath, "utf-8");
+  } catch (err) {
+    logError("project-manager", `Failed to load brain for project ${projectId}`, err);
+    return null;
+  }
 }

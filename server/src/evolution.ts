@@ -22,8 +22,8 @@ import { logAction, logError } from "./action-log.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import { handleOrchestration } from "./orchestrator.js";
-import { archiveEvolutionSprint, cleanEvolutionTempFiles } from "./evolution-archive.js";
-import { loadProject, ensureDefaultProject, getProjectBranch } from "./project-manager.js";
+import { archiveEvolutionSprint, cleanEvolutionTempFiles, listEvolutionSprints, getEvolutionFile } from "./evolution-archive.js";
+import { loadProject, ensureDefaultProject, getProjectBranch, loadProjectBrain, getProjectBrainPath } from "./project-manager.js";
 import type { Project, Persona, TeamAgent } from "./project-manager.js";
 import { APP_CATALOG } from "./app-catalog.js";
 import { loadAllApps, SHIPPED_APPS_DIR } from "./app-persistence.js";
@@ -72,6 +72,52 @@ function buildAppEcosystemContext(): string {
   return lines.join("\n");
 }
 
+// ── Sprint History Context ──
+
+/**
+ * Condenses the last N sprint meta-reviews into a compact context block.
+ * Extracts: score, build verdict, key findings, next-sprint seeds.
+ * This is injected into Phase 0 so the PL has a fast read on trajectory.
+ */
+function buildSprintHistoryContext(projectId: string, limit = 3): string {
+  const sprints = listEvolutionSprints(projectId).slice(0, limit);
+  if (sprints.length === 0) return "";
+
+  const lines: string[] = [`## Recent Sprint History (last ${sprints.length})\n`];
+  for (const sprint of sprints) {
+    const date = new Date(sprint.completedAt).toISOString().split("T")[0];
+    lines.push(`### ${date} — ${sprint.goal || "General assessment"} [${sprint.status}]`);
+
+    const metaReview = getEvolutionFile(sprint.sprintId, "meta-review.md", projectId);
+    if (metaReview) {
+      // Extract structured summary for score + verdict
+      const summaryMatch = metaReview.match(/<!--\s*STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})\s*-->/);
+      if (summaryMatch) {
+        try {
+          const s = JSON.parse(summaryMatch[1]);
+          const parts: string[] = [];
+          if (s.sprintScore !== undefined) parts.push(`Score: ${s.sprintScore}/10`);
+          if (s.verdict) parts.push(`Build: ${s.verdict}`);
+          if (parts.length) lines.push(parts.join(" | "));
+          if (s.keyFindings && Array.isArray(s.keyFindings) && s.keyFindings.length) {
+            lines.push(`Findings: ${(s.keyFindings as string[]).slice(0, 3).join("; ")}`);
+          }
+        } catch { /* malformed JSON — skip */ }
+      }
+      // Extract next sprint seeds section (first 500 chars)
+      const seedMatch = metaReview.match(/(?:##?\s*)?Next Sprint Seed[^\n]*\n([\s\S]{0,600})/i);
+      if (seedMatch) {
+        const seeds = seedMatch[1].trim().slice(0, 450);
+        if (seeds) lines.push(`Seeds:\n${seeds}`);
+      }
+    } else {
+      lines.push(`(meta-review not available)`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
 // ── Planning Prompt Builder ──
 
 function buildEvolutionPlanningPrompt(
@@ -86,14 +132,40 @@ function buildEvolutionPlanningPrompt(
   // Resolve workspace for absolute artifact paths
   const workspace = getWorkspace(orchestrationId);
 
-  // Persona catalog
+  // ── Load accumulated institutional memory ──
+  const brain = loadProjectBrain(project.id);
+  const brainPath = getProjectBrainPath(project.id);
+  const sprintHistory = buildSprintHistoryContext(project.id, 3);
+
+  // ── Persona catalog with evolving history ──
   const personaCatalog = personas.map((p) => {
     const scenarioList = p.testScenarios.map((s, j) => `  ${j + 1}. ${s}`).join("\n");
+
+    const historyLines: string[] = [];
+    if (p.history && p.history.length > 0) {
+      const recent = p.history.slice(-3); // last 3 findings
+      historyLines.push(`    Sprint history (recent):`);
+      for (const h of recent) {
+        const d = new Date(h.sprintDate).toISOString().split("T")[0];
+        historyLines.push(`      [${d}] "${h.finding}" — ${h.resolved ? "Resolved" : "UNRESOLVED"}`);
+      }
+    }
+
+    const unresolvedLines: string[] = [];
+    if (p.unresolvedFrustrations && p.unresolvedFrustrations.length > 0) {
+      unresolvedLines.push(`    Unresolved frustrations (carry into test scenarios):`);
+      for (const f of p.unresolvedFrustrations) {
+        unresolvedLines.push(`      • ${f}`);
+      }
+    }
+
     return [
       `  - **${p.name}** (${p.role}, ID: ${p.id})`,
       `    Background: ${p.background}`,
       `    Goals: ${p.goals.join("; ")}`,
       `    Frustrations: ${p.frustrations.join("; ")}`,
+      ...historyLines,
+      ...unresolvedLines,
       `    Test scenarios:`,
       scenarioList,
     ].join("\n");
@@ -149,6 +221,27 @@ function buildEvolutionPlanningPrompt(
     ``,
     goal ? `**Sprint focus area:** ${goal}` : `**Focus:** General product assessment — test all major capabilities.`,
     ``,
+    // ── Project Brain ──
+    brain ? [
+      `## Project Brain`,
+      ``,
+      `The following is the accumulated institutional memory of this project's evolution.`,
+      `Read it carefully — it contains failure patterns, velocity trends, strategic priorities,`,
+      `and what has already been tried. Your sprint plan must be grounded in this knowledge.`,
+      ``,
+      brain,
+      ``,
+    ].join("\n") : [
+      `## Project Brain`,
+      ``,
+      `No brain.md exists yet for this project. The Phase 6 meta-review will create it.`,
+      `Brain path for meta-review to write: ${brainPath}`,
+      ``,
+    ].join("\n"),
+    // ── Sprint History ──
+    sprintHistory ? [
+      sprintHistory,
+    ].join("\n") : "",
     `## Existing App Ecosystem (CRITICAL — read before planning)`,
     ``,
     `Before creating ANY new app or tool, the sprint MUST analyze what already exists.`,
@@ -164,11 +257,22 @@ function buildEvolutionPlanningPrompt(
     `- When extending an app, study its current template.jsx and executors/ to maintain consistency`,
     `- App family names must be broad categories: "photo_studio" not "portrait_retoucher"`,
     ``,
-    `## Streamlined Sprint Structure`,
+    `## Sprint Structure`,
     ``,
-    `This sprint follows an EFFICIENT pipeline where real user feedback comes FIRST, then the team analyzes and acts on it:`,
+    `The DEFAULT sprint structure is a 7-phase pipeline designed for comprehensive product assessment.`,
+    `The planner SHOULD use this structure for most sprints.`,
     ``,
-    `1. **Phase 0: PL Meta-Evaluation** — Project Leader sets priorities, selects personas`,
+    `The planner MAY propose an adapted structure when the Project Brain or sprint history clearly calls for it.`,
+    `Common adaptations:`,
+    `- **Debt-recovery sprint**: Heavier implementation, lighter persona testing (e.g., skip marketing/sales, reduce to 1 persona, add a second implement task)`,
+    `- **Architecture sprint**: Architect and EM dominate Phase 3; implementation is design documents + targeted refactors`,
+    `- **Deep persona sprint**: 3–4 personas, extended browser testing, lighter team evaluation`,
+    `- **Emergency bugfix sprint**: Minimal phases — PL → Implement → Review (skip persona testing entirely when a build is broken)`,
+    ``,
+    `If adapting: state the adaptation type and rationale in the first task's description.`,
+    ``,
+    `**Default phases:**`,
+    `1. **Phase 0: PL Meta-Evaluation** — Project Leader reads brain, sets priorities, selects personas`,
     `2. **Phase 1: Persona Testing** — Customer personas test the product (BEFORE any team agents)`,
     `3. **Phase 2: PL Triage** — Project Leader reviews persona findings, decides which team agents to involve`,
     `4. **Phase 3: Selective Team Evaluation** — Only agents the PL selected (core engineering always, marketing/sales on-demand)`,
@@ -182,13 +286,14 @@ function buildEvolutionPlanningPrompt(
     `- **Agent role:** architect`,
     `- **Dependencies:** none`,
     `- **Instructions:** You are ${projectLeader?.name || "the Project Leader"}, the META-CONTROLLER of this project's evolution.`,
-    `  1. Read any previous sprint reports in the project directory`,
-    `  2. Review the current project.json to understand team composition and goals`,
-    `  3. Evaluate: Are we building the right things? Is the team effective?`,
-    `  4. You may MODIFY project.json to: adjust personas, change agent goals, update vision`,
-    `  5. Set priorities for what THIS sprint should focus on`,
-    `  6. DECIDE which 2-3 personas to test (from the catalog below) based on sprint focus`,
-    `  7. Write \`${workspace ? workspace.teamReportPath("project-leader") : ".evolution-team-project-leader.md"}\` with your meta-evaluation, selected personas, and sprint priorities`,
+    `  1. Read the Project Brain at \`${brainPath}\` — it contains accumulated insights from all previous sprints. This is your primary context document.`,
+    `  2. Review project.json to understand current team composition, agent pain points, and sprint notes`,
+    `  3. Cross-reference the brain with the code: verify that known issues are still present, known wins are still holding`,
+    `  4. Evaluate: Are we building the right things? Is the team effective? Is the brain's strategic read still accurate?`,
+    `  5. You MAY MODIFY project.json to: adjust personas, update agent goals, revise vision, add sprint notes`,
+    `  6. Set clear priorities for what THIS sprint should focus on — be specific, not generic`,
+    `  7. DECIDE which 2-3 personas to test based on sprint focus AND their unresolved frustrations (visible in persona catalog below)`,
+    `  8. Write \`${workspace ? workspace.teamReportPath("project-leader") : ".evolution-team-project-leader.md"}\` with: brain synthesis, selected personas with rationale, sprint priorities (ranked), and any brain sections that need updating`,
     ``,
     `## Phase 1: Persona Testing (runs FIRST — before team agents)`,
     ``,
@@ -348,7 +453,7 @@ function buildEvolutionPlanningPrompt(
     `- **Instructions:** Read ALL evolution files from \`${workspace ? workspace.outputsDir : "./"}\` and persona reports from \`${personasDir}/\`. Build a BESPOKE interactive dashboard. Write EXACTLY \`${workspace ? workspace.dashboardPath : ".orchestration-ui.jsx"}\`. Under 500KB. NO import statements. Use var (not const/let). All hooks at top level. Use EnsoUI components + Recharts.`,
     `  Tabs: Overview | Personas | Team | Implementation | Validation | Backlog`,
     ``,
-    `### Project Leader Meta-Review & Resolution Verification`,
+    `### Project Leader Meta-Review, Brain Update & Resolution Verification`,
     `- **Task ID:** meta-review`,
     `- **Agent role:** architect`,
     `- **Dependencies:** review`,
@@ -365,13 +470,27 @@ function buildEvolutionPlanningPrompt(
     `  4. Evaluate: Was this sprint effective? What worked? What didn't?`,
     `  5. NEXT SPRINT SEED: Based on unresolved items and new insights, list 3-5 specific focus areas.`,
     `     These are not deferred tasks — they are discovery seeds for the next sprint's Phase 0.`,
-    `  6. Update project.json with: adjusted goals, sprint priorities, role adjustments, resolution status`,
-    `  7. Write \`${workspace ? workspace.evolutionFilePath("meta-review") : ".evolution-meta-review.md"}\` with:`,
+    `  6. UPDATE THE PROJECT BRAIN at \`${brainPath}\`:`,
+    `     - Add new entries to **Failure Memory** if any recurring pattern appeared or worsened`,
+    `     - Update **Improvement Velocity**: adjust trending-up/down lists based on this sprint's evidence`,
+    `     - Revise **Strategic Read**: update immediate priorities, confirm or revise medium-term bets`,
+    `     - Add to **What's Been Tried**: any new deferred items or approaches that didn't work`,
+    `     - Update **Persona Evolution Notes**: add key observations about each tested persona`,
+    `     - Update the "Last updated" line at the bottom`,
+    `     If brain.md does not exist yet, CREATE it at \`${brainPath}\` using the standard sections.`,
+    `  7. UPDATE PERSONA HISTORIES in project.json:`,
+    `     For each persona that was tested or re-tested this sprint:`,
+    `     - Append a new entry to their \`history\` array: { sprintId, sprintDate: <now ms>, finding: "<key finding>", resolved: false }`,
+    `     - Update \`unresolvedFrustrations\`: add newly discovered frustrations, remove any that were resolved`,
+    `     - Update \`testScenarios\` if any scenarios should be sharpened based on what the persona found`,
+    `  8. Update project.json with: adjusted goals, sprint priorities, role adjustments, sprint score`,
+    `  9. Write \`${workspace ? workspace.evolutionFilePath("meta-review") : ".evolution-meta-review.md"}\` with:`,
     `     - Sprint effectiveness score and justification`,
     `     - Resolution audit table (issue | status | evidence | notes)`,
     `     - App ecosystem health assessment`,
     `     - What worked well / what didn't`,
     `     - Next sprint seed topics (NOT deferred tasks — discovery prompts)`,
+    `     - Brief summary of brain updates made`,
     ``,
     `## Agent Output Standards`,
     ``,
@@ -380,9 +499,9 @@ function buildEvolutionPlanningPrompt(
     `2. Structured summary block: <!-- STRUCTURED_SUMMARY {JSON} -->`,
     `3. Calibrated ratings (1-3: broken, 4-5: poor, 6-7: adequate, 8-9: strong, 10: exceptional)`,
     ``,
-    `## DAG Shape Guidance`,
+    `## DAG Shape`,
     ``,
-    `The sprint should form this SPECIFIC shape:`,
+    `Default shape for a standard sprint:`,
     ``,
     `  team-project-leader (Phase 0)`,
     `        |`,
@@ -400,12 +519,14 @@ function buildEvolutionPlanningPrompt(
     `        |`,
     `  {retest-*, build-dashboard, meta-review} (Phase 6, ALL parallel)`,
     ``,
-    `CRITICAL RULES for the plan:`,
-    `1. Personas test BEFORE team agents (personas depend on PL only, team agents depend on pl-triage)`,
-    `2. Only include Marketing/Sales/AI-Strategist if the sprint focus clearly needs them`,
-    `3. synthesis-and-design is ONE task (not separate synthesis + discussion + design)`,
-    `4. Dashboard, meta-review, and retests are ALL parallel (depend on review, NOT on each other)`,
-    `5. The planner MUST follow this exact dependency structure — do not add extra serial steps`,
+    `Rules that ALWAYS apply regardless of sprint shape:`,
+    `1. Personas test BEFORE team agents — personas depend on PL only; team agents depend on pl-triage`,
+    `2. synthesis-and-design is ONE task (never split into separate synthesis + discussion + design)`,
+    `3. build-dashboard, meta-review, and retests are ALL parallel (depend on review, NOT on each other)`,
+    `4. meta-review is ALWAYS the last task — it updates the brain and persona histories`,
+    `5. Only include Marketing/Sales/AI-Strategist when the sprint focus clearly benefits from them`,
+    ``,
+    `When adapting the shape, keep the rules above intact and explain deviations in the first task description.`,
     ``,
     `## Output Format`,
     ``,

@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "media_gallery",
     "toolPrefix": "enso_media_gallery_",
-    "description": "Media gallery with browsing, viewing, organizing, searching, and folder analytics for photos and videos",
+    "description": "Media gallery with browsing, timeline view, viewing, organizing, searching, duplicate detection, and folder analytics for photos and videos",
     "signatureId": "media_gallery_view",
     "tools": [
       {
@@ -177,7 +177,20 @@
           ],
           "filter": "all",
           "sortBy": "name",
-          "sortDir": "asc"
+          "sortDir": "asc",
+          "summary": {
+            "totalSize": 70257910,
+            "imageCount": 5,
+            "videoCount": 1,
+            "favoriteCount": 2,
+            "ratedCount": 3,
+            "resolutionTiers": { "4K+": 3, "2K": 0, "HD": 2, "SD": 0 },
+            "dateRange": {
+              "earliest": "2024-08-13T13:45:00Z",
+              "latest": "2024-08-17T09:20:00Z"
+            },
+            "topCamera": "Canon EOS R5"
+          }
         },
         "requiredDataKeys": ["tool", "path"],
         "isPrimary": true
@@ -478,6 +491,56 @@
           "avgISO": 640
         },
         "requiredDataKeys": ["tool", "path", "totalFiles"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "duplicates",
+        "description": "Find potential duplicate media files in a folder by matching file sizes and resolutions. Returns groups of likely duplicates with estimated wasted storage. Path defaults to last browsed folder. Use when the user says: 'find duplicates', 'duplicate photos', 'clean up my gallery', 'find duplicate files', 'same photos', 'wasted space', 'storage cleanup'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory path to scan for duplicates. Defaults to last browsed folder."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "path": "C:/Users/Photos/Vacation" },
+        "sampleData": {
+          "tool": "enso_media_gallery_duplicates",
+          "path": "C:/Users/Photos/Vacation",
+          "parentPath": "C:/Users/Photos",
+          "totalScanned": 73,
+          "duplicateGroups": 3,
+          "duplicateFiles": 8,
+          "potentialSavings": 15234567,
+          "groups": [
+            {
+              "matchType": "exact_size",
+              "size": 3245678,
+              "count": 2,
+              "waste": 3245678,
+              "items": [
+                { "name": "sunset_beach.jpg", "path": "C:/Users/Photos/Vacation/sunset_beach.jpg", "mediaUrl": "/media/sunset_beach.jpg", "type": "image", "size": 3245678 },
+                { "name": "sunset_beach_copy.jpg", "path": "C:/Users/Photos/Vacation/sunset_beach_copy.jpg", "mediaUrl": "/media/sunset_beach_copy.jpg", "type": "image", "size": 3245678 }
+              ]
+            },
+            {
+              "matchType": "same_resolution",
+              "resolution": "8192x5464",
+              "count": 3,
+              "waste": 0,
+              "items": [
+                { "name": "sunset_beach.jpg", "path": "C:/Users/Photos/Vacation/sunset_beach.jpg", "mediaUrl": "/media/sunset_beach.jpg", "type": "image", "size": 3245678 },
+                { "name": "city_night.jpg", "path": "C:/Users/Photos/Vacation/city_night.jpg", "mediaUrl": "/media/city_night.jpg", "type": "image", "size": 4123456 },
+                { "name": "panorama.jpg", "path": "C:/Users/Photos/Vacation/panorama.jpg", "mediaUrl": "/media/panorama.jpg", "type": "image", "size": 5678901 }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "path", "groups"],
         "isPrimary": false
       }
     ]

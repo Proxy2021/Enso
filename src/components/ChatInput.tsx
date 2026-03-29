@@ -230,11 +230,18 @@ export default function ChatInput() {
     return () => clearTimeout(timer);
   }, [nlInterceptionToast]);
 
+  // Doubao-style input mode toggle (mobile only)
+  const [inputMode, setInputMode] = useState<"text" | "voice">("text");
+
   // Push-to-talk state
   const [pttActive, setPttActive] = useState(false);
   const [pttCancelZone, setPttCancelZone] = useState(false);
   const [pttStartTime, setPttStartTime] = useState(0);
   const pttAccumulatedRef = useRef("");
+  // State mirror of pttAccumulatedRef for render-safe display text.
+  // The ref remains the source of truth for the send-on-release path,
+  // but this state ensures pttDisplayText re-renders correctly.
+  const [pttAccumulatedText, setPttAccumulatedText] = useState("");
   const pttStartYRef = useRef(0);
   const pttActiveRef = useRef(false);
   const pttCancelRef = useRef(false);
@@ -243,6 +250,7 @@ export default function ChatInput() {
   const handlePttTranscript = useCallback((transcript: string) => {
     const sep = pttAccumulatedRef.current.length > 0 && !pttAccumulatedRef.current.endsWith(" ") ? " " : "";
     pttAccumulatedRef.current += sep + transcript;
+    setPttAccumulatedText(pttAccumulatedRef.current);
   }, []);
   const speech = useSpeechRecognition(handlePttTranscript);
   const recorder = useVoiceRecorder(handlePttTranscript);
@@ -254,8 +262,10 @@ export default function ChatInput() {
     : speech;
   const speechSupported = voice.isSupported !== undefined ? voice.isSupported : false;
 
+  // Display text derived from state (not ref) — re-renders correctly when transcript updates.
+  // pttAccumulatedRef.current remains the authoritative value for the send path.
   const pttDisplayText = pttActive
-    ? ((pttAccumulatedRef.current || "") + (voice.interimTranscript ? (pttAccumulatedRef.current ? " " : "") + voice.interimTranscript : ""))
+    ? ((pttAccumulatedText || "") + (voice.interimTranscript ? (pttAccumulatedText ? " " : "") + voice.interimTranscript : ""))
     : "";
 
   const CANCEL_THRESHOLD_PX = 100;
@@ -277,6 +287,7 @@ export default function ChatInput() {
       // Clear any text selection the browser may have started during the hold
       window.getSelection()?.removeAllRanges();
       pttAccumulatedRef.current = "";
+      setPttAccumulatedText("");
       pttActiveRef.current = true;
       pttCancelRef.current = false;
       setPttActive(true);
@@ -339,6 +350,7 @@ export default function ChatInput() {
       }
     }
     pttAccumulatedRef.current = "";
+    setPttAccumulatedText("");
   }, [voice, sendMessage]);
 
   // touchcancel fires when the OS steals the touch (e.g. native context
@@ -355,6 +367,7 @@ export default function ChatInput() {
     setPttCancelZone(false);
     voice.cancelListening();
     pttAccumulatedRef.current = "";
+    setPttAccumulatedText("");
   }, [voice]);
 
   // Suppress the native context menu on the textarea while PTT is active.
@@ -1012,6 +1025,29 @@ export default function ChatInput() {
             </svg>
           </button>
 
+          {/* Voice/Text mode toggle — mobile only */}
+          {speechSupported && (
+            <button
+              onClick={() => setInputMode(prev => prev === "text" ? "voice" : "text")}
+              className="sm:hidden shrink-0 px-2 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 transition-all duration-150"
+              aria-label={inputMode === "text" ? "Switch to voice mode" : "Switch to text mode"}
+            >
+              {inputMode === "text" ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" x2="12" y1="19" y2="22" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M6 16h12" />
+                </svg>
+              )}
+            </button>
+          )}
+
+          {inputMode === "text" || typeof window !== "undefined" && window.innerWidth >= 640 ? (
           <textarea
             ref={textareaRef}
             data-chat-input
@@ -1037,6 +1073,25 @@ export default function ChatInput() {
               ...(pttActive ? { WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" } as React.CSSProperties : {}),
             }}
           />
+          ) : (
+          <button
+            className="sm:hidden flex-1 bg-gray-800 text-gray-300 rounded-xl px-4 py-2.5 text-base flex items-center justify-center gap-2 select-none touch-none active:bg-violet-900/50 transition-all duration-150"
+            onTouchStart={handleTextareaTouchStart}
+            onTouchMove={handleTextareaTouchMove}
+            onTouchEnd={handleTextareaTouchEnd}
+            onTouchCancel={handleTextareaTouchCancel}
+            disabled={disabled}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={pttActive ? "text-red-400 animate-pulse" : "text-violet-400"}>
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" x2="12" y1="19" y2="22" />
+            </svg>
+            <span className={pttActive ? "text-red-400" : "text-gray-400"}>
+              {pttActive ? (pttCancelZone ? "Release to cancel" : "Listening...") : "Hold to talk"}
+            </span>
+          </button>
+          )}
           {(() => {
             const sendIcon = (
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1056,6 +1111,7 @@ export default function ChatInput() {
                 e.preventDefault();
                 (e.target as HTMLElement).setPointerCapture(e.pointerId);
                 pttAccumulatedRef.current = "";
+                setPttAccumulatedText("");
                 pttStartYRef.current = e.clientY;
                 pttActiveRef.current = true;
                 pttCancelRef.current = false;
@@ -1092,6 +1148,7 @@ export default function ChatInput() {
                   }
                 }
                 pttAccumulatedRef.current = "";
+                setPttAccumulatedText("");
               },
               onPointerCancel: () => {
                 if (!pttActiveRef.current) return;
@@ -1100,6 +1157,7 @@ export default function ChatInput() {
                 setPttCancelZone(false);
                 voice.cancelListening();
                 pttAccumulatedRef.current = "";
+                setPttAccumulatedText("");
               },
             };
 
