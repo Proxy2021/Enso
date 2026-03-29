@@ -416,6 +416,17 @@ Apps render in two styles:
 | **card** | `dynamic-ui` | React JSX template in sandbox | filesystem, media, screen, browser, researcher, all user apps |
 | **terminal** | `terminal` / `shell` | Streaming text terminal (xterm.js) | claude_code, shell |
 
+### APP_CATALOG Integrity Rule
+
+Every non-terminal entry in `APP_CATALOG` (`server/src/app-catalog.ts`) **must** have a UI template or it will appear callable in the client but render raw JSON. There are exactly two valid ways to provide a template:
+
+1. **Shipped app** — `server/apps/<appId>/app.json` + `template.jsx` exists (preferred for anything with a rich UI)
+2. **Native template** — a `ToolTemplate` registered via `registerToolTemplate()` in `native-tools/templates/*.ts` (for deeply integrated system tools like filesystem, researcher)
+
+**Never add an APP_CATALOG entry without immediately providing one of these.** The server logs a startup warning for any orphan entries — check `[enso] ⚠️ APP_CATALOG integrity` in the console if something looks broken.
+
+Also: `server/apps/` is for **shipped/promoted apps only** (git-tracked). User-built apps go to `~/.enso/apps/` automatically. The build pipeline (`build-via-claude.ts`) writes there by default — do not change it to write to `server/apps/`.
+
 ### Critical Rules (Quick Reference)
 
 - Every tool's result data MUST include `"tool": "enso_<family>_<suffix>"` field

@@ -444,6 +444,34 @@ export async function startEnsoServer(opts: {
     logError("system", "app re-hydration failed (non-fatal)", err);
   }
 
+  // Validate APP_CATALOG integrity: every non-terminal entry must have a template
+  // (either a shipped app in server/apps/<appId>/ or a registered native template).
+  // Catches phantom catalog entries that show up in the UI but render as raw JSON.
+  try {
+    const { SHIPPED_APPS_DIR } = await import("./app-persistence.js");
+    const { getGeneratedTemplateCodeBySignature, getAllToolTemplates } = await import("./native-tools/registry.js");
+    const { existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const registeredSigIds = new Set(getAllToolTemplates().map((s) => s.signatureId));
+    const orphans: string[] = [];
+    for (const entry of APP_CATALOG) {
+      if (entry.experience === "terminal") continue;
+      const hasShippedApp = existsSync(join(SHIPPED_APPS_DIR, entry.appId, "app.json"));
+      const hasNativeTemplate = registeredSigIds.has(entry.signatureId) || !!getGeneratedTemplateCodeBySignature(entry.signatureId);
+      if (!hasShippedApp && !hasNativeTemplate) {
+        orphans.push(`${entry.appId} (signatureId: "${entry.signatureId}")`);
+      }
+    }
+    if (orphans.length > 0) {
+      console.warn(`[enso] ⚠️  APP_CATALOG integrity: ${orphans.length} entry(s) have no UI template — will render as raw JSON:`);
+      for (const o of orphans) console.warn(`[enso]   - ${o}`);
+      console.warn(`[enso]   Fix: add server/apps/<appId>/ with app.json+template.jsx, or register a native template for the signatureId.`);
+      logAction({ ts: Date.now(), type: "error", category: "system", message: `APP_CATALOG orphans: ${orphans.join(", ")}` });
+    }
+  } catch (err) {
+    logError("system", "APP_CATALOG integrity check failed (non-fatal)", err);
+  }
+
   // Conditionally load shell PTY support (requires node-pty native module)
   let shellPty: typeof import("./shell-pty.js") | null = null;
   try {
