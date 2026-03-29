@@ -77,11 +77,11 @@ export const APP_CATALOG: AppEntry[] = [
     description: "Photo studio: import, edit, apply artistic styles (56 film & creative looks), batch process, AI analysis, adjust, compare, and export photos",
   },
   {
-    appId: "seedance",
-    primaryTool: "enso_seedance_generate",
-    actions: ["generate", "image_to_video"],
-    signatureId: "seedance_video",
-    description: "AI video generation: create cinematic videos from text prompts or animate still images using BytePlus Seedance 2.0",
+    appId: "video_studio",
+    primaryTool: "enso_video_studio_view",
+    actions: ["view", "generate", "animate", "craft_prompt", "script_to_scenes", "gallery", "history"],
+    signatureId: "video_studio_view",
+    description: "AI video generation studio: create cinematic videos from text prompts, animate still images, craft optimized prompts, browse video gallery",
   },
   // ── Terminal System Apps ──
   {

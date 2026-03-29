@@ -1,0 +1,401 @@
+{
+  "version": 1,
+  "createdAt": 1711267200000,
+  "spec": {
+    "toolFamily": "video_studio",
+    "toolPrefix": "enso_video_studio_",
+    "description": "AI video generation studio: plan your video project with script and settings, then generate clips from text prompts or scripts, animate images, decompose scripts into storyboards, craft optimized prompts, and browse your video gallery",
+    "signatureId": "video_studio_view",
+    "tools": [
+      {
+        "suffix": "view",
+        "description": "Open the Video Studio landing page. Shows a script/prompt setup interface where the user can configure their video project (prompt, duration, resolution, ratio, style, audio) before generating. Also shows recent generation stats and quick access to gallery. This is the starting point — use it when the user wants to create a new video or open the studio.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_video_studio_view",
+          "draft": null,
+          "stats": {
+            "totalGenerations": 5,
+            "successCount": 4,
+            "failedCount": 1,
+            "galleryCount": 3
+          },
+          "recentEntries": [
+            {
+              "date": "2026-03-24 14:15",
+              "type": "t2v",
+              "prompt": "Wide aerial shot over misty mountain peaks at golden hour",
+              "status": "success",
+              "url": "/media/seedance_1711267200.mp4"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "generate",
+        "description": "Generate a single video clip from a text prompt using Seedance AI. Use this when the user has finished configuring their prompt and settings and is ready to generate. For multi-scene stories, use script_to_scenes first. Duration 4-12 seconds, up to 1080p resolution with native audio.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "Detailed scene description in English. Include camera motion, lighting, subjects, and style for best results."
+            },
+            "duration": {
+              "type": "number",
+              "description": "Video duration in seconds (4-12). Default: 5"
+            },
+            "resolution": {
+              "type": "string",
+              "description": "Output resolution: 480p, 720p, or 1080p. Default: 720p"
+            },
+            "ratio": {
+              "type": "string",
+              "description": "Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9. Default: 16:9"
+            },
+            "generate_audio": {
+              "type": "boolean",
+              "description": "Generate native audio alongside the video. Default: true"
+            },
+            "seed": {
+              "type": "number",
+              "description": "Random seed for reproducibility. Optional."
+            }
+          },
+          "required": ["prompt"]
+        },
+        "sampleParams": {
+          "prompt": "Wide aerial tracking shot over misty mountain peaks at golden hour, clouds flowing between valleys, sunlight breaking through in volumetric rays, cinematic color grading with warm amber tones",
+          "duration": 6,
+          "resolution": "720p",
+          "ratio": "16:9"
+        },
+        "sampleData": {
+          "tool": "enso_video_studio_generate",
+          "url": "/media/seedance_1711267200.mp4",
+          "videoPath": "~/.enso/data/seedance/seedance_1711267200.mp4",
+          "sourceUrl": "https://cdn.example.com/video.mp4",
+          "prompt": "Wide aerial tracking shot over misty mountain peaks at golden hour, clouds flowing between valleys, sunlight breaking through in volumetric rays, cinematic color grading with warm amber tones",
+          "duration": 6,
+          "resolution": "720p",
+          "ratio": "16:9",
+          "generateAudio": true,
+          "taskId": "cgt-20260324-example"
+        },
+        "requiredDataKeys": ["tool", "url", "prompt"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "animate",
+        "description": "Animate a still image into a video using Seedance AI. Provide an image file path as the first frame and an optional motion description. Good for bringing photographs, illustrations, or AI-generated images to life.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image_path": {
+              "type": "string",
+              "description": "Absolute path to the source image to animate (first frame)"
+            },
+            "prompt": {
+              "type": "string",
+              "description": "Optional motion/scene description (e.g., 'camera slowly zooms in, leaves sway gently')"
+            },
+            "duration": {
+              "type": "number",
+              "description": "Video duration in seconds (4-12). Default: 5"
+            },
+            "resolution": {
+              "type": "string",
+              "description": "Output resolution: 480p, 720p, or 1080p. Default: 720p"
+            },
+            "ratio": {
+              "type": "string",
+              "description": "Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9, adaptive. Default: adaptive"
+            }
+          },
+          "required": ["image_path"]
+        },
+        "sampleParams": {
+          "image_path": "~/Pictures/landscape.jpg",
+          "prompt": "gentle camera pan right, clouds drift slowly, birds fly across the sky"
+        },
+        "sampleData": {
+          "tool": "enso_video_studio_animate",
+          "url": "/media/seedance_i2v_1711267200.mp4",
+          "videoPath": "~/.enso/data/seedance/seedance_i2v_1711267200.mp4",
+          "sourceUrl": "https://cdn.example.com/video_i2v.mp4",
+          "sourceImage": "~/Pictures/landscape.jpg",
+          "prompt": "gentle camera pan right, clouds drift slowly, birds fly across the sky",
+          "duration": 5,
+          "resolution": "720p",
+          "ratio": "adaptive",
+          "taskId": "cgt-20260324-i2v-example"
+        },
+        "requiredDataKeys": ["tool", "url"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "craft_prompt",
+        "description": "Craft an optimized Seedance video prompt from a rough idea, concept, or description in any language. Returns a detailed English prompt with camera directions, lighting, and style, plus recommended generation settings and alternative variants. Use this when the user has a vague idea that needs refinement into a production-ready video prompt.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Your rough idea, story concept, or scene description in any language"
+            },
+            "style": {
+              "type": "string",
+              "description": "Visual style hint: cinematic, anime, realistic, noir, fantasy, sci-fi, documentary, horror, comedy. Default: cinematic"
+            },
+            "mood": {
+              "type": "string",
+              "description": "Mood hint: dramatic, serene, mysterious, energetic, melancholic, epic, playful, dark. Optional."
+            }
+          },
+          "required": ["description"]
+        },
+        "sampleParams": {
+          "description": "A lone explorer discovers ancient ruins in a jungle",
+          "style": "cinematic",
+          "mood": "mysterious"
+        },
+        "sampleData": {
+          "tool": "enso_video_studio_craft_prompt",
+          "originalDescription": "A lone explorer discovers ancient ruins in a jungle",
+          "craftedPrompt": "A weathered explorer in a worn leather jacket pushes through dense tropical foliage, camera tracking behind as she emerges into a clearing revealing massive moss-covered stone ruins. Golden hour light streams through the canopy, dust motes float in beams of light. Slow crane shot rising to reveal the full scale of the ancient temple. Cinematic color grading with deep greens and warm amber highlights.",
+          "suggestedDuration": 8,
+          "suggestedRatio": "16:9",
+          "suggestedResolution": "720p",
+          "styleNotes": "Cinematic adventure aesthetic. Use slow reveals and tracking shots. Deep jungle greens with warm sunlight contrast.",
+          "variants": [
+            {
+              "label": "Close-up Discovery",
+              "prompt": "Extreme close-up of a hand brushing away moss from carved stone symbols, ancient glyphs glow faintly beneath the surface, shallow depth of field, golden sunlight filters through leaves above"
+            },
+            {
+              "label": "Wide Establishing",
+              "prompt": "Aerial drone shot slowly descending through jungle canopy to reveal massive ancient stone ruins below, morning mist swirling between crumbling pillars, epic scale, cinematic framing"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "craftedPrompt"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "script_to_scenes",
+        "description": "Decompose a full script, story, narrative, or multi-scene concept into individual optimized video scene prompts. Use this when the user provides a screenplay, story outline, or any narrative that should be broken into multiple video clips. Returns a storyboard with each scene's prompt and suggested generation settings. Each scene can then be generated individually.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "script": {
+              "type": "string",
+              "description": "The full script, story, screenplay, or multi-scene concept to decompose. Can be in any language."
+            },
+            "scene_count": {
+              "type": "number",
+              "description": "Target number of scenes to extract (2-12). Default: auto-detect based on script structure and length"
+            },
+            "style": {
+              "type": "string",
+              "description": "Visual style for all scenes: cinematic, anime, realistic, noir, fantasy, sci-fi, documentary, horror, comedy. Default: cinematic"
+            },
+            "duration_per_scene": {
+              "type": "number",
+              "description": "Target duration per scene in seconds (4-12). Default: 5"
+            }
+          },
+          "required": ["script"]
+        },
+        "sampleParams": {
+          "script": "A lone astronaut discovers an ancient alien structure on Mars. She enters the dark corridor, finds glowing symbols on the walls, and reaches a chamber where a holographic map of the galaxy activates.",
+          "style": "sci-fi",
+          "scene_count": 4
+        },
+        "sampleData": {
+          "tool": "enso_video_studio_script_to_scenes",
+          "originalScript": "A lone astronaut discovers an ancient alien structure on Mars. She enters the dark corridor, finds glowing symbols on the walls, and reaches a chamber where a holographic map of the galaxy activates.",
+          "style": "sci-fi",
+          "totalScenes": 4,
+          "totalDuration": 24,
+          "scenes": [
+            {
+              "sceneNumber": 1,
+              "title": "Discovery on Mars",
+              "prompt": "Wide aerial shot of a lone astronaut in white spacesuit walking across red Martian desert, camera reveals massive dark angular alien structure half-buried in sand, sci-fi color grading with amber and teal",
+              "suggestedDuration": 6,
+              "suggestedRatio": "21:9",
+              "mood": "mysterious"
+            },
+            {
+              "sceneNumber": 2,
+              "title": "Entering the Unknown",
+              "prompt": "POV shot pushing into dark alien corridor, astronaut helmet light illuminates geometric patterns on obsidian walls, dust particles float in beam, claustrophobic framing, dark ambient lighting",
+              "suggestedDuration": 5,
+              "suggestedRatio": "16:9",
+              "mood": "tense"
+            },
+            {
+              "sceneNumber": 3,
+              "title": "Alien Symbols",
+              "prompt": "Close-up tracking shot along stone wall covered in glowing cyan symbols, astronaut gloved hand reaches out to touch them, symbols pulse with energy, bioluminescent lighting",
+              "suggestedDuration": 5,
+              "suggestedRatio": "16:9",
+              "mood": "wonder"
+            },
+            {
+              "sceneNumber": 4,
+              "title": "The Galactic Map",
+              "prompt": "Wide shot of vast dark chamber erupting with massive holographic star map, millions of stars rotating slowly, astronaut stands center looking up in awe, volumetric light rays, epic cinematic framing",
+              "suggestedDuration": 8,
+              "suggestedRatio": "21:9",
+              "mood": "epic"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "scenes"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "gallery",
+        "description": "Browse all generated Seedance videos with file details, prompts, and video previews. Shows creation dates, sizes, and the prompt used for each video when available.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sortBy": {
+              "type": "string",
+              "description": "Sort by: date or size. Default: date"
+            },
+            "sortDir": {
+              "type": "string",
+              "description": "Sort direction: desc or asc. Default: desc (newest first)"
+            },
+            "filter": {
+              "type": "string",
+              "description": "Filter by type: all, t2v (text-to-video), i2v (image-to-video). Default: all"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_video_studio_gallery",
+          "totalCount": 3,
+          "totalSizeMB": 45.2,
+          "videos": [
+            {
+              "name": "seedance_1711267200.mp4",
+              "url": "/media/seedance_1711267200.mp4",
+              "path": "~/.enso/data/seedance/seedance_1711267200.mp4",
+              "type": "t2v",
+              "date": "2026-03-24",
+              "sizeMB": 18.5,
+              "prompt": "Wide aerial shot over misty mountain peaks at golden hour"
+            },
+            {
+              "name": "seedance_i2v_1711180800.mp4",
+              "url": "/media/seedance_i2v_1711180800.mp4",
+              "path": "~/.enso/data/seedance/seedance_i2v_1711180800.mp4",
+              "type": "i2v",
+              "date": "2026-03-23",
+              "sizeMB": 15.3,
+              "prompt": ""
+            },
+            {
+              "name": "seedance_1711094400.mp4",
+              "url": "/media/seedance_1711094400.mp4",
+              "path": "~/.enso/data/seedance/seedance_1711094400.mp4",
+              "type": "t2v",
+              "date": "2026-03-22",
+              "sizeMB": 11.4,
+              "prompt": "A rain-soaked city street at night with neon reflections"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "videos"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "history",
+        "description": "View the history of all video generation tasks including prompts, settings, outcomes, and links to generated videos. Supports searching prompts by keyword and filtering by status.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "type": "number",
+              "description": "Maximum number of history entries to return. Default: 50"
+            },
+            "search": {
+              "type": "string",
+              "description": "Search prompts by keyword. Optional."
+            },
+            "status": {
+              "type": "string",
+              "description": "Filter by status: all, success, failed. Default: all"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_video_studio_history",
+          "totalGenerations": 5,
+          "t2vCount": 3,
+          "i2vCount": 2,
+          "successCount": 4,
+          "failedCount": 1,
+          "entries": [
+            {
+              "date": "2026-03-24 14:15",
+              "type": "t2v",
+              "prompt": "Wide aerial shot over misty mountain peaks at golden hour, cinematic color grading",
+              "duration": 6,
+              "resolution": "720p",
+              "ratio": "16:9",
+              "status": "success",
+              "url": "/media/seedance_1711267200.mp4",
+              "taskId": "cgt-20260324-001"
+            },
+            {
+              "date": "2026-03-23 10:30",
+              "type": "i2v",
+              "prompt": "gentle camera pan, clouds drift slowly",
+              "duration": 5,
+              "resolution": "720p",
+              "ratio": "adaptive",
+              "status": "success",
+              "url": "/media/seedance_i2v_1711180800.mp4",
+              "taskId": "cgt-20260323-002"
+            },
+            {
+              "date": "2026-03-22 16:45",
+              "type": "t2v",
+              "prompt": "A rain-soaked city street at night with neon reflections in puddles, moody cinematic lighting",
+              "duration": 6,
+              "resolution": "1080p",
+              "ratio": "21:9",
+              "status": "success",
+              "url": "/media/seedance_1711094400.mp4",
+              "taskId": "cgt-20260322-003"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "entries"],
+        "isPrimary": false
+      }
+    ]
+  }
+}
