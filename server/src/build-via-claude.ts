@@ -71,7 +71,8 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
   };
 
   // 2. Craft the build prompt
-  const prompt = buildAppPrompt(cardText, buildAppDefinition, conversationContext);
+  const userAppsDir = getEnsoPath("apps");
+  const prompt = buildAppPrompt(cardText, buildAppDefinition, userAppsDir, conversationContext);
 
   // 3. Run Claude Code — streams to the source card (client accumulates in buildTerminalText)
   let sessionId: string | undefined;
@@ -604,6 +605,7 @@ function sendBuildComplete(
 function buildAppPrompt(
   cardText: string,
   buildDefinition: string,
+  userAppsDir: string,
   conversationContext?: string,
 ): string {
   const lines: string[] = [];
@@ -616,6 +618,7 @@ function buildAppPrompt(
   lines.push(``);
   lines.push(`## Step 2: Study Existing Apps for Patterns`);
   lines.push(`Browse server/apps/ to see how real apps are structured. Pick 1-2 to read in full as reference.`);
+  lines.push(`**server/apps/ is READ-ONLY reference material — do NOT write your new app there.**`);
   lines.push(``);
   lines.push(`## Step 2.5: Design for Reuse (CRITICAL — read before building)`);
   lines.push(`You are building a GENERAL-PURPOSE tool, not a one-off solution.`);
@@ -646,7 +649,7 @@ function buildAppPrompt(
   lines.push(``);
 
   lines.push(`## Step 3: Design and Build the App`);
-  lines.push(`Write the app files to: ~/.enso/apps/<family_name>/`);
+  lines.push(`Write the app files to: ${userAppsDir}/<family_name>/`);
   lines.push(`Required files:`);
   lines.push(`- app.json — manifest with PluginSpec (tools array, sampleData, sampleParams)`);
   lines.push(`- template.jsx — React component as JSX string`);
