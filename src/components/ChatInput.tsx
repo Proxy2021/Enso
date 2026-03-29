@@ -274,6 +274,8 @@ export default function ChatInput() {
     longPressTimerRef.current = setTimeout(() => {
       longPressTimerRef.current = null;
       textareaRef.current?.blur();
+      // Clear any text selection the browser may have started during the hold
+      window.getSelection()?.removeAllRanges();
       pttAccumulatedRef.current = "";
       pttActiveRef.current = true;
       pttCancelRef.current = false;
@@ -338,6 +340,35 @@ export default function ChatInput() {
     }
     pttAccumulatedRef.current = "";
   }, [voice, sendMessage]);
+
+  // touchcancel fires when the OS steals the touch (e.g. native context
+  // menu / copy modal on long press). Treat it as a cancel so PTT doesn't
+  // get stuck with the timer counting indefinitely.
+  const handleTextareaTouchCancel = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (!pttActiveRef.current) return;
+    pttActiveRef.current = false;
+    setPttActive(false);
+    setPttCancelZone(false);
+    voice.cancelListening();
+    pttAccumulatedRef.current = "";
+  }, [voice]);
+
+  // Suppress the native context menu on the textarea while PTT is active.
+  // Without this, holding the textarea for ~600ms triggers the OS copy/paste
+  // popup which steals touch events and leaves PTT stuck.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const suppress = (e: Event) => {
+      if (pttActiveRef.current) e.preventDefault();
+    };
+    el.addEventListener("contextmenu", suppress);
+    return () => el.removeEventListener("contextmenu", suppress);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -990,6 +1021,7 @@ export default function ChatInput() {
             onTouchStart={handleTextareaTouchStart}
             onTouchMove={handleTextareaTouchMove}
             onTouchEnd={handleTextareaTouchEnd}
+            onTouchCancel={handleTextareaTouchCancel}
             placeholder={disabled ? "Disconnected..." : activeShellSessionId ? "Shell command..." : (speechSupported ? "Message or hold to talk..." : "Message...")}
             disabled={disabled}
             rows={1}
@@ -1000,7 +1032,10 @@ export default function ChatInput() {
                   ? "ring-2 ring-amber-500/60 focus:ring-amber-500"
                   : "focus:ring-2 focus:ring-indigo-500"
             }`}
-            style={{ maxHeight: "200px" }}
+            style={{
+              maxHeight: "200px",
+              ...(pttActive ? { WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" } as React.CSSProperties : {}),
+            }}
           />
           {(() => {
             const sendIcon = (
