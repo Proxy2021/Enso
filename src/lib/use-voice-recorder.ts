@@ -42,6 +42,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 export function useVoiceRecorder(onTranscript: (text: string) => void) {
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const isListeningRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -56,7 +57,7 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (isListening || isTranscribing) return;
+    if (isListeningRef.current || isTranscribing) return;
     try {
       const stream = await getAudioStream();
       streamRef.current = stream;
@@ -83,10 +84,12 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
         chunksRef.current = [];
 
         if (blob.size < 100) {
+          isListeningRef.current = false;
           setIsListening(false);
           return;
         }
 
+        isListeningRef.current = false;
         setIsListening(false);
         setIsTranscribing(true);
         try {
@@ -114,11 +117,12 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
 
       mediaRecorderRef.current = recorder;
       recorder.start();
+      isListeningRef.current = true;
       setIsListening(true);
     } catch (err) {
       console.warn("[voice-recorder] getUserMedia failed:", err);
     }
-  }, [isListening, isTranscribing]);
+  }, [isTranscribing]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
@@ -136,6 +140,7 @@ export function useVoiceRecorder(onTranscript: (text: string) => void) {
     streamRef.current = null;
     chunksRef.current = [];
     mediaRecorderRef.current = null;
+    isListeningRef.current = false;
     setIsListening(false);
     setIsTranscribing(false);
   }, []);

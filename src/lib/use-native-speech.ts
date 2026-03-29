@@ -43,6 +43,9 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
   const listenersRef = useRef<PluginListenerHandle[]>([]);
+  // Ref mirror of isListening — prevents stale-closure guard in startListening
+  // when user rapidly re-presses before React re-renders with updated state.
+  const isListeningRef = useRef(false);
 
   useEffect(() => {
     if (!isNative) return;
@@ -75,7 +78,7 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
   }, []);
 
   const startListening = useCallback(async () => {
-    if (!isSupported || isListening) return;
+    if (!isSupported || isListeningRef.current) return;
 
     for (const handle of listenersRef.current) {
       handle.remove().catch(() => {});
@@ -90,6 +93,7 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
       });
 
       const finalHandle = await Speech.addListener("finalResult", (data) => {
+        isListeningRef.current = false;
         setIsListening(false);
         setInterimTranscript("");
         if (data.transcript) {
@@ -98,6 +102,7 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
       });
 
       const errorHandle = await Speech.addListener("error", (data) => {
+        isListeningRef.current = false;
         setIsListening(false);
         setInterimTranscript("");
         console.warn("[native-speech] error:", data.error, "code:", data.code);
@@ -106,38 +111,52 @@ export function useNativeSpeech(onTranscript: (text: string) => void) {
       listenersRef.current = [partialHandle, finalHandle, errorHandle];
 
       await Speech.start({ language: navigator.language || "en-US" });
+      isListeningRef.current = true;
       setIsListening(true);
     } catch (err) {
       console.warn("[native-speech] start failed:", err);
+      isListeningRef.current = false;
       setIsListening(false);
       setInterimTranscript("");
     }
-  }, [isSupported, isListening]);
+  }, [isSupported]);
 
   const stopListening = useCallback(async () => {
-    if (!isListening) return;
+    if (!isListeningRef.current) return;
     try {
       await Speech.stop();
+      // Android should deliver onResults → finalResult event resets state.
+      // Safety: if finalResult doesn't arrive within 3s, force-reset to
+      // prevent isListening from being stuck true indefinitely.
+      setTimeout(() => {
+        if (isListeningRef.current) {
+          isListeningRef.current = false;
+          setIsListening(false);
+          setInterimTranscript("");
+        }
+      }, 3000);
     } catch {
+      isListeningRef.current = false;
       setIsListening(false);
       setInterimTranscript("");
     }
-  }, [isListening]);
+  }, []);
 
   const cancelListening = useCallback(async () => {
-    if (!isListening) return;
+    if (!isListeningRef.current) return;
     try {
       await Speech.cancel();
     } catch {
       // fall through
     }
+    isListeningRef.current = false;
     setIsListening(false);
     setInterimTranscript("");
     for (const handle of listenersRef.current) {
       handle.remove().catch(() => {});
     }
     listenersRef.current = [];
-  }, [isListening]);
+  }, []);
 
   const toggleListening = useCallback(() => {
     if (isListening) {

@@ -40,6 +40,7 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const isListeningRef = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
 
@@ -50,7 +51,7 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
   }, []);
 
   const startListening = useCallback(() => {
-    if (!isSupported || isListening) return;
+    if (!isSupported || isListeningRef.current) return;
 
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition: SpeechRecognitionInstance = new Ctor();
@@ -59,7 +60,10 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
     recognition.interimResults = true;
     recognition.lang = navigator.language || "en-US";
 
-    recognition.onstart = () => setIsListening(true);
+    recognition.onstart = () => {
+      isListeningRef.current = true;
+      setIsListening(true);
+    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = "";
@@ -78,12 +82,14 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       if (event.error !== "aborted") {
         console.warn("[speech] Recognition error:", event.error);
+        isListeningRef.current = false;
         setIsListening(false);
         setInterimTranscript("");
       }
     };
 
     recognition.onend = () => {
+      isListeningRef.current = false;
       setIsListening(false);
       setInterimTranscript("");
       recognitionRef.current = null;
@@ -91,7 +97,7 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [isListening]);
+  }, []);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -100,6 +106,7 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
   const cancelListening = useCallback(() => {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
+    isListeningRef.current = false;
     setIsListening(false);
     setInterimTranscript("");
   }, []);

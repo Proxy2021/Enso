@@ -317,15 +317,21 @@ export default function ChatInput() {
     if (!pttActiveRef.current) return;
     pttActiveRef.current = false;
     const wasCancelled = pttCancelRef.current;
+    // Capture transcript BEFORE any stop/cancel clears it asynchronously
+    const capturedInterim = voice.interimTranscript || "";
+    const capturedAccum = pttAccumulatedRef.current || "";
     setPttActive(false);
     setPttCancelZone(false);
     if (wasCancelled) {
       voice.cancelListening();
       haptic([30, 50, 30]);
     } else {
-      voice.cancelListening();
+      // stopListening (not cancel) lets the recognizer finalize cleanly,
+      // resetting isListening via the finalResult/onend event.
+      voice.stopListening();
       haptic(15);
-      const finalText = (pttAccumulatedRef.current + (voice.interimTranscript ? (pttAccumulatedRef.current ? " " : "") + voice.interimTranscript : "")).trim();
+      const sep = capturedAccum && capturedInterim ? " " : "";
+      const finalText = (capturedAccum + sep + capturedInterim).trim();
       if (finalText) {
         sendMessage(finalText);
       }
