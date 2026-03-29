@@ -1,42 +1,48 @@
 export default function GeneratedUI({ data, onAction }) {
-  var [showFullPrompt, setShowFullPrompt] = useState(false);
-  var [selectedVideo, setSelectedVideo] = useState(null);
-  var [copiedPrompt, setCopiedPrompt] = useState(false);
+  // ── State ──
   var [expandedScene, setExpandedScene] = useState(null);
-  var [selectedEntry, setSelectedEntry] = useState(null);
-  var [historySearch, setHistorySearch] = useState("");
-
-  // ── Landing view state ──
+  var [selectedGalleryCategory, setSelectedGalleryCategory] = useState("all");
+  var [selectedTemplate, setSelectedTemplate] = useState(null);
+  // Landing state
+  var [landingMode, setLandingMode] = useState("short_video");
+  var [svPlatform, setSvPlatform] = useState("douyin");
+  var [svCategory, setSvCategory] = useState("lifestyle");
+  var [svDuration, setSvDuration] = useState(30);
+  var [svConcept, setSvConcept] = useState("");
+  var [svHookStyle, setSvHookStyle] = useState("auto");
+  // Single clip state
   var [promptText, setPromptText] = useState("");
   var [durationVal, setDurationVal] = useState(5);
-  var [resolutionVal, setResolutionVal] = useState("720p");
-  var [ratioVal, setRatioVal] = useState("16:9");
+  var [resolutionVal, setResolutionVal] = useState("1080p");
+  var [ratioVal, setRatioVal] = useState("9:16");
   var [styleVal, setStyleVal] = useState("cinematic");
   var [moodVal, setMoodVal] = useState("");
   var [audioEnabled, setAudioEnabled] = useState(true);
-  var [landingMode, setLandingMode] = useState("single");
-
-  // ── Generate result editing state ──
+  // Craft prompt editing
   var [editingPrompt, setEditingPrompt] = useState(false);
   var [editPromptText, setEditPromptText] = useState("");
-  var [editDuration, setEditDuration] = useState(5);
-  var [editResolution, setEditResolution] = useState("720p");
-  var [editRatio, setEditRatio] = useState("16:9");
-  var [editAudio, setEditAudio] = useState(true);
 
   var tool = data?.tool || "";
   var error = data?.error || "";
 
-  // ── Shared ratio preview helper ──
+  // ── Shared helpers ──
+  var PLATFORM_LABELS = { douyin: "抖音 Douyin", tiktok: "TikTok", rednote: "小红书", bilibili: "Bilibili", youtube_shorts: "YT Shorts", wechat: "微信视频号" };
+  var PLATFORM_ICONS = { douyin: "🎵", tiktok: "🎶", rednote: "📕", bilibili: "📺", youtube_shorts: "▶️", wechat: "💬" };
+  var PLATFORM_RATIO = { douyin: "9:16", tiktok: "9:16", rednote: "3:4", bilibili: "16:9", youtube_shorts: "9:16", wechat: "9:16" };
+
+  var scoreVariant = function(score) {
+    if (!score) return "outline";
+    if (score >= 8.5) return "success";
+    if (score >= 7) return "warning";
+    return "danger";
+  };
+  var purposeVariant = function(p) {
+    var m = { hook: "warning", cta: "pink", emotion: "purple", content: "blue", solution: "green", proof: "teal", conflict: "danger", context: "outline", action: "orange" };
+    return m[p] || "outline";
+  };
+
   var ratioPreviewStyle = function(ratio) {
-    var map = {
-      "16:9": { width: 48, height: 27 },
-      "9:16": { width: 27, height: 48 },
-      "1:1": { width: 36, height: 36 },
-      "4:3": { width: 40, height: 30 },
-      "3:4": { width: 30, height: 40 },
-      "21:9": { width: 56, height: 24 }
-    };
+    var map = { "16:9": { width: 48, height: 27 }, "9:16": { width: 27, height: 48 }, "1:1": { width: 36, height: 36 }, "4:3": { width: 40, height: 30 }, "3:4": { width: 30, height: 40 }, "21:9": { width: 56, height: 24 } };
     return map[ratio] || map["16:9"];
   };
 
@@ -47,12 +53,8 @@ export default function GeneratedUI({ data, onAction }) {
         <div className="space-y-3">
           <Badge variant="danger">{String(error)}</Badge>
           <div className="flex gap-2 flex-wrap">
-            <Button variant="primary" icon={<LucideReact.Home size={14} />} onClick={function() { onAction("view", {}); }}>
-              Studio Home
-            </Button>
-            <Button variant="outline" icon={<LucideReact.Grid3x3 size={14} />} onClick={function() { onAction("gallery", {}); }}>
-              Gallery
-            </Button>
+            <Button variant="primary" icon={<LucideReact.Home size={14} />} onClick={function() { onAction("view", {}); }}>Studio Home</Button>
+            <Button variant="outline" icon={<LucideReact.Grid3x3 size={14} />} onClick={function() { onAction("gallery", {}); }}>Gallery</Button>
           </div>
         </div>
       </UICard>
@@ -60,45 +62,424 @@ export default function GeneratedUI({ data, onAction }) {
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // ── Landing / Setup View ──
+  // ── 短视频 Project View ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_short_video") {
+    var svScenes = data.scenes || [];
+    var hookScene = null;
+    var otherScenes = [];
+    for (var si = 0; si < svScenes.length; si++) {
+      if (svScenes[si].purpose === "hook" && !hookScene) hookScene = svScenes[si];
+      else otherScenes.push(svScenes[si]);
+    }
+    if (!hookScene && svScenes.length > 0) { hookScene = svScenes[0]; otherScenes = svScenes.slice(1); }
+
+    return (
+      <div className="space-y-4">
+        {/* Project Header */}
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <LucideReact.Clapperboard size={18} className="text-purple-400 flex-shrink-0" />
+            <span className="text-sm font-bold text-white truncate">{String(data.projectTitle || "Short Video Project")}</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant="purple">{String(PLATFORM_ICONS[data.platform] || "🎬")} {String(data.platformName || data.platform || "Douyin")}</Badge>
+            {data.hookScore ? <Badge variant={scoreVariant(data.hookScore)}>⚡ Hook {String(data.hookScore)}</Badge> : null}
+            {data.viralScore ? <Badge variant={scoreVariant(data.viralScore)}>🔥 Viral {String(data.viralScore)}</Badge> : null}
+          </div>
+        </div>
+
+        {/* Concept */}
+        <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/8 text-xs text-gray-400 italic">
+          {String(data.concept || "")}
+        </div>
+
+        {/* Specs row */}
+        <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500">
+          <span className="flex items-center gap-1"><LucideReact.Maximize size={11} />{String(data.ratio || "9:16")}</span>
+          <span className="flex items-center gap-1"><LucideReact.Monitor size={11} />{String(data.resolution || "1080p")}</span>
+          <span className="flex items-center gap-1"><LucideReact.Clock size={11} />{String(data.totalDuration || 0)}s total</span>
+          <span className="flex items-center gap-1"><LucideReact.Film size={11} />{String(svScenes.length)} scenes</span>
+          {data.hookStyle && data.hookStyle !== "auto" ? <Badge variant="outline" size="sm">{String(data.hookStyle)} hook</Badge> : null}
+        </div>
+
+        {/* Hook Scene */}
+        {hookScene ? (
+          <div className="rounded-xl border border-orange-500/50 bg-orange-500/5 p-3 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-orange-400 font-bold text-xs">⚡ HOOK</span>
+                <span className="text-xs text-gray-400">{String(hookScene.title || "")}</span>
+                <Badge variant="warning">{String(hookScene.duration || 3)}s</Badge>
+              </div>
+              <Button variant="outline" size="sm" icon={<LucideReact.Play size={11} />}
+                onClick={function() { onAction("generate", { prompt: hookScene.prompt, duration: hookScene.duration || 3, resolution: data.resolution || "1080p", ratio: data.ratio || "9:16", generate_audio: true }); }}>
+                Generate
+              </Button>
+            </div>
+            <p className="text-xs text-gray-300 leading-relaxed">{String(hookScene.prompt || "")}</p>
+            {hookScene.caption ? (
+              <div className="flex items-start gap-2 pt-1">
+                <LucideReact.Type size={11} className="text-yellow-400/70 flex-shrink-0 mt-0.5" />
+                <span className="text-xs text-yellow-300 font-medium">"{String(hookScene.caption)}"</span>
+                {hookScene.captionTiming ? <span className="text-xs text-gray-600 ml-1">{String(hookScene.captionTiming)}</span> : null}
+              </div>
+            ) : null}
+            {hookScene.audioNote ? (
+              <div className="flex items-start gap-2">
+                <LucideReact.Music size={11} className="text-purple-400/70 flex-shrink-0 mt-0.5" />
+                <span className="text-xs text-gray-500">{String(hookScene.audioNote)}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Remaining Scenes */}
+        {otherScenes.length > 0 ? (
+          <div className="space-y-1.5">
+            {otherScenes.map(function(scene, idx) {
+              var isExp = expandedScene === scene.number;
+              return (
+                <div key={idx} className={"rounded-lg border overflow-hidden transition-colors " + (isExp ? "border-white/20 bg-white/5" : "border-white/8 bg-white/3")}>
+                  <div className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-white/5 transition-colors"
+                    onClick={function() { setExpandedScene(isExp ? null : scene.number); }}>
+                    <span className="text-xs font-mono text-gray-600 w-5 flex-shrink-0">{String(scene.number)}</span>
+                    <span className="text-xs text-gray-200 flex-1 truncate">{String(scene.title || "Scene " + scene.number)}</span>
+                    <Badge variant={purposeVariant(scene.purpose)}>{String(scene.purpose || "content")}</Badge>
+                    <span className="text-xs text-gray-600 flex-shrink-0">{String(scene.duration || 5)}s</span>
+                    {scene.generated ? <LucideReact.CheckCircle size={11} className="text-green-400 flex-shrink-0" /> : null}
+                    <LucideReact.ChevronDown size={11} className={"text-gray-500 flex-shrink-0 transition-transform duration-200 " + (isExp ? "rotate-180" : "")} />
+                  </div>
+                  {isExp ? (
+                    <div className="px-3 pb-3 space-y-2.5 border-t border-white/8">
+                      <p className="text-xs text-gray-300 leading-relaxed mt-2">{String(scene.prompt || "")}</p>
+                      {scene.caption ? (
+                        <div className="flex items-start gap-2">
+                          <LucideReact.Type size={11} className="text-yellow-400/70 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs text-yellow-300">"{String(scene.caption)}"</span>
+                          {scene.captionTiming ? <span className="text-xs text-gray-600 ml-1">{String(scene.captionTiming)}</span> : null}
+                        </div>
+                      ) : null}
+                      {scene.audioNote ? (
+                        <div className="flex items-start gap-2">
+                          <LucideReact.Music size={11} className="text-purple-400/70 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs text-gray-500">{String(scene.audioNote)}</span>
+                        </div>
+                      ) : null}
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <Button variant="outline" size="sm" icon={<LucideReact.Play size={11} />}
+                          onClick={function() { onAction("generate", { prompt: scene.prompt, duration: scene.duration || 5, resolution: data.resolution || "1080p", ratio: data.ratio || "9:16", generate_audio: true }); }}>
+                          Generate This Scene
+                        </Button>
+                        <span className="text-xs text-gray-600">→ {String(scene.transition || "cut")}</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {/* Music Direction */}
+        {(data.musicGenre || data.musicMood) ? (
+          <div className="rounded-lg border border-white/10 bg-white/3 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <LucideReact.Music2 size={13} className="text-purple-400" />
+              <span className="text-xs font-semibold text-gray-300">Music Direction</span>
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              {data.musicGenre ? <Badge variant="purple">{String(data.musicGenre)}</Badge> : null}
+              {data.musicMood ? <Badge variant="outline">{String(data.musicMood)}</Badge> : null}
+              {data.musicBPM ? <span className="text-xs text-gray-500">{String(data.musicBPM)} BPM</span> : null}
+            </div>
+            {data.ctaText ? <p className="text-xs text-gray-500 mt-2">CTA: <span className="text-gray-300">"{String(data.ctaText)}"</span></p> : null}
+          </div>
+        ) : null}
+
+        {/* Platform Tips */}
+        {data.platformTips && data.platformTips.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-gray-400">Platform Tips</p>
+            {data.platformTips.map(function(tip, i) {
+              return (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-purple-400 text-xs mt-0.5 flex-shrink-0">•</span>
+                  <span className="text-xs text-gray-500">{String(tip)}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {/* Hashtags */}
+        {data.hashtags && data.hashtags.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {data.hashtags.map(function(tag, i) {
+              return <span key={i} className="text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-full border border-blue-400/20">{String(tag)}</span>;
+            })}
+          </div>
+        ) : null}
+
+        {/* Action Row */}
+        <div className="flex gap-2 flex-wrap pt-1">
+          <Button variant="primary" icon={<LucideReact.Zap size={13} />}
+            onClick={function() { onAction("batch_generate", { scenes: svScenes, ratio: data.ratio || "9:16", resolution: data.resolution || "1080p", generate_audio: true, project_id: data.projectId || "" }); }}>
+            Generate All Scenes
+          </Button>
+          <Button variant="outline" icon={<LucideReact.Palette size={13} />}
+            onClick={function() { onAction("style_gallery", {}); }}>
+            Style Gallery
+          </Button>
+          <Button variant="ghost" icon={<LucideReact.Home size={13} />}
+            onClick={function() { onAction("view", {}); }}>
+            Studio
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ── Batch Generate Results ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_batch_generate") {
+    var bResults = data.results || [];
+    var bSuccess = data.successCount || 0;
+    var bFailed = data.failedCount || 0;
+    var bTotal = data.totalScenes || bResults.length;
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <LucideReact.Layers size={18} className="text-purple-400" />
+            <span className="text-sm font-bold text-white">Batch Generation Results</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="success">{String(bSuccess)}/{String(bTotal)} done</Badge>
+            {bFailed > 0 ? <Badge variant="danger">{String(bFailed)} failed</Badge> : null}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <Progress value={bTotal > 0 ? (bSuccess / bTotal) * 100 : 0} />
+
+        {/* Results list */}
+        <div className="space-y-3">
+          {bResults.map(function(r, idx) {
+            return (
+              <div key={idx} className={"rounded-lg border p-3 space-y-2 " + (r.status === "success" ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5")}>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-gray-500">#{String(r.number || (idx + 1))}</span>
+                    <span className="text-xs text-gray-200 font-medium">{String(r.title || "Scene " + (idx + 1))}</span>
+                    {r.purpose ? <Badge variant={purposeVariant(r.purpose)}>{String(r.purpose)}</Badge> : null}
+                  </div>
+                  <Badge variant={r.status === "success" ? "success" : "danger"}>
+                    {r.status === "success" ? "✓ Done" : "✗ Failed"}
+                  </Badge>
+                </div>
+                {r.status === "success" && r.url ? (
+                  <video
+                    src={r.url}
+                    controls
+                    className="w-full rounded-lg max-h-64 bg-black"
+                    style={{ aspectRatio: (data.ratio || "9:16").replace(":", "/") }}
+                  />
+                ) : null}
+                {r.caption ? (
+                  <div className="flex items-center gap-2">
+                    <LucideReact.Type size={11} className="text-yellow-400/70 flex-shrink-0" />
+                    <span className="text-xs text-yellow-300">"{String(r.caption)}"</span>
+                  </div>
+                ) : null}
+                {r.status === "failed" ? (
+                  <div className="flex items-start gap-2">
+                    <LucideReact.AlertCircle size={11} className="text-red-400 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs text-red-400">{String(r.error || "Generation failed")}</span>
+                  </div>
+                ) : null}
+                {r.status === "failed" ? (
+                  <Button variant="outline" size="sm" icon={<LucideReact.RefreshCw size={11} />}
+                    onClick={function() { onAction("generate", { prompt: r.prompt, duration: r.duration || 5, resolution: data.resolution || "1080p", ratio: data.ratio || "9:16", generate_audio: true }); }}>
+                    Retry
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom actions */}
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" icon={<LucideReact.Grid3x3 size={13} />}
+            onClick={function() { onAction("gallery", {}); }}>
+            View Gallery
+          </Button>
+          <Button variant="ghost" icon={<LucideReact.Home size={13} />}
+            onClick={function() { onAction("view", {}); }}>
+            Studio
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ── Style Gallery ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_style_gallery") {
+    var templates = data.templates || [];
+    var allCategories = data.categories || ["all", "education", "lifestyle", "entertainment", "food", "travel", "beauty", "product"];
+    var filtered = selectedGalleryCategory === "all"
+      ? templates
+      : templates.filter(function(t) { return t.category === selectedGalleryCategory; });
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <LucideReact.Palette size={18} className="text-purple-400" />
+            <span className="text-sm font-bold text-white">Viral Format Templates</span>
+            <Badge variant="purple">{String(filtered.length)} templates</Badge>
+          </div>
+          <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />}
+            onClick={function() { onAction("view", {}); }}>Studio</Button>
+        </div>
+
+        {/* Category tabs */}
+        <div className="flex flex-wrap gap-1.5">
+          {allCategories.map(function(cat) {
+            return (
+              <button key={cat}
+                className={"px-2.5 py-1 rounded-full text-xs transition-colors " + (selectedGalleryCategory === cat ? "bg-purple-500 text-white" : "bg-white/8 text-gray-400 hover:bg-white/15")}
+                onClick={function() { setSelectedGalleryCategory(cat); }}>
+                {String(cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1))}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Template grid */}
+        <div className="space-y-3">
+          {filtered.map(function(tmpl, idx) {
+            var isSelected = selectedTemplate === tmpl.id;
+            return (
+              <div key={idx} className={"rounded-xl border transition-colors overflow-hidden " + (isSelected ? "border-purple-500/60 bg-purple-500/5" : "border-white/10 bg-white/3 hover:border-white/20")}>
+                {/* Template header */}
+                <div className="p-3 cursor-pointer" onClick={function() { setSelectedTemplate(isSelected ? null : tmpl.id); }}>
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-white">{String(tmpl.name || tmpl.nameEn || "")}</span>
+                        {tmpl.nameEn && tmpl.name !== tmpl.nameEn ? <span className="text-xs text-gray-500">{String(tmpl.nameEn)}</span> : null}
+                        <Badge variant="outline">{String(tmpl.category || "")}</Badge>
+                        <Badge variant={tmpl.hookType === "shock" || tmpl.hookType === "action" ? "warning" : "purple"}>{String(tmpl.hookType || "")} hook</Badge>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{String(tmpl.description || "")}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <Badge variant={scoreVariant(tmpl.viralPotential)}>🔥 {String(tmpl.viralPotential || "")}</Badge>
+                      <span className="text-xs text-gray-600">{String(tmpl.totalDuration || "")}s</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded content */}
+                {isSelected ? (
+                  <div className="px-3 pb-3 space-y-3 border-t border-white/8">
+                    {/* Structure */}
+                    <div className="space-y-1 pt-2">
+                      <p className="text-xs font-semibold text-gray-400">Scene Structure</p>
+                      {(tmpl.structure || []).map(function(step, si) {
+                        return (
+                          <div key={si} className="flex items-center gap-2">
+                            <span className="text-xs text-purple-400 font-mono w-4">{String(si + 1)}.</span>
+                            <span className="text-xs text-gray-400">{String(step)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Example prompt */}
+                    {tmpl.examplePrompt ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-gray-400">Example Prompt</p>
+                        <div className="p-2 rounded-lg bg-black/30 border border-white/8">
+                          <p className="text-xs text-gray-400 italic">{String(tmpl.examplePrompt)}</p>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Best for */}
+                    {tmpl.bestFor && tmpl.bestFor.length > 0 ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-500">Best for:</span>
+                        {tmpl.bestFor.map(function(p) {
+                          return <Badge key={p} variant="outline">{String(PLATFORM_ICONS[p] || "")} {String(PLATFORM_LABELS[p] || p)}</Badge>;
+                        })}
+                      </div>
+                    ) : null}
+
+                    {/* Use template button */}
+                    <Button variant="primary" icon={<LucideReact.Sparkles size={13} />}
+                      onClick={function() {
+                        setSvConcept(tmpl.exampleConcept || "");
+                        if (tmpl.bestFor && tmpl.bestFor.length > 0) setSvPlatform(tmpl.bestFor[0]);
+                        setSvCategory(tmpl.category || "lifestyle");
+                        setSvHookStyle(tmpl.hookType || "auto");
+                        onAction("view", {});
+                      }}>
+                      Use This Template
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ── Landing / Studio Home ──
   // ══════════════════════════════════════════════════════════════════════
   if (tool === "enso_video_studio_view") {
     var stats = data.stats || {};
     var recentEntries = data.recentEntries || [];
 
-    var resolutionOptions = [
-      { value: "480p", label: "480p" },
-      { value: "720p", label: "720p" },
-      { value: "1080p", label: "1080p" }
-    ];
-    var ratioOptions = [
-      { value: "16:9", label: "16:9 Landscape" },
-      { value: "9:16", label: "9:16 Portrait" },
-      { value: "1:1", label: "1:1 Square" },
-      { value: "4:3", label: "4:3 Classic" },
-      { value: "21:9", label: "21:9 Ultra" }
-    ];
     var styleOptions = [
-      { value: "cinematic", label: "Cinematic" },
-      { value: "anime", label: "Anime" },
-      { value: "realistic", label: "Realistic" },
-      { value: "noir", label: "Noir" },
-      { value: "fantasy", label: "Fantasy" },
-      { value: "sci-fi", label: "Sci-Fi" },
-      { value: "documentary", label: "Documentary" },
-      { value: "horror", label: "Horror" },
-      { value: "comedy", label: "Comedy" }
+      { value: "cinematic", label: "Cinematic" }, { value: "anime", label: "Anime" },
+      { value: "realistic", label: "Realistic" }, { value: "noir", label: "Noir" },
+      { value: "fantasy", label: "Fantasy" }, { value: "sci-fi", label: "Sci-Fi" },
+      { value: "documentary", label: "Documentary" }, { value: "viral", label: "Viral" }
     ];
     var moodOptions = [
-      { value: "", label: "Auto" },
-      { value: "dramatic", label: "Dramatic" },
-      { value: "serene", label: "Serene" },
-      { value: "mysterious", label: "Mysterious" },
-      { value: "energetic", label: "Energetic" },
-      { value: "melancholic", label: "Melancholic" },
-      { value: "epic", label: "Epic" },
-      { value: "playful", label: "Playful" },
-      { value: "dark", label: "Dark" }
+      { value: "", label: "Auto" }, { value: "dramatic", label: "Dramatic" },
+      { value: "serene", label: "Serene" }, { value: "energetic", label: "Energetic" },
+      { value: "mysterious", label: "Mysterious" }, { value: "emotional", label: "Emotional" },
+      { value: "playful", label: "Playful" }
+    ];
+    var resolutionOptions = [{ value: "480p", label: "480p" }, { value: "720p", label: "720p" }, { value: "1080p", label: "1080p" }];
+    var ratioOptions = [
+      { value: "9:16", label: "9:16 Portrait ↑" }, { value: "16:9", label: "16:9 Landscape" },
+      { value: "1:1", label: "1:1 Square" }, { value: "3:4", label: "3:4 Classic" }, { value: "21:9", label: "21:9 Ultra" }
+    ];
+    var categoryOptions = [
+      { value: "lifestyle", label: "Lifestyle" }, { value: "education", label: "Education" },
+      { value: "entertainment", label: "Entertainment" }, { value: "food", label: "Food" },
+      { value: "travel", label: "Travel" }, { value: "beauty", label: "Beauty" },
+      { value: "product", label: "Product" }, { value: "comedy", label: "Comedy" }
+    ];
+    var hookStyleOptions = [
+      { value: "auto", label: "Auto (AI chooses)" }, { value: "question", label: "Question" },
+      { value: "shock", label: "Shock" }, { value: "action", label: "Action" },
+      { value: "emotion", label: "Emotion" }, { value: "mystery", label: "Mystery" },
+      { value: "trend", label: "Trending" }
     ];
 
     var rPreview = ratioPreviewStyle(ratioVal);
@@ -106,805 +487,627 @@ export default function GeneratedUI({ data, onAction }) {
     return (
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <LucideReact.Clapperboard size={20} className="text-purple-400" />
             <span className="text-base font-bold text-white">Video Studio</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <Button variant="ghost" size="sm" icon={<LucideReact.Sparkles size={13} />}
+              onClick={function() { onAction("style_gallery", {}); }}>
+              Templates
+            </Button>
             {stats.galleryCount > 0 ? (
-              <Button variant="ghost" size="sm" icon={<LucideReact.Grid3x3 size={13} />} onClick={function() { onAction("gallery", {}); }}>
+              <Button variant="ghost" size="sm" icon={<LucideReact.Grid3x3 size={13} />}
+                onClick={function() { onAction("gallery", {}); }}>
                 {String(stats.galleryCount)}
               </Button>
             ) : null}
-            <Button variant="ghost" size="sm" icon={<LucideReact.Clock size={13} />} onClick={function() { onAction("history", {}); }} />
+            <Button variant="ghost" size="sm" icon={<LucideReact.Clock size={13} />}
+              onClick={function() { onAction("history", {}); }} />
           </div>
         </div>
 
-        {/* Mode Toggle */}
-        <div className="flex gap-2">
-          <Button
-            variant={landingMode === "single" ? "primary" : "outline"}
-            size="sm"
-            icon={<LucideReact.Video size={13} />}
-            onClick={function() { setLandingMode("single"); }}
-          >
-            Single Clip
-          </Button>
-          <Button
-            variant={landingMode === "script" ? "primary" : "outline"}
-            size="sm"
-            icon={<LucideReact.Film size={13} />}
-            onClick={function() { setLandingMode("script"); }}
-          >
-            Multi-Scene
-          </Button>
-        </div>
-
-        {/* Prompt Input — textarea for multi-line */}
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-gray-400">
-            {landingMode === "single" ? "Scene Description" : "Script / Story"}
-          </p>
-          <textarea
-            className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
-            rows={landingMode === "single" ? 3 : 5}
-            placeholder={landingMode === "single"
-              ? "Describe your scene... e.g., aerial shot over misty mountains at golden hour with cinematic lighting"
-              : "Write your full script or story with multiple scenes..."}
-            value={promptText}
-            onChange={function(e) { setPromptText(e.target.value); }}
-          />
-          <p className="text-xs text-gray-600">
-            {landingMode === "single"
-              ? "Include camera movement, lighting, and style for best results"
-              : "The AI will decompose your narrative into individual video prompts"}
-          </p>
-        </div>
-
-        {/* Settings Grid — compact 2-column */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <LucideReact.Settings size={13} className="text-gray-500" />
-            <p className="text-xs font-medium text-gray-400">Settings</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <p className="text-xs text-gray-500">Style</p>
-              <Select options={styleOptions} value={styleVal} onChange={function(v) { setStyleVal(v); }} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-gray-500">Mood</p>
-              <Select options={moodOptions} value={moodVal} onChange={function(v) { setMoodVal(v); }} />
-            </div>
-          </div>
-
-          {/* Duration slider */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500">Duration</p>
-              <span className="text-xs font-mono text-purple-400">{String(durationVal) + "s"}</span>
-            </div>
-            <Slider min={4} max={12} step={1} value={durationVal} onChange={function(v) { setDurationVal(v); }} showValue={false} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <p className="text-xs text-gray-500">Resolution</p>
-              <Select options={resolutionOptions} value={resolutionVal} onChange={function(v) { setResolutionVal(v); }} />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-gray-500">Aspect Ratio</p>
-              <Select options={ratioOptions} value={ratioVal} onChange={function(v) { setRatioVal(v); }} />
-            </div>
-          </div>
-
-          {/* Ratio preview + Audio toggle row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div
-                className="border border-gray-600/60 rounded bg-gray-700/30"
-                style={{ width: rPreview.width, height: rPreview.height }}
-              />
-              <span className="text-xs text-gray-500">{ratioVal}</span>
-            </div>
-            <Switch checked={audioEnabled} onChange={function(v) { setAudioEnabled(v); }} label="Audio" />
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 flex-wrap">
-          {landingMode === "single" ? (
-            <Fragment>
-              <Button
-                variant="primary"
-                icon={<LucideReact.Play size={14} />}
-                disabled={!promptText.trim()}
-                onClick={function() {
-                  onAction("generate", {
-                    prompt: promptText,
-                    duration: durationVal,
-                    resolution: resolutionVal,
-                    ratio: ratioVal,
-                    generate_audio: audioEnabled
-                  });
-                }}
-              >
-                Generate
-              </Button>
-              <Button
-                variant="outline"
-                icon={<LucideReact.Sparkles size={14} />}
-                disabled={!promptText.trim()}
-                onClick={function() {
-                  onAction("craft_prompt", {
-                    description: promptText,
-                    style: styleVal,
-                    mood: moodVal || undefined
-                  });
-                }}
-              >
-                Craft Prompt
-              </Button>
-            </Fragment>
-          ) : (
-            <Fragment>
-              <Button
-                variant="primary"
-                icon={<LucideReact.Film size={14} />}
-                disabled={!promptText.trim()}
-                onClick={function() {
-                  onAction("script_to_scenes", {
-                    script: promptText,
-                    style: styleVal,
-                    duration_per_scene: durationVal
-                  });
-                }}
-              >
-                Break into Scenes
-              </Button>
-              <Button
-                variant="outline"
-                icon={<LucideReact.Sparkles size={14} />}
-                disabled={!promptText.trim()}
-                onClick={function() {
-                  onAction("craft_prompt", {
-                    description: promptText,
-                    style: styleVal,
-                    mood: moodVal || undefined
-                  });
-                }}
-              >
-                Craft Prompt
-              </Button>
-            </Fragment>
-          )}
-        </div>
-
-        {/* Recent Generations */}
-        {recentEntries.length > 0 ? (
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500">Recent</p>
-            {recentEntries.map(function(entry, i) {
-              return (
-                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/8 transition-colors cursor-pointer"
-                  onClick={function() {
-                    if (entry.prompt) setPromptText(entry.prompt);
-                  }}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-300 truncate">{String(entry.prompt || "No prompt")}</p>
-                    <p className="text-xs text-gray-600">{String(entry.date || "")}</p>
-                  </div>
-                  <Badge variant={entry.status === "success" ? "success" : "danger"}>
-                    {String(entry.type || "t2v").toUpperCase()}
-                  </Badge>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  // ── Generate / Animate Result View ──
-  // ══════════════════════════════════════════════════════════════════════
-  if (tool === "enso_video_studio_generate" || tool === "enso_video_studio_animate") {
-    var videoUrl = data.url || data.videoUrl || "";
-    var prompt = data.prompt || "";
-    var duration = data.duration || 0;
-    var resolution = data.resolution || "720p";
-    var ratio = data.ratio || "16:9";
-    var hasAudio = data.generateAudio !== false;
-    var isAnimate = tool === "enso_video_studio_animate";
-    var taskId = data.taskId || "";
-    var sourceImage = data.sourceImage || "";
-
-    var resOptGen = [
-      { value: "480p", label: "480p" },
-      { value: "720p", label: "720p" },
-      { value: "1080p", label: "1080p" }
-    ];
-    var ratioOptGen = [
-      { value: "16:9", label: "16:9" },
-      { value: "9:16", label: "9:16" },
-      { value: "1:1", label: "1:1" },
-      { value: "4:3", label: "4:3" },
-      { value: "21:9", label: "21:9" }
-    ];
-
-    return (
-      <div className="space-y-4">
-        {/* Header bar */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Badge variant={isAnimate ? "info" : "success"}>
-              {isAnimate ? "Image-to-Video" : "Generated"}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }} />
-            <Button variant="ghost" size="sm" icon={<LucideReact.Grid3x3 size={13} />} onClick={function() { onAction("gallery", {}); }} />
-          </div>
-        </div>
-
-        {/* Video Player — prominent */}
-        {videoUrl ? (
-          <div className="rounded-xl overflow-hidden border border-white/10 bg-black">
-            <EnsoUI.VideoPlayer src={videoUrl} />
-          </div>
-        ) : (
-          <EmptyState icon={<LucideReact.VideoOff size={24} />} title="No Video" description="Video URL was not returned" />
-        )}
-
-        {/* Compact stats row */}
-        <div className="flex gap-2 flex-wrap">
-          <Badge variant="outline">{String(duration) + "s"}</Badge>
-          <Badge variant="outline">{String(resolution)}</Badge>
-          <Badge variant="outline">{String(ratio)}</Badge>
-          {hasAudio ? <Badge variant="outline">Audio</Badge> : null}
-          {isAnimate && sourceImage ? <Badge variant="info">From image</Badge> : null}
-        </div>
-
-        {/* Prompt section — toggleable edit mode */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-gray-400">Prompt</p>
-            <Button variant="ghost" size="sm"
-              icon={editingPrompt ? <LucideReact.X size={12} /> : <LucideReact.Pencil size={12} />}
-              onClick={function() {
-                if (!editingPrompt) {
-                  setEditPromptText(prompt);
-                  setEditDuration(duration || 5);
-                  setEditResolution(resolution);
-                  setEditRatio(ratio);
-                  setEditAudio(hasAudio);
-                }
-                setEditingPrompt(!editingPrompt);
-              }}>
-              {editingPrompt ? "Cancel" : "Edit"}
-            </Button>
-          </div>
-
-          {editingPrompt ? (
-            <div className="space-y-3 p-3 rounded-lg border border-violet-500/30 bg-violet-500/5">
-              <textarea
-                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
-                rows={4}
-                value={editPromptText}
-                onChange={function(e) { setEditPromptText(e.target.value); }}
-              />
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <p className="text-xs text-gray-500">Duration</p>
-                  <Slider min={4} max={12} step={1} value={editDuration} onChange={function(v) { setEditDuration(v); }} showValue={true} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-gray-500">Resolution</p>
-                  <Select options={resOptGen} value={editResolution} onChange={function(v) { setEditResolution(v); }} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-gray-500">Ratio</p>
-                  <Select options={ratioOptGen} value={editRatio} onChange={function(v) { setEditRatio(v); }} />
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <Switch checked={editAudio} onChange={function(v) { setEditAudio(v); }} label="Audio" />
-                <Button variant="primary" size="sm" icon={<LucideReact.Play size={13} />}
-                  disabled={!editPromptText.trim()}
-                  onClick={function() {
-                    onAction("generate", {
-                      prompt: editPromptText,
-                      duration: editDuration,
-                      resolution: editResolution,
-                      ratio: editRatio,
-                      generate_audio: editAudio
-                    });
-                  }}>
-                  Regenerate
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="p-2 rounded-lg bg-white/5">
-              <p className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed">
-                {showFullPrompt || prompt.length <= 200 ? String(prompt) : String(prompt.slice(0, 200)) + "..."}
-              </p>
-              {prompt.length > 200 ? (
-                <Button variant="ghost" size="sm" onClick={function() { setShowFullPrompt(!showFullPrompt); }}>
-                  {showFullPrompt ? "Less" : "More"}
-                </Button>
-              ) : null}
-            </div>
-          )}
-        </div>
-
-        {/* Source image for animate */}
-        {isAnimate && sourceImage ? (
-          <div className="p-2 rounded-lg bg-white/5">
-            <p className="text-xs text-gray-500">Source: {String(sourceImage)}</p>
-          </div>
-        ) : null}
-
-        {/* Quick actions */}
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="primary" icon={<LucideReact.Plus size={14} />} onClick={function() { onAction("view", {}); }}>
-            New
-          </Button>
-          <Button variant="outline" icon={<LucideReact.RefreshCw size={14} />} onClick={function() {
-            onAction("generate", { prompt: prompt, duration: duration, resolution: resolution, ratio: ratio, generate_audio: hasAudio });
-          }}>
-            Redo
-          </Button>
-          <Button variant="outline" icon={<LucideReact.Wand2 size={14} />} onClick={function() {
-            onAction("craft_prompt", { description: prompt });
-          }}>
-            Refine
-          </Button>
-        </div>
-
-        {taskId ? (
-          <p className="text-xs text-gray-600">Task: {String(taskId)}</p>
-        ) : null}
-      </div>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  // ── Craft Prompt View ──
-  // ══════════════════════════════════════════════════════════════════════
-  if (tool === "enso_video_studio_craft_prompt") {
-    var craftedPrompt = data.craftedPrompt || "";
-    var originalDesc = data.originalDescription || "";
-    var suggestedDuration = data.suggestedDuration || 5;
-    var suggestedRatio = data.suggestedRatio || "16:9";
-    var suggestedResolution = data.suggestedResolution || "720p";
-    var styleNotes = data.styleNotes || "";
-    var promptVariants = data.variants || [];
-    var isCached = data.cached || false;
-
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <LucideReact.Sparkles size={18} className="text-amber-400" />
-            <span className="text-base font-semibold text-white">Crafted Prompt</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {isCached ? <Badge variant="outline">Cached</Badge> : null}
-            <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }} />
-          </div>
-        </div>
-
-        {originalDesc ? (
-          <div className="p-2 rounded-lg bg-white/5">
-            <p className="text-xs text-gray-500 mb-1">Your idea</p>
-            <p className="text-xs text-gray-400">{String(originalDesc)}</p>
-          </div>
-        ) : null}
-
-        {/* Main crafted prompt — prominent */}
-        <UICard accent="amber" header="Optimized Prompt">
-          <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{String(craftedPrompt)}</p>
-        </UICard>
-
-        {styleNotes ? (
-          <div className="p-2 rounded-lg bg-white/5">
-            <p className="text-xs text-gray-500 mb-1">Style notes</p>
-            <p className="text-xs text-gray-400">{String(styleNotes)}</p>
-          </div>
-        ) : null}
-
-        <div className="flex gap-2 flex-wrap">
-          <Badge variant="outline">{String(suggestedDuration) + "s"}</Badge>
-          <Badge variant="outline">{String(suggestedRatio)}</Badge>
-          <Badge variant="outline">{String(suggestedResolution)}</Badge>
-        </div>
-
-        {/* Variants */}
-        {promptVariants.length > 0 ? (
-          <Accordion
-            type="single"
-            items={promptVariants.map(function(v, i) {
-              return {
-                value: "var_" + i,
-                title: String(v.label || "Variant " + (i + 1)),
-                content: (
-                  <div className="space-y-2">
-                    <p className="text-xs text-gray-300 whitespace-pre-wrap">{String(v.prompt || "")}</p>
-                    <Button variant="primary" size="sm" icon={<LucideReact.Play size={13} />}
-                      onClick={function() { onAction("generate", { prompt: v.prompt, duration: suggestedDuration, resolution: suggestedResolution, ratio: suggestedRatio, generate_audio: true }); }}>
-                      Generate
-                    </Button>
-                  </div>
-                )
-              };
-            })}
-          />
-        ) : null}
-
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="primary" icon={<LucideReact.Play size={14} />}
-            onClick={function() { onAction("generate", { prompt: craftedPrompt, duration: suggestedDuration, resolution: suggestedResolution, ratio: suggestedRatio, generate_audio: true }); }}>
-            Generate Video
-          </Button>
-          <Button variant="outline" icon={<LucideReact.Film size={14} />}
-            onClick={function() { onAction("script_to_scenes", { script: originalDesc || craftedPrompt }); }}>
-            Multi-Scene
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  // ── Script to Scenes (Storyboard) View ──
-  // ══════════════════════════════════════════════════════════════════════
-  if (tool === "enso_video_studio_script_to_scenes") {
-    var scenes = data.scenes || [];
-    var totalScenes = data.totalScenes || scenes.length;
-    var totalDuration = data.totalDuration || 0;
-    var storyStyle = data.style || "cinematic";
-    var originalScript = data.originalScript || "";
-    var isCachedScenes = data.cached || false;
-
-    if (scenes.length === 0) {
-      return (
-        <EmptyState
-          icon={<LucideReact.Film size={32} />}
-          title="No Scenes Generated"
-          description="Could not decompose the script into scenes. Try a more detailed script."
-          action={
-            <div className="flex gap-2">
-              <Button variant="primary" icon={<LucideReact.RefreshCw size={14} />} onClick={function() { onAction("script_to_scenes", { script: originalScript, style: storyStyle }); }}>Retry</Button>
-              <Button variant="outline" icon={<LucideReact.Home size={14} />} onClick={function() { onAction("view", {}); }}>Studio</Button>
-            </div>
-          }
-        />
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <LucideReact.Film size={18} className="text-amber-400" />
-            <span className="text-base font-semibold text-white">Storyboard</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {isCachedScenes ? <Badge variant="outline">Cached</Badge> : null}
-            <Badge variant="info">{String(totalScenes) + " scenes"}</Badge>
-            <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }} />
-          </div>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <Badge variant="outline">{String(totalDuration) + "s total"}</Badge>
-          <Badge variant="outline">{String(storyStyle)}</Badge>
-        </div>
-
-        {originalScript ? (
-          <Accordion
-            type="single"
-            items={[{
-              value: "script",
-              title: "Original Script",
-              content: <p className="text-xs text-gray-400 whitespace-pre-wrap">{String(originalScript)}</p>
-            }]}
-          />
-        ) : null}
-
-        <div className="space-y-3">
-          {scenes.map(function(scene, i) {
-            var sceneNum = scene.sceneNumber || (i + 1);
-            var sceneTitle = scene.title || "Scene " + sceneNum;
-            var scenePrompt = scene.prompt || "";
-            var sceneDuration = scene.suggestedDuration || 5;
-            var sceneRatio = scene.suggestedRatio || "16:9";
-            var sceneMood = scene.mood || "";
-            var accentColors = ["violet", "indigo", "purple", "cyan", "teal", "amber"];
-            var accent = accentColors[i % accentColors.length];
-
+        {/* Mode Tabs */}
+        <div className="flex gap-1.5 flex-wrap">
+          {[
+            { id: "short_video", label: "🎬 短视频", icon: null },
+            { id: "single", label: "Single Clip", icon: null },
+            { id: "multi", label: "Multi-Scene", icon: null },
+            { id: "animate", label: "Animate", icon: null }
+          ].map(function(tab) {
             return (
-              <UICard key={i} accent={accent} header={"#" + String(sceneNum) + " " + String(sceneTitle)}>
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-200 whitespace-pre-wrap leading-relaxed">{String(scenePrompt)}</p>
-                  <div className="flex gap-1 flex-wrap">
-                    <Badge variant="outline">{String(sceneDuration) + "s"}</Badge>
-                    <Badge variant="outline">{String(sceneRatio)}</Badge>
-                    {sceneMood ? <Badge variant="info">{String(sceneMood)}</Badge> : null}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="primary" size="sm" icon={<LucideReact.Play size={13} />}
-                      onClick={function() { onAction("generate", { prompt: scenePrompt, duration: sceneDuration, resolution: "720p", ratio: sceneRatio, generate_audio: true }); }}>
-                      Generate
-                    </Button>
-                    <Button variant="ghost" size="sm" icon={<LucideReact.Wand2 size={13} />}
-                      onClick={function() { onAction("craft_prompt", { description: scenePrompt, style: storyStyle, mood: sceneMood }); }}>
-                      Refine
-                    </Button>
-                  </div>
-                </div>
-              </UICard>
+              <Button key={tab.id}
+                variant={landingMode === tab.id ? "primary" : "outline"}
+                size="sm"
+                onClick={function() { setLandingMode(tab.id); }}>
+                {String(tab.label)}
+              </Button>
             );
           })}
         </div>
 
+        {/* ── 短视频 Creator ── */}
+        {landingMode === "short_video" ? (
+          <div className="space-y-3">
+            {/* Platform selector */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-gray-400">Platform</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {Object.keys(PLATFORM_LABELS).map(function(pid) {
+                  var isActive = svPlatform === pid;
+                  return (
+                    <button key={pid}
+                      className={"rounded-lg px-2 py-2 text-xs transition-colors flex flex-col items-center gap-0.5 border " + (isActive ? "bg-purple-500/20 border-purple-500/50 text-purple-300" : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10")}
+                      onClick={function() { setSvPlatform(pid); }}>
+                      <span className="text-sm">{String(PLATFORM_ICONS[pid] || "🎬")}</span>
+                      <span className="leading-tight text-center">{String(PLATFORM_LABELS[pid] || pid)}</span>
+                      <span className="text-gray-600" style={{ fontSize: "10px" }}>{String(PLATFORM_RATIO[pid] || "")}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Category + Hook Style */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500">Category</p>
+                <Select options={categoryOptions} value={svCategory} onChange={function(v) { setSvCategory(v); }} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500">Hook Style</p>
+                <Select options={hookStyleOptions} value={svHookStyle} onChange={function(v) { setSvHookStyle(v); }} />
+              </div>
+            </div>
+
+            {/* Duration slider */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">Total Duration</p>
+                <span className="text-xs font-mono text-purple-400">{String(svDuration)}s</span>
+              </div>
+              <Slider min={10} max={90} step={5} value={svDuration} onChange={function(v) { setSvDuration(v); }} showValue={false} />
+            </div>
+
+            {/* Concept input */}
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-400">Your Concept</p>
+              <textarea
+                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2.5 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
+                rows={3}
+                placeholder={"Describe your video idea in any language... e.g., 一个关于坚持的励志故事 or 'Before/after kitchen transformation'"}
+                value={svConcept}
+                onChange={function(e) { setSvConcept(e.target.value); }}
+              />
+            </div>
+
+            {/* Generate button */}
+            <Button variant="primary" icon={<LucideReact.Sparkles size={14} />}
+              disabled={!svConcept.trim()}
+              onClick={function() {
+                onAction("short_video", { concept: svConcept, platform: svPlatform, category: svCategory, target_duration: svDuration, hook_style: svHookStyle });
+              }}>
+              Plan 短视频 Project
+            </Button>
+          </div>
+        ) : null}
+
+        {/* ── Single Clip ── */}
+        {landingMode === "single" ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-400">Scene Description</p>
+              <textarea
+                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
+                rows={3}
+                placeholder="Describe your scene... e.g., close-up of hands typing on keyboard at midnight, neon city lights reflected in rain-covered window"
+                value={promptText}
+                onChange={function(e) { setPromptText(e.target.value); }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><p className="text-xs text-gray-500">Style</p><Select options={styleOptions} value={styleVal} onChange={function(v) { setStyleVal(v); }} /></div>
+              <div className="space-y-1"><p className="text-xs text-gray-500">Mood</p><Select options={moodOptions} value={moodVal} onChange={function(v) { setMoodVal(v); }} /></div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">Duration</p>
+                <span className="text-xs font-mono text-purple-400">{String(durationVal)}s</span>
+              </div>
+              <Slider min={4} max={15} step={1} value={durationVal} onChange={function(v) { setDurationVal(v); }} showValue={false} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><p className="text-xs text-gray-500">Resolution</p><Select options={resolutionOptions} value={resolutionVal} onChange={function(v) { setResolutionVal(v); }} /></div>
+              <div className="space-y-1"><p className="text-xs text-gray-500">Aspect Ratio</p><Select options={ratioOptions} value={ratioVal} onChange={function(v) { setRatioVal(v); }} /></div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="border border-gray-600/60 rounded bg-gray-700/30" style={{ width: rPreview.width, height: rPreview.height }} />
+                <span className="text-xs text-gray-500">{ratioVal}</span>
+              </div>
+              <Switch checked={audioEnabled} onChange={function(v) { setAudioEnabled(v); }} label="Audio" />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button variant="primary" icon={<LucideReact.Play size={14} />}
+                disabled={!promptText.trim()}
+                onClick={function() { onAction("generate", { prompt: promptText, duration: durationVal, resolution: resolutionVal, ratio: ratioVal, generate_audio: audioEnabled }); }}>
+                Generate
+              </Button>
+              <Button variant="outline" icon={<LucideReact.Sparkles size={14} />}
+                disabled={!promptText.trim()}
+                onClick={function() { onAction("craft_prompt", { description: promptText, style: styleVal, mood: moodVal || undefined }); }}>
+                Craft Prompt
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ── Multi-Scene ── */}
+        {landingMode === "multi" ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-400">Script / Story</p>
+              <textarea
+                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
+                rows={5}
+                placeholder="Write your full script or story. The AI will decompose it into individual video prompts with captions and audio cues..."
+                value={promptText}
+                onChange={function(e) { setPromptText(e.target.value); }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><p className="text-xs text-gray-500">Style</p><Select options={styleOptions} value={styleVal} onChange={function(v) { setStyleVal(v); }} /></div>
+              <div className="space-y-1"><p className="text-xs text-gray-500">Scene Duration</p>
+                <Select options={[{value:"4",label:"4s"},{value:"5",label:"5s"},{value:"6",label:"6s"},{value:"8",label:"8s"},{value:"10",label:"10s"},{value:"12",label:"12s"}]}
+                  value={String(durationVal)} onChange={function(v) { setDurationVal(Number(v)); }} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Platform (optional — for ratio presets)</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {[{id:"",label:"General"},{id:"douyin",label:"🎵 抖音"},{id:"tiktok",label:"🎶 TikTok"},{id:"rednote",label:"📕 RedNote"},{id:"bilibili",label:"📺 Bilibili"}].map(function(p) {
+                  return (
+                    <button key={p.id}
+                      className={"px-2.5 py-1 rounded-full text-xs transition-colors border " + (svPlatform === p.id ? "bg-purple-500/20 border-purple-500/50 text-purple-300" : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10")}
+                      onClick={function() { setSvPlatform(p.id); }}>
+                      {String(p.label)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button variant="primary" icon={<LucideReact.Film size={14} />}
+                disabled={!promptText.trim()}
+                onClick={function() { onAction("script_to_scenes", { script: promptText, style: styleVal, duration_per_scene: durationVal, platform: svPlatform || undefined, short_video: svPlatform === "douyin" || svPlatform === "tiktok" }); }}>
+                Break into Scenes
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ── Animate ── */}
+        {landingMode === "animate" ? (
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg bg-blue-500/8 border border-blue-500/20 text-xs text-blue-400">
+              <p className="font-medium mb-1">Image to Video Animation</p>
+              <p className="text-blue-400/80">Tell Enso which image to animate and describe the motion. Supports JPG, PNG, WEBP.</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Motion Description</p>
+              <textarea
+                className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 placeholder-gray-500 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 transition-colors resize-none"
+                rows={2}
+                placeholder="Describe the motion... e.g., gentle camera pan right, hair flowing in wind, clouds drift slowly"
+                value={promptText}
+                onChange={function(e) { setPromptText(e.target.value); }}
+              />
+            </div>
+            <p className="text-xs text-gray-600">To animate an image, type in the chat: "animate this image [path]" or use the Enso file browser to select an image first.</p>
+          </div>
+        ) : null}
+
+        {/* Recent Generations */}
+        {recentEntries.length > 0 ? (
+          <div className="space-y-2">
+            <Separator />
+            <p className="text-xs text-gray-500 font-medium">Recent</p>
+            {recentEntries.map(function(entry, i) {
+              return (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white/4 hover:bg-white/7 transition-colors cursor-pointer"
+                  onClick={function() { if (entry.prompt) setPromptText(entry.prompt); }}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-300 truncate">{String(entry.prompt || "No prompt")}</p>
+                    <p className="text-xs text-gray-600">{String(entry.date || "")}</p>
+                  </div>
+                  <Badge variant={entry.status === "success" ? "success" : "danger"}>{String(entry.type || "t2v")}</Badge>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {/* Stats */}
+        {stats.totalGenerations > 0 ? (
+          <div className="flex gap-3 pt-1">
+            <Stat label="Total" value={String(stats.totalGenerations || 0)} />
+            <Stat label="Success" value={String(stats.successCount || 0)} />
+            {stats.failedCount > 0 ? <Stat label="Failed" value={String(stats.failedCount || 0)} /> : null}
+            {stats.galleryCount > 0 ? <Stat label="Gallery" value={String(stats.galleryCount || 0)} /> : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ── Generate Result ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_generate") {
+    var genUrl = data.url || "";
+    var genPrompt = data.prompt || "";
+    var genRatio = data.ratio || "9:16";
+    var genRatioCss = genRatio.replace(":", "/");
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <LucideReact.Video size={16} className="text-purple-400" />
+            <span className="text-sm font-semibold text-white">Generated Clip</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline">{String(genRatio)}</Badge>
+            <Badge variant="outline">{String(data.resolution || "1080p")}</Badge>
+            <Badge variant="outline">{String(data.duration || 5)}s</Badge>
+          </div>
+        </div>
+
+        {genUrl ? (
+          <video src={genUrl} controls className="w-full rounded-xl bg-black" style={{ aspectRatio: genRatioCss, maxHeight: "400px" }} />
+        ) : null}
+
+        {/* Prompt section */}
+        <div className="rounded-lg bg-white/5 border border-white/10 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-400">Prompt Used</p>
+            <div className="flex gap-1.5">
+              <Button variant="ghost" size="sm" icon={<LucideReact.RefreshCw size={11} />}
+                onClick={function() { onAction("generate", { prompt: genPrompt, duration: data.duration || 5, resolution: data.resolution || "1080p", ratio: genRatio, generate_audio: data.generateAudio !== false }); }}>
+                Regenerate
+              </Button>
+              <Button variant="ghost" size="sm" icon={<LucideReact.Sparkles size={11} />}
+                onClick={function() { onAction("craft_prompt", { description: genPrompt }); }}>
+                Refine
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">{String(genPrompt)}</p>
+        </div>
+
         <div className="flex gap-2 flex-wrap">
-          <Button variant="primary" icon={<LucideReact.Home size={14} />} onClick={function() { onAction("view", {}); }}>
-            New Project
-          </Button>
-          <Button variant="outline" icon={<LucideReact.Grid3x3 size={14} />} onClick={function() { onAction("gallery", {}); }}>
-            Gallery
-          </Button>
+          <Button variant="outline" icon={<LucideReact.Grid3x3 size={13} />}
+            onClick={function() { onAction("gallery", {}); }}>Gallery</Button>
+          <Button variant="ghost" icon={<LucideReact.Home size={13} />}
+            onClick={function() { onAction("view", {}); }}>Studio</Button>
         </div>
       </div>
     );
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // ── Gallery View ──
+  // ── Animate Result ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_animate") {
+    var animUrl = data.url || "";
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <LucideReact.ImagePlay size={16} className="text-blue-400" />
+          <span className="text-sm font-semibold text-white">Animated Video</span>
+          <Badge variant="blue">{String(data.duration || 5)}s</Badge>
+        </div>
+
+        {animUrl ? (
+          <video src={animUrl} controls className="w-full rounded-xl bg-black" style={{ maxHeight: "400px" }} />
+        ) : null}
+
+        {data.prompt ? (
+          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+            <p className="text-xs font-semibold text-gray-400 mb-1">Motion Applied</p>
+            <p className="text-xs text-gray-400">{String(data.prompt)}</p>
+          </div>
+        ) : null}
+
+        {data.sourceImage ? (
+          <p className="text-xs text-gray-600 flex items-center gap-1.5">
+            <LucideReact.Image size={11} />Source: {String(data.sourceImage)}
+          </p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <Button variant="outline" icon={<LucideReact.Grid3x3 size={13} />} onClick={function() { onAction("gallery", {}); }}>Gallery</Button>
+          <Button variant="ghost" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }}>Studio</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ── Craft Prompt Result ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_craft_prompt") {
+    var crafted = data.craftedPrompt || "";
+    var variants = data.variants || [];
+    var displayPrompt = editingPrompt ? editPromptText : crafted;
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <LucideReact.Sparkles size={16} className="text-yellow-400" />
+          <span className="text-sm font-semibold text-white">Crafted Prompt</span>
+          {data.suggestedRatio ? <Badge variant="outline">{String(data.suggestedRatio)}</Badge> : null}
+          {data.suggestedDuration ? <Badge variant="outline">{String(data.suggestedDuration)}s</Badge> : null}
+        </div>
+
+        {data.originalDescription ? (
+          <p className="text-xs text-gray-600 italic">From: "{String(data.originalDescription).slice(0, 80)}"</p>
+        ) : null}
+
+        {/* Main crafted prompt */}
+        <div className="rounded-lg bg-white/5 border border-white/10 p-3 space-y-2">
+          {editingPrompt ? (
+            <textarea
+              className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 resize-none"
+              rows={4}
+              value={editPromptText}
+              onChange={function(e) { setEditPromptText(e.target.value); }}
+            />
+          ) : (
+            <p className="text-xs text-gray-300 leading-relaxed">{String(crafted)}</p>
+          )}
+          <div className="flex gap-1.5 flex-wrap">
+            {!editingPrompt ? (
+              <Button variant="ghost" size="sm" icon={<LucideReact.Edit size={11} />}
+                onClick={function() { setEditPromptText(crafted); setEditingPrompt(true); }}>Edit</Button>
+            ) : (
+              <Button variant="ghost" size="sm" icon={<LucideReact.Check size={11} />}
+                onClick={function() { setEditingPrompt(false); }}>Done</Button>
+            )}
+            <Button variant="primary" size="sm" icon={<LucideReact.Play size={11} />}
+              onClick={function() { onAction("generate", { prompt: displayPrompt, duration: data.suggestedDuration || 5, resolution: "1080p", ratio: data.suggestedRatio || "9:16", generate_audio: true }); }}>
+              Generate
+            </Button>
+          </div>
+        </div>
+
+        {data.styleNotes ? (
+          <div className="p-2 rounded-lg bg-yellow-500/8 border border-yellow-500/20 text-xs text-yellow-400/90">
+            {String(data.styleNotes)}
+          </div>
+        ) : null}
+
+        {/* Variants */}
+        {variants.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400">Variants</p>
+            {variants.map(function(v, i) {
+              return (
+                <div key={i} className="rounded-lg border border-white/10 bg-white/3 p-2.5 space-y-2">
+                  <p className="text-xs font-medium text-gray-300">{String(v.label || "Variant " + (i + 1))}</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">{String(v.prompt || "")}</p>
+                  <Button variant="outline" size="sm" icon={<LucideReact.Play size={11} />}
+                    onClick={function() { onAction("generate", { prompt: v.prompt, duration: data.suggestedDuration || 5, resolution: "1080p", ratio: data.suggestedRatio || "9:16", generate_audio: true }); }}>
+                    Generate This
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <Button variant="ghost" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }}>Studio</Button>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ── Script to Scenes Storyboard ──
+  // ══════════════════════════════════════════════════════════════════════
+  if (tool === "enso_video_studio_script_to_scenes") {
+    var sbScenes = data.scenes || [];
+    var sbPlatform = data.platform || "";
+    var sbRatio = data.defaultRatio || "16:9";
+    var sbIsShort = data.isShortVideo;
+    var sbTotal = data.totalDuration || 0;
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <LucideReact.Film size={16} className="text-purple-400" />
+            <span className="text-sm font-semibold text-white">Storyboard</span>
+            <Badge variant="purple">{String(sbScenes.length)} scenes</Badge>
+            <Badge variant="outline">{String(sbTotal)}s</Badge>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {sbPlatform ? <Badge variant="outline">{String(PLATFORM_ICONS[sbPlatform] || "🎬")} {String(PLATFORM_LABELS[sbPlatform] || sbPlatform)}</Badge> : null}
+            {sbIsShort ? <Badge variant="warning">短视频</Badge> : null}
+            {data.cached ? <Badge variant="outline">cached</Badge> : null}
+          </div>
+        </div>
+
+        {/* Scenes */}
+        <div className="space-y-2">
+          {sbScenes.map(function(scene, idx) {
+            var isExp = expandedScene === scene.sceneNumber;
+            return (
+              <div key={idx} className={"rounded-lg border overflow-hidden transition-colors " + (isExp ? "border-white/20" : "border-white/10")}>
+                {/* Scene header */}
+                <div className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-white/5 transition-colors"
+                  onClick={function() { setExpandedScene(isExp ? null : scene.sceneNumber); }}>
+                  <span className="text-xs font-mono text-purple-400 w-5 flex-shrink-0">{String(scene.sceneNumber)}</span>
+                  <span className="text-xs text-white font-medium flex-1 truncate">{String(scene.title || "Scene " + scene.sceneNumber)}</span>
+                  {scene.purpose ? <Badge variant={purposeVariant(scene.purpose)}>{String(scene.purpose)}</Badge> : null}
+                  <span className="text-xs text-gray-500">{String(scene.suggestedDuration || 5)}s</span>
+                  <span className="text-xs text-gray-600">{String(scene.suggestedRatio || sbRatio)}</span>
+                  <LucideReact.ChevronDown size={11} className={"text-gray-500 flex-shrink-0 transition-transform " + (isExp ? "rotate-180" : "")} />
+                </div>
+
+                {/* Expanded scene details */}
+                {isExp ? (
+                  <div className="px-3 pb-3 space-y-2.5 border-t border-white/8 bg-white/3">
+                    <p className="text-xs text-gray-300 leading-relaxed mt-2">{String(scene.prompt || "")}</p>
+
+                    {scene.caption ? (
+                      <div className="flex items-start gap-2 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-2.5 py-1.5">
+                        <LucideReact.Type size={11} className="text-yellow-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <span className="text-xs text-yellow-300 font-medium">"{String(scene.caption)}"</span>
+                          {scene.mood ? <span className="text-xs text-gray-500 ml-2">· {String(scene.mood)}</span> : null}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {scene.audioNote ? (
+                      <div className="flex items-start gap-2">
+                        <LucideReact.Music size={11} className="text-purple-400/70 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs text-gray-500">{String(scene.audioNote)}</span>
+                      </div>
+                    ) : null}
+
+                    <div className="flex items-center gap-2">
+                      <Button variant="primary" size="sm" icon={<LucideReact.Play size={11} />}
+                        onClick={function() { onAction("generate", { prompt: scene.prompt, duration: scene.suggestedDuration || 5, resolution: "1080p", ratio: scene.suggestedRatio || sbRatio, generate_audio: true }); }}>
+                        Generate
+                      </Button>
+                      <span className="text-xs text-gray-600">→ {String(scene.transition || "cut")}</span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Batch generate button */}
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="primary" icon={<LucideReact.Zap size={13} />}
+            onClick={function() { onAction("batch_generate", { scenes: sbScenes.map(function(s) { return { number: s.sceneNumber, title: s.title, prompt: s.prompt, duration: s.suggestedDuration, suggestedRatio: s.suggestedRatio || sbRatio, caption: s.caption || "", audioNote: s.audioNote || "", purpose: s.purpose || "content" }; }), ratio: sbRatio, resolution: "1080p", generate_audio: true }); }}>
+            Generate All Scenes
+          </Button>
+          <Button variant="ghost" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }}>Studio</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // ── Gallery ──
   // ══════════════════════════════════════════════════════════════════════
   if (tool === "enso_video_studio_gallery") {
     var videos = data.videos || [];
-    var totalCount = data.totalCount || videos.length;
-    var totalSizeMB = data.totalSizeMB || 0;
-
-    if (videos.length === 0) {
-      return (
-        <EmptyState
-          icon={<LucideReact.Film size={32} />}
-          title="No Videos Yet"
-          description="Generate your first video to see it here"
-          action={<Button variant="primary" icon={<LucideReact.Home size={14} />} onClick={function() { onAction("view", {}); }}>Open Studio</Button>}
-        />
-      );
-    }
+    var galleryTotal = data.totalCount || 0;
+    var gallerySize = data.totalSizeMB || 0;
 
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <LucideReact.Film size={18} className="text-cyan-400" />
-            <span className="text-base font-semibold text-white">Gallery</span>
+            <LucideReact.Grid3x3 size={16} className="text-purple-400" />
+            <span className="text-sm font-semibold text-white">Video Gallery</span>
+            <Badge variant="purple">{String(galleryTotal)} videos</Badge>
           </div>
-          <div className="flex items-center gap-1">
-            <Badge variant="info">{String(totalCount)}</Badge>
-            <Badge variant="outline">{String(totalSizeMB) + " MB"}</Badge>
-            <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }} />
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-gray-500">{String(gallerySize.toFixed ? gallerySize.toFixed(1) : gallerySize)} MB</span>
+            <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }}>Studio</Button>
           </div>
         </div>
 
-        {selectedVideo ? (
-          <div className="space-y-3">
-            {/* Full video player */}
-            <div className="rounded-xl overflow-hidden border border-white/10 bg-black">
-              <EnsoUI.VideoPlayer src={selectedVideo.url || ""} />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex gap-1 flex-wrap">
-                <Badge variant={selectedVideo.type === "i2v" ? "info" : "success"}>{selectedVideo.type === "i2v" ? "I2V" : "T2V"}</Badge>
-                <Badge variant="outline">{String(selectedVideo.date || "")}</Badge>
-                {selectedVideo.sizeMB ? <Badge variant="outline">{String(selectedVideo.sizeMB) + " MB"}</Badge> : null}
-              </div>
-              <Button variant="ghost" size="sm" icon={<LucideReact.ArrowLeft size={13} />} onClick={function() { setSelectedVideo(null); }}>
-                Back
-              </Button>
-            </div>
-
-            {selectedVideo.prompt ? (
-              <div className="p-2 rounded-lg bg-white/5">
-                <p className="text-xs text-gray-300 whitespace-pre-wrap">{String(selectedVideo.prompt)}</p>
-                <div className="mt-2 flex gap-2">
-                  <Button variant="outline" size="sm" icon={<LucideReact.RefreshCw size={12} />}
-                    onClick={function() { onAction("generate", { prompt: selectedVideo.prompt }); }}>
-                    Regenerate
-                  </Button>
-                  <Button variant="ghost" size="sm" icon={<LucideReact.Wand2 size={12} />}
-                    onClick={function() { onAction("craft_prompt", { description: selectedVideo.prompt }); }}>
-                    Refine
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+        {videos.length === 0 ? (
+          <EmptyState icon={<LucideReact.Video size={24} />} title="No videos yet" description="Generate your first video in the studio." />
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {videos.map(function(v, i) {
               return (
-                <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/8 transition-colors cursor-pointer"
-                  onClick={function() { setSelectedVideo(v); }}>
-                  <div className="w-8 h-8 rounded bg-gray-700/50 flex items-center justify-center shrink-0">
-                    <LucideReact.Play size={14} className="text-gray-400" />
+                <div key={i} className="rounded-xl border border-white/10 bg-white/3 overflow-hidden">
+                  {v.url ? (
+                    <video src={v.url} controls className="w-full bg-black" style={{ maxHeight: "280px" }} />
+                  ) : null}
+                  <div className="p-3 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant={v.type === "i2v" ? "blue" : "purple"}>{String(v.type || "t2v").toUpperCase()}</Badge>
+                      <span className="text-xs text-gray-600">{String(v.date || "")} · {String(v.sizeMB || 0)} MB</span>
+                    </div>
+                    {v.prompt ? <p className="text-xs text-gray-400 line-clamp-2">{String(v.prompt)}</p> : null}
+                    <Button variant="outline" size="sm" icon={<LucideReact.RefreshCw size={11} />}
+                      onClick={function() { if (v.prompt) onAction("generate", { prompt: v.prompt, duration: 5, resolution: "1080p", ratio: "9:16", generate_audio: true }); }}>
+                      Regenerate
+                    </Button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-200 truncate">{v.prompt ? String(v.prompt).slice(0, 60) : String(v.name || "Video " + (i + 1))}</p>
-                    <p className="text-xs text-gray-600">{String(v.date || "")} {v.sizeMB ? " / " + String(v.sizeMB) + " MB" : ""}</p>
-                  </div>
-                  <Badge variant={v.type === "i2v" ? "info" : "success"}>{v.type === "i2v" ? "I2V" : "T2V"}</Badge>
                 </div>
               );
             })}
           </div>
         )}
-
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="primary" icon={<LucideReact.Plus size={14} />} onClick={function() { onAction("view", {}); }}>
-            New Video
-          </Button>
-          <Button variant="outline" icon={<LucideReact.Clock size={14} />} onClick={function() { onAction("history", {}); }}>
-            History
-          </Button>
-        </div>
       </div>
     );
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // ── History View ──
+  // ── History ──
   // ══════════════════════════════════════════════════════════════════════
   if (tool === "enso_video_studio_history") {
-    var entries = data.entries || [];
-    var totalGenerations = data.totalGenerations || entries.length;
-    var t2vCount = data.t2vCount || 0;
-    var i2vCount = data.i2vCount || 0;
-    var successCount = data.successCount || 0;
-    var failedCount = data.failedCount || 0;
-
-    // Client-side search filtering
-    var displayEntries = entries;
-    if (historySearch) {
-      var searchLower = historySearch.toLowerCase();
-      displayEntries = entries.filter(function(e) {
-        return (e.prompt || "").toLowerCase().indexOf(searchLower) >= 0;
-      });
-    }
-
-    if (entries.length === 0) {
-      return (
-        <EmptyState
-          icon={<LucideReact.Clock size={32} />}
-          title="No History"
-          description="Your video generation history will appear here"
-          action={<Button variant="primary" icon={<LucideReact.Home size={14} />} onClick={function() { onAction("view", {}); }}>Open Studio</Button>}
-        />
-      );
-    }
+    var histEntries = data.entries || [];
+    var histTotal = data.totalGenerations || 0;
 
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <LucideReact.Clock size={18} className="text-emerald-400" />
-            <span className="text-base font-semibold text-white">History</span>
+            <LucideReact.Clock size={16} className="text-purple-400" />
+            <span className="text-sm font-semibold text-white">Generation History</span>
           </div>
-          <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }} />
+          <div className="flex gap-2 items-center">
+            <div className="flex gap-3">
+              <Stat label="Total" value={String(data.totalGenerations || 0)} />
+              <Stat label="T2V" value={String(data.t2vCount || 0)} />
+              <Stat label="I2V" value={String(data.i2vCount || 0)} />
+            </div>
+            <Button variant="ghost" size="sm" icon={<LucideReact.Home size={13} />} onClick={function() { onAction("view", {}); }}>Studio</Button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
-          <Stat label="Total" value={String(totalGenerations)} accent="emerald" />
-          <Stat label="T2V" value={String(t2vCount)} accent="purple" />
-          <Stat label="I2V" value={String(i2vCount)} accent="indigo" />
-          <Stat label="Success" value={totalGenerations > 0 ? String(Math.round(successCount / totalGenerations * 100)) + "%" : "--"} accent={failedCount > 0 ? "amber" : "emerald"} />
-        </div>
-
-        <Input
-          icon={<LucideReact.Search size={13} />}
-          placeholder="Search prompts..."
-          value={historySearch}
-          onChange={function(v) { setHistorySearch(v); }}
-        />
-
-        {selectedEntry ? (
-          <div className="space-y-3">
-            {selectedEntry.url ? (
-              <div className="rounded-xl overflow-hidden border border-white/10 bg-black">
-                <EnsoUI.VideoPlayer src={selectedEntry.url} />
-              </div>
-            ) : null}
-            <div className="p-2 rounded-lg bg-white/5">
-              <p className="text-xs text-gray-300 whitespace-pre-wrap">{String(selectedEntry.prompt || "")}</p>
-            </div>
-            <div className="flex gap-1 flex-wrap">
-              <Badge variant={selectedEntry.type === "i2v" ? "info" : "success"}>{selectedEntry.type === "i2v" ? "I2V" : "T2V"}</Badge>
-              <Badge variant="outline">{String(selectedEntry.duration || "-") + "s"}</Badge>
-              <Badge variant="outline">{String(selectedEntry.resolution || "720p")}</Badge>
-              <Badge variant={selectedEntry.status === "success" ? "success" : "danger"}>{String(selectedEntry.status || "unknown")}</Badge>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {selectedEntry.prompt ? (
-                <Fragment>
-                  <Button variant="primary" size="sm" icon={<LucideReact.RefreshCw size={13} />}
-                    onClick={function() { onAction("generate", { prompt: selectedEntry.prompt, duration: selectedEntry.duration, resolution: selectedEntry.resolution, ratio: selectedEntry.ratio }); }}>
-                    Regenerate
-                  </Button>
-                  <Button variant="outline" size="sm" icon={<LucideReact.Wand2 size={13} />}
-                    onClick={function() { onAction("craft_prompt", { description: selectedEntry.prompt }); }}>
-                    Refine
-                  </Button>
-                </Fragment>
-              ) : null}
-              <Button variant="ghost" size="sm" icon={<LucideReact.ArrowLeft size={13} />} onClick={function() { setSelectedEntry(null); }}>
-                Back
-              </Button>
-            </div>
-          </div>
+        {histEntries.length === 0 ? (
+          <EmptyState icon={<LucideReact.Clock size={24} />} title="No history yet" description="Generated videos will appear here." />
         ) : (
           <div className="space-y-2">
-            {displayEntries.map(function(e, i) {
+            {histEntries.map(function(entry, i) {
               return (
-                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/8 transition-colors cursor-pointer"
-                  onClick={function() { setSelectedEntry(e); }}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-300 truncate">{String((e.prompt || "").slice(0, 60))}{(e.prompt || "").length > 60 ? "..." : ""}</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-xs text-gray-600">{String(e.date || "")}</span>
-                      <span className="text-xs text-gray-600">{String(e.duration || "-") + "s"}</span>
+                <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg bg-white/4 hover:bg-white/7 transition-colors">
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <p className="text-xs text-gray-300 line-clamp-2">{String(entry.prompt || "")}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-gray-600">{String(entry.date || "")}</span>
+                      <Badge variant={entry.type === "i2v" ? "blue" : "purple"}>{String(entry.type || "t2v").toUpperCase()}</Badge>
+                      <span className="text-xs text-gray-600">{String(entry.duration || "")}s {String(entry.ratio || "")}</span>
+                      <Badge variant={entry.status === "success" ? "success" : "danger"}>{String(entry.status || "")}</Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Badge variant={e.type === "i2v" ? "info" : "success"}>{String(e.type === "i2v" ? "I2V" : "T2V")}</Badge>
-                    <Badge variant={e.status === "success" ? "success" : "danger"}>
-                      {e.status === "success" ? <LucideReact.Check size={10} /> : <LucideReact.X size={10} />}
-                    </Badge>
-                  </div>
+                  {entry.status === "success" && entry.prompt ? (
+                    <Button variant="ghost" size="sm" icon={<LucideReact.RotateCcw size={11} />}
+                      onClick={function() { onAction("generate", { prompt: entry.prompt, duration: entry.duration || 5, resolution: entry.resolution || "1080p", ratio: entry.ratio || "9:16", generate_audio: true }); }} />
+                  ) : null}
                 </div>
               );
             })}
           </div>
         )}
-
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="primary" icon={<LucideReact.Plus size={14} />} onClick={function() { onAction("view", {}); }}>
-            New Video
-          </Button>
-          <Button variant="outline" icon={<LucideReact.Grid3x3 size={14} />} onClick={function() { onAction("gallery", {}); }}>
-            Gallery
-          </Button>
-        </div>
       </div>
     );
   }
 
-  // ── Default / Unknown Tool → Redirect to Studio ──
-  return (
-    <EmptyState
-      icon={<LucideReact.Clapperboard size={32} />}
-      title="Video Studio"
-      description="Create AI videos from text prompts or images"
-      action={
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="primary" icon={<LucideReact.Home size={14} />} onClick={function() { onAction("view", {}); }}>
-            Open Studio
-          </Button>
-          <Button variant="outline" icon={<LucideReact.Grid3x3 size={14} />} onClick={function() { onAction("gallery", {}); }}>
-            Gallery
-          </Button>
-        </div>
-      }
-    />
-  );
+  return null;
 }

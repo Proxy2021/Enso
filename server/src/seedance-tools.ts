@@ -35,7 +35,8 @@ const BASE_URL =
 const DEFAULT_MODEL =
   process.env.SEEDANCE_MODEL ?? "seedance-1-5-pro-251215";
 const POLL_INTERVAL_MS = 15_000; // BytePlus recommends 15s
-const TIMEOUT_MS = 5 * 60_000; // 5 minutes
+const TIMEOUT_MS = 10 * 60_000; // 10 minutes — extended for long clips on paid tier
+const MAX_DURATION = 15; // Paid tier supports up to 15s per clip
 
 function getApiKey(): string {
   return process.env.BYTEPLUS_API_KEY ?? "";
@@ -195,7 +196,8 @@ export function createSeedanceTools(): EnsoAgentTool[] {
       description:
         "Generate a video from a text prompt using BytePlus Seedance 1.5 Pro. " +
         "Supports cinematic, realistic, anime, and 3D styles. " +
-        "Duration 4-12 seconds, up to 1080p resolution with native audio.",
+        "Duration 4-15 seconds (paid tier), up to 1080p resolution with native audio. " +
+        "Default: 1080p 9:16 portrait optimized for 短视频 (Douyin/TikTok).",
       isPrimary: true,
       parameters: {
         type: "object",
@@ -208,18 +210,18 @@ export function createSeedanceTools(): EnsoAgentTool[] {
           },
           duration: {
             type: "number",
-            description: "Video duration in seconds (4-12). Default: 5",
+            description: `Video duration in seconds (4-${MAX_DURATION}). Default: 5. Paid tier unlocks up to ${MAX_DURATION}s per clip.`,
           },
           resolution: {
             type: "string",
             enum: ["480p", "720p", "1080p"],
             description:
-              "Output resolution. Default: 720p. Higher = slower + more expensive.",
+              "Output resolution. Default: 1080p for production-quality 短视频. Lower = faster generation.",
           },
           ratio: {
             type: "string",
             enum: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"],
-            description: "Aspect ratio. Default: 16:9",
+            description: "Aspect ratio. Default: 9:16 (portrait, optimized for Douyin/TikTok 短视频)",
           },
           generate_audio: {
             type: "boolean",
@@ -244,13 +246,13 @@ export function createSeedanceTools(): EnsoAgentTool[] {
 
         const prompt = params.prompt as string;
         const duration = (params.duration as number) ?? 5;
-        const resolution = (params.resolution as string) ?? "720p";
-        const ratio = (params.ratio as string) ?? "16:9";
+        const resolution = (params.resolution as string) ?? "1080p";
+        const ratio = (params.ratio as string) ?? "9:16";
         const generateAudio = (params.generate_audio as boolean) ?? true;
         const seed = params.seed as number | undefined;
 
-        if (duration < 4 || duration > 12) {
-          return errorResult("Duration must be between 4 and 12 seconds");
+        if (duration < 4 || duration > MAX_DURATION) {
+          return errorResult(`Duration must be between 4 and ${MAX_DURATION} seconds (paid tier)`);
         }
 
         logAction({
@@ -341,12 +343,12 @@ export function createSeedanceTools(): EnsoAgentTool[] {
           },
           duration: {
             type: "number",
-            description: "Video duration in seconds (4-12). Default: 5",
+            description: `Video duration in seconds (4-${MAX_DURATION}). Default: 5.`,
           },
           resolution: {
             type: "string",
             enum: ["480p", "720p", "1080p"],
-            description: "Output resolution. Default: 720p",
+            description: "Output resolution. Default: 1080p.",
           },
           ratio: {
             type: "string",
@@ -377,7 +379,7 @@ export function createSeedanceTools(): EnsoAgentTool[] {
         const imagePath = params.image_path as string;
         const prompt = (params.prompt as string) ?? "";
         const duration = (params.duration as number) ?? 5;
-        const resolution = (params.resolution as string) ?? "720p";
+        const resolution = (params.resolution as string) ?? "1080p";
         const ratio = (params.ratio as string) ?? "adaptive";
 
         if (!existsSync(imagePath)) {

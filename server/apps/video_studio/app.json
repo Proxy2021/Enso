@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "video_studio",
     "toolPrefix": "enso_video_studio_",
-    "description": "AI video generation studio: plan your video project with script and settings, then generate clips from text prompts or scripts, animate images, decompose scripts into storyboards, craft optimized prompts, and browse your video gallery",
+    "description": "AI video generation studio: create production-level 短视频 (short videos) for Douyin/TikTok/RedNote with full project planning, batch generation, viral format templates, scene-by-scene captions and audio cues — plus single clip generation, image animation, prompt crafting, and gallery management",
     "signatureId": "video_studio_view",
     "tools": [
       {
@@ -52,15 +52,15 @@
             },
             "duration": {
               "type": "number",
-              "description": "Video duration in seconds (4-12). Default: 5"
+              "description": "Video duration in seconds (4-15). Default: 5. Paid tier supports up to 15s per clip."
             },
             "resolution": {
               "type": "string",
-              "description": "Output resolution: 480p, 720p, or 1080p. Default: 720p"
+              "description": "Output resolution: 480p, 720p, or 1080p. Default: 1080p"
             },
             "ratio": {
               "type": "string",
-              "description": "Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9. Default: 16:9"
+              "description": "Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 21:9. Default: 9:16 (portrait, optimized for 短视频)"
             },
             "generate_audio": {
               "type": "boolean",
@@ -394,6 +394,218 @@
           ]
         },
         "requiredDataKeys": ["tool", "entries"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "short_video",
+        "description": "Create a complete production-ready 短视频 (short video) project plan for Douyin, TikTok, RedNote, Bilibili, YouTube Shorts, or WeChat. Takes your concept and platform, then generates: scene-by-scene prompts, on-screen captions, audio/music cues, hook score, viral score, platform optimization tips, and hashtags. Returns a full storyboard you can batch-generate or generate scene by scene. This is the primary workflow for professional 短视频 production.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "concept": {
+              "type": "string",
+              "description": "Your video idea or concept in any language (e.g., '一个关于早起习惯的励志短片' or 'Morning routine transformation')"
+            },
+            "platform": {
+              "type": "string",
+              "description": "Target platform: douyin, tiktok, rednote, bilibili, youtube_shorts, wechat. Default: douyin"
+            },
+            "category": {
+              "type": "string",
+              "description": "Content category: lifestyle, education, entertainment, food, travel, beauty, product, comedy. Default: lifestyle"
+            },
+            "target_duration": {
+              "type": "number",
+              "description": "Target total video duration in seconds (6-120). Default: 30"
+            },
+            "hook_style": {
+              "type": "string",
+              "description": "Hook type for opening scene: auto, question, shock, action, emotion, mystery, trend. Default: auto"
+            }
+          },
+          "required": ["concept"]
+        },
+        "sampleParams": {
+          "concept": "一位厨师深夜在空荡荡的餐厅里做最后一道菜",
+          "platform": "douyin",
+          "category": "food",
+          "target_duration": 30
+        },
+        "sampleData": {
+          "tool": "enso_video_studio_short_video",
+          "concept": "A chef cooking their last dish in an empty restaurant at midnight",
+          "platform": "douyin",
+          "platformName": "抖音 Douyin",
+          "ratio": "9:16",
+          "resolution": "1080p",
+          "projectTitle": "Last Dish Before Dawn",
+          "hookStyle": "emotion",
+          "hookScore": 9.1,
+          "viralScore": 8.7,
+          "totalDuration": 30,
+          "projectId": "svproject_1711267200000",
+          "scenes": [
+            {
+              "number": 1,
+              "title": "The Empty Kitchen",
+              "duration": 3,
+              "purpose": "hook",
+              "prompt": "Close-up of weathered chef hands gripping a kitchen knife, dim restaurant kitchen at midnight, single spotlight overhead, steam rising from pot, extreme cinematic contrast, teal and orange color grade",
+              "caption": "最后一道菜",
+              "captionTiming": "0-3s",
+              "audioNote": "Single piano note, silence, then melancholic melody begins",
+              "transition": "cut",
+              "generated": false,
+              "url": ""
+            },
+            {
+              "number": 2,
+              "title": "Cooking with Purpose",
+              "duration": 7,
+              "purpose": "content",
+              "prompt": "Medium tracking shot following chef moving through empty restaurant kitchen, passionate preparation, ingredients flying, fire roaring, motion blur on hands, warm fire light against dark kitchen background",
+              "caption": "三十年的味道",
+              "captionTiming": "3-10s",
+              "audioNote": "Music builds, kitchen ASMR sounds layered with melody",
+              "transition": "cut",
+              "generated": false,
+              "url": ""
+            },
+            {
+              "number": 3,
+              "title": "The Last Plating",
+              "duration": 8,
+              "purpose": "emotion",
+              "prompt": "Macro close-up of meticulous plating, trembling hands placing final garnish with absolute care, single tear drops onto counter, warm spotlight on perfect dish, bokeh background of empty restaurant chairs",
+              "caption": "今夜告别",
+              "captionTiming": "10-18s",
+              "audioNote": "Music swells to emotional peak",
+              "transition": "fade",
+              "generated": false,
+              "url": ""
+            },
+            {
+              "number": 4,
+              "title": "The Moment",
+              "duration": 8,
+              "purpose": "cta",
+              "prompt": "Wide shot of chef standing alone in empty restaurant, perfect dish on the table, looking out window at empty chairs, city lights outside, silhouette against ambient city glow, cinematic final frame",
+              "caption": "关注，听他的故事",
+              "captionTiming": "20-28s",
+              "audioNote": "Piano fades to silence on final frame",
+              "transition": "fade",
+              "generated": false,
+              "url": ""
+            }
+          ],
+          "musicGenre": "Piano Instrumental",
+          "musicMood": "emotional",
+          "musicBPM": 72,
+          "ctaText": "关注获取更多故事",
+          "platformTips": [
+            "Post between 7-9pm for maximum Douyin reach",
+            "First 3 seconds must stop the scroll — your hook scene is critical",
+            "Add 抖音 AI sticker overlays to boost algorithm visibility"
+          ],
+          "hashtags": ["#深夜厨房", "#匠心料理", "#感人故事", "#抖音美食"]
+        },
+        "requiredDataKeys": ["tool", "scenes"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "batch_generate",
+        "description": "Sequentially generate all video clips for a 短视频 project's scenes. Takes the scenes array from short_video or script_to_scenes and generates each scene using Seedance AI. Returns results for all scenes with video URLs. Use after planning your project to produce all clips in one go.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scenes": {
+              "type": "array",
+              "description": "Array of scene objects from short_video or script_to_scenes. Each needs: prompt, number, title, duration (optional), suggestedRatio or ratio (optional)"
+            },
+            "ratio": {
+              "type": "string",
+              "description": "Default aspect ratio for all scenes: 9:16, 16:9, 1:1, 3:4. Default: 9:16"
+            },
+            "resolution": {
+              "type": "string",
+              "description": "Output resolution: 480p, 720p, 1080p. Default: 1080p"
+            },
+            "generate_audio": {
+              "type": "boolean",
+              "description": "Generate AI audio for all clips. Default: true"
+            },
+            "project_id": {
+              "type": "string",
+              "description": "Optional project ID from short_video to update project state with generation results"
+            }
+          },
+          "required": ["scenes"]
+        },
+        "sampleParams": {
+          "scenes": [
+            { "number": 1, "title": "Hook", "duration": 3, "prompt": "Close-up of hands gripping a knife in a dark kitchen", "suggestedRatio": "9:16" },
+            { "number": 2, "title": "Main", "duration": 7, "prompt": "Chef cooking passionately in empty restaurant", "suggestedRatio": "9:16" }
+          ],
+          "ratio": "9:16",
+          "resolution": "1080p"
+        },
+        "sampleData": {
+          "tool": "enso_video_studio_batch_generate",
+          "totalScenes": 4,
+          "successCount": 3,
+          "failedCount": 1,
+          "ratio": "9:16",
+          "resolution": "1080p",
+          "results": [
+            { "number": 1, "title": "Hook Scene", "prompt": "Close-up of hands...", "status": "success", "url": "/media/seedance_1711267200.mp4", "taskId": "cgt-001", "duration": 3 },
+            { "number": 2, "title": "Main Content", "prompt": "Chef cooking...", "status": "success", "url": "/media/seedance_1711267210.mp4", "taskId": "cgt-002", "duration": 7 },
+            { "number": 3, "title": "Emotion Peak", "prompt": "Macro plating...", "status": "success", "url": "/media/seedance_1711267220.mp4", "taskId": "cgt-003", "duration": 8 },
+            { "number": 4, "title": "CTA", "prompt": "Wide shot restaurant...", "status": "failed", "error": "Generation timeout", "url": "", "duration": 8 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "results"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "style_gallery",
+        "description": "Browse curated viral 短视频 format templates with proven structures, hook types, and example prompts. Each template includes complete scene structure, viral potential score, best-fit platforms, and an example Seedance prompt. Use this to discover formats and then launch a short_video project from a chosen template.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "category": {
+              "type": "string",
+              "description": "Filter templates by content category: all, education, lifestyle, entertainment, food, travel, beauty, product. Default: all"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_video_studio_style_gallery",
+          "category": "all",
+          "totalTemplates": 14,
+          "categories": ["all", "education", "lifestyle", "entertainment", "food", "travel", "beauty", "product"],
+          "templates": [
+            {
+              "id": "hook-question",
+              "name": "你知道吗？Hook",
+              "nameEn": "Did You Know? Hook",
+              "category": "education",
+              "description": "Open with a shocking question that challenges common belief.",
+              "hookType": "question",
+              "structure": ["Hook Question (3s)", "Unexpected Reveal (5s)", "Explanation (8s)", "Takeaway (5s)", "CTA (3s)"],
+              "totalDuration": 24,
+              "exampleConcept": "The real reason successful people wake up early",
+              "bestFor": ["douyin", "tiktok", "youtube_shorts"],
+              "viralPotential": 9.2,
+              "examplePrompt": "Extreme close-up of tired eyes snapping open in shock, phone light illuminates dark room, dramatic zoom out reveals messy desk and coffee cups everywhere, neon city lights through window"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "templates"],
         "isPrimary": false
       }
     ]

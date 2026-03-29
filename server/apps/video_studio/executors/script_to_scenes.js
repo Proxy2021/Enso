@@ -2,6 +2,8 @@ var script = (params.script || "").trim();
 var sceneCount = typeof params.scene_count === "number" ? params.scene_count : 0;
 var style = (params.style || "").trim() || "cinematic";
 var durationPerScene = typeof params.duration_per_scene === "number" ? params.duration_per_scene : 5;
+var platform = (params.platform || "").trim(); // "douyin" | "tiktok" | "rednote" | "bilibili" | "youtube_shorts" | ""
+var isShortVideo = params.short_video === true || platform === "douyin" || platform === "tiktok" || platform === "youtube_shorts";
 
 if (!script) {
   return {
@@ -16,14 +18,22 @@ if (!script) {
 }
 
 // Clamp duration per scene
-if (durationPerScene < 4) durationPerScene = 4;
-if (durationPerScene > 12) durationPerScene = 12;
+if (durationPerScene < 3) durationPerScene = 3;
+if (durationPerScene > 15) durationPerScene = 15;
+
+// For 短视频 platforms, prefer shorter durations
+if (isShortVideo && durationPerScene > 6) durationPerScene = 5;
 
 // Clamp scene count
 if (sceneCount < 0) sceneCount = 0;
 if (sceneCount > 12) sceneCount = 12;
 
-// Check cache for repeated scripts
+// Platform ratio defaults
+var defaultRatio = "16:9";
+if (platform === "douyin" || platform === "tiktok" || platform === "wechat" || platform === "youtube_shorts") defaultRatio = "9:16";
+if (platform === "rednote") defaultRatio = "3:4";
+
+// Check cache
 var cacheHash = function(str) {
   var h = 0;
   for (var i = 0; i < str.length; i++) {
@@ -34,7 +44,7 @@ var cacheHash = function(str) {
   return "scenes_" + Math.abs(h).toString(36);
 };
 
-var cacheKey = cacheHash(script + "|" + style + "|" + sceneCount + "|" + durationPerScene);
+var cacheKey = cacheHash(script + "|" + style + "|" + sceneCount + "|" + durationPerScene + "|" + platform);
 try {
   var cached = await ctx.store.get(cacheKey);
   if (cached) {
@@ -50,26 +60,41 @@ try {
 
 var sceneCountInstruction = sceneCount > 0
   ? "Create exactly " + sceneCount + " scenes."
-  : "Determine the optimal number of scenes (2-8) based on the script's structure and pacing.";
+  : isShortVideo
+    ? "Determine optimal scenes (3-8) for a short-form video. Each scene should be punchy and purposeful."
+    : "Determine the optimal number of scenes (2-10) based on the script's structure and pacing.";
 
-var systemPrompt = "You are a film director and screenwriter. Decompose the following script/story into discrete video scenes, each optimized for a 4-12 second AI-generated video clip.\n\n"
-  + "For each scene, provide:\n"
-  + "1. A short scene title (2-5 words)\n"
-  + "2. A detailed English video prompt (under 280 characters) with specific camera movement, lighting, composition, and atmosphere\n"
-  + "3. Suggested duration in seconds (" + durationPerScene + "s default, adjust based on scene complexity)\n"
-  + "4. Suggested aspect ratio (16:9, 21:9, 9:16, 1:1)\n"
-  + "5. Mood (one word: mysterious, tense, epic, serene, dramatic, energetic, melancholic, playful, dark, hopeful)\n\n"
+var platformInstruction = platform
+  ? "\nPlatform: " + platform + " (optimize for this platform's audience and format, ratio: " + defaultRatio + ")"
+  : "";
+
+var shortVideoExtra = isShortVideo
+  ? "\nSHORT VIDEO RULES:\n- Scene 1 MUST be an attention-grabbing hook (first 2-3s)\n- Every scene needs a punchy caption\n- Suggest music/audio cues for each scene\n- Keep scenes short and visually dynamic\n- Label scene purposes: hook, context, action, solution, proof, cta\n"
+  : "";
+
+var systemPrompt = "You are a professional film director and short-form video content strategist.\n\n"
+  + "Decompose the following script/story into individual video scenes optimized for AI video generation.\n\n"
+  + "For each scene provide:\n"
+  + "1. Scene title (2-5 words)\n"
+  + "2. Detailed English video prompt (max 280 chars) with: camera movement, lighting, composition, subjects, color grade\n"
+  + "3. Duration in seconds\n"
+  + "4. Aspect ratio suggestion\n"
+  + "5. Mood (one word)\n"
+  + "6. On-screen caption text (max 12 words, punchy and engaging)\n"
+  + "7. Audio/music note (brief sound direction for this scene)\n"
+  + "8. Scene purpose: hook|context|action|conflict|solution|proof|emotion|cta|content\n"
+  + "9. Transition to next scene: cut|fade|zoom|wipe|match-cut\n\n"
   + "Visual style: " + style + "\n"
+  + platformInstruction + "\n"
+  + shortVideoExtra
   + sceneCountInstruction + "\n\n"
-  + "RULES:\n"
+  + "PROMPT RULES:\n"
   + "- Each prompt must be self-contained and visually specific\n"
-  + "- Include camera directions (dolly, pan, crane, POV, tracking, push-in, pull-out, etc.)\n"
-  + "- Include lighting details (golden hour, chiaroscuro, neon, ambient, etc.)\n"
-  + "- Maintain visual continuity and narrative flow across scenes\n"
-  + "- All prompts must be in English regardless of input language\n"
-  + "- Keep prompts concise but visually rich\n\n"
-  + "Respond in this exact JSON format:\n"
-  + '{"scenes":[{"sceneNumber":1,"title":"Scene Title","prompt":"detailed video prompt","suggestedDuration":5,"suggestedRatio":"16:9","mood":"mysterious"}]}';
+  + "- Include explicit camera directions (dolly, pan, crane, POV, tracking, push-in, pull-out)\n"
+  + "- Include lighting details (golden hour, chiaroscuro, neon, studio, ambient)\n"
+  + "- Maintain visual continuity and narrative flow\n"
+  + "- All prompts in English regardless of input language\n\n"
+  + 'Respond in ONLY valid JSON: {"scenes":[{"sceneNumber":1,"title":"Title","prompt":"detailed prompt","suggestedDuration":5,"suggestedRatio":"16:9","mood":"mysterious","caption":"On-screen text here","audioNote":"Upbeat electronic music builds tension","purpose":"hook","transition":"cut"}]}';
 
 var askResult = await ctx.ask(systemPrompt + "\n\nScript:\n" + script);
 
@@ -77,6 +102,9 @@ var resultData = {
   tool: "enso_video_studio_script_to_scenes",
   originalScript: script,
   style: style,
+  platform: platform,
+  defaultRatio: defaultRatio,
+  isShortVideo: isShortVideo,
   totalScenes: 0,
   totalDuration: 0,
   scenes: []
@@ -91,52 +119,50 @@ if (askResult && askResult.ok && askResult.text) {
       if (parsed.scenes && Array.isArray(parsed.scenes)) {
         resultData.scenes = parsed.scenes.map(function(s, idx) {
           var dur = typeof s.suggestedDuration === "number" ? s.suggestedDuration : durationPerScene;
-          if (dur < 4) dur = 4;
-          if (dur > 12) dur = 12;
+          if (dur < 3) dur = 3;
+          if (dur > 15) dur = 15;
           return {
             sceneNumber: s.sceneNumber || (idx + 1),
             title: String(s.title || "Scene " + (idx + 1)),
             prompt: String(s.prompt || ""),
             suggestedDuration: dur,
-            suggestedRatio: String(s.suggestedRatio || "16:9"),
-            mood: String(s.mood || "")
+            suggestedRatio: String(s.suggestedRatio || defaultRatio),
+            mood: String(s.mood || ""),
+            caption: String(s.caption || ""),
+            audioNote: String(s.audioNote || ""),
+            purpose: String(s.purpose || "content"),
+            transition: String(s.transition || "cut")
           };
         });
       }
     } catch(e) {
-      // JSON parsing failed - try to extract scene info from text
       resultData.scenes = [{
-        sceneNumber: 1,
-        title: "Full Scene",
+        sceneNumber: 1, title: "Full Scene",
         prompt: responseText.slice(0, 280),
         suggestedDuration: durationPerScene,
-        suggestedRatio: "16:9",
-        mood: ""
+        suggestedRatio: defaultRatio,
+        mood: "", caption: "", audioNote: "", purpose: "content", transition: "cut"
       }];
     }
   } else {
     resultData.scenes = [{
-      sceneNumber: 1,
-      title: "Full Scene",
+      sceneNumber: 1, title: "Full Scene",
       prompt: responseText.slice(0, 280),
       suggestedDuration: durationPerScene,
-      suggestedRatio: "16:9",
-      mood: ""
+      suggestedRatio: defaultRatio,
+      mood: "", caption: "", audioNote: "", purpose: "content", transition: "cut"
     }];
   }
 } else {
-  // Fallback: create a single scene from the script
   resultData.scenes = [{
-    sceneNumber: 1,
-    title: "Full Scene",
+    sceneNumber: 1, title: "Full Scene",
     prompt: style + " scene: " + script.slice(0, 250),
     suggestedDuration: durationPerScene,
-    suggestedRatio: "16:9",
-    mood: ""
+    suggestedRatio: defaultRatio,
+    mood: "", caption: "", audioNote: "", purpose: "content", transition: "cut"
   }];
 }
 
-// Compute totals
 resultData.totalScenes = resultData.scenes.length;
 var totalDur = 0;
 for (var i = 0; i < resultData.scenes.length; i++) {
@@ -144,16 +170,11 @@ for (var i = 0; i < resultData.scenes.length; i++) {
 }
 resultData.totalDuration = totalDur;
 
-// Cache the result
+// Cache result
 try {
   var toCache = JSON.parse(JSON.stringify(resultData));
   toCache._cachedAt = Date.now();
   await ctx.store.set(cacheKey, JSON.stringify(toCache));
 } catch(e) {}
 
-return {
-  content: [{
-    type: "text",
-    text: JSON.stringify(resultData)
-  }]
-};
+return { content: [{ type: "text", text: JSON.stringify(resultData) }] };
