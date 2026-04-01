@@ -146,7 +146,7 @@ export function archiveEvolutionSprint(
               copyFileSync(srcPath, join(sprintDir, file));
               hasDesign = true;
               allFiles.push(file);
-            } else if (file === "implementation.md" || file.startsWith("implementation-")) {
+            } else if (file === "implementation.md" || file.startsWith("implementation-") || file.startsWith("implement-")) {
               copyFileSync(srcPath, join(sprintDir, file));
               hasImplementation = true;
               allFiles.push(file);

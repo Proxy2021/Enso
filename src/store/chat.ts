@@ -111,6 +111,7 @@ interface CardStore {
   // Claude Code session state
   projects: ProjectInfo[];
   codeSessionCwd: string | null;
+  defaultProjectCwd: string | null;
   codeSessionId: string | null;
   claudeModel: string;
   claudeThinking: "adaptive" | "disabled";
@@ -351,6 +352,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   ensoProjectPath: null,
   projects: [],
   codeSessionCwd: localStorage.getItem(STORAGE_KEYS.CODE_SESSION_CWD) || null,
+  defaultProjectCwd: null,
   codeSessionId: localStorage.getItem(STORAGE_KEYS.CODE_SESSION_ID) || null,
   claudeModel: localStorage.getItem(STORAGE_KEYS.CLAUDE_MODEL) || DEFAULT_CLAUDE_MODEL,
   claudeThinking: (localStorage.getItem(STORAGE_KEYS.CLAUDE_THINKING) as "adaptive" | "disabled") || "adaptive",
@@ -660,7 +662,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
         // Read session from active terminal card's own state, fall back to global
         const termId = get()._activeTerminalCardId;
         const termCard = termId ? get().cards[termId] : null;
-        const cwd = termCard?.toolMeta?.cwd ?? get().codeSessionCwd;
+        const cwd = termCard?.toolMeta?.cwd ?? get().codeSessionCwd ?? get().defaultProjectCwd;
         const toolSessionId = termCard?.toolMeta?.toolSessionId ?? get().codeSessionId;
 
         if (!cwd) {
@@ -2034,6 +2036,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
       const patch: Partial<CardStore> = {};
       if (msg.settings.toolFamilies) patch.toolFamilies = msg.settings.toolFamilies;
       if (msg.settings.ensoProjectPath) patch.ensoProjectPath = msg.settings.ensoProjectPath;
+      if (msg.settings.defaultProjectCwd) patch.defaultProjectCwd = msg.settings.defaultProjectCwd;
       if (msg.settings.claudeModel) {
         patch.claudeModel = msg.settings.claudeModel;
         localStorage.setItem(STORAGE_KEYS.CLAUDE_MODEL, msg.settings.claudeModel);

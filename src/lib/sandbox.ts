@@ -174,7 +174,7 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
     const reactNames = ["useState", "useEffect", "useMemo", "useCallback", "useRef", "Fragment"];
     const filteredReact = reactNames.filter(n => !templateNames.has(n)).join(", ");
 
-    const rechartsNames = ["BarChart", "LineChart", "PieChart", "AreaChart", "RadarChart", "Bar", "Line", "Pie", "Area", "Radar", "XAxis", "YAxis", "CartesianGrid", "Tooltip", "Legend", "ResponsiveContainer", "Cell", "PolarGrid", "PolarAngleAxis", "PolarRadiusAxis", "ComposedChart", "Scatter", "RadialBarChart", "RadialBar", "Treemap", "Funnel", "FunnelChart"];
+    const rechartsNames = ["BarChart", "LineChart", "PieChart", "AreaChart", "RadarChart", "Bar", "Line", "Pie", "Area", "Radar", "XAxis", "YAxis", "CartesianGrid", "Tooltip", "Legend", "ResponsiveContainer", "Cell", "PolarGrid", "PolarAngleAxis", "PolarRadiusAxis", "ComposedChart", "Scatter", "RadialBarChart", "RadialBar", "Treemap", "Funnel", "FunnelChart", "ReferenceLine", "ReferenceArea", "ReferenceDot"];
     const filteredRecharts = rechartsNames.filter(n => !templateNames.has(n)).join(", ");
 
     const preamble = [

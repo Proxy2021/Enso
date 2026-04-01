@@ -7,10 +7,10 @@
   "codebasePath": "D:/Github/Enso",
   "techStack": "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
   "testUrl": "http://localhost:5173",
-  "lastSprint": 16,
-  "lastSprintScore": 7.0,
-  "currentSprint": 17,
-  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0],
+  "lastSprint": 17,
+  "lastSprintScore": 7.5,
+  "currentSprint": 18,
+  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5],
   "teamAgents": [
     {
       "id": "project-leader",
@@ -152,6 +152,14 @@
         "Use deep research: 'Deep dive into the market sizing and TAM for AI-native developer tools'",
         "Build a product: 'Create a startup metrics dashboard that tracks MRR, churn, runway, and burn rate with interactive charts'",
         "Ask Enso: 'Compare the pros and cons of freemium vs usage-based pricing for a B2B SaaS product'"
+      ],
+      "history": [
+        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 6.8/10 (NEW BASELINE after 4-sprint gap). 2/5 scenarios completed with strong quality: market research 8/10, dashboard build 7/10. 3/5 timed out from sequential query degradation. Research is the killer feature. Build-to-app gap: cards not interactive apps. Zero errors, zero misroutes.", "resolved": true }
+      ],
+      "unresolvedFrustrations": [
+        "Build requests produce text cards, not interactive demo-ready apps",
+        "Sequential query throughput degrades after 2 fast queries (queries 3-5 timeout)",
+        "No cross-product portfolio view for tracking multiple ventures"
       ]
     },
     {
@@ -179,12 +187,13 @@
         "Open /shell and run 'npm test' to check the current test suite status"
       ],
       "history": [
-        { "sprintId": 16, "sprintDate": 1743465600000, "finding": "Total platform outage due to Video Studio schema bug — 0/5 scenarios passed, score 2.6/10. /code fix (P0-4) and misrouting fix (P0-1) implemented but unverified due to schema blocking all routing.", "resolved": false }
+        { "sprintId": 16, "sprintDate": 1743465600000, "finding": "Total platform outage due to Video Studio schema bug — 0/5 scenarios passed, score 2.6/10. /code fix (P0-4) and misrouting fix (P0-1) implemented but unverified due to schema blocking all routing.", "resolved": true },
+        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 6.2/10 (+3.6). All Sprint 16 fixes VALIDATED: 0 misroutes, 0 schema errors, 0 'try rephrasing'. Research quality 7/10. /code sub-agent offer works. Project selector auto-context now implemented.", "resolved": true }
       ],
       "unresolvedFrustrations": [
-        "Project selector friction on /code and /shell — P0-5 deferred to Sprint 17",
-        "Need to verify /code client connection fix actually works post-schema-fix",
-        "Need to verify Photo Studio no longer appears for non-photo requests"
+        "No progress indicator for long-running requests (30s+ blind waits)",
+        "Build requests ask clarifying questions instead of 'just building it'",
+        "Need to verify project selector auto-context improvement in practice"
       ]
     },
     {
@@ -237,12 +246,13 @@
         "Open /shell and explore the project structure — run 'ls server/src/' and 'npm test'"
       ],
       "history": [
-        { "sprintId": 16, "sprintDate": 1743465600000, "finding": "100% server error rate across all 5 scenarios due to schema bug. Touch targets improved from 86-90% to 37% violations on welcome screen. Score 4.0/10 (pre-fix). Touch target worst offenders fixed post-test.", "resolved": false }
+        { "sprintId": 16, "sprintDate": 1743465600000, "finding": "100% server error rate across all 5 scenarios due to schema bug. Touch targets improved from 86-90% to 37% violations on welcome screen. Score 4.0/10 (pre-fix). Touch target worst offenders fixed post-test.", "resolved": false },
+        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 4.5/10 (+0.5). 0/5 scenarios returned responses — silent failure with zero feedback. Touch targets: welcome 100%, chat 42% pre-fix. Sprint 17 applied remaining touch target fixes (settings gear 44px, chips 44px, buttons 44px). Silent failure is WORSE than Sprint 16's bad errors.", "resolved": false }
       ],
       "unresolvedFrustrations": [
-        "Project selector adds friction on every /code and /shell interaction — P0-5 deferred",
-        "Touch targets still 38-40px on input area buttons — only worst offenders (<32px) fixed",
-        "Need to verify all 5 developer scenarios return results after schema fix"
+        "Silent failure — 0/5 responses with zero error feedback or loading indicator (P0)",
+        "Need to verify touch target improvements and response delivery in Sprint 18 retest",
+        "No connection health indicator or timeout escalation in UI"
       ]
     },
     {
@@ -303,13 +313,14 @@
         "Orchestrate: 'For this wedding shoot: AI-cull the photos, batch color-grade, generate a contact sheet PDF, and create Instagram-optimized exports'"
       ],
       "history": [
-        { "sprintId": 16, "sprintDate": 1743465600000, "finding": "Total platform outage — 0/5 scenarios passed (score 1.5/10). Video Studio schema bug blocked all tool routing. Photo Studio misrouting fix implemented but untested due to upstream blocker. Silent timeouts (46s) on 2 scenarios, error cards on 3.", "resolved": false }
+        { "sprintId": 16, "sprintDate": 1743465600000, "finding": "Total platform outage — 0/5 scenarios passed (score 1.5/10). Video Studio schema bug blocked all tool routing. Photo Studio misrouting fix implemented but untested due to upstream blocker. Silent timeouts (46s) on 2 scenarios, error cards on 3.", "resolved": false },
+        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 2.5/10 (+1.0). Cross-session contamination blocked ALL fix validation — 3/3 responses from wrong sessions, 2/5 silent timeouts. Contamination root cause found and fixed (7 LOC) AFTER test. Sprint 16 fixes still UNVALIDATED for this persona after 3 sprints.", "resolved": false }
       ],
       "unresolvedFrustrations": [
-        "Need to verify gallery browsing routes to media_gallery after misrouting fix",
-        "Response latency (27-29s even when working) is unusable for creative workflows",
-        "No smart photo directory discovery — gallery defaults to home, doesn't auto-detect ~/Pictures",
-        "Silent timeout inconsistency — some requests hang 45s, others return error in 6s"
+        "Sprint 16 Photo Studio misrouting fix UNVALIDATED for 3 sprints (contamination blocked test)",
+        "Need to verify contamination fix resolves cross-session response leakage",
+        "Response latency and smart photo directory discovery remain unaddressed",
+        "Silent timeout with zero user feedback"
       ]
     }
   ],
@@ -320,8 +331,8 @@
   ],
   "sprintNotes": {
     "16": "DEBT-RECOVERY sprint — SCORE: 7.0/10. 7/8 P0 items shipped. Fixed: Video Studio schema bomb (P0-EMERGENCY), error messages (P0-A), graceful degradation (P0-B), Photo Studio misrouting (P0-1), touch targets worst offenders (P0-2), ChatInput Phase 1 1205→914 LOC (P0-3), /code client connection (P0-4). Deferred: P0-5 project selector. Process win: assignment matrix gate eliminated orphan P0s. Pre-fix persona scores: Marco 1.5, Priya 2.6, Jordan 4.0 (worst ever, caused by schema regression).",
-    "17": "VALIDATION + CONTINUED IMPROVEMENT sprint. Priorities: (1) Post-fix persona retests — Marco, Priya, Jordan MANDATORY. (2) Alex Chen persona testing (untested since Sprint 12). (3) Schema validation test (schema-validation.test.ts) — P0 prevention. (4) ChatInput Phase 2 (SlashMenu, SendControls → <500 LOC). (5) P0-5 project selector auto-context. (6) server.ts decomposition planning."
+    "17": "VALIDATION + IMPROVEMENT sprint — SCORE: 7.5/10. 7/7 planned items + bonus E7 delivered. Fixed: cross-session contamination (7 LOC), project selector auto-context, ChatInput Phase 2 (914→525 LOC, 6 components). Added: schema-validation.test.ts (245 tests), error-classification.test.ts (34 tests). Created: server.ts decomposition design doc. Touch targets completed (responsive 44px). Persona scores: Marco 2.5 (contamination blocked), Priya 6.2 (+3.6 VALIDATED), Jordan 4.5 (silent failure), Alex 6.8 (new baseline). Avg 5.0 (up from 2.7)."
   },
   "createdAt": 1773909300324,
-  "updatedAt": 1743465600000
+  "updatedAt": 1743552000000
 }

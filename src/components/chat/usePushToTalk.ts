@@ -171,6 +171,74 @@ export function usePushToTalk({ disabled, sendMessage, textareaRef }: UsePushToT
     };
   }, []);
 
+  // Cancel any active PTT session (used by handleSend in ChatInput)
+  const cancelPtt = useCallback(() => {
+    if (!pttActiveRef.current) return;
+    voice.cancelListening();
+    pttActiveRef.current = false;
+    setPttActive(false);
+    setPttCancelZone(false);
+    pttAccumulatedRef.current = "";
+    setPttAccumulatedText("");
+  }, [voice]);
+
+  // Desktop pointer-based PTT handlers (for mic button in SendControls)
+  const desktopPttHandlers: DesktopPttHandlers = {
+    onPointerDown: (e: React.PointerEvent) => {
+      if (disabled) return;
+      e.preventDefault();
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      pttAccumulatedRef.current = "";
+      setPttAccumulatedText("");
+      pttStartYRef.current = e.clientY;
+      pttActiveRef.current = true;
+      pttCancelRef.current = false;
+      setPttActive(true);
+      setPttCancelZone(false);
+      setPttStartTime(Date.now());
+      haptic(30);
+      voice.startListening();
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (!pttActiveRef.current) return;
+      const dy = pttStartYRef.current - e.clientY;
+      const inCancel = dy > CANCEL_THRESHOLD_PX;
+      if (inCancel !== pttCancelRef.current) {
+        pttCancelRef.current = inCancel;
+        setPttCancelZone(inCancel);
+      }
+    },
+    onPointerUp: () => {
+      if (!pttActiveRef.current) return;
+      pttActiveRef.current = false;
+      const wasCancelled = pttCancelRef.current;
+      setPttActive(false);
+      setPttCancelZone(false);
+      if (wasCancelled) {
+        voice.cancelListening();
+        haptic([30, 50, 30]);
+      } else {
+        voice.cancelListening();
+        haptic(15);
+        const finalText = (pttAccumulatedRef.current + (voice.interimTranscript ? (pttAccumulatedRef.current ? " " : "") + voice.interimTranscript : "")).trim();
+        if (finalText) {
+          sendMessage(finalText);
+        }
+      }
+      pttAccumulatedRef.current = "";
+      setPttAccumulatedText("");
+    },
+    onPointerCancel: () => {
+      if (!pttActiveRef.current) return;
+      pttActiveRef.current = false;
+      setPttActive(false);
+      setPttCancelZone(false);
+      voice.cancelListening();
+      pttAccumulatedRef.current = "";
+      setPttAccumulatedText("");
+    },
+  };
+
   return {
     // State
     pttActive,
@@ -187,15 +255,9 @@ export function usePushToTalk({ disabled, sendMessage, textareaRef }: UsePushToT
     isFallbackRecorder,
     recorder,
 
-    // Refs & setters — exposed for desktop pointer PTT handlers in main component
-    pttAccumulatedRef,
-    pttStartYRef,
-    pttActiveRef,
-    pttCancelRef,
-    setPttActive,
-    setPttCancelZone,
-    setPttStartTime,
-    setPttAccumulatedText,
+    // Desktop PTT pointer handlers
+    desktopPttHandlers,
+    cancelPtt,
 
     // Touch handlers
     handleTextareaTouchStart,
@@ -203,4 +265,11 @@ export function usePushToTalk({ disabled, sendMessage, textareaRef }: UsePushToT
     handleTextareaTouchEnd,
     handleTextareaTouchCancel,
   };
+}
+
+export interface DesktopPttHandlers {
+  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerMove: (e: React.PointerEvent) => void;
+  onPointerUp: () => void;
+  onPointerCancel: () => void;
 }

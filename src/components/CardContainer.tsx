@@ -386,7 +386,7 @@ function EnhanceButton({ card }: { card: Card }) {
     return (
       <button
         onClick={() => enhanceCardWithFamily(card.id, suggestedFamily)}
-        className="flex items-center justify-center gap-1 sm:gap-1.5 text-[10px] min-h-[28px] px-1.5 sm:px-2.5 py-0.5 rounded-full border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 active:bg-emerald-500/35 active:scale-[0.95] transition-all duration-150"
+        className="flex items-center justify-center gap-1 sm:gap-1.5 text-[10px] min-h-[36px] sm:min-h-[28px] px-2 sm:px-2.5 py-1 sm:py-0.5 rounded-full border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 active:bg-emerald-500/35 active:scale-[0.95] transition-all duration-150"
         title={`Enhance as ${familyLabel} (auto-detected)`}
       >
         <span className="text-xs leading-none">{familyIcon}</span>
@@ -1051,7 +1051,7 @@ function ViewToggle({ card }: { card: Card }) {
   if (isCardEvolution) {
     const hasTaskTerminals = !!card.taskTerminals && Object.keys(card.taskTerminals).length > 0;
     const segClass = (active: boolean, pulse?: boolean) =>
-      `text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
+      `text-[10px] min-h-[36px] sm:min-h-[26px] px-2 sm:px-2.5 py-1 sm:py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
         pulse ? "bg-violet-500/20 text-violet-300 animate-pulse"
         : active ? "bg-gray-600/60 text-gray-200"
         : "text-gray-400 hover:text-gray-300 active:text-gray-200"
@@ -1113,7 +1113,7 @@ function ViewToggle({ card }: { card: Card }) {
     <div className="inline-flex rounded-full border border-gray-600/50 bg-gray-800/60 p-0.5">
       <button
         onClick={() => toggleCardView(card.id, "original")}
-        className={`text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
+        className={`text-[10px] min-h-[36px] sm:min-h-[26px] px-2 sm:px-2.5 py-1 sm:py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
           viewMode === "original"
             ? "bg-gray-600/60 text-gray-200"
             : "text-gray-400 hover:text-gray-300 active:text-gray-200"
@@ -1124,7 +1124,7 @@ function ViewToggle({ card }: { card: Card }) {
       </button>
       <button
         onClick={() => toggleCardView(card.id, "app")}
-        className={`text-[10px] min-h-[26px] px-1.5 sm:px-2.5 py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
+        className={`text-[10px] min-h-[36px] sm:min-h-[26px] px-2 sm:px-2.5 py-1 sm:py-0.5 rounded-full transition-all duration-150 active:scale-[0.95] ${
           isBuilding
             ? "bg-violet-500/20 text-violet-300 border-violet-500/30 animate-pulse"
             : awaitingAutoAppReveal

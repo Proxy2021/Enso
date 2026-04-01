@@ -38,11 +38,12 @@ const MAX_HISTORY = 40; // Keep last N turns per conversation
  * Key is conversationId (per-thread) — NOT sessionKey (per-browser).
  * This ensures switching conversations gives the agent a clean/separate context.
  */
-function getConversationHistory(conversationId: string): ConversationEntry[] {
-  let history = conversationHistories.get(conversationId);
+function getConversationHistory(clientId: string, conversationId: string): ConversationEntry[] {
+  const key = `${clientId}|${conversationId}`;
+  let history = conversationHistories.get(key);
   if (!history) {
     history = [];
-    conversationHistories.set(conversationId, history);
+    conversationHistories.set(key, history);
   }
   return history;
 }
@@ -155,11 +156,11 @@ function cardToEntry(record: CardRecord): ConversationEntry | null {
  * Inject a non-agent card into the conversation's in-memory history.
  * Called from server.ts after persistCard() for cards NOT created by the agent loop.
  */
-export function injectCardContext(conversationId: string, record: CardRecord): void {
+export function injectCardContext(clientId: string, conversationId: string, record: CardRecord): void {
   const entry = cardToEntry(record);
   if (!entry) return;
 
-  const history = getConversationHistory(conversationId);
+  const history = getConversationHistory(clientId, conversationId);
   history.push(entry);
   trimHistory(history);
 }
@@ -173,7 +174,7 @@ function hydrateFromJournal(clientId: string, conversationId: string): number {
     const records = loadCardHistory(clientId, conversationId, 20);
     if (records.length === 0) return 0;
 
-    const history = getConversationHistory(conversationId);
+    const history = getConversationHistory(clientId, conversationId);
     let count = 0;
     for (const record of records) {
       const entry = cardToEntry(record);
@@ -462,7 +463,7 @@ export async function handleStandaloneInbound(params: {
   const clientId = message.clientId;
 
   // Hydrate from journal on cold start (server restart or first message in this conversation)
-  const existingHistory = getConversationHistory(conversationId);
+  const existingHistory = getConversationHistory(clientId, conversationId);
   if (existingHistory.length === 0 && clientId) {
     const hydrated = hydrateFromJournal(clientId, conversationId);
     if (hydrated > 0) {
@@ -585,7 +586,7 @@ export async function handleStandaloneInbound(params: {
   }
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Sending ${functionDeclarations.length} tools to Gemini (filtered from ${allTools.length}, ${skippedTools.length} invalid skipped)`, cardId: stableCardId });
 
-  const history = getConversationHistory(conversationId);
+  const history = getConversationHistory(clientId, conversationId);
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `History for conv=${conversationId.slice(0, 20)}: ${history.length} turns` });
   history.push({ role: "user", parts: [{ text: rawBody }] });
 

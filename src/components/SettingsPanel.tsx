@@ -54,7 +54,7 @@ export default function SettingsPanel() {
       <button
         ref={btnRef}
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium hover:bg-gray-800 transition-all duration-150 text-gray-400"
+        className="flex items-center justify-center gap-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:px-1.5 sm:py-0.5 rounded text-xs font-medium hover:bg-gray-800 transition-all duration-150 text-gray-400"
         title={t("settings.title")}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -1682,6 +1682,7 @@ export async function startEnsoServer(opts: {
         mode: account.mode ?? "full",
         toolFamilies,
         ensoProjectPath,
+        defaultProjectCwd: process.cwd(),
         bootId,
         providers: _getProviderStatus ? _getProviderStatus(account.providerKeys) as any : undefined,
       },
@@ -1738,7 +1739,7 @@ export async function startEnsoServer(opts: {
               persistCard(clientId, convId, record);
               // Inject all card types into agent's in-memory conversation history
               // so follow-up questions have full context (research, tool results, etc.)
-              try { injectCardContext(convId, record); } catch { /* best effort */ }
+              try { injectCardContext(clientId, convId, record); } catch { /* best effort */ }
             };
             // Persist user bubble to card history — but skip tool-routed
             // messages (e.g. claude-code prompts contain system instructions

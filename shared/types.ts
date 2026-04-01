@@ -113,6 +113,7 @@ export interface ServerMessage {
     mode: ChannelMode;
     toolFamilies?: Array<{ toolFamily: string; description: string }>;
     ensoProjectPath?: string;
+    defaultProjectCwd?: string;
     claudeModel?: string;
     claudeThinking?: "adaptive" | "disabled";
     language?: string;
