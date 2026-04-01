@@ -117,7 +117,7 @@ export default function EvolveView() {
       const res = await fetch(`${baseUrl}/api/discovery-results`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setDiscoveries(data.discoveries ?? []);
+        setDiscoveries(data.results ?? []);
       } else {
         setDiscoveryError(`Failed to load discoveries (${res.status})`);
       }

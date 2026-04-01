@@ -22,16 +22,17 @@ import { getMemoryContext, appendDailyMemory, loadCardHistory } from "./memory-b
 import type { CardRecord } from "./memory-bridge.js";
 import { geminiUrl, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
 import { recordToolCall } from "./native-tools/tool-call-store.js";
+import { maybeCompactHistory, forceCompactHistory } from "./conversation-compactor.js";
 
 // ── Conversation history (in-memory, per conversation thread) ──
 
-interface ConversationEntry {
+export interface ConversationEntry {
   role: "user" | "model";
   parts: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown } }>;
 }
 
 const conversationHistories = new Map<string, ConversationEntry[]>();
-const MAX_HISTORY = 40; // Keep last N turns per conversation
+const MAX_HISTORY = 60; // Safety net — compaction handles the normal case at 20 entries
 
 /**
  * Get or create conversation history.
@@ -474,6 +475,43 @@ export async function handleStandaloneInbound(params: {
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Chat [conv=${conversationId.slice(0, 20)}]: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
   setLastUserMessage(rawBody);
 
+  // ── /compact command: force-compact conversation history ──
+  if (rawBody === "/compact") {
+    const compactHistory = getConversationHistory(clientId, conversationId);
+    if (compactHistory.length < 6) {
+      await deliverEnsoReply({
+        payload: { text: "Conversation history is too short to compact (need at least 6 entries)." },
+        client, runId, seq: 0, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, statusSink, conversationId,
+      });
+      return;
+    }
+    if (!account.geminiApiKey) {
+      await deliverEnsoReply({
+        payload: { text: "Compaction requires a Gemini API key." },
+        client, runId, seq: 0, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, statusSink, conversationId,
+      });
+      return;
+    }
+    try {
+      const oldCount = compactHistory.length;
+      const summary = await forceCompactHistory(compactHistory, account.geminiApiKey);
+      await deliverEnsoReply({
+        payload: { text: `Compacted ${oldCount} → ${compactHistory.length} entries. Conversation context preserved.\n\n**Summary:**\n${summary}` },
+        client, runId, seq: 0, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, statusSink, conversationId,
+      });
+    } catch (err) {
+      await deliverEnsoReply({
+        payload: { text: `Compaction failed: ${err instanceof Error ? err.message : String(err)}` },
+        client, runId, seq: 0, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, statusSink, conversationId,
+      });
+    }
+    return;
+  }
+
   const userChatModel = client.chatModel;
   const isGeminiModel = !userChatModel || userChatModel.startsWith("gemini-");
   const providerKeys: Record<string, string> = {
@@ -663,7 +701,13 @@ export async function handleStandaloneInbound(params: {
       break;
     }
 
-    trimHistory(history);
+    // Intelligent compaction: summarize older entries via LLM, fall back to dumb trim
+    try {
+      const compacted = await maybeCompactHistory(history, account.geminiApiKey, `${clientId}|${conversationId}`);
+      if (!compacted) trimHistory(history);
+    } catch {
+      trimHistory(history);
+    }
 
     const combined =
       chatPrefix && finalText.trim()
