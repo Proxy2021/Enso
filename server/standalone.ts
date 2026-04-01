@@ -10,42 +10,8 @@
  * local registry, and uses the configured LLM for the chat agent pipeline.
  */
 
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-// ── Load .env ──
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function loadEnvFile(): void {
-  try {
-    const envPath = resolve(__dirname, ".env");
-    const content = readFileSync(envPath, "utf-8");
-    let loaded = 0;
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIdx = trimmed.indexOf("=");
-      if (eqIdx < 1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const value = trimmed.slice(eqIdx + 1).trim();
-      if (!process.env[key]) {
-        process.env[key] = value;
-        loaded++;
-      }
-    }
-    if (loaded > 0) console.log(`[enso:standalone] Loaded ${loaded} env var(s)`);
-  } catch {
-    // .env not found — rely on system env
-  }
-}
-
-loadEnvFile();
-
-// ── Load API keys from ~/.enso/api-keys.json + migrate from .env ──
-import { loadApiKeys, migrateFromEnvFile } from "./src/api-keys.js";
-migrateFromEnvFile(resolve(__dirname, ".env"));
+// ── Load API keys from ~/.enso/api-keys.json ──
+import { loadApiKeys } from "./src/api-keys.js";
 loadApiKeys();
 
 // ── Imports (after env load so API keys are available) ──
@@ -104,7 +70,7 @@ async function main(): Promise<void> {
 
   if (!account.geminiApiKey) {
     console.warn("[enso:standalone] WARNING: No GEMINI_API_KEY set. Chat will not work without it.");
-    console.warn("[enso:standalone] Set GEMINI_API_KEY in .env or as an environment variable.");
+    console.warn("[enso:standalone] Set it via the Settings UI or in ~/.enso/api-keys.json");
   }
 
   const runtime = {

@@ -256,22 +256,29 @@ export function createSystemTools(): EnsoAgentTool[] {
         },
         required: ["task"],
       },
-      execute: async (_callId, params) => {
+      execute: async (_callId, params, context) => {
         const task = (params as { task: string }).task;
         if (!task?.trim()) {
           return errorResult("Task description is required");
-        }
-
-        const clientId = getActiveClientId();
-        if (!clientId) {
-          return errorResult("No active client — cannot launch session");
         }
 
         // Dynamically import to avoid circular dependencies
         const { getConnectedClient } = await import("./server.js");
         const { runClaudeCode } = await import("./claude-code.js");
 
-        const client = getConnectedClient(clientId);
+        // Prefer context-injected client (from standalone-agent), fall back to global singleton
+        type ClientGetter = () => { id: string; sessionKey: string; ws: unknown; send: (msg: unknown) => void; [k: string]: unknown };
+        let client: ReturnType<typeof getConnectedClient> | undefined;
+        if (context?.getClient) {
+          client = (context.getClient as ClientGetter)() as ReturnType<typeof getConnectedClient>;
+        }
+        if (!client) {
+          const clientId = (context?.clientId as string | undefined) ?? getActiveClientId();
+          if (!clientId) {
+            return errorResult("No active client — cannot launch session");
+          }
+          client = getConnectedClient(clientId);
+        }
         if (!client) {
           return errorResult("Client disconnected");
         }

@@ -22,11 +22,14 @@ describe("timeAgo", () => {
 });
 
 describe("formatDate", () => {
-  it("formats date as short month", () => {
-    const result = formatDate(new Date("2026-03-25").getTime());
-    expect(result).toContain("Mar");
-    expect(result).toContain("25");
+  it("formats date with correct year and day", () => {
+    const date = new Date("2026-03-25");
+    const result = formatDate(date.getTime());
+    // Locale-independent assertions — formatDate uses the system locale
     expect(result).toContain("2026");
+    expect(result).toContain("25");
+    // Verify it returns a non-empty string with the expected date components
+    expect(result.length).toBeGreaterThan(0);
   });
 });
 

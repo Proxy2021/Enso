@@ -90,7 +90,7 @@ export function createActionRouter(deps: {
       if (!account.geminiApiKey && isGeminiModel) {
         client.send({
           id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
-          state: "error", text: "No GEMINI_API_KEY configured. Add it in Settings or server/.env",
+          state: "error", text: "No GEMINI_API_KEY configured. Add it in Settings or ~/.enso/api-keys.json",
           timestamp: Date.now(),
         });
       } else {

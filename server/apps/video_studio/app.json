@@ -522,7 +522,18 @@
           "properties": {
             "scenes": {
               "type": "array",
-              "description": "Array of scene objects from short_video or script_to_scenes. Each needs: prompt, number, title, duration (optional), suggestedRatio or ratio (optional)"
+              "description": "Array of scene objects from short_video or script_to_scenes. Each needs: prompt, number, title, duration (optional), suggestedRatio or ratio (optional)",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "number": { "type": "number", "description": "Scene number" },
+                  "title": { "type": "string", "description": "Scene title" },
+                  "prompt": { "type": "string", "description": "Seedance video generation prompt" },
+                  "duration": { "type": "number", "description": "Duration in seconds" },
+                  "suggestedRatio": { "type": "string", "description": "Aspect ratio for this scene" }
+                },
+                "required": ["prompt"]
+              }
             },
             "ratio": {
               "type": "string",
@@ -617,7 +628,8 @@
           "properties": {
             "image_paths": {
               "type": "array",
-              "description": "Array of absolute file paths to the images to animate. Supports JPG, PNG, WEBP. Order matters — determines narrative sequence. Example: [\"/Users/you/Photos/trip1.jpg\", \"/Users/you/Photos/trip2.jpg\"]"
+              "description": "Array of absolute file paths to the images to animate. Supports JPG, PNG, WEBP. Order matters — determines narrative sequence. Example: [\"/Users/you/Photos/trip1.jpg\", \"/Users/you/Photos/trip2.jpg\"]",
+              "items": { "type": "string" }
             },
             "concept": {
               "type": "string",
@@ -641,7 +653,8 @@
             },
             "image_descriptions": {
               "type": "array",
-              "description": "Optional: brief text descriptions of each photo to help AI create better motion directions. E.g., ['Sunset over Tokyo skyline', 'Ramen shop at night']. Must match image_paths order."
+              "description": "Optional: brief text descriptions of each photo to help AI create better motion directions. E.g., ['Sunset over Tokyo skyline', 'Ramen shop at night']. Must match image_paths order.",
+              "items": { "type": "string" }
             }
           },
           "required": ["image_paths", "concept"]

@@ -28,6 +28,7 @@ export interface ServiceKeyDef {
 const SERVICE_KEYS: ServiceKeyDef[] = [
   { id: "gemini", envVar: "GEMINI_API_KEY", label: "Google Gemini", description: "Chat AI model (powers agent conversations)", setupUrl: "https://aistudio.google.com/apikey" },
   { id: "brave", envVar: "BRAVE_API_KEY", label: "Brave Search", description: "Web search for research tools", setupUrl: "https://brave.com/search/api/" },
+  { id: "accessToken", envVar: "ENSO_ACCESS_TOKEN", label: "Access Token", description: "Server authentication token (auto-generated if empty)", setupUrl: "" },
   { id: "byteplus", envVar: "BYTEPLUS_API_KEY", label: "BytePlus Seedance", description: "AI video generation", setupUrl: "https://console.byteplus.com/" },
   { id: "replicate", envVar: "REPLICATE_API_TOKEN", label: "Replicate", description: "AI image upscaling", setupUrl: "https://replicate.com/account/api-tokens" },
   { id: "removebg", envVar: "REMOVE_BG_API_KEY", label: "Remove.bg", description: "Background removal", setupUrl: "https://www.remove.bg/api" },
@@ -61,7 +62,7 @@ function writeKeysFile(keys: ApiKeysFile): void {
 /**
  * Load all API keys from ~/.enso/api-keys.json into process.env.
  * Called once at startup. Does NOT overwrite keys already in process.env
- * (system env vars and .env take precedence).
+ * (system env vars take precedence).
  */
 export function loadApiKeys(): void {
   const keys = readKeysFile();

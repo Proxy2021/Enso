@@ -1,14 +1,8 @@
-import { readFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import { DEFAULT_ACCOUNT_ID } from "./local-types.js";
 import { ENSO_PORT, ENSO_HOST } from "./config.js";
 import type { CoreConfig, EnsoAccountConfig } from "./types.js";
 import { loadProviderKeys } from "./llm-provider.js";
-
-const PLUGIN_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
-const GEMINI_KEY_FILE = join(PLUGIN_DIR, "gemini.key");
 
 export type ResolvedEnsoAccount = {
   accountId: string;
@@ -39,7 +33,7 @@ export function resolveEnsoAccount(params: {
   const port = section.port ?? ENSO_PORT;
   const host = section.host ?? ENSO_HOST;
   const geminiApiKey =
-    section.geminiApiKey ?? process.env.GEMINI_API_KEY ?? readKeyFile(GEMINI_KEY_FILE) ?? "";
+    section.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "";
 
   const configured = true;
   const mode = section.mode ?? "full";
@@ -70,11 +64,3 @@ export function resolveEnsoAccount(params: {
   };
 }
 
-function readKeyFile(path: string): string | undefined {
-  try {
-    const content = readFileSync(path, "utf-8").trim();
-    return content || undefined;
-  } catch {
-    return undefined;
-  }
-}

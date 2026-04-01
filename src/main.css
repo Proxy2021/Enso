@@ -192,6 +192,18 @@
   .scroll-touch {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* WCAG 2.1 SC 2.5.5 — minimum 44x44px touch target */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .touch-target-inline {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 
 /* Card containment — skip rendering off-screen cards during scroll */

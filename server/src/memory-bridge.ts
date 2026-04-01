@@ -54,6 +54,10 @@ export interface CardRecord {
   appData?: unknown;
   appGeneratedUI?: string;
   appCardMode?: CardModeDetail;
+  // Summary & podcast (persisted so they survive page reload)
+  cardSummary?: { overview: string; keyOutcomes: string[]; narrative: string };
+  cardAudioUrl?: string;
+  cardPodcastScript?: string;
   timestamp: number;
 }
 

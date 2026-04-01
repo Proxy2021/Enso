@@ -2148,6 +2148,11 @@ export const useChatStore = create<CardStore>((set, get) => ({
           appCardMode: rec.appCardMode,
           viewMode: rec.appData ? "app" : "original",
           enhanceStatus: rec.appData ? "ready" : undefined,
+          cardSummary: (rec as any).cardSummary,
+          cardSummaryStatus: (rec as any).cardSummary ? "ready" : undefined,
+          cardAudioUrl: (rec as any).cardAudioUrl,
+          cardPodcastScript: (rec as any).cardPodcastScript,
+          cardPodcastStatus: (rec as any).cardAudioUrl ? "ready" : undefined,
           createdAt: rec.timestamp,
           updatedAt: rec.timestamp,
         };

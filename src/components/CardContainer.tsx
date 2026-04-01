@@ -261,7 +261,7 @@ function BuildSummaryBanner({ summary, onDismiss }: { summary: ToolBuildSummary;
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); onDismiss(); }}
-            className="text-gray-500 hover:text-gray-300 text-xs px-1"
+            className="text-gray-500 hover:text-gray-300 text-xs px-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
             title="Dismiss"
           >
             &times;

@@ -59,7 +59,7 @@ export async function processMediaAI(task: MediaAITask): Promise<MediaAIResult> 
   }
   return {
     success: false,
-    error: `No AI provider available for "${task.operation}". Basic resize is available via sharp. For AI-enhanced processing, configure a cloud AI provider in your server/.env file.`,
+    error: `No AI provider available for "${task.operation}". Basic resize is available via sharp. For AI-enhanced processing, configure a cloud AI provider in Settings or ~/.enso/api-keys.json.`,
   };
 }
 

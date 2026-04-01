@@ -60,6 +60,7 @@ export function getAllLocalToolNames(): string[] {
 export async function executeLocalTool(
   name: string,
   params: Record<string, unknown>,
+  context?: Record<string, unknown>,
 ): Promise<unknown> {
   let tool: EnsoAgentTool | undefined = localTools.get(name);
   // Fall back to dynamic app tools if not in system registry
@@ -70,7 +71,7 @@ export async function executeLocalTool(
   if (!tool) {
     throw new Error(`Tool not found in local registry: ${name}`);
   }
-  const result = await tool.execute("local-" + Date.now(), params);
+  const result = await tool.execute("local-" + Date.now(), params, context);
   // Extract text from the content array
   const textParts = result.content
     .filter((c) => c.type === "text" && c.text)

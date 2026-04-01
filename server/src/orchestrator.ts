@@ -35,6 +35,7 @@ import {
 import type { AppEntry } from "./app-catalog.js";
 import { executeToolDirect } from "./native-tools/registry.js";
 import { registerCardContext } from "./outbound.js";
+import { persistCard } from "./memory-bridge.js";
 import { APP_CATALOG } from "./app-catalog.js";
 import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
@@ -432,6 +433,16 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
         orchestrationProgress: { orchestrationId, eventType: "plan_ready", plan },
       });
 
+      // Persist initial orchestration card to journal
+      try {
+        persistCard(client.id, client.conversationId, {
+          id: bootstrapCardId, runId: orchestrationId, type: "orchestration", role: "assistant",
+          text: plan.goal,
+          data: { orchestrationPlan: plan, orchestrationProgress: { orchestrationId, eventType: "plan_ready", plan } },
+          timestamp: Date.now(),
+        });
+      } catch { /* best effort */ }
+
       handleOrchestrationApprove({ orchestrationId, client, account }).catch((err) => {
         logError("orchestrator", "Fast plan execution failed", err, { orchestrationId });
       });
@@ -523,6 +534,16 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
         plan,
       },
     });
+
+    // Persist initial orchestration card to journal
+    try {
+      persistCard(client.id, client.conversationId, {
+        id: bootstrapCardId, runId: orchestrationId, type: "orchestration", role: "assistant",
+        text: plan.goal,
+        data: { orchestrationPlan: plan, orchestrationProgress: { orchestrationId, eventType: "plan_ready", plan } },
+        timestamp: Date.now(),
+      });
+    } catch { /* best effort */ }
 
     // Auto-execute immediately
     handleOrchestrationApprove({
@@ -929,6 +950,24 @@ export function updateOrchestrationProgress(
     orchestrationProgress: progress,
     timestamp: Date.now(),
   } as ServerMessage);
+
+  // Persist orchestration card to journal on completion so it survives page reload
+  if (isFinal) {
+    try {
+      persistCard(orch.client.id, orch.client.conversationId, {
+        id: orch.bootstrapCardId,
+        runId: orchestrationId,
+        type: "orchestration",
+        role: "assistant",
+        text: `${orch.plan.goal}`,
+        data: {
+          orchestrationPlan: orch.plan,
+          orchestrationProgress: progress,
+        },
+        timestamp: Date.now(),
+      });
+    } catch { /* never break the main flow */ }
+  }
 }
 
 /**

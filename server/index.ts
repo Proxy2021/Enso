@@ -28,45 +28,10 @@ import { createSystemTools } from "./src/system-tools.js";
 import { registerSeedanceTools, createSeedanceTools } from "./src/seedance-tools.js";
 import { registerLocalTool } from "./src/tool-registry-local.js";
 import { APP_CATALOG } from "./src/app-catalog.js";
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { EnsoPluginApi } from "./src/local-types.js";
 
-/**
- * Load .env file from the Enso project root into process.env.
- * Only sets keys that are NOT already present (system env takes precedence).
- */
-function loadEnvFile(): void {
-  try {
-    const pluginDir = dirname(fileURLToPath(import.meta.url));
-    const envPath = resolve(pluginDir, "..", ".env");
-    const content = readFileSync(envPath, "utf-8");
-    let loaded = 0;
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIdx = trimmed.indexOf("=");
-      if (eqIdx < 1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const value = trimmed.slice(eqIdx + 1).trim();
-      if (!process.env[key]) {
-        process.env[key] = value;
-        loaded++;
-      }
-    }
-    if (loaded > 0) console.log(`[enso] Loaded ${loaded} env var(s) from ${envPath}`);
-  } catch {
-    // .env not found — rely on system env
-  }
-}
-
-loadEnvFile();
-
-// Load API keys from ~/.enso/api-keys.json + migrate from server/.env
-import { loadApiKeys, migrateFromEnvFile } from "./src/api-keys.js";
-const pluginDir = dirname(fileURLToPath(import.meta.url));
-migrateFromEnvFile(resolve(pluginDir, "..", ".env"));
+// Load API keys from ~/.enso/api-keys.json
+import { loadApiKeys } from "./src/api-keys.js";
 loadApiKeys();
 
 /** Register tools in the local registry (always) for standalone agent + card actions. */

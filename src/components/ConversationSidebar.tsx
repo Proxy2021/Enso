@@ -124,17 +124,17 @@ export default function ConversationSidebar() {
                   if (c.id !== activeConversationId) selectConversation(c.id);
                   setMobileOpen(false);
                 }}
-                className="w-full text-left px-2.5 py-2.5 sm:py-2 pr-14 text-xs text-gray-200 truncate"
+                className="w-full text-left px-2.5 py-2.5 sm:py-2 pr-14 text-xs text-gray-200 truncate min-h-[44px]"
                 title={c.title}
               >
                 {c.title}
               </button>
             )}
             {editingId !== c.id && (
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
                 <button
                   type="button"
-                  className="p-1.5 sm:p-1 rounded text-gray-500 hover:text-gray-200 hover:bg-gray-800 active:bg-gray-700"
+                  className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded text-gray-500 hover:text-gray-200 hover:bg-gray-800 active:bg-gray-700"
                   title={t("conversations.rename")}
                   onClick={() => beginRename(c)}
                 >
@@ -145,7 +145,7 @@ export default function ConversationSidebar() {
                 </button>
                 <button
                   type="button"
-                  className="p-1.5 sm:p-1 rounded text-gray-500 hover:text-red-300 hover:bg-red-950/40 active:bg-red-950/60"
+                  className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded text-gray-500 hover:text-red-300 hover:bg-red-950/40 active:bg-red-950/60"
                   title={t("conversations.delete")}
                   onClick={() => void deleteConversationById(c.id)}
                 >
@@ -167,7 +167,7 @@ export default function ConversationSidebar() {
           type="button"
           disabled={disabled}
           onClick={() => setAppsOpen((o) => !o)}
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-3 py-2 min-h-[44px] text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-colors cursor-pointer"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -193,7 +193,7 @@ export default function ConversationSidebar() {
                 type="button"
                 disabled={disabled}
                 onClick={() => { runApp(app.toolFamily); setMobileOpen(false); }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-gray-800/60 active:bg-gray-800/80 transition-colors disabled:opacity-40"
+                className="w-full flex items-center gap-2 px-2 py-1.5 min-h-[44px] rounded-md text-left hover:bg-gray-800/60 active:bg-gray-800/80 transition-colors disabled:opacity-40"
                 title={app.description}
               >
                 <AppIcon appId={app.appId} size={20} />

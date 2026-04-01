@@ -2191,6 +2191,16 @@ export async function startEnsoServer(opts: {
                     timestamp: Date.now(),
                   });
 
+                  // Persist summary to card journal so it survives page reload
+                  const sumConvId = resolveConversationId(client, msg);
+                  try {
+                    persistCard(clientId, sumConvId, {
+                      id: sumCardId, runId: "", type: msg.cardType!, role: "assistant",
+                      cardSummary: summary,
+                      timestamp: Date.now(),
+                    });
+                  } catch { /* best effort */ }
+
                   // Automatically follow up with podcast generation
                   send({
                     id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
@@ -2231,6 +2241,17 @@ export async function startEnsoServer(opts: {
                       cardPodcastStatus: "ready",
                       timestamp: Date.now(),
                     });
+
+                    // Persist podcast audio URL to card journal
+                    try {
+                      persistCard(clientId, sumConvId, {
+                        id: sumCardId, runId: "", type: msg.cardType!, role: "assistant",
+                        cardSummary: summary,
+                        cardAudioUrl: result.audioUrl,
+                        cardPodcastScript: result.script,
+                        timestamp: Date.now(),
+                      });
+                    } catch { /* best effort */ }
                   } catch (podErr) {
                     logError("card.summarize", "podcast generation failed", podErr, { cardId: sumCardId });
                     send({

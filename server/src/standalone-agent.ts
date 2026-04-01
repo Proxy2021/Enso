@@ -377,6 +377,43 @@ function toolToFunctionDeclaration(tool: EnsoAgentTool): GeminiFunctionDeclarati
   };
 }
 
+/**
+ * Validate a Gemini function declaration before submission.
+ * Returns null if valid, or an error description if invalid.
+ */
+function validateFunctionDeclaration(decl: GeminiFunctionDeclaration): string | null {
+  try {
+    const params = decl.parameters as Record<string, unknown>;
+    if (!params || typeof params !== "object") return null;
+
+    function checkProperties(obj: Record<string, unknown>, path: string): string | null {
+      const props = obj.properties as Record<string, Record<string, unknown>> | undefined;
+      if (!props) return null;
+      for (const [key, prop] of Object.entries(props)) {
+        if (prop.type === "array" && !prop.items) {
+          return `${path}.${key}: array type missing "items" field`;
+        }
+        if (prop.type === "object" && prop.properties) {
+          const nested = checkProperties(prop as Record<string, unknown>, `${path}.${key}`);
+          if (nested) return nested;
+        }
+        if (prop.type === "array" && prop.items && typeof prop.items === "object") {
+          const itemObj = prop.items as Record<string, unknown>;
+          if (itemObj.type === "object" && itemObj.properties) {
+            const nested = checkProperties(itemObj as Record<string, unknown>, `${path}.${key}.items`);
+            if (nested) return nested;
+          }
+        }
+      }
+      return null;
+    }
+
+    return checkProperties(params, decl.name);
+  } catch {
+    return `${decl.name}: validation threw an exception`;
+  }
+}
+
 // ── Main handler ──
 
 export async function handleStandaloneInbound(params: {
@@ -487,7 +524,7 @@ export async function handleStandaloneInbound(params: {
   // Gemini path: function-calling agent loop
   if (!account.geminiApiKey) {
     await deliverEnsoReply({
-      payload: { text: "No Gemini API key configured. Please set GEMINI_API_KEY in your .env file or select a different chat model in Settings." },
+      payload: { text: "No Gemini API key configured. Set it in Settings or in ~/.enso/api-keys.json." },
       client,
       runId,
       seq: 0,
@@ -527,8 +564,26 @@ export async function handleStandaloneInbound(params: {
     return selected;
   })();
   const systemPrompt = buildSystemPrompt(tools);
-  const functionDeclarations = tools.map(toolToFunctionDeclaration);
-  logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Sending ${functionDeclarations.length} tools to Gemini (filtered from ${allTools.length})`, cardId: stableCardId });
+  const allDeclarations = tools.map(toolToFunctionDeclaration);
+  const functionDeclarations: GeminiFunctionDeclaration[] = [];
+  const skippedTools: string[] = [];
+
+  for (const decl of allDeclarations) {
+    const error = validateFunctionDeclaration(decl);
+    if (error) {
+      skippedTools.push(error);
+      logError("standalone-agent", `Skipping invalid tool schema: ${error}`);
+    } else {
+      functionDeclarations.push(decl);
+    }
+  }
+
+  if (skippedTools.length > 0) {
+    logAction({ ts: Date.now(), type: "action", category: "standalone-agent",
+      message: `Skipped ${skippedTools.length} invalid tool schemas: ${skippedTools.join("; ")}`,
+      cardId: stableCardId });
+  }
+  logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Sending ${functionDeclarations.length} tools to Gemini (filtered from ${allTools.length}, ${skippedTools.length} invalid skipped)`, cardId: stableCardId });
 
   const history = getConversationHistory(conversationId);
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `History for conv=${conversationId.slice(0, 20)}: ${history.length} turns` });
@@ -585,7 +640,7 @@ export async function handleStandaloneInbound(params: {
 
         let toolResult: unknown;
         try {
-          const result = await executeLocalTool(name, args);
+          const result = await executeLocalTool(name, args, { clientId: client.id, getClient: () => client });
           toolResult = result ?? { success: true };
           // Record the tool call so auto-enhance can render the app UI
           recordToolCall({ toolName: name, params: args, result: toolResult, timestamp: Date.now() });
@@ -637,8 +692,10 @@ export async function handleStandaloneInbound(params: {
 
     // Friendly message for common Gemini errors instead of raw API errors
     const errMsg = err instanceof Error ? err.message : String(err);
-    const userFriendly = errMsg.includes("400")
-      ? "I couldn't process that request. Please try rephrasing your message."
+    const userFriendly = errMsg.includes("SAFETY")
+      ? "I can't help with that request due to safety guidelines. Please try a different topic."
+      : errMsg.includes("400") || errMsg.includes("500") || errMsg.includes("503") || errMsg.includes("429")
+      ? "A temporary service error occurred. Please try again in a moment."
       : `An error occurred: ${errMsg}`;
 
     try {

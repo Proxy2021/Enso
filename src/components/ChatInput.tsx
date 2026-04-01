@@ -1,157 +1,15 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useChatStore } from "../store/chat";
-import { useSpeechRecognition } from "../lib/use-speech-recognition";
-import { useVoiceRecorder } from "../lib/use-voice-recorder";
-import { useNativeSpeech } from "../lib/use-native-speech";
 import { VoiceOverlay } from "./VoiceOverlay";
 import { isNative } from "../lib/platform";
 import { isLikelyNaturalLanguage } from "../utils/nlDetection";
 import { useT } from "../lib/i18n";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
-
-/**
- * Tracks visual viewport offset on mobile when the software keyboard opens.
- * Adjusts the input container so it stays above the keyboard instead of
- * being hidden behind it. Falls back gracefully when API is unavailable.
- */
-function useKeyboardOffset() {
-  const [offset, setOffset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    let rafId = 0;
-    const update = () => {
-      if (rafId) return; // already scheduled
-      rafId = requestAnimationFrame(() => {
-        rafId = 0;
-        const diff = window.innerHeight - vv.height - vv.offsetTop;
-        setOffset(Math.max(0, diff));
-      });
-    };
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      cancelAnimationFrame(rafId);
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
-  return offset;
-}
-
-interface SlashCommand {
-  command: string;
-  label: string;
-  descKey: string;
-  icon?: string;
-  category: "build" | "research" | "system" | "history";
-}
-
-const SLASH_COMMANDS: SlashCommand[] = [
-  // Build
-  { command: "/code", label: "/code", descKey: "slash.code", icon: "\uD83D\uDCBB", category: "build" },
-  { command: "/code ", label: "/code <prompt>", descKey: "slash.codePrompt", icon: "\uD83D\uDCBB", category: "build" },
-  { command: "/orchestrate", label: "/orchestrate", descKey: "slash.orchestrate", icon: "\u26A1", category: "build" },
-  { command: "/evolve", label: "/evolve", descKey: "slash.evolve", icon: "\uD83E\uDDEC", category: "build" },
-  // Research
-  { command: "/research ", label: "/research <topic>", descKey: "slash.research", icon: "\uD83D\uDD0D", category: "research" },
-  { command: "/discover", label: "/discover", descKey: "slash.discover", icon: "\uD83D\uDD2C", category: "research" },
-  // System
-  { command: "/projects", label: "/projects", descKey: "slash.projects", icon: "\uD83D\uDCC1", category: "system" },
-  { command: "/shell", label: "/shell", descKey: "slash.shell", icon: "\uD83D\uDDA5\uFE0F", category: "system" },
-  { command: "/tool enso", label: "/tool enso", descKey: "slash.toolEnso", icon: "\uD83D\uDD27", category: "system" },
-  { command: "/delete-apps", label: "/delete-apps", descKey: "slash.deleteApps", icon: "\uD83D\uDDD1\uFE0F", category: "system" },
-  { command: "/help", label: "/help", descKey: "slash.help", icon: "\u2753", category: "system" },
-  // History
-  { command: "/evolution-history", label: "/evolution-history", descKey: "slash.evolutionHistory", icon: "\uD83D\uDCCA", category: "history" },
-  { command: "/discovery-history", label: "/discovery-history", descKey: "slash.discoveryHistory", icon: "\uD83D\uDD0D", category: "history" },
-];
-
-const CATEGORY_LABELS: Record<SlashCommand["category"], string> = {
-  build: "Build",
-  research: "Research",
-  system: "System",
-  history: "History",
-};
-
-const ATTACH_CATEGORIES = [
-  {
-    id: "photos_videos",
-    labelKey: "attach.photosVideos",
-    accept: "image/*,video/*",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <polyline points="21 15 16 10 5 21" />
-      </svg>
-    ),
-  },
-  {
-    id: "documents",
-    labelKey: "attach.documents",
-    accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.zip,.json,.xml,.md",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-      </svg>
-    ),
-  },
-  {
-    id: "audio",
-    labelKey: "attach.audio",
-    accept: "audio/*",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 18V5l12-2v13" />
-        <circle cx="6" cy="18" r="3" />
-        <circle cx="18" cy="16" r="3" />
-      </svg>
-    ),
-  },
-  {
-    id: "camera",
-    labelKey: "attach.camera",
-    accept: "image/*",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-        <circle cx="12" cy="13" r="4" />
-      </svg>
-    ),
-  },
-  {
-    id: "location",
-    labelKey: "attach.location",
-    accept: null,
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-        <circle cx="12" cy="10" r="3" />
-      </svg>
-    ),
-  },
-] as const;
-
-function getFileCategory(file: File): "image" | "video" | "audio" | "document" {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("audio/")) return "audio";
-  return "document";
-}
-
-function getFileExt(file: File): string {
-  const parts = file.name.split(".");
-  return parts.length > 1 ? parts.pop()!.toUpperCase() : "";
-}
-
-/** Trigger haptic feedback (Android/vibrate-capable browsers). Gracefully no-ops on iOS. */
-function haptic(pattern: number | number[] = 50) {
-  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-    navigator.vibrate(pattern);
-  }
-}
+import { useKeyboardOffset } from "./chat/useKeyboardOffset";
+import { SLASH_COMMANDS, CATEGORY_LABELS, type SlashCommand } from "./chat/slash-commands";
+import { ATTACH_CATEGORIES } from "./chat/attach-categories";
+import { getFileCategory, getFileExt, haptic } from "./chat/chat-utils";
+import { usePushToTalk } from "./chat/usePushToTalk";
 
 export default function ChatInput() {
   const [text, setText] = useState("");
@@ -230,164 +88,15 @@ export default function ChatInput() {
     return () => clearTimeout(timer);
   }, [nlInterceptionToast]);
 
-  // Doubao-style input mode toggle (mobile only)
-  const [inputMode, setInputMode] = useState<"text" | "voice">("text");
-
-  // Push-to-talk state
-  const [pttActive, setPttActive] = useState(false);
-  const [pttCancelZone, setPttCancelZone] = useState(false);
-  const [pttStartTime, setPttStartTime] = useState(0);
-  const pttAccumulatedRef = useRef("");
-  // State mirror of pttAccumulatedRef for render-safe display text.
-  // The ref remains the source of truth for the send-on-release path,
-  // but this state ensures pttDisplayText re-renders correctly.
-  const [pttAccumulatedText, setPttAccumulatedText] = useState("");
-  const pttStartYRef = useRef(0);
-  const pttActiveRef = useRef(false);
-  const pttCancelRef = useRef(false);
-
-  // Speech-to-text hooks — PTT transcript accumulates in ref, not textarea
-  const handlePttTranscript = useCallback((transcript: string) => {
-    const sep = pttAccumulatedRef.current.length > 0 && !pttAccumulatedRef.current.endsWith(" ") ? " " : "";
-    pttAccumulatedRef.current += sep + transcript;
-    setPttAccumulatedText(pttAccumulatedRef.current);
-  }, []);
-  const speech = useSpeechRecognition(handlePttTranscript);
-  const recorder = useVoiceRecorder(handlePttTranscript);
-  const nativeSpeech = useNativeSpeech(handlePttTranscript);
-
-  const isFallbackRecorder = isNative && !nativeSpeech.isSupported;
-  const voice = isNative
-    ? (nativeSpeech.isSupported ? nativeSpeech : recorder)
-    : speech;
-  const speechSupported = voice.isSupported !== undefined ? voice.isSupported : false;
-
-  // Display text derived from state (not ref) — re-renders correctly when transcript updates.
-  // pttAccumulatedRef.current remains the authoritative value for the send path.
-  const pttDisplayText = pttActive
-    ? ((pttAccumulatedText || "") + (voice.interimTranscript ? (pttAccumulatedText ? " " : "") + voice.interimTranscript : ""))
-    : "";
-
-  const CANCEL_THRESHOLD_PX = 100;
-
-  // Long-press detection for Doubao-style unified input (mobile only)
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressTouchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [textareaPttFlash, setTextareaPttFlash] = useState(false);
-
-  const handleTextareaTouchStart = useCallback((e: React.TouchEvent) => {
-    if (disabled || !speechSupported) return;
-    const touch = e.touches[0];
-    longPressTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    pttStartYRef.current = touch.clientY;
-
-    longPressTimerRef.current = setTimeout(() => {
-      longPressTimerRef.current = null;
-      textareaRef.current?.blur();
-      // Clear any text selection the browser may have started during the hold
-      window.getSelection()?.removeAllRanges();
-      pttAccumulatedRef.current = "";
-      setPttAccumulatedText("");
-      pttActiveRef.current = true;
-      pttCancelRef.current = false;
-      setPttActive(true);
-      setPttCancelZone(false);
-      setPttStartTime(Date.now());
-      setTextareaPttFlash(true);
-      haptic(30);
-      voice.startListening();
-      setTimeout(() => setTextareaPttFlash(false), 400);
-    }, 300);
-  }, [disabled, speechSupported, voice]);
-
-  const handleTextareaTouchMove = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    const start = longPressTouchStartRef.current;
-    if (start && longPressTimerRef.current) {
-      const dx = touch.clientX - start.x;
-      const dy = touch.clientY - start.y;
-      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-        clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-    }
-    if (pttActiveRef.current) {
-      const dy = pttStartYRef.current - touch.clientY;
-      const inCancel = dy > CANCEL_THRESHOLD_PX;
-      if (inCancel !== pttCancelRef.current) {
-        pttCancelRef.current = inCancel;
-        setPttCancelZone(inCancel);
-        haptic(10);
-      }
-    }
-  }, []);
-
-  const handleTextareaTouchEnd = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    if (!pttActiveRef.current) return;
-    pttActiveRef.current = false;
-    const wasCancelled = pttCancelRef.current;
-    // Capture transcript BEFORE any stop/cancel clears it asynchronously
-    const capturedInterim = voice.interimTranscript || "";
-    const capturedAccum = pttAccumulatedRef.current || "";
-    setPttActive(false);
-    setPttCancelZone(false);
-    if (wasCancelled) {
-      voice.cancelListening();
-      haptic([30, 50, 30]);
-    } else {
-      // stopListening (not cancel) lets the recognizer finalize cleanly,
-      // resetting isListening via the finalResult/onend event.
-      voice.stopListening();
-      haptic(15);
-      const sep = capturedAccum && capturedInterim ? " " : "";
-      const finalText = (capturedAccum + sep + capturedInterim).trim();
-      if (finalText) {
-        sendMessage(finalText);
-      }
-    }
-    pttAccumulatedRef.current = "";
-    setPttAccumulatedText("");
-  }, [voice, sendMessage]);
-
-  // touchcancel fires when the OS steals the touch (e.g. native context
-  // menu / copy modal on long press). Treat it as a cancel so PTT doesn't
-  // get stuck with the timer counting indefinitely.
-  const handleTextareaTouchCancel = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    if (!pttActiveRef.current) return;
-    pttActiveRef.current = false;
-    setPttActive(false);
-    setPttCancelZone(false);
-    voice.cancelListening();
-    pttAccumulatedRef.current = "";
-    setPttAccumulatedText("");
-  }, [voice]);
-
-  // Suppress the native context menu on the textarea while PTT is active.
-  // Without this, holding the textarea for ~600ms triggers the OS copy/paste
-  // popup which steals touch events and leaves PTT stuck.
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const suppress = (e: Event) => {
-      if (pttActiveRef.current) e.preventDefault();
-    };
-    el.addEventListener("contextmenu", suppress);
-    return () => el.removeEventListener("contextmenu", suppress);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    };
-  }, []);
+  // Push-to-talk + voice input (extracted to chat/usePushToTalk.ts)
+  const {
+    pttActive, pttCancelZone, pttStartTime, pttDisplayText, textareaPttFlash,
+    inputMode, setInputMode,
+    voice, speechSupported, isFallbackRecorder, recorder,
+    pttAccumulatedRef, pttStartYRef, pttActiveRef, pttCancelRef,
+    setPttActive, setPttCancelZone, setPttStartTime, setPttAccumulatedText,
+    handleTextareaTouchStart, handleTextareaTouchMove, handleTextareaTouchEnd, handleTextareaTouchCancel,
+  } = usePushToTalk({ disabled, sendMessage, textareaRef });
 
   // Close attach menu on click/touch outside
   useEffect(() => {
@@ -1124,7 +833,7 @@ export default function ChatInput() {
               onPointerMove: (e: React.PointerEvent) => {
                 if (!pttActiveRef.current) return;
                 const dy = pttStartYRef.current - e.clientY;
-                const inCancel = dy > CANCEL_THRESHOLD_PX;
+                const inCancel = dy > 100;
                 if (inCancel !== pttCancelRef.current) {
                   pttCancelRef.current = inCancel;
                   setPttCancelZone(inCancel);

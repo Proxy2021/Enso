@@ -16,6 +16,7 @@ export interface EnsoAgentTool {
   execute: (
     callId: string,
     params: Record<string, unknown>,
+    context?: Record<string, unknown>,
   ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }
 

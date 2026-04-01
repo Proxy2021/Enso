@@ -9,7 +9,7 @@
     "tools": [
       {
         "suffix": "import_photos",
-        "description": "Browse the filesystem to find and select photos. Use when the user says: 'open photo studio', 'browse photos for editing', 'import my photos', 'find photos to style'. Shows directories and image files with thumbnails. Navigate into folders to find your photos.",
+        "description": "Import photos into the Photo Studio for AI style processing and editing. Use ONLY when the user wants to apply artistic styles, edit photos, or process images — NOT for browsing or viewing their photo gallery. Trigger phrases: 'open photo studio', 'style my photos', 'edit this photo', 'apply a film look'. Do NOT use for: 'show my photos', 'browse my gallery', 'view my pictures' (use media_gallery browse instead).",
         "parameters": {
           "type": "object",
           "additionalProperties": false,

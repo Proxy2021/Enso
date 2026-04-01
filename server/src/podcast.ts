@@ -29,18 +29,7 @@ export async function getGeminiApiKey(): Promise<string | undefined> {
     if (fromAccount) return fromAccount;
   } catch { /* server not ready yet */ }
 
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
-
-  try {
-    const { readFileSync } = await import("node:fs");
-    const { join, dirname } = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
-    const keyPath = join(dirname(fileURLToPath(import.meta.url)), "..", "gemini.key");
-    const key = readFileSync(keyPath, "utf-8").trim();
-    if (key) return key;
-  } catch { /* path resolution failed */ }
-
-  return undefined;
+  return process.env.GEMINI_API_KEY ?? undefined;
 }
 
 // ── Script Generation (any LLM provider) ──

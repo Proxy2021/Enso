@@ -239,7 +239,7 @@ export function createSeedanceTools(): EnsoAgentTool[] {
         const apiKey = getApiKey();
         if (!apiKey) {
           return errorResult(
-            "BYTEPLUS_API_KEY is not configured. Set it in your .env file to use Seedance video generation.\n" +
+            "BYTEPLUS_API_KEY is not configured. Set it in Settings or ~/.enso/api-keys.json to use Seedance video generation.\n" +
               "Get an API key at: https://console.byteplus.com/",
           );
         }
@@ -371,7 +371,7 @@ export function createSeedanceTools(): EnsoAgentTool[] {
         const apiKey = getApiKey();
         if (!apiKey) {
           return errorResult(
-            "BYTEPLUS_API_KEY is not configured. Set it in your .env file to use Seedance video generation.\n" +
+            "BYTEPLUS_API_KEY is not configured. Set it in Settings or ~/.enso/api-keys.json to use Seedance video generation.\n" +
               "Get an API key at: https://console.byteplus.com/",
           );
         }
