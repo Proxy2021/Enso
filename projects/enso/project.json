@@ -326,12 +326,13 @@
   ],
   "validationPersonaIds": [
     "creative-professional",
-    "indie-developer",
-    "developer"
+    "developer",
+    "indie-developer"
   ],
   "sprintNotes": {
     "16": "DEBT-RECOVERY sprint — SCORE: 7.0/10. 7/8 P0 items shipped. Fixed: Video Studio schema bomb (P0-EMERGENCY), error messages (P0-A), graceful degradation (P0-B), Photo Studio misrouting (P0-1), touch targets worst offenders (P0-2), ChatInput Phase 1 1205→914 LOC (P0-3), /code client connection (P0-4). Deferred: P0-5 project selector. Process win: assignment matrix gate eliminated orphan P0s. Pre-fix persona scores: Marco 1.5, Priya 2.6, Jordan 4.0 (worst ever, caused by schema regression).",
-    "17": "VALIDATION + IMPROVEMENT sprint — SCORE: 7.5/10. 7/7 planned items + bonus E7 delivered. Fixed: cross-session contamination (7 LOC), project selector auto-context, ChatInput Phase 2 (914→525 LOC, 6 components). Added: schema-validation.test.ts (245 tests), error-classification.test.ts (34 tests). Created: server.ts decomposition design doc. Touch targets completed (responsive 44px). Persona scores: Marco 2.5 (contamination blocked), Priya 6.2 (+3.6 VALIDATED), Jordan 4.5 (silent failure), Alex 6.8 (new baseline). Avg 5.0 (up from 2.7)."
+    "17": "VALIDATION + IMPROVEMENT sprint — SCORE: 7.5/10. 7/7 planned items + bonus E7 delivered. Fixed: cross-session contamination (7 LOC), project selector auto-context, ChatInput Phase 2 (914→525 LOC, 6 components). Added: schema-validation.test.ts (245 tests), error-classification.test.ts (34 tests). Created: server.ts decomposition design doc. Touch targets completed (responsive 44px). Persona scores: Marco 2.5 (contamination blocked), Priya 6.2 (+3.6 VALIDATED), Jordan 4.5 (silent failure), Alex 6.8 (new baseline). Avg 5.0 (up from 2.7).",
+    "18": "DEBT-RECOVERY sprint — IN PROGRESS. Priorities: P0-1 server.ts decomposition (3,314→~500 LOC, 5 modules), P0-2 Marco MANDATORY retest (3 sprints unvalidated), P0-3 silent failure UX (loading+timeout). Core agents only: Architect, Engineering Manager, Test Manager. Personas: Marco (mandatory), Jordan (silent failure), Priya (baseline)."
   },
   "createdAt": 1773909300324,
   "updatedAt": 1743552000000
