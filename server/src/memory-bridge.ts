@@ -905,6 +905,22 @@ export function getMemoryContext(): string {
 }
 
 /**
+ * Returns only the user profile context (no cross-conversation memory).
+ * Use this in system prompts for chat agents to avoid context contamination
+ * where the LLM hallucinates prior interactions based on memory from other conversations.
+ * Cross-conversation memory should only be accessed on-demand via memory search tools.
+ */
+export function getUserProfileContext(): string {
+  const { user } = readEnsoMemory();
+  if (!user) return "";
+
+  const trimmed = user.length > MAX_USER_CHARS
+    ? user.slice(0, MAX_USER_CHARS) + "\n... (truncated)"
+    : user;
+  return `<user_profile>\n${trimmed}\n</user_profile>`;
+}
+
+/**
  * Find a card record by id, preferring the active conversation then scanning other threads.
  */
 export function findCardRecordForClient(

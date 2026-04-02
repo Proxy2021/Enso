@@ -823,12 +823,35 @@ export const useChatStore = create<CardStore>((set, get) => ({
       isWaiting: true,
       chatViewOpen: true,
     }));
-    get()._wsClient?.send({
-      type: "chat.send",
-      conversationId: get().activeConversationId,
-      text: displayText,
-      routing: finalRouting,
-    });
+    const ws = get()._wsClient;
+    if (ws) {
+      ws.send({
+        type: "chat.send",
+        conversationId: get().activeConversationId,
+        text: displayText,
+        routing: finalRouting,
+      });
+    } else {
+      // WebSocket disconnected — show error so user knows message wasn't sent
+      const errorId = uuidv4();
+      const errorCard: Card = {
+        id: errorId,
+        runId: errorId,
+        type: "text",
+        role: "assistant",
+        display: "expanded",
+        text: "Message could not be sent — connection lost. Please wait for reconnection or refresh the page.",
+        status: "error",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      set((s) => ({
+        cardOrder: [...s.cardOrder, errorCard.id],
+        cards: { ...s.cards, [errorCard.id]: errorCard },
+        _thinkingCardId: null,
+        isWaiting: false,
+      }));
+    }
   },
 
   sendMessageWithMedia: async (text: string, mediaFiles: File[], intent?: "image_research" | "image_search") => {

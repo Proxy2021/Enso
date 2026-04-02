@@ -543,8 +543,35 @@ export async function startEnsoServer(opts: {
     }
   }
 
+  // ── Simple IP-based rate limiter (no external package — safety rules block npm install) ──
+  const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+  const RATE_WINDOW_MS = 60_000;
+  const RATE_LIMIT = 60;
+  function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+    let entry = rateLimitMap.get(ip);
+    if (!entry || now > entry.resetAt) {
+      entry = { count: 0, resetAt: now + RATE_WINDOW_MS };
+      rateLimitMap.set(ip, entry);
+    }
+    entry.count++;
+    if (entry.count > RATE_LIMIT) {
+      res.status(429).json({ error: "Too many requests" });
+      return;
+    }
+    next();
+  }
+  // Periodic cleanup to prevent memory growth
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of rateLimitMap) {
+      if (now > entry.resetAt) rateLimitMap.delete(ip);
+    }
+  }, 5 * 60_000).unref();
+
   // ── Client-side WS debug log (unauthenticated — must work even when auth fails) ──
-  app.post("/api/ws-debug", express.json(), (req, res) => {
+  app.post("/api/ws-debug", rateLimit, express.json(), (req, res) => {
     const entries: Array<{ event: string; ts: number; detail?: string }> = req.body?.entries;
     if (Array.isArray(entries)) {
       for (const e of entries) {
@@ -556,7 +583,7 @@ export async function startEnsoServer(opts: {
 
   // ── Health endpoint (unauthenticated — used for connection testing) ──
   const accessToken = account.accessToken;
-  app.get("/health", (_req, res) => {
+  app.get("/health", rateLimit, (_req, res) => {
     const pkg = readPkgVersion();
     const shm = opts.selfHealMetrics?.();
     const mem = process.memoryUsage();
@@ -591,7 +618,7 @@ export async function startEnsoServer(opts: {
   });
 
   // ── App version endpoint (unauthenticated — for Android upgrade checks) ──
-  app.get("/api/version", (_req, res) => {
+  app.get("/api/version", rateLimit, (_req, res) => {
     const pkg = readPkgVersion();
     const apkExists = existsSync(apkPath);
     // Only offer the APK for upgrade when we can verify the version from build
@@ -871,7 +898,20 @@ export async function startEnsoServer(opts: {
   app.use(createActionRouter({ account, config, runtime }));
 
   // ── Share token endpoint — returns access token for embedding in live exports ──
-  app.get("/api/share-token", (_req, res) => {
+  // Defense-in-depth: explicit guard beyond the global auth middleware, since this
+  // endpoint returns the actual access token and the global middleware allows
+  // same-origin bypass (sec-fetch-site can be forged via curl).
+  app.get("/api/share-token", (req, res) => {
+    if (accessToken) {
+      const origin = req.headers.origin ?? "";
+      const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`;
+      const hasToken = req.headers.authorization?.replace("Bearer ", "") === accessToken
+        || req.query.token === accessToken;
+      if (!isSameOrigin && !hasToken) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+    }
     res.json({ token: accessToken || "" });
   });
 
@@ -3047,7 +3087,9 @@ export async function startEnsoServer(opts: {
               break;
             }
             const shellTargetCardId = msg.sourceCardId ?? randomUUID();
-            const shellCwd = msg.routing?.cwd ?? projectRoot ?? process.cwd();
+            const shellCwd = msg.routing?.cwd
+              ?? (existsSync(join(projectRoot, "package.json")) ? projectRoot : null)
+              ?? process.cwd();
             const shellSessionId = shellPty.createShellSession({
               client,
               targetCardId: shellTargetCardId,

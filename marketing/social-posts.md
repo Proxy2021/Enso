@@ -14,7 +14,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 > Type /evolve → an AI team improves your entire installation.
 > Self-hosted. Open source. MIT license.
 >
-> ⭐ github.com/Proxy2021/Enso
+> ⭐ github.com/Proxy2021/Enso?utm_source=twitter&utm_campaign=launch
 
 **Full version:**
 
@@ -26,7 +26,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 >
 > Self-hosted. Open source. MIT license. You own everything.
 >
-> 🔗 github.com/Proxy2021/Enso
+> 🔗 github.com/Proxy2021/Enso?utm_source=twitter&utm_campaign=launch
 
 ---
 
@@ -38,7 +38,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 >
 > That's /evolve in Enso. It's open source and self-hosted.
 >
-> 🧬 github.com/Proxy2021/Enso
+> 🧬 github.com/Proxy2021/Enso?utm_source=twitter&utm_campaign=launch
 
 ---
 
@@ -56,7 +56,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 >
 > This is what "every answer is an app" means.
 >
-> github.com/Proxy2021/Enso
+> github.com/Proxy2021/Enso?utm_source=twitter&utm_campaign=launch
 
 ---
 
@@ -78,7 +78,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 >
 > It's free, it's open source, and it's ready to try.
 >
-> 🔗 github.com/Proxy2021/Enso
+> 🔗 github.com/Proxy2021/Enso?utm_source=linkedin&utm_campaign=launch
 >
 > #opensource #ai #developertools #selfhosted
 
@@ -108,7 +108,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 >
 > Would love feedback on the architecture and UX decisions.
 >
-> GitHub: https://github.com/Proxy2021/Enso
+> GitHub: https://github.com/Proxy2021/Enso?utm_source=hackernews&utm_campaign=launch
 
 ---
 
@@ -132,7 +132,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 >
 > **Requirements:** Node.js 18+, API key for at least one LLM provider
 >
-> GitHub: https://github.com/Proxy2021/Enso
+> GitHub: https://github.com/Proxy2021/Enso?utm_source=reddit&utm_campaign=launch
 
 ---
 
@@ -152,7 +152,7 @@ Ready-to-use posts for launch. Customize links and handles before posting.
 >
 > Would love to hear what you think.
 >
-> GitHub: https://github.com/Proxy2021/Enso
+> GitHub: https://github.com/Proxy2021/Enso?utm_source=reddit&utm_campaign=launch
 
 ---
 

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://proxy2021.github.io/Enso/sitemap.xml

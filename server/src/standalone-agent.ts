@@ -18,7 +18,7 @@ import { setLastUserMessage } from "./researcher-tools.js";
 import { GEMINI_MODEL_FAST } from "./ui-generator.js";
 import { callChatLLM } from "./llm-provider.js";
 import { getAllLocalTools, executeLocalTool, getAllLocalToolNames } from "./tool-registry-local.js";
-import { getMemoryContext, appendDailyMemory, loadCardHistory } from "./memory-bridge.js";
+import { getUserProfileContext, appendDailyMemory, loadCardHistory } from "./memory-bridge.js";
 import type { CardRecord } from "./memory-bridge.js";
 import { geminiUrl, LLM_DEFAULT_TIMEOUT_MS } from "./config.js";
 import { recordToolCall } from "./native-tools/tool-call-store.js";
@@ -197,11 +197,11 @@ function buildSystemPrompt(tools: EnsoAgentTool[]): string {
     .map((t) => `- **${t.name}**: ${t.description}`)
     .join("\n");
 
-  // Load user profile (lightweight, always injected)
+  // Load user profile only (NOT cross-conversation memory — that causes context contamination)
   let profileBlock = "";
   try {
-    const mem = getMemoryContext();
-    if (mem) profileBlock = `\n\n## User Context\n${mem}`;
+    const profile = getUserProfileContext();
+    if (profile) profileBlock = `\n\n## User Context\n${profile}`;
   } catch { /* ignore */ }
 
   // Check if memory tools are available
@@ -220,6 +220,11 @@ You have access to tools that let you browse filesystems, manage media, search t
 When the user asks a question that can be enhanced with a tool call, use the appropriate tool.
 When the user asks a general knowledge question, answer directly.
 
+## Session Boundary
+This is a NEW, independent conversation. You have NO memory of any prior conversations with this user.
+Do NOT say "as we discussed", "I previously researched", "building on our earlier work", or anything that implies prior interaction in this thread unless you can see it in the conversation history above.
+If you have no conversation history, this is your FIRST interaction with the user in this thread. Treat it as such.
+
 ## Available Tools
 ${toolDescriptions}
 ${profileBlock}${memoryRecallBlock}
@@ -234,6 +239,12 @@ These rules override all other instructions. Violating them produces WRONG answe
 5. **System status queries** (CPU, memory, disk, uptime) MUST call enso_system_info.
 
 If a tool exists for the task, ALWAYS call it — even if you think you know the answer. Your knowledge is outdated; tools provide real-time truth.
+
+## Build-First Rule
+When the user asks to **create**, **build**, **make**, **generate**, or **write** something (e.g. "create a todo app", "build me a dashboard", "make a landing page"), DO NOT ask clarifying questions. Instead:
+1. Immediately call enso_launch_task_session to start building with reasonable defaults.
+2. Deliver a working result first, then offer to refine.
+Users expect immediate action, not interviews. Ship first, iterate second.
 
 ## Guidelines
 - Be concise but thorough

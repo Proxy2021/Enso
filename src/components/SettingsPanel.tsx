@@ -4,6 +4,7 @@ import { useChatStore } from "../store/chat";
 import { useT, SUPPORTED_LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
 import { useMemoryApi } from "../hooks/useMemoryApi";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { useTheme } from "../lib/theme";
 
 // ── Claude Code Presets ─────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ function findPreset(model: string, thinking: string): ModelPreset {
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
-type SettingsTab = "language" | "chatModel" | "claudeCode" | "memory" | "apiKeys";
+type SettingsTab = "appearance" | "chatModel" | "claudeCode" | "memory" | "apiKeys";
 
 // ── Memory sub-tabs ─────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export default function SettingsPanel() {
                 { id: "claudeCode" as const, label: t("settings.claudeCodeModel") },
                 { id: "apiKeys" as const, label: t("settings.apiKeys") },
                 { id: "memory" as const, label: t("settings.memory") },
-                { id: "language" as const, label: t("settings.language") },
+                { id: "appearance" as const, label: t("settings.language") },
               ]).map((tab) => (
                 <button
                   key={tab.id}
@@ -108,7 +109,7 @@ export default function SettingsPanel() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              {activeTab === "language" && <LanguageSection />}
+              {activeTab === "appearance" && <AppearanceSection />}
               {activeTab === "chatModel" && <ChatModelSection onClose={() => setOpen(false)} />}
               {activeTab === "claudeCode" && <ClaudeCodeSection onClose={() => setOpen(false)} />}
               {activeTab === "apiKeys" && <ServiceKeysSection />}
@@ -122,30 +123,66 @@ export default function SettingsPanel() {
   );
 }
 
-// ── Language Section ─────────────────────────────────────────────────────────
+// ── Appearance Section ───────────────────────────────────────────────────────
 
-function LanguageSection() {
+function AppearanceSection() {
   const language = useChatStore((s) => s.language);
   const setLanguage = useChatStore((s) => s.setLanguage);
+  const { theme, toggleTheme } = useTheme();
   const { t } = useT();
 
   return (
-    <div>
-      <p className="text-xs text-gray-500 mb-3">{t("settings.languageHint")}</p>
-      <div className="flex gap-2">
-        {SUPPORTED_LOCALES.map((loc: Locale) => (
+    <div className="space-y-5">
+      {/* Dark mode toggle */}
+      <div>
+        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800/50 rounded-lg border border-gray-700/50">
+          <div className="flex items-center gap-2.5">
+            {theme === "dark" ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400">
+                <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            )}
+            <div>
+              <p className="text-xs font-medium text-gray-200">{theme === "dark" ? "Dark mode" : "Light mode"}</p>
+            </div>
+          </div>
           <button
-            key={loc}
-            onClick={() => setLanguage(loc)}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-              language === loc
-                ? "bg-indigo-500/20 border border-indigo-500/50 text-indigo-300"
-                : "bg-gray-800/60 border border-gray-700 text-gray-400 hover:bg-gray-700/60"
+            onClick={toggleTheme}
+            className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
+              theme === "dark" ? "bg-indigo-500" : "bg-gray-300"
             }`}
           >
-            {LOCALE_LABELS[loc]}
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                theme === "dark" ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
           </button>
-        ))}
+        </div>
+      </div>
+
+      {/* Language */}
+      <div>
+        <p className="text-xs text-gray-500 mb-3">{t("settings.languageHint")}</p>
+        <div className="flex gap-2">
+          {SUPPORTED_LOCALES.map((loc: Locale) => (
+            <button
+              key={loc}
+              onClick={() => setLanguage(loc)}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                language === loc
+                  ? "bg-indigo-500/20 border border-indigo-500/50 text-indigo-300"
+                  : "bg-gray-800/60 border border-gray-700 text-gray-400 hover:bg-gray-700/60"
+              }`}
+            >
+              {LOCALE_LABELS[loc]}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
