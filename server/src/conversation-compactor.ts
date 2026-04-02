@@ -25,7 +25,7 @@ const PRESERVE_RECENT = 8;
 const MIN_ENTRIES_TO_SUMMARIZE = 6;
 
 /** Skip compaction if estimated tokens are below this (short conversations). */
-const MIN_TOKEN_ESTIMATE = 3000;
+const MIN_TOKEN_ESTIMATE = 2000;
 
 // ── Concurrency guard ──────────────────────────────────────────────────────
 

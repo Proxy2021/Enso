@@ -39,7 +39,7 @@ const MAX_HISTORY = 60; // Safety net — compaction handles the normal case at 
  * Key is conversationId (per-thread) — NOT sessionKey (per-browser).
  * This ensures switching conversations gives the agent a clean/separate context.
  */
-function getConversationHistory(clientId: string, conversationId: string): ConversationEntry[] {
+export function getConversationHistory(clientId: string, conversationId: string): ConversationEntry[] {
   const key = `${clientId}|${conversationId}`;
   let history = conversationHistories.get(key);
   if (!history) {

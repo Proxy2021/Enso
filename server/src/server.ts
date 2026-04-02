@@ -1855,6 +1855,30 @@ export async function startEnsoServer(opts: {
                   routing: msg.routing,
                 });
               }
+            } else if (msg.text?.trim() === "/compact" && account.geminiApiKey && !msg.routing) {
+              // /compact command — force-compact conversation history
+              const { forceCompactHistory } = await import("./conversation-compactor.js");
+              const { getConversationHistory } = await import("./standalone-agent.js");
+              const compactHistory = getConversationHistory(connectionId, convId);
+              const compactRunId = randomUUID();
+              const compactCardId = randomUUID();
+              if (compactHistory.length < 6) {
+                send({ id: randomUUID(), runId: compactRunId, sessionKey, seq: 0, state: "final",
+                  text: "Conversation history is too short to compact (need at least 6 entries).",
+                  conversationId: convId, timestamp: Date.now() });
+              } else {
+                try {
+                  const oldCount = compactHistory.length;
+                  const summary = await forceCompactHistory(compactHistory, account.geminiApiKey);
+                  send({ id: randomUUID(), runId: compactRunId, sessionKey, seq: 0, state: "final",
+                    text: `✅ Compacted ${oldCount} → ${compactHistory.length} entries. Context preserved.\n\n**Summary:**\n${summary}`,
+                    conversationId: convId, timestamp: Date.now() });
+                } catch (compactErr: any) {
+                  send({ id: randomUUID(), runId: compactRunId, sessionKey, seq: 0, state: "final",
+                    text: `Compaction failed: ${compactErr?.message || compactErr}`,
+                    conversationId: convId, timestamp: Date.now() });
+                }
+              }
             } else if (msg.text && account.geminiApiKey && !msg.routing && account.mode !== "im") {
               // Smart task routing — auto-classify message complexity
               const processingRunId = randomUUID();
