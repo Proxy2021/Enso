@@ -182,6 +182,7 @@ export function compileComponent(jsxCode: string): CompileResult | CompileError 
       filteredRecharts ? `const { ${filteredRecharts} } = Recharts;` : "",
       filteredEnsoUI ? `const { ${filteredEnsoUI} } = EnsoUI;` : "",
       !templateNames.has("Icons") ? "const Icons = LucideReact;" : "",
+      !templateNames.has("LucideIcons") ? "const LucideIcons = LucideReact;" : "",
       lucideDestructure ? `const { ${lucideDestructure} } = LucideReact;` : "",
     ].filter(Boolean).join("\n");
 
