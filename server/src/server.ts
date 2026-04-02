@@ -292,6 +292,15 @@ async function routeToResearch(params: {
     runtime,
   }).catch((err) => {
     logError("task-router", "Research action failed", err, { topic });
+    send({
+      id: cardId,
+      runId: randomUUID(),
+      sessionKey,
+      seq: 0,
+      state: "error",
+      text: "Research failed — please try again.",
+      timestamp: Date.now(),
+    });
   });
 }
 

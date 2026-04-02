@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#030712"/>
+
+  <!-- Subtle gradient overlay -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1b4b" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#030712" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#g)"/>
+
+  <!-- Brand name -->
+  <text x="600" y="220" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="96" font-weight="700" fill="#e5e7eb">
+    Enso
+  </text>
+
+  <!-- Tagline -->
+  <text x="600" y="290" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="36" fill="#9ca3af">
+    An AI sandbox that ships
+  </text>
+
+  <!-- Divider -->
+  <line x1="400" y1="330" x2="800" y2="330" stroke="#374151" stroke-width="1"/>
+
+  <!-- Three pillars -->
+  <text x="250" y="400" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="22" font-weight="600" fill="#818cf8">
+    Own the Factory
+  </text>
+  <text x="250" y="430" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="16" fill="#6b7280">
+    Self-hosted · Open source
+  </text>
+
+  <text x="600" y="400" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="22" font-weight="600" fill="#818cf8">
+    Every Answer Is an App
+  </text>
+  <text x="600" y="430" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="16" fill="#6b7280">
+    Interactive · Not text walls
+  </text>
+
+  <text x="950" y="400" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="22" font-weight="600" fill="#818cf8">
+    AI That Evolves Itself
+  </text>
+  <text x="950" y="430" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="16" fill="#6b7280">
+    Sprint score: 4.5 → 7.5
+  </text>
+
+  <!-- Footer -->
+  <text x="600" y="560" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="18" fill="#4b5563">
+    Open Source · MIT License · enso.sh
+  </text>
+</svg>

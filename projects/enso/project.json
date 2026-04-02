@@ -7,10 +7,10 @@
   "codebasePath": "D:/Github/Enso",
   "techStack": "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
   "testUrl": "http://localhost:5173",
-  "lastSprint": 17,
+  "lastSprint": 18,
   "lastSprintScore": 7.5,
-  "currentSprint": 18,
-  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5],
+  "currentSprint": 19,
+  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5, 7.5],
   "teamAgents": [
     {
       "id": "project-leader",
@@ -154,11 +154,12 @@
         "Ask Enso: 'Compare the pros and cons of freemium vs usage-based pricing for a B2B SaaS product'"
       ],
       "history": [
-        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 6.8/10 (NEW BASELINE after 4-sprint gap). 2/5 scenarios completed with strong quality: market research 8/10, dashboard build 7/10. 3/5 timed out from sequential query degradation. Research is the killer feature. Build-to-app gap: cards not interactive apps. Zero errors, zero misroutes.", "resolved": true }
+        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 6.8/10 (NEW BASELINE after 4-sprint gap). 2/5 scenarios completed with strong quality: market research 8/10, dashboard build 7/10. 3/5 timed out from sequential query degradation. Research is the killer feature. Build-to-app gap: cards not interactive apps. Zero errors, zero misroutes.", "resolved": true },
+        { "sprintId": 18, "sprintDate": 1743552000000, "finding": "Score 8.2/10 (+1.4). 5/5 scenarios completed (100% up from 40%). Research quality 9/10 — SaaS market analysis in 14s. Social shareability 2/10 (pre-OG-fix). Marketing eval: tagline strong, demo-readiness 6/10. Orchestration misrouting (S2 pitch deck → essay). Context leaks between chats (S3, S5).", "resolved": true }
       ],
       "unresolvedFrustrations": [
-        "Build requests produce text cards, not interactive demo-ready apps",
-        "Sequential query throughput degrades after 2 fast queries (queries 3-5 timeout)",
+        "Orchestration requests produce essays instead of multi-artifact deliverables",
+        "Chat context leaks between sessions (different root cause than Sprint 17 contamination)",
         "No cross-product portfolio view for tracking multiple ventures"
       ]
     },
@@ -188,12 +189,13 @@
       ],
       "history": [
         { "sprintId": 16, "sprintDate": 1743465600000, "finding": "Total platform outage due to Video Studio schema bug — 0/5 scenarios passed, score 2.6/10. /code fix (P0-4) and misrouting fix (P0-1) implemented but unverified due to schema blocking all routing.", "resolved": true },
-        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 6.2/10 (+3.6). All Sprint 16 fixes VALIDATED: 0 misroutes, 0 schema errors, 0 'try rephrasing'. Research quality 7/10. /code sub-agent offer works. Project selector auto-context now implemented.", "resolved": true }
+        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 6.2/10 (+3.6). All Sprint 16 fixes VALIDATED: 0 misroutes, 0 schema errors, 0 'try rephrasing'. Research quality 7/10. /code sub-agent offer works. Project selector auto-context now implemented.", "resolved": true },
+        { "sprintId": 18, "sprintDate": 1743552000000, "finding": "Score 6.8/10 (+0.6). /code instant launch is aha moment (8/10). Research quality strong (8/10). Deep research synthesis FAILED (48 sources, synthesis crashed — 4/10). Design-instead-of-build persists (S3 todo app). Shell opens in wrong directory. Marketing eval: viral potential 6/10, docs quality 5/10.", "resolved": true }
       ],
       "unresolvedFrustrations": [
-        "No progress indicator for long-running requests (30s+ blind waits)",
-        "Build requests ask clarifying questions instead of 'just building it'",
-        "Need to verify project selector auto-context improvement in practice"
+        "Deep research synthesis failure — 48 sources found but synthesis crashed, showing raw results",
+        "Build requests ask clarifying questions instead of 'just building it' (design-instead-of-build)",
+        "Shell mode opens in wrong directory (D:\\Github instead of D:\\Github\\Enso)"
       ]
     },
     {
@@ -250,8 +252,8 @@
         { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 4.5/10 (+0.5). 0/5 scenarios returned responses — silent failure with zero feedback. Touch targets: welcome 100%, chat 42% pre-fix. Sprint 17 applied remaining touch target fixes (settings gear 44px, chips 44px, buttons 44px). Silent failure is WORSE than Sprint 16's bad errors.", "resolved": false }
       ],
       "unresolvedFrustrations": [
-        "Silent failure — 0/5 responses with zero error feedback or loading indicator (P0)",
-        "Need to verify touch target improvements and response delivery in Sprint 18 retest",
+        "Silent failure — 0/5 responses with zero error feedback or loading indicator (P0) — ThinkingCard timeout escalation added Sprint 18, needs validation",
+        "Need to verify touch target improvements and response delivery in Sprint 19 retest",
         "No connection health indicator or timeout escalation in UI"
       ]
     },
@@ -314,13 +316,14 @@
       ],
       "history": [
         { "sprintId": 16, "sprintDate": 1743465600000, "finding": "Total platform outage — 0/5 scenarios passed (score 1.5/10). Video Studio schema bug blocked all tool routing. Photo Studio misrouting fix implemented but untested due to upstream blocker. Silent timeouts (46s) on 2 scenarios, error cards on 3.", "resolved": false },
-        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 2.5/10 (+1.0). Cross-session contamination blocked ALL fix validation — 3/3 responses from wrong sessions, 2/5 silent timeouts. Contamination root cause found and fixed (7 LOC) AFTER test. Sprint 16 fixes still UNVALIDATED for this persona after 3 sprints.", "resolved": false }
+        { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 2.5/10 (+1.0). Cross-session contamination blocked ALL fix validation — 3/3 responses from wrong sessions, 2/5 silent timeouts. Contamination root cause found and fixed (7 LOC) AFTER test. Sprint 16 fixes still UNVALIDATED for this persona after 3 sprints.", "resolved": false },
+        { "sprintId": 18, "sprintDate": 1743552000000, "finding": "Score 3.5/10 (+1.0). MANDATORY retest: contamination fix VALIDATED (0/2 leakage), schema VALIDATED (0 errors), error classification VALIDATED (0 'try rephrasing'). Misrouting STILL UNVALIDATABLE — 3/5 scenarios silently timeout (server-side, not client UI). Photo culling design (S5) was 91% relevant and excellent quality. Latency regression (17.2s avg vs 9.9s Sprint 17).", "resolved": false }
       ],
       "unresolvedFrustrations": [
-        "Sprint 16 Photo Studio misrouting fix UNVALIDATED for 3 sprints (contamination blocked test)",
-        "Need to verify contamination fix resolves cross-session response leakage",
-        "Response latency and smart photo directory discovery remain unaddressed",
-        "Silent timeout with zero user feedback"
+        "Server-side timeouts on filesystem/gallery requests — 60% of scenarios get zero response (NOT a client UI issue)",
+        "Photo Studio misrouting fix unvalidated for 4 consecutive sprints due to timeout-blocked test scenarios",
+        "Response latency regression (17.2s avg vs 9.9s Sprint 17)",
+        "No batch operation progress indicators"
       ]
     }
   ],
@@ -332,7 +335,7 @@
   "sprintNotes": {
     "16": "DEBT-RECOVERY sprint — SCORE: 7.0/10. 7/8 P0 items shipped. Fixed: Video Studio schema bomb (P0-EMERGENCY), error messages (P0-A), graceful degradation (P0-B), Photo Studio misrouting (P0-1), touch targets worst offenders (P0-2), ChatInput Phase 1 1205→914 LOC (P0-3), /code client connection (P0-4). Deferred: P0-5 project selector. Process win: assignment matrix gate eliminated orphan P0s. Pre-fix persona scores: Marco 1.5, Priya 2.6, Jordan 4.0 (worst ever, caused by schema regression).",
     "17": "VALIDATION + IMPROVEMENT sprint — SCORE: 7.5/10. 7/7 planned items + bonus E7 delivered. Fixed: cross-session contamination (7 LOC), project selector auto-context, ChatInput Phase 2 (914→525 LOC, 6 components). Added: schema-validation.test.ts (245 tests), error-classification.test.ts (34 tests). Created: server.ts decomposition design doc. Touch targets completed (responsive 44px). Persona scores: Marco 2.5 (contamination blocked), Priya 6.2 (+3.6 VALIDATED), Jordan 4.5 (silent failure), Alex 6.8 (new baseline). Avg 5.0 (up from 2.7).",
-    "18": "DEBT-RECOVERY sprint — IN PROGRESS. Priorities: P0-1 server.ts decomposition (3,314→~500 LOC, 5 modules), P0-2 Marco MANDATORY retest (3 sprints unvalidated), P0-3 silent failure UX (loading+timeout). Core agents only: Architect, Engineering Manager, Test Manager. Personas: Marco (mandatory), Jordan (silent failure), Priya (baseline)."
+    "18": "MARKETING sprint — SCORE: 7.5/10. 10/10 planned items delivered (3rd consecutive full-delivery). Marketing readiness: 2.2/10 → 6.5/10. Produced: landing page HTML, competitive one-pager, 8 social posts, demo storyboard, CONTRIBUTING.md, README restructure, OG meta tags (14), OG image SVG, WelcomeCard reorder (/code first), ThinkingCard timeout escalation, research error propagation. Persona scores: Alex 8.2 (+1.4), Marco 3.5 (+1.0, contamination VALIDATED, server timeouts remain), Priya 6.8 (+0.6). Avg 6.17 (up from 5.0). Pre-launch blockers: SVG OG image needs PNG, competitive claim inconsistency, placeholder screenshot. server.ts decomposition deferred 3rd sprint."
   },
   "createdAt": 1773909300324,
   "updatedAt": 1743552000000

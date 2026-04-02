@@ -13,8 +13,9 @@ interface Template {
 }
 
 const TEMPLATES: Template[] = [
-  { icon: "\uD83D\uDD0D", titleKey: "welcome.tile.researcher", descKey: "welcome.tile.researcher.desc", toolFamily: "researcher" },
   { icon: "\uD83D\uDCBB", titleKey: "welcome.tile.codeAssistant", descKey: "welcome.tile.codeAssistant.desc", prompt: "/code" },
+  { icon: "\uD83D\uDD0D", titleKey: "welcome.tile.researcher", descKey: "welcome.tile.researcher.desc", toolFamily: "researcher" },
+  { icon: "\uD83E\uDDEC", titleKey: "welcome.tile.evolve", descKey: "welcome.tile.evolve.desc", prompt: "/evolve" },
   { icon: "\u26A1", titleKey: "welcome.tile.orchestrate", descKey: "welcome.tile.orchestrate.desc", prompt: "/orchestrate" },
   { icon: "\uD83D\uDCC1", titleKey: "welcome.tile.browseFiles", descKey: "welcome.tile.browseFiles.desc", toolFamily: "filesystem" },
   { icon: "\uD83D\uDDBC\uFE0F", titleKey: "welcome.tile.photoGallery", descKey: "welcome.tile.photoGallery.desc", toolFamily: "media_gallery" },
@@ -22,7 +23,6 @@ const TEMPLATES: Template[] = [
   { icon: "\uD83D\uDCC1", titleKey: "welcome.tile.projects", descKey: "welcome.tile.projects.desc", prompt: "/projects" },
   { icon: "\uD83D\uDDA5\uFE0F", titleKey: "welcome.tile.terminal", descKey: "welcome.tile.terminal.desc", prompt: "/shell" },
   { icon: "\uD83D\uDD2C", titleKey: "welcome.tile.discover", descKey: "welcome.tile.discover.desc", prompt: "/discover" },
-  { icon: "\uD83E\uDDEC", titleKey: "welcome.tile.evolve", descKey: "welcome.tile.evolve.desc", prompt: "/evolve" },
   { icon: "\uD83D\uDCCA", titleKey: "welcome.tile.sessions", descKey: "welcome.tile.sessions.desc", prompt: "/sessions" },
 ];
 
@@ -33,11 +33,11 @@ interface SuggestedPrompt {
 }
 
 const SUGGESTED_PROMPTS: SuggestedPrompt[] = [
-  { categoryKey: "welcome.category.research", icon: "\uD83D\uDD0D", textKey: "welcome.prompt.research" },
-  { categoryKey: "welcome.category.compare", icon: "\uD83D\uDCCA", textKey: "welcome.prompt.compare" },
   { categoryKey: "welcome.category.build", icon: "\uD83D\uDEE0\uFE0F", textKey: "welcome.prompt.build" },
-  { categoryKey: "welcome.category.diagram", icon: "\uD83D\uDD17", textKey: "welcome.prompt.diagram" },
+  { categoryKey: "welcome.category.research", icon: "\uD83D\uDD0D", textKey: "welcome.prompt.research" },
   { categoryKey: "welcome.category.create", icon: "\u2728", textKey: "welcome.prompt.create" },
+  { categoryKey: "welcome.category.compare", icon: "\uD83D\uDCCA", textKey: "welcome.prompt.compare" },
+  { categoryKey: "welcome.category.diagram", icon: "\uD83D\uDD17", textKey: "welcome.prompt.diagram" },
   { categoryKey: "welcome.category.explain", icon: "\uD83C\uDF93", textKey: "welcome.prompt.explain" },
 ];
 
