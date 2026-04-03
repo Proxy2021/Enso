@@ -224,6 +224,16 @@ Rules:
 
     writeFileSync(PROFILE_PATH, JSON.stringify(profile, null, 2));
 
+    // Auto-populate ENSO_USER.md if it's empty — so the Me page profile card shows discovered data
+    try {
+      const { readEnsoMemory, writeEnsoUser } = await import("./memory-bridge.js");
+      const { user: existingUser } = readEnsoMemory();
+      if (!existingUser?.trim()) {
+        const userMd = buildUserMarkdown(profile, synthesized.summary);
+        if (userMd) writeEnsoUser(userMd);
+      }
+    } catch { /* memory-bridge not available — skip */ }
+
     logAction({
       ts: Date.now(), type: "action", category: "user-context-builder",
       message: `Profile built: ${profile.interests.length} interests, ${profile.workProjects.length} projects, ${sourcesScanned.length} sources`,
@@ -377,4 +387,46 @@ export function maybeRefreshProfile(): void {
         .finally(() => { _refreshInProgress = false; });
     }
   } catch { /* ignore */ }
+}
+
+// ── Auto-populate ENSO_USER.md from discovered context ──────────────────────
+
+function buildUserMarkdown(profile: UserContextProfile, summary?: string): string | null {
+  const lines: string[] = ["# About Me", ""];
+
+  if (summary) {
+    lines.push(summary, "");
+  }
+
+  if (profile.interests.length > 0) {
+    const top = profile.interests
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 8)
+      .map(i => i.topic);
+    lines.push(`**Interests:** ${top.join(", ")}`, "");
+  }
+
+  if (profile.workProjects.length > 0) {
+    lines.push("**Projects:**");
+    for (const p of profile.workProjects.slice(0, 6)) {
+      const tech = p.technologies.length > 0 ? ` (${p.technologies.slice(0, 3).join(", ")})` : "";
+      lines.push(`- ${p.name}${tech}`);
+    }
+    lines.push("");
+  }
+
+  if (profile.tools.frequentSites.length > 0) {
+    const sites = profile.tools.frequentSites.slice(0, 6).map(s => s.domain).join(", ");
+    lines.push(`**Frequent sites:** ${sites}`, "");
+  }
+
+  if (profile.tools.recentSearches.length > 0) {
+    const searches = profile.tools.recentSearches.slice(0, 5).map(s => s.query).join("; ");
+    lines.push(`**Recent interests:** ${searches}`, "");
+  }
+
+  lines.push("*Auto-generated from desktop scan. Edit anytime in Settings > About You.*");
+
+  // Only return if we have meaningful content beyond the header
+  return lines.length > 4 ? lines.join("\n") : null;
 }

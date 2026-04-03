@@ -217,6 +217,8 @@ function extractName(text: string | null): string | null {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   for (const line of lines) {
     if (line.startsWith("#")) continue;
+    // Skip markdown formatting lines (bold, italic, lists, links, auto-gen footer)
+    if (/^[*_\-\[>]/.test(line)) continue;
     if (line.length > 2 && line.length < 60) return line;
   }
   return null;
@@ -227,5 +229,13 @@ function extractRole(text: string | null): string | null {
   if (!text) return null;
   const roleMatch = text.match(/^(?:role|Role|title|Title|profession|Profession|what.*do)\s*[:：]\s*(.+)/m);
   if (roleMatch) return roleMatch[1].trim();
+  // Fallback: use the first sentence of the summary paragraph (auto-generated profiles)
+  const lines = text.split("\n").filter(l => l.trim() && !l.startsWith("#") && !l.startsWith("*") && !l.startsWith("-") && !l.startsWith("["));
+  if (lines.length > 0) {
+    const first = lines[0].trim();
+    // Extract first sentence, capped at 80 chars
+    const sentence = first.split(/[.!?]/)[0]?.trim();
+    if (sentence && sentence.length > 10 && sentence.length < 80) return sentence;
+  }
   return null;
 }

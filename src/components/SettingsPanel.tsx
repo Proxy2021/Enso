@@ -765,21 +765,11 @@ export function DataSourcesSection() {
   const [profileExists, setProfileExists] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
 
-  // Fetch current status on mount
-  useEffect(() => {
-    if (!wsClient) return;
-    const base = getBackendBaseUrl();
-    const headers = authHeaders();
-    // Use a custom fetch to get status since there's no dedicated REST endpoint
-    // We'll send a WS message instead
-    wsClient.send({ type: "settings.get_context_status" } as never);
-  }, [wsClient]);
-
-  // Listen for context status updates via dedicated store field
+  // Listen for context status updates + fetch on mount
   const lastCtxTs = useRef(0);
   useEffect(() => {
-    const unsub = useChatStore.subscribe((state) => {
-      const update = state._contextUpdate;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function processUpdate(update: any) {
       if (!update || update._ts === lastCtxTs.current) return;
       lastCtxTs.current = update._ts;
       if (update.contextStatus) {
@@ -797,7 +787,6 @@ export function DataSourcesSection() {
         setScanningSources(scanStatus.scanning ? (scanStatus.sources || null) : null);
         if (scanStatus.result) {
           setProfileExists(true);
-          // Re-fetch full status to refresh lastScan timestamps
           const ws = useChatStore.getState()._wsClient;
           ws?.send({ type: "settings.get_context_status" } as never);
         }
@@ -806,7 +795,14 @@ export function DataSourcesSection() {
         setProfileExists(false);
         setLastScan({});
       }
-    });
+    }
+    // Process any update that arrived before subscription
+    processUpdate(useChatStore.getState()._contextUpdate);
+    // Subscribe for future updates
+    const unsub = useChatStore.subscribe((state) => processUpdate(state._contextUpdate));
+    // Request fresh status from server
+    const ws = useChatStore.getState()._wsClient;
+    ws?.send({ type: "settings.get_context_status" } as never);
     return unsub;
   }, []);
 
