@@ -755,7 +755,7 @@ const DATA_SOURCES: SourceConfig[] = [
   { key: "system", icon: "💻", label: "System Info", description: "Know your installed applications and development tools" },
 ];
 
-function DataSourcesSection() {
+export function DataSourcesSection() {
   const { t } = useT();
   const wsClient = useChatStore((s) => s._wsClient);
   const [consent, setConsent] = useState<Record<string, boolean>>({});

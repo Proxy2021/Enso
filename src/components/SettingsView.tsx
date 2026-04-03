@@ -3,7 +3,7 @@ import { useChatStore } from "../store/chat";
 import { useT, SUPPORTED_LOCALES, LOCALE_LABELS, type Locale } from "../lib/i18n";
 import { getActiveBackend } from "../lib/connection";
 import { useMemoryApi } from "../hooks/useMemoryApi";
-import { MemorySection } from "./SettingsPanel";
+import { MemorySection, DataSourcesSection } from "./SettingsPanel";
 import SettingsPanel from "./SettingsPanel";
 import DebugReporter from "./DebugReporter";
 import { MobileViewHeader } from "./TabNavigation";
@@ -20,6 +20,7 @@ export default function SettingsView() {
 
   const { memory, fetchMemory } = useMemoryApi();
   const [profileExpanded, setProfileExpanded] = useState(false);
+  const [dataSourcesExpanded, setDataSourcesExpanded] = useState(false);
 
   useEffect(() => { fetchMemory(); }, [fetchMemory]);
 
@@ -58,6 +59,34 @@ export default function SettingsView() {
           {profileExpanded && (
             <div className="rounded-2xl bg-gray-900/40 border border-gray-800/50 p-4">
               <MemorySection />
+            </div>
+          )}
+
+          {/* Data Sources — scan desktop environment for personalization */}
+          <button
+            onClick={() => setDataSourcesExpanded((v) => !v)}
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50 hover:bg-gray-800/40 transition-all cursor-pointer text-left"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gray-800/60 flex items-center justify-center shrink-0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-400">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-200">{t("settings.dataSources")}</p>
+              <p className="text-xs text-gray-500">Scan browser, email, files for personalization</p>
+            </div>
+            <svg
+              width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={`text-gray-600 transition-transform duration-200 ${dataSourcesExpanded ? "rotate-90" : ""}`}
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+
+          {dataSourcesExpanded && (
+            <div className="rounded-2xl bg-gray-900/40 border border-gray-800/50 p-4">
+              <DataSourcesSection />
             </div>
           )}
 
