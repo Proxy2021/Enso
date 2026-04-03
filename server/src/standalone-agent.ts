@@ -192,7 +192,7 @@ function hydrateFromJournal(clientId: string, conversationId: string): number {
 
 // ── System prompt ──
 
-function buildSystemPrompt(tools: EnsoAgentTool[]): string {
+async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
   const toolDescriptions = tools
     .map((t) => `- **${t.name}**: ${t.description}`)
     .join("\n");
@@ -203,6 +203,14 @@ function buildSystemPrompt(tools: EnsoAgentTool[]): string {
     const profile = getUserProfileContext();
     if (profile) profileBlock = `\n\n## User Context\n${profile}`;
   } catch { /* ignore */ }
+
+  // Inject daily briefing from user's desktop context (browser, email, projects)
+  let briefingBlock = "";
+  try {
+    const { getDailyBriefing } = await import("./user-context-proactive.js");
+    const briefing = getDailyBriefing();
+    if (briefing) briefingBlock = `\n\n## Today's Context\n${briefing}`;
+  } catch { /* user-context-proactive not available — skip */ }
 
   // Check if memory tools are available
   const hasMemoryTools = tools.some((t) => t.name === "enso_memory_search");
@@ -227,7 +235,7 @@ If you have no conversation history, this is your FIRST interaction with the use
 
 ## Available Tools
 ${toolDescriptions}
-${profileBlock}${memoryRecallBlock}
+${profileBlock}${briefingBlock}${memoryRecallBlock}
 
 ## MANDATORY Tool Use Rules
 These rules override all other instructions. Violating them produces WRONG answers.
@@ -536,7 +544,7 @@ export async function handleStandaloneInbound(params: {
     const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
     try {
       const tools = getAllLocalTools();
-      const systemPrompt = buildSystemPrompt(tools);
+      const systemPrompt = await buildSystemPrompt(tools);
       const answer = await callChatLLM({
         prompt: rawBody,
         systemPrompt,
@@ -613,7 +621,7 @@ export async function handleStandaloneInbound(params: {
     }
     return selected;
   })();
-  const systemPrompt = buildSystemPrompt(tools);
+  const systemPrompt = await buildSystemPrompt(tools);
   const allDeclarations = tools.map(toolToFunctionDeclaration);
   const functionDeclarations: GeminiFunctionDeclaration[] = [];
   const skippedTools: string[] = [];

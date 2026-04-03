@@ -3071,6 +3071,96 @@ export async function startEnsoServer(opts: {
             }
             break;
           }
+
+          // ── User Context Discovery ──────────────────────────────────
+          case "settings.set_context_consent": {
+            try {
+              const { readConsent, writeConsent } = await import("./user-context-tools.js");
+              const source = msg.source as string;
+              const enabled = msg.enabled as boolean;
+              const consent = readConsent();
+              if (source in consent && source !== "updatedAt") {
+                (consent as Record<string, unknown>)[source] = enabled;
+                consent.updatedAt = Date.now();
+                writeConsent(consent);
+                runtime.log?.(`[enso] context consent: ${source} = ${enabled}`);
+              }
+              send({
+                id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                data: { contextConsent: consent },
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.("[enso] context consent error:", err);
+            }
+            break;
+          }
+          case "settings.context_scan_now": {
+            try {
+              const { readConsent } = await import("./user-context-tools.js");
+              const { buildUserContextProfile } = await import("./user-context-builder.js");
+              const consent = readConsent();
+              // Send "scanning" status
+              send({
+                id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "delta",
+                data: { contextScanStatus: { scanning: true } },
+                timestamp: Date.now(),
+              });
+              // Run scan in background
+              buildUserContextProfile(consent).then((result) => {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  data: { contextScanStatus: { scanning: false, result } },
+                  timestamp: Date.now(),
+                });
+              }).catch((err) => {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error",
+                  text: `Context scan failed: ${err?.message || err}`,
+                  timestamp: Date.now(),
+                });
+              });
+            } catch (err) {
+              runtime.error?.("[enso] context scan error:", err);
+            }
+            break;
+          }
+          case "settings.get_context_status": {
+            try {
+              const { getContextStatus } = await import("./user-context-tools.js");
+              send({
+                id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                data: { contextStatus: getContextStatus() },
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.("[enso] context status error:", err);
+            }
+            break;
+          }
+          case "settings.context_clear_data": {
+            try {
+              const { getContextDir } = await import("./user-context-tools.js");
+              const { rmSync } = await import("fs");
+              const cacheDir = join(getContextDir(), "cache");
+              const profilePath = join(getContextDir(), "profile.json");
+              const scanLogPath = join(getContextDir(), "scan-log.json");
+              // Remove cache, profile, and scan log (keep consent.json)
+              try { rmSync(cacheDir, { recursive: true, force: true }); } catch { /* ignore */ }
+              try { rmSync(profilePath, { force: true }); } catch { /* ignore */ }
+              try { rmSync(scanLogPath, { force: true }); } catch { /* ignore */ }
+              runtime.log?.("[enso] context data cleared");
+              send({
+                id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                data: { contextCleared: true },
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.("[enso] context clear error:", err);
+            }
+            break;
+          }
+
           case "shell.create": {
             if (!shellPty) {
               send({

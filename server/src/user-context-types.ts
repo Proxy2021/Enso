@@ -1,0 +1,149 @@
+/**
+ * User Context Discovery — Shared Types
+ *
+ * Types for the consent-gated system that learns about users from their
+ * desktop environment (browser, email, files, system) to provide
+ * deeply personalized assistance.
+ */
+
+// ── Consent ──────────────────────────────────────────────────────────────────
+
+export interface ContextConsent {
+  browserHistory: boolean;
+  bookmarks: boolean;
+  email: boolean;
+  files: boolean;
+  system: boolean;
+  updatedAt: number;
+}
+
+export const DEFAULT_CONSENT: ContextConsent = {
+  browserHistory: false,
+  bookmarks: false,
+  email: false,
+  files: false,
+  system: false,
+  updatedAt: 0,
+};
+
+// ── Scan Results ─────────────────────────────────────────────────────────────
+
+export interface BrowserHistoryEntry {
+  url: string;
+  title: string;
+  visitCount: number;
+  lastVisit: number; // epoch ms
+  browser: "chrome" | "edge" | "firefox";
+}
+
+export interface BookmarkEntry {
+  title: string;
+  url: string;
+  folder: string;
+  browser: "chrome" | "edge" | "firefox";
+}
+
+export interface EmailSummary {
+  from: string;
+  subject: string;
+  date: number; // epoch ms
+  folder: string;
+  hasBody?: boolean;
+}
+
+export interface FileEntry {
+  path: string;
+  name: string;
+  ext: string;
+  size: number;
+  modified: number; // epoch ms
+  isDirectory: boolean;
+}
+
+export interface DetectedProject {
+  name: string;
+  path: string;
+  type: string; // "node", "python", "rust", "dotnet", "java", "go", etc.
+  technologies: string[];
+  lastModified: number;
+}
+
+export interface SystemInfo {
+  installedApps: string[];
+  runningProcesses: string[];
+  platform: string;
+  hostname: string;
+}
+
+// ── Aggregated Profile ───────────────────────────────────────────────────────
+
+export interface UserContextProfile {
+  version: 1;
+  lastUpdated: number;
+
+  /** Topics the user is interested in, derived from browsing + bookmarks + files */
+  interests: Array<{
+    topic: string;
+    confidence: number; // 0-1
+    sources: string[]; // e.g. ["browser-history", "bookmarks"]
+    lastSeen: number;
+  }>;
+
+  /** Detected software/code projects on the filesystem */
+  workProjects: Array<{
+    name: string;
+    path: string;
+    technologies: string[];
+    lastActivity: number;
+  }>;
+
+  /** Email communication patterns */
+  communicationPatterns: {
+    topContacts: Array<{ name: string; email: string; frequency: number }>;
+    peakHours: number[];
+    primaryFolders: string[];
+  };
+
+  /** Tools and services the user uses */
+  tools: {
+    installedApps: string[];
+    frequentSites: Array<{ domain: string; visits: number }>;
+    recentSearches: Array<{ query: string; timestamp: number }>;
+  };
+
+  /** Behavioral patterns */
+  habits: {
+    activeHours: { start: number; end: number };
+    mostUsedFileTypes: string[];
+    topDirectories: string[];
+  };
+}
+
+export const EMPTY_PROFILE: UserContextProfile = {
+  version: 1,
+  lastUpdated: 0,
+  interests: [],
+  workProjects: [],
+  communicationPatterns: { topContacts: [], peakHours: [], primaryFolders: [] },
+  tools: { installedApps: [], frequentSites: [], recentSearches: [] },
+  habits: { activeHours: { start: 9, end: 22 }, mostUsedFileTypes: [], topDirectories: [] },
+};
+
+// ── Scan Log ─────────────────────────────────────────────────────────────────
+
+export interface ScanLog {
+  browserHistory?: number;
+  bookmarks?: number;
+  email?: number;
+  files?: number;
+  system?: number;
+}
+
+// ── Context Status (sent to frontend) ────────────────────────────────────────
+
+export interface ContextStatus {
+  consent: ContextConsent;
+  scanLog: ScanLog;
+  profileExists: boolean;
+  profileAge: number; // seconds since last update
+}

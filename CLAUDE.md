@@ -347,6 +347,20 @@ Standard research uses a two-phase streaming pipeline (Phase A: summary + findin
 - **Components translated**: WelcomeCard, ChatInput, CardTimeline, BackgroundTaskBar, AppBuilderDialog, DynamicUICard
 - **Adding a new language**: Create `src/lib/i18n/<code>.json`, add to `SUPPORTED_LOCALES` and `LOCALE_LABELS` in index.ts, add validation in `server.ts` settings handler
 
+### User Context Discovery
+
+Consent-gated system that scans the user's desktop environment to build a rich profile for deeply personalized assistance. All data stays local — only a compact summary (~600 chars) is injected into agent prompts.
+
+- **Settings**: Settings > Data Sources tab — per-source toggles (Browser History, Bookmarks, Email, Files, System)
+- **Scanners** (7 tools in `user-context-tools.ts`): `enso_context_scan_browser_history` (SQLite via better-sqlite3, copies locked DB to temp), `enso_context_scan_bookmarks` (Chrome/Edge JSON), `enso_context_scan_email` (Outlook COM on Windows, Himalaya CLI fallback), `enso_context_scan_files` (project detection via markers like package.json/.git), `enso_context_scan_system` (installed apps + running processes), `enso_context_get_profile`, `enso_context_refresh`
+- **Profile builder** (`user-context-builder.ts`): Runs all consented scanners, reduces data locally, sends reduced summary to Gemini Flash for synthesis into structured `UserContextProfile` JSON
+- **Context injection**: `getContextProfileSummary(800)` called from `buildEnsoContext()` in `memory-bridge.ts` — injected between user memory and app usage
+- **Daily briefing** (`user-context-proactive.ts`): `getDailyBriefing()` injected into standalone agent system prompt on first message of session
+- **Auto-refresh**: Profile staleness checked on every `buildEnsoContext()` call — background rebuild if >24h old
+- **Storage**: `~/.enso/data/user-context/` — `consent.json`, `profile.json`, `scan-log.json`, `cache/*.json`
+- **WS messages**: `settings.set_context_consent`, `settings.context_scan_now`, `settings.get_context_status`, `settings.context_clear_data`
+- Key files: `user-context-types.ts`, `user-context-tools.ts`, `user-context-builder.ts`, `user-context-proactive.ts` (backend); `SettingsPanel.tsx` DataSourcesSection (frontend)
+
 ### Claude Code Integration
 
 - Trigger: `/code` opens project picker, then `/code <prompt>` sends prompts

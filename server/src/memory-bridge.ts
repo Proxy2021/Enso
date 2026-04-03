@@ -550,6 +550,15 @@ export async function buildEnsoContext(): Promise<string> {
   const memCtx = getMemoryContext();
   if (memCtx) sections.push(memCtx);
 
+  // Include user context from desktop scans (browser, email, files, etc.)
+  try {
+    const { getContextProfileSummary, maybeRefreshProfile } = await import("./user-context-builder.js");
+    const contextSummary = getContextProfileSummary(800);
+    if (contextSummary) sections.push(contextSummary);
+    // Fire-and-forget: refresh if stale (>24h)
+    maybeRefreshProfile();
+  } catch { /* user-context-builder not available — skip */ }
+
   const usage = buildAppUsageSummary();
   if (usage) sections.push(usage);
 

@@ -26,6 +26,7 @@ import { registerClawHubTools, createClawHubTools } from "./src/clawhub-tools.js
 import { createMemoryTools } from "./src/memory-tools.js";
 import { createSystemTools } from "./src/system-tools.js";
 import { registerSeedanceTools, createSeedanceTools } from "./src/seedance-tools.js";
+import { createUserContextTools } from "./src/user-context-tools.js";
 import { registerLocalTool } from "./src/tool-registry-local.js";
 import { APP_CATALOG } from "./src/app-catalog.js";
 import type { EnsoPluginApi } from "./src/local-types.js";
@@ -48,6 +49,7 @@ function registerAllToolsLocally(): void {
     createMemoryTools(),
     createSystemTools(),
     createSeedanceTools(),
+    createUserContextTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

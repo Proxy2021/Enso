@@ -36,7 +36,7 @@ function findPreset(model: string, thinking: string): ModelPreset {
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
-type SettingsTab = "appearance" | "chatModel" | "claudeCode" | "memory" | "apiKeys";
+type SettingsTab = "appearance" | "chatModel" | "claudeCode" | "memory" | "apiKeys" | "dataSources";
 
 // ── Memory sub-tabs ─────────────────────────────────────────────────────────
 
@@ -91,6 +91,7 @@ export default function SettingsPanel() {
                 { id: "claudeCode" as const, label: t("settings.claudeCodeModel") },
                 { id: "apiKeys" as const, label: t("settings.apiKeys") },
                 { id: "memory" as const, label: t("settings.memory") },
+                { id: "dataSources" as const, label: t("settings.dataSources") },
                 { id: "appearance" as const, label: t("settings.language") },
               ]).map((tab) => (
                 <button
@@ -109,6 +110,7 @@ export default function SettingsPanel() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {activeTab === "dataSources" && <DataSourcesSection />}
               {activeTab === "appearance" && <AppearanceSection />}
               {activeTab === "chatModel" && <ChatModelSection onClose={() => setOpen(false)} />}
               {activeTab === "claudeCode" && <ClaudeCodeSection onClose={() => setOpen(false)} />}
@@ -732,6 +734,183 @@ function ServiceKeysSection() {
       ))}
 
       <p className="text-[10px] text-gray-600 text-center pt-2">{t("settings.apiKeysStorageHint")}</p>
+    </div>
+  );
+}
+
+// ── Data Sources Section ─────────────────────────────────────────────────────
+
+interface SourceConfig {
+  key: string;
+  icon: string;
+  label: string;
+  description: string;
+}
+
+const DATA_SOURCES: SourceConfig[] = [
+  { key: "browserHistory", icon: "🌐", label: "Browser History", description: "Learn from your browsing patterns, frequent sites, and search queries" },
+  { key: "bookmarks", icon: "🔖", label: "Bookmarks", description: "Understand your saved resources and categorized interests" },
+  { key: "email", icon: "📧", label: "Email", description: "Analyze email subjects and contacts to understand your communication" },
+  { key: "files", icon: "📁", label: "Files & Projects", description: "Detect your code projects, recently modified files, and work patterns" },
+  { key: "system", icon: "💻", label: "System Info", description: "Know your installed applications and development tools" },
+];
+
+function DataSourcesSection() {
+  const { t } = useT();
+  const wsClient = useChatStore((s) => s._wsClient);
+  const [consent, setConsent] = useState<Record<string, boolean>>({});
+  const [scanning, setScanning] = useState(false);
+  const [lastScan, setLastScan] = useState<Record<string, number>>({});
+  const [profileExists, setProfileExists] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
+
+  // Fetch current status on mount
+  useEffect(() => {
+    if (!wsClient) return;
+    const base = getBackendBaseUrl();
+    const headers = authHeaders();
+    // Use a custom fetch to get status since there's no dedicated REST endpoint
+    // We'll send a WS message instead
+    wsClient.send({ type: "settings.get_context_status" } as never);
+  }, [wsClient]);
+
+  // Listen for status responses
+  useEffect(() => {
+    const unsub = useChatStore.subscribe((state) => {
+      // Check for context status updates in the latest card data
+      const cards = Object.values(state.cards);
+      for (const card of cards) {
+        const data = card.data as Record<string, unknown> | undefined;
+        if (data?.contextStatus) {
+          const status = data.contextStatus as {
+            consent: Record<string, boolean>;
+            scanLog: Record<string, number>;
+            profileExists: boolean;
+          };
+          setConsent(status.consent || {});
+          setLastScan(status.scanLog || {});
+          setProfileExists(status.profileExists);
+        }
+        if (data?.contextConsent) {
+          setConsent(data.contextConsent as Record<string, boolean>);
+        }
+        if (data?.contextScanStatus) {
+          const scanStatus = data.contextScanStatus as { scanning: boolean; result?: unknown };
+          setScanning(scanStatus.scanning);
+          if (scanStatus.result) setProfileExists(true);
+        }
+        if (data?.contextCleared) {
+          setProfileExists(false);
+          setLastScan({});
+        }
+      }
+    });
+    return unsub;
+  }, []);
+
+  const toggleSource = (key: string) => {
+    const newValue = !consent[key];
+    setConsent((prev) => ({ ...prev, [key]: newValue }));
+    wsClient?.send({ type: "settings.set_context_consent", source: key, enabled: newValue } as never);
+  };
+
+  const scanNow = () => {
+    setScanning(true);
+    wsClient?.send({ type: "settings.context_scan_now" } as never);
+  };
+
+  const clearData = () => {
+    wsClient?.send({ type: "settings.context_clear_data" } as never);
+    setClearConfirm(false);
+  };
+
+  const anyEnabled = Object.values(consent).some(Boolean);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
+        <p className="text-xs text-indigo-300 leading-relaxed">
+          {t("settings.dataSourcesHint")}
+        </p>
+      </div>
+
+      {DATA_SOURCES.map((source) => (
+        <div
+          key={source.key}
+          className="flex items-center justify-between py-2 border-b border-gray-800/40 last:border-0"
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <span className="text-lg flex-shrink-0">{source.icon}</span>
+            <div className="min-w-0">
+              <p className="text-sm text-gray-200 font-medium">{source.label}</p>
+              <p className="text-xs text-gray-500 truncate">{source.description}</p>
+              {lastScan[source.key] && (
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  Last scan: {new Date(lastScan[source.key]).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => toggleSource(source.key)}
+            className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
+              consent[source.key] ? "bg-indigo-500" : "bg-gray-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                consent[source.key] ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+      ))}
+
+      {/* Scan & Status */}
+      <div className="flex items-center gap-2 pt-2">
+        <button
+          onClick={scanNow}
+          disabled={!anyEnabled || scanning}
+          className="px-4 py-1.5 text-xs rounded-md bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {scanning ? "Scanning..." : "Scan Now"}
+        </button>
+        {profileExists && (
+          <span className="text-[10px] text-green-500">Profile built</span>
+        )}
+      </div>
+
+      {/* Clear Data */}
+      <div className="pt-2 border-t border-gray-800/50">
+        {!clearConfirm ? (
+          <button
+            onClick={() => setClearConfirm(true)}
+            className="text-xs text-red-400/70 hover:text-red-400 transition-colors"
+          >
+            Clear All Scanned Data
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-red-400">Delete all cached scans and profile?</span>
+            <button
+              onClick={clearData}
+              className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+            >
+              Yes, Clear
+            </button>
+            <button
+              onClick={() => setClearConfirm(false)}
+              className="px-2 py-1 text-xs rounded text-gray-500 hover:text-gray-400"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[10px] text-gray-600 text-center pt-1">
+        {t("settings.dataSourcesPrivacy")}
+      </p>
     </div>
   );
 }
