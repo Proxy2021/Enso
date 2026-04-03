@@ -1,8 +1,8 @@
 {
   "name": "enso",
   "private": true,
-  "version": "0.3.85",
-  "versionCode": 187,
+  "version": "0.3.86",
+  "versionCode": 188,
   "description": "An AI sandbox that generates complete solutions — discovers opportunities, assembles AI teams to build, self-evolves, and ships products",
   "type": "module",
   "scripts": {
