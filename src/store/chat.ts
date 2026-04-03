@@ -136,6 +136,15 @@ interface CardStore {
   _serverBootId: string | null;
   _lastDisconnectWasRestart: boolean;
 
+  // User context discovery (Data Sources)
+  _contextUpdate: {
+    contextStatus?: { consent: Record<string, boolean>; scanLog: Record<string, number>; profileExists: boolean; profileAge: number };
+    contextConsent?: Record<string, boolean>;
+    contextScanStatus?: { scanning: boolean; sources?: string[] | null; result?: unknown };
+    contextCleared?: boolean;
+    _ts: number;
+  } | null;
+
   // Conversation continuity
   recentTopics: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
   activeConversationId: string;
@@ -365,6 +374,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _nlInterceptionToast: null as string | null,
   _serverBootId: null as string | null,
   _lastDisconnectWasRestart: false,
+  _contextUpdate: null,
   recentTopics: [],
   activeConversationId: localStorage.getItem(STORAGE_KEYS.ACTIVE_CONVERSATION_ID) || "default",
   conversationsList: [],
@@ -2133,6 +2143,15 @@ export const useChatStore = create<CardStore>((set, get) => ({
         }
       }
       return;
+    }
+
+    // ── User Context Discovery — intercept before card routing ──
+    if (msg.data && typeof msg.data === "object") {
+      const d = msg.data as Record<string, unknown>;
+      if (d.contextStatus || d.contextConsent || d.contextScanStatus || d.contextCleared) {
+        set({ _contextUpdate: { ...d, _ts: Date.now() } as CardStore["_contextUpdate"] });
+        return;
+      }
     }
 
     if (msg.conversationsList) {

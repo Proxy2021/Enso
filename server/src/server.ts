@@ -3109,10 +3109,13 @@ export async function startEnsoServer(opts: {
                 timestamp: Date.now(),
               });
               // Run scan in background
-              buildUserContextProfile(consent, sources).then((result) => {
+              buildUserContextProfile(consent, sources).then(async (result) => {
+                // Include full status so frontend gets updated scanLog + profileExists in one message
+                const { getContextStatus } = await import("./user-context-tools.js");
+                const status = getContextStatus();
                 send({
                   id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
-                  data: { contextScanStatus: { scanning: false, result } },
+                  data: { contextScanStatus: { scanning: false, result }, contextStatus: status },
                   timestamp: Date.now(),
                 });
               }).catch((err) => {

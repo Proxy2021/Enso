@@ -775,36 +775,36 @@ export function DataSourcesSection() {
     wsClient.send({ type: "settings.get_context_status" } as never);
   }, [wsClient]);
 
-  // Listen for status responses
+  // Listen for context status updates via dedicated store field
+  const lastCtxTs = useRef(0);
   useEffect(() => {
     const unsub = useChatStore.subscribe((state) => {
-      // Check for context status updates in the latest card data
-      const cards = Object.values(state.cards);
-      for (const card of cards) {
-        const data = card.data as Record<string, unknown> | undefined;
-        if (data?.contextStatus) {
-          const status = data.contextStatus as {
-            consent: Record<string, boolean>;
-            scanLog: Record<string, number>;
-            profileExists: boolean;
-          };
-          setConsent(status.consent || {});
-          setLastScan(status.scanLog || {});
-          setProfileExists(status.profileExists);
+      const update = state._contextUpdate;
+      if (!update || update._ts === lastCtxTs.current) return;
+      lastCtxTs.current = update._ts;
+      if (update.contextStatus) {
+        const status = update.contextStatus;
+        setConsent(status.consent || {});
+        setLastScan(status.scanLog || {});
+        setProfileExists(status.profileExists);
+      }
+      if (update.contextConsent) {
+        setConsent(update.contextConsent);
+      }
+      if (update.contextScanStatus) {
+        const scanStatus = update.contextScanStatus;
+        setScanning(scanStatus.scanning);
+        setScanningSources(scanStatus.scanning ? (scanStatus.sources || null) : null);
+        if (scanStatus.result) {
+          setProfileExists(true);
+          // Re-fetch full status to refresh lastScan timestamps
+          const ws = useChatStore.getState()._wsClient;
+          ws?.send({ type: "settings.get_context_status" } as never);
         }
-        if (data?.contextConsent) {
-          setConsent(data.contextConsent as Record<string, boolean>);
-        }
-        if (data?.contextScanStatus) {
-          const scanStatus = data.contextScanStatus as { scanning: boolean; sources?: string[] | null; result?: unknown };
-          setScanning(scanStatus.scanning);
-          setScanningSources(scanStatus.scanning ? (scanStatus.sources || null) : null);
-          if (scanStatus.result) setProfileExists(true);
-        }
-        if (data?.contextCleared) {
-          setProfileExists(false);
-          setLastScan({});
-        }
+      }
+      if (update.contextCleared) {
+        setProfileExists(false);
+        setLastScan({});
       }
     });
     return unsub;
