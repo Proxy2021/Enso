@@ -110,31 +110,41 @@ export async function buildUserContextProfile(
   // Build reduced context for LLM (only summaries, never raw URLs or file paths)
   const contextParts: string[] = [];
 
-  if (browserData) {
-    const domains = browserData.topDomains?.slice(0, 20).map(d => `${d.domain} (${d.visits} visits)`).join(", ") || "none";
-    const searches = browserData.recentSearches?.slice(0, 15).map(s => s.query).join(", ") || "none";
-    contextParts.push(`## Browser Activity\nTop sites: ${domains}\nRecent searches: ${searches}`);
+  if (browserData && (browserData.topDomains?.length || browserData.recentSearches?.length)) {
+    const domains = browserData.topDomains?.slice(0, 20).map(d => `${d.domain} (${d.visits} visits)`).join(", ");
+    const searches = browserData.recentSearches?.slice(0, 15).map(s => s.query).join(", ");
+    const parts = [];
+    if (domains) parts.push(`Top sites: ${domains}`);
+    if (searches) parts.push(`Recent searches: ${searches}`);
+    if (parts.length) contextParts.push(`## Browser Activity\n${parts.join("\n")}`);
   }
-  if (bookmarkData) {
-    const folders = bookmarkData.folders?.slice(0, 10).map(f => `${f.folder} (${f.count})`).join(", ") || "none";
+  if (bookmarkData?.folders?.length) {
+    const folders = bookmarkData.folders.slice(0, 10).map(f => `${f.folder} (${f.count})`).join(", ");
     contextParts.push(`## Bookmarks\nFolders: ${folders}`);
   }
-  if (emailData) {
-    const senders = emailData.topSenders?.slice(0, 10).map(s => `${s.from} (${s.count}x)`).join(", ") || "none";
-    const subjects = emailData.recentSubjects?.slice(0, 10).map(s => s.subject).join("; ") || "none";
-    contextParts.push(`## Email\nTop senders: ${senders}\nRecent subjects: ${subjects}`);
+  if (emailData && (emailData.topSenders?.length || emailData.recentSubjects?.length)) {
+    const parts = [];
+    if (emailData.topSenders?.length) parts.push(`Top senders: ${emailData.topSenders.slice(0, 10).map(s => `${s.from} (${s.count}x)`).join(", ")}`);
+    if (emailData.recentSubjects?.length) parts.push(`Recent subjects: ${emailData.recentSubjects.slice(0, 10).map(s => s.subject).join("; ")}`);
+    if (parts.length) contextParts.push(`## Email\n${parts.join("\n")}`);
   }
-  if (fileData) {
-    const projects = fileData.projects?.map(p => `${p.name} (${p.technologies.join(", ")})`).join(", ") || "none";
-    const fileTypes = fileData.topFileTypes?.map(f => `${f.ext} (${f.count})`).join(", ") || "none";
-    contextParts.push(`## Projects & Files\nProjects: ${projects}\nFile types: ${fileTypes}`);
+  if (fileData && (fileData.projects?.length || fileData.topFileTypes?.length)) {
+    const parts = [];
+    if (fileData.projects?.length) parts.push(`Projects: ${fileData.projects.map(p => `${p.name} (${p.technologies.join(", ")})`).join(", ")}`);
+    if (fileData.topFileTypes?.length) parts.push(`File types: ${fileData.topFileTypes.map(f => `${f.ext} (${f.count})`).join(", ")}`);
+    if (parts.length) contextParts.push(`## Projects & Files\n${parts.join("\n")}`);
   }
-  if (systemData) {
-    const apps = systemData.installedApps?.slice(0, 30).join(", ") || "none";
-    contextParts.push(`## Installed Software\n${apps}`);
+  if (systemData?.installedApps?.length) {
+    contextParts.push(`## Installed Software\n${systemData.installedApps.slice(0, 30).join(", ")}`);
   }
 
   const contextSummary = contextParts.join("\n\n");
+
+  // If no actual data was found across all sources, skip LLM synthesis
+  if (contextParts.length === 0) {
+    logAction({ ts: Date.now(), type: "action", category: "user-context-builder", message: "No data found in any scanned source — skipping profile synthesis" });
+    return { sourcesScanned, interestCount: 0, projectCount: 0 };
+  }
 
   // Step 3: Ask LLM to synthesize into structured profile
   const synthesisPrompt = `You are analyzing a user's desktop environment to build a profile for personalized AI assistance.

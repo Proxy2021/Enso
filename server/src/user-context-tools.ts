@@ -16,11 +16,14 @@
 
 import type { EnsoAgentTool } from "./local-types.js";
 import {
-  existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync, statSync, copyFileSync,
+  existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync, statSync, copyFileSync, unlinkSync,
 } from "fs";
 import { join, basename, extname, resolve } from "path";
 import { homedir, tmpdir, platform, hostname } from "os";
 import { execSync } from "child_process";
+import { createRequire } from "module";
+
+const esmRequire = createRequire(import.meta.url);
 import { logAction, logError } from "./action-log.js";
 import type {
   ContextConsent, BrowserHistoryEntry, BookmarkEntry, EmailSummary,
@@ -122,8 +125,7 @@ function scanBrowserHistory(
   // Dynamic import of better-sqlite3 (it's an optional native module)
   let Database: typeof import("better-sqlite3").default;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    Database = require("better-sqlite3");
+    Database = esmRequire("better-sqlite3");
   } catch (err) {
     logError("user-context", "better-sqlite3 not available", err);
     return [];
@@ -174,7 +176,7 @@ function scanBrowserHistory(
       logError("user-context", `Failed to read ${browser} history`, err);
     } finally {
       // Clean up temp file
-      try { require("fs").unlinkSync(tmpPath); } catch { /* ignore */ }
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
     }
   }
 
@@ -335,7 +337,7 @@ try {
     );
 
     // Clean up temp script
-    try { require("fs").unlinkSync(psPath); } catch { /* ignore */ }
+    try { unlinkSync(psPath); } catch { /* ignore */ }
 
     const parsed = JSON.parse(raw.trim());
     const envelopes = Array.isArray(parsed) ? parsed : [parsed];
