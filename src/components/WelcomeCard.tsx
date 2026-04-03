@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { STORAGE_KEYS, TIMINGS } from "../lib/constants";
+import type { ProactiveSuggestionAction } from "@shared/types";
 
 interface Template {
   icon: string;
@@ -41,19 +42,46 @@ const SUGGESTED_PROMPTS: SuggestedPrompt[] = [
   { categoryKey: "welcome.category.explain", icon: "\uD83C\uDF93", textKey: "welcome.prompt.explain" },
 ];
 
+const PILLAR_ICONS: Record<string, string> = {
+  project_health: "\uD83D\uDEE1\uFE0F",
+  research: "\uD83D\uDD2C",
+  communication: "\u2709\uFE0F",
+  workflow: "\u26A1",
+  learning: "\uD83C\uDF93",
+  digest: "\uD83D\uDCCB",
+  ambient: "\u2699\uFE0F",
+};
+
+const PILLAR_COLORS: Record<string, string> = {
+  project_health: "border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20",
+  research: "border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20",
+  communication: "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20",
+  workflow: "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20",
+  learning: "border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20",
+  digest: "border-zinc-500/40 bg-zinc-500/10 hover:bg-zinc-500/20",
+  ambient: "border-zinc-500/40 bg-zinc-500/10 hover:bg-zinc-500/20",
+};
+
 export default function WelcomeCard() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const runApp = useChatStore((s) => s.runApp);
   const connectionState = useChatStore((s) => s.connectionState);
+  const proactiveSuggestions = useChatStore((s) => s.proactiveSuggestions);
   const disabled = connectionState !== "connected";
   const { t } = useT();
 
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (localStorage.getItem(STORAGE_KEYS.ONBOARDING_DISMISSED)) return false;
-    // Legacy key (pre-constants): treat as already seen
     if (localStorage.getItem("enso_onboarded")) return false;
     return true;
   });
+
+  // Request proactive suggestions on mount when connected
+  useEffect(() => {
+    if (connectionState !== "connected") return;
+    const ws = useChatStore.getState()._wsClient;
+    ws?.send({ type: "proactive.get_suggestions", suggestionCount: 3 } as never);
+  }, [connectionState]);
 
   useEffect(() => {
     if (showOnboarding) {
@@ -78,6 +106,39 @@ export default function WelcomeCard() {
     sendMessage(t(textKey));
   }
 
+  function handleSuggestionAction(action: ProactiveSuggestionAction, pillar: string) {
+    if (disabled) return;
+    // Record acceptance
+    const ws = useChatStore.getState()._wsClient;
+    ws?.send({ type: "proactive.accept", suggestionPillar: pillar } as never);
+
+    switch (action.type) {
+      case "send_message":
+        sendMessage(action.message);
+        break;
+      case "run_app":
+        runApp(action.appId);
+        break;
+      case "deep_research":
+        sendMessage(`/research ${action.topic}`);
+        break;
+      case "open_project":
+        sendMessage(`Open project at ${action.path}`);
+        break;
+    }
+  }
+
+  function handleDismissSuggestion(id: string, pillar: string) {
+    const ws = useChatStore.getState()._wsClient;
+    ws?.send({ type: "proactive.dismiss", suggestionId: id, suggestionPillar: pillar } as never);
+    // Optimistic removal from local state
+    useChatStore.setState((s) => ({
+      proactiveSuggestions: s.proactiveSuggestions.filter(sg => sg.id !== id),
+    }));
+  }
+
+  const topSuggestions = proactiveSuggestions.slice(0, 3);
+
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-4">
       <div className="text-center mb-6">
@@ -92,6 +153,38 @@ export default function WelcomeCard() {
           <div className="flex items-start justify-between gap-2">
             <p>{t("welcome.onboarding")}</p>
             <button onClick={() => setShowOnboarding(false)} className="text-indigo-400 hover:text-indigo-200 text-xs shrink-0 mt-0.5">&#x2715;</button>
+          </div>
+        </div>
+      )}
+
+      {/* Proactive suggestions from profile */}
+      {topSuggestions.length > 0 && (
+        <div className="w-full max-w-lg mb-5">
+          <p className="text-xs text-gray-500 mb-2 px-1">{t("welcome.suggestedForYou")}</p>
+          <div className="space-y-1.5">
+            {topSuggestions.map((s) => (
+              <div
+                key={s.id}
+                className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border transition-all duration-150 group ${PILLAR_COLORS[s.pillar] || PILLAR_COLORS.ambient}`}
+              >
+                <span className="text-sm shrink-0 mt-0.5">{PILLAR_ICONS[s.pillar] || "\u2022"}</span>
+                <button
+                  onClick={() => handleSuggestionAction(s.action as ProactiveSuggestionAction, s.pillar)}
+                  disabled={disabled}
+                  className="flex-1 text-left min-w-0 disabled:opacity-50"
+                >
+                  <div className="text-xs font-medium text-gray-200">{s.title}</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{s.description}</div>
+                </button>
+                <button
+                  onClick={() => handleDismissSuggestion(s.id, s.pillar)}
+                  className="shrink-0 text-gray-600 hover:text-gray-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity mt-0.5"
+                  title="Dismiss"
+                >
+                  &#x2715;
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

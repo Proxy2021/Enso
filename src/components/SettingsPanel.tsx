@@ -36,7 +36,7 @@ function findPreset(model: string, thinking: string): ModelPreset {
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
-type SettingsTab = "appearance" | "chatModel" | "claudeCode" | "memory" | "apiKeys" | "dataSources";
+type SettingsTab = "appearance" | "chatModel" | "claudeCode" | "memory" | "apiKeys" | "dataSources" | "proactive";
 
 // ── Memory sub-tabs ─────────────────────────────────────────────────────────
 
@@ -92,6 +92,7 @@ export default function SettingsPanel() {
                 { id: "apiKeys" as const, label: t("settings.apiKeys") },
                 { id: "memory" as const, label: t("settings.memory") },
                 { id: "dataSources" as const, label: t("settings.dataSources") },
+                { id: "proactive" as const, label: t("settings.proactive") },
                 { id: "appearance" as const, label: t("settings.language") },
               ]).map((tab) => (
                 <button
@@ -111,6 +112,7 @@ export default function SettingsPanel() {
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {activeTab === "dataSources" && <DataSourcesSection />}
+              {activeTab === "proactive" && <ProactiveSection />}
               {activeTab === "appearance" && <AppearanceSection />}
               {activeTab === "chatModel" && <ChatModelSection onClose={() => setOpen(false)} />}
               {activeTab === "claudeCode" && <ClaudeCodeSection onClose={() => setOpen(false)} />}
@@ -936,6 +938,139 @@ export function DataSourcesSection() {
 
       <p className="text-[10px] text-gray-600 text-center pt-1">
         {t("settings.dataSourcesPrivacy")}
+      </p>
+    </div>
+  );
+}
+
+// ── Proactive Suggestions Settings ──────────────────────────────────────────
+
+const PROACTIVE_PILLARS = [
+  { key: "projectHealth", label: "Project Health", description: "Dependency audits, stale projects, tech stack insights", icon: "\uD83D\uDEE1\uFE0F" },
+  { key: "research", label: "Research", description: "Research momentum, bookmark clusters, knowledge gaps", icon: "\uD83D\uDD2C" },
+  { key: "communication", label: "Communication", description: "Email follow-ups, meeting prep, contact context", icon: "\u2709\uFE0F" },
+  { key: "workflow", label: "Workflow", description: "Tool integrations, CI/CD setup, environment optimization", icon: "\u26A1" },
+  { key: "learning", label: "Learning", description: "Skill gaps, technology radar, best practices", icon: "\uD83C\uDF93" },
+  { key: "ambient", label: "Background Tasks", description: "Branch cleanup, backup reminders, disk monitoring (opt-in)", icon: "\u2699\uFE0F" },
+];
+
+function ProactiveSection() {
+  const { t } = useT();
+  const wsClient = useChatStore((s) => s._wsClient);
+  const [consent, setConsent] = useState<Record<string, boolean>>({
+    enabled: true, projectHealth: true, research: true,
+    communication: true, workflow: true, learning: true, ambient: false,
+  });
+  const [analytics, setAnalytics] = useState<{
+    totalSuggested: number; totalAccepted: number; totalDismissed: number;
+    byPillar: Record<string, { suggested: number; accepted: number; dismissed: number }>;
+  } | null>(null);
+
+  useEffect(() => {
+    const unsub = useChatStore.subscribe((state) => {
+      const update = state._proactiveUpdate;
+      if (!update) return;
+      if (update.consent) setConsent(update.consent as Record<string, boolean>);
+      if (update.analytics) setAnalytics(update.analytics as typeof analytics);
+    });
+    const ws = useChatStore.getState()._wsClient;
+    ws?.send({ type: "proactive.get_consent" } as never);
+    ws?.send({ type: "proactive.get_analytics" } as never);
+    return unsub;
+  }, []);
+
+  const togglePillar = (key: string) => {
+    const newValue = !consent[key];
+    setConsent((prev) => ({ ...prev, [key]: newValue }));
+    wsClient?.send({ type: "proactive.set_consent", proactiveConsentUpdate: { [key]: newValue } } as never);
+  };
+
+  const toggleMaster = () => {
+    const newValue = !consent.enabled;
+    setConsent((prev) => ({ ...prev, enabled: newValue }));
+    wsClient?.send({ type: "proactive.set_consent", proactiveConsentUpdate: { enabled: newValue } } as never);
+  };
+
+  const acceptRate = analytics && analytics.totalSuggested > 0
+    ? Math.round((analytics.totalAccepted / analytics.totalSuggested) * 100)
+    : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
+        <p className="text-xs text-indigo-300 leading-relaxed">
+          {t("settings.proactiveHint")}
+        </p>
+      </div>
+
+      {/* Master toggle */}
+      <div className="flex items-center justify-between py-2 border-b border-gray-800/40">
+        <div>
+          <p className="text-sm text-gray-200 font-medium">{t("settings.proactiveEnabled")}</p>
+          <p className="text-xs text-gray-500">{t("settings.proactiveEnabledDesc")}</p>
+        </div>
+        <button
+          onClick={toggleMaster}
+          className={`relative w-10 h-5 rounded-full transition-colors ${consent.enabled ? "bg-indigo-500" : "bg-gray-700"}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${consent.enabled ? "translate-x-5" : "translate-x-0"}`} />
+        </button>
+      </div>
+
+      {/* Per-pillar toggles */}
+      {consent.enabled && (
+        <>
+          {PROACTIVE_PILLARS.map((pillar) => (
+            <div key={pillar.key} className="flex items-center justify-between py-2 border-b border-gray-800/40 last:border-0">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="text-lg flex-shrink-0">{pillar.icon}</span>
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-200 font-medium">{pillar.label}</p>
+                  <p className="text-xs text-gray-500 truncate">{pillar.description}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => togglePillar(pillar.key)}
+                className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${consent[pillar.key] ? "bg-indigo-500" : "bg-gray-700"}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${consent[pillar.key] ? "translate-x-5" : "translate-x-0"}`} />
+              </button>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Analytics */}
+      {analytics && analytics.totalSuggested > 0 && (
+        <div className="pt-3 border-t border-gray-800/50">
+          <p className="text-xs text-gray-400 mb-2 font-medium">{t("settings.proactiveStats")}</p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="px-2 py-1.5 rounded bg-gray-800/40">
+              <p className="text-lg font-semibold text-gray-200">{analytics.totalSuggested}</p>
+              <p className="text-[10px] text-gray-500">Suggested</p>
+            </div>
+            <div className="px-2 py-1.5 rounded bg-gray-800/40">
+              <p className="text-lg font-semibold text-green-400">{analytics.totalAccepted}</p>
+              <p className="text-[10px] text-gray-500">Accepted</p>
+            </div>
+            <div className="px-2 py-1.5 rounded bg-gray-800/40">
+              <p className="text-lg font-semibold text-gray-400">{analytics.totalDismissed}</p>
+              <p className="text-[10px] text-gray-500">Dismissed</p>
+            </div>
+          </div>
+          {acceptRate !== null && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${acceptRate}%` }} />
+              </div>
+              <span className="text-[10px] text-gray-500 shrink-0">{acceptRate}% acceptance</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="text-[10px] text-gray-600 text-center pt-1">
+        {t("settings.proactivePrivacy")}
       </p>
     </div>
   );

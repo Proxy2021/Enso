@@ -555,9 +555,18 @@ export async function buildEnsoContext(): Promise<string> {
     const { getContextProfileSummary, maybeRefreshProfile } = await import("./user-context-builder.js");
     const contextSummary = getContextProfileSummary(800);
     if (contextSummary) sections.push(contextSummary);
-    // Fire-and-forget: refresh if stale (>24h)
     maybeRefreshProfile();
   } catch { /* user-context-builder not available — skip */ }
+
+  // Include proactive engine insights for richer context-aware responses
+  try {
+    const { getTopSuggestions } = await import("./proactive-engine.js");
+    const suggestions = await getTopSuggestions(5);
+    if (suggestions.length > 0) {
+      const lines = suggestions.map(s => `- [${s.pillar}] ${s.title}: ${s.description}`);
+      sections.push(`<proactive_insights>\nPending suggestions the user may benefit from:\n${lines.join("\n")}\n</proactive_insights>`);
+    }
+  } catch { /* proactive-engine not available — skip */ }
 
   const usage = buildAppUsageSummary();
   if (usage) sections.push(usage);

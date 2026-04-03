@@ -11,7 +11,7 @@ const { mockCallGemini } = vi.hoisted(() => ({
 
 vi.mock("./ui-generator.js", () => ({
   callGeminiLLMWithRetry: mockCallGemini,
-  GEMINI_MODEL_FAST: "gemini-2.5-flash",
+  GEMINI_MODEL_FAST: "gemini-3-flash-preview",
   GEMINI_MODEL_PRO: "gemini-2.5-pro",
 }));
 

@@ -187,6 +187,14 @@ export interface ServerMessage {
   recentTopics?: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
   monitorUpdate?: { topic: string; changes: { newFindings: string[]; removedFindings: string[] }; timestamp: number };
   monitorList?: Array<{ id: string; topic: string; enabled: boolean; lastChecked: number }>;
+  /** Proactive engine: suggestions for welcome card / nudge */
+  proactiveSuggestions?: ProactiveSuggestionDTO[];
+  /** Proactive engine: daily digest */
+  dailyDigest?: DailyDigestDTO;
+  /** Proactive engine: consent state */
+  proactiveConsent?: ProactiveConsentDTO;
+  /** Proactive engine: analytics */
+  proactiveAnalytics?: { totalSuggested: number; totalAccepted: number; totalDismissed: number; byPillar: Record<string, { suggested: number; accepted: number; dismissed: number }> };
   /** Saved chat threads for the browser client (sidebar). */
   conversationsList?: Array<{ id: string; title: string; createdAt: number; updatedAt: number }>;
   /** Batch of historical cards sent in response to chat.history */
@@ -254,6 +262,13 @@ export interface ClientMessage {
     | "card.evolve"
     | "card.release"
     | "card.persist"
+    | "proactive.get_suggestions"
+    | "proactive.get_digest"
+    | "proactive.dismiss"
+    | "proactive.accept"
+    | "proactive.set_consent"
+    | "proactive.get_consent"
+    | "proactive.get_analytics"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;
@@ -338,6 +353,11 @@ export interface ClientMessage {
   orchestrationTaskId?: string;
   orchestrationModification?: string;
   orchestrationMessage?: string;
+  // proactive.* fields
+  suggestionId?: string;
+  suggestionPillar?: string;
+  proactiveConsentUpdate?: Partial<ProactiveConsentDTO>;
+  suggestionCount?: number;
 }
 
 // ── Orchestration ──
@@ -475,6 +495,61 @@ export type CardData =
   | ResearchCardData
   | OrchestrationCardData
   | Record<string, unknown>;
+
+// ── Proactive Engine Types ──
+
+export type ProactiveSuggestionPillar =
+  | "project_health"
+  | "research"
+  | "communication"
+  | "workflow"
+  | "learning"
+  | "digest"
+  | "ambient";
+
+export type ProactiveSuggestionPriority = "urgent" | "high" | "medium" | "low";
+
+export type ProactiveSuggestionAction =
+  | { type: "send_message"; message: string }
+  | { type: "run_app"; appId: string }
+  | { type: "deep_research"; topic: string }
+  | { type: "open_project"; path: string }
+  | { type: "dismiss" };
+
+export interface ProactiveSuggestionDTO {
+  id: string;
+  pillar: ProactiveSuggestionPillar;
+  priority: ProactiveSuggestionPriority;
+  title: string;
+  description: string;
+  icon: string;
+  action: ProactiveSuggestionAction;
+}
+
+export interface DigestItemDTO {
+  category: "project" | "research" | "communication" | "workflow" | "learning" | "change";
+  title: string;
+  description: string;
+  icon: string;
+  priority: ProactiveSuggestionPriority;
+  action?: ProactiveSuggestionAction;
+}
+
+export interface DailyDigestDTO {
+  date: string;
+  greeting: string;
+  items: DigestItemDTO[];
+}
+
+export interface ProactiveConsentDTO {
+  enabled: boolean;
+  projectHealth: boolean;
+  research: boolean;
+  communication: boolean;
+  workflow: boolean;
+  learning: boolean;
+  ambient: boolean;
+}
 
 // ── Type Guards ──
 

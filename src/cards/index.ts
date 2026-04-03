@@ -14,8 +14,15 @@ const DiscoveryHistoryCard = lazy(() => import("./DiscoveryHistoryCard"));
 const ProjectsCard = lazy(() => import("./ProjectsCard"));
 const SessionDashboardCard = lazy(() => import("./SessionDashboardCard"));
 const TodoListCard = lazy(() => import("./TodoListCard"));
+const DailyDigestCard = lazy(() => import("./DailyDigestCard"));
 
 // Register built-in card types (order matters — first match wins in resolve)
+
+cardRegistry.register({
+  type: "daily-digest",
+  renderer: DailyDigestCard,
+  match: (msg) => Boolean(msg.dailyDigest),
+});
 
 cardRegistry.register({
   type: "todo-list",

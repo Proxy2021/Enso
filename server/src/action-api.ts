@@ -20,6 +20,7 @@ import type { CoreConfig } from "./types.js";
 import type { EnsoRuntime } from "./local-types.js";
 import { logAction, logError } from "./action-log.js";
 import { DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
+import { GEMINI_MODEL_FAST } from "./config.js";
 
 // ── SSE Bridge ──────────────────────────────────────────────────────────────
 
@@ -84,7 +85,7 @@ export function createActionRouter(deps: {
     logAction({ ts: Date.now(), type: "action", category: "action-api", message: `chat: ${text.slice(0, 80)}` });
 
     try {
-      const chatModel = client.chatModel ?? "gemini-2.5-flash";
+      const chatModel = client.chatModel ?? GEMINI_MODEL_FAST;
       const isGeminiModel = chatModel.startsWith("gemini-");
 
       if (!account.geminiApiKey && isGeminiModel) {

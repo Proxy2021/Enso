@@ -3076,11 +3076,11 @@ export async function startEnsoServer(opts: {
           case "settings.set_context_consent": {
             try {
               const { readConsent, writeConsent } = await import("./user-context-tools.js");
-              const source = msg.source as string;
-              const enabled = msg.enabled as boolean;
+              const source = msg.source;
+              const enabled = msg.enabled;
               const consent = readConsent();
-              if (source in consent && source !== "updatedAt") {
-                (consent as Record<string, unknown>)[source] = enabled;
+              if (source && source in consent && source !== "updatedAt") {
+                (consent as unknown as Record<string, unknown>)[source] = enabled;
                 consent.updatedAt = Date.now();
                 writeConsent(consent);
                 runtime.log?.(`[enso] context consent: ${source} = ${enabled}`);
@@ -3162,6 +3162,130 @@ export async function startEnsoServer(opts: {
               });
             } catch (err) {
               runtime.error?.("[enso] context clear error:", err);
+            }
+            break;
+          }
+
+          // ── Proactive Engine ─────────────────────────────────────────
+          case "proactive.get_suggestions": {
+            try {
+              const { getTopSuggestions } = await import("./proactive-engine.js");
+              const count = msg.suggestionCount || 5;
+              const suggestions = await getTopSuggestions(count);
+              send({
+                id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                proactiveSuggestions: suggestions.map(s => ({
+                  id: s.id, pillar: s.pillar, priority: s.priority,
+                  title: s.title, description: s.description, icon: s.icon, action: s.action,
+                })),
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.("[enso] proactive suggestions error:", err);
+            }
+            break;
+          }
+          case "proactive.get_digest": {
+            try {
+              const { generateDailyDigest } = await import("./proactive-engine.js");
+              const digest = generateDailyDigest();
+              if (digest) {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  dailyDigest: {
+                    date: digest.date,
+                    greeting: digest.greeting,
+                    items: digest.items,
+                  },
+                  timestamp: Date.now(),
+                });
+              }
+            } catch (err) {
+              runtime.error?.("[enso] proactive digest error:", err);
+            }
+            break;
+          }
+          case "proactive.dismiss": {
+            try {
+              const { dismissSuggestion, recordDismissal } = await import("./proactive-engine.js");
+              const sId = msg.suggestionId;
+              const sPillar = msg.suggestionPillar;
+              if (sId) dismissSuggestion(sId);
+              if (sPillar) recordDismissal(sPillar as never);
+            } catch (err) {
+              runtime.error?.("[enso] proactive dismiss error:", err);
+            }
+            break;
+          }
+          case "proactive.accept": {
+            try {
+              const { recordAcceptance } = await import("./proactive-engine.js");
+              const sPillar = msg.suggestionPillar;
+              if (sPillar) recordAcceptance(sPillar as never);
+            } catch (err) {
+              runtime.error?.("[enso] proactive accept error:", err);
+            }
+            break;
+          }
+          case "proactive.set_consent": {
+            try {
+              const { readProactiveConsent, writeProactiveConsent } = await import("./proactive-engine.js");
+              const update = msg.proactiveConsentUpdate;
+              if (update) {
+                const current = readProactiveConsent();
+                const updated = { ...current, ...update, updatedAt: Date.now() };
+                writeProactiveConsent(updated);
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  proactiveConsent: {
+                    enabled: updated.enabled,
+                    projectHealth: updated.projectHealth,
+                    research: updated.research,
+                    communication: updated.communication,
+                    workflow: updated.workflow,
+                    learning: updated.learning,
+                    ambient: updated.ambient,
+                  },
+                  timestamp: Date.now(),
+                });
+              }
+            } catch (err) {
+              runtime.error?.("[enso] proactive consent error:", err);
+            }
+            break;
+          }
+          case "proactive.get_consent": {
+            try {
+              const { readProactiveConsent } = await import("./proactive-engine.js");
+              const c = readProactiveConsent();
+              send({
+                id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                proactiveConsent: {
+                  enabled: c.enabled,
+                  projectHealth: c.projectHealth,
+                  research: c.research,
+                  communication: c.communication,
+                  workflow: c.workflow,
+                  learning: c.learning,
+                  ambient: c.ambient,
+                },
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.("[enso] proactive get consent error:", err);
+            }
+            break;
+          }
+          case "proactive.get_analytics": {
+            try {
+              const { getAnalytics } = await import("./proactive-engine.js");
+              send({
+                id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                proactiveAnalytics: getAnalytics(),
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              runtime.error?.("[enso] proactive analytics error:", err);
             }
             break;
           }

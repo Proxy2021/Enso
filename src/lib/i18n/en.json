@@ -50,6 +50,7 @@
   "welcome.category.explain": "Explain",
 
   "welcome.onboarding": "Welcome! Ask anything in natural language, or try /discover to find market opportunities.",
+  "welcome.suggestedForYou": "Suggested for you:",
 
   "chat.thinking": "Thinking...",
   "chat.working": "Working on it...",
@@ -133,6 +134,12 @@
   "settings.dataSources": "Data Sources",
   "settings.dataSourcesHint": "Enso can learn about your interests, projects, and work patterns to provide deeply personalized assistance. All data stays on your device — only compact summaries are used in conversations.",
   "settings.dataSourcesPrivacy": "All scanned data stays local on your server. Only a brief summary is shared with the AI model.",
+  "settings.proactive": "Proactive",
+  "settings.proactiveHint": "Enso analyzes your profile to suggest useful tasks — project health checks, research opportunities, workflow automations, and more. All analysis runs locally from your profile data.",
+  "settings.proactiveEnabled": "Proactive Suggestions",
+  "settings.proactiveEnabledDesc": "Show personalized suggestions on the welcome screen and daily digest",
+  "settings.proactiveStats": "Suggestion Analytics",
+  "settings.proactivePrivacy": "Suggestions are generated locally from your profile. No additional data is sent to AI models.",
   "settings.apiKeys": "API Keys",
   "settings.apiKeysHint": "Service API keys for Enso's features. Keys are stored in server/.env and take effect immediately.",
   "settings.apiKeysStorageHint": "Keys are stored in server/.env on your Enso server — never sent to third parties",

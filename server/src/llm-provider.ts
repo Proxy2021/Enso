@@ -68,7 +68,8 @@ export const PROVIDERS: LLMProvider[] = [
     setupUrl: "https://aistudio.google.com/apikey",
     setupHint: "Get a free API key from Google AI Studio",
     models: [
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Fast, great for everyday use" },
+      { id: "gemini-3-flash-preview", name: "Gemini 3 Flash", description: "Fast, great for everyday use" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Legacy — sunset June 2026" },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", description: "Powerful reasoning" },
     ],
   },

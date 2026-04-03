@@ -53,6 +53,7 @@ import type {
 import type { TaskClassification } from "./task-router.js";
 import { logAction, logError } from "./action-log.js";
 import { getEnsoPath } from "./utils/home.js";
+import { GEMINI_MODEL_FAST } from "./config.js";
 
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(PLUGIN_DIR, "..", "..");
@@ -377,7 +378,7 @@ async function planWithLLM(params: {
     let raw: string;
 
     // Use unified provider system with user's chat model
-    const chatModel = params.chatModel ?? "gemini-2.5-flash";
+    const chatModel = params.chatModel ?? GEMINI_MODEL_FAST;
     const providerKeys = { ...params.account.providerKeys };
     if (params.account.geminiApiKey) providerKeys.gemini = params.account.geminiApiKey;
 

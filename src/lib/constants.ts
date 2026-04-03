@@ -68,4 +68,4 @@ export const TIMINGS = {
 // ── Default Model Names ──
 
 export const DEFAULT_CLAUDE_MODEL = "claude-opus-4-6";
-export const DEFAULT_CHAT_MODEL = "gemini-2.5-flash";
+export const DEFAULT_CHAT_MODEL = "gemini-3-flash-preview";

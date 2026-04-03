@@ -26,7 +26,7 @@ async function callMemoryLLM(prompt: string, geminiApiKey?: string, providerKeys
     // Pick cheapest available: gemini flash → gpt-4o-mini → first configured
     const model = providerKeys.gemini ? GEMINI_MODEL_FAST
       : providerKeys.openai ? "gpt-4o-mini"
-      : "gemini-2.5-flash";
+      : GEMINI_MODEL_FAST;
     return callChatLLM({ prompt, model, providerKeys, timeoutMs: 10_000 });
   }
   throw new Error("No LLM provider available for memory extraction");

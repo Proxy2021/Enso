@@ -145,6 +145,10 @@ interface CardStore {
     _ts: number;
   } | null;
 
+  // Proactive engine
+  proactiveSuggestions: Array<{ id: string; pillar: string; priority: string; title: string; description: string; icon: string; action: unknown }>;
+  _proactiveUpdate: { suggestions?: unknown[]; digest?: unknown; consent?: unknown; analytics?: unknown; _ts: number } | null;
+
   // Conversation continuity
   recentTopics: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
   activeConversationId: string;
@@ -375,6 +379,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _serverBootId: null as string | null,
   _lastDisconnectWasRestart: false,
   _contextUpdate: null,
+  proactiveSuggestions: [],
+  _proactiveUpdate: null,
   recentTopics: [],
   activeConversationId: localStorage.getItem(STORAGE_KEYS.ACTIVE_CONVERSATION_ID) || "default",
   conversationsList: [],
@@ -2152,6 +2158,24 @@ export const useChatStore = create<CardStore>((set, get) => ({
         set({ _contextUpdate: { ...d, _ts: Date.now() } as CardStore["_contextUpdate"] });
         return;
       }
+    }
+
+    // ── Proactive Engine — intercept before card routing ──
+    if (msg.proactiveSuggestions) {
+      set({
+        proactiveSuggestions: msg.proactiveSuggestions as CardStore["proactiveSuggestions"],
+        _proactiveUpdate: { suggestions: msg.proactiveSuggestions, _ts: Date.now() } as CardStore["_proactiveUpdate"],
+      });
+    }
+    if (msg.proactiveConsent || msg.proactiveAnalytics || msg.dailyDigest) {
+      set({
+        _proactiveUpdate: {
+          ...(msg.proactiveConsent ? { consent: msg.proactiveConsent } : {}),
+          ...(msg.proactiveAnalytics ? { analytics: msg.proactiveAnalytics } : {}),
+          ...(msg.dailyDigest ? { digest: msg.dailyDigest } : {}),
+          _ts: Date.now(),
+        } as CardStore["_proactiveUpdate"],
+      });
     }
 
     if (msg.conversationsList) {

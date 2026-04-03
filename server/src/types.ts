@@ -178,8 +178,9 @@ export interface ServerMessage {
   runId: string;
   sessionKey: string;
   seq: number;
-  state: "delta" | "final" | "error";
+  state: "delta" | "final" | "error" | "complete";
   text?: string;
+  conversationId?: string;
   data?: unknown;
   generatedUI?: string;
   mediaUrls?: string[];
@@ -195,6 +196,7 @@ export interface ServerMessage {
     mode: ChannelMode;
     toolFamilies?: Array<{ toolFamily: string; description: string }>;
     ensoProjectPath?: string;
+    defaultProjectCwd?: string;
     claudeModel?: string;
     claudeThinking?: "adaptive" | "disabled";
     language?: string;
@@ -268,6 +270,11 @@ export interface ServerMessage {
   recentTopics?: Array<{ topic: string; lastMessage: string; timestamp: number; cardId: string }>;
   monitorUpdate?: { topic: string; changes: { newFindings: string[]; removedFindings: string[] }; timestamp: number };
   monitorList?: Array<{ id: string; topic: string; enabled: boolean; lastChecked: number }>;
+  /** Proactive engine fields */
+  proactiveSuggestions?: Array<{ id: string; pillar: string; priority: string; title: string; description: string; icon: string; action: unknown }>;
+  dailyDigest?: { date: string; greeting: string; items: Array<{ category: string; title: string; description: string; icon: string; priority: string; action?: unknown }> };
+  proactiveConsent?: { enabled: boolean; projectHealth: boolean; research: boolean; communication: boolean; workflow: boolean; learning: boolean; ambient: boolean };
+  proactiveAnalytics?: { totalSuggested: number; totalAccepted: number; totalDismissed: number; byPillar: Record<string, { suggested: number; accepted: number; dismissed: number }> };
   /** Saved chat threads for the browser client (sidebar). */
   conversationsList?: Array<{ id: string; title: string; createdAt: number; updatedAt: number }>;
   /** Batch of historical cards sent in response to chat.history */
@@ -335,6 +342,19 @@ export interface ClientMessage {
     | "card.release"
     | "monitor.list"
     | "monitor.remove"
+    | "settings.set_context_consent"
+    | "settings.context_scan_now"
+    | "settings.get_context_status"
+    | "settings.context_clear_data"
+    | "proactive.get_suggestions"
+    | "proactive.get_digest"
+    | "proactive.dismiss"
+    | "proactive.accept"
+    | "proactive.set_consent"
+    | "proactive.get_consent"
+    | "proactive.get_analytics"
+    | "image_search"
+    | "card.persist"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;
@@ -409,6 +429,17 @@ export interface ClientMessage {
   orchestrationTaskId?: string;
   orchestrationModification?: string;
   orchestrationMessage?: string;
+  // settings.set_context_consent fields
+  source?: string;
+  enabled?: boolean;
+  sources?: string[];
+  // proactive.* fields
+  suggestionId?: string;
+  suggestionPillar?: string;
+  proactiveConsentUpdate?: Record<string, unknown>;
+  suggestionCount?: number;
+  // card.persist fields
+  cardRecord?: { id: string; runId: string; type: string; role: "user" | "assistant"; text?: string; data?: unknown; timestamp: number };
 }
 
 /** Executor Context — injected into generated app executors as `ctx` */

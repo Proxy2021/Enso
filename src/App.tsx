@@ -25,6 +25,7 @@ import UpdateBanner from "./components/UpdateBanner";
 import SettingsPanel from "./components/SettingsPanel";
 import ToastContainer from "./components/ToastContainer";
 import BackgroundTaskBar from "./components/BackgroundTaskBar";
+import ProactiveNudgeBanner from "./components/ProactiveNudgeBanner";
 import { reportError } from "./lib/error-reporter";
 import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
 import { useT } from "./lib/i18n";
@@ -188,6 +189,7 @@ function TabContent() {
               <MobileChatHeader />
               <CardTimeline />
               <BackgroundTaskBar />
+              <ProactiveNudgeBanner />
               <ChatInput />
             </div>
           ) : (
@@ -202,6 +204,7 @@ function TabContent() {
             <div className="flex-1 flex flex-col overflow-hidden min-w-0">
               <CardTimeline />
               <BackgroundTaskBar />
+              <ProactiveNudgeBanner />
               <ChatInput />
             </div>
             <PinnedSidebar />

@@ -50,6 +50,7 @@
   "welcome.category.explain": "解释",
 
   "welcome.onboarding": "欢迎！用自然语言提问，或试试 /discover 发现市场机会。",
+  "welcome.suggestedForYou": "为你推荐：",
 
   "chat.thinking": "思考中...",
   "chat.working": "处理中...",
@@ -133,6 +134,12 @@
   "settings.dataSources": "数据源",
   "settings.dataSourcesHint": "Enso 可以从您的浏览历史、项目和工作模式中学习，提供深度个性化的帮助。所有数据保存在您的设备上 — 仅将简要摘要用于对话。",
   "settings.dataSourcesPrivacy": "所有扫描数据保存在您的本地服务器上。仅与 AI 模型共享简要摘要。",
+  "settings.proactive": "智能推荐",
+  "settings.proactiveHint": "Enso 分析您的个人资料来建议有用的任务 — 项目健康检查、研究机会、工作流自动化等。所有分析在本地进行。",
+  "settings.proactiveEnabled": "智能推荐",
+  "settings.proactiveEnabledDesc": "在欢迎页和每日摘要中显示个性化建议",
+  "settings.proactiveStats": "推荐分析",
+  "settings.proactivePrivacy": "建议从您的本地个人资料生成。不会向 AI 模型发送额外数据。",
   "settings.apiKeys": "API 密钥",
   "settings.apiKeysHint": "Enso 各项功能所需的服务 API 密钥。密钥保存在 server/.env，立即生效。",
   "settings.apiKeysStorageHint": "密钥存储在 Enso 服务器的 server/.env 文件中 — 不会发送给第三方",

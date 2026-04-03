@@ -7,7 +7,7 @@ const mockCallGemini = vi.fn<(prompt: string, apiKey: string, model?: string) =>
 
 vi.mock("./ui-generator.js", () => ({
   callGeminiLLMWithRetry: (...args: unknown[]) => mockCallGemini(args[0] as string, args[1] as string, args[2] as string | undefined),
-  GEMINI_MODEL_PRO: "gemini-2.5-pro",
+  GEMINI_MODEL_PRO: "gemini-3-pro-preview",
   STRUCTURED_DATA_SYSTEM_PROMPT: "You build apps.",
 }));
 

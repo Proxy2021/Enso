@@ -20,7 +20,7 @@ export const ENSO_HOME = process.env.ENSO_HOME || join(HOME_DIR, ".enso");
 export const GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta";
 
-export const GEMINI_MODEL_FAST = "gemini-2.5-flash";
+export const GEMINI_MODEL_FAST = "gemini-3-flash-preview";
 export const GEMINI_MODEL_PRO = "gemini-3-pro-preview";
 export const GEMINI_MODEL_UTILITY = "gemini-2.0-flash";
 
