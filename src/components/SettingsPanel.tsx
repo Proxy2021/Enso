@@ -760,6 +760,7 @@ function DataSourcesSection() {
   const wsClient = useChatStore((s) => s._wsClient);
   const [consent, setConsent] = useState<Record<string, boolean>>({});
   const [scanning, setScanning] = useState(false);
+  const [scanningSources, setScanningSources] = useState<string[] | null>(null);
   const [lastScan, setLastScan] = useState<Record<string, number>>({});
   const [profileExists, setProfileExists] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -795,8 +796,9 @@ function DataSourcesSection() {
           setConsent(data.contextConsent as Record<string, boolean>);
         }
         if (data?.contextScanStatus) {
-          const scanStatus = data.contextScanStatus as { scanning: boolean; result?: unknown };
+          const scanStatus = data.contextScanStatus as { scanning: boolean; sources?: string[] | null; result?: unknown };
           setScanning(scanStatus.scanning);
+          setScanningSources(scanStatus.scanning ? (scanStatus.sources || null) : null);
           if (scanStatus.result) setProfileExists(true);
         }
         if (data?.contextCleared) {
@@ -814,9 +816,10 @@ function DataSourcesSection() {
     wsClient?.send({ type: "settings.set_context_consent", source: key, enabled: newValue } as never);
   };
 
-  const scanNow = () => {
+  const scanNow = (sources?: string[]) => {
     setScanning(true);
-    wsClient?.send({ type: "settings.context_scan_now" } as never);
+    setScanningSources(sources || null);
+    wsClient?.send({ type: "settings.context_scan_now", ...(sources ? { sources } : {}) } as never);
   };
 
   const clearData = () => {
@@ -834,49 +837,76 @@ function DataSourcesSection() {
         </p>
       </div>
 
-      {DATA_SOURCES.map((source) => (
-        <div
-          key={source.key}
-          className="flex items-center justify-between py-2 border-b border-gray-800/40 last:border-0"
-        >
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <span className="text-lg flex-shrink-0">{source.icon}</span>
-            <div className="min-w-0">
-              <p className="text-sm text-gray-200 font-medium">{source.label}</p>
-              <p className="text-xs text-gray-500 truncate">{source.description}</p>
-              {lastScan[source.key] && (
-                <p className="text-[10px] text-gray-600 mt-0.5">
-                  Last scan: {new Date(lastScan[source.key]).toLocaleDateString()}
-                </p>
-              )}
+      {DATA_SOURCES.map((source) => {
+        const isEnabled = !!consent[source.key];
+        const isThisScanning = scanning && scanningSources?.includes(source.key);
+        return (
+          <div
+            key={source.key}
+            className="flex items-center justify-between py-2 border-b border-gray-800/40 last:border-0"
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <span className="text-lg flex-shrink-0">{source.icon}</span>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-200 font-medium">{source.label}</p>
+                <p className="text-xs text-gray-500 truncate">{source.description}</p>
+                {lastScan[source.key] && (
+                  <p className="text-[10px] text-gray-600 mt-0.5">
+                    Last scan: {new Date(lastScan[source.key]).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => scanNow([source.key])}
+                disabled={!isEnabled || scanning}
+                title={isEnabled ? `Scan ${source.label}` : "Enable this source first"}
+                className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                  isThisScanning
+                    ? "bg-indigo-500/30 text-indigo-300 animate-pulse"
+                    : isEnabled && !scanning
+                      ? "bg-gray-700/60 text-gray-400 hover:bg-indigo-500/20 hover:text-indigo-300"
+                      : "bg-gray-800/30 text-gray-600 cursor-not-allowed"
+                }`}
+              >
+                {isThisScanning ? "Scanning..." : "Scan"}
+              </button>
+              <button
+                onClick={() => toggleSource(source.key)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${
+                  isEnabled ? "bg-indigo-500" : "bg-gray-700"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                    isEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => toggleSource(source.key)}
-            className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-              consent[source.key] ? "bg-indigo-500" : "bg-gray-700"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                consent[source.key] ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-      ))}
+        );
+      })}
 
-      {/* Scan & Status */}
+      {/* Scan All & Status */}
       <div className="flex items-center gap-2 pt-2">
         <button
-          onClick={scanNow}
+          onClick={() => scanNow()}
           disabled={!anyEnabled || scanning}
           className="px-4 py-1.5 text-xs rounded-md bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {scanning ? "Scanning..." : "Scan Now"}
+          {scanning && !scanningSources ? "Scanning All..." : "Scan All"}
         </button>
         {profileExists && (
           <span className="text-[10px] text-green-500">Profile built</span>
+        )}
+        {scanning && scanningSources && (
+          <span className="text-[10px] text-indigo-400 animate-pulse">
+            Scanning {scanningSources.length === 1
+              ? DATA_SOURCES.find(s => s.key === scanningSources[0])?.label || scanningSources[0]
+              : `${scanningSources.length} sources`}...
+          </span>
         )}
       </div>
 

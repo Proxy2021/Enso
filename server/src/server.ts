@@ -3100,14 +3100,16 @@ export async function startEnsoServer(opts: {
               const { readConsent } = await import("./user-context-tools.js");
               const { buildUserContextProfile } = await import("./user-context-builder.js");
               const consent = readConsent();
-              // Send "scanning" status
+              // Optional: scan specific sources only (e.g. ["browserHistory"])
+              const sources = Array.isArray(msg.sources) ? msg.sources as string[] : undefined;
+              // Send "scanning" status (include which sources are being scanned)
               send({
                 id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "delta",
-                data: { contextScanStatus: { scanning: true } },
+                data: { contextScanStatus: { scanning: true, sources: sources || null } },
                 timestamp: Date.now(),
               });
               // Run scan in background
-              buildUserContextProfile(consent).then((result) => {
+              buildUserContextProfile(consent, sources).then((result) => {
                 send({
                   id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
                   data: { contextScanStatus: { scanning: false, result } },
