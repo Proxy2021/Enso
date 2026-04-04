@@ -228,10 +228,13 @@ You have access to tools that let you browse filesystems, manage media, search t
 When the user asks a question that can be enhanced with a tool call, use the appropriate tool.
 When the user asks a general knowledge question, answer directly.
 
-## Session Boundary
+## Session Boundary (CRITICAL — violating this makes your responses WRONG)
 This is a NEW, independent conversation. You have NO memory of any prior conversations with this user.
-Do NOT say "as we discussed", "I previously researched", "building on our earlier work", or anything that implies prior interaction in this thread unless you can see it in the conversation history above.
-If you have no conversation history, this is your FIRST interaction with the user in this thread. Treat it as such.
+- Do NOT reference any project, dashboard, app, artifact, or topic from prior conversations.
+- Do NOT say "as we discussed", "continuing from before", "the dashboard we built", or anything that implies prior work.
+- If you see references to past topics in your context, IGNORE them — they are from a different session.
+- If you have no conversation history above, this is your FIRST interaction. Treat it as such.
+- NEVER mention specific artifacts (e.g. "API Monitoring Dashboard") unless the user explicitly brings them up in THIS conversation.
 
 ## Available Tools
 ${toolDescriptions}
@@ -243,7 +246,10 @@ These rules override all other instructions. Violating them produces WRONG answe
 1. **You do NOT know the current time.** Any question about "what time", "current time", "time now", or time zones MUST call a time-related tool (enso_world_clock_now or enso_system_info). NEVER guess or fabricate a time.
 2. **You cannot see the user's filesystem.** Any request to list, browse, open, or find files/directories MUST call enso_filesystem_list or another filesystem tool. NEVER fabricate file listings.
 3. **You cannot access the internet.** Any question requiring live/current data (prices, news, weather, stocks, "what's trending", "latest") MUST call enso_researcher_search or enso_launch_task_session.
-4. **You cannot run code.** Any request to write, fix, build, deploy, or execute code MUST call enso_launch_task_session to start a Claude Code session.
+4. **Running commands vs writing code:**
+   - For **simple shell commands** (npm test, npm run build, git status, ls, pwd, docker ps, etc.) — use enso_shell_execute. It's faster and cheaper.
+   - For **complex tasks** that require writing code, fixing bugs, building apps, multi-step file operations, or creative work — use enso_launch_task_session to start a Claude Code session.
+   - Rule of thumb: if the user's request can be fulfilled with a single terminal command, use enso_shell_execute. If it requires writing or modifying files, use enso_launch_task_session.
 5. **System status queries** (CPU, memory, disk, uptime) MUST call enso_system_info.
 
 If a tool exists for the task, ALWAYS call it — even if you think you know the answer. Your knowledge is outdated; tools provide real-time truth.
@@ -647,8 +653,48 @@ export async function handleStandaloneInbound(params: {
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `History for conv=${conversationId.slice(0, 20)}: ${history.length} turns` });
   history.push({ role: "user", parts: [{ text: rawBody }] });
 
+  // ── BUG-03 FIX: Build intent fast path ──
+  // When the user wants to build/create software, bypass Gemini tool selection
+  // (which misroutes to media tools like Photo Studio) and go straight to Claude Code.
+  const BUILD_INTENT = /\b(build|create|make|generate|develop|scaffold|bootstrap)\b.*\b(app|application|dashboard|website|page|site|tool|api|server|backend|frontend|project|service|bot|script|plugin|extension|component|module)\b/i;
+  if (BUILD_INTENT.test(rawBody)) {
+    logAction({ ts: Date.now(), type: "action", category: "standalone-agent",
+      message: `Build intent detected — fast-pathing to enso_launch_task_session`, cardId: stableCardId });
+
+    const fastPathToolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
+
+    // Deliver interim message
+    await deliverEnsoReply({
+      payload: { text: "Starting a build session for your request..." },
+      client, runId, seq: 0, account, userMessage: rawBody,
+      targetCardId, cardId: stableCardId, toolMeta: fastPathToolMeta, statusSink, conversationId,
+    });
+
+    // Directly invoke the task session launcher
+    try {
+      await executeLocalTool("enso_launch_task_session", { task: rawBody },
+        { clientId: client.id, getClient: () => client });
+      history.push({ role: "model", parts: [{ text: `I've launched a Claude Code session to handle: ${rawBody.slice(0, 100)}` }] });
+      await deliverEnsoReply({
+        payload: { text: `I've launched a Claude Code session to handle your request. You'll see results streaming in shortly.` },
+        client, runId, seq: 1, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, toolMeta: fastPathToolMeta, statusSink, conversationId,
+      });
+    } catch (err) {
+      logError("standalone-agent", "Build fast-path failed", err, { cardId: stableCardId });
+      await deliverEnsoReply({
+        payload: { text: `I tried to start a build session but encountered an error: ${err instanceof Error ? err.message : String(err)}. Please try again.` },
+        client, runId, seq: 1, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, toolMeta: fastPathToolMeta, statusSink, conversationId,
+      });
+    }
+    return; // Skip the Gemini agent loop entirely
+  }
+
   const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
 
+  // BUG-02 FIX: "Never silent" guard — track whether we delivered at least one message
+  let delivered = false;
   try {
     let finalText = "";
     let deliverSeq = 0;
@@ -751,6 +797,7 @@ export async function handleStandaloneInbound(params: {
       statusSink,
       conversationId,
     });
+    delivered = true;
   } catch (err) {
     logError("standalone-agent", "Gemini agent call failed", err, { cardId: stableCardId });
 
@@ -772,8 +819,24 @@ export async function handleStandaloneInbound(params: {
         text: userFriendly,
         timestamp: Date.now(),
       });
+      delivered = true;
     } catch (sendErr) {
       logError("standalone-agent", "Failed to send error to client", sendErr, { cardId: stableCardId });
+    }
+  } finally {
+    // BUG-02: Never-silent guarantee — if no message was delivered, send a last-resort fallback
+    if (!delivered) {
+      try {
+        client.send({
+          id: randomUUID(),
+          runId,
+          sessionKey,
+          seq: 0,
+          state: "error",
+          text: "Something went wrong processing your request. Please try again.",
+          timestamp: Date.now(),
+        });
+      } catch { /* truly unrecoverable — client gone */ }
     }
   }
 }

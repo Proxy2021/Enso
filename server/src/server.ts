@@ -1,3 +1,9 @@
+/**
+ * Main Enso server — sets up the Express HTTP server and WebSocket layer.
+ * Manages connected browser clients, routes incoming WebSocket messages to
+ * handlers (chat, Claude Code, apps, card actions, domain evolution, etc.),
+ * and serves media files with MIME detection and Range streaming support.
+ */
 import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";

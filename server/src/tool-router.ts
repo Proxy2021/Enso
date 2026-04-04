@@ -314,7 +314,7 @@ function inferMissingRequiredParams(input: {
 function isOperationalPrompt(message: string): boolean {
   const normalized = normalizeMessage(message);
   if (!normalized) return false;
-  return /\b(list|show|scan|search|read|inspect|group|plan|optimize|budget|overview|detect|run|check|predict|market|portfolio|ticker|repo|trip|itinerary|meal|grocery|directory|files|media|workspace|snapshot)\b/.test(
+  return /\b(list|show|scan|search|read|inspect|group|plan|optimize|budget|overview|detect|run|check|predict|market|portfolio|ticker|repo|trip|itinerary|meal|grocery|directory|files|media|workspace|snapshot|write|create|build|delete|move|copy|rename|execute|open|browse|stat|disk|process|system)\b/.test(
     normalized,
   );
 }

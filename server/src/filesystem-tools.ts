@@ -1,10 +1,15 @@
 import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
 import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "path";
+import { fileURLToPath } from "url";
 import { execFile } from "child_process";
 import { execSync } from "child_process";
 import { homedir, platform, tmpdir } from "os";
 import { toMediaUrl } from "./server.js";
+
+/** Detect project root from module location (server/src → ../../). */
+const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
+const DETECTED_PROJECT_ROOT = resolve(join(PLUGIN_DIR, "..", ".."));
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -127,7 +132,7 @@ const ALLOWED_ROOTS: string[] = [
   normalize(tmpdir()),
 ];
 // Add project root if running from a known project directory
-const PROJECT_ROOT = normalize(resolve("D:\\Github\\Enso"));
+const PROJECT_ROOT = normalize(DETECTED_PROJECT_ROOT);
 if (!ALLOWED_ROOTS.some((r) => normalize(PROJECT_ROOT).startsWith(r))) {
   ALLOWED_ROOTS.push(PROJECT_ROOT);
 }

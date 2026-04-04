@@ -7,10 +7,10 @@
   "codebasePath": "D:/Github/Enso",
   "techStack": "TypeScript/React 19/Node.js/Vite/Tailwind CSS 4",
   "testUrl": "http://localhost:5173",
-  "lastSprint": 20,
-  "lastSprintScore": 6.5,
-  "currentSprint": 21,
-  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5, 7.5, 7.0, 6.5],
+  "lastSprint": 21,
+  "lastSprintScore": 7.0,
+  "currentSprint": 22,
+  "sprintScoreTrend": [8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5, 7.5, 7.0, 6.5, 7.0],
   "teamAgents": [
     {
       "id": "project-leader",
@@ -156,11 +156,13 @@
       "history": [
         { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 6.8/10 (NEW BASELINE after 4-sprint gap). 2/5 scenarios completed with strong quality: market research 8/10, dashboard build 7/10. 3/5 timed out from sequential query degradation. Research is the killer feature. Build-to-app gap: cards not interactive apps. Zero errors, zero misroutes.", "resolved": true },
         { "sprintId": 18, "sprintDate": 1743552000000, "finding": "Score 8.2/10 (+1.4). 5/5 scenarios completed (100% up from 40%). Research quality 9/10 — SaaS market analysis in 14s. Social shareability 2/10 (pre-OG-fix). Marketing eval: tagline strong, demo-readiness 6/10. Orchestration misrouting (S2 pitch deck → essay). Context leaks between chats (S3, S5).", "resolved": true },
-        { "sprintId": 19, "sprintDate": 1775174400000, "finding": "Score 7.2/10 (-1.0). S3 CRITICAL FAILURE: completely off-topic response (API monitoring instead of market sizing) — context contamination from ENSO_MEMORY.md injection. S1 7/10, S2 6/10 (orchestration=essays), S4 8/10, S5 8/10. OG image SVG = 3/10 social shareability. Fixes deployed: getUserProfileContext(), session boundary marker, OG PNG.", "resolved": false }
+        { "sprintId": 19, "sprintDate": 1775174400000, "finding": "Score 7.2/10 (-1.0). S3 CRITICAL FAILURE: completely off-topic response (API monitoring instead of market sizing) — context contamination from ENSO_MEMORY.md injection. S1 7/10, S2 6/10 (orchestration=essays), S4 8/10, S5 8/10. OG image SVG = 3/10 social shareability. Fixes deployed: getUserProfileContext(), session boundary marker, OG PNG.", "resolved": true },
+        { "sprintId": 21, "sprintDate": 1775606400000, "finding": "Score 5.6/10 (pre-fix only, -1.6 from S19). S2 context contamination confirmed — referenced 'API Monitoring Dashboard' from prior session. Orchestration produces essays, not deliverables. Gemini API timeout on Build App pipeline. Research quality excellent when delivered (25 sources, 76% confidence). Fixes deployed: session boundary expanded to 5-point prohibition list with explicit artifact prohibition. Prompt-level mitigation only — full fix needs session-keyed history isolation.", "resolved": false }
       ],
       "unresolvedFrustrations": [
         "Orchestration requests produce essays instead of multi-artifact deliverables",
-        "Context contamination fix deployed Sprint 19 — now 2 sprints unvalidated (NOT TESTED Sprint 20)",
+        "Context contamination partially mitigated (prompt-level) — session boundary strengthened but not fully isolated (Sprint 21)",
+        "Gemini API timeout on Build App pipeline",
         "No cross-product portfolio view for tracking multiple ventures"
       ]
     },
@@ -255,12 +257,14 @@
         { "sprintId": 16, "sprintDate": 1743465600000, "finding": "100% server error rate across all 5 scenarios due to schema bug. Touch targets improved from 86-90% to 37% violations on welcome screen. Score 4.0/10 (pre-fix). Touch target worst offenders fixed post-test.", "resolved": false },
         { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 4.5/10 (+0.5). 0/5 scenarios returned responses — silent failure with zero feedback. Touch targets: welcome 100%, chat 42% pre-fix. Sprint 17 applied remaining touch target fixes (settings gear 44px, chips 44px, buttons 44px). Silent failure is WORSE than Sprint 16's bad errors.", "resolved": true },
         { "sprintId": 19, "sprintDate": 1775174400000, "finding": "Score 7.6/10 (+3.1 — DRAMATIC IMPROVEMENT). Silent failure elimination VALIDATED: 4-5/5 responses delivered. S1 build product 9/10, S2 /code 9/10, S3 browse apps 7/10, S4 research 7/10, S5 shell 7/10. Touch targets: welcome 82% (28/34), chat 48% (11/23 — fails WCAG). Background Claude Code persists at 41s without management UI. Shell CWD still wrong (D:\\Github vs D:\\Github\\Enso).", "resolved": true },
-        { "sprintId": 20, "sprintDate": 1775433600000, "finding": "Score 6.1/10 (-1.5 REGRESSION). Shell CWD persists 3rd sprint (D:\\Github vs D:\\Github\\Enso). Simple filesystem ops routed through heavyweight Claude Code (32.9s for file listing). Touch target WCAG drops from 76% to 37% during active use (close buttons 10x16px). Background Claude Code sessions persist without management UI. 8 new OS-level tools implemented but persona didn't benefit due to routing issues.", "resolved": false }
+        { "sprintId": 20, "sprintDate": 1775433600000, "finding": "Score 6.1/10 (-1.5 REGRESSION). Shell CWD persists 3rd sprint (D:\\Github vs D:\\Github\\Enso). Simple filesystem ops routed through heavyweight Claude Code (32.9s for file listing). Touch target WCAG drops from 76% to 37% during active use (close buttons 10x16px). Background Claude Code sessions persist without management UI. 8 new OS-level tools implemented but persona didn't benefit due to routing issues.", "resolved": true },
+        { "sprintId": 21, "sprintDate": 1775606400000, "finding": "Score 4.0/10 (pre-fix only, -2.1 from S20). Shell CWD confirmed at D:\\Github instead of D:\\Github\\Enso. 'Build API dashboard' still misrouted to Photo Studio. Claude Code overhead 51-61s for trivial tasks. WCAG touch targets 82%→43% during active use. Fixes deployed: BUG-01 dynamic PROJECT_ROOT (shell-pty.ts, filesystem-tools.ts, system-tools.ts), BUG-03 BUILD_INTENT regex fast path, Rule 4 updated to allow enso_shell_execute for simple commands. NO POST-FIX RETEST.", "resolved": false }
       ],
       "unresolvedFrustrations": [
-        "Shell CWD bug persists 3rd sprint — D:\\Github instead of D:\\Github\\Enso",
-        "Simple filesystem operations routed through heavyweight Claude Code (30s+ latency)",
-        "Touch target WCAG compliance drops to 37% during active use — close buttons at 10x16px",
+        "Shell CWD fix deployed (dynamic PROJECT_ROOT) — pending retest validation",
+        "Build intent misrouting fix deployed (BUILD_INTENT regex fast path) — pending retest validation",
+        "Rule 4 updated to allow enso_shell_execute for simple commands — pending retest validation",
+        "Touch target WCAG compliance drops to 43% during active use — not addressed Sprint 21",
         "Background Claude Code sessions persist without management UI"
       ]
     },
@@ -325,14 +329,15 @@
         { "sprintId": 16, "sprintDate": 1743465600000, "finding": "Total platform outage — 0/5 scenarios passed (score 1.5/10). Video Studio schema bug blocked all tool routing. Photo Studio misrouting fix implemented but untested due to upstream blocker. Silent timeouts (46s) on 2 scenarios, error cards on 3.", "resolved": false },
         { "sprintId": 17, "sprintDate": 1743552000000, "finding": "Score 2.5/10 (+1.0). Cross-session contamination blocked ALL fix validation — 3/3 responses from wrong sessions, 2/5 silent timeouts. Contamination root cause found and fixed (7 LOC) AFTER test. Sprint 16 fixes still UNVALIDATED for this persona after 3 sprints.", "resolved": false },
         { "sprintId": 18, "sprintDate": 1743552000000, "finding": "Score 3.5/10 (+1.0). MANDATORY retest: contamination fix VALIDATED (0/2 leakage), schema VALIDATED (0 errors), error classification VALIDATED (0 'try rephrasing'). Misrouting STILL UNVALIDATABLE — 3/5 scenarios silently timeout (server-side, not client UI). Photo culling design (S5) was 91% relevant and excellent quality. Latency regression (17.2s avg vs 9.9s Sprint 17).", "resolved": true },
-        { "sprintId": 20, "sprintDate": 1775433600000, "finding": "Score 3.6/10 (+0.1, effectively flat). 6th consecutive sprint under 5.0 — CRITICAL RESCUE FAILURE. S1: silent filesystem failure (zero output, zero error — BUG-02 unresolved). S3/S4: Photo Studio misrouting captured file management requests (BUG-03 unresolved, 6th sprint). S2: Media Gallery lacks image dimensions. Speed improved (9.2s avg) but 1/5 scenarios produced useful output. New write_file/copy_path tools implemented but unreachable due to routing bugs. 0/3 P0 bugs fixed this sprint.", "resolved": false }
+        { "sprintId": 20, "sprintDate": 1775433600000, "finding": "Score 3.6/10 (+0.1, effectively flat). 6th consecutive sprint under 5.0 — CRITICAL RESCUE FAILURE. S1: silent filesystem failure (zero output, zero error — BUG-02 unresolved). S3/S4: Photo Studio misrouting captured file management requests (BUG-03 unresolved, 6th sprint). S2: Media Gallery lacks image dimensions. Speed improved (9.2s avg) but 1/5 scenarios produced useful output. New write_file/copy_path tools implemented but unreachable due to routing bugs. 0/3 P0 bugs fixed this sprint.", "resolved": true },
+        { "sprintId": 21, "sprintDate": 1775606400000, "finding": "Score 3.8/10 (pre-fix only, +0.2). 7th consecutive sprint under 5.0. S1/S2: zero response (BUG-02 reproduced). S3: Media Gallery correctly handled file listing (BUG-03 partially fixed). S4: write_file routed to File Browser instead of filesystem tool (new routing gap). S5: acknowledged but no research action. Fixes deployed: BUG-02 never-silent guard (delivered flag + finally block), BUG-03 BUILD_INTENT fast path + 14 isOperationalPrompt keywords. NO POST-FIX RETEST — rescue status UNKNOWN.", "resolved": false }
       ],
       "unresolvedFrustrations": [
-        "Silent filesystem failures — zero output, zero error on non-existent paths (BUG-02, 3rd sprint)",
-        "Photo Studio misrouting captures file management and build requests (BUG-03, 6th sprint unresolved)",
-        "New filesystem tools (write_file, copy_path) implemented but unreachable due to routing bugs",
+        "BUG-02 (silent failures) fix deployed — never-silent guard. Pending retest validation.",
+        "BUG-03 (Photo Studio misrouting) fix deployed — BUILD_INTENT fast path. Pending retest validation.",
+        "write_file tool routed to File Browser instead of filesystem tool (new routing gap found Sprint 21 pre-fix test)",
         "Media Gallery lacks image dimension metadata",
-        "6th consecutive sprint under 5.0 — creative professional persona at risk of abandonment"
+        "7th consecutive sprint under 5.0 — rescue status unknown pending retest"
       ]
     }
   ],
@@ -346,8 +351,9 @@
     "17": "VALIDATION + IMPROVEMENT sprint — SCORE: 7.5/10. 7/7 planned items + bonus E7 delivered. Fixed: cross-session contamination (7 LOC), project selector auto-context, ChatInput Phase 2 (914→525 LOC, 6 components). Added: schema-validation.test.ts (245 tests), error-classification.test.ts (34 tests). Created: server.ts decomposition design doc. Touch targets completed (responsive 44px). Persona scores: Marco 2.5 (contamination blocked), Priya 6.2 (+3.6 VALIDATED), Jordan 4.5 (silent failure), Alex 6.8 (new baseline). Avg 5.0 (up from 2.7).",
     "18": "MARKETING sprint — SCORE: 7.5/10. 10/10 planned items delivered (3rd consecutive full-delivery). Marketing readiness: 2.2/10 → 6.5/10. Produced: landing page HTML, competitive one-pager, 8 social posts, demo storyboard, CONTRIBUTING.md, README restructure, OG meta tags (14), OG image SVG, WelcomeCard reorder (/code first), ThinkingCard timeout escalation, research error propagation. Persona scores: Alex 8.2 (+1.4), Marco 3.5 (+1.0, contamination VALIDATED, server timeouts remain), Priya 6.8 (+0.6). Avg 6.17 (up from 5.0). Pre-launch blockers: SVG OG image needs PNG, competitive claim inconsistency, placeholder screenshot. server.ts decomposition deferred 3rd sprint.",
     "19": "SALES & GROWTH sprint — SCORE: 7.0/10. 10/10 planned items delivered (4th consecutive full-delivery). Marketing readiness: 6.5/10 → 7.5/10. All pre-launch blockers resolved: OG PNG (verified), MIT LICENSE, landing page hero CSS terminal, docs/ directory (GitHub Pages ready), SEO (robots.txt, sitemap.xml, JSON-LD), UTM tracking. Engineering: context contamination root cause fixed (getUserProfileContext replaces getMemoryContext), Build-First Rule, share-token security guard, rate limiter, shell CWD validation, WS disconnect error card. Persona scores: Alex 7.2 (-1.0, context contamination pre-fix), Priya 6.0 (-0.8, design-instead-of-build pre-fix), Jordan 7.6 (+3.1, SILENT FAILURE ELIMINATION VALIDATED). Avg 6.93. CRITICAL GAP: Nothing deployed — landing page in docs/ but GitHub Pages not enabled, social posts ready but not posted, analytics script but no account. Sales infrastructure 0.6/10. server.ts decomposition deferred 4th sprint.",
-    "20": "OS-LEVEL AGENT TOOLS sprint — SCORE: 6.5/10. Feature delivery excellent (8/8 new tools, 663 LOC, 13 new tests, 728/728 tests pass) but bug fix delivery ZERO (0/3 P0 bugs fixed). New tools: enso_fs_write_file, enso_fs_copy_path, enso_fs_search_content, enso_shell_execute, enso_browser_extract, enso_browser_key, enso_browser_evaluate, enso_browser_wait. Playwright/Puppeteer dual-engine abstraction built. Design-to-implementation disconnect: design specified 3 bug fixes in server.ts but architecture diagram listed server.ts as 'No Changes' — both implementation tracks cited this to skip all bugs. Persona scores CRASHED: Jordan 6.1 (-1.5), Marco 3.6 (+0.1 flat, 6th sprint under 5.0), Priya 5.0 (-1.0). Avg 4.9 (-2.03). Alex NOT TESTED. server.ts decomposition deferred 5th sprint. CRITICAL: New tools are well-implemented but unreachable for Marco due to routing bugs."
+    "20": "OS-LEVEL AGENT TOOLS sprint — SCORE: 6.5/10. Feature delivery excellent (8/8 new tools, 663 LOC, 13 new tests, 728/728 tests pass) but bug fix delivery ZERO (0/3 P0 bugs fixed). New tools: enso_fs_write_file, enso_fs_copy_path, enso_fs_search_content, enso_shell_execute, enso_browser_extract, enso_browser_key, enso_browser_evaluate, enso_browser_wait. Playwright/Puppeteer dual-engine abstraction built. Design-to-implementation disconnect: design specified 3 bug fixes in server.ts but architecture diagram listed server.ts as 'No Changes' — both implementation tracks cited this to skip all bugs. Persona scores CRASHED: Jordan 6.1 (-1.5), Marco 3.6 (+0.1 flat, 6th sprint under 5.0), Priya 5.0 (-1.0). Avg 4.9 (-2.03). Alex NOT TESTED. server.ts decomposition deferred 5th sprint. CRITICAL: New tools are well-implemented but unreachable for Marco due to routing bugs.",
+    "21": "DEBT-RECOVERY sprint — SCORE: 7.0/10. ALL 3 P0 BUGS FIXED: BUG-01 (Shell CWD — dynamic PROJECT_ROOT via import.meta.url in 3 files), BUG-02 (Silent failures — never-silent guard with delivered flag + finally block), BUG-03 (Photo Studio misrouting — BUILD_INTENT regex fast path + 14 new isOperationalPrompt keywords). BUG-04 (context contamination) partially mitigated via session boundary expansion (prompt-level only). Fix-cycle added 5 new test files with 70 tests. Track A/B parallel implementation in non-overlapping regions of standalone-agent.ts (~400 lines apart). Build clean (625/625 tests, 25 files). server.ts decomposition deferred 6th sprint but proven unnecessary for bug fixes. CRITICAL GAP: NO persona retests conducted (3rd consecutive sprint). Pre-fix scores: Marco 3.8*, Jordan 4.0*, Alex 5.6*. All fixes unvalidated by persona testing. UX-01 confirmed client-side (no server fix possible)."
   },
   "createdAt": 1773909300324,
-  "updatedAt": 1775433600000
+  "updatedAt": 1775606400000
 }

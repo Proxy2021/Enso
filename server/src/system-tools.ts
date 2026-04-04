@@ -6,9 +6,15 @@ import os from "node:os";
 import { execSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { EnsoAgentTool } from "./local-types.js";
 import { getActiveClientId } from "./runtime.js";
 import { logAction, logError } from "./action-log.js";
+
+/** Detect project root from module location (server/src → ../../). */
+const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(join(PLUGIN_DIR, "..", ".."));
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -254,7 +260,7 @@ export function createSystemTools(): EnsoAgentTool[] {
             items: { type: "string" },
             description: "Command arguments as separate strings (e.g., ['--version'] or ['status', '--short']).",
           },
-          cwd: { type: "string", description: "Working directory (default: D:\\Github\\Enso)." },
+          cwd: { type: "string", description: "Working directory (default: project root)." },
           timeout: { type: "number", description: "Timeout in seconds (default 30, max 120)." },
         },
         required: ["command"],
@@ -266,7 +272,7 @@ export function createSystemTools(): EnsoAgentTool[] {
         const rawArgs = (params as Record<string, unknown>).args;
         const args = Array.isArray(rawArgs) ? rawArgs.map(String) : [];
         const timeoutSec = Math.min(Math.max(Number((params as Record<string, unknown>).timeout ?? 30), 1), 120);
-        const cwd = String((params as Record<string, unknown>).cwd ?? "D:\\Github\\Enso");
+        const cwd = String((params as Record<string, unknown>).cwd ?? PROJECT_ROOT);
 
         if (!existsSync(cwd)) return errorResult(`working directory does not exist: ${cwd}`);
 

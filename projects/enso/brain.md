@@ -18,16 +18,18 @@ Recurring failure modes that have appeared across multiple sprints:
 - Sprint 16: EXECUTION SUCCEEDED. 7/8 P0 items with zero orphans. Assignment matrix gate was key.
 - **Sprint 17-19: 4 consecutive full-delivery sprints (7/8, 7/7+bonus, 10/10, 10/10).** Pattern is definitively broken. Assignment matrix gate is PERMANENT.
 
-**2. Persona re-test deferral spiral — WATCH**
+**2. Persona re-test deferral spiral — RECURRING**
 - Marco Reyes re-test was deferred for 5 consecutive sprints (Sprints 10–14)
 - Sprint 15–18: Marco tested every sprint. Persona testing is now a consistent sprint gate.
 - **Sprint 19: Marco NOT TESTED. Retest files not generated for Alex/Priya.** Process slipped — fixes deployed but unvalidated. Must not become a pattern again.
+- **Sprint 21: Persona retests again NOT conducted despite P0-VALIDATION listing.** Pre-fix persona scores collected (Marco 3.8, Jordan 4.0, Alex 5.6) but NO post-fix retests were generated. Pattern has now recurred for the 3rd time (Sprint 19, 20, 21). All 3 P0 bugs were fixed but remain unvalidated by persona retests. This is the #1 process gap.
 
 **3. Stale backlog items persisting across 3+ sprints**
 - media-ai-gateway error string: RESOLVED Sprint 14
 - ADR-004 (SSE Streaming): deprioritized indefinitely (6+ sprints deferred)
 - MCP client integration: 7+ sprints, design only. Blocked by server.ts decomposition. Target Sprint 21+.
-- **Sprint 20 update:** server.ts decomposition now at **5 sprints deferred** (designed Sprint 17, deferred Sprint 18/19/20). MUST execute Sprint 21. This is a severe credibility crisis — 4 consecutive "MUST execute" promises broken. Sprint 20 design explicitly marked server.ts as "No Changes" which excluded all 3 P0 bug fixes from implementation scope. **The design-to-implementation disconnect is now the #1 process failure.**
+- **Sprint 20 update:** server.ts decomposition now at **5 sprints deferred** (designed Sprint 17, deferred Sprint 18/19/20). MUST execute Sprint 21.
+- **Sprint 21 update:** server.ts decomposition deferred **6th time**. However, Sprint 21 proved that all 3 P0 bugs (BUG-01, BUG-02, BUG-03) could be fixed WITHOUT decomposition — surgical changes in standalone-agent.ts, shell-pty.ts, filesystem-tools.ts, system-tools.ts. Decomposition remains valuable for maintainability but is no longer the root-cause blocker for bug fixes. **Credibility crisis partially addressed by delivering bug fixes through alternative paths.**
 
 **4. Build gate violations — RESOLVED**
 - Sprint 15, 16, 17, 18, 19: Build green. **Six consecutive green-build sprints.**
@@ -63,39 +65,38 @@ Recurring failure modes that have appeared across multiple sprints:
 - Sprint 20 pivot: Focus shifted to OS-level agent tools instead of deployment. Marketing deployment deferred indefinitely.
 - Root cause: The evolution sprint process produces code artifacts but has no mechanism to execute external deployment actions (enable GitHub Pages, create Plausible account, post to Twitter)
 
-**11. NEW: Design-to-implementation disconnect (Sprint 20)**
+**11. Design-to-implementation disconnect (Sprint 20) — COUNTER-MEASURES VALIDATED Sprint 21**
 - Sprint 20 design (Phase 4) explicitly specified 3 P0 bug fixes in Sections 7.1-7.3 with server.ts code changes
 - BUT the same design's architecture diagram listed server.ts under "No Changes"
 - Both implementation tracks cited "outside this track's scope" to skip ALL bug fixes
-- The review phase noted this as "deferred" rather than flagging it as a process failure
-- Result: 0/3 P0 bugs fixed despite being designed and assigned as P0
-- **Root cause:** The design phase created an internal contradiction — P0 bug fixes specified in text but excluded from the file change matrix. Implementation agents followed the matrix, not the text.
-- **Counter-measure:** Sprint 21 must require explicit file-level assignment for EVERY P0 item. If a P0 requires changes to a file, that file MUST appear in the "Files Changed" matrix. No P0 can be "designed but not assigned to a file."
+- **Sprint 21: Counter-measures WORKED.** File assignment matrix required explicit file-level assignment for every P0 item. Track A assigned to standalone-agent.ts lines 656-841, Track B assigned to standalone-agent.ts lines 231-252. Non-overlapping regions, no "No Changes" exceptions. All 3 P0 bugs with file assignments were implemented. Fix-cycle resolved BUG-01 with dynamic PROJECT_ROOT across 3 files + 70 new tests.
+- **Process gate confirmed:** Explicit file-level assignment for P0 items is now a PERMANENT requirement.
 
 ---
 
 ## Improvement Velocity
 
-Sprint score history (Sprints 1–20): `[8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5, 7.5, 7.0, 6.5]`
-Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
+Sprint score history (Sprints 1–21): `[8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5, 7.5, 7.0, 6.5, 7.0]`
+Mean: 6.81 — Recovery from Sprint 20 dip. All P0 bugs fixed but no persona retests.
 
 **Trending up:**
-- Sprint execution reliability: Feature delivery remains strong (8/8 new tools, 663 LOC, 13 new tests). Assignment matrix PERMANENT.
-- Build stability: **7 consecutive green-build sprints** (728/728 tests pass Sprint 20)
-- Test coverage: 20 test files, 551+ tests post-Sprint 20 (testing methodology changed — fewer files but more focused). 13 new filesystem tool tests added.
-- Tool ecosystem: Filesystem 11→14, Browser 6→10, System 4→5. **34 total agent-callable tools** (+8 this sprint).
-- OS-level agent capabilities: write_file, copy_path, search_content, shell_execute, browser_extract/key/evaluate/wait all functional.
+- Sprint execution reliability: All 3 P0 bugs fixed in Sprint 21 (BUG-01, BUG-02, BUG-03). Assignment matrix PERMANENT. Counter-measures from Sprint 20 post-mortem validated.
+- Build stability: **8 consecutive green-build sprints** (625/625 tests pass Sprint 21, 25 test files)
+- Test coverage: 25 test files, 625 tests. Sprint 21 fix-cycle added 5 new test files (70 tests): shell-pty.test.ts, filesystem-error-handling.test.ts, intent-routing.test.ts, session-isolation.test.ts, browser-tools.test.ts.
+- Bug fix delivery: **3/3 P0 bugs fixed** (reversed Sprint 20's 0/3). BUG-01 (dynamic PROJECT_ROOT), BUG-02 (never-silent guard), BUG-03 (BUILD_INTENT fast path + keyword expansion).
+- Tool routing: 14 new keywords in isOperationalPrompt(), BUILD_INTENT regex pre-routing bypasses Gemini misrouting.
+- OS-level agent capabilities: write_file, copy_path, search_content, shell_execute, browser_extract/key/evaluate/wait all functional (Sprint 20). Now reachable post-routing fixes.
 - Playwright/Puppeteer dual-engine abstraction: Structural readiness. Zero-risk migration path when Playwright is installed.
 
 **Trending down / plateauing:**
-- **Persona scores CRASHED**: Average 6.93 → 4.9 (-2.03). ALL three personas regressed or flat.
-- Jordan Kim: 7.6 → 6.1 (-1.5). Shell CWD persists 3rd sprint. Simple ops routed through heavyweight Claude Code.
-- Priya Sharma: 6.0 → 5.0 (-1.0). Claude Code project selector replaces old build-first friction. Shell CWD. Deep research still fake.
-- Marco Reyes: 3.5 → 3.6 (+0.1, effectively flat). Silent filesystem failures. Photo Studio misrouting. **6th sprint under 5.0. Critical rescue failure.**
-- Alex Chen: NOT TESTED Sprint 20. Context contamination fix still unvalidated.
-- server.ts size: 3,870+ LOC (**5 sprints deferred**). Blocks MCP integration. Blocks ALL bug fixes. **Credibility crisis.**
-- Bug fix delivery: **0/3 P0 bugs fixed** despite being designed. Design-implementation disconnect pattern.
-- Deployed marketing: Still 0/10 — three sprints of preparation, nothing live.
+- **Persona scores pre-fix (NO RETESTS CONDUCTED)**: Marco 3.8*, Jordan 4.0*, Alex 5.6* (*pre-fix, unvalidated post-fix).
+- Marco Reyes: 3.6 → 3.8* (pre-fix). BUG-02 and BUG-03 now fixed — expected significant improvement post-retest. **7th sprint under 5.0 but fixes are deployed.**
+- Jordan Kim: 6.1 → 4.0* (pre-fix). BUG-01 now fixed (dynamic PROJECT_ROOT). Rule 4 updated to allow enso_shell_execute for simple commands. Expected improvement post-retest.
+- Alex Chen: 7.2 → 5.6* (pre-fix). Session boundary strengthened with 5-point prohibition list. Context contamination fix still prompt-level only.
+- Priya Sharma: NOT TESTED Sprint 21. UX-01 (Claude Code project selector) still open — client-side issue.
+- server.ts size: 3,877+ LOC (**6 sprints deferred**). No longer blocks bug fixes (proven Sprint 21) but still blocks MCP integration and maintainability.
+- Persona retests: **NOT CONDUCTED for 3rd consecutive sprint** (Sprint 19, 20, 21). All fixes unvalidated by personas.
+- Deployed marketing: Still 0/10 — deprioritized.
 - Sales infrastructure: Still 0.6/10.
 
 **Areas that improved and held:**
@@ -126,49 +127,52 @@ Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
 | Security posture | N/A | 7/10 (share-token, rate limit) | NEW |
 
 **Persona score history:**
-| Persona | S16 | S17 | S18 | S19 | S20 | Trend |
-|---|---|---|---|---|---|---|
-| Alex Chen | — | 6.8 | 8.2 | 7.2 | — | Not tested |
-| Priya Sharma | 2.6 | 6.2 | 6.8 | 6.0 | 5.0 | ↓↓ (-1.0) Claude Code selector friction |
-| Jordan Kim | 4.0 | 4.5 | — | 7.6 | 6.1 | ↓ (-1.5) Shell CWD, heavyweight routing |
-| Marco Reyes | 1.5 | 2.5 | 3.5 | — | 3.6 | → (+0.1) 6th sprint under 5.0 |
-| Sprint Average | 2.7 | 5.0 | 6.17 | 6.93 | 4.9 | ↓↓ (-2.03) REGRESSION |
+| Persona | S16 | S17 | S18 | S19 | S20 | S21* | Trend |
+|---|---|---|---|---|---|---|---|
+| Alex Chen | — | 6.8 | 8.2 | 7.2 | — | 5.6* | ↓ (-1.6) pre-fix, context contamination |
+| Priya Sharma | 2.6 | 6.2 | 6.8 | 6.0 | 5.0 | — | Not tested S21 |
+| Jordan Kim | 4.0 | 4.5 | — | 7.6 | 6.1 | 4.0* | ↓ (-2.1) pre-fix, CWD + routing |
+| Marco Reyes | 1.5 | 2.5 | 3.5 | — | 3.6 | 3.8* | → (+0.2) 7th sprint under 5.0 |
+| Sprint Average | 2.7 | 5.0 | 6.17 | 6.93 | 4.9 | 4.47* | *Pre-fix only, no retests |
+
+*S21 scores are PRE-FIX only. All 3 P0 bugs were fixed after persona testing but NO post-fix retests were conducted. Actual post-fix scores are expected to be significantly higher.
 
 **Known regressions introduced by evolution sprints:**
 - Sprint 20: No code regressions, but persona scores regressed because existing bugs were not fixed. New tools implemented but unreachable due to routing issues.
+- Sprint 21: No code regressions. 625/625 tests pass. Persona scores appear regressed but are pre-fix snapshots only.
 
 ---
 
 ## Strategic Read
 
-*PL's current assessment as of Sprint 20 meta-review.*
+*PL's current assessment as of Sprint 21 meta-review.*
 
-**P0-EMERGENCY (Sprint 21 must deliver — no deferral):**
-1. **server.ts decomposition + routing fix** — 5 sprints deferred. This is no longer a technical debt item — it is the **root cause** of 0/3 bug fixes and all persona regressions. Extract routing logic into a separate module. Fix Photo Studio misrouting, shell CWD, and silent filesystem failures IN THE SAME DELIVERABLE. No "No Changes" exceptions for server.ts.
-2. **Fix Photo Studio misrouting (BUG-03)** — 6th sprint unresolved. Makes new filesystem tools unreachable. Marco's #1 blocker.
-3. **Fix silent filesystem failures (BUG-02)** — Upstream routing issue, not in filesystem-tools.ts. Error handling exists but errors don't propagate to client.
-4. **Fix shell CWD (BUG-01)** — 4th sprint. Code logic looks correct, runtime behavior wrong.
+**P0-EMERGENCY (Sprint 22 must deliver — no deferral):**
+1. **Persona retests for ALL personas** — 3 consecutive sprints without post-fix retests (Sprint 19, 20, 21). All 3 P0 bug fixes are deployed but UNVALIDATED. Marco has been under 5.0 for 7 sprints. This is the **#1 process gap** — we fix bugs but never confirm they work for users.
+2. **BUG-04 full fix (context contamination)** — Sprint 21 added prompt-level mitigation only. Alex dropped from 7.2 to 5.6 partly from contamination. Full fix requires session-keyed history isolation (not just prompt instructions).
 
-**P0-VALIDATION (Sprint 21):**
-5. **Retest Marco Reyes** — 6 sprints under 5.0. If Sprint 21 doesn't move him above 5.0, creative professional persona is effectively abandoned.
-6. **Retest ALL personas against new tools** — 8 new OS-level tools were implemented but never tested by personas because bug fixes weren't done.
-7. **Validate Sprint 19 fixes** — Alex context contamination fix and Priya Build-First Rule still never retested (2 sprints unvalidated).
+**P0-RESOLVED (Sprint 21 — confirmed fixed, pending retest validation):**
+3. ~~**Fix shell CWD (BUG-01)**~~ — **RESOLVED** via fix-cycle. Dynamic PROJECT_ROOT in shell-pty.ts, filesystem-tools.ts, system-tools.ts. Tests in shell-pty.test.ts validate.
+4. ~~**Fix silent filesystem failures (BUG-02)**~~ — **RESOLVED** via Track A. `delivered` flag + `finally` block in handleStandaloneInbound(). Never-silent guard ensures at least one message reaches client.
+5. ~~**Fix Photo Studio misrouting (BUG-03)**~~ — **RESOLVED** via fix-cycle + Track A. 14 new keywords in isOperationalPrompt() + BUILD_INTENT regex fast path bypasses Gemini for software build requests.
 
-**P1 (Sprint 21):**
-8. **Permission tiers for shell_execute** — Currently any command executes with equal trust. 4-tier approval system deferred from Sprint 20.
-9. **Claude Code project selector fix** — Blocks autonomous building for Priya.
+**P1 (Sprint 22):**
+6. **server.ts decomposition** — 6 sprints deferred. Sprint 21 proved bug fixes work without it, but 3,877 LOC monolith still blocks MCP integration and reduces maintainability. No longer P0-EMERGENCY.
+7. **UX-01: Claude Code project selector** — Client-side issue. Server sends defaultProjectCwd but client renders irrelevant options. Blocks autonomous building for Priya.
+8. **Permission tiers for shell_execute** — 4-tier approval system deferred from Sprint 20.
+9. **WCAG touch target compliance** — Jordan reported 37% compliance during active use (close buttons 10x16px).
 10. **Session management** — Background Claude Code terminals persist and block interactions.
 
 **Medium-term strategic bets:**
-- **MCP client integration** — 9+ sprints deferred. Blocked by server.ts decomposition. Target Sprint 22+.
-- **Prompt caching** — 90% input token savings. Low risk, high ROI. Target Sprint 21-22.
+- **MCP client integration** — 10+ sprints deferred. Blocked by server.ts decomposition. Target Sprint 23+.
+- **Prompt caching** — 90% input token savings. Low risk, high ROI. Target Sprint 22-23.
 - **Research synthesis reliability** — Deep research still returns general knowledge, not web research.
 - **Build-to-app pipeline** — "build X" should produce interactive apps, not text cards.
 
 **Things that are fine as-is (do not over-engineer):**
 - Photo engine (H&D curves, LAB color, luminosity masking) — superior to external APIs
 - Virtual scrolling + CSS containment — working, don't touch
-- App ecosystem (15 apps, 34 agent-callable tools) — well-segmented, no merges needed
+- App ecosystem (18 apps, 34 agent-callable tools) — well-segmented, consolidation deferred
 - Photo Studio / Media Gallery boundary — RESOLVED and VALIDATED
 - Schema validation — test suite active, graceful degradation as defense-in-depth
 - Error message classification — test suite active, no regressions
@@ -177,6 +181,10 @@ Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
 - OG image and tags — now PNG, fully functional (Sprint 19)
 - LICENSE file — MIT, present at root (Sprint 19)
 - SEO basics — robots.txt, sitemap.xml, JSON-LD all in place (Sprint 19)
+- BUG-01/02/03 fixes — all deployed and passing tests (Sprint 21). Pending persona retest validation.
+- BUILD_INTENT regex fast path — deterministic pre-routing for software build requests (Sprint 21)
+- Never-silent guard — `delivered` flag + `finally` block ensures response delivery (Sprint 21)
+- Dynamic PROJECT_ROOT — import.meta.url-based resolution replaces hard-coded paths (Sprint 21)
 
 **Sales Infrastructure Status (unchanged from Sprint 19 — deprioritized):**
 | Component | Status | Target |
@@ -195,13 +203,12 @@ Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
 
 **Deferred (attempted but not completed, with sprint context):**
 - SSE Streaming (ADR-004): Designed Sprint 13, deprioritized indefinitely (6+ sprints).
-- MCP client: Design since Sprint 12, no code. Target Sprint 22+ (after server.ts decomposition).
+- MCP client: Design since Sprint 12, no code. Target Sprint 23+ (after server.ts decomposition).
 - SQLite-backed CardContextStore: Design ready, deferred every sprint.
 - Playwright E2E framework: Proposed Sprint 14, deferred (5+ sprints). Playwright/Puppeteer dual-engine abstraction built Sprint 20 but Playwright not installed.
-- server.ts decomposition IMPLEMENTATION: Designed Sprint 17, deferred Sprint 18, 19, 20. **5 sprints deferred. Target Sprint 21 P0-EMERGENCY.**
-- Photo Studio misrouting fix: Designed Sprint 16, attempted Sprint 16-20. **6 sprints unresolved.** Requires server.ts routing changes.
-- Shell CWD fix: Code logic correct (Sprint 19), runtime still wrong (Sprint 20). **4 sprints.** Needs runtime investigation.
-- Silent filesystem failure fix: Error handling exists in filesystem-tools.ts, bug is upstream in routing/error propagation. **3 sprints.** Needs server.ts trace.
+- server.ts decomposition IMPLEMENTATION: Designed Sprint 17, deferred Sprint 18, 19, 20, 21. **6 sprints deferred.** Sprint 21 proved bug fixes work without it — no longer P0-EMERGENCY but still needed for maintainability and MCP integration. Target Sprint 22 P1.
+- BUG-04 full fix (context contamination): Prompt-level mitigation Sprint 21. Full fix requires session-keyed history isolation. Target Sprint 22.
+- UX-01 (Claude Code project selector): Client-side issue confirmed Sprint 21. Server sends defaultProjectCwd but client renders irrelevant options. No server-side fix possible.
 
 **Tried and confirmed working (don't revert):**
 - @tanstack/react-virtual for CardTimeline: Virtual scrolling implemented and stable
@@ -212,7 +219,7 @@ Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
 - Doubao visible mode toggle (inputMode state): Implemented Sprint 15, working
 - ChatInput stale ref fix via state mirror pattern (pttAccumulatedText): Sprint 15 → usePushToTalk Sprint 16
 - OrchestrationCard React.memo wrapper: Implemented Sprint 15, verified Sprint 16–19
-- Photo Studio misrouting fix (negative constraints in import_photos): Sprint 16, validated Sprint 17
+- Photo Studio misrouting fix (negative constraints in import_photos): Sprint 16, validated Sprint 17. **Further fixed Sprint 21: BUILD_INTENT regex fast path + 14 new isOperationalPrompt keywords.**
 - /code client connection fix (context injection, 3-tier fallback): Sprint 16, partially validated Sprint 17
 - Error message classification (system vs user errors): Sprint 16, validated Sprint 17-19
 - Tool schema graceful degradation (validateFunctionDeclaration): Sprint 16, validated Sprint 17-19
@@ -252,14 +259,22 @@ Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
   - Registry signature updates: filesystem +3, browser +4 supportedActions.
   - Template updates: write_file/copy_path/search_content views, extract/evaluate content areas.
   - 13 new unit tests for filesystem tools (write_file 6, copy_path 3, search_content 3, + sprint assertion updates).
+- **Sprint 21 Debt-Recovery fixes (3 P0 bugs + 70 new tests):**
+  - BUG-01 fix (Shell CWD): Dynamic PROJECT_ROOT via `import.meta.url` in shell-pty.ts, filesystem-tools.ts, system-tools.ts. Replaces hard-coded `resolve("D:\\Github\\Enso")`. Validated by shell-pty.test.ts (10 tests).
+  - BUG-02 fix (Silent failures): `delivered` flag + `finally` block in standalone-agent.ts handleStandaloneInbound(). Guarantees at least one message reaches client even if deliverEnsoReply() and catch block both throw.
+  - BUG-03 fix (Photo Studio misrouting): BUILD_INTENT regex (`/\b(build|create|make|...)\b.*\b(app|dashboard|...)\b/i`) fast path bypasses Gemini tool selection. 14 new keywords in isOperationalPrompt() (write, create, build, delete, move, copy, rename, execute, open, browse, stat, disk, process, system).
+  - BUG-04 mitigation (Context contamination): Session boundary expanded to 5-point prohibition list with "(CRITICAL)" header. Prompt-level only — full fix requires session-keyed history isolation.
+  - System prompt Rule 4 update: Allows enso_shell_execute for simple one-liner commands, reserves Claude Code for complex multi-step tasks. Reduces overhead from 51-61s to <1s for trivial commands.
+  - Fix-cycle test additions: 5 new test files (70 tests): shell-pty.test.ts (10), filesystem-error-handling.test.ts (15), intent-routing.test.ts (27), session-isolation.test.ts (6), browser-tools.test.ts (16). Total: 625/625 tests pass.
 
 **Tried and found not needed:**
 - Replacing photo engine with external neural style transfer APIs: Photo engine is already superior
 - Implementing adaptive thinking: Already active in claude-code.ts L366
 
 **Architectural decisions pending:**
-- server.ts decomposition IMPLEMENTATION: Design ready. 5 modules, extraction order defined. **Sprint 21 P0-EMERGENCY (5th deferral).** This blocks all routing bug fixes.
-- Permission tiers for OS actions: 4-tier system designed by AI Strategist, deferred Sprint 20. Target Sprint 21.
+- server.ts decomposition IMPLEMENTATION: Design ready. 5 modules, extraction order defined. **6th deferral. P1 for Sprint 22.** No longer blocks bug fixes (proven Sprint 21) but still needed for maintainability + MCP integration.
+- Permission tiers for OS actions: 4-tier system designed by AI Strategist, deferred Sprint 20-21. Target Sprint 22.
+- BUG-04 full fix: Session-keyed history isolation needed. Prompt-level mitigation deployed Sprint 21 but not sufficient for full context isolation.
 - Playwright installation: Dual-engine abstraction ready. Manual `npm install playwright` post-sprint activation step.
 - ChatInput Phase 3: 525 → <500 LOC. Shell mode banner or voice toggle. Low priority.
 - Landing page deployment: **Decision made: GitHub Pages from /docs.** Execution pending (manual step). Deprioritized.
@@ -271,31 +286,31 @@ Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
 
 *Running observations about each persona's relationship with the product.*
 
-**Marco Reyes (creative-professional) — CRITICAL RESCUE FAILURE (Sprint 20):**
-- Sprint 15: 4.2/10. Sprint 16: 1.5/10. Sprint 17: 2.5/10. Sprint 18: 3.5/10. Sprint 19: NOT TESTED. **Sprint 20: 3.6/10 (+0.1, effectively flat).**
-- **6th consecutive sprint under 5.0.** If Sprint 21 doesn't move him above 5.0, creative professional persona is effectively abandoned.
-- S1: Silent filesystem failure (zero output, zero error — BUG-02). S3/S4: Photo Studio misrouting captured file management requests (BUG-03).
-- Speed improved (9.2s avg) but 1/5 scenarios produced useful output.
-- New tools (write_file, copy_path) implemented but unreachable due to routing bugs.
-- **Sprint 21 MANDATORY**: Fix routing bugs FIRST, then retest. Marco is the canary — if routing works, his score should jump 2+ points.
+**Marco Reyes (creative-professional) — RESCUE STATUS UNKNOWN (Sprint 21):**
+- Sprint 15: 4.2/10. Sprint 16: 1.5/10. Sprint 17: 2.5/10. Sprint 18: 3.5/10. Sprint 19: NOT TESTED. Sprint 20: 3.6/10. **Sprint 21: 3.8/10* (pre-fix only).**
+- **7th consecutive sprint under 5.0** (pre-fix). BUG-02 (silent failures) and BUG-03 (Photo Studio misrouting) both FIXED in Sprint 21 implementation. New write_file tool also reported unreachable (routed to File Browser instead) — potential new routing gap.
+- Pre-fix test showed: S1 zero response (BUG-02), S2 zero response (BUG-02), S3 Media Gallery correct (BUG-03 fixed for this scenario), S4 routed to File Browser instead of write_file (new issue), S5 acknowledged but no research action.
+- **Sprint 22 MANDATORY**: Retest Marco post-fix. BUG-02 and BUG-03 fixes should eliminate silent failures and misrouting. If Marco crosses 5.0, rescue succeeds. If not, investigate write_file routing gap.
 
-**Priya Sharma (indie-developer) — CONTINUED REGRESSION (Sprint 20):**
-- Sprint 15: 4.8/10. Sprint 16: 2.6/10. Sprint 17: 6.2/10. Sprint 18: 6.8/10. Sprint 19: 6.0/10. **Sprint 20: 5.0/10 (-1.0).**
-- Build-First Rule partially working (no more clarifying questions) but Claude Code project selector blocks autonomous building (UX-01).
-- Shell CWD inconclusive. Deep research still defaults to general knowledge, no real web research.
-- **Sprint 21 focus**: Fix Claude Code project selector. Validate shell CWD at runtime.
+**Priya Sharma (indie-developer) — NOT TESTED Sprint 21:**
+- Sprint 15: 4.8/10. Sprint 16: 2.6/10. Sprint 17: 6.2/10. Sprint 18: 6.8/10. Sprint 19: 6.0/10. Sprint 20: 5.0/10. **Sprint 21: NOT TESTED.**
+- UX-01 (Claude Code project selector) confirmed as client-side issue — no server fix possible. Needs client-side change.
+- Shell CWD fix (BUG-01) now deployed. Rule 4 updated to allow enso_shell_execute for simple commands.
+- **Sprint 22 focus**: Retest to validate BUG-01 fix and Rule 4 improvement. UX-01 requires client-side work.
 
-**Jordan Kim (developer) — REGRESSION FROM PEAK (Sprint 20):**
-- Sprint 15: 6.4/10. Sprint 16: 4.0/10. Sprint 17: 4.5/10. Sprint 18: NOT TESTED. Sprint 19: 7.6/10. **Sprint 20: 6.1/10 (-1.5).**
-- Shell CWD bug persists 3rd sprint (D:\Github vs D:\Github\Enso). Simple ops routed through heavyweight Claude Code (30s for file listing).
-- Touch targets: WCAG compliance dropped from 76% to 37% during active use (close buttons 10x16px).
-- Background Claude Code sessions persist without management UI.
-- **Sprint 21 focus**: Shell CWD runtime fix. Routing optimization for simple filesystem queries.
+**Jordan Kim (developer) — FIXES DEPLOYED, UNVALIDATED (Sprint 21):**
+- Sprint 15: 6.4/10. Sprint 16: 4.0/10. Sprint 17: 4.5/10. Sprint 18: NOT TESTED. Sprint 19: 7.6/10. Sprint 20: 6.1/10. **Sprint 21: 4.0/10* (pre-fix only).**
+- BUG-01 (Shell CWD) now FIXED — dynamic PROJECT_ROOT replaces hard-coded path. BUG-03 (build intent misrouting) now FIXED — BUILD_INTENT regex fast path. Rule 4 updated to allow lightweight shell commands.
+- Pre-fix test confirmed Shell CWD at D:\Github instead of D:\Github\Enso, and "Build API dashboard" still misrouted to Photo Studio. Both issues addressed by Sprint 21 fixes.
+- Touch targets: WCAG 82% → 43% during active use. Not addressed Sprint 21.
+- **Sprint 22 MANDATORY**: Retest to validate BUG-01 and BUG-03 fixes. Expected significant improvement.
 
-**Alex Chen (startup-founder) — NOT TESTED Sprint 20:**
-- Sprint 12: ~4.0/10. Sprint 17: 6.8/10. Sprint 18: 8.2/10. Sprint 19: 7.2/10. Sprint 20: NOT TESTED.
-- Context contamination fix (getUserProfileContext + session boundary) deployed Sprint 19, now **2 sprints unvalidated**.
-- **Sprint 21 focus**: RETEST to validate context contamination fix.
+**Alex Chen (startup-founder) — CONTEXT CONTAMINATION PARTIALLY ADDRESSED (Sprint 21):**
+- Sprint 12: ~4.0/10. Sprint 17: 6.8/10. Sprint 18: 8.2/10. Sprint 19: 7.2/10. Sprint 20: NOT TESTED. **Sprint 21: 5.6/10* (pre-fix only).**
+- Pre-fix test confirmed context contamination (S2 references "API Monitoring Dashboard" from prior session). Session boundary strengthened with 5-point prohibition list (FIX B2).
+- Orchestration still produces essays instead of deliverables. Gemini API timeout on Build App pipeline.
+- Context contamination fix is prompt-level only — full fix requires session-keyed history isolation.
+- **Sprint 22 focus**: Retest to validate session boundary strengthening. Consider BUG-04 full fix (session-keyed isolation).
 
 ---
 
@@ -303,24 +318,26 @@ Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
 
 *Significant uncommitted work that should not be lost or forgotten across sprints.*
 
-**Sprint 20 new changes (cumulative with Sprint 15-19):**
+**Sprint 21 new changes (cumulative with Sprint 15-20):**
 
-Sprint 15-19 uncommitted changes still present (see Sprint 19 brain entry for full list).
+Sprint 15-20 uncommitted changes still present.
 
-Sprint 20 new changes (663 LOC across 8 files):
-- `server/src/filesystem-tools.ts` — +3 tools: write_file, copy_path, search_content (~170 LOC)
-- `server/src/system-tools.ts` — +1 tool: shell_execute (~85 LOC)
-- `server/src/browser-tools.ts` — +4 tools: extract, key, evaluate, wait + PuppeteerPage type extensions + engine abstraction (~220 LOC)
-- `server/src/native-tools/registry.ts` — +7 supportedActions across 2 signatures (~2 LOC)
-- `server/src/native-tools/templates/filesystem.ts` — +3 new result views (~50 LOC)
-- `server/src/native-tools/templates/browser.ts` — +extract/evaluate content area (~12 LOC)
-- `server/src/filesystem-tools.test.ts` — +13 new test cases (~120 LOC)
-- `server/src/sprint-enhancements.test.ts` — Updated tool count assertions (~4 LOC)
-- `server/src/shell-pty.ts` — Minor changes
-- `projects/enso/project.json` — Sprint data updates
-- `projects/enso/brain.md` — Sprint 20 meta-review updates
+Sprint 21 new changes (+96 / -11 LOC across 6 source files + 5 new test files):
+- `server/src/standalone-agent.ts` — BUILD_INTENT regex fast path (lines 656-692), never-silent guard (lines 696-840), session boundary expansion (lines 231-237), Rule 4 update (lines 249-252) (~+47 LOC Track A, +6 LOC Track B)
+- `server/src/shell-pty.ts` — Dynamic PROJECT_ROOT via import.meta.url replacing hard-coded path
+- `server/src/filesystem-tools.ts` — DETECTED_PROJECT_ROOT dynamic resolution + ALLOWED_ROOTS enforcement
+- `server/src/system-tools.ts` — Dynamic PROJECT_ROOT via import.meta.url
+- `server/src/server.ts` — JSDoc comment block only (cosmetic)
+- `server/src/tool-router.ts` — 14 new keywords in isOperationalPrompt()
+- `server/src/shell-pty.test.ts` — NEW: 10 tests (validateCwd, PROJECT_ROOT)
+- `server/src/filesystem-error-handling.test.ts` — NEW: 15 tests
+- `server/src/intent-routing.test.ts` — NEW: 27 tests (isOperationalPrompt keyword expansion)
+- `server/src/session-isolation.test.ts` — NEW: 6 tests
+- `server/src/browser-tools.test.ts` — NEW: 16 tests
+- `projects/enso/project.json` — Sprint 21 data updates
+- `projects/enso/brain.md` — Sprint 21 meta-review updates
 
 ---
 
-*Last updated: Sprint 20 meta-review (2026-04-04)*
-*Next update: Phase 6 meta-review of Sprint 21*
+*Last updated: Sprint 21 meta-review (2026-04-05)*
+*Next update: Phase 6 meta-review of Sprint 22*

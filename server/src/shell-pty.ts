@@ -9,10 +9,15 @@ import * as pty from "node-pty";
 import { platform, homedir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
-import { normalize, resolve } from "path";
+import { dirname, join, normalize, resolve } from "path";
+import { fileURLToPath } from "url";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
 import { logError, logAction } from "./action-log.js";
+
+/** Detect project root from module location (server/src → ../../). */
+const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(join(PLUGIN_DIR, "..", ".."));
 
 /** Maximum concurrent shell sessions per client. */
 const MAX_SESSIONS_PER_CLIENT = 3;
@@ -38,8 +43,8 @@ interface ShellSession {
 const sessions = new Map<string, ShellSession>();
 
 /** Validate that CWD is a real existing directory. */
-function validateCwd(cwd: string | undefined): string {
-  const defaultCwd = resolve("D:\\Github\\Enso");
+export function validateCwd(cwd: string | undefined): string {
+  const defaultCwd = PROJECT_ROOT;
   if (!cwd) return existsSync(defaultCwd) ? defaultCwd : homedir();
   const resolved = normalize(resolve(cwd));
   if (!existsSync(resolved)) return existsSync(defaultCwd) ? defaultCwd : homedir();
