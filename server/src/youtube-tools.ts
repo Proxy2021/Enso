@@ -52,15 +52,15 @@ function getYouTubePublic() {
 }
 
 /** Enrich video IDs with view counts, durations, etc. */
-async function enrichVideos(yt: ReturnType<typeof google.youtube>, videoIds: string[]): Promise<Map<string, { viewCount?: string; likeCount?: string; duration?: string }>> {
-  const map = new Map<string, { viewCount?: string; likeCount?: string; duration?: string }>();
+async function enrichVideos(yt: ReturnType<typeof google.youtube>, videoIds: string[]): Promise<Map<string, { viewCount?: string; likeCount?: string; duration?: string; description?: string }>> {
+  const map = new Map<string, { viewCount?: string; likeCount?: string; duration?: string; description?: string }>();
   if (videoIds.length === 0) return map;
 
   // YouTube API allows max 50 IDs per request
   for (let i = 0; i < videoIds.length; i += 50) {
     const batch = videoIds.slice(i, i + 50);
     const res = await yt.videos.list({
-      part: ["statistics", "contentDetails"],
+      part: ["statistics", "contentDetails", "snippet"],
       id: batch,
     });
     for (const item of res.data.items || []) {
@@ -68,13 +68,14 @@ async function enrichVideos(yt: ReturnType<typeof google.youtube>, videoIds: str
         viewCount: item.statistics?.viewCount,
         likeCount: item.statistics?.likeCount,
         duration: item.contentDetails?.duration?.replace("PT", "").toLowerCase(),
+        description: item.snippet?.description?.slice(0, 500),
       });
     }
   }
   return map;
 }
 
-function formatVideo(item: any, stats?: { viewCount?: string; likeCount?: string; duration?: string }): VideoInfo {
+function formatVideo(item: any, stats?: { viewCount?: string; likeCount?: string; duration?: string; description?: string }): VideoInfo {
   const snippet = item.snippet || {};
   const videoId = item.id?.videoId || item.contentDetails?.videoId || item.id || "";
   return {
@@ -88,7 +89,7 @@ function formatVideo(item: any, stats?: { viewCount?: string; likeCount?: string
     duration: stats?.duration,
     thumbnailUrl: snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
-    description: snippet.description?.slice(0, 200),
+    description: stats?.description || snippet.description?.slice(0, 500),
   };
 }
 
