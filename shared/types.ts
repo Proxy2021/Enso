@@ -191,6 +191,10 @@ export interface ServerMessage {
   proactiveSuggestions?: ProactiveSuggestionDTO[];
   /** Proactive engine: daily digest */
   dailyDigest?: DailyDigestDTO;
+  /** Scheduled tasks */
+  scheduledTasks?: ScheduledTaskDef[];
+  scheduledTaskUpdate?: ScheduledTaskDef;
+  scheduledTaskRun?: ScheduledTaskRun;
   /** Proactive engine: consent state */
   proactiveConsent?: ProactiveConsentDTO;
   /** Proactive engine: analytics */
@@ -269,6 +273,11 @@ export interface ClientMessage {
     | "proactive.set_consent"
     | "proactive.get_consent"
     | "proactive.get_analytics"
+    | "scheduled-task.create"
+    | "scheduled-task.update"
+    | "scheduled-task.delete"
+    | "scheduled-task.trigger"
+    | "scheduled-task.list"
     | "client.error";
   mode?: ChannelMode;
   claudeModel?: string;
@@ -358,6 +367,10 @@ export interface ClientMessage {
   suggestionPillar?: string;
   proactiveConsentUpdate?: Partial<ProactiveConsentDTO>;
   suggestionCount?: number;
+  // scheduled-task.* fields
+  scheduledTaskDef?: Partial<ScheduledTaskDef>;
+  scheduledTaskId?: string;
+  scheduledTaskUpdates?: Partial<ScheduledTaskDef>;
 }
 
 // ── Orchestration ──
@@ -549,6 +562,45 @@ export interface ProactiveConsentDTO {
   workflow: boolean;
   learning: boolean;
   ambient: boolean;
+}
+
+// ── Scheduled Tasks ──
+
+export interface ScheduledTaskAction {
+  type: "prompt" | "tool";
+  prompt?: string;
+  conversationId?: string;
+  toolId?: string;
+  params?: Record<string, unknown>;
+}
+
+export interface ScheduledTaskDef {
+  taskId: string;
+  name: string;
+  description: string;
+  cron?: string;
+  fireAt?: string;
+  action: ScheduledTaskAction;
+  enabled: boolean;
+  createdAt: number;
+  lastFiredAt?: number;
+  lastRunStatus?: "success" | "failed" | "running";
+  nextFireAt?: number;
+  model?: string;
+  recurring: boolean;
+  maxAgeMs?: number;
+  notifyOnComplete: boolean;
+}
+
+export interface ScheduledTaskRun {
+  runId: string;
+  taskId: string;
+  firedAt: number;
+  completedAt?: number;
+  status: "running" | "success" | "failed";
+  durationMs?: number;
+  error?: string;
+  resultSummary?: string;
 }
 
 // ── Type Guards ──

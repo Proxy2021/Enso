@@ -83,6 +83,14 @@ export const APP_CATALOG: AppEntry[] = [
     signatureId: "video_studio_view",
     description: "AI video generation studio: create cinematic videos from text prompts, animate still images, craft optimized prompts, browse video gallery",
   },
+  // ── Email ──
+  {
+    appId: "email",
+    primaryTool: "enso_email_send",
+    actions: ["send"],
+    signatureId: "email_send",
+    description: "Email: send messages via Gmail SMTP with attachments, CC/BCC, HTML support",
+  },
   // ── Terminal System Apps ──
   {
     appId: "claude_code",

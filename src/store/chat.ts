@@ -162,6 +162,9 @@ interface CardStore {
   cardSearchQuery: string;
   cardSearchVisible: boolean;
 
+  // Scheduled tasks
+  scheduledTasks: import("@shared/types").ScheduledTaskDef[];
+
   // Tab navigation (universal — desktop rail + mobile bottom bar)
   activeTab: "chat" | "tasks" | "evolve" | "projects" | "me";
   chatViewOpen: boolean;
@@ -230,6 +233,13 @@ interface CardStore {
   setCardSearchVisible: (visible: boolean) => void;
   setActiveTab: (tab: "chat" | "tasks" | "evolve" | "projects" | "me") => void;
   setChatViewOpen: (open: boolean) => void;
+  // Scheduled task actions
+  fetchScheduledTasks: () => void;
+  createScheduledTask: (def: Partial<import("@shared/types").ScheduledTaskDef>) => void;
+  updateScheduledTask: (taskId: string, updates: Partial<import("@shared/types").ScheduledTaskDef>) => void;
+  deleteScheduledTask: (taskId: string) => void;
+  triggerScheduledTask: (taskId: string) => void;
+
   _handleServerMessage: (msg: ServerMessage) => void;
 }
 
@@ -390,6 +400,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   cardSearchVisible: false,
   activeTab: "chat" as const,
   chatViewOpen: false,
+  scheduledTasks: [],
 
   setActiveTab: (tab) => set({ activeTab: tab, chatViewOpen: false }),
   setChatViewOpen: (open) => set({ chatViewOpen: open }),
@@ -2069,7 +2080,62 @@ export const useChatStore = create<CardStore>((set, get) => ({
     }
   },
 
+  // ── Scheduled Task Actions ──
+
+  fetchScheduledTasks: () => {
+    const ws = get()._wsClient;
+    if (ws) ws.send({ type: "scheduled-task.list" } as ClientMessage);
+  },
+
+  createScheduledTask: (def) => {
+    const ws = get()._wsClient;
+    if (ws) ws.send({ type: "scheduled-task.create", scheduledTaskDef: def } as ClientMessage);
+  },
+
+  updateScheduledTask: (taskId, updates) => {
+    const ws = get()._wsClient;
+    if (ws) ws.send({ type: "scheduled-task.update", scheduledTaskId: taskId, scheduledTaskUpdates: updates } as ClientMessage);
+  },
+
+  deleteScheduledTask: (taskId) => {
+    const ws = get()._wsClient;
+    if (ws) ws.send({ type: "scheduled-task.delete", scheduledTaskId: taskId } as ClientMessage);
+  },
+
+  triggerScheduledTask: (taskId) => {
+    const ws = get()._wsClient;
+    if (ws) ws.send({ type: "scheduled-task.trigger", scheduledTaskId: taskId } as ClientMessage);
+  },
+
   _handleServerMessage: (msg: ServerMessage) => {
+    // Handle scheduled task messages
+    if (msg.scheduledTasks) {
+      set({ scheduledTasks: msg.scheduledTasks });
+    }
+    if (msg.scheduledTaskUpdate) {
+      const existing = get().scheduledTasks;
+      const idx = existing.findIndex((t) => t.taskId === msg.scheduledTaskUpdate!.taskId);
+      if (idx >= 0) {
+        const updated = [...existing];
+        updated[idx] = msg.scheduledTaskUpdate!;
+        set({ scheduledTasks: updated });
+      } else {
+        set({ scheduledTasks: [...existing, msg.scheduledTaskUpdate!] });
+      }
+    }
+    if (msg.scheduledTaskRun && msg.scheduledTaskRun.status !== "running") {
+      const run = msg.scheduledTaskRun;
+      const task = get().scheduledTasks.find((t) => t.taskId === run.taskId);
+      if (task?.notifyOnComplete) {
+        notifyTaskComplete({
+          type: "general",
+          title: `Scheduled: ${task.name}`,
+          body: run.status === "success" ? (run.resultSummary || "Completed") : (run.error || "Failed"),
+          success: run.status === "success",
+        });
+      }
+    }
+
     // Handle settings messages (mode + tool families)
     if (msg.settings) {
       const patch: Partial<CardStore> = {};

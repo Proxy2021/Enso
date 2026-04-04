@@ -32,6 +32,8 @@ const SERVICE_KEYS: ServiceKeyDef[] = [
   { id: "byteplus", envVar: "BYTEPLUS_API_KEY", label: "BytePlus Seedance", description: "AI video generation", setupUrl: "https://console.byteplus.com/" },
   { id: "replicate", envVar: "REPLICATE_API_TOKEN", label: "Replicate", description: "AI image upscaling", setupUrl: "https://replicate.com/account/api-tokens" },
   { id: "removebg", envVar: "REMOVE_BG_API_KEY", label: "Remove.bg", description: "Background removal", setupUrl: "https://www.remove.bg/api" },
+  { id: "smtpEmail", envVar: "SMTP_EMAIL", label: "Gmail Address", description: "Gmail address for sending emails (e.g. you@gmail.com)", setupUrl: "https://myaccount.google.com/apppasswords" },
+  { id: "smtpPassword", envVar: "SMTP_PASSWORD", label: "Gmail App Password", description: "Gmail App Password (16-char code from Google > Security > App Passwords)", setupUrl: "https://myaccount.google.com/apppasswords" },
 ];
 
 export function getServiceKeyDefinitions(): ServiceKeyDef[] {

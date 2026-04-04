@@ -10,7 +10,7 @@
 
 // ── Types ──
 
-export type SessionType = "claude-code" | "orchestration-task" | "build" | "deep-research";
+export type SessionType = "claude-code" | "orchestration-task" | "build" | "deep-research" | "scheduled-task";
 export type SessionStatus = "running" | "completed" | "failed" | "cancelled";
 
 export interface SessionInfo {

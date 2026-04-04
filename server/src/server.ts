@@ -1263,6 +1263,59 @@ export async function startEnsoServer(opts: {
     res.json({ workspaces });
   });
 
+  // ── Scheduled Tasks REST API ──
+
+  app.get("/api/scheduled-tasks", async (_req, res) => {
+    const { listTasks } = await import("./scheduled-tasks.js");
+    res.json({ tasks: listTasks() });
+  });
+
+  app.post("/api/scheduled-tasks", async (req, res) => {
+    try {
+      const { createTask } = await import("./scheduled-tasks.js");
+      const task = createTask(req.body);
+      res.json({ success: true, task });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.put("/api/scheduled-tasks/:taskId", async (req, res) => {
+    try {
+      const { updateTask } = await import("./scheduled-tasks.js");
+      const task = updateTask(req.params.taskId, req.body);
+      res.json({ success: true, task });
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.delete("/api/scheduled-tasks/:taskId", async (req, res) => {
+    try {
+      const { deleteTask } = await import("./scheduled-tasks.js");
+      deleteTask(req.params.taskId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post("/api/scheduled-tasks/:taskId/trigger", async (req, res) => {
+    try {
+      const { triggerTask } = await import("./scheduled-tasks.js");
+      const run = await triggerTask(req.params.taskId);
+      res.json({ success: true, run });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/api/scheduled-tasks/:taskId/runs", async (req, res) => {
+    const { getTaskRuns } = await import("./scheduled-tasks.js");
+    const count = parseInt(req.query.count as string) || 20;
+    res.json({ runs: getTaskRuns(req.params.taskId, count) });
+  });
+
   // ── Service API Keys Management ──
   // Persisted in ~/.enso/api-keys.json — easy to copy between machines
 
@@ -3406,6 +3459,96 @@ export async function startEnsoServer(opts: {
             if (monitorId) removeMonitor(monitorId);
             break;
           }
+
+          // ── Scheduled Tasks ──
+          case "scheduled-task.list": {
+            const { listTasks } = await import("./scheduled-tasks.js");
+            send({
+              id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+              scheduledTasks: listTasks(),
+              timestamp: Date.now(),
+            });
+            break;
+          }
+          case "scheduled-task.create": {
+            if (msg.scheduledTaskDef) {
+              const { createTask } = await import("./scheduled-tasks.js");
+              try {
+                const task = createTask(msg.scheduledTaskDef);
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  scheduledTaskUpdate: task,
+                  timestamp: Date.now(),
+                });
+              } catch (err) {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error",
+                  text: err instanceof Error ? err.message : String(err),
+                  timestamp: Date.now(),
+                });
+              }
+            }
+            break;
+          }
+          case "scheduled-task.update": {
+            if (msg.scheduledTaskId && msg.scheduledTaskUpdates) {
+              const { updateTask } = await import("./scheduled-tasks.js");
+              try {
+                const task = updateTask(msg.scheduledTaskId, msg.scheduledTaskUpdates);
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  scheduledTaskUpdate: task,
+                  timestamp: Date.now(),
+                });
+              } catch (err) {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error",
+                  text: err instanceof Error ? err.message : String(err),
+                  timestamp: Date.now(),
+                });
+              }
+            }
+            break;
+          }
+          case "scheduled-task.delete": {
+            if (msg.scheduledTaskId) {
+              const { deleteTask } = await import("./scheduled-tasks.js");
+              try {
+                deleteTask(msg.scheduledTaskId);
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  text: `Deleted task ${msg.scheduledTaskId}`,
+                  timestamp: Date.now(),
+                });
+              } catch (err) {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error",
+                  text: err instanceof Error ? err.message : String(err),
+                  timestamp: Date.now(),
+                });
+              }
+            }
+            break;
+          }
+          case "scheduled-task.trigger": {
+            if (msg.scheduledTaskId) {
+              const { triggerTask } = await import("./scheduled-tasks.js");
+              triggerTask(msg.scheduledTaskId).then((run) => {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+                  scheduledTaskRun: run,
+                  timestamp: Date.now(),
+                });
+              }).catch((err) => {
+                send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error",
+                  text: err instanceof Error ? err.message : String(err),
+                  timestamp: Date.now(),
+                });
+              });
+            }
+            break;
+          }
         }
       } catch (err) {
         runtime.error?.(`[enso] message handling error: ${String(err)}`);
@@ -3467,6 +3610,33 @@ export async function startEnsoServer(opts: {
 
       // Prune stale card history files on startup
       try { pruneStaleJournals(); } catch { /* best-effort */ }
+
+      // Start scheduled task scheduler
+      import("./scheduled-tasks.js").then(async ({ initScheduler }) => {
+        const { executeScheduledTask, setScheduledTaskClient } = await import("./scheduled-tasks-executor.js");
+        // Register first connected client for delivery (will update on reconnect)
+        const broadcastToClients = (msg: Partial<ServerMessage>) => {
+          const fullMsg: ServerMessage = {
+            id: randomUUID(), runId: randomUUID(), sessionKey: "", seq: 0, state: "final",
+            ...msg,
+            timestamp: Date.now(),
+          };
+          for (const c of clients.values()) {
+            try { c.send(fullMsg); } catch { /* client may have disconnected */ }
+          }
+          // Keep executor aware of first available client
+          const firstClient = clients.values().next().value;
+          setScheduledTaskClient(firstClient ? {
+            ws: firstClient.ws as unknown as { send: (data: string) => void; readyState: number },
+            clientId: firstClient.id,
+            account: { id: account.id ?? "standalone", peer: firstClient.id },
+          } : null);
+        };
+        initScheduler(executeScheduledTask, broadcastToClients);
+        runtime.log?.("[enso] scheduled task scheduler started");
+      }).catch((err) => {
+        runtime.error?.(`[enso] failed to start scheduler: ${err instanceof Error ? err.message : String(err)}`);
+      });
 
       // Start research topic monitor loop
       import("./research-monitor.js").then(({ startMonitorLoop }) => {
@@ -3530,6 +3700,9 @@ export async function startEnsoServer(opts: {
           try { client.send(restartMsg); } catch { /* best-effort */ }
         }
       }
+
+      // Stop scheduled task scheduler
+      import("./scheduled-tasks.js").then(({ stopScheduler }) => stopScheduler()).catch(() => {});
 
       const closeCode = isRestart ? 4078 : 1001;
       const closeReason = isRestart ? "server-restart" : "shutdown";

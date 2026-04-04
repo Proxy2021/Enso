@@ -6,8 +6,11 @@ import { useT } from "../lib/i18n";
 import { TabHeader, MobileViewHeader } from "./TabNavigation";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
+import type { ScheduledTaskDef } from "@shared/types";
 import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 import { timeAgo, formatElapsedTime } from "../lib/time-utils";
+import { ScheduledTaskDialog } from "./ScheduledTaskDialog";
+import { Clock, Play, Pause, Trash2, Pencil, Plus } from "lucide-react";
 
 // ── Types (mirrors session-registry.ts) ──
 
@@ -141,11 +144,21 @@ export default function TasksView() {
   const setChatViewOpen = useChatStore((s) => s.setChatViewOpen);
   const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
 
+  const scheduledTasks = useChatStore((s) => s.scheduledTasks);
+  const fetchScheduledTasks = useChatStore((s) => s.fetchScheduledTasks);
+  const createScheduledTask = useChatStore((s) => s.createScheduledTask);
+  const updateScheduledTask = useChatStore((s) => s.updateScheduledTask);
+  const deleteScheduledTask = useChatStore((s) => s.deleteScheduledTask);
+  const triggerScheduledTask = useChatStore((s) => s.triggerScheduledTask);
+
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [orchestrations, setOrchestrations] = useState<OrchestrationInfo[]>([]);
   const [recoverables, setRecoverables] = useState<RecoverableInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
+  const [showTaskDialog, setShowTaskDialog] = useState(false);
+  const [editingTask, setEditingTask] = useState<ScheduledTaskDef | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -171,9 +184,10 @@ export default function TasksView() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
+    fetchScheduledTasks();
+    const interval = setInterval(() => { fetchStatus(); fetchScheduledTasks(); }, 5000);
     return () => clearInterval(interval);
-  }, [fetchStatus]);
+  }, [fetchStatus, fetchScheduledTasks]);
 
   const doAction = useCallback(async (method: string, path: string, key: string) => {
     setActionInFlight(key);
@@ -338,6 +352,124 @@ export default function TasksView() {
           </section>
         )}
 
+        {/* Scheduled Tasks */}
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-blue-400" />
+              <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Scheduled Tasks</h2>
+              {scheduledTasks.length > 0 && (
+                <span className="text-[10px] text-gray-600">({scheduledTasks.filter((t) => t.enabled).length} active)</span>
+              )}
+            </div>
+            <button
+              onClick={() => { setEditingTask(null); setShowTaskDialog(true); }}
+              className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25 transition-colors cursor-pointer"
+            >
+              <Plus className="w-3 h-3" /> New
+            </button>
+          </div>
+
+          {scheduledTasks.length === 0 ? (
+            <div className="rounded-xl border border-gray-800/50 bg-gray-900/30 px-4 py-6 text-center">
+              <Clock className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+              <p className="text-xs text-gray-500">No scheduled tasks yet</p>
+              <p className="text-[10px] text-gray-600 mt-1">Create tasks that run automatically on a schedule</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {scheduledTasks.map((task) => (
+                <div key={task.taskId} className={`rounded-xl border px-4 py-3 ${task.enabled ? "border-gray-700/50 bg-gray-800/40" : "border-gray-800/30 bg-gray-900/30 opacity-60"}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-medium text-gray-200">{task.name}</span>
+                        {task.lastRunStatus === "running" && (
+                          <span className="flex items-center gap-1 text-[10px] text-green-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> running
+                          </span>
+                        )}
+                        {!task.enabled && <span className="text-[10px] text-gray-600">paused</span>}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                        <span className="font-mono">{task.cron || (task.fireAt ? `at ${new Date(task.fireAt).toLocaleString()}` : "manual")}</span>
+                        {task.recurring && <span className="text-blue-400/60">recurring</span>}
+                        {!task.recurring && <span className="text-amber-400/60">one-shot</span>}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
+                        {task.nextFireAt && (
+                          <span>Next: <span className="text-gray-400">{timeAgo(task.nextFireAt).replace(" ago", "").replace("just now", "now")}</span></span>
+                        )}
+                        {task.lastFiredAt && (
+                          <span>Last: <span className={task.lastRunStatus === "success" ? "text-emerald-400" : task.lastRunStatus === "failed" ? "text-red-400" : "text-gray-400"}>
+                            {task.lastRunStatus === "success" ? "\u2713" : task.lastRunStatus === "failed" ? "\u2717" : "\u2026"} {timeAgo(task.lastFiredAt)}
+                          </span></span>
+                        )}
+                      </div>
+                      {task.description && <p className="text-[10px] text-gray-600 mt-0.5 truncate">{task.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {task.lastRunStatus !== "running" && (
+                        <button
+                          onClick={() => triggerScheduledTask(task.taskId)}
+                          title="Run now"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-500/10 transition-colors cursor-pointer"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => updateScheduledTask(task.taskId, { enabled: !task.enabled })}
+                        title={task.enabled ? "Pause" : "Resume"}
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 transition-colors cursor-pointer"
+                      >
+                        {task.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => { setEditingTask(task); setShowTaskDialog(true); }}
+                        title="Edit"
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {deleteConfirm === task.taskId ? (
+                        <button
+                          onClick={() => { deleteScheduledTask(task.taskId); setDeleteConfirm(null); }}
+                          className="px-2 py-1 text-[10px] font-medium rounded bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors cursor-pointer"
+                        >
+                          Confirm
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirm(task.taskId)}
+                          title="Delete"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Task creation dialog */}
+        <ScheduledTaskDialog
+          open={showTaskDialog}
+          onClose={() => { setShowTaskDialog(false); setEditingTask(null); }}
+          onSave={(def) => {
+            if (editingTask) {
+              updateScheduledTask(editingTask.taskId, def);
+            } else {
+              createScheduledTask(def);
+            }
+          }}
+          editTask={editingTask}
+        />
+
         {/* Recoverable Orchestrations */}
         {recoverables.length > 0 && (
           <section>
@@ -362,7 +494,7 @@ export default function TasksView() {
         )}
 
         {/* Empty active state */}
-        {!hasActive && recoverables.length === 0 && completedTasks.length === 0 && (
+        {!hasActive && recoverables.length === 0 && completedTasks.length === 0 && scheduledTasks.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-gray-500">
             <svg className="w-10 h-10 mb-3 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
