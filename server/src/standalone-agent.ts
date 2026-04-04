@@ -341,6 +341,12 @@ async function callGeminiWithTools(params: {
     // Only include tools if we have function declarations
     if (params.tools.length > 0) {
       body.tools = [{ function_declarations: params.tools }];
+      // Force structured function calling — without this, some Gemini models
+      // output tool calls as text (e.g. $$ tool_name(...) $$) instead of
+      // using the functionCall response format.
+      (body as Record<string, unknown>).tool_config = {
+        function_calling_config: { mode: "AUTO" },
+      };
     }
 
     const response = await fetch(
@@ -499,6 +505,18 @@ export async function handleStandaloneInbound(params: {
 
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Chat [conv=${conversationId.slice(0, 20)}]: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
   setLastUserMessage(rawBody);
+
+  // Send immediate processing indicator so the user sees feedback right away
+  client.send({
+    id: randomUUID(),
+    runId,
+    sessionKey,
+    seq: 0,
+    state: "delta",
+    operation: { operationId: stableCardId, stage: "processing", label: "Thinking...", cancellable: true },
+    targetCardId: stableCardId,
+    timestamp: Date.now(),
+  });
 
   // ── /compact command: force-compact conversation history ──
   if (rawBody === "/compact") {
