@@ -19,8 +19,21 @@ var isDiscover = tool === "enso_youtube_manager_discover";
 var isAnalytics = tool === "enso_youtube_manager_analytics";
 var isUnsubscribe = tool === "enso_youtube_manager_unsubscribe";
 
+// ── Derive active tab from data tool (persists across re-renders) ──
+var derivedTab = "subscriptions";
+if (isFeed) derivedTab = "feed";
+else if (isTrending) derivedTab = "trending";
+else if (isDiscover) derivedTab = "discover";
+else if (isAnalytics) derivedTab = "analytics";
+else if (isUnsubscribe) derivedTab = "subscriptions";
+
 // ── State ──
-var [activeTab, setActiveTab] = useState("subscriptions");
+var [activeTab, setActiveTab] = useState(derivedTab);
+
+// Sync activeTab when data changes (new tool response arrives)
+useEffect(function() {
+  setActiveTab(derivedTab);
+}, [derivedTab]);
 var [viewMode, setViewMode] = useState("grid");
 var [searchQuery, setSearchQuery] = useState("");
 var [selectedCategory, setSelectedCategory] = useState("all");
@@ -101,14 +114,22 @@ var TabBar = function() {
           <button
             key={tab.id}
             onClick={function() {
-              setActiveTab(tab.id);
               setSelected(new Set());
               setSelectMode(false);
-              // Trigger data fetch for tabs that need it
-              if (tab.id === "feed" && !isFeed) onAction("feed", {});
-              if (tab.id === "trending" && !isTrending) onAction("trending", { regionCode: regionCode });
-              if (tab.id === "discover" && !isDiscover) onAction("discover", {});
-              if (tab.id === "analytics" && !isAnalytics) onAction("analytics", {});
+              setConfirmUnsub(false);
+              // Tabs that reuse existing data just switch view
+              if (tab.id === "subscriptions" || tab.id === "cleanup") {
+                setActiveTab(tab.id);
+                // Fetch manage data if we don't have it
+                if (!isManage && !isUnsubscribe) onAction("manage", {});
+                else setActiveTab(tab.id);
+                return;
+              }
+              // Other tabs need their own data
+              if (tab.id === "feed") onAction("feed", {});
+              else if (tab.id === "trending") onAction("trending", { regionCode: regionCode });
+              else if (tab.id === "discover") onAction("discover", {});
+              else if (tab.id === "analytics") onAction("analytics", {});
             }}
             className={"flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap " +
               (activeTab === tab.id ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800")}
@@ -736,22 +757,21 @@ if (data?.error) {
   );
 }
 
-// Determine which view to show based on active tab + data tool
+// Determine which view to show — activeTab is primary, data tool confirms data is ready
 var content;
 if (isUnsubscribe) {
   content = <UnsubscribeResultView />;
-} else if (activeTab === "feed" && isFeed) {
-  content = <FeedView />;
-} else if (activeTab === "trending" && isTrending) {
-  content = <TrendingView />;
-} else if (activeTab === "discover" && isDiscover) {
-  content = <DiscoverView />;
-} else if (activeTab === "analytics" && isAnalytics) {
-  content = <AnalyticsView />;
-} else if (activeTab === "cleanup" && isManage) {
-  content = <CleanupView />;
+} else if (activeTab === "feed") {
+  content = isFeed ? <FeedView /> : <EmptyState icon={<Play className="w-8 h-8" />} title="Loading feed..." description="Fetching latest videos from your subscriptions" />;
+} else if (activeTab === "trending") {
+  content = isTrending ? <TrendingView /> : <EmptyState icon={<TrendingUp className="w-8 h-8" />} title="Loading trending..." description="Fetching popular videos" />;
+} else if (activeTab === "discover") {
+  content = isDiscover ? <DiscoverView /> : <EmptyState icon={<Compass className="w-8 h-8" />} title="Loading discovery..." description="Finding channels based on your interests" />;
+} else if (activeTab === "analytics") {
+  content = isAnalytics ? <AnalyticsView /> : <EmptyState icon={<BarChart3 className="w-8 h-8" />} title="Loading analytics..." description="Computing subscription analytics" />;
+} else if (activeTab === "cleanup") {
+  content = isManage ? <CleanupView /> : <EmptyState icon={<Trash2 className="w-8 h-8" />} title="Loading..." description="Preparing cleanup view" />;
 } else {
-  // Default: Subscriptions tab (or if data doesn't match tab, show subscriptions)
   content = <SubscriptionsView />;
 }
 
