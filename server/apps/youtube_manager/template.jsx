@@ -1,6 +1,16 @@
 // YouTube Manager — template.jsx
 // 6-tab power-user YouTube management app
 
+export default function GeneratedUI({ data, onAction }) {
+
+if (!data) {
+  return (
+    <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 text-center">
+      <div className="animate-pulse text-gray-500 text-sm">Loading YouTube Manager...</div>
+    </div>
+  );
+}
+
 var tool = data?.tool || "";
 var isManage = tool === "enso_youtube_manager_manage";
 var isFeed = tool === "enso_youtube_manager_feed";
@@ -80,11 +90,13 @@ var tabs = [
   { id: "cleanup", label: "Cleanup", icon: "Trash2" },
 ];
 
+var IconMap = { Users: Users, Play: Play, TrendingUp: TrendingUp, Compass: Compass, BarChart3: BarChart3, Trash2: Trash2 };
+
 var TabBar = function() {
   return (
     <div className="flex gap-1 bg-gray-900/50 rounded-xl p-1 mb-4 overflow-x-auto">
       {tabs.map(function(tab) {
-        var Icon = { Users: Users, Play: Play, TrendingUp: TrendingUp, Compass: Compass, BarChart3: BarChart3, Trash2: Trash2 }[tab.icon] || Users;
+        var Icon = IconMap[tab.icon] || Users;
         return (
           <button
             key={tab.id}
@@ -229,18 +241,17 @@ var SubscriptionsView = function() {
           </div>
         </div>
 
-        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-          <option value="all">All Categories</option>
-          {categories.map(function(cat) {
-            return <option key={cat.name} value={cat.name}>{cat.name} ({cat.count})</option>;
-          })}
-        </Select>
+        <Select value={selectedCategory} options={
+          [{ value: "all", label: "All Categories" }].concat(
+            categories.map(function(cat) { return { value: cat.name, label: cat.name + " (" + cat.count + ")" }; })
+          )
+        } onChange={setSelectedCategory} />
 
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <option value="name">Sort: Name</option>
-          <option value="subs">Sort: Subscribers</option>
-          <option value="videos">Sort: Videos</option>
-        </Select>
+        <Select value={sortBy} options={[
+          { value: "name", label: "Sort: Name" },
+          { value: "subs", label: "Sort: Subscribers" },
+          { value: "videos", label: "Sort: Videos" },
+        ]} onChange={setSortBy} />
 
         <button
           onClick={function() { setSelectMode(!selectMode); if (selectMode) setSelected(new Set()); }}
@@ -358,9 +369,9 @@ var TrendingView = function() {
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
-        <Select value={regionCode} onValueChange={function(v) { setRegionCode(v); onAction("trending", { regionCode: v }); }}>
-          {REGIONS.map(function(r) { return <option key={r.code} value={r.code}>{r.label}</option>; })}
-        </Select>
+        <Select value={regionCode} options={
+          REGIONS.map(function(r) { return { value: r.code, label: r.label }; })
+        } onChange={function(v) { setRegionCode(v); onAction("trending", { regionCode: v }); }} />
         <p className="text-xs text-gray-500 ml-auto">{videos.length} trending</p>
       </div>
       {videos.length > 0 ? (
@@ -762,3 +773,4 @@ return (
     </div>
   </div>
 );
+}

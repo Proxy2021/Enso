@@ -1,3 +1,4 @@
+var p = params || {};
 // YouTube Manager — analytics.js
 // Subscription analytics computed from cached subscription data
 

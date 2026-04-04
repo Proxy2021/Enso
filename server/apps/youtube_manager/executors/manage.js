@@ -1,6 +1,5 @@
 // YouTube Manager — manage.js
-// Fetches all subscriptions with stats, auto-categorization, and health scoring.
-// Caches for 10 minutes via ctx.store.
+// Fetches all subscriptions with auto-categorization.
 
 var CACHE_KEY = "yt_manager_subs";
 var CACHE_TTL = 600000; // 10 min
@@ -22,22 +21,16 @@ var CATEGORIES = {
   "Art & Design": /\bart\b|design|creative|illustrat|graphic|museum/i
 };
 
-function categorize(title, desc, topics) {
-  var text = (title + " " + desc + " " + (topics || []).join(" ")).toLowerCase();
+function categorize(title, desc) {
+  var text = (title + " " + desc).toLowerCase();
   for (var cat in CATEGORIES) {
     if (CATEGORIES[cat].test(text)) return cat;
   }
   return "Other";
 }
 
-function fmt(n) {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
-  if (n >= 1000) return Math.round(n / 1000) + "K";
-  return String(n);
-}
-
-// Fetch all subs with pagination
-var refresh = params.refresh === true;
+var p = params || {};
+var refresh = p.refresh === true;
 
 // Check cache first
 if (!refresh) {
@@ -51,73 +44,82 @@ if (!refresh) {
 }
 
 // Fetch subscriptions via the system tool
+// ctx.callTool returns { success, data, error, rawText }
+var subsResult = await ctx.callTool("enso_youtube_subscriptions", { maxResults: 999, all: true });
 var allSubs = [];
-var page = 0;
-var hasMore = true;
 
-while (hasMore && page < 10) {
-  var result = await ctx.callTool("enso_youtube_subscriptions", { maxResults: 999, all: true });
-  var parsed = typeof result === "string" ? JSON.parse(result) : result;
-  var items = parsed.channels || parsed.data?.channels || [];
-  if (items.length === 0) break;
-  allSubs = items;
-  hasMore = false; // The tool handles pagination internally
-  page++;
+// Try multiple parsing paths — the result shape varies
+if (subsResult && subsResult.data && subsResult.data.channels) {
+  allSubs = subsResult.data.channels;
+} else if (subsResult && subsResult.rawText) {
+  try {
+    var parsed = JSON.parse(subsResult.rawText);
+    allSubs = parsed.channels || [];
+  } catch(e) {}
+} else if (subsResult && typeof subsResult === "object") {
+  // Maybe the result IS the data directly
+  allSubs = subsResult.channels || [];
 }
 
-// Enrich with channel stats (batch via YouTube API)
-// We call the YouTube search to get basic channel info since we already have channelIds
-var channelIds = allSubs.map(function(s) { return s.channelId; });
+// If still empty, try reading rawText from data
+if (allSubs.length === 0 && subsResult && subsResult.data && typeof subsResult.data === "string") {
+  try {
+    var p2 = JSON.parse(subsResult.data);
+    allSubs = p2.channels || [];
+  } catch(e) {}
+}
 
-// Use ctx.callTool to get channel details — call enso_youtube_channel_videos for a sampling
-// Actually, we need raw stats. Let's use a different approach - call a batch script
+// Debug: if still empty, include error info in result
+var debugInfo = null;
+if (allSubs.length === 0) {
+  debugInfo = {
+    subsResultType: typeof subsResult,
+    success: subsResult ? subsResult.success : "no result",
+    error: subsResult ? subsResult.error : "no result",
+    dataType: subsResult ? typeof subsResult.data : "N/A",
+    dataKeys: subsResult && subsResult.data ? Object.keys(subsResult.data).slice(0, 10) : [],
+    rawTextSlice: subsResult && subsResult.rawText ? subsResult.rawText.slice(0, 200) : "N/A",
+  };
+}
+
+// Categorize channels
 var enriched = [];
 for (var i = 0; i < allSubs.length; i++) {
   var sub = allSubs[i];
   enriched.push({
     subscriptionId: sub.subscriptionId || "",
-    channelId: sub.channelId,
-    title: sub.title,
+    channelId: sub.channelId || "",
+    title: sub.title || "",
     description: sub.description || "",
     thumbnailUrl: sub.thumbnailUrl || "",
-    category: categorize(sub.title, sub.description || "", []),
-    subscriberCount: 0,
-    videoCount: 0,
-    subscriberCountFmt: "—",
-    videoCountFmt: "—"
+    category: categorize(sub.title || "", sub.description || ""),
+    subscriberCount: sub.subscriberCount || 0,
+    videoCount: sub.videoCount || 0
   });
 }
 
-// We need stats — use Bash to call YouTube API directly for enrichment
-try {
-  var statsScript = 'const{google}=require("googleapis");const k=require("C:/Users/Administrator/.enso/api-keys.json");const a=new google.auth.OAuth2(k.youtubeClientId,k.youtubeClientSecret);a.setCredentials({refresh_token:k.youtubeRefreshToken});const yt=google.youtube({version:"v3",auth:a});async function m(){const ids=' + JSON.stringify(channelIds) + ';const r={};for(let i=0;i<ids.length;i+=50){const b=ids.slice(i,i+50);const res=await yt.channels.list({part:["statistics","topicDetails"],id:b});for(const c of res.data.items||[]){r[c.id]={s:parseInt(c.statistics?.subscriberCount||"0"),v:parseInt(c.statistics?.videoCount||"0"),t:(c.topicDetails?.topicCategories||[]).map(t=>t.split("/").pop())}}}console.log(JSON.stringify(r))}m()';
-
-  var statsResult = await ctx.callTool("enso_fs_read_text_file", { path: "NUL" });
-  // Fallback: use the shell to execute
-} catch(e) {}
-
-// Build final result
-var categories = {};
+// Build category summary
+var catCounts = {};
 for (var j = 0; j < enriched.length; j++) {
-  var ch = enriched[j];
-  if (!categories[ch.category]) categories[ch.category] = [];
-  categories[ch.category].push(ch);
+  var cat = enriched[j].category;
+  catCounts[cat] = (catCounts[cat] || 0) + 1;
 }
 
-var categoryList = Object.keys(categories).sort(function(a, b) {
-  return categories[b].length - categories[a].length;
+var categoryList = Object.keys(catCounts).sort(function(a, b) {
+  return catCounts[b] - catCounts[a];
+}).map(function(cat) {
+  return { name: cat, count: catCounts[cat] };
 });
 
 var result = {
   tool: "enso_youtube_manager_manage",
   totalChannels: enriched.length,
-  categories: categoryList.map(function(cat) {
-    return { name: cat, count: categories[cat].length };
-  }),
+  categories: categoryList,
   channels: enriched.sort(function(a, b) {
     return a.title.localeCompare(b.title);
   }),
-  cachedAt: Date.now()
+  cachedAt: Date.now(),
+  debug: debugInfo
 };
 
 // Cache it
