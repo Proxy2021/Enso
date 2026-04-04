@@ -1967,6 +1967,7 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration completed: ${orchId}` });
     updateOrchestrationStatus(orchId, "completed");
     try { orch.onComplete?.(orchId, "completed"); } catch { /* best effort */ }
+    sendOrchestrationCompletionEmail(orch.plan, "completed").catch(() => {});
     unregisterOrchestration(orchId);
   } else if (allDone && anyFailed) {
     // Some tasks failed but the session finished
@@ -1978,6 +1979,7 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration finished: ${completed} completed, ${failed} failed` });
     updateOrchestrationStatus(orchId, status);
     try { orch.onComplete?.(orchId, status as "completed" | "failed"); } catch { /* best effort */ }
+    sendOrchestrationCompletionEmail(orch.plan, status as "completed" | "failed").catch(() => {});
     unregisterOrchestration(orchId);
   }
   // If tasks are still pending, leave status as "executing" (shouldn't happen)
@@ -2232,5 +2234,167 @@ export function loadOrchestration(orchestrationId: string): OrchestrationPlan | 
     return JSON.parse(readFileSync(filePath, "utf-8"));
   } catch {
     return null;
+  }
+}
+
+// ── Completion Email Notification ──
+
+async function sendOrchestrationCompletionEmail(plan: OrchestrationPlan, status: "completed" | "failed"): Promise<void> {
+  try {
+    const email = process.env.SMTP_EMAIL;
+    const password = process.env.SMTP_PASSWORD;
+    if (!email || !password) return; // SMTP not configured
+
+    const { default: nodemailer } = await import("nodemailer");
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com", port: 587, secure: false,
+      auth: { user: email, pass: password },
+    });
+
+    const completed = plan.tasks.filter(t => t.status === "completed");
+    const failed = plan.tasks.filter(t => t.status === "failed");
+    const blocked = plan.tasks.filter(t => t.status === "blocked");
+    const totalTasks = plan.tasks.length;
+    const duration = ""; // Could compute from task timestamps if available
+
+    const statusColor = status === "completed" ? "#4ade80" : "#f87171";
+    const statusIcon = status === "completed" ? "&#10003;" : "&#10007;";
+    const statusLabel = status === "completed" ? "Completed Successfully" : "Completed with Failures";
+
+    // Build task rows
+    let taskRows = "";
+    for (const task of plan.tasks) {
+      const taskStatusColor = task.status === "completed" ? "#4ade80" : task.status === "failed" ? "#f87171" : "#94a3b8";
+      const taskIcon = task.status === "completed" ? "&#10003;" : task.status === "failed" ? "&#10007;" : "&#8212;";
+      const roleColor: Record<string, string> = {
+        researcher: "#60a5fa", architect: "#a78bfa", builder: "#fbbf24",
+        coder: "#34d399", reviewer: "#f472b6",
+      };
+      const roleBg = roleColor[task.agentRole] || "#64748b";
+
+      // Extract key info from result summary
+      const summary = task.resultSummary?.slice(0, 300) || task.error || "";
+      const verdict = task.structuredResult?.verdict || "";
+
+      taskRows += `
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #1e293b;vertical-align:top">
+            <span style="color:${taskStatusColor};font-size:14px">${taskIcon}</span>
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #1e293b;vertical-align:top">
+            <div style="color:#e2e8f0;font-size:13px;font-weight:600">${task.title}</div>
+            <div style="margin-top:4px">
+              <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${roleBg}20;color:${roleBg};font-size:10px;font-weight:600;text-transform:uppercase">${task.agentRole}</span>
+              ${verdict ? `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#1e293b;color:#94a3b8;font-size:10px;margin-left:4px">${verdict}</span>` : ""}
+            </div>
+            <div style="color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.4">${task.description}</div>
+            ${summary ? `<div style="color:#64748b;font-size:11px;margin-top:6px;padding:8px;background:#0f172a;border-radius:6px;line-height:1.3">${summary.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>` : ""}
+          </td>
+        </tr>`;
+    }
+
+    // Key findings from structured results
+    let findingsHtml = "";
+    const allFindings = plan.tasks
+      .filter(t => t.structuredResult?.keyFindings?.length)
+      .flatMap(t => (t.structuredResult?.keyFindings || []).map(f => ({ ...f, from: t.title })));
+
+    if (allFindings.length > 0) {
+      findingsHtml = `
+        <div style="background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">
+          <h3 style="color:#e2e8f0;font-size:14px;margin:0 0 12px">Key Findings</h3>
+          ${allFindings.slice(0, 10).map(f => `
+            <div style="padding:6px 0;border-bottom:1px solid #0f172a">
+              <span style="color:${f.impact === "high" ? "#f87171" : f.impact === "medium" ? "#fbbf24" : "#4ade80"};font-size:10px;font-weight:600;text-transform:uppercase">${f.impact || "info"}</span>
+              <span style="color:#e2e8f0;font-size:12px;margin-left:8px">${f.title}</span>
+              <span style="color:#475569;font-size:10px;margin-left:8px">from ${f.from}</span>
+            </div>
+          `).join("")}
+        </div>`;
+    }
+
+    // Recommendations
+    let recsHtml = "";
+    const allRecs = plan.tasks
+      .filter(t => t.structuredResult?.recommendations?.length)
+      .flatMap(t => t.structuredResult?.recommendations || []);
+
+    if (allRecs.length > 0) {
+      recsHtml = `
+        <div style="background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">
+          <h3 style="color:#e2e8f0;font-size:14px;margin:0 0 12px">Recommendations</h3>
+          ${allRecs.slice(0, 8).map((r, i) => `
+            <div style="padding:6px 0;border-bottom:1px solid #0f172a">
+              <span style="color:#94a3b8;font-size:10px;font-weight:600">${r.priority || ""}</span>
+              <span style="color:#e2e8f0;font-size:12px;margin-left:8px">${r.title}</span>
+              ${r.effort ? `<span style="color:#475569;font-size:10px;margin-left:8px">Effort: ${r.effort}</span>` : ""}
+            </div>
+          `).join("")}
+        </div>`;
+    }
+
+    const html = `
+<div style="background:#0f172a;padding:30px 20px;font-family:system-ui,-apple-system,sans-serif">
+  <div style="max-width:700px;margin:0 auto">
+    <h1 style="color:${statusColor};text-align:center;font-size:24px;margin-bottom:4px">
+      ${statusIcon} Orchestration ${statusLabel}
+    </h1>
+    <p style="color:#94a3b8;text-align:center;font-size:13px;margin-top:0">
+      ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+    </p>
+
+    <!-- Goal -->
+    <div style="background:#1e293b;border-radius:12px;padding:16px;margin:20px 0">
+      <div style="color:#64748b;font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:6px">Goal</div>
+      <div style="color:#e2e8f0;font-size:15px;line-height:1.4">${plan.goal}</div>
+    </div>
+
+    <!-- Stats -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0">
+      <tr>
+        <td style="text-align:center;padding:12px;background:#1e293b;border-radius:12px 0 0 12px">
+          <div style="color:#4ade80;font-size:24px;font-weight:700">${completed.length}</div>
+          <div style="color:#64748b;font-size:11px">Completed</div>
+        </td>
+        <td style="text-align:center;padding:12px;background:#1e293b">
+          <div style="color:#f87171;font-size:24px;font-weight:700">${failed.length}</div>
+          <div style="color:#64748b;font-size:11px">Failed</div>
+        </td>
+        <td style="text-align:center;padding:12px;background:#1e293b">
+          <div style="color:#94a3b8;font-size:24px;font-weight:700">${blocked.length}</div>
+          <div style="color:#64748b;font-size:11px">Blocked</div>
+        </td>
+        <td style="text-align:center;padding:12px;background:#1e293b;border-radius:0 12px 12px 0">
+          <div style="color:#e2e8f0;font-size:24px;font-weight:700">${totalTasks}</div>
+          <div style="color:#64748b;font-size:11px">Total</div>
+        </td>
+      </tr>
+    </table>
+
+    ${findingsHtml}
+    ${recsHtml}
+
+    <!-- Task Details -->
+    <h3 style="color:#e2e8f0;font-size:14px;margin:24px 0 12px">Task Details</h3>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:12px;overflow:hidden">
+      <tbody>${taskRows}</tbody>
+    </table>
+
+    <p style="color:#334155;text-align:center;font-size:11px;margin-top:24px">Enso AI · Orchestration Report</p>
+  </div>
+</div>`;
+
+    const subject = `${status === "completed" ? "✓" : "✗"} Orchestration ${statusLabel}: ${plan.goal.slice(0, 60)}`;
+
+    await transporter.sendMail({
+      from: `Enso AI <${email}>`,
+      to: "kkwong@xiaomi.com",
+      subject,
+      html,
+    });
+
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Completion email sent for ${plan.orchestrationId}` });
+  } catch (err) {
+    logError("orchestrator", "Failed to send completion email", err);
   }
 }
