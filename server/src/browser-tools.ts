@@ -112,10 +112,35 @@ type PuppeteerPage = {
   url: () => string;
   title: () => Promise<string>;
   close: () => Promise<void>;
-  keyboard: { type: (text: string) => Promise<void>; press: (key: string) => Promise<void> };
+  keyboard: {
+    type: (text: string) => Promise<void>;
+    press: (key: string) => Promise<void>;
+    down: (key: string) => Promise<void>;
+    up: (key: string) => Promise<void>;
+  };
   mouse: { click: (x: number, y: number) => Promise<void> };
   isClosed: () => boolean;
+  waitForSelector: (selector: string, opts?: { timeout?: number }) => Promise<unknown>;
+  waitForNavigation: (opts?: { timeout?: number; waitUntil?: string }) => Promise<unknown>;
 };
+
+// ── Engine Abstraction (structural readiness for Playwright) ──
+
+type BrowserEngineName = "playwright" | "puppeteer";
+let detectedEngine: BrowserEngineName | null = null;
+
+async function detectEngine(): Promise<BrowserEngineName> {
+  if (detectedEngine) return detectedEngine;
+  try {
+    // Use variable to prevent Vite/bundler from statically resolving this import
+    const playwrightModule = "playwright";
+    await import(/* @vite-ignore */ playwrightModule);
+    detectedEngine = "playwright";
+  } catch {
+    detectedEngine = "puppeteer";
+  }
+  return detectedEngine;
+}
 
 let browser: PuppeteerBrowser | null = null;
 let activePage: PuppeteerPage | null = null;
@@ -237,8 +262,9 @@ async function browserOpen(params: OpenParams): Promise<AgentToolResult> {
     const page = await getPage();
 
     if (params.url) {
-      const url = ensureProtocol(params.url);
-      await page.goto(url, { waitUntil: "networkidle2" as string, timeout: PAGE_TIMEOUT }).catch(() => {});
+      const validated = validateBrowserUrl(params.url);
+      if (!validated.ok) return errorResult(validated.error);
+      await page.goto(validated.url, { waitUntil: "networkidle2" as string, timeout: PAGE_TIMEOUT }).catch(() => {});
       return jsonResult(await buildBrowserResult(page, "enso_browser_open", bookmarks));
     }
 
@@ -261,9 +287,10 @@ async function browserOpen(params: OpenParams): Promise<AgentToolResult> {
 
 async function browserNavigate(params: NavigateParams): Promise<AgentToolResult> {
   try {
+    const validated = validateBrowserUrl(params.url);
+    if (!validated.ok) return errorResult(validated.error);
     const page = await getPage();
-    const url = ensureProtocol(params.url);
-    await page.goto(url, { waitUntil: "networkidle2" as string, timeout: PAGE_TIMEOUT }).catch(() => {});
+    await page.goto(validated.url, { waitUntil: "networkidle2" as string, timeout: PAGE_TIMEOUT }).catch(() => {});
     const bookmarks = getAllBookmarks();
     return jsonResult(await buildBrowserResult(page, "enso_browser_navigate", bookmarks));
   } catch (err) {
@@ -344,6 +371,21 @@ async function browserType(params: TypeParams): Promise<AgentToolResult> {
   } catch (err) {
     return errorResult(`Failed to type: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/** Blocked URL schemes that could access local resources or execute code. */
+const BLOCKED_SCHEMES = ["file:", "javascript:", "data:", "vbscript:", "blob:"];
+
+function validateBrowserUrl(url: string): { ok: true; url: string } | { ok: false; error: string } {
+  const trimmed = url.trim().toLowerCase();
+  for (const scheme of BLOCKED_SCHEMES) {
+    if (trimmed.startsWith(scheme)) {
+      return { ok: false, error: `blocked URL scheme: ${scheme}` };
+    }
+  }
+  // Ensure http(s) protocol
+  const withProtocol = (url.startsWith("http://") || url.startsWith("https://")) ? url : `https://${url}`;
+  return { ok: true, url: withProtocol };
 }
 
 function ensureProtocol(url: string): string {
@@ -447,6 +489,255 @@ export function createBrowserTools(): EnsoAgentTool[] {
       },
       execute: async (_callId: string, params: Record<string, unknown>) =>
         browserType(params as TypeParams),
+    } as EnsoAgentTool,
+    {
+      name: "enso_browser_extract",
+      label: "Extract Page Content",
+      description: "Extract content from the current browser page. Modes: 'text' (readable text), 'html' (full HTML), 'selector' (specific CSS selector content).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          mode: {
+            type: "string",
+            enum: ["text", "html", "selector"],
+            description: "Extraction mode: 'text' for readable text, 'html' for full HTML, 'selector' for specific element.",
+          },
+          selector: { type: "string", description: "CSS selector (required when mode is 'selector')." },
+          maxLength: { type: "number", description: "Maximum characters to return (default 50000)." },
+        },
+        required: ["mode"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => {
+        try {
+          const page = await getPage();
+          const mode = String(params.mode ?? "text");
+          const maxLen = Math.min(Number(params.maxLength ?? 50000), 100000);
+
+          let content: string;
+
+          if (mode === "text") {
+            content = await page.evaluate(() => (document as any).body.innerText) as string;
+          } else if (mode === "html") {
+            content = await page.evaluate(() => (document as any).documentElement.outerHTML) as string;
+          } else if (mode === "selector") {
+            const sel = String(params.selector ?? "");
+            if (!sel) return errorResult("selector is required when mode is 'selector'");
+            content = await page.evaluate((s: unknown) => {
+              const el = (document as any).querySelector(s as string);
+              return el ? el.outerHTML : null;
+            }, sel) as string;
+            if (!content) return errorResult(`No element found matching selector: ${sel}`);
+          } else {
+            return errorResult(`Invalid mode: ${mode}. Use 'text', 'html', or 'selector'.`);
+          }
+
+          const truncated = content.length > maxLen;
+          if (truncated) content = content.slice(0, maxLen) + `\n[TRUNCATED — ${content.length} chars total]`;
+
+          const screenshotUrl = await takeScreenshot(page);
+          const url = page.url();
+          const title = await page.title();
+
+          return jsonResult({
+            tool: "enso_browser_extract",
+            mode,
+            content,
+            truncated,
+            contentLength: content.length,
+            url,
+            title,
+            screenshotUrl,
+          });
+        } catch (err) {
+          return errorResult(`Extract failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      },
+    } as EnsoAgentTool,
+    {
+      name: "enso_browser_key",
+      label: "Send Keyboard Shortcut",
+      description: "Send a keyboard shortcut or key press to the current browser page. Examples: 'Escape', 'Tab', 'Enter', 'Control+C', 'Alt+F4'.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          combo: { type: "string", description: "Key combination (e.g., 'Escape', 'Tab', 'Control+C', 'Shift+Enter')." },
+        },
+        required: ["combo"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => {
+        try {
+          const page = await getPage();
+          const combo = String(params.combo ?? "");
+          if (!combo) return errorResult("combo is required");
+
+          const parts = combo.split("+");
+          const modifiers = parts.slice(0, -1);
+          const key = parts[parts.length - 1];
+
+          for (const mod of modifiers) {
+            await page.keyboard.down(mod);
+          }
+          await page.keyboard.press(key);
+          for (const mod of modifiers.reverse()) {
+            await page.keyboard.up(mod);
+          }
+
+          resetIdleTimer();
+          const screenshotUrl = await takeScreenshot(page);
+          const url = page.url();
+          const title = await page.title();
+
+          return jsonResult({
+            tool: "enso_browser_key",
+            combo,
+            url,
+            title,
+            screenshotUrl,
+            viewportWidth: VIEWPORT_WIDTH,
+            viewportHeight: VIEWPORT_HEIGHT,
+          });
+        } catch (err) {
+          return errorResult(`Key press failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      },
+    } as EnsoAgentTool,
+    {
+      name: "enso_browser_evaluate",
+      label: "Run JavaScript on Page",
+      description: "Execute JavaScript code in the current browser page context. Returns the result. Cannot access Node.js or server filesystem — sandboxed to browser context.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          script: { type: "string", description: "JavaScript code to execute in the page context." },
+        },
+        required: ["script"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => {
+        try {
+          const page = await getPage();
+          const script = String(params.script ?? "");
+          if (!script) return errorResult("script is required");
+
+          const wrappedScript = `(async () => { ${script} })()`;
+          const result = await page.evaluate(wrappedScript as unknown as (...args: unknown[]) => unknown);
+
+          let serialized: string;
+          try {
+            serialized = JSON.stringify(result, null, 2);
+          } catch {
+            serialized = String(result);
+          }
+
+          const maxLen = 50000;
+          const truncated = serialized.length > maxLen;
+          if (truncated) serialized = serialized.slice(0, maxLen) + `\n[TRUNCATED]`;
+
+          resetIdleTimer();
+          const screenshotUrl = await takeScreenshot(page);
+          const url = page.url();
+          const title = await page.title();
+
+          return jsonResult({
+            tool: "enso_browser_evaluate",
+            result: serialized,
+            resultType: typeof result,
+            truncated,
+            url,
+            title,
+            screenshotUrl,
+          });
+        } catch (err) {
+          return errorResult(`Evaluate failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      },
+    } as EnsoAgentTool,
+    {
+      name: "enso_browser_wait",
+      label: "Wait for Condition",
+      description: "Wait for a condition on the current browser page. Conditions: 'selector' (CSS selector appears), 'navigation' (page navigates), 'idle' (network becomes idle).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          condition: {
+            type: "string",
+            enum: ["selector", "navigation", "idle"],
+            description: "What to wait for.",
+          },
+          selector: { type: "string", description: "CSS selector to wait for (when condition is 'selector')." },
+          timeout: { type: "number", description: "Max wait time in milliseconds (default 10000, max 30000)." },
+        },
+        required: ["condition"],
+      },
+      execute: async (_callId: string, params: Record<string, unknown>) => {
+        try {
+          const page = await getPage();
+          const condition = String(params.condition ?? "");
+          const timeoutMs = Math.min(Math.max(Number(params.timeout ?? 10000), 1000), 30000);
+          const startTime = Date.now();
+
+          if (condition === "selector") {
+            const sel = String(params.selector ?? "");
+            if (!sel) return errorResult("selector is required when condition is 'selector'");
+            await page.waitForSelector(sel, { timeout: timeoutMs });
+          } else if (condition === "navigation") {
+            await page.waitForNavigation({ timeout: timeoutMs });
+          } else if (condition === "idle") {
+            if (typeof (page as Record<string, unknown>).waitForNetworkIdle === "function") {
+              await ((page as Record<string, unknown>).waitForNetworkIdle as (opts: { timeout: number }) => Promise<void>)({ timeout: timeoutMs });
+            } else {
+              await new Promise(resolve => setTimeout(resolve, Math.min(2000, timeoutMs)));
+            }
+          } else {
+            return errorResult(`Invalid condition: ${condition}. Use 'selector', 'navigation', or 'idle'.`);
+          }
+
+          const duration = Date.now() - startTime;
+          resetIdleTimer();
+          const screenshotUrl = await takeScreenshot(page);
+          const url = page.url();
+          const title = await page.title();
+
+          return jsonResult({
+            tool: "enso_browser_wait",
+            condition,
+            waited: true,
+            duration,
+            url,
+            title,
+            screenshotUrl,
+            viewportWidth: VIEWPORT_WIDTH,
+            viewportHeight: VIEWPORT_HEIGHT,
+          });
+        } catch (err) {
+          if (err instanceof Error && err.message.includes("timeout")) {
+            try {
+              const page = await getPage();
+              const screenshotUrl = await takeScreenshot(page);
+              return jsonResult({
+                tool: "enso_browser_wait",
+                condition: String(params.condition),
+                waited: false,
+                timedOut: true,
+                url: page.url(),
+                title: await page.title(),
+                screenshotUrl,
+              });
+            } catch {
+              return jsonResult({
+                tool: "enso_browser_wait",
+                condition: String(params.condition),
+                waited: false,
+                timedOut: true,
+              });
+            }
+          }
+          return errorResult(`Wait failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      },
     } as EnsoAgentTool,
   ];
 }

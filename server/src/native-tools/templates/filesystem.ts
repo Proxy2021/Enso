@@ -40,6 +40,10 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
   const isStatView = data?.tool === "enso_fs_stat_path" && data?.type != null;
   // If the data contains drives list, show drives view
   const isDrivesView = data?.tool === "enso_fs_list_drives" || Array.isArray(data?.drives);
+  // New tool result views
+  const isWriteFileView = data?.tool === "enso_fs_write_file";
+  const isCopyPathView = data?.tool === "enso_fs_copy_path";
+  const isSearchContentView = data?.tool === "enso_fs_search_content";
 
   const isDir = (type) => type === "directory" || type === "symlink";
   const formatSize = (bytes) => {
@@ -307,6 +311,77 @@ const FILESYSTEM_TEMPLATE = `export default function GeneratedUI({ data, onActio
           ))}
         </div>
         <div className="text-[10px] text-gray-500 truncate">Full path: {statPath}</div>
+      </div>
+    );
+  }
+
+  // ── Write file result view ──
+  if (isWriteFileView) {
+    const filePath = data.path ?? "";
+    const parent = filePath.split(/[\\\\/]/).slice(0, -1).join(pathSep);
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onAction("list_directory", { path: parent })}
+            className="px-2 py-1 text-xs rounded-md bg-gray-700 border border-gray-600 hover:bg-gray-600 shrink-0"
+          >\u2190 Back</button>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-emerald-300">\u2705 File Written</div>
+            <div className="text-[10px] text-gray-500 truncate">{data.path}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            ["Bytes Written", formatSize(data.bytesWritten)],
+            ["Mode", data.mode || "create"],
+          ].map(([label, val]) => (
+            <div key={label} className="bg-gray-800 rounded-md border border-gray-700/50 px-2.5 py-1.5">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</div>
+              <div className="text-xs text-gray-200">{val}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Copy path result view ──
+  if (isCopyPathView) {
+    // copy_path returns a directory listing (same as move_path), which is handled by the main view below
+  }
+
+  // ── Search content result view ──
+  if (isSearchContentView) {
+    const searchMatches = Array.isArray(data?.matches) ? data.matches : [];
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onAction("list_directory", { path: data.path })}
+            className="px-2 py-1 text-xs rounded-md bg-gray-700 border border-gray-600 hover:bg-gray-600 shrink-0"
+          >\u2190 Back</button>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-100">\uD83D\uDD0D Content Search</div>
+            <div className="text-[10px] text-gray-500 truncate">"{data.query}" in {data.path} \u2022 {data.matchCount} match{data.matchCount !== 1 ? "es" : ""} \u2022 {data.totalFilesSearched} files searched</div>
+          </div>
+        </div>
+        <div className="space-y-0.5 max-h-80 overflow-y-auto">
+          {searchMatches.length > 0 ? searchMatches.map((m, idx) => (
+            <div key={idx} className="bg-gray-800/60 rounded-md px-2 py-1.5 hover:bg-gray-800 transition-colors">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => onAction("read_text_file", { path: m.file })}
+                  className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline truncate"
+                >{m.file.split(/[\\\\/]/).pop()}</button>
+                <span className="text-[10px] text-gray-600">:{m.lineNumber}</span>
+              </div>
+              <pre className="text-[11px] text-gray-400 truncate mt-0.5 font-mono">{m.line}</pre>
+            </div>
+          )) : (
+            <div className="px-2 py-6 text-center text-xs text-gray-500">No matches found.</div>
+          )}
+        </div>
       </div>
     );
   }

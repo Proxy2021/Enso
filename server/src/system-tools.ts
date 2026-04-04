@@ -3,11 +3,12 @@
  */
 
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import type { EnsoAgentTool } from "./local-types.js";
 import { getActiveClientId } from "./runtime.js";
-import { logError } from "./action-log.js";
+import { logAction, logError } from "./action-log.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -234,6 +235,118 @@ export function createSystemTools(): EnsoAgentTool[] {
           });
         } catch (err) {
           return errorResult(`Failed to get disk info: ${(err as Error).message}`);
+        }
+      },
+    },
+
+    // ── Shell Execute ──
+    {
+      name: "enso_shell_execute",
+      label: "Execute Command",
+      description: "Execute a system command and return its output. Uses array-based arguments for safety — no shell interpretation. Returns stdout, stderr, exit code, and execution duration.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          command: { type: "string", description: "Command to execute (e.g., 'node', 'git', 'npm')." },
+          args: {
+            type: "array",
+            items: { type: "string" },
+            description: "Command arguments as separate strings (e.g., ['--version'] or ['status', '--short']).",
+          },
+          cwd: { type: "string", description: "Working directory (default: D:\\Github\\Enso)." },
+          timeout: { type: "number", description: "Timeout in seconds (default 30, max 120)." },
+        },
+        required: ["command"],
+      },
+      execute: async (_callId, params) => {
+        const command = String((params as Record<string, unknown>).command ?? "").trim();
+        if (!command) return errorResult("command is required");
+
+        const rawArgs = (params as Record<string, unknown>).args;
+        const args = Array.isArray(rawArgs) ? rawArgs.map(String) : [];
+        const timeoutSec = Math.min(Math.max(Number((params as Record<string, unknown>).timeout ?? 30), 1), 120);
+        const cwd = String((params as Record<string, unknown>).cwd ?? "D:\\Github\\Enso");
+
+        if (!existsSync(cwd)) return errorResult(`working directory does not exist: ${cwd}`);
+
+        const MAX_OUTPUT = 100 * 1024; // 100KB per stream
+        const startTime = Date.now();
+
+        try {
+          const result = await new Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }>((resolve) => {
+            const proc = spawn(command, args, {
+              cwd,
+              shell: false,
+              timeout: timeoutSec * 1000,
+              windowsHide: true,
+              env: { ...process.env },
+            });
+
+            let stdout = "";
+            let stderr = "";
+            let stdoutBytes = 0;
+            let stderrBytes = 0;
+            let timedOut = false;
+
+            proc.stdout?.on("data", (chunk: Buffer) => {
+              stdoutBytes += chunk.length;
+              if (stdout.length < MAX_OUTPUT) {
+                stdout += chunk.toString("utf-8");
+              }
+            });
+
+            proc.stderr?.on("data", (chunk: Buffer) => {
+              stderrBytes += chunk.length;
+              if (stderr.length < MAX_OUTPUT) {
+                stderr += chunk.toString("utf-8");
+              }
+            });
+
+            proc.on("error", (err) => {
+              resolve({ stdout, stderr: err.message, exitCode: -1, timedOut: false });
+            });
+
+            proc.on("close", (code) => {
+              if (stdoutBytes > MAX_OUTPUT) {
+                stdout = stdout.slice(0, MAX_OUTPUT) + `\n[TRUNCATED — ${stdoutBytes} bytes total]`;
+              }
+              if (stderrBytes > MAX_OUTPUT) {
+                stderr = stderr.slice(0, MAX_OUTPUT) + `\n[TRUNCATED — ${stderrBytes} bytes total]`;
+              }
+              resolve({ stdout, stderr, exitCode: code, timedOut });
+            });
+
+            // Backup timeout
+            setTimeout(() => {
+              timedOut = true;
+              try { proc.kill("SIGTERM"); } catch { /* ignore */ }
+            }, timeoutSec * 1000 + 500);
+          });
+
+          const duration = Date.now() - startTime;
+
+          logAction({
+            ts: Date.now(),
+            type: "action",
+            category: "shell",
+            message: `shell_execute: ${command} ${args.join(" ")} (cwd: ${cwd}, exit: ${result.exitCode}, ${duration}ms)`,
+          });
+
+          return jsonResult({
+            tool: "enso_shell_execute",
+            command,
+            args,
+            cwd,
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            duration,
+            timedOut: result.timedOut,
+            success: result.exitCode === 0,
+          });
+        } catch (err) {
+          return errorResult(`Command execution failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       },
     },

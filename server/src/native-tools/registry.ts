@@ -354,7 +354,7 @@ function registerDefaultSignatures(): void {
       toolFamily: "filesystem",
       signatureId: "directory_listing",
       templateId: "filesystem-browser-v2",
-      supportedActions: ["refresh", "list_drives", "list_directory", "read_text_file", "open_file", "open_external", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path"],
+      supportedActions: ["refresh", "list_drives", "list_directory", "read_text_file", "open_file", "open_external", "stat_path", "search_paths", "create_directory", "rename_path", "delete_path", "move_path", "write_file", "copy_path", "search_content"],
       coverageStatus: "covered",
     },
     {
@@ -368,7 +368,7 @@ function registerDefaultSignatures(): void {
       toolFamily: "web_browser",
       signatureId: "remote_browser",
       templateId: "remote-browser-v1",
-      supportedActions: ["refresh", "open", "navigate", "click", "scroll", "back", "type"],
+      supportedActions: ["refresh", "open", "navigate", "click", "scroll", "back", "type", "extract", "key", "evaluate", "wait"],
       coverageStatus: "covered",
     },
     {

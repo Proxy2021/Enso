@@ -246,6 +246,20 @@ const BROWSER_TEMPLATE = `export default function GeneratedUI({ data, onAction }
         )}
       </div>
 
+      {/* Extract/Evaluate content area */}
+      {(data?.tool === "enso_browser_extract" || data?.tool === "enso_browser_evaluate") && (data?.content || data?.result) && (
+        <div className="mx-2 mt-2 mb-1 bg-gray-800 rounded-lg p-2 max-h-48 overflow-y-auto border border-gray-700/50">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">
+              {data.tool === "enso_browser_extract" ? "Extracted Content" : "Evaluate Result"}
+              {data.truncated ? " (truncated)" : ""}
+            </span>
+            {data.contentLength && <span className="text-[10px] text-gray-600">{data.contentLength} chars</span>}
+          </div>
+          <pre className="text-xs text-gray-300 whitespace-pre-wrap break-words font-mono">{data.content || data.result}</pre>
+        </div>
+      )}
+
       {/* Bottom controls: scroll + type */}
       <div className="flex items-center gap-1.5 p-2 bg-gray-800 border-t border-gray-700">
         <button

@@ -27,7 +27,7 @@ Recurring failure modes that have appeared across multiple sprints:
 - media-ai-gateway error string: RESOLVED Sprint 14
 - ADR-004 (SSE Streaming): deprioritized indefinitely (6+ sprints deferred)
 - MCP client integration: 7+ sprints, design only. Blocked by server.ts decomposition. Target Sprint 21+.
-- **Sprint 19 update:** server.ts decomposition now at **4 sprints deferred** (designed Sprint 17, deferred Sprint 18/19). MUST execute Sprint 20. This is a credibility issue — 3 consecutive "MUST execute" promises broken.
+- **Sprint 20 update:** server.ts decomposition now at **5 sprints deferred** (designed Sprint 17, deferred Sprint 18/19/20). MUST execute Sprint 21. This is a severe credibility crisis — 4 consecutive "MUST execute" promises broken. Sprint 20 design explicitly marked server.ts as "No Changes" which excluded all 3 P0 bug fixes from implementation scope. **The design-to-implementation disconnect is now the #1 process failure.**
 
 **4. Build gate violations — RESOLVED**
 - Sprint 15, 16, 17, 18, 19: Build green. **Six consecutive green-build sprints.**
@@ -57,35 +57,46 @@ Recurring failure modes that have appeared across multiple sprints:
 - **NEW lesson:** The evolution process cannot execute external actions (deploy websites, post to social media, create accounts). These require manual human action. Sprint planning must explicitly account for this gap.
 - Counter-measure: Sprint 20 must include a "manual deployment checklist" with specific human action items, not just code changes.
 
-**10. NEW: "Ready-to-deploy but never deployed" pattern (Sprint 18-19)**
+**10. "Ready-to-deploy but never deployed" pattern (Sprint 18-19) — DEPRIORITIZED**
 - Sprint 18 created landing page, social posts, competitive positioning — all excellent quality, none deployed
 - Sprint 19 fixed all blockers (OG PNG, LICENSE, SEO, security) — still nothing deployed
+- Sprint 20 pivot: Focus shifted to OS-level agent tools instead of deployment. Marketing deployment deferred indefinitely.
 - Root cause: The evolution sprint process produces code artifacts but has no mechanism to execute external deployment actions (enable GitHub Pages, create Plausible account, post to Twitter)
-- **Counter-measure needed:** Each sprint must identify manual deployment steps and flag them as separate from code deliverables. Sprint success should be measured partly on deployed state, not just code state.
+
+**11. NEW: Design-to-implementation disconnect (Sprint 20)**
+- Sprint 20 design (Phase 4) explicitly specified 3 P0 bug fixes in Sections 7.1-7.3 with server.ts code changes
+- BUT the same design's architecture diagram listed server.ts under "No Changes"
+- Both implementation tracks cited "outside this track's scope" to skip ALL bug fixes
+- The review phase noted this as "deferred" rather than flagging it as a process failure
+- Result: 0/3 P0 bugs fixed despite being designed and assigned as P0
+- **Root cause:** The design phase created an internal contradiction — P0 bug fixes specified in text but excluded from the file change matrix. Implementation agents followed the matrix, not the text.
+- **Counter-measure:** Sprint 21 must require explicit file-level assignment for EVERY P0 item. If a P0 requires changes to a file, that file MUST appear in the "Files Changed" matrix. No P0 can be "designed but not assigned to a file."
 
 ---
 
 ## Improvement Velocity
 
-Sprint score history (Sprints 1–19): `[8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5, 7.5, 7.0]`
-Mean: 6.81 — Stable at historical average. Four consecutive 7+ sprints.
+Sprint score history (Sprints 1–20): `[8.0, 6.5, 7.0, 8.5, 7.5, 7.0, 6.6, 6.6, 5.87, 8.0, 6.0, 7.5, 7.0, 4.5, 6.0, 7.0, 7.5, 7.5, 7.0, 6.5]`
+Mean: 6.80 — Slight dip. Four consecutive 7+ streak broken.
 
 **Trending up:**
-- Sprint execution reliability: **4 consecutive full-delivery sprints** (S16: 7/8, S17: 7/7+bonus, S18: 10/10, S19: 10/10). Assignment matrix PERMANENT.
-- Build stability: **6 consecutive green-build sprints**
-- Test coverage: 29 test files, 655 tests. Schema + error tests are highest-ROI additions.
-- Marketing infrastructure: 2.2/10 → 6.5/10 → 7.5/10 across two sprints. All pre-launch blockers eliminated.
-- Jordan Kim: 4.5 → 7.6 (+3.1). **Silent failure elimination VALIDATED.** ThinkingCard + TypingIndicator confirmed working. Most improved persona.
-- Security posture: share-token guarded, rate limiting added, WS disconnect feedback implemented (Sprint 19).
-- SEO infrastructure: robots.txt, sitemap.xml, JSON-LD, UTM tracking all in place (Sprint 19).
+- Sprint execution reliability: Feature delivery remains strong (8/8 new tools, 663 LOC, 13 new tests). Assignment matrix PERMANENT.
+- Build stability: **7 consecutive green-build sprints** (728/728 tests pass Sprint 20)
+- Test coverage: 20 test files, 551+ tests post-Sprint 20 (testing methodology changed — fewer files but more focused). 13 new filesystem tool tests added.
+- Tool ecosystem: Filesystem 11→14, Browser 6→10, System 4→5. **34 total agent-callable tools** (+8 this sprint).
+- OS-level agent capabilities: write_file, copy_path, search_content, shell_execute, browser_extract/key/evaluate/wait all functional.
+- Playwright/Puppeteer dual-engine abstraction: Structural readiness. Zero-risk migration path when Playwright is installed.
 
 **Trending down / plateauing:**
-- Alex Chen: 8.2 → 7.2 (-1.0). Context contamination regressed S3. Fix deployed (getUserProfileContext + session boundary) but **not retested**.
-- Priya Sharma: 6.8 → 6.0 (-0.8). Design-instead-of-build persists. Hallucinated "previously researched" in fresh chat. Fix deployed (Build-First Rule + session boundary) but **not retested**.
-- Marco creative workflows: NOT TESTED Sprint 19. Still at 3.5/10 (Sprint 18). Server-side timeouts remain uninvestigated.
-- server.ts size: 3,323+ LOC (**4 sprints deferred**). Blocks MCP integration. Now a credibility issue.
-- Deployed marketing: 0/10 — two sprints of preparation, nothing live.
-- Sales infrastructure: 0.6/10 — no CRM, no analytics, no community, no conversion path.
+- **Persona scores CRASHED**: Average 6.93 → 4.9 (-2.03). ALL three personas regressed or flat.
+- Jordan Kim: 7.6 → 6.1 (-1.5). Shell CWD persists 3rd sprint. Simple ops routed through heavyweight Claude Code.
+- Priya Sharma: 6.0 → 5.0 (-1.0). Claude Code project selector replaces old build-first friction. Shell CWD. Deep research still fake.
+- Marco Reyes: 3.5 → 3.6 (+0.1, effectively flat). Silent filesystem failures. Photo Studio misrouting. **6th sprint under 5.0. Critical rescue failure.**
+- Alex Chen: NOT TESTED Sprint 20. Context contamination fix still unvalidated.
+- server.ts size: 3,870+ LOC (**5 sprints deferred**). Blocks MCP integration. Blocks ALL bug fixes. **Credibility crisis.**
+- Bug fix delivery: **0/3 P0 bugs fixed** despite being designed. Design-implementation disconnect pattern.
+- Deployed marketing: Still 0/10 — three sprints of preparation, nothing live.
+- Sales infrastructure: Still 0.6/10.
 
 **Areas that improved and held:**
 - Virtual scrolling, CSS containment, code splitting: all stable since Sprint 13-14
@@ -115,62 +126,68 @@ Mean: 6.81 — Stable at historical average. Four consecutive 7+ sprints.
 | Security posture | N/A | 7/10 (share-token, rate limit) | NEW |
 
 **Persona score history:**
-| Persona | S16 | S17 | S18 | S19 | Trend |
-|---|---|---|---|---|---|
-| Alex Chen | — | 6.8 | 8.2 | 7.2 | ↓ (-1.0) Context contamination |
-| Priya Sharma | 2.6 | 6.2 | 6.8 | 6.0 | ↓ (-0.8) Design-instead-of-build |
-| Jordan Kim | 4.0 | 4.5 | — | 7.6 | ↑↑ (+3.1) Silent failure fixed |
-| Marco Reyes | 1.5 | 2.5 | 3.5 | — | Not tested |
-| Sprint Average | 2.7 | 5.0 | 6.17 | 6.93 | ↑ (+0.76) |
+| Persona | S16 | S17 | S18 | S19 | S20 | Trend |
+|---|---|---|---|---|---|---|
+| Alex Chen | — | 6.8 | 8.2 | 7.2 | — | Not tested |
+| Priya Sharma | 2.6 | 6.2 | 6.8 | 6.0 | 5.0 | ↓↓ (-1.0) Claude Code selector friction |
+| Jordan Kim | 4.0 | 4.5 | — | 7.6 | 6.1 | ↓ (-1.5) Shell CWD, heavyweight routing |
+| Marco Reyes | 1.5 | 2.5 | 3.5 | — | 3.6 | → (+0.1) 6th sprint under 5.0 |
+| Sprint Average | 2.7 | 5.0 | 6.17 | 6.93 | 4.9 | ↓↓ (-2.03) REGRESSION |
 
 **Known regressions introduced by evolution sprints:**
-- None this sprint. All changes were net-positive or neutral.
+- Sprint 20: No code regressions, but persona scores regressed because existing bugs were not fixed. New tools implemented but unreachable due to routing issues.
 
 ---
 
 ## Strategic Read
 
-*PL's current assessment as of Sprint 19 meta-review.*
+*PL's current assessment as of Sprint 20 meta-review.*
 
-**Immediate priority (Sprint 20 must deliver):**
-1. **DEPLOY WHAT EXISTS.** Enable GitHub Pages for docs/. Verify landing page is live. Confirm OG image renders on Twitter/LinkedIn. This is a 2-click action that has been "ready" for 2 sprints. If it doesn't happen Sprint 20, it never will.
-2. **Execute social launch.** Post at least 3 of the 8 ready social posts (HN Show, Twitter, Reddit r/selfhosted). This requires manual action outside the sprint process.
-3. **server.ts decomposition IMPLEMENTATION** — 4 sprints deferred. Extract at minimum server-utils.ts + client-manager.ts (Steps 1-2). This is mandatory and non-negotiable. Design doc ready since Sprint 17.
-4. **Validate Sprint 19 fixes.** Retest Alex (context contamination) and Priya (design-instead-of-build, shell CWD). Fixes deployed but never validated.
-5. **Set up analytics.** Create Plausible account or add self-hosted counter. Can't optimize what you can't measure.
+**P0-EMERGENCY (Sprint 21 must deliver — no deferral):**
+1. **server.ts decomposition + routing fix** — 5 sprints deferred. This is no longer a technical debt item — it is the **root cause** of 0/3 bug fixes and all persona regressions. Extract routing logic into a separate module. Fix Photo Studio misrouting, shell CWD, and silent filesystem failures IN THE SAME DELIVERABLE. No "No Changes" exceptions for server.ts.
+2. **Fix Photo Studio misrouting (BUG-03)** — 6th sprint unresolved. Makes new filesystem tools unreachable. Marco's #1 blocker.
+3. **Fix silent filesystem failures (BUG-02)** — Upstream routing issue, not in filesystem-tools.ts. Error handling exists but errors don't propagate to client.
+4. **Fix shell CWD (BUG-01)** — 4th sprint. Code logic looks correct, runtime behavior wrong.
+
+**P0-VALIDATION (Sprint 21):**
+5. **Retest Marco Reyes** — 6 sprints under 5.0. If Sprint 21 doesn't move him above 5.0, creative professional persona is effectively abandoned.
+6. **Retest ALL personas against new tools** — 8 new OS-level tools were implemented but never tested by personas because bug fixes weren't done.
+7. **Validate Sprint 19 fixes** — Alex context contamination fix and Priya Build-First Rule still never retested (2 sprints unvalidated).
+
+**P1 (Sprint 21):**
+8. **Permission tiers for shell_execute** — Currently any command executes with equal trust. 4-tier approval system deferred from Sprint 20.
+9. **Claude Code project selector fix** — Blocks autonomous building for Priya.
+10. **Session management** — Background Claude Code terminals persist and block interactions.
 
 **Medium-term strategic bets:**
-- **MCP client integration** — 8+ sprints deferred. Won't happen until server.ts is decomposed. Target Sprint 21+.
-- **Prompt caching** — 90% input token savings. Low risk, high ROI. Target Sprint 20-21.
-- **Research synthesis reliability** — Root cause investigation for synthesis failures. Priya S4 still broken.
-- **Build-to-app pipeline** — Alex and Priya want "build X" to produce interactive apps, not text cards.
-- **Interactive onboarding flow** — Replace 11 tiles + 6 prompts with 3-step guided demo.
-- **Community presence** — Enable GitHub Discussions (zero cost). Discord when 50+ members.
-- **Email capture** — Add signup form to landing page.
+- **MCP client integration** — 9+ sprints deferred. Blocked by server.ts decomposition. Target Sprint 22+.
+- **Prompt caching** — 90% input token savings. Low risk, high ROI. Target Sprint 21-22.
+- **Research synthesis reliability** — Deep research still returns general knowledge, not web research.
+- **Build-to-app pipeline** — "build X" should produce interactive apps, not text cards.
 
 **Things that are fine as-is (do not over-engineer):**
 - Photo engine (H&D curves, LAB color, luminosity masking) — superior to external APIs
 - Virtual scrolling + CSS containment — working, don't touch
-- App ecosystem (15 apps, 114 tools) — well-segmented, no merges needed
+- App ecosystem (15 apps, 34 agent-callable tools) — well-segmented, no merges needed
 - Photo Studio / Media Gallery boundary — RESOLVED and VALIDATED
 - Schema validation — test suite active, graceful degradation as defense-in-depth
 - Error message classification — test suite active, no regressions
-- Marketing content quality — landing page, social posts, competitive positioning all high quality
-- Onboarding tile order — /code first, Build first prompts (Sprint 18)
+- New OS-level tools (8 tools) — well-implemented, tested, following existing patterns
+- Playwright/Puppeteer dual-engine abstraction — ready for Playwright activation post-install
 - OG image and tags — now PNG, fully functional (Sprint 19)
 - LICENSE file — MIT, present at root (Sprint 19)
 - SEO basics — robots.txt, sitemap.xml, JSON-LD all in place (Sprint 19)
 
-**Sales Infrastructure Status (NEW — Sprint 19):**
+**Sales Infrastructure Status (unchanged from Sprint 19 — deprioritized):**
 | Component | Status | Target |
 |---|---|---|
-| Landing page | Files ready, not deployed | Sprint 20: DEPLOY |
-| Analytics | Script in HTML, no account | Sprint 20: CREATE |
-| CRM | Does not exist | Sprint 21+ |
-| Community | No channels | Sprint 20: GitHub Discussions |
-| Auto-sales | No conversion path | Sprint 21+ |
-| Email capture | No signup form | Sprint 20 |
-| Social presence | 8 posts ready, 0 posted | Sprint 20: POST 3 |
+| Landing page | Files ready, not deployed | Sprint 22+ |
+| Analytics | Script in HTML, no account | Sprint 22+ |
+| CRM | Does not exist | Sprint 22+ |
+| Community | No channels | Sprint 22+ |
+| Auto-sales | No conversion path | Sprint 22+ |
+| Email capture | No signup form | Sprint 22+ |
+| Social presence | 8 posts ready, 0 posted | Sprint 22+ |
 
 ---
 
@@ -178,10 +195,13 @@ Mean: 6.81 — Stable at historical average. Four consecutive 7+ sprints.
 
 **Deferred (attempted but not completed, with sprint context):**
 - SSE Streaming (ADR-004): Designed Sprint 13, deprioritized indefinitely (6+ sprints).
-- MCP client: Design since Sprint 12, no code. Target Sprint 21+ (after server.ts decomposition).
+- MCP client: Design since Sprint 12, no code. Target Sprint 22+ (after server.ts decomposition).
 - SQLite-backed CardContextStore: Design ready, deferred every sprint.
-- Playwright E2E framework: Proposed Sprint 14, deferred (5+ sprints).
-- server.ts decomposition IMPLEMENTATION: Designed Sprint 17, deferred Sprint 18, 19 (marketing/sales priority). Target Sprint 20 MANDATORY.
+- Playwright E2E framework: Proposed Sprint 14, deferred (5+ sprints). Playwright/Puppeteer dual-engine abstraction built Sprint 20 but Playwright not installed.
+- server.ts decomposition IMPLEMENTATION: Designed Sprint 17, deferred Sprint 18, 19, 20. **5 sprints deferred. Target Sprint 21 P0-EMERGENCY.**
+- Photo Studio misrouting fix: Designed Sprint 16, attempted Sprint 16-20. **6 sprints unresolved.** Requires server.ts routing changes.
+- Shell CWD fix: Code logic correct (Sprint 19), runtime still wrong (Sprint 20). **4 sprints.** Needs runtime investigation.
+- Silent filesystem failure fix: Error handling exists in filesystem-tools.ts, bug is upstream in routing/error propagation. **3 sprints.** Needs server.ts trace.
 
 **Tried and confirmed working (don't revert):**
 - @tanstack/react-virtual for CardTimeline: Virtual scrolling implemented and stable
@@ -219,16 +239,31 @@ Mean: 6.81 — Stable at historical average. Four consecutive 7+ sprints.
   - Shell CWD fix: package.json existence check before using projectRoot, process.cwd() fallback.
   - WS disconnect feedback: Error card shown when message sent with null WS client.
   - Plausible analytics script in docs/index.html (account not yet created).
+- **Sprint 20 OS-level agent tools (8 new tools, 663 LOC):**
+  - `enso_fs_write_file`: Write text to disk (create/overwrite/append modes). 1MB limit, protected path check, auto-creates parent dirs.
+  - `enso_fs_copy_path`: Copy files/directories. Preserves name when copying into directory. Uses cpSync for recursive.
+  - `enso_fs_search_content`: Grep-like recursive search. Regex/literal, glob filter, 50 default / 200 max results, depth/file/size limits, binary skip.
+  - `enso_shell_execute`: Structured command execution via `spawn` with array args. `shell:false` (injection-proof), 30s default / 120s max timeout, 100KB output cap, CWD validation, audit logging.
+  - `enso_browser_extract`: Extract page text/HTML/CSS-selector content. 50K chars default, 100K max.
+  - `enso_browser_key`: Send keyboard shortcuts. Parses combo strings, holds modifiers.
+  - `enso_browser_evaluate`: Execute JS on page. Async IIFE wrapper, browser sandbox only.
+  - `enso_browser_wait`: Wait for selector/navigation/idle. Graceful timeout handling.
+  - Playwright/Puppeteer dual-engine abstraction: `detectEngine()` with dynamic import fallback. ~50 LOC. Puppeteer default.
+  - Registry signature updates: filesystem +3, browser +4 supportedActions.
+  - Template updates: write_file/copy_path/search_content views, extract/evaluate content areas.
+  - 13 new unit tests for filesystem tools (write_file 6, copy_path 3, search_content 3, + sprint assertion updates).
 
 **Tried and found not needed:**
 - Replacing photo engine with external neural style transfer APIs: Photo engine is already superior
 - Implementing adaptive thinking: Already active in claude-code.ts L366
 
 **Architectural decisions pending:**
-- server.ts decomposition IMPLEMENTATION: Design ready. 5 modules, extraction order defined. Sprint 20 MANDATORY (4th deferral).
+- server.ts decomposition IMPLEMENTATION: Design ready. 5 modules, extraction order defined. **Sprint 21 P0-EMERGENCY (5th deferral).** This blocks all routing bug fixes.
+- Permission tiers for OS actions: 4-tier system designed by AI Strategist, deferred Sprint 20. Target Sprint 21.
+- Playwright installation: Dual-engine abstraction ready. Manual `npm install playwright` post-sprint activation step.
 - ChatInput Phase 3: 525 → <500 LOC. Shell mode banner or voice toggle. Low priority.
-- Landing page deployment: **Decision made: GitHub Pages from /docs.** Execution pending (manual step).
-- Analytics platform: **Decision made: Plausible.** Account creation pending (manual step).
+- Landing page deployment: **Decision made: GitHub Pages from /docs.** Execution pending (manual step). Deprioritized.
+- Analytics platform: **Decision made: Plausible.** Account creation pending (manual step). Deprioritized.
 
 ---
 
@@ -236,34 +271,31 @@ Mean: 6.81 — Stable at historical average. Four consecutive 7+ sprints.
 
 *Running observations about each persona's relationship with the product.*
 
-**Marco Reyes (creative-professional) — NOT TESTED Sprint 19:**
-- Sprint 15: 4.2/10. Sprint 16: 1.5/10. Sprint 17: 2.5/10. Sprint 18: 3.5/10 (+1.0). Sprint 19: NOT TESTED.
-- Sprint 18 MANDATORY retest completed: Contamination fix VALIDATED. Schema fix VALIDATED. Error classification VALIDATED.
-- Misrouting fix STILL UNVALIDATABLE — server-side timeouts prevent test scenarios from executing. Now a **5-sprint unvalidated fix**.
-- **Sprint 20 focus**: Must be tested. Server-side timeout diagnostic still needed.
+**Marco Reyes (creative-professional) — CRITICAL RESCUE FAILURE (Sprint 20):**
+- Sprint 15: 4.2/10. Sprint 16: 1.5/10. Sprint 17: 2.5/10. Sprint 18: 3.5/10. Sprint 19: NOT TESTED. **Sprint 20: 3.6/10 (+0.1, effectively flat).**
+- **6th consecutive sprint under 5.0.** If Sprint 21 doesn't move him above 5.0, creative professional persona is effectively abandoned.
+- S1: Silent filesystem failure (zero output, zero error — BUG-02). S3/S4: Photo Studio misrouting captured file management requests (BUG-03).
+- Speed improved (9.2s avg) but 1/5 scenarios produced useful output.
+- New tools (write_file, copy_path) implemented but unreachable due to routing bugs.
+- **Sprint 21 MANDATORY**: Fix routing bugs FIRST, then retest. Marco is the canary — if routing works, his score should jump 2+ points.
 
-**Priya Sharma (indie-developer) — REGRESSION, FIXES DEPLOYED BUT UNVALIDATED (Sprint 19):**
-- Sprint 15: 4.8/10. Sprint 16: 2.6/10. Sprint 17: 6.2/10. Sprint 18: 6.8/10. Sprint 19: 6.0/10 (-0.8).
-- Regressions: Design-instead-of-build (S3: todo app → clarifying questions), hallucinated "previously researched" (S2).
-- **Fixes deployed Sprint 19:** Build-First Rule (system prompt), session boundary marker, getUserProfileContext().
-- Shell CWD fixed (package.json check + process.cwd() fallback). Not retested.
-- **Sprint 20 focus**: RETEST to validate Build-First Rule and session boundary fixes.
+**Priya Sharma (indie-developer) — CONTINUED REGRESSION (Sprint 20):**
+- Sprint 15: 4.8/10. Sprint 16: 2.6/10. Sprint 17: 6.2/10. Sprint 18: 6.8/10. Sprint 19: 6.0/10. **Sprint 20: 5.0/10 (-1.0).**
+- Build-First Rule partially working (no more clarifying questions) but Claude Code project selector blocks autonomous building (UX-01).
+- Shell CWD inconclusive. Deep research still defaults to general knowledge, no real web research.
+- **Sprint 21 focus**: Fix Claude Code project selector. Validate shell CWD at runtime.
 
-**Jordan Kim (developer) — DRAMATIC IMPROVEMENT VALIDATED (Sprint 19):**
-- Sprint 15: 6.4/10. Sprint 16: 4.0/10. Sprint 17: 4.5/10. Sprint 18: NOT TESTED. Sprint 19: 7.6/10 (+3.1).
-- **Silent failure elimination VALIDATED**: 0/5 → 4-5/5 responses delivered. ThinkingCard + TypingIndicator confirmed working.
-- Build product (S1): 9/10. /code (S2): 9/10. Browse apps (S3): 7/10. Research (S4): 7/10. Shell (S5): 7/10.
-- Touch targets: Welcome 82% (28/34), Chat 48% (11/23). Chat touch targets still fail WCAG 2.1 (44×44px minimum).
-- Background Claude Code sessions persist without management UI (S2 running at 41s during S3-S5).
-- **Sprint 20 focus**: Touch target compliance in chat. Background task management consideration.
+**Jordan Kim (developer) — REGRESSION FROM PEAK (Sprint 20):**
+- Sprint 15: 6.4/10. Sprint 16: 4.0/10. Sprint 17: 4.5/10. Sprint 18: NOT TESTED. Sprint 19: 7.6/10. **Sprint 20: 6.1/10 (-1.5).**
+- Shell CWD bug persists 3rd sprint (D:\Github vs D:\Github\Enso). Simple ops routed through heavyweight Claude Code (30s for file listing).
+- Touch targets: WCAG compliance dropped from 76% to 37% during active use (close buttons 10x16px).
+- Background Claude Code sessions persist without management UI.
+- **Sprint 21 focus**: Shell CWD runtime fix. Routing optimization for simple filesystem queries.
 
-**Alex Chen (startup-founder) — REGRESSION DUE TO CONTEXT CONTAMINATION (Sprint 19):**
-- Sprint 12: ~4.0/10. Sprint 17: 6.8/10. Sprint 18: 8.2/10. Sprint 19: 7.2/10 (-1.0).
-- S3 CRITICAL FAILURE: Completely off-topic response (API monitoring dashboard instead of market sizing). Context contamination from prior session.
-- S1 (7/10), S4 (8/10), S5 (8/10) were strong. S2 (6/10) — orchestration still produces essays, not artifacts.
-- **Fix deployed Sprint 19:** getUserProfileContext() + session boundary marker. Not retested.
-- Marketing eval: OG image SVG → broken sharing (3/10 social shareability). OG PNG fix deployed.
-- **Sprint 20 focus**: RETEST to validate context contamination fix. Validate OG image in real social sharing.
+**Alex Chen (startup-founder) — NOT TESTED Sprint 20:**
+- Sprint 12: ~4.0/10. Sprint 17: 6.8/10. Sprint 18: 8.2/10. Sprint 19: 7.2/10. Sprint 20: NOT TESTED.
+- Context contamination fix (getUserProfileContext + session boundary) deployed Sprint 19, now **2 sprints unvalidated**.
+- **Sprint 21 focus**: RETEST to validate context contamination fix.
 
 ---
 
@@ -271,28 +303,24 @@ Mean: 6.81 — Stable at historical average. Four consecutive 7+ sprints.
 
 *Significant uncommitted work that should not be lost or forgotten across sprints.*
 
-**Sprint 19 new changes (cumulative with Sprint 15-18):**
+**Sprint 20 new changes (cumulative with Sprint 15-19):**
 
-Sprint 15-18 uncommitted changes still present (see Sprint 18 brain entry for full list).
+Sprint 15-19 uncommitted changes still present (see Sprint 19 brain entry for full list).
 
-Sprint 19 new changes:
-- `LICENSE` (NEW) — MIT license, 1100 bytes
-- `docs/index.html` (NEW) — GitHub Pages landing page with Plausible, JSON-LD, SEO
-- `docs/og-image.png` (NEW) — 1200×630 PNG OG image (16,865 bytes)
-- `docs/robots.txt` (NEW) — Crawler configuration
-- `docs/sitemap.xml` (NEW) — Single-page sitemap
-- `public/og-image.png` (NEW) — PNG OG image replacing SVG (16,865 bytes)
-- `index.html` — Updated OG image references (SVG → PNG)
-- `marketing/landing-page.html` — Hero placeholder replaced with CSS terminal mockup
-- `marketing/social-posts.md` — UTM parameters added to all 8 URLs
-- `server/src/server.ts` — share-token auth guard, shell CWD validation, rate limiter (+52 lines)
-- `server/src/standalone-agent.ts` — getUserProfileContext(), session boundary marker, Build-First Rule (+19 lines)
-- `server/src/memory-bridge.ts` — getUserProfileContext() function (+16 lines)
-- `src/store/chat.ts` — WS disconnect error card, isWaiting clear on disconnect (+35 lines)
-- `src/components/SettingsPanel.tsx` — Model preset updates (+71 lines)
+Sprint 20 new changes (663 LOC across 8 files):
+- `server/src/filesystem-tools.ts` — +3 tools: write_file, copy_path, search_content (~170 LOC)
+- `server/src/system-tools.ts` — +1 tool: shell_execute (~85 LOC)
+- `server/src/browser-tools.ts` — +4 tools: extract, key, evaluate, wait + PuppeteerPage type extensions + engine abstraction (~220 LOC)
+- `server/src/native-tools/registry.ts` — +7 supportedActions across 2 signatures (~2 LOC)
+- `server/src/native-tools/templates/filesystem.ts` — +3 new result views (~50 LOC)
+- `server/src/native-tools/templates/browser.ts` — +extract/evaluate content area (~12 LOC)
+- `server/src/filesystem-tools.test.ts` — +13 new test cases (~120 LOC)
+- `server/src/sprint-enhancements.test.ts` — Updated tool count assertions (~4 LOC)
+- `server/src/shell-pty.ts` — Minor changes
 - `projects/enso/project.json` — Sprint data updates
+- `projects/enso/brain.md` — Sprint 20 meta-review updates
 
 ---
 
-*Last updated: Sprint 19 meta-review (2026-04-03)*
-*Next update: Phase 6 meta-review of Sprint 20*
+*Last updated: Sprint 20 meta-review (2026-04-04)*
+*Next update: Phase 6 meta-review of Sprint 21*

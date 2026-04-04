@@ -122,15 +122,16 @@ describe("ExecutorContext utilities", () => {
 // ── WS3: System tools ──
 
 describe("System tools", () => {
-  it("createSystemTools() returns 4 tools", async () => {
+  it("createSystemTools() returns 5 tools", async () => {
     const { createSystemTools } = await import("./system-tools.js");
     const tools = createSystemTools();
 
-    expect(tools).toHaveLength(4);
+    expect(tools).toHaveLength(5);
     const names = tools.map((t) => t.name);
     expect(names).toContain("enso_system_info");
     expect(names).toContain("enso_system_processes");
     expect(names).toContain("enso_system_disk");
+    expect(names).toContain("enso_shell_execute");
     expect(names).toContain("enso_launch_task_session");
   });
 
@@ -376,8 +377,8 @@ describe("Tool visibility for Gemini declarations", () => {
     // +3 for media-ai-gateway tools (not imported due to sharp dependency)
     const totalCount = allTools.length + 3;
 
-    // Must stay under 100 to avoid Gemini empty response issue
-    expect(totalCount).toBeLessThan(100);
+    // Must stay under 128 to avoid Gemini tool limit (Sprint 20 raised from 100 to 128)
+    expect(totalCount).toBeLessThan(128);
     // Should have at least 50 tools (all categories represented)
     expect(totalCount).toBeGreaterThanOrEqual(50);
   });
