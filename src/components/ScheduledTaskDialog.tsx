@@ -20,47 +20,119 @@ interface ScheduledTaskDialogProps {
   editTask?: ScheduledTaskDef | null;
 }
 
-const CRON_PRESETS = [
-  { label: "Every 5 min", cron: "*/5 * * * *" },
-  { label: "Every 30 min", cron: "*/30 * * * *" },
-  { label: "Every hour", cron: "0 * * * *" },
-  { label: "Daily 9am", cron: "0 9 * * *" },
-  { label: "Weekdays 9am", cron: "0 9 * * 1-5" },
-  { label: "Weekly Mon", cron: "0 9 * * 1" },
+type FrequencyType = "minutes" | "hourly" | "daily" | "weekdays" | "weekly" | "custom";
+
+const FREQUENCY_OPTIONS: Array<{ value: FrequencyType; label: string }> = [
+  { value: "minutes", label: "Every N min" },
+  { value: "hourly", label: "Hourly" },
+  { value: "daily", label: "Daily" },
+  { value: "weekdays", label: "Weekdays" },
+  { value: "weekly", label: "Weekly" },
+  { value: "custom", label: "Custom cron" },
 ];
+
+const DAYS_OF_WEEK = [
+  { value: "1", label: "Mon" },
+  { value: "2", label: "Tue" },
+  { value: "3", label: "Wed" },
+  { value: "4", label: "Thu" },
+  { value: "5", label: "Fri" },
+  { value: "6", label: "Sat" },
+  { value: "0", label: "Sun" },
+];
+
+/** Parse a cron string into frequency/hour/minute/day for the UI */
+function parseCron(cron: string): { frequency: FrequencyType; hour: number; minute: number; intervalMin: number; dow: string } {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return { frequency: "custom", hour: 9, minute: 0, intervalMin: 5, dow: "1" };
+  const [min, hr, , , dow] = parts;
+
+  if (min.startsWith("*/")) {
+    return { frequency: "minutes", hour: 0, minute: 0, intervalMin: parseInt(min.slice(2)) || 5, dow: "1" };
+  }
+  if (min === "0" && hr === "*") {
+    return { frequency: "hourly", hour: 0, minute: 0, intervalMin: 5, dow: "1" };
+  }
+  const h = parseInt(hr);
+  const m = parseInt(min);
+  if (!isNaN(h) && !isNaN(m)) {
+    if (dow === "*") return { frequency: "daily", hour: h, minute: m, intervalMin: 5, dow: "1" };
+    if (dow === "1-5") return { frequency: "weekdays", hour: h, minute: m, intervalMin: 5, dow: "1" };
+    return { frequency: "weekly", hour: h, minute: m, intervalMin: 5, dow };
+  }
+  return { frequency: "custom", hour: 9, minute: 0, intervalMin: 5, dow: "1" };
+}
+
+function buildCron(frequency: FrequencyType, hour: number, minute: number, intervalMin: number, dow: string): string {
+  switch (frequency) {
+    case "minutes": return `*/${intervalMin} * * * *`;
+    case "hourly": return `0 * * * *`;
+    case "daily": return `${minute} ${hour} * * *`;
+    case "weekdays": return `${minute} ${hour} * * 1-5`;
+    case "weekly": return `${minute} ${hour} * * ${dow}`;
+    case "custom": return "";
+  }
+}
 
 export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClose, onSave, editTask }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [scheduleType, setScheduleType] = useState<"recurring" | "once">("recurring");
-  const [cron, setCron] = useState("0 * * * *");
+  const [cron, setCron] = useState("0 9 * * *");
   const [fireAt, setFireAt] = useState("");
   const [actionType, setActionType] = useState<"prompt" | "tool">("prompt");
   const [prompt, setPrompt] = useState("");
   const [toolId, setToolId] = useState("");
   const [notifyOnComplete, setNotifyOnComplete] = useState(true);
 
+  // Structured schedule state
+  const [frequency, setFrequency] = useState<FrequencyType>("daily");
+  const [hour, setHour] = useState(9);
+  const [minute, setMinute] = useState(0);
+  const [intervalMin, setIntervalMin] = useState(5);
+  const [dow, setDow] = useState("1");
+
+  // Sync structured state → cron string
+  const updateCronFromParts = (f: FrequencyType, h: number, m: number, iv: number, d: string) => {
+    if (f !== "custom") {
+      setCron(buildCron(f, h, m, iv, d));
+    }
+  };
+
   useEffect(() => {
     if (editTask) {
       setName(editTask.name);
       setDescription(editTask.description);
       setScheduleType(editTask.recurring ? "recurring" : "once");
-      setCron(editTask.cron || "0 * * * *");
+      const cronVal = editTask.cron || "0 9 * * *";
+      setCron(cronVal);
       setFireAt(editTask.fireAt || "");
       setActionType(editTask.action.type);
       setPrompt(editTask.action.prompt || "");
       setToolId(editTask.action.toolId || "");
       setNotifyOnComplete(editTask.notifyOnComplete);
+      // Parse cron into structured state
+      const parsed = parseCron(cronVal);
+      setFrequency(parsed.frequency);
+      setHour(parsed.hour);
+      setMinute(parsed.minute);
+      setIntervalMin(parsed.intervalMin);
+      setDow(parsed.dow);
     } else {
       setName("");
       setDescription("");
       setScheduleType("recurring");
-      setCron("0 * * * *");
+      setCron("0 9 * * *");
       setFireAt("");
       setActionType("prompt");
       setPrompt("");
       setToolId("");
       setNotifyOnComplete(true);
+      setFrequency("daily");
+      setHour(9);
+      setMinute(0);
+      setIntervalMin(5);
+      setDow("1");
     }
   }, [editTask, open]);
 
@@ -148,25 +220,97 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
             </div>
 
             {scheduleType === "recurring" ? (
-              <div>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {CRON_PRESETS.map((p) => (
+              <div className="space-y-3">
+                {/* Frequency picker */}
+                <div className="flex flex-wrap gap-1.5">
+                  {FREQUENCY_OPTIONS.map((opt) => (
                     <button
-                      key={p.cron}
-                      onClick={() => setCron(p.cron)}
-                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${cron === p.cron ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"}`}
+                      key={opt.value}
+                      onClick={() => {
+                        setFrequency(opt.value);
+                        updateCronFromParts(opt.value, hour, minute, intervalMin, dow);
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${frequency === opt.value ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"}`}
                     >
-                      {p.label}
+                      {opt.label}
                     </button>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  value={cron}
-                  onChange={(e) => setCron(e.target.value)}
-                  placeholder="*/5 * * * * (cron expression)"
-                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white font-mono text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                />
+
+                {/* Interval picker (for "Every N min") */}
+                {frequency === "minutes" && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-zinc-400">Every</span>
+                    <select
+                      value={intervalMin}
+                      onChange={(e) => { const v = parseInt(e.target.value); setIntervalMin(v); updateCronFromParts("minutes", hour, minute, v, dow); }}
+                      className="px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    >
+                      {[1, 2, 3, 5, 10, 15, 20, 30].map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                    <span className="text-sm text-zinc-400">minutes</span>
+                  </div>
+                )}
+
+                {/* Time picker (for daily/weekdays/weekly) */}
+                {(frequency === "daily" || frequency === "weekdays" || frequency === "weekly") && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-zinc-400">At</span>
+                    <select
+                      value={hour}
+                      onChange={(e) => { const v = parseInt(e.target.value); setHour(v); updateCronFromParts(frequency, v, minute, intervalMin, dow); }}
+                      className="px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{i.toString().padStart(2, "0")}</option>
+                      ))}
+                    </select>
+                    <span className="text-zinc-600">:</span>
+                    <select
+                      value={minute}
+                      onChange={(e) => { const v = parseInt(e.target.value); setMinute(v); updateCronFromParts(frequency, hour, v, intervalMin, dow); }}
+                      className="px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    >
+                      {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((v) => (
+                        <option key={v} value={v}>{v.toString().padStart(2, "0")}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Day picker (for weekly) */}
+                {frequency === "weekly" && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-zinc-400">On</span>
+                    <div className="flex gap-1">
+                      {DAYS_OF_WEEK.map((d) => (
+                        <button
+                          key={d.value}
+                          onClick={() => { setDow(d.value); updateCronFromParts("weekly", hour, minute, intervalMin, d.value); }}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${dow === d.value ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-white"}`}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom cron input */}
+                {frequency === "custom" && (
+                  <input
+                    type="text"
+                    value={cron}
+                    onChange={(e) => setCron(e.target.value)}
+                    placeholder="*/5 * * * * (cron expression)"
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white font-mono text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                  />
+                )}
+
+                {/* Show resulting cron */}
+                <div className="text-[10px] text-zinc-600 font-mono">cron: {cron}</div>
               </div>
             ) : (
               <input
