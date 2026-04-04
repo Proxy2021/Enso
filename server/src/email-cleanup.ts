@@ -201,8 +201,10 @@ export function executePendingCleanup(token: string): { success: boolean; delete
   if (!pending) return { success: false, error: "Cleanup token not found or expired" };
   if (pending.executed) return { success: false, error: "This cleanup was already executed" };
 
-  // Build PowerShell deletion script
-  const sendersJson = JSON.stringify(pending.senderEmails);
+  // Write sender list to a JSON file (avoids PowerShell inline parsing issues)
+  const sendersFilePath = join(CLEANUP_DIR, `senders-${token}.json`);
+  writeFileSync(sendersFilePath, JSON.stringify(pending.senderEmails), "utf-8");
+
   const psScript = `
 Add-Type -AssemblyName 'Microsoft.Office.Interop.Outlook'
 $outlook = New-Object -ComObject Outlook.Application
@@ -210,7 +212,8 @@ $ns = $outlook.GetNamespace('MAPI')
 $inbox = $ns.GetDefaultFolder(6)
 $items = $inbox.Items
 
-$senders = ${sendersJson} | ConvertFrom-Json
+$sendersRaw = Get-Content -Path "${sendersFilePath.replace(/\\/g, "\\\\")}" -Encoding UTF8 -Raw
+$senders = $sendersRaw | ConvertFrom-Json
 $deleteSet = @{}
 foreach ($addr in $senders) { $deleteSet[$addr.ToLower()] = $true }
 
