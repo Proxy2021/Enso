@@ -125,7 +125,7 @@ export function createEmailTools(): EnsoAgentTool[] {
           const { transporter: smtp, senderEmail } = getTransporter();
 
           const mailOptions: nodemailer.SendMailOptions = {
-            from: senderEmail,
+            from: `Enso AI <${senderEmail}>`,
             to,
             subject,
             replyTo: replyTo || senderEmail,
