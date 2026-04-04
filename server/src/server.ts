@@ -2635,8 +2635,16 @@ export async function startEnsoServer(opts: {
               });
               // Include built-in tool families whose fallback tool is registered
               const dynamicFamilies = new Set(dynamicApps.map((a) => a.toolFamily));
+              const { getToolTemplate } = await import("./native-tools/registry.js");
               const builtInApps = APP_CATALOG
-                .filter((cap) => !dynamicFamilies.has(cap.appId) && isToolRegistered(cap.primaryTool))
+                .filter((cap) => {
+                  if (dynamicFamilies.has(cap.appId)) return false;
+                  if (!isToolRegistered(cap.primaryTool)) return false;
+                  // Hide tools that have no UI template (pure API tools like email, youtube)
+                  if (cap.experience === "terminal") return true; // Terminal apps are fine
+                  if (!getToolTemplate(cap.appId, cap.signatureId)) return false;
+                  return true;
+                })
                 .map((cap) => ({
                   appId: cap.appId,
                   toolFamily: cap.appId,
