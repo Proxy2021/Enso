@@ -257,7 +257,7 @@ $cloudflaredExe = if ($cfCmdInfo) { $cfCmdInfo.Source } else { $null }
 if (-not $cloudflaredExe) { $cloudflaredExe = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }
 if (Test-Path $cloudflaredExe) {
     Start-Process -FilePath $cloudflaredExe `
-        -ArgumentList "tunnel", "run", "enso" `
+        -ArgumentList "tunnel", "--protocol", "http2", "run", "enso" `
         -WindowStyle Hidden
 
     Start-Sleep -Seconds 2

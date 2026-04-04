@@ -116,7 +116,7 @@ fi
 # ── 6. Start Cloudflare Tunnel ──
 if [ -f "$HOME/.cloudflared/config.yml" ]; then
   echo "[tunnel] Starting cloudflared"
-  nohup cloudflared tunnel run > /tmp/cloudflared.log 2>&1 &
+  nohup cloudflared tunnel --protocol http2 run > /tmp/cloudflared.log 2>&1 &
   CF_PID=$!
   sleep 2
   if kill -0 $CF_PID 2>/dev/null; then
