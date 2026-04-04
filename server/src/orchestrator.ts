@@ -2243,7 +2243,7 @@ async function sendOrchestrationCompletionEmail(plan: OrchestrationPlan, status:
   try {
     const email = process.env.SMTP_EMAIL;
     const password = process.env.SMTP_PASSWORD;
-    if (!email || !password) return; // SMTP not configured
+    if (!email || !password) return;
 
     const { default: nodemailer } = await import("nodemailer");
     const transporter = nodemailer.createTransport({
@@ -2253,143 +2253,89 @@ async function sendOrchestrationCompletionEmail(plan: OrchestrationPlan, status:
 
     const completed = plan.tasks.filter(t => t.status === "completed");
     const failed = plan.tasks.filter(t => t.status === "failed");
-    const blocked = plan.tasks.filter(t => t.status === "blocked");
     const totalTasks = plan.tasks.length;
-    const duration = ""; // Could compute from task timestamps if available
 
-    const statusColor = status === "completed" ? "#4ade80" : "#f87171";
-    const statusIcon = status === "completed" ? "&#10003;" : "&#10007;";
-    const statusLabel = status === "completed" ? "Completed Successfully" : "Completed with Failures";
+    // Build a compact data summary for the LLM
+    const taskSummaries = plan.tasks.map(t => ({
+      title: t.title,
+      role: t.agentRole,
+      status: t.status,
+      verdict: t.structuredResult?.verdict || "",
+      summary: t.resultSummary?.slice(0, 200) || "",
+      findings: (t.structuredResult?.keyFindings || []).slice(0, 3).map(f => f.title),
+      recommendations: (t.structuredResult?.recommendations || []).slice(0, 3).map(r => r.title),
+    }));
 
-    // Build task rows
-    let taskRows = "";
-    for (const task of plan.tasks) {
-      const taskStatusColor = task.status === "completed" ? "#4ade80" : task.status === "failed" ? "#f87171" : "#94a3b8";
-      const taskIcon = task.status === "completed" ? "&#10003;" : task.status === "failed" ? "&#10007;" : "&#8212;";
-      const roleColor: Record<string, string> = {
-        researcher: "#60a5fa", architect: "#a78bfa", builder: "#fbbf24",
-        coder: "#34d399", reviewer: "#f472b6",
-      };
-      const roleBg = roleColor[task.agentRole] || "#64748b";
+    const sprintData = JSON.stringify({
+      goal: plan.goal,
+      status,
+      completed: completed.length,
+      failed: failed.length,
+      total: totalTasks,
+      tasks: taskSummaries,
+    });
 
-      // Extract key info from result summary
-      const summary = task.resultSummary?.slice(0, 300) || task.error || "";
-      const verdict = task.structuredResult?.verdict || "";
+    // Use the user's configured chat LLM to generate a concise summary
+    let summaryHtml = "";
+    try {
+      const { callChatLLM } = await import("./llm-provider.js");
+      const { loadProviderKeys } = await import("./accounts.js");
+      const providerKeys = { ...loadProviderKeys(), gemini: process.env.GEMINI_API_KEY || "" };
+      // Use the default chat model (Gemini Flash as fallback)
+      const model = process.env.ENSO_CHAT_MODEL || "gemini-2.0-flash";
 
-      taskRows += `
-        <tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #1e293b;vertical-align:top">
-            <span style="color:${taskStatusColor};font-size:14px">${taskIcon}</span>
-          </td>
-          <td style="padding:10px 12px;border-bottom:1px solid #1e293b;vertical-align:top">
-            <div style="color:#e2e8f0;font-size:13px;font-weight:600">${task.title}</div>
-            <div style="margin-top:4px">
-              <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${roleBg}20;color:${roleBg};font-size:10px;font-weight:600;text-transform:uppercase">${task.agentRole}</span>
-              ${verdict ? `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#1e293b;color:#94a3b8;font-size:10px;margin-left:4px">${verdict}</span>` : ""}
-            </div>
-            <div style="color:#94a3b8;font-size:12px;margin-top:6px;line-height:1.4">${task.description}</div>
-            ${summary ? `<div style="color:#64748b;font-size:11px;margin-top:6px;padding:8px;background:#0f172a;border-radius:6px;line-height:1.3">${summary.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>` : ""}
-          </td>
-        </tr>`;
-    }
+      const prompt = `You are summarizing an AI orchestration sprint for an executive email. Be CONCISE and focus on KEY ACHIEVEMENTS and ACTIONABLE INSIGHTS.
 
-    // Key findings from structured results
-    let findingsHtml = "";
-    const allFindings = plan.tasks
-      .filter(t => t.structuredResult?.keyFindings?.length)
-      .flatMap(t => (t.structuredResult?.keyFindings || []).map(f => ({ ...f, from: t.title })));
+Sprint data:
+${sprintData}
 
-    if (allFindings.length > 0) {
-      findingsHtml = `
+Write an HTML email body (NO <html>/<body> tags, just content divs) with dark theme styling (background #0f172a, cards #1e293b, text #e2e8f0, accent #f472b6). Include:
+
+1. A one-paragraph executive summary (3-4 sentences max) of what was accomplished
+2. "Key Achievements" section — 3-5 bullet points of the most important things delivered
+3. "Issues Found" section — top 3 problems discovered (if any)
+4. "Next Steps" section — 2-3 recommended follow-up actions
+5. Stats bar showing completed/failed/total
+
+Keep the ENTIRE email under 400 words. No task-by-task breakdown. No raw data dumps. Write like a CTO briefing a CEO.
+
+Use inline CSS. Use these colors: success=#4ade80, error=#f87171, accent=#f472b6, muted=#94a3b8, card-bg=#1e293b, bg=#0f172a.`;
+
+      summaryHtml = await callChatLLM({ prompt, model, providerKeys, timeoutMs: 30_000 });
+      // Strip markdown code fences if present
+      summaryHtml = summaryHtml.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+    } catch { /* fall back to basic email */ }
+
+    // Fallback if LLM summary failed
+    if (!summaryHtml) {
+      const statusColor = status === "completed" ? "#4ade80" : "#f87171";
+      summaryHtml = `
+        <div style="text-align:center;margin:20px 0">
+          <span style="color:${statusColor};font-size:32px;font-weight:700">${completed.length}/${totalTasks}</span>
+          <span style="color:#94a3b8;font-size:14px;display:block">tasks completed</span>
+        </div>
         <div style="background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">
-          <h3 style="color:#e2e8f0;font-size:14px;margin:0 0 12px">Key Findings</h3>
-          ${allFindings.slice(0, 10).map(f => `
-            <div style="padding:6px 0;border-bottom:1px solid #0f172a">
-              <span style="color:${f.impact === "high" ? "#f87171" : f.impact === "medium" ? "#fbbf24" : "#4ade80"};font-size:10px;font-weight:600;text-transform:uppercase">${f.impact || "info"}</span>
-              <span style="color:#e2e8f0;font-size:12px;margin-left:8px">${f.title}</span>
-              <span style="color:#475569;font-size:10px;margin-left:8px">from ${f.from}</span>
-            </div>
-          `).join("")}
+          <div style="color:#e2e8f0;font-size:14px;line-height:1.5">${plan.goal}</div>
         </div>`;
     }
 
-    // Recommendations
-    let recsHtml = "";
-    const allRecs = plan.tasks
-      .filter(t => t.structuredResult?.recommendations?.length)
-      .flatMap(t => t.structuredResult?.recommendations || []);
-
-    if (allRecs.length > 0) {
-      recsHtml = `
-        <div style="background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">
-          <h3 style="color:#e2e8f0;font-size:14px;margin:0 0 12px">Recommendations</h3>
-          ${allRecs.slice(0, 8).map((r, i) => `
-            <div style="padding:6px 0;border-bottom:1px solid #0f172a">
-              <span style="color:#94a3b8;font-size:10px;font-weight:600">${r.priority || ""}</span>
-              <span style="color:#e2e8f0;font-size:12px;margin-left:8px">${r.title}</span>
-              ${r.effort ? `<span style="color:#475569;font-size:10px;margin-left:8px">Effort: ${r.effort}</span>` : ""}
-            </div>
-          `).join("")}
-        </div>`;
-    }
+    const statusLabel = status === "completed" ? "Completed" : "Failed";
+    const statusIcon = status === "completed" ? "✓" : "✗";
 
     const html = `
 <div style="background:#0f172a;padding:30px 20px;font-family:system-ui,-apple-system,sans-serif">
   <div style="max-width:700px;margin:0 auto">
-    <h1 style="color:${statusColor};text-align:center;font-size:24px;margin-bottom:4px">
-      ${statusIcon} Orchestration ${statusLabel}
-    </h1>
-    <p style="color:#94a3b8;text-align:center;font-size:13px;margin-top:0">
-      ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-    </p>
-
-    <!-- Goal -->
-    <div style="background:#1e293b;border-radius:12px;padding:16px;margin:20px 0">
-      <div style="color:#64748b;font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:6px">Goal</div>
-      <div style="color:#e2e8f0;font-size:15px;line-height:1.4">${plan.goal}</div>
-    </div>
-
-    <!-- Stats -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0">
-      <tr>
-        <td style="text-align:center;padding:12px;background:#1e293b;border-radius:12px 0 0 12px">
-          <div style="color:#4ade80;font-size:24px;font-weight:700">${completed.length}</div>
-          <div style="color:#64748b;font-size:11px">Completed</div>
-        </td>
-        <td style="text-align:center;padding:12px;background:#1e293b">
-          <div style="color:#f87171;font-size:24px;font-weight:700">${failed.length}</div>
-          <div style="color:#64748b;font-size:11px">Failed</div>
-        </td>
-        <td style="text-align:center;padding:12px;background:#1e293b">
-          <div style="color:#94a3b8;font-size:24px;font-weight:700">${blocked.length}</div>
-          <div style="color:#64748b;font-size:11px">Blocked</div>
-        </td>
-        <td style="text-align:center;padding:12px;background:#1e293b;border-radius:0 12px 12px 0">
-          <div style="color:#e2e8f0;font-size:24px;font-weight:700">${totalTasks}</div>
-          <div style="color:#64748b;font-size:11px">Total</div>
-        </td>
-      </tr>
-    </table>
-
-    ${findingsHtml}
-    ${recsHtml}
-
-    <!-- Task Details -->
-    <h3 style="color:#e2e8f0;font-size:14px;margin:24px 0 12px">Task Details</h3>
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:12px;overflow:hidden">
-      <tbody>${taskRows}</tbody>
-    </table>
-
-    <p style="color:#334155;text-align:center;font-size:11px;margin-top:24px">Enso AI · Orchestration Report</p>
+    <h1 style="color:#f472b6;text-align:center;font-size:22px;margin-bottom:4px">${statusIcon} Sprint ${statusLabel}</h1>
+    <p style="color:#94a3b8;text-align:center;font-size:13px;margin-top:0">${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+    ${summaryHtml}
+    <p style="color:#334155;text-align:center;font-size:11px;margin-top:24px">Enso AI · Sprint Report</p>
   </div>
 </div>`;
-
-    const subject = `${status === "completed" ? "✓" : "✗"} Orchestration ${statusLabel}: ${plan.goal.slice(0, 60)}`;
 
     await transporter.sendMail({
       from: `Enso AI <${email}>`,
       to: "kkwong@xiaomi.com",
-      subject,
+      subject: `${statusIcon} Sprint ${statusLabel}: ${plan.goal.slice(0, 60)}`,
       html,
     });
 
