@@ -83,6 +83,14 @@ export const APP_CATALOG: AppEntry[] = [
     signatureId: "video_studio_view",
     description: "AI video generation studio: create cinematic videos from text prompts, animate still images, craft optimized prompts, browse video gallery",
   },
+  // ── YouTube ──
+  {
+    appId: "youtube",
+    primaryTool: "enso_youtube_my_feed",
+    actions: ["my_feed", "trending", "search", "channel_videos", "liked_videos", "subscriptions"],
+    signatureId: "youtube_feed",
+    description: "YouTube: personalized feed from subscriptions, trending, search, channel videos, liked videos, subscriptions list",
+  },
   // ── Email ──
   {
     appId: "email",

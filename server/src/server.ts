@@ -1351,6 +1351,39 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── YouTube OAuth API ──
+
+  app.get("/api/youtube/auth", async (_req, res) => {
+    const { getAuthUrl } = await import("./youtube-auth.js");
+    const baseUrl = `http://localhost:${port}`;
+    const url = getAuthUrl(baseUrl);
+    if (!url) {
+      res.status(400).json({ error: "YouTube Client ID and Secret must be configured first in Settings > Service Keys" });
+      return;
+    }
+    res.redirect(url);
+  });
+
+  app.get("/api/youtube/callback", async (req, res) => {
+    const code = req.query.code as string;
+    if (!code) { res.status(400).send("Missing authorization code"); return; }
+
+    const { handleCallback } = await import("./youtube-auth.js");
+    const baseUrl = `http://localhost:${port}`;
+    const result = await handleCallback(code, baseUrl);
+
+    if (result.success) {
+      res.send("<html><body style='background:#0a0a0a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0'><div style='text-align:center'><h1>YouTube Authorized</h1><p style='color:#4ade80'>You can close this tab and return to Enso.</p></div></body></html>");
+    } else {
+      res.status(400).send(`<html><body style='background:#0a0a0a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0'><div style='text-align:center'><h1>Authorization Failed</h1><p style='color:#f87171'>${result.error}</p></div></body></html>`);
+    }
+  });
+
+  app.get("/api/youtube/status", async (_req, res) => {
+    const { isAuthorized } = await import("./youtube-auth.js");
+    res.json({ authorized: isAuthorized() });
+  });
+
   // ── Growth Marketing & Sales API ──
 
   try {

@@ -34,6 +34,9 @@ const SERVICE_KEYS: ServiceKeyDef[] = [
   { id: "removebg", envVar: "REMOVE_BG_API_KEY", label: "Remove.bg", description: "Background removal", setupUrl: "https://www.remove.bg/api" },
   { id: "smtpEmail", envVar: "SMTP_EMAIL", label: "Gmail Address", description: "Gmail address for sending emails (e.g. you@gmail.com)", setupUrl: "https://myaccount.google.com/apppasswords" },
   { id: "smtpPassword", envVar: "SMTP_PASSWORD", label: "Gmail App Password", description: "Gmail App Password (16-char code from Google > Security > App Passwords)", setupUrl: "https://myaccount.google.com/apppasswords" },
+  { id: "youtubeClientId", envVar: "YOUTUBE_CLIENT_ID", label: "YouTube Client ID", description: "Google Cloud OAuth2 Client ID for YouTube API", setupUrl: "https://console.cloud.google.com/apis/credentials" },
+  { id: "youtubeClientSecret", envVar: "YOUTUBE_CLIENT_SECRET", label: "YouTube Client Secret", description: "Google Cloud OAuth2 Client Secret", setupUrl: "https://console.cloud.google.com/apis/credentials" },
+  { id: "youtubeRefreshToken", envVar: "YOUTUBE_REFRESH_TOKEN", label: "YouTube Refresh Token", description: "Auto-generated after OAuth authorization (do not edit manually)", setupUrl: "" },
 ];
 
 export function getServiceKeyDefinitions(): ServiceKeyDef[] {

@@ -37,6 +37,7 @@
     "better-sqlite3": "^12.8.0",
     "croner": "^10.0.1",
     "express": "^4.21.0",
+    "googleapis": "^171.4.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.0",
     "lucide-react": "^0.469.0",
