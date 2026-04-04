@@ -116,7 +116,7 @@ var result = {
   totalChannels: enriched.length,
   categories: categoryList,
   channels: enriched.sort(function(a, b) {
-    return a.title.localeCompare(b.title);
+    return (a.title || "").localeCompare(b.title || "");
   }),
   cachedAt: Date.now(),
   debug: debugInfo

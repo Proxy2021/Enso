@@ -218,7 +218,7 @@ var SubscriptionsView = function() {
       result = result.filter(function(ch) { return ch.category === selectedCategory; });
     }
     // Sort
-    if (sortBy === "name") result = result.slice().sort(function(a, b) { return a.title.localeCompare(b.title); });
+    if (sortBy === "name") result = result.slice().sort(function(a, b) { return (a.title || "").localeCompare(b.title || ""); });
     else if (sortBy === "subs") result = result.slice().sort(function(a, b) { return (b.subscriberCount || 0) - (a.subscriberCount || 0); });
     else if (sortBy === "videos") result = result.slice().sort(function(a, b) { return (b.videoCount || 0) - (a.videoCount || 0); });
     return result;
