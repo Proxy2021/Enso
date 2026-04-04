@@ -1,88 +1,87 @@
 {
-  "appId": "youtube_manager",
-  "name": "YouTube Manager",
-  "description": "Manage YouTube subscriptions, discover channels, personalized feed, analytics, and bulk cleanup — powered by your Enso profile",
-  "tools": [
-    {
-      "name": "enso_youtube_manager_manage",
-      "label": "My Subscriptions",
-      "description": "View and manage all YouTube subscriptions with auto-categorization, stats, health scores, and bulk actions",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "refresh": { "type": "boolean", "description": "Force refresh (bypass 10-min cache)" }
+  "version": 1,
+  "createdAt": 1775280000000,
+  "spec": {
+    "toolFamily": "youtube_manager",
+    "toolPrefix": "enso_youtube_manager_",
+    "description": "YouTube Manager: subscription management, personalized feed, trending, AI-powered channel discovery, analytics, bulk cleanup",
+    "signatureId": "youtube_manager_view",
+    "tools": [
+      {
+        "suffix": "manage",
+        "description": "View and manage all YouTube subscriptions with auto-categorization, stats, health scores, and bulk actions",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "refresh": { "type": "boolean", "description": "Force refresh (bypass 10-min cache)" }
+          },
+          "required": []
         },
-        "required": []
+        "isPrimary": true
       },
-      "isPrimary": true
-    },
-    {
-      "name": "enso_youtube_manager_feed",
-      "label": "My Feed",
-      "description": "Personalized video feed from your subscribed channels, sorted by newest",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "maxResults": { "type": "number", "description": "Number of videos (default 20)" },
-          "category": { "type": "string", "description": "Filter by subscription category" }
-        },
-        "required": []
+      {
+        "suffix": "feed",
+        "description": "Personalized video feed from your subscribed channels, sorted by newest",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxResults": { "type": "number", "description": "Number of videos (default 20)" },
+            "category": { "type": "string", "description": "Filter by subscription category" }
+          },
+          "required": []
+        }
+      },
+      {
+        "suffix": "trending",
+        "description": "Trending YouTube videos by region and category",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "regionCode": { "type": "string", "description": "Country code (default HK). Examples: US, GB, JP, KR" },
+            "categoryId": { "type": "string", "description": "YouTube category: 10=Music, 20=Gaming, 28=Science" },
+            "maxResults": { "type": "number", "description": "Number of videos (default 20)" }
+          },
+          "required": []
+        }
+      },
+      {
+        "suffix": "discover",
+        "description": "AI-powered channel discovery based on your Enso profile interests, browsing habits, and subscription gaps",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "topic": { "type": "string", "description": "Specific topic to search for (overrides profile-driven discovery)" },
+            "maxResults": { "type": "number", "description": "Number of channels to discover (default 10)" }
+          },
+          "required": []
+        }
+      },
+      {
+        "suffix": "analytics",
+        "description": "Subscription analytics: category distribution, channel health, engagement insights",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "suffix": "unsubscribe",
+        "description": "Unsubscribe from one or more YouTube channels",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "channelIds": { "type": "array", "items": { "type": "string" }, "description": "Channel IDs to unsubscribe from" }
+          },
+          "required": ["channelIds"]
+        }
       }
-    },
-    {
-      "name": "enso_youtube_manager_trending",
-      "label": "Trending",
-      "description": "Trending YouTube videos by region and category",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "regionCode": { "type": "string", "description": "Country code (default HK). Examples: US, GB, JP, KR" },
-          "categoryId": { "type": "string", "description": "YouTube category: 10=Music, 20=Gaming, 28=Science, 24=Entertainment" },
-          "maxResults": { "type": "number", "description": "Number of videos (default 20)" }
-        },
-        "required": []
-      }
-    },
-    {
-      "name": "enso_youtube_manager_discover",
-      "label": "Discover Channels",
-      "description": "AI-powered channel discovery based on your Enso profile interests, browsing habits, and subscription gaps",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "topic": { "type": "string", "description": "Specific topic to search for (overrides profile-driven discovery)" },
-          "maxResults": { "type": "number", "description": "Number of channels to discover (default 10)" }
-        },
-        "required": []
-      }
-    },
-    {
-      "name": "enso_youtube_manager_analytics",
-      "label": "Analytics",
-      "description": "Subscription analytics: category distribution, channel health, engagement insights",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {},
-        "required": []
-      }
-    },
-    {
-      "name": "enso_youtube_manager_unsubscribe",
-      "label": "Unsubscribe",
-      "description": "Unsubscribe from one or more YouTube channels",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "channelIds": { "type": "array", "items": { "type": "string" }, "description": "Channel IDs to unsubscribe from" }
-        },
-        "required": ["channelIds"]
-      }
-    }
-  ]
+    ]
+  }
 }
