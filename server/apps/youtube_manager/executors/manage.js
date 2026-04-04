@@ -1,5 +1,6 @@
+var p = params || {};
 // YouTube Manager — manage.js
-// Fetches all subscriptions with auto-categorization.
+// Fetches all subscriptions with stats and auto-categorization.
 
 var CACHE_KEY = "yt_manager_subs";
 var CACHE_TTL = 600000; // 10 min
@@ -29,10 +30,15 @@ function categorize(title, desc) {
   return "Other";
 }
 
-var p = params || {};
+function fmtCount(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return Math.round(n / 1000) + "K";
+  return String(n);
+}
+
 var refresh = p.refresh === true;
 
-// Check cache first
+// Check cache
 if (!refresh) {
   try {
     var cached = await ctx.store.get(CACHE_KEY);
@@ -43,49 +49,41 @@ if (!refresh) {
   } catch(e) {}
 }
 
-// Fetch subscriptions via the system tool
-// ctx.callTool returns { success, data, error, rawText }
+// 1. Fetch subscriptions
 var subsResult = await ctx.callTool("enso_youtube_subscriptions", { maxResults: 999, all: true });
 var allSubs = [];
 
-// Try multiple parsing paths — the result shape varies
 if (subsResult && subsResult.data && subsResult.data.channels) {
   allSubs = subsResult.data.channels;
 } else if (subsResult && subsResult.rawText) {
-  try {
-    var parsed = JSON.parse(subsResult.rawText);
-    allSubs = parsed.channels || [];
-  } catch(e) {}
-} else if (subsResult && typeof subsResult === "object") {
-  // Maybe the result IS the data directly
-  allSubs = subsResult.channels || [];
+  try { allSubs = JSON.parse(subsResult.rawText).channels || []; } catch(e) {}
+} else if (subsResult && subsResult.channels) {
+  allSubs = subsResult.channels;
 }
-
-// If still empty, try reading rawText from data
 if (allSubs.length === 0 && subsResult && subsResult.data && typeof subsResult.data === "string") {
-  try {
-    var p2 = JSON.parse(subsResult.data);
-    allSubs = p2.channels || [];
-  } catch(e) {}
+  try { allSubs = JSON.parse(subsResult.data).channels || []; } catch(e) {}
 }
 
-// Debug: if still empty, include error info in result
-var debugInfo = null;
-if (allSubs.length === 0) {
-  debugInfo = {
-    subsResultType: typeof subsResult,
-    success: subsResult ? subsResult.success : "no result",
-    error: subsResult ? subsResult.error : "no result",
-    dataType: subsResult ? typeof subsResult.data : "N/A",
-    dataKeys: subsResult && subsResult.data ? Object.keys(subsResult.data).slice(0, 10) : [],
-    rawTextSlice: subsResult && subsResult.rawText ? subsResult.rawText.slice(0, 200) : "N/A",
-  };
+// 2. Enrich with channel stats (subscriber count, video count)
+var statsMap = {};
+if (allSubs.length > 0) {
+  var channelIds = allSubs.map(function(s) { return s.channelId; });
+  var statsResult = await ctx.callTool("enso_youtube_channel_stats", { channelIds: channelIds });
+
+  if (statsResult && statsResult.data && statsResult.data.stats) {
+    statsMap = statsResult.data.stats;
+  } else if (statsResult && statsResult.rawText) {
+    try { statsMap = JSON.parse(statsResult.rawText).stats || {}; } catch(e) {}
+  }
 }
 
-// Categorize channels
+// 3. Build enriched channel list
 var enriched = [];
 for (var i = 0; i < allSubs.length; i++) {
   var sub = allSubs[i];
+  var stats = statsMap[sub.channelId] || {};
+  var subCount = stats.subscriberCount || 0;
+  var vidCount = stats.videoCount || 0;
   enriched.push({
     subscriptionId: sub.subscriptionId || "",
     channelId: sub.channelId || "",
@@ -93,12 +91,14 @@ for (var i = 0; i < allSubs.length; i++) {
     description: sub.description || "",
     thumbnailUrl: sub.thumbnailUrl || "",
     category: categorize(sub.title || "", sub.description || ""),
-    subscriberCount: sub.subscriberCount || 0,
-    videoCount: sub.videoCount || 0
+    subscriberCount: subCount,
+    videoCount: vidCount,
+    subscriberCountFmt: fmtCount(subCount),
+    videoCountFmt: fmtCount(vidCount)
   });
 }
 
-// Build category summary
+// 4. Category summary
 var catCounts = {};
 for (var j = 0; j < enriched.length; j++) {
   var cat = enriched[j].category;
@@ -118,11 +118,10 @@ var result = {
   channels: enriched.sort(function(a, b) {
     return (a.title || "").localeCompare(b.title || "");
   }),
-  cachedAt: Date.now(),
-  debug: debugInfo
+  cachedAt: Date.now()
 };
 
-// Cache it
+// Cache
 try {
   await ctx.store.set(CACHE_KEY, { data: result, cachedAt: Date.now() });
 } catch(e) {}

@@ -479,6 +479,48 @@ export function createYouTubeTools(): EnsoAgentTool[] {
     } as EnsoAgentTool,
 
     {
+      name: "enso_youtube_channel_stats",
+      label: "Channel Stats",
+      description: "Get subscriber count and video count for a batch of YouTube channel IDs. Returns a map of channelId → { subscriberCount, videoCount }.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          channelIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of YouTube channel IDs to look up stats for",
+          },
+        },
+        required: ["channelIds"],
+      },
+      execute: async (_callId, params) => {
+        try {
+          const yt = getYouTubePublic();
+          const ids = (params.channelIds as string[]) || [];
+          const stats: Record<string, { subscriberCount: number; videoCount: number }> = {};
+
+          for (let i = 0; i < ids.length; i += 50) {
+            const batch = ids.slice(i, i + 50);
+            const res = await yt.channels.list({ part: ["statistics"], id: batch });
+            for (const ch of res.data.items || []) {
+              stats[ch.id!] = {
+                subscriberCount: parseInt(ch.statistics?.subscriberCount || "0"),
+                videoCount: parseInt(ch.statistics?.videoCount || "0"),
+              };
+            }
+          }
+
+          logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Channel stats: ${Object.keys(stats).length} channels` });
+          return jsonResult({ tool: "enso_youtube_channel_stats", count: Object.keys(stats).length, stats });
+        } catch (err) {
+          logError("youtube", "channel_stats failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
+
+    {
       name: "enso_youtube_liked_videos",
       label: "My Liked Videos",
       description: "Get your liked YouTube videos. Requires YouTube OAuth authorization.",
