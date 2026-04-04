@@ -1384,6 +1384,63 @@ export async function startEnsoServer(opts: {
     res.json({ authorized: isAuthorized() });
   });
 
+  // ── Email-Triggered Orchestration API ──
+
+  app.get("/api/trigger/evolve", async (req, res) => {
+    const goal = req.query.goal as string;
+    const projectId = (req.query.projectId as string) || "enso";
+    if (!goal) { res.status(400).send("Missing goal parameter"); return; }
+
+    try {
+      const { handleEvolution } = await import("./evolution.js");
+      const firstClient = clients.values().next().value;
+      if (!firstClient) {
+        // No client connected — show a page that says to open Enso first
+        res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#fbbf24;font-size:48px;margin-bottom:8px">&#9888;</h1><h2>No Client Connected</h2><p style="color:#94a3b8">Open <a href="https://pc1.enso.net" style="color:#60a5fa">pc1.enso.net</a> first, then click the button again.</p></div></body></html>`);
+        return;
+      }
+
+      handleEvolution({
+        client: firstClient,
+        account,
+        goal,
+        projectId,
+      }).catch((err: Error) => {
+        logError("trigger", "Email-triggered evolve failed", err);
+      });
+
+      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#a78bfa;font-size:48px;margin-bottom:8px">&#9889;</h1><h2>Evolution Sprint Started</h2><p style="color:#94a3b8;max-width:500px">${goal.slice(0, 200)}</p><p style="color:#475569;font-size:13px;margin-top:20px">Check progress in <a href="https://pc1.enso.net" style="color:#60a5fa">Enso</a></p></div></body></html>`);
+    } catch (err) {
+      res.status(500).send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f87171">Error</h1><p style="color:#94a3b8">${err instanceof Error ? err.message : String(err)}</p></div></body></html>`);
+    }
+  });
+
+  app.get("/api/trigger/discover", async (req, res) => {
+    const focus = req.query.focus as string;
+    if (!focus) { res.status(400).send("Missing focus parameter"); return; }
+
+    try {
+      const { handleDiscovery } = await import("./discovery.js");
+      const firstClient = clients.values().next().value;
+      if (!firstClient) {
+        res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#fbbf24;font-size:48px;margin-bottom:8px">&#9888;</h1><h2>No Client Connected</h2><p style="color:#94a3b8">Open <a href="https://pc1.enso.net" style="color:#60a5fa">pc1.enso.net</a> first, then click the button again.</p></div></body></html>`);
+        return;
+      }
+
+      handleDiscovery({
+        client: firstClient,
+        account,
+        focus,
+      }).catch((err: Error) => {
+        logError("trigger", "Email-triggered discover failed", err);
+      });
+
+      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f59e0b;font-size:48px;margin-bottom:8px">&#128270;</h1><h2>Discovery Started</h2><p style="color:#94a3b8;max-width:500px">${focus.slice(0, 200)}</p><p style="color:#475569;font-size:13px;margin-top:20px">Check progress in <a href="https://pc1.enso.net" style="color:#60a5fa">Enso</a></p></div></body></html>`);
+    } catch (err) {
+      res.status(500).send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f87171">Error</h1><p style="color:#94a3b8">${err instanceof Error ? err.message : String(err)}</p></div></body></html>`);
+    }
+  });
+
   // ── Email Cleanup API ──
 
   app.get("/api/email-cleanup/confirm", async (req, res) => {
