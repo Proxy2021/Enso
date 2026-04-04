@@ -87,7 +87,7 @@ export const APP_CATALOG: AppEntry[] = [
   {
     appId: "youtube",
     primaryTool: "enso_youtube_my_feed",
-    actions: ["my_feed", "trending", "search", "channel_videos", "liked_videos", "subscriptions"],
+    actions: ["my_feed", "trending", "search", "channel_videos", "liked_videos", "subscriptions", "unsubscribe"],
     signatureId: "youtube_feed",
     description: "YouTube: personalized feed from subscriptions, trending, search, channel videos, liked videos, subscriptions list",
   },

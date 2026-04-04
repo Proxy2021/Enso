@@ -286,23 +286,89 @@ async function likedVideos(params: Record<string, unknown>): Promise<VideoInfo[]
   }));
 }
 
-async function subscriptions(params: Record<string, unknown>): Promise<Array<{ channelId: string; title: string; description: string; thumbnailUrl: string }>> {
+async function subscriptions(params: Record<string, unknown>): Promise<Array<{ subscriptionId: string; channelId: string; title: string; description: string; thumbnailUrl: string }>> {
   const yt = getYouTube();
   const maxResults = Math.min(Number(params.maxResults) || 20, 50);
 
-  const res = await yt.subscriptions.list({
-    part: ["snippet"],
-    mine: true,
-    maxResults,
-    order: "alphabetical",
-  });
+  const all: Array<{ subscriptionId: string; channelId: string; title: string; description: string; thumbnailUrl: string }> = [];
+  let pageToken: string | undefined;
 
-  return (res.data.items || []).map((item) => ({
-    channelId: item.snippet?.resourceId?.channelId || "",
-    title: item.snippet?.title || "",
-    description: item.snippet?.description?.slice(0, 200) || "",
-    thumbnailUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url || "",
-  }));
+  do {
+    const res = await yt.subscriptions.list({
+      part: ["snippet"],
+      mine: true,
+      maxResults,
+      order: "alphabetical",
+      pageToken,
+    });
+    for (const item of res.data.items || []) {
+      all.push({
+        subscriptionId: item.id || "",
+        channelId: item.snippet?.resourceId?.channelId || "",
+        title: item.snippet?.title || "",
+        description: item.snippet?.description?.slice(0, 200) || "",
+        thumbnailUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url || "",
+      });
+    }
+    // If caller wants all, keep paginating; otherwise stop
+    if (Number(params.maxResults) > 50 || params.all) {
+      pageToken = res.data.nextPageToken || undefined;
+    } else {
+      pageToken = undefined;
+    }
+  } while (pageToken);
+
+  return all;
+}
+
+async function unsubscribe(params: Record<string, unknown>): Promise<{ unsubscribed: string[]; errors: string[] }> {
+  const yt = getYouTube();
+  const channelIds = (params.channelIds as string[] | undefined) || [];
+  const subscriptionIds = (params.subscriptionIds as string[] | undefined) || [];
+
+  if (channelIds.length === 0 && subscriptionIds.length === 0) {
+    throw new Error("Provide channelIds or subscriptionIds to unsubscribe from");
+  }
+
+  // If channelIds provided, look up their subscription IDs first
+  const idsToDelete: Array<{ subId: string; title: string }> = [];
+
+  if (channelIds.length > 0) {
+    // Fetch all subscriptions to find matching subscription IDs
+    let pageToken: string | undefined;
+    do {
+      const res = await yt.subscriptions.list({ part: ["snippet"], mine: true, maxResults: 50, pageToken });
+      for (const item of res.data.items || []) {
+        const chId = item.snippet?.resourceId?.channelId;
+        if (chId && channelIds.includes(chId)) {
+          idsToDelete.push({ subId: item.id || "", title: item.snippet?.title || chId });
+        }
+      }
+      pageToken = res.data.nextPageToken || undefined;
+    } while (pageToken);
+  }
+
+  // Add directly specified subscription IDs
+  for (const sid of subscriptionIds) {
+    if (!idsToDelete.find((d) => d.subId === sid)) {
+      idsToDelete.push({ subId: sid, title: sid });
+    }
+  }
+
+  const unsubscribed: string[] = [];
+  const errors: string[] = [];
+
+  for (const { subId, title } of idsToDelete) {
+    try {
+      await yt.subscriptions.delete({ id: subId });
+      unsubscribed.push(title);
+      logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Unsubscribed from: ${title}` });
+    } catch (err) {
+      errors.push(`${title}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { unsubscribed, errors };
 }
 
 // ── Tool Definitions ──
@@ -455,6 +521,39 @@ export function createYouTubeTools(): EnsoAgentTool[] {
           return jsonResult({ tool: "enso_youtube_subscriptions", count: channels.length, channels });
         } catch (err) {
           logError("youtube", "subscriptions failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
+
+    {
+      name: "enso_youtube_unsubscribe",
+      label: "Unsubscribe",
+      description: "Unsubscribe from YouTube channels. Provide channel IDs or subscription IDs. Requires YouTube OAuth with write access.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          channelIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "YouTube channel IDs to unsubscribe from (e.g. ['UCxxxxxx', 'UCyyyyyy'])",
+          },
+          subscriptionIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Subscription IDs to delete (from enso_youtube_subscriptions results)",
+          },
+        },
+        required: [],
+      },
+      execute: async (_callId, params) => {
+        try {
+          const result = await unsubscribe(params);
+          logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Unsubscribed from ${result.unsubscribed.length} channels` });
+          return jsonResult({ tool: "enso_youtube_unsubscribe", ...result });
+        } catch (err) {
+          logError("youtube", "unsubscribe failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
       },

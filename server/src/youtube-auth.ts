@@ -10,7 +10,7 @@ import { google } from "googleapis";
 import { saveApiKey } from "./api-keys.js";
 import { logAction, logError } from "./action-log.js";
 
-const SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"];
+const SCOPES = ["https://www.googleapis.com/auth/youtube"];
 const REDIRECT_PATH = "/api/youtube/callback";
 
 /** Create an OAuth2 client from stored credentials */
