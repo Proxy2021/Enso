@@ -520,7 +520,7 @@ var AnalyticsView = function() {
                   return <Cell key={idx} fill={COLORS[idx % COLORS.length]} />;
                 })}
               </Bar>
-              <RechartsTooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -535,7 +535,7 @@ var AnalyticsView = function() {
               <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 10 }} />
               <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
               <Bar dataKey="value" fill="#818cf8" radius={[4, 4, 0, 0]} />
-              <RechartsTooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
             </BarChart>
           </ResponsiveContainer>
         </div>
