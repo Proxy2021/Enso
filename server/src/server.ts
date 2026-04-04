@@ -1384,6 +1384,22 @@ export async function startEnsoServer(opts: {
     res.json({ authorized: isAuthorized() });
   });
 
+  // ── Email Cleanup API ──
+
+  app.get("/api/email-cleanup/confirm", async (req, res) => {
+    const token = req.query.token as string;
+    if (!token) { res.status(400).send("Missing token"); return; }
+
+    const { executePendingCleanup } = await import("./email-cleanup.js");
+    const result = executePendingCleanup(token);
+
+    if (result.success) {
+      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#4ade80;font-size:48px;margin-bottom:8px">&#10003;</h1><h2>Cleanup Complete</h2><p style="color:#94a3b8;font-size:18px">${result.deleted} emails deleted</p><p style="color:#475569;font-size:13px;margin-top:20px">You can close this tab.</p></div></body></html>`);
+    } else {
+      res.status(400).send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f87171;font-size:48px;margin-bottom:8px">&#10007;</h1><h2>Cleanup Failed</h2><p style="color:#94a3b8">${result.error}</p></div></body></html>`);
+    }
+  });
+
   // ── Growth Marketing & Sales API ──
 
   try {
