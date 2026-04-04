@@ -91,6 +91,13 @@ export const APP_CATALOG: AppEntry[] = [
     signatureId: "youtube_feed",
     description: "YouTube: personalized feed from subscriptions, trending, search, channel videos, liked videos, subscriptions list",
   },
+  {
+    appId: "youtube_manager",
+    primaryTool: "enso_youtube_manager_manage",
+    actions: ["manage", "feed", "trending", "discover", "analytics", "unsubscribe"],
+    signatureId: "youtube_manager_view",
+    description: "YouTube Manager: subscription management, personalized feed, trending, AI-powered channel discovery, analytics, bulk cleanup",
+  },
   // ── Email ──
   {
     appId: "email",
