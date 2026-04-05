@@ -91,10 +91,10 @@ export default function SettingsPanel() {
                 { id: "claudeCode" as const, label: t("settings.claudeCodeModel") },
                 { id: "apiKeys" as const, label: t("settings.apiKeys") },
                 { id: "memory" as const, label: t("settings.memory") },
+                { id: "transfer" as const, label: "Transfer" },
                 { id: "dataSources" as const, label: t("settings.dataSources") },
                 { id: "proactive" as const, label: t("settings.proactive") },
                 { id: "appearance" as const, label: t("settings.language") },
-                { id: "transfer" as const, label: "Transfer" },
               ]).map((tab) => (
                 <button
                   key={tab.id}
