@@ -275,6 +275,13 @@ export interface ServerMessage {
   dailyDigest?: { date: string; greeting: string; items: Array<{ category: string; title: string; description: string; icon: string; priority: string; action?: unknown }> };
   proactiveConsent?: { enabled: boolean; projectHealth: boolean; research: boolean; communication: boolean; workflow: boolean; learning: boolean; ambient: boolean };
   proactiveAnalytics?: { totalSuggested: number; totalAccepted: number; totalDismissed: number; byPillar: Record<string, { suggested: number; accepted: number; dismissed: number }> };
+  /** Cross-card context sharing */
+  contextUpdate?: { channelName: string; update: import("./context-bus.js").ContextUpdate };
+  contextChannels?: Array<{ name: string; publisherCardId: string; summary: string; updatedAt: number; subscriberCount: number }>;
+  /** Scheduled tasks */
+  scheduledTasks?: unknown;
+  scheduledTaskUpdate?: unknown;
+  scheduledTaskRun?: unknown;
   /** Saved chat threads for the browser client (sidebar). */
   conversationsList?: Array<{ id: string; title: string; createdAt: number; updatedAt: number }>;
   /** Batch of historical cards sent in response to chat.history */
@@ -355,7 +362,12 @@ export interface ClientMessage {
     | "proactive.get_analytics"
     | "image_search"
     | "card.persist"
-    | "client.error";
+    | "client.error"
+    // Cross-card context sharing
+    | "context.publish"
+    | "context.subscribe"
+    | "context.unsubscribe"
+    | "context.list";
   mode?: ChannelMode;
   claudeModel?: string;
   claudeThinking?: "adaptive" | "disabled";
@@ -440,6 +452,16 @@ export interface ClientMessage {
   suggestionCount?: number;
   // card.persist fields
   cardRecord?: { id: string; runId: string; type: string; role: "user" | "assistant"; text?: string; data?: unknown; timestamp: number };
+  // context.* fields (cross-card context sharing)
+  contextChannelName?: string;
+  contextSummary?: string;
+  contextData?: Record<string, unknown>;
+  // Scheduled-task fields (dynamic dispatch)
+  scheduledTaskId?: string;
+  scheduledTaskDef?: unknown;
+  scheduledTaskUpdates?: unknown;
+  // monitor.remove field
+  monitorId?: string;
 }
 
 /** Executor Context — injected into generated app executors as `ctx` */

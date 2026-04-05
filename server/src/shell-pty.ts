@@ -15,9 +15,17 @@ import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
 import { logError, logAction } from "./action-log.js";
 
-/** Detect project root from module location (server/src → ../../). */
+/**
+ * Detect project root from module location (server/src → ../../).
+ * NOTE: tsx caches compiled output in %LOCALAPPDATA%\Temp\tsx-Administrator\.
+ * If import.meta.url points to the cache, PROJECT_ROOT may resolve incorrectly.
+ * Clear the tsx cache before restarting the gateway after modifying plugin source.
+ */
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(join(PLUGIN_DIR, "..", ".."));
+
+// BUG-01: Log resolved PROJECT_ROOT at module load time for debugging CWD issues
+logAction({ ts: Date.now(), type: "info", category: "shell-pty", message: `shell-pty PROJECT_ROOT: ${PROJECT_ROOT} (from ${PLUGIN_DIR})` });
 
 /** Maximum concurrent shell sessions per client. */
 const MAX_SESSIONS_PER_CLIENT = 3;

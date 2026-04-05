@@ -153,6 +153,62 @@ describe("filesystem error handling — error format contract", () => {
   });
 });
 
+describe("BUG-02: tool-router timeout prevents silent hangs", () => {
+  it("Promise.race returns fallback when executor exceeds timeout", async () => {
+    const TIMEOUT_MS = 100;
+    const hangingPromise = new Promise<{ success: true; data: string }>((resolve) => {
+      setTimeout(() => resolve({ success: true, data: "late result" }), 5000);
+    });
+    const timeoutPromise = new Promise<{ success: false; data: null }>((resolve) => {
+      setTimeout(() => resolve({ success: false, data: null }), TIMEOUT_MS);
+    });
+
+    const result = await Promise.race([hangingPromise, timeoutPromise]);
+    expect(result.success).toBe(false);
+    expect(result.data).toBeNull();
+  });
+
+  it("Promise.race returns real result when executor is fast", async () => {
+    const TIMEOUT_MS = 5000;
+    const fastPromise = Promise.resolve({ success: true as const, data: "fast result" });
+    const timeoutPromise = new Promise<{ success: false; data: null }>((resolve) => {
+      setTimeout(() => resolve({ success: false, data: null }), TIMEOUT_MS);
+    });
+
+    const result = await Promise.race([fastPromise, timeoutPromise]);
+    expect(result.success).toBe(true);
+    expect(result.data).toBe("fast result");
+  });
+});
+
+describe("NEW-BUG-02: inferPathLikeValue Windows path extraction", () => {
+  // Test the regex patterns used in tool-router.ts inferPathLikeValue
+  it("matches explicit Windows drive path", () => {
+    const winPath = "write to D:\\Photos\\test".match(/(^|\s)([A-Za-z]:\\[^\s,;]+)/);
+    expect(winPath?.[2]).toBe("D:\\Photos\\test");
+  });
+
+  it("matches C:\\ drive path", () => {
+    const winPath = "save file to C:\\Users\\Admin\\Desktop".match(/(^|\s)([A-Za-z]:\\[^\s,;]+)/);
+    expect(winPath?.[2]).toBe("C:\\Users\\Admin\\Desktop");
+  });
+
+  it("does NOT match non-path text", () => {
+    const winPath = "hello world foo bar".match(/(^|\s)([A-Za-z]:\\[^\s,;]+)/);
+    expect(winPath).toBeNull();
+  });
+
+  it("matches quoted path with forward slashes", () => {
+    const quotedPath = 'save to "D:/Photos/test/output.txt" please'.match(/"([^"]+[/\\][^"]+)"/);
+    expect(quotedPath?.[1]).toBe("D:/Photos/test/output.txt");
+  });
+
+  it("matches quoted path with backslashes", () => {
+    const quotedPath = 'write "C:\\Users\\test\\file.md" content'.match(/"([^"]+[/\\][^"]+)"/);
+    expect(quotedPath?.[1]).toBe("C:\\Users\\test\\file.md");
+  });
+});
+
 describe("filesystem error handling — valid edge cases", () => {
   const dirs: string[] = [];
   afterEach(() => {

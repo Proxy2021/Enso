@@ -165,6 +165,10 @@ interface CardStore {
   // Scheduled tasks
   scheduledTasks: import("@shared/types").ScheduledTaskDef[];
 
+  // Standalone deploy (from Evolve view)
+  deployProgress: string | null;
+  deployStatus: "idle" | "deploying" | "done" | null;
+
   // Tab navigation (universal — desktop rail + mobile bottom bar)
   activeTab: "chat" | "tasks" | "evolve" | "projects" | "me";
   chatViewOpen: boolean;
@@ -229,6 +233,7 @@ interface CardStore {
   requestCardSummary: (cardId: string) => void;
   requestCardEvolution: (cardId: string, options?: { goal?: string; includeResearch?: boolean }) => void;
   releaseCard: (cardId: string) => void;
+  triggerDeploy: () => void;
   setCardSearchQuery: (query: string) => void;
   setCardSearchVisible: (visible: boolean) => void;
   setActiveTab: (tab: "chat" | "tasks" | "evolve" | "projects" | "me") => void;
@@ -400,6 +405,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
   cardSearchVisible: false,
   activeTab: "chat" as const,
   chatViewOpen: false,
+  deployProgress: null,
+  deployStatus: null,
   scheduledTasks: [],
 
   setActiveTab: (tab) => set({ activeTab: tab, chatViewOpen: false }),
@@ -1969,6 +1976,15 @@ export const useChatStore = create<CardStore>((set, get) => ({
       toolFamily: activeMode?.toolFamily ?? activeMode?.appId,
     } as ClientMessage);
   },
+  triggerDeploy: () => {
+    const wsClient = get()._wsClient;
+    if (!wsClient) return;
+    set({ deployProgress: "Starting deploy...", deployStatus: "deploying" });
+    wsClient.send({
+      type: "card.release",
+      cardId: "__deploy__",
+    } as ClientMessage);
+  },
   setCardSearchQuery: (query: string) => set({ cardSearchQuery: query }),
   setCardSearchVisible: (visible: boolean) => set((s) => ({
     cardSearchVisible: visible,
@@ -2771,6 +2787,14 @@ export const useChatStore = create<CardStore>((set, get) => ({
             cardOrder: [...state.cardOrder, msg.targetCardId],
             cards: { ...state.cards, [msg.targetCardId]: card },
             isWaiting: false,
+          };
+        }
+
+        // Standalone deploy progress (no real card exists for __deploy__)
+        if (!card && msg.targetCardId === "__deploy__" && msg.releaseProgress != null) {
+          return {
+            deployProgress: msg.releaseProgress,
+            deployStatus: msg.state === "final" ? "done" : "deploying",
           };
         }
 

@@ -80,6 +80,9 @@ export default function EvolveView() {
   const fetchApps = useChatStore((s) => s.fetchApps);
   const deleteApp = useChatStore((s) => s.deleteApp);
   const storeRunApp = useChatStore((s) => s.runApp);
+  const triggerDeploy = useChatStore((s) => s.triggerDeploy);
+  const deployProgress = useChatStore((s) => s.deployProgress);
+  const deployStatus = useChatStore((s) => s.deployStatus);
 
   const [showEnhanceDialog, setShowEnhanceDialog] = useState(false);
   const [showBuildDialog, setShowBuildDialog] = useState(false);
@@ -200,6 +203,27 @@ export default function EvolveView() {
               onClick={() => setShowEnhanceDialog(true)}
             />
           </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+            <QuickAction
+              icon={<RocketIcon />}
+              label="Deploy"
+              sublabel="Build & release"
+              accent="emerald"
+              onClick={triggerDeploy}
+              disabled={deployStatus === "deploying"}
+            />
+          </div>
+          {deployProgress && (
+            <div className={`mt-3 px-3 py-2 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-line border ${
+              deployStatus === "done"
+                ? deployProgress.includes("FAILED")
+                  ? "bg-red-900/20 border-red-700/40 text-red-300"
+                  : "bg-emerald-900/20 border-emerald-700/40 text-emerald-300"
+                : "bg-blue-900/20 border-blue-700/40 text-blue-300"
+            }`}>
+              {deployProgress}
+            </div>
+          )}
         </section>
 
         {/* App Ecosystem */}
@@ -326,23 +350,26 @@ export default function EvolveView() {
 
 // ── Subcomponents ──
 
-function QuickAction({ icon, label, sublabel, accent, onClick }: {
+function QuickAction({ icon, label, sublabel, accent, onClick, disabled }: {
   icon: React.ReactNode;
   label: string;
   sublabel: string;
   accent: string;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   const accentClasses: Record<string, string> = {
     purple: "from-purple-500/15 to-purple-500/5 border-purple-500/25 hover:border-purple-500/40 text-purple-300",
     amber: "from-amber-500/15 to-amber-500/5 border-amber-500/25 hover:border-amber-500/40 text-amber-300",
     orange: "from-orange-500/15 to-orange-500/5 border-orange-500/25 hover:border-orange-500/40 text-orange-300",
     cyan: "from-cyan-500/15 to-cyan-500/5 border-cyan-500/25 hover:border-cyan-500/40 text-cyan-300",
+    emerald: "from-emerald-500/15 to-emerald-500/5 border-emerald-500/25 hover:border-emerald-500/40 text-emerald-300",
   };
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-1.5 p-3 sm:p-4 rounded-2xl border bg-gradient-to-b transition-all active:scale-[0.97] cursor-pointer ${accentClasses[accent] ?? accentClasses.purple}`}
+      disabled={disabled}
+      className={`flex flex-col items-center gap-1.5 p-3 sm:p-4 rounded-2xl border bg-gradient-to-b transition-all active:scale-[0.97] cursor-pointer disabled:opacity-50 disabled:cursor-wait ${accentClasses[accent] ?? accentClasses.purple}`}
     >
       <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center">{icon}</div>
       <div className="text-center">
@@ -489,6 +516,17 @@ function WrenchIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
+function RocketIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+      <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+      <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+      <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
     </svg>
   );
 }

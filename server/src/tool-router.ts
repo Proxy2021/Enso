@@ -200,8 +200,19 @@ function extractFirstNumber(message: string): number | undefined {
 }
 
 function inferPathLikeValue(message: string): string {
+  // 1. Explicit Unix path (~/..., /...)
   const explicitPath = message.match(/(^|\s)(~\/[^\s,;]+|\/[^\s,;]+)/);
   if (explicitPath?.[2]) return explicitPath[2];
+
+  // 2. NEW-BUG-02: Explicit Windows path (e.g., D:\Photos\test, C:\Users\...)
+  const winPath = message.match(/(^|\s)([A-Za-z]:\\[^\s,;]+)/);
+  if (winPath?.[2]) return winPath[2];
+
+  // 3. Quoted path (either OS)
+  const quotedPath = message.match(/"([^"]+[/\\][^"]+)"/);
+  if (quotedPath?.[1]) return quotedPath[1];
+
+  // 4. Well-known directory keywords
   const normalized = normalizeMessage(message);
   if (/\bdesktop\b/.test(normalized)) return "~/Desktop";
   if (/\bdownloads\b/.test(normalized)) return "~/Downloads";
@@ -211,7 +222,9 @@ function inferPathLikeValue(message: string): string {
   if (/\bmusic\b/.test(normalized)) return "~/Music";
   if (/\bgithub\b/.test(normalized)) return "~/Desktop/Github";
   if (/\bhome\b/.test(normalized)) return "~";
-  return ".";
+
+  // 5. Default: home directory (safer than "." which resolves to PROJECT_ROOT)
+  return "~";
 }
 
 function inferLocationLikeValue(message: string): string | undefined {
@@ -357,6 +370,9 @@ function topLexicalTools(userMessage: string, tools: ToolDetail[]): Array<{ tool
     .sort((a, b) => b.relevance - a.relevance);
 }
 
+// BUG-02: Timeout for direct tool execution to prevent silent hangs
+const TOOL_EXEC_TIMEOUT_MS = 15_000;
+
 async function executeToolWithInferredParams(input: {
   tool: ToolDetail;
   userMessage: string;
@@ -368,7 +384,15 @@ async function executeToolWithInferredParams(input: {
     tool: input.tool,
     baseParams: input.params,
   });
-  const result = await executeToolDirect(input.tool.name, finalParams);
+
+  // BUG-02: Wrap with timeout to prevent silent hangs when tool execution stalls
+  const result = await Promise.race([
+    executeToolDirect(input.tool.name, finalParams),
+    new Promise<{ success: false; data: null }>((resolve) =>
+      setTimeout(() => resolve({ success: false, data: null }), TOOL_EXEC_TIMEOUT_MS)
+    ),
+  ]);
+
   if (!result.success || result.data == null) return { matched: false };
   return {
     matched: true,

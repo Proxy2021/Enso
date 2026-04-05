@@ -2282,7 +2282,7 @@ async function sendOrchestrationCompletionEmail(plan: OrchestrationPlan, status:
       const { loadProviderKeys } = await import("./accounts.js");
       const providerKeys = { ...loadProviderKeys(), gemini: process.env.GEMINI_API_KEY || "" };
       // Use the default chat model (Gemini Flash as fallback)
-      const model = process.env.ENSO_CHAT_MODEL || "gemini-2.0-flash";
+      const model = process.env.ENSO_CHAT_MODEL || "gemini-2.5-flash";
 
       const prompt = `You are summarizing an AI orchestration sprint for an executive email. Be CONCISE and focus on KEY ACHIEVEMENTS and ACTIONABLE INSIGHTS.
 
@@ -2304,11 +2304,25 @@ Use inline CSS. Use these colors: success=#4ade80, error=#f87171, accent=#f472b6
       summaryHtml = await callChatLLM({ prompt, model, providerKeys, timeoutMs: 30_000 });
       // Strip markdown code fences if present
       summaryHtml = summaryHtml.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
-    } catch { /* fall back to basic email */ }
+    } catch (llmErr) {
+      logError("orchestrator", "Sprint email LLM summary failed", llmErr);
+    }
 
-    // Fallback if LLM summary failed
+    // Fallback if LLM summary failed — include task-level details
     if (!summaryHtml) {
       const statusColor = status === "completed" ? "#4ade80" : "#f87171";
+      const taskRows = plan.tasks.map(t => {
+        const icon = t.status === "completed" ? "✓" : t.status === "failed" ? "✗" : "○";
+        const color = t.status === "completed" ? "#4ade80" : t.status === "failed" ? "#f87171" : "#94a3b8";
+        const detail = t.resultSummary?.slice(0, 120) || t.structuredResult?.verdict || "";
+        return `<tr>
+          <td style="padding:6px 8px;color:${color};font-size:14px;width:20px;vertical-align:top">${icon}</td>
+          <td style="padding:6px 8px">
+            <div style="color:#e2e8f0;font-size:13px;font-weight:500">${t.title}</div>
+            ${detail ? `<div style="color:#94a3b8;font-size:11px;margin-top:2px">${detail}</div>` : ""}
+          </td>
+        </tr>`;
+      }).join("");
       summaryHtml = `
         <div style="text-align:center;margin:20px 0">
           <span style="color:${statusColor};font-size:32px;font-weight:700">${completed.length}/${totalTasks}</span>
@@ -2316,6 +2330,9 @@ Use inline CSS. Use these colors: success=#4ade80, error=#f87171, accent=#f472b6
         </div>
         <div style="background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">
           <div style="color:#e2e8f0;font-size:14px;line-height:1.5">${plan.goal}</div>
+        </div>
+        <div style="background:#1e293b;border-radius:12px;padding:8px;margin:16px 0">
+          <table style="width:100%;border-collapse:collapse">${taskRows}</table>
         </div>`;
     }
 

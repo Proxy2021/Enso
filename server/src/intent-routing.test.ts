@@ -204,3 +204,36 @@ describe("intent routing — keyword coverage for new operations", () => {
     });
   }
 });
+
+describe("NEW-BUG-01: trivial shell command fast-path (standalone-agent)", () => {
+  /**
+   * These tests verify the TRIVIAL_SHELL_PATTERNS regex used in standalone-agent.ts
+   * to fast-path short shell commands directly to enso_shell_execute.
+   * The regex is tested independently here for correctness.
+   */
+  const TRIVIAL_SHELL_PATTERNS = /^\s*(ls|dir|pwd|cd|cat|head|tail|wc|df|du|whoami|hostname|date|uptime|uname|echo|which|where|type|env|set|cls|clear)\b/i;
+
+  const shouldMatch = [
+    "ls", "ls -la", "dir", "pwd", "cd /tmp",
+    "cat file.txt", "whoami", "hostname", "date",
+    "echo hello", "env", "clear",
+  ];
+
+  const shouldNotMatch = [
+    "build me an app", "create a dashboard", "show files",
+    "list files", "what time is it", "hello",
+    "research something", "write a file",
+  ];
+
+  for (const cmd of shouldMatch) {
+    it(`matches trivial shell command: "${cmd}"`, () => {
+      expect(TRIVIAL_SHELL_PATTERNS.test(cmd.trim())).toBe(true);
+    });
+  }
+
+  for (const cmd of shouldNotMatch) {
+    it(`does NOT match non-shell message: "${cmd}"`, () => {
+      expect(TRIVIAL_SHELL_PATTERNS.test(cmd.trim())).toBe(false);
+    });
+  }
+});

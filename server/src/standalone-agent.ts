@@ -29,10 +29,26 @@ import { maybeCompactHistory, forceCompactHistory } from "./conversation-compact
 export interface ConversationEntry {
   role: "user" | "model";
   parts: Array<{ text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown } }>;
+  _meta?: { cardId?: string; conversationId?: string; ts?: number };
 }
 
 const conversationHistories = new Map<string, ConversationEntry[]>();
 const MAX_HISTORY = 60; // Safety net — compaction handles the normal case at 20 entries
+
+/**
+ * Track conversations created in this server session.
+ * Fresh conversations should NOT be hydrated from old journal data
+ * to prevent stale context contamination (BUG-04).
+ */
+const freshConversationIds = new Set<string>();
+
+export function markConversationFresh(clientId: string, conversationId: string): void {
+  freshConversationIds.add(`${clientId}|${conversationId}`);
+}
+
+export function isConversationFresh(clientId: string, conversationId: string): boolean {
+  return freshConversationIds.has(`${clientId}|${conversationId}`);
+}
 
 /**
  * Get or create conversation history.
@@ -156,10 +172,14 @@ function cardToEntry(record: CardRecord): ConversationEntry | null {
 /**
  * Inject a non-agent card into the conversation's in-memory history.
  * Called from server.ts after persistCard() for cards NOT created by the agent loop.
+ * BUG-04: Tags each injected entry with _meta for provenance tracking.
  */
 export function injectCardContext(clientId: string, conversationId: string, record: CardRecord): void {
   const entry = cardToEntry(record);
   if (!entry) return;
+
+  // BUG-04: Tag the entry with its source for provenance tracking
+  entry._meta = { cardId: record.id, conversationId, ts: Date.now() };
 
   const history = getConversationHistory(clientId, conversationId);
   history.push(entry);
@@ -169,8 +189,13 @@ export function injectCardContext(clientId: string, conversationId: string, reco
 /**
  * Hydrate agent history from persisted journal on cold start.
  * Called when the in-memory history is empty (server restart or first message).
+ * BUG-04: Skip hydration for conversations marked fresh in this session
+ * to prevent stale context from leaking into new conversations.
  */
 function hydrateFromJournal(clientId: string, conversationId: string): number {
+  // BUG-04: Fresh conversations should start clean — no old journal data
+  if (isConversationFresh(clientId, conversationId)) return 0;
+
   try {
     const records = loadCardHistory(clientId, conversationId, 20);
     if (records.length === 0) return 0;
@@ -707,6 +732,34 @@ export async function handleStandaloneInbound(params: {
       });
     }
     return; // Skip the Gemini agent loop entirely
+  }
+
+  // ── NEW-BUG-01 FIX: Trivial shell command fast path ──
+  // Short shell commands (ls, pwd, etc.) fail shouldAttemptRouting() due to length < 6
+  // and Gemini doesn't reliably route them to enso_shell_execute via function calling.
+  // Fast-path these directly to shell execution.
+  const TRIVIAL_SHELL_PATTERNS = /^\s*(ls|dir|pwd|cd|cat|head|tail|wc|df|du|whoami|hostname|date|uptime|uname|echo|which|where|type|env|set|cls|clear)\b/i;
+  if (TRIVIAL_SHELL_PATTERNS.test(rawBody.trim())) {
+    logAction({ ts: Date.now(), type: "action", category: "standalone-agent",
+      message: `Trivial shell command detected — fast-pathing to enso_shell_execute`, cardId: stableCardId });
+    try {
+      const shellResult = await executeLocalTool("enso_shell_execute", { command: rawBody.trim() },
+        { clientId: client.id, getClient: () => client });
+      const shellOutput = shellResult && typeof shellResult === "object" && "content" in (shellResult as Record<string, unknown>)
+        ? ((shellResult as { content: Array<{ text?: string }> }).content?.[0]?.text ?? JSON.stringify(shellResult))
+        : String(shellResult ?? "Command executed.");
+      history.push({ role: "user", parts: [{ text: rawBody }] });
+      history.push({ role: "model", parts: [{ text: shellOutput }] });
+      await deliverEnsoReply({
+        payload: { text: shellOutput },
+        client, runId, seq: 0, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, toolMeta: { toolId: "shell" }, statusSink, conversationId,
+      });
+      return;
+    } catch (err) {
+      logError("standalone-agent", "Trivial shell fast-path failed, falling through to agent", err, { cardId: stableCardId });
+      // Fall through to normal agent loop
+    }
   }
 
   const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;

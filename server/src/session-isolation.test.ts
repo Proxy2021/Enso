@@ -62,7 +62,7 @@ vi.mock("./ui-generator.js", () => ({
   GEMINI_MODEL_FAST: "gemini-2.5-flash",
 }));
 
-import { getConversationHistory, injectCardContext } from "./standalone-agent.js";
+import { getConversationHistory, injectCardContext, markConversationFresh, isConversationFresh } from "./standalone-agent.js";
 import { getUserProfileContext } from "./memory-bridge.js";
 
 describe("conversation isolation", () => {
@@ -117,6 +117,68 @@ describe("conversation isolation", () => {
 
     // Other conversation should be unchanged
     expect(historyOther.length).toBe(initialOther);
+  });
+});
+
+describe("BUG-04: fresh conversation tracking", () => {
+  it("markConversationFresh and isConversationFresh work correctly", () => {
+    const clientId = "client-fresh-test";
+    const convId = "conv-fresh-" + Date.now();
+
+    expect(isConversationFresh(clientId, convId)).toBe(false);
+    markConversationFresh(clientId, convId);
+    expect(isConversationFresh(clientId, convId)).toBe(true);
+  });
+
+  it("fresh tracking is scoped per client and conversation", () => {
+    const convId = "conv-scope-" + Date.now();
+    markConversationFresh("client-A-scope", convId);
+
+    expect(isConversationFresh("client-A-scope", convId)).toBe(true);
+    expect(isConversationFresh("client-B-scope", convId)).toBe(false);
+    expect(isConversationFresh("client-A-scope", "other-conv")).toBe(false);
+  });
+
+  it("getConversationHistory for a new conversation returns empty array", () => {
+    const history = getConversationHistory("client-empty-test", "conv-empty-" + Date.now());
+    expect(history).toEqual([]);
+    expect(history.length).toBe(0);
+  });
+
+  it("injectCardContext tags entries with _meta", () => {
+    const clientId = "client-meta-test";
+    const convId = "conv-meta-" + Date.now();
+
+    injectCardContext(clientId, convId, {
+      id: "card-123",
+      role: "assistant",
+      text: "Test card content",
+      type: "chat",
+    } as Parameters<typeof injectCardContext>[2]);
+
+    const history = getConversationHistory(clientId, convId);
+    expect(history.length).toBeGreaterThan(0);
+    const lastEntry = history[history.length - 1];
+    expect(lastEntry._meta).toBeDefined();
+    expect(lastEntry._meta?.cardId).toBe("card-123");
+    expect(lastEntry._meta?.conversationId).toBe(convId);
+    expect(lastEntry._meta?.ts).toBeGreaterThan(0);
+  });
+
+  it("injectCardContext without card id still sets _meta with conversationId", () => {
+    const clientId = "client-meta-noid";
+    const convId = "conv-meta-noid-" + Date.now();
+
+    injectCardContext(clientId, convId, {
+      role: "assistant",
+      text: "No-id card",
+      type: "chat",
+    } as Parameters<typeof injectCardContext>[2]);
+
+    const history = getConversationHistory(clientId, convId);
+    const lastEntry = history[history.length - 1];
+    expect(lastEntry._meta).toBeDefined();
+    expect(lastEntry._meta?.conversationId).toBe(convId);
   });
 });
 
