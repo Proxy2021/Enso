@@ -13,6 +13,23 @@ export function timeAgo(ts: number): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+/** Relative future time: "in 5m", "in 3h", "tomorrow 7:00am", "Mon 8:30am" */
+export function timeUntil(ts: number): string {
+  const s = Math.floor((ts - Date.now()) / 1000);
+  if (s <= 0) return "now";
+  if (s < 60) return "in <1m";
+  if (s < 3600) return `in ${Math.floor(s / 60)}m`;
+  if (s < 86400) return `in ${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  const d = new Date(ts);
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+  if (d.toDateString() === tomorrow.toDateString()) return `tomorrow ${time}`;
+  const day = d.toLocaleDateString(undefined, { weekday: "short" });
+  return `${day} ${time}`;
+}
+
 /** Short date: "Mar 25, 2026" */
 export function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, {

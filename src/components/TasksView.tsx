@@ -8,7 +8,7 @@ import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
 import type { ScheduledTaskDef } from "@shared/types";
 import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
-import { timeAgo, formatElapsedTime } from "../lib/time-utils";
+import { timeAgo, timeUntil, formatElapsedTime } from "../lib/time-utils";
 import { ScheduledTaskDialog } from "./ScheduledTaskDialog";
 import { Clock, Play, Pause, Trash2, Pencil, Plus } from "lucide-react";
 
@@ -398,7 +398,7 @@ export default function TasksView() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
                         {task.nextFireAt && (
-                          <span>Next: <span className="text-gray-400">{timeAgo(task.nextFireAt).replace(" ago", "").replace("just now", "now")}</span></span>
+                          <span>Next: <span className="text-gray-400">{timeUntil(task.nextFireAt)}</span></span>
                         )}
                         {task.lastFiredAt && (
                           <span>Last: <span className={task.lastRunStatus === "success" ? "text-emerald-400" : task.lastRunStatus === "failed" ? "text-red-400" : "text-gray-400"}>
