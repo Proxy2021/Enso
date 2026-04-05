@@ -368,9 +368,9 @@ export default function ChatInput() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
               </span>
-              <span className="text-xs text-amber-200 font-semibold tracking-wide">SHELL MODE</span>
+              <span className="text-xs text-amber-200 font-semibold tracking-wide">{t("chat.shellMode")}</span>
               <span className="text-[10px] text-amber-300/80">
-                — type commands or press <kbd className="px-1 py-0.5 rounded bg-amber-800/50 border border-amber-600/50 text-amber-200 font-mono text-[9px]">Esc</kbd> to return to AI
+                {t("chat.shellHint")} <kbd className="px-1 py-0.5 rounded bg-amber-800/50 border border-amber-600/50 text-amber-200 font-mono text-[9px]">Esc</kbd> {t("chat.shellHintReturn")}
               </span>
             </div>
             <button
@@ -382,7 +382,7 @@ export default function ChatInput() {
               }}
               className="text-[10px] px-2.5 py-1 rounded-md border border-amber-500/60 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 active:bg-amber-500/35 active:scale-[0.95] transition-all duration-150 font-medium"
             >
-              Exit Shell
+              {t("chat.exitShell")}
             </button>
           </div>
         )}
@@ -448,7 +448,7 @@ export default function ChatInput() {
             <button
               onClick={() => setInputMode(prev => prev === "text" ? "voice" : "text")}
               className="sm:hidden shrink-0 px-2 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 transition-all duration-150"
-              aria-label={inputMode === "text" ? "Switch to voice mode" : "Switch to text mode"}
+              aria-label={inputMode === "text" ? t("chat.voiceMode") : t("chat.textMode")}
             >
               {inputMode === "text" ? (
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -476,7 +476,7 @@ export default function ChatInput() {
             onTouchMove={handleTextareaTouchMove}
             onTouchEnd={handleTextareaTouchEnd}
             onTouchCancel={handleTextareaTouchCancel}
-            placeholder={disabled ? "Disconnected..." : activeShellSessionId ? "Shell command..." : (speechSupported ? "Message or hold to talk..." : "Message...")}
+            placeholder={disabled ? t("chat.disconnected") : activeShellSessionId ? t("chat.shellCommand") : (speechSupported ? t("chat.messageOrTalk") : t("chat.message"))}
             disabled={disabled}
             rows={1}
             className={`flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2.5 text-base sm:text-sm resize-none outline-none placeholder-gray-500 disabled:opacity-50 overflow-y-auto transition-all duration-200 ${
@@ -506,7 +506,7 @@ export default function ChatInput() {
               <line x1="12" x2="12" y1="19" y2="22" />
             </svg>
             <span className={pttActive ? "text-red-400" : "text-gray-400"}>
-              {pttActive ? (pttCancelZone ? "Release to cancel" : "Listening...") : "Hold to talk"}
+              {pttActive ? (pttCancelZone ? t("chat.releaseToCancel") : t("chat.listening")) : t("chat.holdToTalk")}
             </span>
           </button>
           )}

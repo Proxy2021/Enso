@@ -332,7 +332,7 @@ function ClaudeCodeSection({ onClose }: { onClose: () => void }) {
 
       {/* Anthropic models */}
       <div className="px-1 mb-1">
-        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Anthropic</span>
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{t("settings.anthropic")}</span>
       </div>
       {PRESETS.map((p) => {
         const isActive = p.id === active.id;
@@ -581,7 +581,7 @@ function ServiceKeysSection() {
         setError(`Failed to load keys (${res.status})`);
       }
     } catch {
-      setError("Could not connect to server");
+      setError(t("error.couldNotConnect"));
     }
     setLoading(false);
   }, []);
@@ -606,7 +606,7 @@ function ServiceKeysSection() {
         setError(`Failed to save key (${res.status})`);
       }
     } catch {
-      setError("Could not connect to server");
+      setError(t("error.couldNotConnect"));
     }
     setSaving(false);
   };
@@ -629,7 +629,7 @@ function ServiceKeysSection() {
         setError(`Failed to remove key (${res.status})`);
       }
     } catch {
-      setError("Could not connect to server");
+      setError(t("error.couldNotConnect"));
     }
     setSaving(false);
   };
@@ -646,7 +646,7 @@ function ServiceKeysSection() {
     return (
       <div className="text-center py-6">
         <p className="text-sm text-red-400">{error}</p>
-        <button onClick={fetchKeys} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Retry</button>
+        <button onClick={fetchKeys} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">{t("common.retry")}</button>
       </div>
     );
   }
@@ -752,11 +752,11 @@ interface SourceConfig {
 }
 
 const DATA_SOURCES: SourceConfig[] = [
-  { key: "browserHistory", icon: "🌐", label: "Browser History", description: "Learn from your browsing patterns, frequent sites, and search queries" },
-  { key: "bookmarks", icon: "🔖", label: "Bookmarks", description: "Understand your saved resources and categorized interests" },
-  { key: "email", icon: "📧", label: "Email", description: "Analyze email subjects and contacts to understand your communication" },
-  { key: "files", icon: "📁", label: "Files & Projects", description: "Detect your code projects, recently modified files, and work patterns" },
-  { key: "system", icon: "💻", label: "System Info", description: "Know your installed applications and development tools" },
+  { key: "browserHistory", icon: "🌐", label: "settings.browserHistory", description: "settings.browserHistoryDesc" },
+  { key: "bookmarks", icon: "🔖", label: "settings.bookmarks", description: "settings.bookmarksDesc" },
+  { key: "email", icon: "📧", label: "settings.emailLabel", description: "settings.emailDesc" },
+  { key: "files", icon: "📁", label: "settings.filesProjects", description: "settings.filesProjectsDesc" },
+  { key: "system", icon: "💻", label: "settings.systemInfo", description: "settings.systemInfoDesc" },
 ];
 
 export function DataSourcesSection() {
@@ -848,8 +848,8 @@ export function DataSourcesSection() {
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <span className="text-lg flex-shrink-0">{source.icon}</span>
               <div className="min-w-0">
-                <p className="text-sm text-gray-200 font-medium">{source.label}</p>
-                <p className="text-xs text-gray-500 truncate">{source.description}</p>
+                <p className="text-sm text-gray-200 font-medium">{t(source.label)}</p>
+                <p className="text-xs text-gray-500 truncate">{t(source.description)}</p>
                 {lastScan[source.key] && (
                   <p className="text-[10px] text-gray-600 mt-0.5">
                     Last scan: {new Date(lastScan[source.key]).toLocaleDateString()}
@@ -861,7 +861,7 @@ export function DataSourcesSection() {
               <button
                 onClick={() => scanNow([source.key])}
                 disabled={!isEnabled || scanning}
-                title={isEnabled ? `Scan ${source.label}` : "Enable this source first"}
+                title={isEnabled ? `Scan ${t(source.label)}` : "Enable this source first"}
                 className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
                   isThisScanning
                     ? "bg-indigo-500/30 text-indigo-300 animate-pulse"
@@ -899,12 +899,12 @@ export function DataSourcesSection() {
           {scanning && !scanningSources ? "Scanning All..." : "Scan All"}
         </button>
         {profileExists && (
-          <span className="text-[10px] text-green-500">Profile built</span>
+          <span className="text-[10px] text-green-500">{t("settings.profileBuilt")}</span>
         )}
         {scanning && scanningSources && (
           <span className="text-[10px] text-indigo-400 animate-pulse">
             Scanning {scanningSources.length === 1
-              ? DATA_SOURCES.find(s => s.key === scanningSources[0])?.label || scanningSources[0]
+              ? (DATA_SOURCES.find(s => s.key === scanningSources[0])?.label ? t(DATA_SOURCES.find(s => s.key === scanningSources[0])!.label) : scanningSources[0])
               : `${scanningSources.length} sources`}...
           </span>
         )}
@@ -921,7 +921,7 @@ export function DataSourcesSection() {
           </button>
         ) : (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-red-400">Delete all cached scans and profile?</span>
+            <span className="text-xs text-red-400">{t("settings.deleteScansConfirm")}</span>
             <button
               onClick={clearData}
               className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
@@ -948,12 +948,12 @@ export function DataSourcesSection() {
 // ── Proactive Suggestions Settings ──────────────────────────────────────────
 
 const PROACTIVE_PILLARS = [
-  { key: "projectHealth", label: "Project Health", description: "Dependency audits, stale projects, tech stack insights", icon: "\uD83D\uDEE1\uFE0F" },
-  { key: "research", label: "Research", description: "Research momentum, bookmark clusters, knowledge gaps", icon: "\uD83D\uDD2C" },
-  { key: "communication", label: "Communication", description: "Email follow-ups, meeting prep, contact context", icon: "\u2709\uFE0F" },
-  { key: "workflow", label: "Workflow", description: "Tool integrations, CI/CD setup, environment optimization", icon: "\u26A1" },
-  { key: "learning", label: "Learning", description: "Skill gaps, technology radar, best practices", icon: "\uD83C\uDF93" },
-  { key: "ambient", label: "Background Tasks", description: "Branch cleanup, backup reminders, disk monitoring (opt-in)", icon: "\u2699\uFE0F" },
+  { key: "projectHealth", label: "settings.projectHealth", description: "settings.projectHealthDesc", icon: "\uD83D\uDEE1\uFE0F" },
+  { key: "research", label: "settings.researchLabel", description: "settings.researchDesc", icon: "\uD83D\uDD2C" },
+  { key: "communication", label: "settings.communication", description: "settings.communicationDesc", icon: "\u2709\uFE0F" },
+  { key: "workflow", label: "settings.workflow", description: "settings.workflowDesc", icon: "\u26A1" },
+  { key: "learning", label: "settings.learning", description: "settings.learningDesc", icon: "\uD83C\uDF93" },
+  { key: "ambient", label: "settings.backgroundTasks", description: "settings.backgroundTasksDesc", icon: "\u2699\uFE0F" },
 ];
 
 function ProactiveSection() {
@@ -1027,8 +1027,8 @@ function ProactiveSection() {
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <span className="text-lg flex-shrink-0">{pillar.icon}</span>
                 <div className="min-w-0">
-                  <p className="text-sm text-gray-200 font-medium">{pillar.label}</p>
-                  <p className="text-xs text-gray-500 truncate">{pillar.description}</p>
+                  <p className="text-sm text-gray-200 font-medium">{t(pillar.label)}</p>
+                  <p className="text-xs text-gray-500 truncate">{t(pillar.description)}</p>
                 </div>
               </div>
               <button
@@ -1049,15 +1049,15 @@ function ProactiveSection() {
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="px-2 py-1.5 rounded bg-gray-800/40">
               <p className="text-lg font-semibold text-gray-200">{analytics.totalSuggested}</p>
-              <p className="text-[10px] text-gray-500">Suggested</p>
+              <p className="text-[10px] text-gray-500">{t("settings.suggested")}</p>
             </div>
             <div className="px-2 py-1.5 rounded bg-gray-800/40">
               <p className="text-lg font-semibold text-green-400">{analytics.totalAccepted}</p>
-              <p className="text-[10px] text-gray-500">Accepted</p>
+              <p className="text-[10px] text-gray-500">{t("settings.accepted")}</p>
             </div>
             <div className="px-2 py-1.5 rounded bg-gray-800/40">
               <p className="text-lg font-semibold text-gray-400">{analytics.totalDismissed}</p>
-              <p className="text-[10px] text-gray-500">Dismissed</p>
+              <p className="text-[10px] text-gray-500">{t("settings.dismissed")}</p>
             </div>
           </div>
           {acceptRate !== null && (
@@ -1096,6 +1096,7 @@ function formatBytes(bytes: number): string {
 }
 
 function TransferSection() {
+  const { t } = useT();
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -1122,7 +1123,7 @@ function TransferSection() {
           const defaults = new Set(cats.filter((c) => c.available && (c.sensitive || c.id === "scheduledTasks" || c.id === "memory")).map((c) => c.id));
           setSelected(defaults);
         }
-      } catch { setError("Could not connect to server"); }
+      } catch { setError(t("error.couldNotConnect")); }
       setLoading(false);
     })();
   }, []);
@@ -1153,7 +1154,7 @@ function TransferSection() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      setError(err.message || "Export failed");
+      setError(err.message || t("error.exportFailed"));
     }
     setExporting(false);
   };
@@ -1172,7 +1173,7 @@ function TransferSection() {
         if (!bundle._enso?.version) throw new Error("Not a valid Enso export file");
         setImportBundle(bundle);
       } catch (err: any) {
-        setError(err.message || "Invalid file");
+        setError(err.message || t("error.invalidFile"));
         setImportBundle(null);
       }
     };
@@ -1200,12 +1201,12 @@ function TransferSection() {
       setImportFileName("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err: any) {
-      setError(err.message || "Import failed");
+      setError(err.message || t("error.importFailed"));
     }
     setImporting(false);
   };
 
-  if (loading) return <div className="text-xs text-gray-500 py-4 text-center">Loading...</div>;
+  if (loading) return <div className="text-xs text-gray-500 py-4 text-center">{t("common.loading")}</div>;
 
   return (
     <div className="space-y-4">
@@ -1215,8 +1216,8 @@ function TransferSection() {
 
       {/* ── Export ── */}
       <div>
-        <h3 className="text-sm font-medium text-gray-200 mb-2">Export Settings</h3>
-        <p className="text-[11px] text-gray-500 mb-3">Select categories to include in the export file.</p>
+        <h3 className="text-sm font-medium text-gray-200 mb-2">{t("settings.exportTitle")}</h3>
+        <p className="text-[11px] text-gray-500 mb-3">{t("settings.exportDesc")}</p>
 
         <div className="space-y-1.5 mb-3">
           {categories.map((cat) => (
@@ -1266,8 +1267,8 @@ function TransferSection() {
 
       {/* ── Import ── */}
       <div>
-        <h3 className="text-sm font-medium text-gray-200 mb-2">Import Settings</h3>
-        <p className="text-[11px] text-gray-500 mb-3">Load an export file from another machine.</p>
+        <h3 className="text-sm font-medium text-gray-200 mb-2">{t("settings.importTitle")}</h3>
+        <p className="text-[11px] text-gray-500 mb-3">{t("settings.importDesc")}</p>
 
         <input
           ref={fileRef}
@@ -1289,7 +1290,7 @@ function TransferSection() {
             </div>
 
             <div className="flex items-center gap-3 text-[11px]">
-              <span className="text-gray-500">Existing data:</span>
+              <span className="text-gray-500">{t("settings.existingData")}</span>
               <label className="flex items-center gap-1 text-gray-300 cursor-pointer">
                 <input type="radio" name="merge" checked={mergeMode === "skip"} onChange={() => setMergeMode("skip")} className="accent-indigo-500" />
                 Keep (skip conflicts)
@@ -1312,7 +1313,7 @@ function TransferSection() {
 
         {importResult && (
           <div className="mt-3 text-[11px] bg-emerald-500/5 border border-emerald-500/10 rounded px-3 py-2 space-y-1">
-            <div className="font-medium text-emerald-400 mb-1">Import complete</div>
+            <div className="font-medium text-emerald-400 mb-1">{t("settings.importComplete")}</div>
             {Object.entries(importResult).map(([catId, r]) => (
               <div key={catId} className="flex items-center gap-2 text-gray-400">
                 <span className="text-gray-300">{categories.find((c) => c.id === catId)?.label || catId}:</span>

@@ -158,7 +158,7 @@ export default function DynamicUICard({ card, onAction, onDynamicUIReady }: Card
         <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 text-sm">
           <div className="flex items-center justify-between text-amber-300">
             <span>
-              <strong>Compile error:</strong> {result.error}
+              <strong>{t("dynamicUI.compileError")}</strong> {result.error}
             </span>
             <button
               onClick={() => setShowSource(!showSource)}

@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import type { TaskStructuredResult } from "@shared/types";
+import { useT } from "../lib/i18n";
 
 // ── Shared helpers ──
 
@@ -44,6 +45,7 @@ export default function TaskSummaryPanel({ structuredResult, resultSummary, expa
   resultSummary?: string;
   expanded: boolean;
 }) {
+  const { t } = useT();
   const [showAllFindings, setShowAllFindings] = useState(false);
   const [showAllRecs, setShowAllRecs] = useState(false);
 
@@ -106,7 +108,7 @@ export default function TaskSummaryPanel({ structuredResult, resultSummary, expa
       {/* Key Findings */}
       {findings.length > 0 && (
         <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
-          <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Key Findings</div>
+          <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("taskSummary.keyFindings")}</div>
           <div className="space-y-1">
             {visibleFindings.map((f, i) => (
               <div key={f.id || i} className="flex items-start gap-1.5 text-[10px]">
@@ -129,7 +131,7 @@ export default function TaskSummaryPanel({ structuredResult, resultSummary, expa
       {/* Ratings */}
       {ratings.length > 0 && (
         <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
-          <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Ratings</div>
+          <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("taskSummary.ratings")}</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {ratings.map(([key, val]) => (
               <div key={key} className="flex items-center gap-2">
@@ -152,7 +154,7 @@ export default function TaskSummaryPanel({ structuredResult, resultSummary, expa
       {/* Recommendations */}
       {recs.length > 0 && (
         <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
-          <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Recommendations</div>
+          <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("taskSummary.recommendations")}</div>
           <div className="space-y-1">
             {visibleRecs.map((r, i) => (
               <div key={i} className="flex items-start gap-1.5 text-[10px]">

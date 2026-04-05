@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { App } from "@capacitor/app";
 import { isNative } from "../lib/platform";
+import { useT } from "../lib/i18n";
 import {
   checkForUpdate,
   downloadAndInstall,
@@ -13,6 +14,7 @@ import type { DownloadProgress } from "../lib/app-updater";
 type BannerState = "hidden" | "available" | "downloading" | "installing" | "signature_error" | "error";
 
 export default function UpdateBanner() {
+  const { t } = useT();
   const [state, setState] = useState<BannerState>("hidden");
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
@@ -85,7 +87,7 @@ export default function UpdateBanner() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-sm text-blue-200">
-              Update available: <span className="font-medium">v{updateInfo?.serverVersionName}</span>
+              {t("update.available")} <span className="font-medium">v{updateInfo?.serverVersionName}</span>
               {sizeDisplay ? <span className="text-blue-300/60 ml-1">({sizeDisplay})</span> : null}
             </p>
           </div>
@@ -94,13 +96,13 @@ export default function UpdateBanner() {
               onClick={handleDismiss}
               className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-all duration-150"
             >
-              Later
+              {t("update.later")}
             </button>
             <button
               onClick={handleDownload}
               className="text-xs px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-500 transition-all duration-150 font-medium"
             >
-              Update
+              {t("update.update")}
             </button>
           </div>
         </div>
@@ -109,7 +111,7 @@ export default function UpdateBanner() {
       {state === "downloading" && (
         <div>
           <p className="text-sm text-blue-200 mb-2">
-            Downloading update{progressPercent > 0 ? `... ${progressPercent}%` : "..."}
+            {t("update.downloading")}{progressPercent > 0 ? ` ${progressPercent}%` : ""}
           </p>
           <div className="h-1.5 rounded-full bg-blue-900/50 overflow-hidden">
             <div
@@ -123,10 +125,10 @@ export default function UpdateBanner() {
       {state === "installing" && (
         <div>
           <p className="text-sm text-blue-200">
-            Installing update... Follow the system prompts.
+            {t("update.installing")}
           </p>
           <p className="text-xs text-blue-300/60 mt-1">
-            If installation fails, you may need to uninstall the app first (one-time only).
+            {t("update.installHint")}
           </p>
         </div>
       )}
@@ -134,23 +136,23 @@ export default function UpdateBanner() {
       {state === "signature_error" && (
         <div>
           <p className="text-sm text-amber-200">
-            Installation failed — likely due to a signing key change.
+            {t("update.installFailed")}
           </p>
           <p className="text-xs text-amber-300/80 mt-1">
-            Please uninstall Enso, then tap Update below to reinstall. Your data is stored on the server and won't be lost.
+            {t("update.uninstallHint")}
           </p>
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={handleDismiss}
               className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 transition-all duration-150"
             >
-              Dismiss
+              {t("common.dismiss")}
             </button>
             <button
               onClick={handleDownload}
               className="text-xs px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-500 transition-all duration-150 font-medium"
             >
-              Update
+              {t("update.update")}
             </button>
           </div>
         </div>
@@ -159,13 +161,13 @@ export default function UpdateBanner() {
       {state === "error" && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-red-300 flex-1 min-w-0 truncate">
-            Update failed: {errorMsg}
+            {t("update.failed")} {errorMsg}
           </p>
           <button
             onClick={handleDownload}
             className="text-xs px-3 py-1 rounded-md border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-all duration-150 flex-shrink-0"
           >
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       )}

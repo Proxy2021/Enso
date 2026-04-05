@@ -57,8 +57,8 @@ export function SlashMenu({ text, selectedIndex, onSelectIndex, onSelectCommand 
       })}
       <div className="px-3 py-1.5 border-t border-gray-700/50 text-[10px] text-gray-500 flex justify-between">
         <span>{"\u2191\u2193"} navigate</span>
-        <span>Enter or Tab to select</span>
-        <span>Esc to dismiss</span>
+        <span>{t("chat.enterToSelect")}</span>
+        <span>{t("chat.escToDismiss")}</span>
       </div>
     </div>
   );

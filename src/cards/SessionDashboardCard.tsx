@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
 // ── Types (mirrors session-registry.ts) ──
@@ -80,6 +81,7 @@ function statusColor(status: string): string {
 // ── Component ──
 
 export default function SessionDashboardCard({ card }: CardRendererProps) {
+  const { t } = useT();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
@@ -157,7 +159,7 @@ export default function SessionDashboardCard({ card }: CardRendererProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/40">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-sm font-medium text-zinc-100">Session Dashboard</span>
+          <span className="text-sm font-medium text-zinc-100">{t("sessions.title")}</span>
           {status && (
             <span className="text-[10px] text-zinc-500 tabular-nums">
               {activeSessions.length} session{activeSessions.length !== 1 ? "s" : ""} / {activeOrchs.length} orchestration{activeOrchs.length !== 1 ? "s" : ""}
@@ -189,8 +191,8 @@ export default function SessionDashboardCard({ card }: CardRendererProps) {
               <circle cx="12" cy="12" r="10" />
               <path d="M8 12h8" />
             </svg>
-            <span className="text-sm">No active sessions</span>
-            <span className="text-[11px] mt-1">Sessions and orchestrations will appear here when running</span>
+            <span className="text-sm">{t("sessions.noSessions")}</span>
+            <span className="text-[11px] mt-1">{t("sessions.noSessionsHint")}</span>
           </div>
         )}
 

@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import type { CardRendererProps } from "./types";
+import { useT } from "../lib/i18n";
 
 interface Todo {
   id: string;
@@ -9,6 +10,7 @@ interface Todo {
 }
 
 function TodoListCardInner({ card }: CardRendererProps) {
+  const { t } = useT();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -80,7 +82,7 @@ function TodoListCardInner({ card }: CardRendererProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addTodo()}
-          placeholder="What needs to be done?"
+          placeholder={t("todoList.placeholder")}
           className="flex-1 px-3 py-1.5 text-sm rounded-lg bg-gray-800/60 border border-gray-700/50 text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500/60 transition-colors"
         />
         <button

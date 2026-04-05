@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useChatStore } from "../store/chat";
 import { loadBackends, addBackend, type BackendConfig } from "../lib/connection";
+import { useT } from "../lib/i18n";
 
 type Step = "welcome" | "os" | "install" | "connect" | "connected";
 type OS = "windows" | "macos" | "linux";
@@ -25,6 +26,7 @@ function getInstallCommands(os: OS): string[] {
 // ─── Step Components ─────────────────────────────────────────────────────
 
 function WelcomeStep({ onSetup, onManual }: { onSetup: () => void; onManual: () => void }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col items-center text-center px-6 py-8 gap-8">
       {/* Logo */}
@@ -38,7 +40,7 @@ function WelcomeStep({ onSetup, onManual }: { onSetup: () => void; onManual: () 
       </div>
 
       <div>
-        <h1 className="text-2xl font-bold text-white">Welcome to Enso</h1>
+        <h1 className="text-2xl font-bold text-white">{t("setup.welcomeTitle")}</h1>
         <p className="text-gray-400 mt-2 text-sm leading-relaxed max-w-xs mx-auto">
           An AI sandbox that generates complete solutions. Set up your Enso server to get started.
         </p>
@@ -63,10 +65,11 @@ function WelcomeStep({ onSetup, onManual }: { onSetup: () => void; onManual: () 
 }
 
 function OSStep({ onSelect, onBack }: { onSelect: (os: OS) => void; onBack: () => void }) {
+  const { t } = useT();
   const options: { os: OS; label: string; icon: React.ReactNode }[] = [
     {
       os: "windows",
-      label: "Windows",
+      label: t("setup.windows"),
       icon: (
         <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
           <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
@@ -84,7 +87,7 @@ function OSStep({ onSelect, onBack }: { onSelect: (os: OS) => void; onBack: () =
     },
     {
       os: "linux",
-      label: "Linux",
+      label: t("setup.linux"),
       icon: (
         <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.368 1.884 1.43.868.065 1.157-.505 1.303-.748.145-.243.197-.474.135-.773a1.67 1.67 0 00-.354-.532c-.264-.265-.564-.456-.801-.473l-.246-.015c-.18-.012-.37-.024-.514-.138a.524.524 0 01-.105-.217 2.126 2.126 0 01-.09-.596c.007-.27.057-.556.102-.795.082-.543.033-1.04-.098-1.444a2.856 2.856 0 00-.444-.727l-.002-.003c-.476-.6-1.086-1.025-1.586-1.57-.497-.542-.87-1.255-.797-2.332.02-.262.071-.527.127-.785.114-.52.249-1.024.303-1.56.076-.78-.046-1.59-.576-2.27-.5-.641-1.339-.892-2.2-.93a4.507 4.507 0 00-.876.044z" />
@@ -102,8 +105,8 @@ function OSStep({ onSelect, onBack }: { onSelect: (os: OS) => void; onBack: () =
           </svg>
           Back
         </button>
-        <h2 className="text-xl font-semibold text-white">What runs on your PC?</h2>
-        <p className="text-gray-400 text-sm mt-1">Select the operating system of the computer you want to use as your server.</p>
+        <h2 className="text-xl font-semibold text-white">{t("setup.selectOS")}</h2>
+        <p className="text-gray-400 text-sm mt-1">{t("setup.selectOSDesc")}</p>
       </div>
 
       <div className="space-y-3">
@@ -128,6 +131,7 @@ function OSStep({ onSelect, onBack }: { onSelect: (os: OS) => void; onBack: () =
 }
 
 function InstallStep({ os, onNext, onBack }: { os: OS; onNext: () => void; onBack: () => void }) {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const commands = getInstallCommands(os);
   const allCommands = commands.join("\n");
@@ -153,7 +157,7 @@ function InstallStep({ os, onNext, onBack }: { os: OS; onNext: () => void; onBac
           </svg>
           Back
         </button>
-        <h2 className="text-xl font-semibold text-white">Run on your PC</h2>
+        <h2 className="text-xl font-semibold text-white">{t("setup.runOnPC")}</h2>
         <p className="text-gray-400 text-sm mt-1">
           Open <span className="text-gray-200 font-medium">{termLabel}</span> on your computer and paste these commands:
         </p>
@@ -172,7 +176,7 @@ function InstallStep({ os, onNext, onBack }: { os: OS; onNext: () => void; onBac
                 <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                <span className="text-emerald-400">Copied</span>
+                <span className="text-emerald-400">{t("common.copied")}</span>
               </>
             ) : (
               <>
@@ -219,7 +223,8 @@ function ConnectStep({
   onBack: () => void;
   onConnected: (name: string) => void;
 }) {
-  const connectionState = useChatStore((s) => s.connectionState);
+  const { t } = useT();
+  const connectionState = useChatStore((s) => s.connectionState)
   const [manualMode, setManualMode] = useState(false);
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
@@ -263,7 +268,7 @@ function ConnectStep({
       })
       .catch((err: Error) => {
         setTestStatus("fail");
-        setTestMsg(err.message || "Connection failed");
+        setTestMsg(err.message || t("error.connectFailed"));
       });
   }
 
@@ -288,15 +293,15 @@ function ConnectStep({
             </svg>
             Back
           </button>
-          <h2 className="text-xl font-semibold text-white">Manual Connection</h2>
-          <p className="text-gray-400 text-sm mt-1">Enter your server details below.</p>
+          <h2 className="text-xl font-semibold text-white">{t("setup.manualConn")}</h2>
+          <p className="text-gray-400 text-sm mt-1">{t("setup.manualConnDesc")}</p>
         </div>
 
         <div className="space-y-2.5">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Name (optional)"
+            placeholder={t("conn.namePlaceholder")}
             className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
           />
           <input
@@ -308,7 +313,7 @@ function ConnectStep({
           <input
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="Access token"
+            placeholder={t("conn.tokenPlaceholder")}
             type="password"
             className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
           />
@@ -360,7 +365,7 @@ function ConnectStep({
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold text-white">Scan the QR Code</h2>
+        <h2 className="text-xl font-semibold text-white">{t("setup.scanQR")}</h2>
         <p className="text-gray-400 text-sm mt-2 leading-relaxed max-w-xs mx-auto">
           Point your phone's camera at the QR code shown on your PC screen. The app will connect automatically.
         </p>
@@ -387,6 +392,7 @@ function ConnectStep({
 }
 
 function ConnectedStep({ machineName, onFinish }: { machineName: string; onFinish: () => void }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col items-center text-center px-6 py-8 gap-8">
       <div className="w-20 h-20 rounded-full bg-emerald-500/15 flex items-center justify-center">
@@ -396,7 +402,7 @@ function ConnectedStep({ machineName, onFinish }: { machineName: string; onFinis
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold text-white">Connected!</h2>
+        <h2 className="text-xl font-semibold text-white">{t("setup.connected")}</h2>
         <p className="text-gray-400 text-sm mt-2">
           You're connected to <span className="text-gray-200 font-medium">{machineName}</span>
         </p>

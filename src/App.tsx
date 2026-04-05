@@ -28,7 +28,7 @@ import BackgroundTaskBar from "./components/BackgroundTaskBar";
 import ProactiveNudgeBanner from "./components/ProactiveNudgeBanner";
 import { reportError } from "./lib/error-reporter";
 import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
-import { useT } from "./lib/i18n";
+import { t, useT } from "./lib/i18n";
 import "./cards";
 
 class AppErrorBoundary extends React.Component<
@@ -52,13 +52,13 @@ class AppErrorBoundary extends React.Component<
     if (this.state.error) {
       return (
         <div className="flex flex-col items-center justify-center h-dvh text-gray-100 bg-gray-950 p-8">
-          <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
+          <h2 className="text-lg font-semibold mb-2">{t("error.somethingWrong")}</h2>
           <p className="text-sm text-gray-400 mb-4 text-center max-w-md">{this.state.error}</p>
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors text-sm"
           >
-            Reload
+            {t("error.reload")}
           </button>
         </div>
       );
@@ -68,6 +68,7 @@ class AppErrorBoundary extends React.Component<
 }
 
 function ConnectionBanner() {
+  const { t } = useT();
   const state = useChatStore((s) => s.connectionState);
   const connect = useChatStore((s) => s.connect);
 
@@ -80,7 +81,7 @@ function ConnectionBanner() {
       {isConnecting ? (
         <>
           <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-          <span>Reconnecting to server...</span>
+          <span>{t("error.reconnecting")}</span>
         </>
       ) : (
         <>
@@ -89,12 +90,12 @@ function ConnectionBanner() {
             <line x1="12" y1="9" x2="12" y2="13" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-          <span>Connection lost</span>
+          <span>{t("error.connectionLost")}</span>
           <button
             onClick={() => connect()}
             className="ml-2 px-2.5 py-0.5 rounded bg-amber-700/80 hover:bg-amber-600/80 text-amber-100 text-xs font-medium transition-colors"
           >
-            Retry
+            {t("common.retry")}
           </button>
         </>
       )}
@@ -103,6 +104,7 @@ function ConnectionBanner() {
 }
 
 function SidebarToggle() {
+  const { t } = useT();
   const pinnedCards = useChatStore((s) => s.pinnedCards);
   const toggleSidebar = useChatStore((s) => s.toggleSidebar);
   if (pinnedCards.length === 0) return null;
@@ -110,7 +112,7 @@ function SidebarToggle() {
     <button
       onClick={toggleSidebar}
       className="relative flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200 active:scale-[0.92] transition-all duration-150 p-1.5 rounded-lg border border-gray-700/60 bg-gray-800/50"
-      title="Pinned apps"
+      title={t("pinnedApps")}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 17v5" />
@@ -145,6 +147,7 @@ function MobileChatHeader() {
 }
 
 function SearchToggle() {
+  const { t } = useT();
   const searchVisible = useChatStore((s) => s.cardSearchVisible);
   const setVisible = useChatStore((s) => s.setCardSearchVisible);
   const cardCount = useChatStore((s) => s.cardOrder.length);
@@ -153,7 +156,7 @@ function SearchToggle() {
     <button
       onClick={() => setVisible(!searchVisible)}
       className={`flex items-center text-sm transition-all duration-150 p-1.5 rounded-lg border active:scale-[0.92] ${searchVisible ? "text-violet-400 border-violet-500/40 bg-violet-500/10" : "text-gray-400 hover:text-gray-200 border-gray-700/60 bg-gray-800/50"}`}
-      title="Search cards (Ctrl+F)"
+      title={t("search.hint")}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />

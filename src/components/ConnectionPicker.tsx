@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import {
   loadBackends,
   addBackend,
@@ -12,6 +13,7 @@ import { isNative } from "../lib/platform";
 type TestStatus = "idle" | "testing" | "ok" | "fail";
 
 export default function ConnectionPicker() {
+  const { t } = useT();
   const show = useChatStore((s) => s.showConnectionPicker);
   const setShow = useChatStore((s) => s.setShowConnectionPicker);
   const setShowWizard = useChatStore((s) => s.setShowSetupWizard);
@@ -69,7 +71,7 @@ export default function ConnectionPicker() {
       })
       .catch((err: Error) => {
         setTestStatus("fail");
-        setTestMsg(err.message || "Connection failed");
+        setTestMsg(err.message || t("error.connectFailed"));
       });
   }
 
@@ -109,8 +111,8 @@ export default function ConnectionPicker() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
           <div>
-            <h2 className="text-base font-semibold text-gray-100">Connect to Backend</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Choose an OpenClaw server to connect to</p>
+            <h2 className="text-base font-semibold text-gray-100">{t("conn.title")}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{t("conn.subtitle")}</p>
           </div>
           <button onClick={() => setShow(false)} className="text-gray-500 hover:text-gray-300 transition-all duration-150 p-1">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -132,8 +134,8 @@ export default function ConnectionPicker() {
                 </svg>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-200">Local Server</div>
-                <div className="text-xs text-gray-500">Same-origin (default dev mode)</div>
+                <div className="text-sm font-medium text-gray-200">{t("conn.localServer")}</div>
+                <div className="text-xs text-gray-500">{t("conn.localServerDesc")}</div>
               </div>
               {connectionState === "connected" && !loadBackends().find(() => false) && (
                 <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
@@ -162,7 +164,7 @@ export default function ConnectionPicker() {
               <button
                 onClick={() => handleRemove(b.id)}
                 className="p-1.5 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150 flex-shrink-0"
-                title="Remove"
+                title={t("conn.remove")}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -177,7 +179,7 @@ export default function ConnectionPicker() {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Name (optional)"
+                placeholder={t("conn.namePlaceholder")}
                 className="w-full px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
               />
               <input
@@ -189,7 +191,7 @@ export default function ConnectionPicker() {
               <input
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder="Access token"
+                placeholder={t("conn.tokenPlaceholder")}
                 type="password"
                 className="w-full px-3 py-1.5 rounded-md bg-gray-800 border border-gray-700 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
               />

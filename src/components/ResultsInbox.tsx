@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
 import { TOOL_ID_CLAUDE_CODE, TIMINGS } from "../lib/constants";
@@ -175,6 +176,7 @@ interface ResultsInboxProps {
 }
 
 export default function ResultsInbox({ show, onClose, asPage }: ResultsInboxProps) {
+  const { t } = useT();
   const { cards, cardOrder } = useChatStore(
     useShallow((s) => ({ cards: s.cards, cardOrder: s.cardOrder }))
   );
@@ -206,7 +208,7 @@ export default function ResultsInbox({ show, onClose, asPage }: ResultsInboxProp
     return (
       <div className="flex flex-col h-full">
         <div className="px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-100 tracking-tight">Inbox</h1>
+          <h1 className="text-xl font-bold text-gray-100 tracking-tight">{t("inbox.title")}</h1>
           {results.some((r) => !r.seen) && (
             <button onClick={markAllSeen} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
               Mark all read
@@ -261,7 +263,7 @@ export default function ResultsInbox({ show, onClose, asPage }: ResultsInboxProp
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950 border-t border-gray-800 rounded-t-2xl max-h-[70vh] flex flex-col animate-[slideUp_0.2s_ease-out] pb-[env(safe-area-inset-bottom)]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-          <h2 className="text-sm font-semibold text-gray-200">Completed Tasks</h2>
+          <h2 className="text-sm font-semibold text-gray-200">{t("inbox.completedTasks")}</h2>
           <div className="flex items-center gap-3">
             {results.some((r) => !r.seen) && (
               <button

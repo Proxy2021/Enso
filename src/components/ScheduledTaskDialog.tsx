@@ -12,6 +12,7 @@
 import { useState, useEffect, type FC } from "react";
 import { X, Clock, Zap, MessageSquare, Wrench } from "lucide-react";
 import type { ScheduledTaskDef, ScheduledTaskAction } from "@shared/types";
+import { useT } from "../lib/i18n";
 
 interface ScheduledTaskDialogProps {
   open: boolean;
@@ -22,23 +23,24 @@ interface ScheduledTaskDialogProps {
 
 type FrequencyType = "minutes" | "hourly" | "daily" | "weekdays" | "weekly" | "custom";
 
-const FREQUENCY_OPTIONS: Array<{ value: FrequencyType; label: string }> = [
-  { value: "minutes", label: "Every N min" },
-  { value: "hourly", label: "Hourly" },
-  { value: "daily", label: "Daily" },
-  { value: "weekdays", label: "Weekdays" },
-  { value: "weekly", label: "Weekly" },
-  { value: "custom", label: "Custom cron" },
+// Labels are resolved at render time via t() — see usages below
+const FREQUENCY_KEYS: Array<{ value: FrequencyType; key: string }> = [
+  { value: "minutes", key: "schedule.everyN" },
+  { value: "hourly", key: "schedule.hourly" },
+  { value: "daily", key: "schedule.daily" },
+  { value: "weekdays", key: "schedule.weekdays" },
+  { value: "weekly", key: "schedule.weekly" },
+  { value: "custom", key: "schedule.customCron" },
 ];
 
-const DAYS_OF_WEEK = [
-  { value: "1", label: "Mon" },
-  { value: "2", label: "Tue" },
-  { value: "3", label: "Wed" },
-  { value: "4", label: "Thu" },
-  { value: "5", label: "Fri" },
-  { value: "6", label: "Sat" },
-  { value: "0", label: "Sun" },
+const DAYS_OF_WEEK_KEYS = [
+  { value: "1", key: "schedule.mon" },
+  { value: "2", key: "schedule.tue" },
+  { value: "3", key: "schedule.wed" },
+  { value: "4", key: "schedule.thu" },
+  { value: "5", key: "schedule.fri" },
+  { value: "6", key: "schedule.sat" },
+  { value: "0", key: "schedule.sun" },
 ];
 
 /** Parse a cron string into frequency/hour/minute/day for the UI */
@@ -75,6 +77,7 @@ function buildCron(frequency: FrequencyType, hour: number, minute: number, inter
 }
 
 export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClose, onSave, editTask }) => {
+  const { t } = useT();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [scheduleType, setScheduleType] = useState<"recurring" | "once">("recurring");
@@ -179,7 +182,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
         <div className="px-5 py-4 space-y-5">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1.5">Name</label>
+            <label className="block text-sm font-medium text-zinc-300 mb-1.5">{t("schedule.name")}</label>
             <input
               type="text"
               value={name}
@@ -191,19 +194,19 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-zinc-300 mb-1.5">{t("schedule.description")}</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What does this task do?"
+              placeholder={t("schedule.whatToDo")}
               className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
             />
           </div>
 
           {/* Schedule Type */}
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">Schedule</label>
+            <label className="block text-sm font-medium text-zinc-300 mb-2">{t("schedule.schedule")}</label>
             <div className="flex gap-2 mb-3">
               <button
                 onClick={() => setScheduleType("recurring")}
@@ -223,7 +226,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
               <div className="space-y-3">
                 {/* Frequency picker */}
                 <div className="flex flex-wrap gap-1.5">
-                  {FREQUENCY_OPTIONS.map((opt) => (
+                  {FREQUENCY_KEYS.map((opt) => (
                     <button
                       key={opt.value}
                       onClick={() => {
@@ -232,7 +235,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
                       }}
                       className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${frequency === opt.value ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700"}`}
                     >
-                      {opt.label}
+                      {t(opt.key)}
                     </button>
                   ))}
                 </div>
@@ -240,7 +243,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
                 {/* Interval picker (for "Every N min") */}
                 {frequency === "minutes" && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-zinc-400">Every</span>
+                    <span className="text-sm text-zinc-400">{t("schedule.every")}</span>
                     <select
                       value={intervalMin}
                       onChange={(e) => { const v = parseInt(e.target.value); setIntervalMin(v); updateCronFromParts("minutes", hour, minute, v, dow); }}
@@ -285,13 +288,13 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-zinc-400">On</span>
                     <div className="flex gap-1">
-                      {DAYS_OF_WEEK.map((d) => (
+                      {DAYS_OF_WEEK_KEYS.map((d) => (
                         <button
                           key={d.value}
                           onClick={() => { setDow(d.value); updateCronFromParts("weekly", hour, minute, intervalMin, d.value); }}
                           className={`px-2 py-1 rounded text-xs font-medium transition-colors ${dow === d.value ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-400 hover:text-white"}`}
                         >
-                          {d.label}
+                          {t(d.key)}
                         </button>
                       ))}
                     </div>
@@ -324,7 +327,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
 
           {/* Action Type */}
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">Action</label>
+            <label className="block text-sm font-medium text-zinc-300 mb-2">{t("schedule.action")}</label>
             <div className="flex gap-2 mb-3">
               <button
                 onClick={() => setActionType("prompt")}
@@ -344,7 +347,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="What should the AI do when this fires?"
+                placeholder={t("schedule.whatShouldAIDo")}
                 rows={3}
                 className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
               />
@@ -353,7 +356,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
                 type="text"
                 value={toolId}
                 onChange={(e) => setToolId(e.target.value)}
-                placeholder="Tool ID (e.g. enso_researcher_search)"
+                placeholder={t("schedule.toolIdPlaceholder")}
                 className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
               />
             )}
@@ -368,7 +371,7 @@ export const ScheduledTaskDialog: FC<ScheduledTaskDialogProps> = ({ open, onClos
                 onChange={(e) => setNotifyOnComplete(e.target.checked)}
                 className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/50"
               />
-              <span className="text-sm text-zinc-300">Notify on completion</span>
+              <span className="text-sm text-zinc-300">{t("schedule.notifyOnComplete")}</span>
             </label>
           </div>
         </div>

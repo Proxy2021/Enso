@@ -108,7 +108,7 @@ export default function EvolveView() {
         setSprintError(`Failed to load sprints (${res.status})`);
       }
     } catch {
-      setSprintError("Could not connect to server");
+      setSprintError(t("error.couldNotConnect"));
     }
     setLoadingSprints(false);
   }, []);
@@ -125,7 +125,7 @@ export default function EvolveView() {
         setDiscoveryError(`Failed to load discoveries (${res.status})`);
       }
     } catch {
-      setDiscoveryError("Could not connect to server");
+      setDiscoveryError(t("error.couldNotConnect"));
     }
     setLoadingDiscoveries(false);
   }, []);
@@ -228,14 +228,14 @@ export default function EvolveView() {
 
         {/* App Ecosystem */}
         <section>
-          <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-3">App Ecosystem</h2>
+          <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-3">{t("evolve.appEcosystem")}</h2>
           {apps.length === 0 ? (
-            <p className="text-sm text-gray-600">No apps installed</p>
+            <p className="text-sm text-gray-600">{t("evolve.noApps")}</p>
           ) : (
             <>
               {userApps.length > 0 && (
                 <div className="mb-4">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">User Apps</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">{t("evolve.userApps")}</p>
                   <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {userApps.map((app) => (
                       <AppCard key={app.appId} app={app} onRun={runApp} onDelete={deleteApp} onEvolve={openEvolveApp} />
@@ -244,7 +244,7 @@ export default function EvolveView() {
                 </div>
               )}
               <div>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">System & Shipped</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">{t("evolve.systemShipped")}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {systemApps.map((app) => (
                     <AppCard key={app.appId} app={app} onRun={runApp} onEvolve={openEvolveApp} />
@@ -257,18 +257,18 @@ export default function EvolveView() {
 
         {/* Evolution History */}
         <section>
-          <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-3">Evolution History</h2>
+          <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-3">{t("evolve.evolutionHistory")}</h2>
           {loadingSprints ? (
-            <p className="text-sm text-gray-600">Loading sprints...</p>
+            <p className="text-sm text-gray-600">{t("evolve.loadingSprints")}</p>
           ) : sprintError ? (
             <div className="text-center py-4">
               <p className="text-sm text-red-400">{sprintError}</p>
-              <button onClick={fetchSprints} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Retry</button>
+              <button onClick={fetchSprints} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">{t("common.retry")}</button>
             </div>
           ) : sprints.length === 0 ? (
             <div className="text-center py-8 text-gray-600">
-              <p className="text-sm">No evolution sprints yet</p>
-              <p className="text-xs mt-1">Type /evolve to start your first sprint</p>
+              <p className="text-sm">{t("evolve.noSprintsYet")}</p>
+              <p className="text-xs mt-1">{t("evolve.startFirstSprint")}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -294,18 +294,18 @@ export default function EvolveView() {
 
         {/* Discovery History */}
         <section>
-          <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-3">Discovery History</h2>
+          <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-3">{t("evolve.discoveryHistory")}</h2>
           {loadingDiscoveries ? (
-            <p className="text-sm text-gray-600">Loading discoveries...</p>
+            <p className="text-sm text-gray-600">{t("evolve.loadingDiscoveries")}</p>
           ) : discoveryError ? (
             <div className="text-center py-4">
               <p className="text-sm text-red-400">{discoveryError}</p>
-              <button onClick={fetchDiscoveries} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Retry</button>
+              <button onClick={fetchDiscoveries} className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">{t("common.retry")}</button>
             </div>
           ) : discoveries.length === 0 ? (
             <div className="text-center py-8 text-gray-600">
-              <p className="text-sm">No discovery sprints yet</p>
-              <p className="text-xs mt-1">Type /discover to launch your first AI VC discovery</p>
+              <p className="text-sm">{t("evolve.noDiscoveriesYet")}</p>
+              <p className="text-xs mt-1">{t("evolve.startFirstDiscovery")}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -381,6 +381,7 @@ function QuickAction({ icon, label, sublabel, accent, onClick, disabled }: {
 }
 
 function AppCard({ app, onRun, onDelete, onEvolve }: { app: AppInfo; onRun: (id: string) => void; onDelete?: (id: string) => void; onEvolve?: (id: string) => void }) {
+  const { t } = useT();
   return (
     <div className="flex flex-col gap-1.5 px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border border-gray-800/50 bg-gray-900/30 hover:bg-gray-800/30 active:bg-gray-800/40 transition-colors">
       <div className="flex items-center gap-2 min-w-0">
@@ -392,11 +393,11 @@ function AppCard({ app, onRun, onDelete, onEvolve }: { app: AppInfo; onRun: (id:
       </div>
       <div className="flex items-center gap-1">
         {onEvolve && (
-          <button onClick={() => onEvolve(app.appId)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-purple-500/10 text-purple-400 border border-purple-500/25 hover:bg-purple-500/20 active:bg-purple-500/25 transition-colors cursor-pointer">Evolve</button>
+          <button onClick={() => onEvolve(app.appId)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-purple-500/10 text-purple-400 border border-purple-500/25 hover:bg-purple-500/20 active:bg-purple-500/25 transition-colors cursor-pointer">{t("evolve.evolveBtn")}</button>
         )}
-        <button onClick={() => onRun(app.toolFamily)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 hover:bg-indigo-500/20 active:bg-indigo-500/25 transition-colors cursor-pointer">Run</button>
+        <button onClick={() => onRun(app.toolFamily)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 hover:bg-indigo-500/20 active:bg-indigo-500/25 transition-colors cursor-pointer">{t("evolve.runBtn")}</button>
         {onDelete && (
-          <button onClick={() => onDelete(app.toolFamily)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 active:bg-red-500/25 transition-colors cursor-pointer">Del</button>
+          <button onClick={() => onDelete(app.toolFamily)} className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 active:bg-red-500/25 transition-colors cursor-pointer">{t("evolve.delBtn")}</button>
         )}
       </div>
     </div>
@@ -404,14 +405,15 @@ function AppCard({ app, onRun, onDelete, onEvolve }: { app: AppInfo; onRun: (id:
 }
 
 function BuildAppQuickDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
   const [text, setText] = useState("");
   const launchCommandInNewChat = useChatStore((s) => s.launchCommandInNewChat);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-gray-900 border border-gray-700/60 rounded-2xl p-5 w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-base font-semibold text-gray-100 mb-2">Build App</h3>
-        <p className="text-xs text-gray-500 mb-3">Describe what app you want. Claude Code will build it.</p>
+        <h3 className="text-base font-semibold text-gray-100 mb-2">{t("evolve.buildAppTitle")}</h3>
+        <p className="text-xs text-gray-500 mb-3">{t("evolve.buildAppDesc")}</p>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -420,7 +422,7 @@ function BuildAppQuickDialog({ onClose }: { onClose: () => void }) {
           autoFocus
         />
         <div className="flex justify-end gap-2 mt-3">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors cursor-pointer">{t("common.cancel")}</button>
           <button
             onClick={async () => {
               if (text.trim()) {
@@ -448,6 +450,7 @@ function EvolveInstructionDialog({ title, description, placeholder, baseCommand,
   title: string; description: string; placeholder: string; baseCommand: string; accent: string;
   onClose: () => void; onLaunch: (command: string) => void;
 }) {
+  const { t } = useT();
   const [instruction, setInstruction] = useState("");
   const colors = ACCENT_CLASSES[accent] ?? ACCENT_CLASSES.purple;
 
@@ -471,7 +474,7 @@ function EvolveInstructionDialog({ title, description, placeholder, baseCommand,
           autoFocus
         />
         <div className="flex justify-end gap-2 mt-3">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors cursor-pointer">{t("common.cancel")}</button>
           <button
             onClick={handleLaunch}
             className={`px-4 py-1.5 text-sm font-medium rounded-lg ${colors.btn} ${colors.btnText} border ${colors.btnBorder} ${colors.btnHover} transition-colors cursor-pointer`}

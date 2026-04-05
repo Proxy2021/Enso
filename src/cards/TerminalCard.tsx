@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useChatStore, type ProjectInfo } from "../store/chat";
+import { useT } from "../lib/i18n";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { TOOL_ID_CLAUDE_CODE, API } from "../lib/constants";
 import { useVoiceInput } from "../components/VoiceMicButton";
@@ -23,6 +24,7 @@ function ProjectPicker({ projects, cardId, pendingCodeText }: { projects: Projec
   const setCodeSessionCwd = useChatStore((s) => s.setCodeSessionCwd);
   const switchTerminalProject = useChatStore((s) => s.switchTerminalProject);
   const fetchProjects = useChatStore((s) => s.fetchProjects);
+  const { t } = useT();
 
   useEffect(() => {
     if (projects.length === 0) fetchProjects();
@@ -31,14 +33,14 @@ function ProjectPicker({ projects, cardId, pendingCodeText }: { projects: Projec
   if (projects.length === 0) {
     return (
       <div className="text-gray-500 text-sm py-4 text-center">
-        Scanning for projects...
+        {t("terminal.scanning")}
       </div>
     );
   }
 
   return (
     <div className="py-2">
-      <div className="text-gray-400 text-xs mb-3 px-1">Select a project to work in:</div>
+      <div className="text-gray-400 text-xs mb-3 px-1">{t("terminal.selectProject")}</div>
       <div className="space-y-1">
         {projects.map((p) => (
           <button
@@ -56,7 +58,7 @@ function ProjectPicker({ projects, cardId, pendingCodeText }: { projects: Projec
       </div>
       {pendingCodeText && (
         <div className="mt-2 px-3 py-2 rounded-md bg-gray-800/60 border border-gray-700/50">
-          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Queued prompt</span>
+          <span className="text-[10px] text-gray-500 uppercase tracking-wide">{t("terminal.queuedPrompt")}</span>
           <p className="text-xs text-gray-300 mt-1 font-mono truncate">
             {pendingCodeText}
           </p>
@@ -81,6 +83,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const { VoiceMic } = useVoiceInput(setText);
+  const { t } = useT();
 
   // Fetch available slash commands when cwd is set (cached per cwd)
   useEffect(() => {
@@ -169,7 +172,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Claude Code..."
+          placeholder={t("terminal.askPlaceholder")}
           className="flex-1 bg-transparent text-gray-100 text-base sm:text-sm outline-none placeholder-gray-600 font-mono"
         />
         <VoiceMic />
@@ -177,7 +180,7 @@ function TerminalInput({ onSubmit, cwd }: { onSubmit: (text: string) => void; cw
           onClick={handleSubmit}
           disabled={!text.trim()}
           className="shrink-0 p-2 sm:p-1 rounded text-gray-500 hover:text-green-400 active:scale-[0.9] disabled:text-gray-700 disabled:cursor-default transition-all duration-150"
-          title="Send (Enter)"
+          title={t("chat.sendHint")}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13" />
@@ -231,6 +234,7 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
   const dropdownRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState({ top: 0, right: 0 });
+  const { t } = useT();
 
   useEffect(() => {
     if (isOpen && projects.length === 0) fetchProjects();
@@ -276,7 +280,7 @@ function ProjectSwitchButton({ cardId, currentCwd }: { cardId: string; currentCw
           style={{ top: pos.top, right: pos.right }}
         >
           {projects.length === 0 ? (
-            <div className="px-3 py-2 text-gray-500 text-xs">Scanning...</div>
+            <div className="px-3 py-2 text-gray-500 text-xs">{t("terminal.scanning")}</div>
           ) : (
             projects.map((p) => (
               <button
@@ -307,6 +311,7 @@ function SessionPicker({ cardId, onDismiss }: { cardId: string; onDismiss: () =>
   const cards = useChatStore((s) => s.cards);
   const resumeSessionOnCard = useChatStore((s) => s.resumeSessionOnCard);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const { t } = useT();
 
   // Collect all terminal cards with active sessions (excluding this card)
   const sessions = Object.values(cards).filter(
@@ -320,16 +325,16 @@ function SessionPicker({ cardId, onDismiss }: { cardId: string; onDismiss: () =>
   if (sessions.length === 0) {
     return (
       <div className="py-3 text-center">
-        <div className="text-gray-500 text-sm mb-2">No active sessions to resume.</div>
-        <div className="text-gray-600 text-xs">Type a prompt to start a new session.</div>
-        <button onClick={onDismiss} className="mt-2 text-xs text-gray-400 hover:text-gray-300">Dismiss</button>
+        <div className="text-gray-500 text-sm mb-2">{t("terminal.noResumeSessions")}</div>
+        <div className="text-gray-600 text-xs">{t("terminal.startNewPrompt")}</div>
+        <button onClick={onDismiss} className="mt-2 text-xs text-gray-400 hover:text-gray-300">{t("common.dismiss")}</button>
       </div>
     );
   }
 
   return (
     <div className="py-2">
-      <div className="text-gray-400 text-xs mb-2 px-1">Resume an existing session:</div>
+      <div className="text-gray-400 text-xs mb-2 px-1">{t("terminal.resumeSession")}</div>
       <div className="space-y-1">
         {sessions.map((c) => {
           const projectName = c.toolMeta.cwd.replace(/\\/g, "/").split("/").pop() ?? c.toolMeta.cwd;
@@ -359,7 +364,7 @@ function SessionPicker({ cardId, onDismiss }: { cardId: string; onDismiss: () =>
           );
         })}
       </div>
-      <button onClick={onDismiss} className="mt-2 text-xs text-gray-400 hover:text-gray-300 px-1">Cancel</button>
+      <button onClick={onDismiss} className="mt-2 text-xs text-gray-400 hover:text-gray-300 px-1">{t("common.cancel")}</button>
     </div>
   );
 }
@@ -374,6 +379,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
   const setCodeSessionCwd = useChatStore((s) => s.setCodeSessionCwd);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [showSessionPicker, setShowSessionPicker] = useState(false);
+  const { t } = useT();
 
   // Per-card session state — derived from the card's own toolMeta
   const cardCwd = card.toolMeta?.cwd ?? null;
@@ -416,7 +422,7 @@ export default function TerminalCard({ card }: CardRendererProps) {
             <span className="w-2 h-2 rounded-full bg-yellow-500/70" />
             <span className="w-2 h-2 rounded-full bg-green-500/70" />
           </div>
-          <span className="text-gray-400 text-[11px]">Claude Code</span>
+          <span className="text-gray-400 text-[11px]">{t("terminal.claudeCode")}</span>
           {ctxPercent != null && (
             <span
               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
@@ -434,9 +440,9 @@ export default function TerminalCard({ card }: CardRendererProps) {
             <button
               onClick={() => cancelOperation(card.operation!.operationId)}
               className="ml-auto px-2.5 sm:px-2 py-1 sm:py-0.5 rounded border border-red-700/60 text-red-300 hover:bg-red-900/40 active:bg-red-900/60 active:scale-[0.97] transition-all duration-150 text-xs sm:text-[inherit]"
-              title="Cancel current operation"
+              title={t("terminal.cancelOp")}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           )}
           {cardCwd && (

@@ -1,3 +1,5 @@
+import { useT } from "../../lib/i18n";
+
 export interface IrPreviewState {
   file: File;
   localUrl: string;
@@ -14,6 +16,7 @@ interface ImageResearchPreviewProps {
 }
 
 export function ImageResearchPreview({ preview, onCancel, onAction, onTopicChange }: ImageResearchPreviewProps) {
+  const { t } = useT();
   return (
     <div className="mb-3 bg-gray-800/90 border border-gray-600/60 rounded-xl p-3 shadow-lg">
       <div className="flex gap-3">
@@ -30,7 +33,7 @@ export function ImageResearchPreview({ preview, onCancel, onAction, onTopicChang
           {preview.loading ? (
             <div className="flex items-center gap-2 py-2">
               <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs text-gray-400">Extracting topic from image...</span>
+              <span className="text-xs text-gray-400">{t("chat.extractingTopic")}</span>
             </div>
           ) : (
             <textarea
@@ -38,7 +41,7 @@ export function ImageResearchPreview({ preview, onCancel, onAction, onTopicChang
               rows={2}
               value={preview.topic}
               onChange={e => onTopicChange(e.target.value)}
-              placeholder="Describe what to research..."
+              placeholder={t("chat.describeResearch")}
               autoFocus
             />
           )}
@@ -54,10 +57,10 @@ export function ImageResearchPreview({ preview, onCancel, onAction, onTopicChang
         </button>
         <div className="flex gap-1.5 ml-auto">
           {([
-            { label: "Research", icon: "\uD83D\uDD0D", prefix: "", intent: "image_research" as const },
-            { label: "Similar", icon: "\uD83D\uDDBC\uFE0F", prefix: "", intent: "image_search" as const },
-            { label: "Shop", icon: "\uD83D\uDED2", prefix: "Find prices, reviews, and where to buy: ", intent: "image_research" as const },
-            { label: "Translate", icon: "\uD83C\uDF10", prefix: "Translate all text visible in this image. Detected content: ", intent: "image_research" as const },
+            { label: t("chat.imageAction.research"), icon: "\uD83D\uDD0D", prefix: "", intent: "image_research" as const },
+            { label: t("chat.imageAction.similar"), icon: "\uD83D\uDDBC\uFE0F", prefix: "", intent: "image_search" as const },
+            { label: t("chat.imageAction.shop"), icon: "\uD83D\uDED2", prefix: "Find prices, reviews, and where to buy: ", intent: "image_research" as const },
+            { label: t("chat.imageAction.translate"), icon: "\uD83C\uDF10", prefix: "Translate all text visible in this image. Detected content: ", intent: "image_research" as const },
           ]).map(action => (
             <button
               key={action.label}

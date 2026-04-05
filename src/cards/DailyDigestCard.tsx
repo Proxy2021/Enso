@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 import type { DailyDigestDTO, DigestItemDTO, ProactiveSuggestionAction } from "@shared/types";
 
@@ -74,6 +75,7 @@ function DigestItemRow({ item, onAction }: { item: DigestItemDTO; onAction: (act
 }
 
 export default function DailyDigestCard({ card }: CardRendererProps) {
+  const { t } = useT();
   const [digest, setDigest] = useState<DailyDigestDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -128,7 +130,7 @@ export default function DailyDigestCard({ card }: CardRendererProps) {
     return (
       <div className="px-4 py-6 text-center">
         <div className="w-5 h-5 border-2 border-gray-600 border-t-gray-300 rounded-full animate-spin mx-auto mb-2" />
-        <p className="text-xs text-gray-500">Loading your daily digest...</p>
+        <p className="text-xs text-gray-500">{t("digest.loading")}</p>
       </div>
     );
   }
@@ -136,8 +138,8 @@ export default function DailyDigestCard({ card }: CardRendererProps) {
   if (!digest || digest.items.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <p className="text-sm text-gray-400">No updates for today. You're all caught up!</p>
-        <p className="text-xs text-gray-500 mt-1">Enable more data sources in Settings to get personalized suggestions.</p>
+        <p className="text-sm text-gray-400">{t("digest.noUpdates")}</p>
+        <p className="text-xs text-gray-500 mt-1">{t("digest.enableMore")}</p>
       </div>
     );
   }

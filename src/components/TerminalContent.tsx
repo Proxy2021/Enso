@@ -17,6 +17,7 @@ import { useState, useMemo } from "react";
 import MarkdownText from "./MarkdownText";
 import type { Card } from "../cards/types";
 import { useElapsedTime, formatElapsed } from "../lib/useElapsedTime";
+import { useT } from "../lib/i18n";
 
 // ── Marker Regexes ──
 
@@ -491,6 +492,7 @@ function FilesChangedChips({ files }: { files: FilesChanged[] }) {
 }
 
 function CompactBanner({ events }: { events: CompactEvent[] }) {
+  const { t } = useT();
   if (events.length === 0) return null;
   return (
     <div className="space-y-1 mb-1.5 pl-3">
@@ -506,7 +508,7 @@ function CompactBanner({ events }: { events: CompactEvent[] }) {
           {ev.phase === "start" ? (
             <>
               <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              <span>Compacting context...</span>
+              <span>{t("terminal.compactingContext")}</span>
             </>
           ) : (
             <>
@@ -595,6 +597,7 @@ function parseCostString(cost: string): { cost?: string; turns?: string; duratio
 }
 
 function SessionSummaryBar({ entry }: { entry: TerminalEntry }) {
+  const { t } = useT();
   const [expanded, setExpanded] = useState(false);
 
   // Aggregate across the entry
@@ -625,7 +628,7 @@ function SessionSummaryBar({ entry }: { entry: TerminalEntry }) {
         className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-800/40 border border-gray-700/30 hover:bg-gray-800/60 transition-all duration-150 text-left"
       >
         <span className="text-[9px] text-gray-500">{expanded ? "\u25BC" : "\u25B6"}</span>
-        <span className="text-[10px] font-medium text-gray-400">Session Summary</span>
+        <span className="text-[10px] font-medium text-gray-400">{t("terminal.sessionSummary")}</span>
         <div className="flex items-center gap-2 ml-auto text-[9px] text-gray-500">
           {totalFiles > 0 && (
             <span className="flex items-center gap-0.5">
@@ -660,7 +663,7 @@ function SessionSummaryBar({ entry }: { entry: TerminalEntry }) {
           {/* Files Changed */}
           {totalFiles > 0 && (
             <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
-              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Files Changed</div>
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("terminal.filesChanged")}</div>
               <div className="space-y-0.5">
                 {allFiles.flatMap(f => f.saved).map((name, i) => (
                   <div key={`s-${i}`} className="flex items-center gap-1.5 text-[10px]">
@@ -681,7 +684,7 @@ function SessionSummaryBar({ entry }: { entry: TerminalEntry }) {
           {/* Tools Used */}
           {toolCounts.size > 0 && (
             <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
-              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Tools Used</div>
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("terminal.toolsUsed")}</div>
               <div className="flex flex-wrap gap-1.5">
                 {Array.from(toolCounts.entries()).map(([name, count]) => (
                   <span key={name} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-700/40 text-[10px] text-gray-300">
@@ -697,7 +700,7 @@ function SessionSummaryBar({ entry }: { entry: TerminalEntry }) {
           {/* Commands Run */}
           {allBash.length > 0 && (
             <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
-              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Commands Run</div>
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("terminal.commandsRun")}</div>
               <div className="space-y-0.5 max-h-[120px] overflow-y-auto">
                 {allBash.map((c, i) => (
                   <div key={i} className="text-[10px] font-mono text-gray-400 truncate">
@@ -711,41 +714,41 @@ function SessionSummaryBar({ entry }: { entry: TerminalEntry }) {
           {/* Cost Breakdown */}
           {costParsed && (
             <div className="p-2 rounded-lg bg-gray-800/30 border border-gray-700/40">
-              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Cost Breakdown</div>
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("terminal.costBreakdown")}</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
                 {costParsed.cost && (
                   <div className="text-[10px]">
-                    <span className="text-gray-500">Cost: </span>
+                    <span className="text-gray-500">{t("terminal.cost")} </span>
                     <span className="text-gray-300 font-medium">{costParsed.cost}</span>
                   </div>
                 )}
                 {costParsed.turns && (
                   <div className="text-[10px]">
-                    <span className="text-gray-500">Turns: </span>
+                    <span className="text-gray-500">{t("terminal.turns")} </span>
                     <span className="text-gray-300">{costParsed.turns}</span>
                   </div>
                 )}
                 {costParsed.duration && (
                   <div className="text-[10px]">
-                    <span className="text-gray-500">Duration: </span>
+                    <span className="text-gray-500">{t("terminal.duration")} </span>
                     <span className="text-gray-300">{costParsed.duration}</span>
                   </div>
                 )}
                 {costParsed.inputTokens && (
                   <div className="text-[10px]">
-                    <span className="text-gray-500">Input: </span>
+                    <span className="text-gray-500">{t("terminal.input")} </span>
                     <span className="text-gray-300">{costParsed.inputTokens}</span>
                   </div>
                 )}
                 {costParsed.outputTokens && (
                   <div className="text-[10px]">
-                    <span className="text-gray-500">Output: </span>
+                    <span className="text-gray-500">{t("terminal.output")} </span>
                     <span className="text-gray-300">{costParsed.outputTokens}</span>
                   </div>
                 )}
                 {costParsed.cacheTokens && (
                   <div className="text-[10px]">
-                    <span className="text-gray-500">Cache: </span>
+                    <span className="text-gray-500">{t("terminal.cache")} </span>
                     <span className="text-gray-300">{costParsed.cacheTokens}</span>
                   </div>
                 )}
@@ -887,6 +890,7 @@ export default function TerminalContent({
   showHeader = false,
   headerLabel = "Claude Code",
 }: TerminalContentProps) {
+  const { t } = useT();
   const { entries, ctxPercent } = useMemo(
     () => parseEntries(text, status),
     [text, status],
@@ -931,7 +935,7 @@ export default function TerminalContent({
             <TerminalBlock key={i} entry={entry} isFirst={i === 0} onInput={onInput} />
           ))
         ) : (
-          <div className="text-gray-600 italic text-xs">Starting Claude Code session...</div>
+          <div className="text-gray-600 italic text-xs">{t("terminal.startingSession")}</div>
         )}
         {status === "streaming" && entries.length > 0 && entries[entries.length - 1].text === "" && (
           <ActivityIndicator label={statusLabel} />

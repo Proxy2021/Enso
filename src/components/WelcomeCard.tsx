@@ -180,7 +180,7 @@ export default function WelcomeCard() {
                 <button
                   onClick={() => handleDismissSuggestion(s.id, s.pillar)}
                   className="shrink-0 text-gray-600 hover:text-gray-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity mt-0.5"
-                  title="Dismiss"
+                  title={t("common.dismiss")}
                 >
                   &#x2715;
                 </button>

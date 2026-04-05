@@ -4,6 +4,7 @@ import { Bug, Camera, ImagePlus, X } from "lucide-react";
 import { useChatStore } from "../store/chat";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { isNative } from "../lib/platform";
+import { useT } from "../lib/i18n";
 
 interface CapturedImage {
   blob: Blob;
@@ -73,6 +74,7 @@ export default function DebugReporter() {
   const sheetRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const { t } = useT();
   const connectionState = useChatStore((s) => s.connectionState);
   const ensoProjectPath = useChatStore((s) => s.ensoProjectPath);
   const sendDebugReport = useChatStore((s) => s.sendDebugReport);
@@ -256,7 +258,7 @@ export default function DebugReporter() {
         onClick={handleBugClick}
         disabled={disabled || isCapturing}
         className="text-gray-400 hover:text-red-400 transition-all duration-150 disabled:opacity-30"
-        title="Report & auto-fix a bug"
+        title={t("debug.reportAutoFix")}
       >
         <Bug size={16} />
       </button>
@@ -296,7 +298,7 @@ export default function DebugReporter() {
           >
             {/* Header */}
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-200">Report & Auto-Fix</h3>
+              <h3 className="text-sm font-semibold text-gray-200">{t("debug.reportTitle")}</h3>
               <button
                 onClick={handleClose}
                 className="text-gray-400 hover:text-gray-200 transition-all duration-150"
@@ -314,14 +316,14 @@ export default function DebugReporter() {
                   className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-all duration-150"
                 >
                   <Camera size={20} />
-                  <span className="text-xs">Take Photo</span>
+                  <span className="text-xs">{t("debug.takePhoto")}</span>
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="flex-1 h-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-all duration-150"
                 >
                   <ImagePlus size={20} />
-                  <span className="text-xs">From Gallery</span>
+                  <span className="text-xs">{t("debug.fromGallery")}</span>
                 </button>
               </div>
             ) : images.length > 0 ? (
@@ -363,7 +365,7 @@ export default function DebugReporter() {
                   className="shrink-0 h-28 w-20 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-gray-300 transition-all duration-150"
                 >
                   <ImagePlus size={18} />
-                  <span className="text-[10px]">Add</span>
+                  <span className="text-[10px]">{t("debug.add")}</span>
                 </button>
               </div>
             ) : null}
@@ -372,7 +374,7 @@ export default function DebugReporter() {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the bug (optional)..."
+              placeholder={t("debug.describeBug")}
               rows={3}
               className="w-full bg-gray-800 text-gray-100 rounded-lg px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-amber-500/50 placeholder-gray-500 border border-gray-700"
             />

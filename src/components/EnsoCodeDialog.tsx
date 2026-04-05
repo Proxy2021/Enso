@@ -1,11 +1,13 @@
 import { useChatStore } from "../store/chat";
 import { InstructionModal } from "./InstructionModal";
+import { useT } from "../lib/i18n";
 
 interface EnsoCodeDialogProps {
   onClose: () => void;
 }
 
 export function EnsoCodeDialog({ onClose }: EnsoCodeDialogProps) {
+  const { t } = useT();
   const launchEnsoCode = useChatStore((s) => s.launchEnsoCode);
 
   return (
@@ -15,10 +17,10 @@ export function EnsoCodeDialog({ onClose }: EnsoCodeDialogProps) {
       onSubmit={(text) => {
         launchEnsoCode(text);
       }}
-      title="Code with Claude"
-      description="What would you like Claude Code to work on?"
+      title={t("dialog.codeWithClaude")}
+      description={t("dialog.codePrompt")}
       placeholder="e.g., add a new tool to the filesystem family, fix the WebSocket reconnection..."
-      submitLabel="Start"
+      submitLabel={t("dialog.start")}
     />
   );
 }

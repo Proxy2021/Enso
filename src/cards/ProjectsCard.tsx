@@ -4,6 +4,7 @@ import { API } from "../lib/constants";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
 interface TeamAgent {
@@ -75,6 +76,7 @@ function agentDot(agent: TeamAgent) {
 }
 
 export default function ProjectsCard({ card }: CardRendererProps) {
+  const { t } = useT();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Project | null>(null);
@@ -188,7 +190,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
   };
 
   const handleMergeBranch = async (projectId: string) => {
-    if (!confirm("Merge evolution branch into main? This will checkout main and merge.")) return;
+    if (!confirm(t("projects.mergeConfirm"))) return;
     setBranchMerging(true);
     setBranchError("");
     try {
@@ -398,7 +400,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
     return (
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center gap-2">
-          <button onClick={() => setPromptDialog(null)} className="text-xs text-gray-400 hover:text-gray-200">{"\u2190"} Cancel</button>
+          <button onClick={() => setPromptDialog(null)} className="text-xs text-gray-400 hover:text-gray-200">{"\u2190"} {t("common.cancel")}</button>
           <span className="text-gray-600">|</span>
           <h3 className="text-sm font-semibold text-gray-200">
             {isEvolve ? "\uD83E\uDDEC Launch Evolution Sprint" : "\uD83D\uDCA1 Launch Discovery Sprint"}
@@ -445,7 +447,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             onClick={() => setPromptDialog(null)}
             className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </div>
@@ -459,7 +461,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-lg">{"\uD83D\uDCC1"}</span>
-            <h3 className="text-sm font-semibold text-gray-200">Projects</h3>
+            <h3 className="text-sm font-semibold text-gray-200">{t("projects.title")}</h3>
             <span className="text-xs text-gray-500">{projects.length} project{projects.length !== 1 ? "s" : ""}</span>
           </div>
           <div className="flex gap-1.5">
@@ -492,12 +494,12 @@ export default function ProjectsCard({ card }: CardRendererProps) {
           </div>
         </button>
 
-        {loading && <div className="text-center py-8 text-gray-500 text-xs">Loading projects...</div>}
+        {loading && <div className="text-center py-8 text-gray-500 text-xs">{t("projects.loadingProjects")}</div>}
 
         {!loading && projects.length === 0 && (
           <div className="text-center py-8 space-y-2">
             <div className="text-2xl">{"\uD83D\uDCC1"}</div>
-            <div className="text-gray-400 text-sm">No projects yet</div>
+            <div className="text-gray-400 text-sm">{t("projects.noProjectsYet")}</div>
             <div className="flex gap-3 justify-center">
               <button onClick={handleDiscover} className="text-amber-400 text-xs hover:text-amber-300">
                 Discover opportunities {"\u2192"}
@@ -547,7 +549,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
         <div className="flex items-center gap-2">
           <button onClick={() => { setView("list"); setImportError(""); }} className="text-xs text-gray-400 hover:text-gray-200">{"\u2190"} Back</button>
           <span className="text-gray-600">|</span>
-          <h3 className="text-sm font-semibold text-gray-200">Import Project</h3>
+          <h3 className="text-sm font-semibold text-gray-200">{t("projects.importTitle")}</h3>
         </div>
 
         <div className="bg-gradient-to-r from-violet-500/10 to-blue-500/10 border border-violet-500/20 rounded-lg p-2.5">
@@ -558,7 +560,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
         <div className="space-y-2.5">
           <div>
-            <label className="text-[10px] text-gray-500 font-medium block mb-1">Project Name *</label>
+            <label className="text-[10px] text-gray-500 font-medium block mb-1">{t("projects.projectName")} *</label>
             <input
               value={importForm.name}
               onChange={e => setImportForm(f => ({ ...f, name: e.target.value }))}
@@ -569,7 +571,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
           </div>
 
           <div>
-            <label className="text-[10px] text-gray-500 font-medium block mb-1">Codebase Path *</label>
+            <label className="text-[10px] text-gray-500 font-medium block mb-1">{t("projects.codebasePath")} *</label>
             <input
               value={importForm.codebasePath}
               onChange={e => setImportForm(f => ({ ...f, codebasePath: e.target.value }))}
@@ -592,7 +594,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
           </div>
 
           <div>
-            <label className="text-[10px] text-gray-500 font-medium block mb-1">Vision <span className="text-gray-600">(optional)</span></label>
+            <label className="text-[10px] text-gray-500 font-medium block mb-1">{t("projects.vision")} <span className="text-gray-600">(optional)</span></label>
             <input
               value={importForm.vision}
               onChange={e => setImportForm(f => ({ ...f, vision: e.target.value }))}
@@ -652,7 +654,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             disabled={generating}
             className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded-lg transition-colors"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </div>
@@ -674,11 +676,11 @@ export default function ProjectsCard({ card }: CardRendererProps) {
     }
 
     const detailTabs: { value: DetailTab; label: string }[] = [
-      { value: "overview", label: "Overview" },
-      { value: "sprints", label: "Sprints" },
-      { value: "discoveries", label: "Discoveries" },
-      { value: "team", label: `Team (${p.teamAgents?.length || 0})` },
-      { value: "personas", label: `Personas (${p.personas?.length || 0})` },
+      { value: "overview", label: t("projects.overview") },
+      { value: "sprints", label: t("projects.sprints") },
+      { value: "discoveries", label: t("projects.discoveries") },
+      { value: "team", label: `${t("projects.teamAgents")} (${p.teamAgents?.length || 0})` },
+      { value: "personas", label: `${t("projects.personas")} (${p.personas?.length || 0})` },
     ];
 
     return (
@@ -748,11 +750,11 @@ export default function ProjectsCard({ card }: CardRendererProps) {
         {/* Meta */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-2 text-xs">
-            <div className="text-gray-500 text-[10px]">Codebase</div>
+            <div className="text-gray-500 text-[10px]">{t("projects.codebase")}</div>
             <div className="text-gray-300 truncate">{p.codebasePath}</div>
           </div>
           <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-2 text-xs">
-            <div className="text-gray-500 text-[10px]">Tech Stack</div>
+            <div className="text-gray-500 text-[10px]">{t("projects.techStack")}</div>
             <div className="text-gray-300 truncate">{p.techStack || "Not specified"}</div>
           </div>
         </div>
@@ -765,7 +767,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
               Branch
             </div>
             {!branchEditing && (
-              <button onClick={() => { setBranchInput(p.branch || "main"); setBranchEditing(true); }} className="text-[10px] text-gray-500 hover:text-gray-300">Edit</button>
+              <button onClick={() => { setBranchInput(p.branch || "main"); setBranchEditing(true); }} className="text-[10px] text-gray-500 hover:text-gray-300">{t("common.edit")}</button>
             )}
           </div>
           {branchEditing ? (
@@ -778,8 +780,8 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                 placeholder="branch name"
                 autoFocus
               />
-              <button onClick={() => handleBranchSave(p.id)} className="text-[10px] px-1.5 py-0.5 bg-violet-600 hover:bg-violet-500 text-white rounded">Save</button>
-              <button onClick={() => setBranchEditing(false)} className="text-[10px] text-gray-500 hover:text-gray-300">Cancel</button>
+              <button onClick={() => handleBranchSave(p.id)} className="text-[10px] px-1.5 py-0.5 bg-violet-600 hover:bg-violet-500 text-white rounded">{t("common.save")}</button>
+              <button onClick={() => setBranchEditing(false)} className="text-[10px] text-gray-500 hover:text-gray-300">{t("common.cancel")}</button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -814,21 +816,21 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             className="bg-gray-800/50 rounded-lg border border-gray-700 hover:border-gray-600 p-2 text-xs text-center transition-colors"
           >
             <div className="text-gray-200 font-medium">{p.teamAgents?.length || 0}</div>
-            <div className="text-[10px] text-gray-500">Team Agents</div>
+            <div className="text-[10px] text-gray-500">{t("projects.teamAgents")}</div>
           </button>
           <button
             onClick={() => setDetailTab("personas")}
             className="bg-gray-800/50 rounded-lg border border-gray-700 hover:border-gray-600 p-2 text-xs text-center transition-colors"
           >
             <div className="text-gray-200 font-medium">{p.personas?.length || 0}</div>
-            <div className="text-[10px] text-gray-500">Personas</div>
+            <div className="text-[10px] text-gray-500">{t("projects.personas")}</div>
           </button>
           <button
             onClick={() => setDetailTab("sprints")}
             className="bg-gray-800/50 rounded-lg border border-gray-700 hover:border-gray-600 p-2 text-xs text-center transition-colors"
           >
             <div className="text-gray-200 font-medium">{"\uD83E\uDDEC"}</div>
-            <div className="text-[10px] text-gray-500">View Sprints</div>
+            <div className="text-[10px] text-gray-500">{t("projects.viewSprints")}</div>
           </button>
         </div>
 
@@ -853,14 +855,14 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
   function renderSprintsTab(p: Project) {
     if (sprintsLoading) {
-      return <div className="text-center py-8 text-gray-500 text-xs">Loading sprints...</div>;
+      return <div className="text-center py-8 text-gray-500 text-xs">{t("evolve.loadingSprints")}</div>;
     }
 
     if (sprints.length === 0) {
       return (
         <div className="text-center py-8 space-y-2">
           <div className="text-2xl">{"\uD83E\uDDEC"}</div>
-          <div className="text-gray-400 text-sm">No evolution sprints yet</div>
+          <div className="text-gray-400 text-sm">{t("evolve.noSprintsYet")}</div>
           <button
             onClick={() => handleEvolve(p.id)}
             className="text-violet-400 text-xs hover:text-violet-300"
@@ -921,14 +923,14 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
   function renderDiscoveriesTab() {
     if (discoveriesLoading) {
-      return <div className="text-center py-8 text-gray-500 text-xs">Loading discoveries...</div>;
+      return <div className="text-center py-8 text-gray-500 text-xs">{t("evolve.loadingDiscoveries")}</div>;
     }
 
     if (discoveries.length === 0) {
       return (
         <div className="text-center py-8 space-y-2">
           <div className="text-2xl">{"\uD83D\uDD0D"}</div>
-          <div className="text-gray-400 text-sm">No discovery sprints yet</div>
+          <div className="text-gray-400 text-sm">{t("evolve.noDiscoveriesYet")}</div>
           <button
             onClick={handleDiscover}
             className="text-amber-400 text-xs hover:text-amber-300"
@@ -989,7 +991,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
   function renderTeamTab(p: Project) {
     if (!p.teamAgents || p.teamAgents.length === 0) {
-      return <div className="text-center py-8 text-gray-500 text-xs">No team agents configured</div>;
+      return <div className="text-center py-8 text-gray-500 text-xs">{t("projects.noTeamAgents")}</div>;
     }
 
     return (
@@ -1002,11 +1004,11 @@ export default function ProjectsCard({ card }: CardRendererProps) {
               <span className="text-[9px] text-gray-600 ml-auto">{agent.agentRole}</span>
             </summary>
             <div className="px-3 py-2 border-t border-gray-700 text-[11px] text-gray-400 space-y-1">
-              <div><span className="text-gray-500">Responsibilities:</span> {agent.responsibilities}</div>
-              <div><span className="text-gray-500">Perspective:</span> {agent.perspective}</div>
+              <div><span className="text-gray-500">{t("projects.responsibilities")}</span> {agent.responsibilities}</div>
+              <div><span className="text-gray-500">{t("projects.perspective")}</span> {agent.perspective}</div>
               {agent.goals.length > 0 && (
                 <div>
-                  <span className="text-gray-500">Goals:</span>
+                  <span className="text-gray-500">{t("projects.goals")}</span>
                   <ul className="list-disc list-inside mt-0.5">
                     {agent.goals.map((g, i) => <li key={i}>{g}</li>)}
                   </ul>
@@ -1014,7 +1016,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
               )}
               {agent.painPoints && agent.painPoints.length > 0 && (
                 <div>
-                  <span className="text-red-400/70">Pain Points:</span>
+                  <span className="text-red-400/70">{t("projects.frustrations")}</span>
                   <ul className="list-disc list-inside mt-0.5">
                     {agent.painPoints.map((pp, i) => <li key={i}>{pp}</li>)}
                   </ul>
@@ -1029,7 +1031,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
 
   function renderPersonasTab(p: Project) {
     if (!p.personas || p.personas.length === 0) {
-      return <div className="text-center py-8 text-gray-500 text-xs">No customer personas configured</div>;
+      return <div className="text-center py-8 text-gray-500 text-xs">{t("projects.noPersonas")}</div>;
     }
 
     return (
@@ -1043,10 +1045,10 @@ export default function ProjectsCard({ card }: CardRendererProps) {
               )}
             </summary>
             <div className="px-3 py-2 border-t border-gray-700 text-[11px] text-gray-400 space-y-1">
-              <div><span className="text-gray-500">Background:</span> {persona.background}</div>
+              <div><span className="text-gray-500">{t("projects.background")}</span> {persona.background}</div>
               {persona.goals.length > 0 && (
                 <div>
-                  <span className="text-gray-500">Goals:</span>
+                  <span className="text-gray-500">{t("projects.goals")}</span>
                   <ul className="list-disc list-inside mt-0.5">
                     {persona.goals.map((g, i) => <li key={i}>{g}</li>)}
                   </ul>
@@ -1054,7 +1056,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
               )}
               {persona.frustrations.length > 0 && (
                 <div>
-                  <span className="text-red-400/70">Frustrations:</span>
+                  <span className="text-red-400/70">{t("projects.frustrations")}</span>
                   <ul className="list-disc list-inside mt-0.5">
                     {persona.frustrations.map((f, i) => <li key={i}>{f}</li>)}
                   </ul>
@@ -1062,7 +1064,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
               )}
               {persona.testScenarios.length > 0 && (
                 <div>
-                  <span className="text-gray-500">Test Scenarios:</span>
+                  <span className="text-gray-500">{t("projects.testScenarios")}</span>
                   <ul className="list-disc list-inside mt-0.5">
                     {persona.testScenarios.map((s, i) => <li key={i}>{s}</li>)}
                   </ul>
@@ -1081,11 +1083,11 @@ export default function ProjectsCard({ card }: CardRendererProps) {
     const sid = s.sprintId;
 
     const tabs = ([
-      { value: "overview" as const, label: "Overview", enabled: true },
-      { value: "personas" as const, label: `Personas (${s.phases.personas.count})`, enabled: s.phases.personas.count > 0 },
-      { value: "implementation" as const, label: "Implementation", enabled: s.phases.implementation },
-      { value: "validation" as const, label: `Validation (${s.phases.validation.count})`, enabled: s.phases.validation.count > 0 },
-      { value: "dashboard" as const, label: "Dashboard", enabled: s.phases.dashboard },
+      { value: "overview" as const, label: t("projects.overview"), enabled: true },
+      { value: "personas" as const, label: `${t("projects.personas")} (${s.phases.personas.count})`, enabled: s.phases.personas.count > 0 },
+      { value: "implementation" as const, label: t("projects.implementation"), enabled: s.phases.implementation },
+      { value: "validation" as const, label: `${t("projects.validation")} (${s.phases.validation.count})`, enabled: s.phases.validation.count > 0 },
+      { value: "dashboard" as const, label: t("projects.dashboard"), enabled: s.phases.dashboard },
     ]).filter(t => t.enabled);
 
     return (
@@ -1128,12 +1130,12 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             <div className="space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { label: "Personas", done: s.phases.personas.count > 0, detail: `${s.phases.personas.count} tested` },
-                  { label: "Synthesis", done: s.phases.synthesis, detail: s.phases.synthesis ? "Done" : "\u2014" },
-                  { label: "Implementation", done: s.phases.implementation, detail: s.phases.implementation ? "Done" : "\u2014" },
-                  { label: "Review", done: s.phases.review, detail: s.phases.review ? "Reviewed" : "\u2014" },
-                  { label: "Validation", done: s.phases.validation.count > 0, detail: `${s.phases.validation.count} retests` },
-                  { label: "Dashboard", done: s.phases.dashboard, detail: s.phases.dashboard ? "Built" : "\u2014" },
+                  { label: t("projects.personas"), done: s.phases.personas.count > 0, detail: `${s.phases.personas.count} tested` },
+                  { label: t("projects.synthesis"), done: s.phases.synthesis, detail: s.phases.synthesis ? "Done" : "\u2014" },
+                  { label: t("projects.implementation"), done: s.phases.implementation, detail: s.phases.implementation ? "Done" : "\u2014" },
+                  { label: t("projects.review"), done: s.phases.review, detail: s.phases.review ? "Reviewed" : "\u2014" },
+                  { label: t("projects.validation"), done: s.phases.validation.count > 0, detail: `${s.phases.validation.count} retests` },
+                  { label: t("projects.dashboard"), done: s.phases.dashboard, detail: s.phases.dashboard ? "Built" : "\u2014" },
                 ].map(phase => (
                   <div key={phase.label} className={`p-2 rounded-lg border text-xs ${
                     phase.done ? "bg-violet-500/5 border-violet-500/30" : "bg-gray-800/50 border-gray-700"
@@ -1168,7 +1170,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                       {prettyFilename(file)}
                     </summary>
                     <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("common.loading")}</span>}
                     </div>
                   </details>
                 );
@@ -1187,7 +1189,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                       {prettyFilename(file)}
                     </summary>
                     <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("common.loading")}</span>}
                     </div>
                   </details>
                 );
@@ -1206,7 +1208,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                       {prettyFilename(file)}
                     </summary>
                     <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("common.loading")}</span>}
                     </div>
                   </details>
                 );
@@ -1218,7 +1220,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             <div>
               {sprintDashError && (
                 <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300 mb-3">
-                  Compile error: {sprintDashError}
+                  {t("evolution.compileError")} {sprintDashError}
                 </div>
               )}
               {SprintDashComp && (
@@ -1227,7 +1229,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                 </div>
               )}
               {!SprintDashComp && !sprintDashError && (
-                <div className="text-center py-8 text-gray-500 text-xs">Loading dashboard...</div>
+                <div className="text-center py-8 text-gray-500 text-xs">{t("evolution.loadingDashboard")}</div>
               )}
             </div>
           )}
@@ -1242,12 +1244,12 @@ export default function ProjectsCard({ card }: CardRendererProps) {
     const did = d.discoveryId;
 
     const tabs = ([
-      { value: "overview" as const, label: "Overview", enabled: true },
-      { value: "sourcing" as const, label: `Sourcing (${d.phases.sourcing.count})`, enabled: d.phases.sourcing.count > 0 },
-      { value: "pitches" as const, label: `Pitches (${d.phases.pitches.count})`, enabled: d.phases.pitches.count > 0 },
-      { value: "committee" as const, label: "Committee", enabled: d.phases.committee.count > 0 },
-      { value: "deliverables" as const, label: "Deliverables", enabled: d.phases.deliverables.memo },
-      { value: "dashboard" as const, label: "Dashboard", enabled: d.phases.deliverables.dashboard },
+      { value: "overview" as const, label: t("projects.overview"), enabled: true },
+      { value: "sourcing" as const, label: `${t("projects.dealSourcing")} (${d.phases.sourcing.count})`, enabled: d.phases.sourcing.count > 0 },
+      { value: "pitches" as const, label: `${t("projects.pitches")} (${d.phases.pitches.count})`, enabled: d.phases.pitches.count > 0 },
+      { value: "committee" as const, label: t("projects.committee"), enabled: d.phases.committee.count > 0 },
+      { value: "deliverables" as const, label: t("projects.deliverables"), enabled: d.phases.deliverables.memo },
+      { value: "dashboard" as const, label: t("projects.dashboard"), enabled: d.phases.deliverables.dashboard },
     ]).filter(t => t.enabled);
 
     return (
@@ -1290,11 +1292,11 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             <div className="space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { label: "Deal Sourcing", done: d.phases.sourcing.count > 0, detail: `${d.phases.sourcing.count} reports` },
-                  { label: "Pitches", done: d.phases.pitches.count > 0, detail: `${d.phases.pitches.count} pitched` },
-                  { label: "IC Challenge", done: d.phases.committee.count > 0, detail: d.phases.committee.count > 0 ? "Reviewed" : "\u2014" },
-                  { label: "Dashboard", done: d.phases.deliverables.dashboard, detail: d.phases.deliverables.dashboard ? "Built" : "\u2014" },
-                  { label: "Memo", done: d.phases.deliverables.memo, detail: d.phases.deliverables.memo ? "Written" : "\u2014" },
+                  { label: t("projects.dealSourcing"), done: d.phases.sourcing.count > 0, detail: `${d.phases.sourcing.count} reports` },
+                  { label: t("projects.pitches"), done: d.phases.pitches.count > 0, detail: `${d.phases.pitches.count} pitched` },
+                  { label: t("projects.committee"), done: d.phases.committee.count > 0, detail: d.phases.committee.count > 0 ? "Reviewed" : "\u2014" },
+                  { label: t("projects.dashboard"), done: d.phases.deliverables.dashboard, detail: d.phases.deliverables.dashboard ? "Built" : "\u2014" },
+                  { label: t("projects.memo"), done: d.phases.deliverables.memo, detail: d.phases.deliverables.memo ? "Written" : "\u2014" },
                 ].map(phase => (
                   <div key={phase.label} className={`p-2 rounded-lg border text-xs ${
                     phase.done ? "bg-amber-500/5 border-amber-500/30" : "bg-gray-800/50 border-gray-700"
@@ -1334,7 +1336,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                       {prettyFilename(file)}
                     </summary>
                     <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("common.loading")}</span>}
                     </div>
                   </details>
                 );
@@ -1353,7 +1355,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                       {prettyFilename(file)}
                     </summary>
                     <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("common.loading")}</span>}
                     </div>
                   </details>
                 );
@@ -1372,7 +1374,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                       {prettyFilename(file)}
                     </summary>
                     <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("common.loading")}</span>}
                     </div>
                   </details>
                 );
@@ -1401,7 +1403,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Download PPT
+                    {t("discovery.downloadPPT")}
                   </button>
                 </div>
               )}
@@ -1411,10 +1413,10 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                 return (
                   <details open className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
                     <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
-                      Investment Memo
+                      {t("discovery.investmentMemo")}
                     </summary>
                     <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[600px]">
-                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                      {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("common.loading")}</span>}
                     </div>
                   </details>
                 );
@@ -1426,7 +1428,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
             <div>
               {discoveryDashError && (
                 <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300 mb-3">
-                  Compile error: {discoveryDashError}
+                  {t("discovery.compileError")} {discoveryDashError}
                 </div>
               )}
               {DiscoveryDashComp && (
@@ -1435,7 +1437,7 @@ export default function ProjectsCard({ card }: CardRendererProps) {
                 </div>
               )}
               {!DiscoveryDashComp && !discoveryDashError && (
-                <div className="text-center py-8 text-gray-500 text-xs">Loading dashboard...</div>
+                <div className="text-center py-8 text-gray-500 text-xs">{t("discovery.loadingDashboard")}</div>
               )}
             </div>
           )}

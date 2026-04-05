@@ -454,6 +454,7 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal, autoExpand 
 }) {
   const [expanded, setExpanded] = useState(false);
   const userToggled = useRef(false);
+  const { t } = useT();
   const hasTerminal = !!terminalData?.text;
   const hasSummary = task.status === "completed" && !!(task.structuredResult || task.resultSummary);
   const canExpand = hasTerminal || hasSummary;
@@ -519,7 +520,7 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal, autoExpand 
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenTerminal(task.taskId); }}
                 className="text-[9px] sm:text-[8px] text-gray-500 hover:text-violet-300 active:text-violet-200 p-1 rounded transition-colors"
-                title="Open in terminal view"
+                title={t("orchestrationCard.openTerminal")}
               >
                 {"\u2197"}
               </button>
@@ -645,7 +646,7 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
           {/* Issues found */}
           {issues.length > 0 && (
             <div className="p-2.5 rounded-lg bg-red-500/5 border border-red-500/20">
-              <div className="text-[9px] font-semibold text-red-400 uppercase tracking-wider mb-1.5">Issues Found</div>
+              <div className="text-[9px] font-semibold text-red-400 uppercase tracking-wider mb-1.5">{t("orchestrationCard.issuesFound")}</div>
               <div className="space-y-1">
                 {issues.map((issue, i) => (
                   <div key={i} className="flex items-start gap-1.5 text-[10px]">
@@ -663,7 +664,7 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
           {/* Aggregated Ratings */}
           {avgRatings.length > 0 && (
             <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
-              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Scorecard</div>
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("orchestrationCard.scorecard")}</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {avgRatings.map(({ key, value }) => (
                   <div key={key} className="flex items-center gap-2">
@@ -696,7 +697,7 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
           {/* Fallback when no structured data */}
           {!hasStructured && allFindings.length === 0 && (
             <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
-              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Task Results</div>
+              <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("orchestrationCard.taskResults")}</div>
               <div className="space-y-1.5">
                 {plan.tasks.filter((t) => t.status === "completed" && t.resultSummary).map((task) => (
                   <div key={task.taskId} className="flex items-start gap-1.5 text-[10px]">
@@ -739,7 +740,7 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
       {tab === "logs" && (
         <div>
           {terminalTasks.length === 0 ? (
-            <div className="text-center py-6 text-xs text-gray-500">No session logs available</div>
+            <div className="text-center py-6 text-xs text-gray-500">{t("orchestrationCard.noSessionLogs")}</div>
           ) : (
             <>
               <div className="flex gap-0.5 overflow-x-auto pb-1 mb-1 scrollbar-none">
@@ -781,11 +782,12 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
 /** Aggregated findings section for the summary tab */
 function SummaryFindingsSection({ findings }: { findings: Array<{ title: string; impact?: "high" | "medium" | "low"; role: AgentRole }> }) {
   const [showAll, setShowAll] = useState(false);
+  const { t } = useT();
   const visible = showAll ? findings : findings.slice(0, 8);
 
   return (
     <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
-      <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Key Decisions & Outcomes</div>
+      <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("orchestrationCard.keyDecisions")}</div>
       <div className="space-y-1">
         {visible.map((f, i) => (
           <div key={i} className="flex items-start gap-1.5 text-[10px]">
@@ -807,11 +809,12 @@ function SummaryFindingsSection({ findings }: { findings: Array<{ title: string;
 /** Aggregated recommendations section for the summary tab */
 function SummaryRecsSection({ recs }: { recs: Array<{ title: string; priority?: string; effort?: string; role: AgentRole }> }) {
   const [showAll, setShowAll] = useState(false);
+  const { t } = useT();
   const visible = showAll ? recs : recs.slice(0, 6);
 
   return (
     <div className="p-2.5 rounded-lg bg-gray-800/30 border border-gray-700/40">
-      <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Top Recommendations</div>
+      <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{t("orchestrationCard.topRecommendations")}</div>
       <div className="space-y-1">
         {visible.map((r, i) => (
           <div key={i} className="flex items-start gap-1.5 text-[10px]">

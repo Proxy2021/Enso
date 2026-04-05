@@ -1,4 +1,5 @@
 import type { DesktopPttHandlers } from "./usePushToTalk";
+import { useT } from "../../lib/i18n";
 
 const SendIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -31,6 +32,7 @@ export function SendControls({
   onSend,
   pttHandlers,
 }: SendControlsProps) {
+  const { t } = useT();
   return (
     <>
       {/* Mobile: send-only button (PTT is via textarea long-press) */}
@@ -50,8 +52,8 @@ export function SendControls({
           <button
             disabled={disabled}
             className="relative px-3 py-2.5 min-h-[44px] min-w-[44px] rounded-xl text-sm transition-all duration-150 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-gray-300 disabled:opacity-50 select-none touch-none"
-            title="Hold to talk"
-            aria-label="Hold to talk"
+            title={t("chat.holdToTalk")}
+            aria-label={t("chat.holdToTalk")}
             {...pttHandlers}
           >
             <MicIcon />

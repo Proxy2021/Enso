@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { TIMINGS } from "../lib/constants";
 import { useVoiceInput } from "./VoiceMicButton";
+import { t } from "../lib/i18n";
 
 export interface InstructionModalProps {
   open: boolean;
@@ -26,7 +27,7 @@ export function InstructionModal({
   description,
   placeholder,
   submitLabel,
-  cancelLabel = "Cancel",
+  cancelLabel = t("common.cancel"),
   multiline = false,
   initialValue = "",
   accent = "indigo",

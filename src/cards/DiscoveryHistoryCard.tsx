@@ -4,6 +4,7 @@ import { API } from "../lib/constants";
 import { useFetchFile } from "../hooks/useFetchFile";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
 // ── Error Boundary for dynamic dashboard rendering ──
@@ -67,6 +68,7 @@ interface DiscoveryMeta {
 type ViewTab = "overview" | "sourcing" | "pitches" | "committee" | "deliverables" | "dashboard";
 
 export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
+  const { t } = useT();
   const [discoveries, setDiscoveries] = useState<DiscoveryMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DiscoveryMeta | null>(null);
@@ -168,19 +170,19 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">{"\uD83D\uDD0D"}</span>
-          <h3 className="text-sm font-semibold text-gray-200">Discovery History</h3>
+          <h3 className="text-sm font-semibold text-gray-200">{t("discovery.title")}</h3>
           <span className="text-xs text-gray-500">{discoveries.length} discovery{discoveries.length !== 1 ? " sprints" : " sprint"}</span>
         </div>
 
         {loading && (
-          <div className="text-center py-8 text-gray-500 text-xs">Loading discoveries...</div>
+          <div className="text-center py-8 text-gray-500 text-xs">{t("discovery.loadingDiscoveries")}</div>
         )}
 
         {!loading && discoveries.length === 0 && (
           <div className="text-center py-8 space-y-2">
             <div className="text-2xl">{"\uD83D\uDD0D"}</div>
-            <div className="text-gray-400 text-sm">No discovery sprints yet</div>
-            <div className="text-gray-500 text-xs">Type /discover to launch your first AI VC discovery sprint</div>
+            <div className="text-gray-400 text-sm">{t("discovery.noDiscoveries")}</div>
+            <div className="text-gray-500 text-xs">{t("discovery.noDiscoveriesHint")}</div>
           </div>
         )}
 
@@ -228,12 +230,12 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
   const did = d.discoveryId;
 
   const tabs = ([
-    { value: "overview" as ViewTab, label: "Overview", enabled: true },
-    { value: "sourcing" as ViewTab, label: `Sourcing (${d.phases.sourcing.count})`, enabled: d.phases.sourcing.count > 0 },
-    { value: "pitches" as ViewTab, label: `Pitches (${d.phases.pitches.count})`, enabled: d.phases.pitches.count > 0 },
-    { value: "committee" as ViewTab, label: "Committee", enabled: d.phases.committee.count > 0 },
-    { value: "deliverables" as ViewTab, label: "Deliverables", enabled: d.phases.deliverables.memo },
-    { value: "dashboard" as ViewTab, label: "Dashboard", enabled: d.phases.deliverables.dashboard },
+    { value: "overview" as ViewTab, label: t("discovery.overview"), enabled: true },
+    { value: "sourcing" as ViewTab, label: `${t("discovery.sourcing")} (${d.phases.sourcing.count})`, enabled: d.phases.sourcing.count > 0 },
+    { value: "pitches" as ViewTab, label: `${t("discovery.pitches")} (${d.phases.pitches.count})`, enabled: d.phases.pitches.count > 0 },
+    { value: "committee" as ViewTab, label: t("discovery.committee"), enabled: d.phases.committee.count > 0 },
+    { value: "deliverables" as ViewTab, label: t("discovery.deliverables"), enabled: d.phases.deliverables.memo },
+    { value: "dashboard" as ViewTab, label: t("discovery.dashboard"), enabled: d.phases.deliverables.dashboard },
   ]).filter(t => t.enabled);
 
   return (
@@ -293,7 +295,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
                 </div>
                 {scoringData.projects[0] && (
                   <div className="text-xs text-gray-400">
-                    Top recommendation: <span className="text-white font-medium">{scoringData.projects[0].name}</span>
+                    {t("discovery.topRecommendation")} <span className="text-white font-medium">{scoringData.projects[0].name}</span>
                     {scoringData.projects[0].investmentRange && (
                       <span className="ml-2 text-indigo-400">{scoringData.projects[0].investmentRange}</span>
                     )}
@@ -305,11 +307,11 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
             {/* Phase timeline */}
             <div className="grid grid-cols-5 gap-1.5">
               {[
-                { label: "Sourcing", done: d.phases.sourcing.count > 0, detail: `${d.phases.sourcing.count}` },
-                { label: "Pitches", done: d.phases.pitches.count > 0, detail: `${d.phases.pitches.count}` },
-                { label: "Committee", done: d.phases.committee.count > 0, detail: d.phases.committee.count > 0 ? "\u2713" : "\u2014" },
-                { label: "Dashboard", done: d.phases.deliverables.dashboard, detail: d.phases.deliverables.dashboard ? "\u2713" : "\u2014" },
-                { label: "Memo", done: d.phases.deliverables.memo, detail: d.phases.deliverables.memo ? "\u2713" : "\u2014" },
+                { label: t("discovery.sourcing"), done: d.phases.sourcing.count > 0, detail: `${d.phases.sourcing.count}` },
+                { label: t("discovery.pitches"), done: d.phases.pitches.count > 0, detail: `${d.phases.pitches.count}` },
+                { label: t("discovery.committee"), done: d.phases.committee.count > 0, detail: d.phases.committee.count > 0 ? "\u2713" : "\u2014" },
+                { label: t("discovery.dashboard"), done: d.phases.deliverables.dashboard, detail: d.phases.deliverables.dashboard ? "\u2713" : "\u2014" },
+                { label: t("discovery.deliverables"), done: d.phases.deliverables.memo, detail: d.phases.deliverables.memo ? "\u2713" : "\u2014" },
               ].map(phase => (
                 <div key={phase.label} className={`p-1.5 rounded border text-center text-[10px] ${
                   phase.done ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" : "bg-gray-800/50 border-gray-700 text-gray-500"
@@ -322,15 +324,15 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
 
             {/* Quick actions */}
             <div className="flex items-center gap-3 text-xs">
-              <span className="text-gray-400"><span className="text-gray-200 font-medium">{d.files.length}</span> artifacts</span>
+              <span className="text-gray-400"><span className="text-gray-200 font-medium">{d.files.length}</span> {t("discovery.artifacts")}</span>
               {d.phases.deliverables.dashboard && (
                 <button onClick={() => setActiveTab("dashboard")} className="text-indigo-400 hover:text-indigo-300">
-                  View Dashboard {"\u2192"}
+                  {t("discovery.viewDashboard")}
                 </button>
               )}
               {d.phases.deliverables.memo && (
                 <button onClick={() => setActiveTab("deliverables")} className="text-indigo-400 hover:text-indigo-300">
-                  Read Memo {"\u2192"}
+                  {t("discovery.readMemo")}
                 </button>
               )}
             </div>
@@ -348,7 +350,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
                     {prettyFilename(file)}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("discovery.loading")}</span>}
                   </div>
                 </details>
               );
@@ -367,7 +369,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
                     {prettyFilename(file)}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("discovery.loading")}</span>}
                   </div>
                 </details>
               );
@@ -386,7 +388,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
                     {prettyFilename(file)}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("discovery.loading")}</span>}
                   </div>
                 </details>
               );
@@ -415,7 +417,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                  Download PPT
+                  {t("discovery.downloadPPT")}
                 </button>
               </div>
             )}
@@ -425,10 +427,10 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
               return (
                 <details open className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
                   <summary className="px-3 py-2 text-xs font-medium text-gray-300 cursor-pointer hover:bg-gray-700/50">
-                    Investment Memo
+                    {t("discovery.investmentMemo")}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[600px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("discovery.loading")}</span>}
                   </div>
                 </details>
               );
@@ -440,13 +442,13 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
           <div>
             {dashError && (
               <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300 mb-3">
-                Compile error: {dashError}
+                {t("discovery.compileError")} {dashError}
               </div>
             )}
             {DashboardComp && (
               <DashboardErrorBoundary fallback={
                 <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300">
-                  Dashboard crashed during rendering. Try refreshing the page.
+                  {t("discovery.dashboardCrashed")}
                 </div>
               }>
                 <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
@@ -455,7 +457,7 @@ export default function DiscoveryHistoryCard({ card }: CardRendererProps) {
               </DashboardErrorBoundary>
             )}
             {!DashboardComp && !dashError && (
-              <div className="text-center py-8 text-gray-500 text-xs">Loading dashboard...</div>
+              <div className="text-center py-8 text-gray-500 text-xs">{t("discovery.loadingDashboard")}</div>
             )}
           </div>
         )}

@@ -175,7 +175,7 @@ export default function ConversationSidebar() {
             <rect x="3" y="14" width="7" height="7" rx="1" />
             <rect x="14" y="14" width="7" height="7" rx="1" />
           </svg>
-          <span className="flex-1 text-left font-medium">Apps</span>
+          <span className="flex-1 text-left font-medium">{t("apps.title")}</span>
           <svg
             width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
             className={`transition-transform duration-150 ${appsOpen ? "rotate-180" : ""}`}
@@ -186,7 +186,7 @@ export default function ConversationSidebar() {
         {appsOpen && (
           <div className="max-h-48 overflow-y-auto px-1.5 pb-1.5 space-y-0.5">
             {apps.length === 0 ? (
-              <p className="text-[10px] text-gray-600 text-center py-3">No apps installed</p>
+              <p className="text-[10px] text-gray-600 text-center py-3">{t("apps.noAppsInstalled")}</p>
             ) : apps.map((app) => (
               <button
                 key={app.appId}

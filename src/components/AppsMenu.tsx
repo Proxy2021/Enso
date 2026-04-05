@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import { SystemEnhanceDialog } from "./SystemEnhanceDialog";
 import { EnsoCodeDialog } from "./EnsoCodeDialog";
 
@@ -12,6 +13,7 @@ const APP_ICONS: Record<string, string> = {
 };
 
 export default function AppsMenu() {
+  const { t } = useT();
   const apps = useChatStore((s) => s.apps);
   const fetchApps = useChatStore((s) => s.fetchApps);
   const runApp = useChatStore((s) => s.runApp);
@@ -96,7 +98,7 @@ export default function AppsMenu() {
             ? "border-gray-700 text-gray-600 cursor-not-allowed"
             : "border-gray-700 text-gray-300 hover:border-gray-600 hover:text-gray-200"
         }`}
-        title="Apps"
+        title={t("apps.title")}
       >
         <svg
           className="w-3.5 h-3.5"
@@ -116,7 +118,7 @@ export default function AppsMenu() {
         <div className="absolute right-0 mt-1 w-72 rounded-lg border border-gray-700 bg-gray-800 shadow-lg z-50 overflow-hidden">
           {apps.length === 0 ? (
             <div className="px-4 py-6 text-center">
-              <div className="text-gray-500 text-sm">No apps available</div>
+              <div className="text-gray-500 text-sm">{t("apps.noApps")}</div>
               <div className="text-gray-600 text-xs mt-1">
                 Apps will appear here once the server is connected.
               </div>
@@ -176,7 +178,7 @@ export default function AppsMenu() {
                             {isDeletable && (
                               <span
                                 role="button"
-                                title="Delete app"
+                                title={t("apps.deleteApp")}
                                 onClick={(e) => handleDeleteClick(e, app.appId)}
                                 className="text-gray-500 hover:text-red-400 transition-all duration-150 cursor-pointer p-0.5"
                               >
@@ -190,7 +192,7 @@ export default function AppsMenu() {
                             {isDeletable && (
                               <span
                                 role="button"
-                                title="Promote to project"
+                                title={t("apps.promoteToProject")}
                                 onClick={(e) => handlePromote(e, app.appId)}
                                 className="text-gray-500 hover:text-blue-400 transition-all duration-150 cursor-pointer p-0.5"
                               >
@@ -201,7 +203,7 @@ export default function AppsMenu() {
                             )}
                             {/* Shipped app indicator */}
                             {app.shipped && (
-                              <span className="text-[9px] text-emerald-500/70" title="Shipped with project">
+                              <span className="text-[9px] text-emerald-500/70" title={t("apps.shippedWithProject")}>
                                 in repo
                               </span>
                             )}

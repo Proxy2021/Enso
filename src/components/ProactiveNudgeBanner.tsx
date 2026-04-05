@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import type { ProactiveSuggestionAction } from "@shared/types";
 
 const PILLAR_COLORS: Record<string, string> = {
@@ -29,6 +30,7 @@ const PILLAR_TEXT: Record<string, string> = {
  * and there are suggestions available beyond what the WelcomeCard shows.
  */
 export default function ProactiveNudgeBanner() {
+  const { t } = useT();
   const suggestions = useChatStore((s) => s.proactiveSuggestions);
   const cardOrder = useChatStore((s) => s.cardOrder);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -88,7 +90,7 @@ export default function ProactiveNudgeBanner() {
         <button
           onClick={() => handleDismiss(nudge.id, nudge.pillar)}
           className="text-gray-600 hover:text-gray-400 text-xs transition-colors p-0.5"
-          title="Dismiss"
+          title={t("common.dismiss")}
         >
           &#x2715;
         </button>

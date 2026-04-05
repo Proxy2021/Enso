@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useChatStore } from "../store/chat";
 import { AppBuilderDialog } from "./AppBuilderDialog";
+import { useT } from "../lib/i18n";
 
 const CATEGORY_ICONS: Record<string, string> = {
   table: "\uD83D\uDCCA",      // 📊
@@ -23,6 +24,7 @@ interface AppSuggestionProps {
 }
 
 export default function AppSuggestion({ cardId, suggestion, cardText }: AppSuggestionProps) {
+  const { t } = useT();
   const [dismissed, setDismissed] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const enhanceCardWithFamily = useChatStore((s) => s.enhanceCardWithFamily);
@@ -86,7 +88,7 @@ export default function AppSuggestion({ cardId, suggestion, cardText }: AppSugge
         <button
           onClick={handleDismiss}
           className="shrink-0 text-gray-500 hover:text-gray-300 text-xs px-1 transition-all duration-150"
-          title="Dismiss"
+          title={t("common.dismiss")}
         >
           &times;
         </button>

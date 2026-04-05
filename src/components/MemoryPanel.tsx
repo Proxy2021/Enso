@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useMemoryApi } from "../hooks/useMemoryApi";
+import { useT } from "../lib/i18n";
 
 export default function MemoryPanel({ show, onClose }: { show: boolean; onClose: () => void }) {
+  const { t } = useT();
   const { memory, loading, saving, clearing, historyCount, fetchMemory, saveMemory, clearHistory } = useMemoryApi();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
@@ -39,7 +41,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
   };
 
   const content = activeTab === "user" ? memory?.user : activeTab === "memory" ? memory?.memory : null;
-  const tabLabel = activeTab === "user" ? "About You" : activeTab === "memory" ? "Memory" : "Chat History";
+  const tabLabel = activeTab === "user" ? t("memory.aboutYou") : activeTab === "memory" ? t("memory.memory") : t("memory.chatHistory");
   const editableTab = activeTab === "user" || activeTab === "memory";
 
   return (
@@ -55,7 +57,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
               <path d="M12 2a5 5 0 0 1 5 5v3a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5Z" />
               <path d="M8.21 13.89 7 23l5-3 5 3-1.21-9.12" />
             </svg>
-            <h2 className="text-lg font-semibold text-gray-100">Memory</h2>
+            <h2 className="text-lg font-semibold text-gray-100">{t("memory.title")}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-all duration-150">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -71,19 +73,19 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
             onClick={() => { setActiveTab("user"); setEditing(false); setClearConfirm(false); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "user" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
-            About You
+            {t("memory.aboutYou")}
           </button>
           <button
             onClick={() => { setActiveTab("memory"); setEditing(false); setClearConfirm(false); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "memory" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
-            Memory
+            {t("memory.memory")}
           </button>
           <button
             onClick={() => { setActiveTab("history"); setEditing(false); setClearConfirm(false); }}
             className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "history" ? "bg-violet-500/20 text-violet-300 font-medium" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"}`}
           >
-            Chat History
+            {t("memory.chatHistory")}
           </button>
         </div>
 
@@ -92,7 +94,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
           {activeTab === "history" ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-gray-300">Chat History</h3>
+                <h3 className="text-sm font-medium text-gray-300">{t("memory.chatHistory")}</h3>
               </div>
               <div className="bg-gray-800/60 rounded-lg border border-gray-700/50 p-4 space-y-3">
                 <div className="flex items-center gap-3">
@@ -101,8 +103,8 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                     <circle cx="12" cy="12" r="10" />
                   </svg>
                   <div>
-                    <p className="text-sm text-gray-300">{historyCount} cards in current session</p>
-                    <p className="text-xs text-gray-500 mt-0.5">History is restored automatically when you refresh the page.</p>
+                    <p className="text-sm text-gray-300">{t("memory.historyCount").replace("{count}", String(historyCount))}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{t("memory.historyHint")}</p>
                   </div>
                 </div>
               </div>
@@ -111,20 +113,20 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
               <div className="pt-2">
                 {clearConfirm ? (
                   <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
-                    <p className="text-sm text-red-300">Are you sure? This will clear all chat history and cannot be undone.</p>
+                    <p className="text-sm text-red-300">{t("memory.clearConfirm")}</p>
                     <div className="flex gap-2 justify-end">
                       <button
                         onClick={() => setClearConfirm(false)}
                         className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-all duration-150"
                       >
-                        Cancel
+                        {t("common.cancel")}
                       </button>
                       <button
                         onClick={handleClearHistory}
                         disabled={clearing}
                         className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white rounded-md transition-all duration-150 disabled:opacity-50"
                       >
-                        {clearing ? "Clearing..." : "Yes, Clear All"}
+                        {clearing ? t("memory.clearing") : t("memory.yesClearAll")}
                       </button>
                     </div>
                   </div>
@@ -138,7 +140,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                       <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
                       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                     </svg>
-                    Clear Chat History
+                    {t("memory.clearChatHistory")}
                   </button>
                 )}
               </div>
@@ -151,8 +153,8 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
             <div className="space-y-3">
               <p className="text-xs text-gray-500">
                 {activeTab === "user"
-                  ? "Tell Enso about yourself — your name, preferences, interests, work. This personalizes all responses."
-                  : "Edit Enso's memory. This is what Enso remembers from your conversations."}
+                  ? t("memory.aboutYouPlaceholder")
+                  : t("memory.memoryPlaceholder")}
               </p>
               <textarea
                 value={editText}
@@ -165,10 +167,10 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
               />
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-md hover:bg-gray-800 transition-all duration-150">
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded-md transition-all duration-150 disabled:opacity-50">
-                  {saving ? "Saving..." : "Save"}
+                  {saving ? t("settings.saving") : t("common.save")}
                 </button>
               </div>
             </div>
@@ -178,7 +180,7 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                 <h3 className="text-sm font-medium text-gray-300">{tabLabel}</h3>
                 {editableTab && (
                   <button onClick={startEdit} className="text-xs text-violet-400 hover:text-violet-300 transition-all duration-150">
-                    {content ? "Edit" : "Create"}
+                    {content ? t("common.edit") : t("settings.create")}
                   </button>
                 )}
               </div>
@@ -190,14 +192,14 @@ export default function MemoryPanel({ show, onClose }: { show: boolean; onClose:
                 <div className="text-center py-8">
                   <p className="text-sm text-gray-500 italic">
                     {activeTab === "user"
-                      ? "No profile set yet. Click \"Create\" to tell Enso about yourself."
-                      : "No memory yet. Enso will accumulate notes here as you chat."}
+                      ? t("memory.noProfileYet")
+                      : t("memory.noMemoryYet")}
                   </p>
                   <button
                     onClick={startEdit}
                     className="mt-3 px-4 py-2 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-all duration-150"
                   >
-                    {activeTab === "user" ? "Create Profile" : "Add Memory"}
+                    {activeTab === "user" ? t("settings.createProfile") : t("settings.addMemory")}
                   </button>
                 </div>
               )}

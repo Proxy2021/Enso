@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { t } from "../lib/i18n";
 
 type MediaType = "image" | "video" | "audio" | "document" | "unknown";
 
@@ -114,7 +115,7 @@ export default function MediaGallery({ urls }: { urls: string[] }) {
           mediaElement = (
             <div className="flex items-center gap-2.5 px-3 py-3 bg-gray-800 min-h-[3rem]">
               <FileIcon className="w-5 h-5 text-gray-500 shrink-0" />
-              <span className="text-xs text-gray-400 truncate flex-1">Attachment</span>
+              <span className="text-xs text-gray-400 truncate flex-1">{t("markdown.attachment")}</span>
               <DownloadIcon className="w-4 h-4 text-gray-500 shrink-0" />
             </div>
           );

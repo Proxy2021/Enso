@@ -43,21 +43,21 @@ const ROLE_COLORS: Record<string, string> = {
   coder: "bg-violet-500", builder: "bg-orange-500",
 };
 
-const TREND_STYLES: Record<string, { label: string; class: string }> = {
-  improving: { label: "Improving", class: "text-emerald-400" },
-  stable:    { label: "Stable",    class: "text-gray-400" },
-  declining: { label: "Declining", class: "text-amber-400" },
+const TREND_STYLES: Record<string, { key: string; class: string }> = {
+  improving: { key: "projects.improving", class: "text-emerald-400" },
+  stable:    { key: "projects.stable",    class: "text-gray-400" },
+  declining: { key: "projects.declining", class: "text-amber-400" },
 };
 
-function projectStatusBadge(project: Project): { label: string; class: string } {
+function projectStatusBadge(project: Project): { key: string; class: string } {
   const daysSinceUpdate = (Date.now() - project.updatedAt) / (1000 * 60 * 60 * 24);
   if (project.currentSprint && daysSinceUpdate < 2)
-    return { label: "Active", class: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" };
+    return { key: "projects.active", class: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" };
   if (daysSinceUpdate < 7)
-    return { label: "Active", class: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" };
+    return { key: "projects.active", class: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" };
   if (daysSinceUpdate < 30)
-    return { label: "Idle", class: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30" };
-  return { label: "Stalled", class: "bg-red-500/15 text-red-400 border-red-500/25" };
+    return { key: "projects.idle", class: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30" };
+  return { key: "projects.stalled", class: "bg-red-500/15 text-red-400 border-red-500/25" };
 }
 
 // ── Component ──
@@ -91,7 +91,7 @@ export default function ProjectsView() {
       setProjects(data.projects ?? data ?? []);
       setError(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to fetch");
+      setError(err instanceof Error ? err.message : t("error.fetchFailed"));
     }
     setLoading(false);
   }, []);
@@ -139,7 +139,7 @@ export default function ProjectsView() {
       setView("list");
       await fetchProjects();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Import failed");
+      setError(err instanceof Error ? err.message : t("error.importFailed"));
     }
     setImporting(false);
   };
@@ -155,7 +155,7 @@ export default function ProjectsView() {
           <button onClick={() => setView("list")} className="text-sm text-gray-400 hover:text-gray-200 mb-4 cursor-pointer">← Back</button>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Project Name</label>
+              <label className="block text-xs text-gray-400 mb-1">{t("projects.projectName")}</label>
               <input
                 value={importName} onChange={(e) => setImportName(e.target.value)}
                 placeholder="e.g., AlphaRank"
@@ -163,7 +163,7 @@ export default function ProjectsView() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Codebase Path</label>
+              <label className="block text-xs text-gray-400 mb-1">{t("projects.codebasePath")}</label>
               <input
                 value={importPath} onChange={(e) => setImportPath(e.target.value)}
                 placeholder="e.g., /Users/me/projects/my-app"
@@ -223,7 +223,7 @@ export default function ProjectsView() {
             <div className="space-y-4">
               {p.vision && (
                 <div className="rounded-xl border border-gray-800/50 bg-gray-900/30 p-4">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Vision</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">{t("projects.vision")}</p>
                   <p className="text-sm text-gray-300 leading-relaxed">{p.vision}</p>
                 </div>
               )}
@@ -237,11 +237,11 @@ export default function ProjectsView() {
               {p.sprintScoreTrend && p.sprintScoreTrend.length >= 2 && (
                 <div className="rounded-xl border border-gray-800/50 bg-gray-900/30 p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">Sprint Score Trend</p>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">{t("projects.sprintTrend")}</p>
                     {(() => {
-                      const t = deriveTrend(p.sprintScoreTrend!);
-                      const s = TREND_STYLES[t];
-                      return <span className={`text-[10px] font-medium ${s.class}`}>{s.label}</span>;
+                      const tr = deriveTrend(p.sprintScoreTrend!);
+                      const s = TREND_STYLES[tr];
+                      return <span className={`text-[10px] font-medium ${s.class}`}>{t(s.key)}</span>;
                     })()}
                   </div>
                   <div className="w-full"><Sparkline data={p.sprintScoreTrend} width={240} height={32} /></div>
@@ -268,7 +268,7 @@ export default function ProjectsView() {
                 </div>
               ))}
               {(!p.teamAgents || p.teamAgents.length === 0) && (
-                <p className="text-sm text-gray-600 py-4 text-center">No team agents configured</p>
+                <p className="text-sm text-gray-600 py-4 text-center">{t("projects.noTeamAgents")}</p>
               )}
             </div>
           )}
@@ -285,7 +285,7 @@ export default function ProjectsView() {
                   <p className="text-xs text-gray-400">{persona.background}</p>
                   {persona.goals?.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-[10px] text-gray-500 mb-0.5">Goals:</p>
+                      <p className="text-[10px] text-gray-500 mb-0.5">{t("projects.goals")}</p>
                       <ul className="text-xs text-gray-400 list-disc list-inside space-y-0.5">
                         {persona.goals.map((g, i) => <li key={i}>{g}</li>)}
                       </ul>
@@ -294,7 +294,7 @@ export default function ProjectsView() {
                 </div>
               ))}
               {(!p.personas || p.personas.length === 0) && (
-                <p className="text-sm text-gray-600 py-4 text-center">No personas configured</p>
+                <p className="text-sm text-gray-600 py-4 text-center">{t("projects.noPersonas")}</p>
               )}
             </div>
           )}
@@ -304,8 +304,8 @@ export default function ProjectsView() {
             <div className="space-y-2">
               {sprints.length === 0 ? (
                 <div className="text-center py-8 text-gray-600">
-                  <p className="text-sm">No sprints yet</p>
-                  <p className="text-xs mt-1">Click "Evolve" to start a sprint for this project</p>
+                  <p className="text-sm">{t("projects.noSprintsYet")}</p>
+                  <p className="text-xs mt-1">{t("projects.noGoals")}</p>
                 </div>
               ) : sprints.map((sp) => (
                 <div key={sp.sprintId} className="rounded-xl border border-gray-800/50 bg-gray-900/30 px-4 py-3">
@@ -356,8 +356,8 @@ export default function ProjectsView() {
             <svg className="w-10 h-10 mb-3 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
             </svg>
-            <p className="text-sm font-medium">No projects</p>
-            <p className="text-xs mt-1 text-gray-600">Import a project to get started with AI-powered evolution</p>
+            <p className="text-sm font-medium">{t("projects.noProjects")}</p>
+            <p className="text-xs mt-1 text-gray-600">{t("projects.noProjectsHint")}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -374,7 +374,7 @@ export default function ProjectsView() {
                 <div className="flex items-center justify-between mb-1 cursor-pointer" onClick={() => openDetail(project)}>
                   <div className="flex items-center gap-2 min-w-0">
                     <h3 className="text-sm font-medium text-gray-200 truncate">{project.name}</h3>
-                    <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded border shrink-0 ${status.class}`}>{status.label}</span>
+                    <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded border shrink-0 ${status.class}`}>{t(status.key)}</span>
                   </div>
                   <span className="text-[10px] text-gray-600 shrink-0 ml-2">{timeAgo(project.updatedAt)}</span>
                 </div>
@@ -395,7 +395,7 @@ export default function ProjectsView() {
                       <Sparkline data={trend} width={56} height={16} className="shrink-0" />
                     )}
                     {trendStyle && (
-                      <span className={`text-[10px] font-medium ${trendStyle.class}`}>{trendStyle.label}</span>
+                      <span className={`text-[10px] font-medium ${trendStyle.class}`}>{t(trendStyle.key)}</span>
                     )}
                   </div>
                   <button

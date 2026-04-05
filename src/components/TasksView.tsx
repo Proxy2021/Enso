@@ -282,7 +282,7 @@ export default function TasksView() {
         {/* Active Orchestrations */}
         {activeOrchs.length > 0 && (
           <section>
-            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">Active Orchestrations</h2>
+            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">{t("tasks.activeOrch")}</h2>
             <div className="space-y-2">
               {activeOrchs.map((o) => {
                 const cardId = orchToCard[o.orchestrationId];
@@ -311,9 +311,9 @@ export default function TasksView() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {o.status === "executing" && (
-                        <button onClick={() => doAction("POST", `/api/orchestrations/${o.orchestrationId}/pause`, `pause-${o.orchestrationId}`)} disabled={!!actionInFlight} className="px-2 py-1 text-[10px] font-medium rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/25 hover:bg-yellow-500/20 transition-colors disabled:opacity-50 cursor-pointer">Pause</button>
+                        <button onClick={() => doAction("POST", `/api/orchestrations/${o.orchestrationId}/pause`, `pause-${o.orchestrationId}`)} disabled={!!actionInFlight} className="px-2 py-1 text-[10px] font-medium rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/25 hover:bg-yellow-500/20 transition-colors disabled:opacity-50 cursor-pointer">{t("common.pause")}</button>
                       )}
-                      <button onClick={() => doAction("DELETE", `/api/orchestrations/${o.orchestrationId}`, `cancel-${o.orchestrationId}`)} disabled={!!actionInFlight} className="px-2 py-1 text-[10px] font-medium rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors disabled:opacity-50 cursor-pointer">Cancel</button>
+                      <button onClick={() => doAction("DELETE", `/api/orchestrations/${o.orchestrationId}`, `cancel-${o.orchestrationId}`)} disabled={!!actionInFlight} className="px-2 py-1 text-[10px] font-medium rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors disabled:opacity-50 cursor-pointer">{t("common.cancel")}</button>
                     </div>
                   </div>
                 </div>
@@ -325,7 +325,7 @@ export default function TasksView() {
         {/* Active Sessions */}
         {activeSessions.length > 0 && (
           <section>
-            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">Active Sessions</h2>
+            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">{t("tasks.activeSess")}</h2>
             <div className="space-y-2">
               {activeSessions.map((s) => {
                 // Find card: direct session match, or via parent orchestration
@@ -345,7 +345,7 @@ export default function TasksView() {
                     </div>
                     <p className="text-sm text-gray-300 truncate">{truncate(s.description, 100)}</p>
                   </div>
-                  <button onClick={() => doAction("DELETE", `/api/sessions/${s.runId}`, `stop-${s.runId}`)} disabled={!!actionInFlight} className="px-2.5 py-1 text-[10px] font-medium rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors disabled:opacity-50 shrink-0 cursor-pointer">Stop</button>
+                  <button onClick={() => doAction("DELETE", `/api/sessions/${s.runId}`, `stop-${s.runId}`)} disabled={!!actionInFlight} className="px-2.5 py-1 text-[10px] font-medium rounded bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors disabled:opacity-50 shrink-0 cursor-pointer">{t("common.stop")}</button>
                 </div>
               );})}
             </div>
@@ -357,7 +357,7 @@ export default function TasksView() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-blue-400" />
-              <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Scheduled Tasks</h2>
+              <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{t("tasks.scheduledTasks")}</h2>
               {scheduledTasks.length > 0 && (
                 <span className="text-[10px] text-gray-600">({scheduledTasks.filter((t) => t.enabled).length} active)</span>
               )}
@@ -373,8 +373,8 @@ export default function TasksView() {
           {scheduledTasks.length === 0 ? (
             <div className="rounded-xl border border-gray-800/50 bg-gray-900/30 px-4 py-6 text-center">
               <Clock className="w-6 h-6 mx-auto mb-2 text-gray-600" />
-              <p className="text-xs text-gray-500">No scheduled tasks yet</p>
-              <p className="text-[10px] text-gray-600 mt-1">Create tasks that run automatically on a schedule</p>
+              <p className="text-xs text-gray-500">{t("tasks.noScheduled")}</p>
+              <p className="text-[10px] text-gray-600 mt-1">{t("tasks.noScheduledHint")}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -412,7 +412,7 @@ export default function TasksView() {
                       {task.lastRunStatus !== "running" && (
                         <button
                           onClick={() => triggerScheduledTask(task.taskId)}
-                          title="Run now"
+                          title={t("tasks.runNow")}
                           className="p-1.5 rounded-lg text-gray-500 hover:text-green-400 hover:bg-green-500/10 transition-colors cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5" />
@@ -427,7 +427,7 @@ export default function TasksView() {
                       </button>
                       <button
                         onClick={() => { setEditingTask(task); setShowTaskDialog(true); }}
-                        title="Edit"
+                        title={t("common.edit")}
                         className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors cursor-pointer"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -442,7 +442,7 @@ export default function TasksView() {
                       ) : (
                         <button
                           onClick={() => setDeleteConfirm(task.taskId)}
-                          title="Delete"
+                          title={t("common.delete")}
                           className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -473,7 +473,7 @@ export default function TasksView() {
         {/* Recoverable Orchestrations */}
         {recoverables.length > 0 && (
           <section>
-            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">Recoverable</h2>
+            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">{t("tasks.recoverableTitle")}</h2>
             <div className="space-y-2">
               {recoverables.map((r) => (
                 <div key={r.orchestrationId} className="rounded-xl border border-gray-700/50 bg-gray-800/40 px-4 py-3 flex items-center justify-between gap-3">
@@ -499,15 +499,15 @@ export default function TasksView() {
             <svg className="w-10 h-10 mb-3 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-            <p className="text-sm font-medium">No tasks</p>
-            <p className="text-xs mt-1 text-gray-600">Active sessions, orchestrations, and completed tasks will appear here</p>
+            <p className="text-sm font-medium">{t("tasks.noTasks")}</p>
+            <p className="text-xs mt-1 text-gray-600">{t("tasks.noTasksHint")}</p>
           </div>
         )}
 
         {/* Completed Tasks */}
         {completedTasks.length > 0 && (
           <section>
-            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">Completed</h2>
+            <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">{t("tasks.completedTitle")}</h2>
             <div className="space-y-1.5">
               {completedTasks.map((task) => (
                 <button

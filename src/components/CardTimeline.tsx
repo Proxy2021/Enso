@@ -86,6 +86,7 @@ function cardMatchesSearch(card: Card, query: string): boolean {
 }
 
 function SearchBar() {
+  const { t } = useT();
   const searchQuery = useChatStore((s) => s.cardSearchQuery);
   const searchVisible = useChatStore((s) => s.cardSearchVisible);
   const setQuery = useChatStore((s) => s.setCardSearchQuery);
@@ -107,7 +108,7 @@ function SearchBar() {
           type="text"
           value={searchQuery}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search cards..."
+          placeholder={t("cardTimeline.searchPlaceholder")}
           className="flex-1 bg-transparent text-xs text-gray-200 placeholder-gray-500 outline-none"
           onKeyDown={(e) => { if (e.key === "Escape") setVisible(false); }}
         />

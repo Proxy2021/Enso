@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useRef, useState } from "react";
+import { t } from "../lib/i18n";
 
 interface MarkdownTextProps {
   text: string;
@@ -446,14 +447,14 @@ function MermaidDiagram({ code }: { code: string }) {
           const { svg } = await m.render(id, renderCode);
           if (!cancelled) setSvgHtml(svg);
         } catch (e: any) {
-          if (!cancelled) setError(e?.message || "Diagram render failed");
+          if (!cancelled) setError(e?.message || t("error.diagramRenderFailed"));
         } finally {
           // Clean up temp container (removes any error SVGs mermaid injected)
           tempContainer.remove();
         }
       })
       .catch(() => {
-        if (!cancelled) setError("Failed to load Mermaid library");
+        if (!cancelled) setError(t("error.mermaidLoadFailed"));
       });
     return () => { cancelled = true; };
   }, [code]);
@@ -492,7 +493,7 @@ function MermaidDiagram({ code }: { code: string }) {
   if (!svgHtml) {
     return (
       <div className="bg-gray-900/50 rounded-md px-3 py-4 my-1.5 flex items-center justify-center border border-gray-700/50">
-        <span className="text-xs text-gray-400 animate-pulse">Rendering diagram...</span>
+        <span className="text-xs text-gray-400 animate-pulse">{t("card.renderingDiagram")}</span>
       </div>
     );
   }

@@ -1,5 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 
 function truncate(text: string | undefined, max: number): string {
   if (!text) return "Untitled app";
@@ -7,6 +8,7 @@ function truncate(text: string | undefined, max: number): string {
 }
 
 export default function PinnedSidebar() {
+  const { t } = useT();
   const { pinnedCards, cards, showSidebar } = useChatStore(
     useShallow((s) => ({
       pinnedCards: s.pinnedCards,
@@ -37,7 +39,7 @@ export default function PinnedSidebar() {
       />
       <aside className="fixed md:relative right-0 top-0 bottom-0 w-[75vw] max-w-64 sm:w-56 z-40 md:z-0 border-l border-gray-800 bg-gray-950/95 backdrop-blur overflow-y-auto flex flex-col transition-transform duration-200">
         <div className="flex items-center justify-between px-3 py-2.5 sm:py-2 border-b border-gray-800 shrink-0 pt-[max(0.625rem,env(safe-area-inset-top))] md:pt-2">
-          <span className="text-xs font-medium text-gray-400">Pinned Apps</span>
+          <span className="text-xs font-medium text-gray-400">{t("apps.pinnedApps")}</span>
           <button
             onClick={toggleSidebar}
             className="w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center text-gray-500 hover:text-gray-300 active:scale-[0.9] text-lg sm:text-sm leading-none transition-all duration-150"
@@ -67,7 +69,7 @@ export default function PinnedSidebar() {
                 <button
                   onClick={(e) => { e.stopPropagation(); unpinCard(id); }}
                   className="text-gray-600 hover:text-gray-300 active:text-gray-100 text-sm p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0"
-                  title="Unpin"
+                  title={t("apps.unpin")}
                 >
                   &times;
                 </button>

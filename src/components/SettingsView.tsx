@@ -74,7 +74,7 @@ export default function SettingsView() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-200">{t("settings.dataSources")}</p>
-              <p className="text-xs text-gray-500">Scan browser, email, files for personalization</p>
+              <p className="text-xs text-gray-500">{t("settings.scanBrowserDesc")}</p>
             </div>
             <svg
               width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -104,7 +104,7 @@ export default function SettingsView() {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-200">Appearance</p>
+              <p className="text-sm font-medium text-gray-200">{t("settings.appearance")}</p>
               <p className="text-xs text-gray-500">{theme === "dark" ? "Dark mode" : "Light mode"}</p>
             </div>
             <button
@@ -154,15 +154,15 @@ export default function SettingsView() {
             </div>
             <div className="p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50">
               <p className="text-2xl font-bold text-gray-200">{state === "connected" ? "Online" : "Offline"}</p>
-              <p className="text-xs text-gray-500 mt-1">Status</p>
+              <p className="text-xs text-gray-500 mt-1">{t("settings.status")}</p>
             </div>
           </div>
 
           {/* Debug reporter */}
           <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-900/40 border border-gray-800/50">
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-200">Debug</p>
-              <p className="text-xs text-gray-500">Report issues & view logs</p>
+              <p className="text-sm font-medium text-gray-200">{t("settings.debug")}</p>
+              <p className="text-xs text-gray-500">{t("settings.debugDesc")}</p>
             </div>
             <DebugReporter />
           </div>

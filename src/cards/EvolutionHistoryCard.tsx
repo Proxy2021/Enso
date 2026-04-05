@@ -4,6 +4,7 @@ import { API } from "../lib/constants";
 import { useFetchFile } from "../hooks/useFetchFile";
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
+import { useT } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
 
 interface SprintMeta {
@@ -28,6 +29,7 @@ interface SprintMeta {
 type ViewTab = "overview" | "personas" | "implementation" | "validation" | "dashboard" | "discussion";
 
 export default function EvolutionHistoryCard({ card }: CardRendererProps) {
+  const { t } = useT();
   const [sprints, setSprints] = useState<SprintMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSprint, setSelectedSprint] = useState<SprintMeta | null>(null);
@@ -117,19 +119,19 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-lg">🧬</span>
-          <h3 className="text-sm font-semibold text-gray-200">Evolution History</h3>
+          <h3 className="text-sm font-semibold text-gray-200">{t("evolution.title")}</h3>
           <span className="text-xs text-gray-500">{sprints.length} sprint{sprints.length !== 1 ? "s" : ""}</span>
         </div>
 
         {loading && (
-          <div className="text-center py-8 text-gray-500 text-xs">Loading sprints...</div>
+          <div className="text-center py-8 text-gray-500 text-xs">{t("evolution.loadingSprints")}</div>
         )}
 
         {!loading && sprints.length === 0 && (
           <div className="text-center py-8 space-y-2">
             <div className="text-2xl">🧬</div>
-            <div className="text-gray-400 text-sm">No evolution sprints yet</div>
-            <div className="text-gray-500 text-xs">Click the Evolve tile or type /evolve to start your first sprint</div>
+            <div className="text-gray-400 text-sm">{t("evolution.noSprints")}</div>
+            <div className="text-gray-500 text-xs">{t("evolution.noSprintsHint")}</div>
           </div>
         )}
 
@@ -180,12 +182,12 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
   const s = selectedSprint;
   const sid = s.sprintId;
   const tabs = ([
-    { value: "overview" as ViewTab, label: "Overview", enabled: true },
-    { value: "personas" as ViewTab, label: `Personas (${s.phases.personas.count})`, enabled: s.phases.personas.count > 0 },
-    { value: "implementation" as ViewTab, label: "Implementation", enabled: s.phases.design || s.phases.implementation },
-    { value: "validation" as ViewTab, label: `Validation (${s.phases.validation.count})`, enabled: s.phases.validation.count > 0 },
-    { value: "dashboard" as ViewTab, label: "Dashboard", enabled: s.phases.dashboard },
-    { value: "discussion" as ViewTab, label: "Discussion", enabled: s.phases.discussion || s.phases.synthesis },
+    { value: "overview" as ViewTab, label: t("evolution.overview"), enabled: true },
+    { value: "personas" as ViewTab, label: `${t("evolution.personas")} (${s.phases.personas.count})`, enabled: s.phases.personas.count > 0 },
+    { value: "implementation" as ViewTab, label: t("evolution.implementation"), enabled: s.phases.design || s.phases.implementation },
+    { value: "validation" as ViewTab, label: `${t("evolution.validation")} (${s.phases.validation.count})`, enabled: s.phases.validation.count > 0 },
+    { value: "dashboard" as ViewTab, label: t("evolution.dashboard"), enabled: s.phases.dashboard },
+    { value: "discussion" as ViewTab, label: t("evolution.discussion"), enabled: s.phases.discussion || s.phases.synthesis },
   ]).filter(t => t.enabled);
 
   return (
@@ -230,13 +232,13 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
             {/* Phase timeline */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { label: "Personas", done: s.phases.personas.count > 0, detail: `${s.phases.personas.count} tested` },
-                { label: "Synthesis", done: s.phases.synthesis, detail: s.phases.synthesis ? "Complete" : "—" },
-                { label: "Discussion", done: s.phases.discussion, detail: s.phases.discussion ? "Complete" : "—" },
-                { label: "Implementation", done: s.phases.implementation, detail: s.phases.implementation ? "Applied" : "—" },
-                { label: "Review", done: s.phases.review, detail: s.phases.review ? "Passed" : "—" },
-                { label: "Validation", done: s.phases.validation.count > 0, detail: `${s.phases.validation.count} re-tested` },
-                { label: "Dashboard", done: s.phases.dashboard, detail: s.phases.dashboard ? "Built" : "—" },
+                { label: t("evolution.personas"), done: s.phases.personas.count > 0, detail: `${s.phases.personas.count} ${t("evolution.tested")}` },
+                { label: t("evolution.synthesis"), done: s.phases.synthesis, detail: s.phases.synthesis ? t("evolution.complete") : "—" },
+                { label: t("evolution.discussion"), done: s.phases.discussion, detail: s.phases.discussion ? t("evolution.complete") : "—" },
+                { label: t("evolution.implementation"), done: s.phases.implementation, detail: s.phases.implementation ? t("evolution.applied") : "—" },
+                { label: t("evolution.review"), done: s.phases.review, detail: s.phases.review ? t("evolution.passed") : "—" },
+                { label: t("evolution.validation"), done: s.phases.validation.count > 0, detail: `${s.phases.validation.count} ${t("evolution.retested")}` },
+                { label: t("evolution.dashboard"), done: s.phases.dashboard, detail: s.phases.dashboard ? t("evolution.built") : "—" },
               ].map(phase => (
                 <div key={phase.label} className={`p-2 rounded-lg border text-xs ${
                   phase.done ? "bg-emerald-500/5 border-emerald-500/30" : "bg-gray-800/50 border-gray-700"
@@ -252,13 +254,13 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
 
             {/* File count */}
             <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-2.5 text-xs text-gray-400">
-              <span className="text-gray-200 font-medium">{s.files.length}</span> artifacts archived
+              <span className="text-gray-200 font-medium">{s.files.length}</span> {t("evolution.artifactsArchived")}
               {s.phases.dashboard && (
                 <button
                   onClick={() => setActiveTab("dashboard")}
                   className="ml-3 text-violet-400 hover:text-violet-300 transition-colors"
                 >
-                  View Dashboard →
+                  {t("evolution.viewDashboard")}
                 </button>
               )}
             </div>
@@ -277,7 +279,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
                     {name}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[400px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("evolution.loading")}</span>}
                   </div>
                 </details>
               );
@@ -301,7 +303,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
                     {label}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[400px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("evolution.loading")}</span>}
                   </div>
                 </details>
               );
@@ -321,7 +323,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
                     Re-test: {name}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[400px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("evolution.loading")}</span>}
                   </div>
                 </details>
               );
@@ -333,7 +335,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
           <div>
             {dashError && (
               <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-300 mb-3">
-                Compile error: {dashError}
+                {t("evolution.compileError")} {dashError}
               </div>
             )}
             {DashboardComp && (
@@ -342,7 +344,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
               </div>
             )}
             {!DashboardComp && !dashError && (
-              <div className="text-center py-8 text-gray-500 text-xs">Loading dashboard...</div>
+              <div className="text-center py-8 text-gray-500 text-xs">{t("evolution.loadingDashboard")}</div>
             )}
           </div>
         )}
@@ -361,7 +363,7 @@ export default function EvolutionHistoryCard({ card }: CardRendererProps) {
                     {label}
                   </summary>
                   <div className="px-3 py-2 border-t border-gray-700 text-xs overflow-auto max-h-[500px]">
-                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">Loading...</span>}
+                    {content ? <MarkdownText text={content} /> : <span className="text-gray-500">{t("evolution.loading")}</span>}
                   </div>
                 </details>
               );

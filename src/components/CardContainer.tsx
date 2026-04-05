@@ -1,4 +1,5 @@
 import { useChatStore } from "../store/chat";
+import { useT } from "../lib/i18n";
 import { cardRegistry } from "../cards";
 import type { Card } from "../cards/types";
 import React, { Suspense, useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
@@ -34,6 +35,7 @@ const APP_LABELS: Record<string, string> = {
 };
 
 function SummaryPanel({ card, isPodcastGenerating }: { card: Card; isPodcastGenerating?: boolean }) {
+  const { t } = useT();
   const [narrativeExpanded, setNarrativeExpanded] = useState(false);
   const [scriptExpanded, setScriptExpanded] = useState(false);
   const summary = card.cardSummary;
@@ -71,7 +73,7 @@ function SummaryPanel({ card, isPodcastGenerating }: { card: Card; isPodcastGene
               className="flex items-center gap-1 text-[10px] text-amber-400/70 hover:text-amber-300 transition-colors"
             >
               <span>{narrativeExpanded ? "\u25BC" : "\u25B6"}</span>
-              <span>Full narrative</span>
+              <span>{t("card.fullNarrative")}</span>
             </button>
             {narrativeExpanded && (
               <div className="mt-1.5 text-[11px] text-gray-400 leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
@@ -105,14 +107,14 @@ function SummaryPanel({ card, isPodcastGenerating }: { card: Card; isPodcastGene
             Your browser does not support audio playback.
           </audio>
           <div className="flex items-center justify-between mt-1">
-            <div className="text-[10px] text-gray-500">Two AI hosts discuss the key points from this card</div>
+            <div className="text-[10px] text-gray-500">{t("card.podcastDiscuss")}</div>
             {card.cardPodcastScript && (
               <button
                 onClick={() => setScriptExpanded(!scriptExpanded)}
                 className="flex items-center gap-1 text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
               >
                 <span>{scriptExpanded ? "\u25BC" : "\u25B6"}</span>
-                <span>Transcript</span>
+                <span>{t("card.transcript")}</span>
               </button>
             )}
           </div>
@@ -234,6 +236,7 @@ function CardLoadingOverlay({ action }: { action?: string }) {
 }
 
 function BuildSummaryBanner({ summary, onDismiss }: { summary: ToolBuildSummary; onDismiss: () => void }) {
+  const { t } = useT();
   const [expanded, setExpanded] = useState(true);
   const allPassed = summary.steps.every((s) => s.status === "passed");
   const familyLabel = summary.toolFamily.replace(/_/g, " ");
@@ -252,17 +255,17 @@ function BuildSummaryBanner({ summary, onDismiss }: { summary: ToolBuildSummary;
             New app: {familyLabel} ({summary.toolNames.length} tools)
           </span>
           {summary.persisted && (
-            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-gray-400">Saved</span>
+            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-gray-400">{t("card.saved")}</span>
           )}
           {summary.skillGenerated && (
-            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-sky-400/70">Agent-ready</span>
+            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-sky-400/70">{t("card.agentReady")}</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); onDismiss(); }}
             className="text-gray-500 hover:text-gray-300 text-xs px-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
-            title="Dismiss"
+            title={t("common.dismiss")}
           >
             &times;
           </button>
@@ -290,7 +293,7 @@ function BuildSummaryBanner({ summary, onDismiss }: { summary: ToolBuildSummary;
             ))}
           </div>
           <div className="flex items-center gap-2 pt-1 border-t border-gray-700/40">
-            <span className="text-[10px] text-gray-500">Actions:</span>
+            <span className="text-[10px] text-gray-500">{t("card.actions")}</span>
             <div className="flex flex-wrap gap-1">
               {summary.actions.map((a) => (
                 <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700/50 text-gray-400">
@@ -310,6 +313,7 @@ function BuildSummaryBanner({ summary, onDismiss }: { summary: ToolBuildSummary;
 
 
 function EnhanceButton({ card }: { card: Card }) {
+  const { t } = useT();
   const enhanceCard = useChatStore((s) => s.enhanceCard);
   const enhanceCardWithFamily = useChatStore((s) => s.enhanceCardWithFamily);
   const toolFamilies = useChatStore((s) => s.toolFamilies);
@@ -348,7 +352,7 @@ function EnhanceButton({ card }: { card: Card }) {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        <span className="text-[10px] hidden sm:inline">Enhancing</span>
+        <span className="text-[10px] hidden sm:inline">{t("card.enhancing")}</span>
       </div>
     );
   }
@@ -359,12 +363,12 @@ function EnhanceButton({ card }: { card: Card }) {
         <button
           onClick={handleBuildAppClick}
           className="flex items-center justify-center gap-1 text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 active:bg-amber-500/30 active:scale-[0.95] transition-all duration-150"
-          title="Build a new app for this content"
+          title={t("card.buildNewApp")}
         >
           <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span className="hidden sm:inline">Build App</span>
+          <span className="hidden sm:inline">{t("card.buildApp")}</span>
         </button>
         {showFactory && (
           <AppBuilderDialog
@@ -410,12 +414,12 @@ function EnhanceButton({ card }: { card: Card }) {
           }
         }}
         className="flex items-center justify-center gap-1 text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 active:bg-violet-500/30 active:scale-[0.95] transition-all duration-150"
-        title="Turn this response into an interactive app"
+        title={t("card.enhanceToApp")}
       >
         <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
         </svg>
-        <span className="hidden sm:inline">App</span>
+        <span className="hidden sm:inline">{t("card.app")}</span>
         {toolFamilies.length > 0 && (
           <svg className="h-2.5 w-2.5 ml-0.5 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9" />
@@ -433,8 +437,8 @@ function EnhanceButton({ card }: { card: Card }) {
             <div className="flex items-center gap-2">
               <span className="text-sm">&#x2728;</span>
               <div>
-                <div className="text-xs text-violet-300 font-medium">Auto-detect</div>
-                <div className="text-[10px] text-gray-500">LLM picks the best app type</div>
+                <div className="text-xs text-violet-300 font-medium">{t("card.autoDetect")}</div>
+                <div className="text-[10px] text-gray-500">{t("card.autoDetectDesc")}</div>
               </div>
             </div>
           </button>
@@ -466,8 +470,8 @@ function EnhanceButton({ card }: { card: Card }) {
             <div className="flex items-center gap-2">
               <span className="text-sm">&#x2795;</span>
               <div>
-                <div className="text-xs text-amber-300 font-medium">Build custom app...</div>
-                <div className="text-[10px] text-gray-500">Generate a new app type with AI</div>
+                <div className="text-xs text-amber-300 font-medium">{t("card.buildCustomApp")}</div>
+                <div className="text-[10px] text-gray-500">{t("card.buildCustomAppDesc")}</div>
               </div>
             </div>
           </button>
@@ -561,6 +565,7 @@ function PinButton({ cardId }: { cardId: string }) {
 }
 
 function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
 
   const backend = getActiveBackend();
@@ -661,14 +666,13 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 pt-4 pb-2">
-          <h3 className="text-sm font-semibold text-gray-100">Share this app</h3>
+          <h3 className="text-sm font-semibold text-gray-100">{t("card.shareTitle")}</h3>
         </div>
         <div className="px-4 py-2 text-xs text-gray-300 space-y-2">
           {isMediaGallery ? (
             <>
               <p>
-                <strong className="text-blue-400">Scoped share:</strong> The recipient will have access
-                <strong> only</strong> to this folder and its subfolders:
+                <strong className="text-blue-400">{t("card.scopedShare")}</strong> {t("card.scopedShareDesc")}
               </p>
               <p className="text-[10px] text-blue-300/80 font-mono truncate bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1" title={currentPath}>
                 {currentPath}
@@ -676,8 +680,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
             </>
           ) : (
             <p>
-              <strong className="text-amber-400">Warning:</strong> Anyone with the link gets direct access
-              to your Enso server. They can interact with this app and trigger actions on your machine.
+              <strong className="text-amber-400">{t("card.warning")}</strong> {t("card.publicShareDesc")}
             </p>
           )}
           <p className="text-[10px] text-gray-500 font-mono truncate" title={serverUrl}>
@@ -697,7 +700,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
               disabled={busy}
               className="px-3 py-1.5 text-xs rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-all duration-150 active:scale-[0.97] cursor-pointer disabled:opacity-50"
             >
-              {busy ? "Preparing…" : "Share"}
+              {busy ? "Preparing…" : t("card.share")}
             </button>
           ) : (
             <>
@@ -724,6 +727,7 @@ function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
 }
 
 function CardShareMenu({ card, isShareable }: { card: Card; isShareable: boolean }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -774,14 +778,14 @@ function CardShareMenu({ card, isShareable }: { card: Card; isShareable: boolean
         <button
           onClick={() => setOpen(!open)}
           className={`text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 bg-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors flex items-center justify-center gap-1 ${justCompleted ? "ring-2 ring-indigo-400/50 animate-pulse" : ""}`}
-          title="Share / Export"
+          title={t("card.shareExport")}
         >
           <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
             <polyline points="16 6 12 2 8 6" />
             <line x1="12" y1="2" x2="12" y2="15" />
           </svg>
-          <span className="hidden sm:inline">Share</span>
+          <span className="hidden sm:inline">{t("card.share")}</span>
         </button>
         {open && (
           <div className="absolute top-full right-0 mt-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[170px] z-[200]">
@@ -864,7 +868,7 @@ function CardShareMenu({ card, isShareable }: { card: Card; isShareable: boolean
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                 <polyline points="22,6 12,13 2,6" />
               </svg>
-              Email
+              {t("card.email")}
             </button>
             <div className="h-px bg-gray-700/50 mx-2" />
             {/* ── CSV (text cards with tables) ── */}
@@ -915,13 +919,14 @@ function CardShareMenu({ card, isShareable }: { card: Card; isShareable: boolean
 }
 
 function CardEmailDialog({ title, onClose, onSend }: { title: string; onClose: () => void; onSend: (recipient: string) => void }) {
+  const { t } = useT();
   const [email, setEmail] = useState("");
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className="relative z-10 w-full max-w-sm mx-4 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="px-4 pt-4 pb-2">
-          <h3 className="text-sm font-semibold text-gray-100">Email: {title}</h3>
+          <h3 className="text-sm font-semibold text-gray-100">{t("card.email")} {title}</h3>
         </div>
         <div className="px-4 py-3">
           <input
@@ -982,9 +987,10 @@ function OrchestrationTerminalView({ text, isComplete }: { text: string; isCompl
 }
 
 function TaskSessionsView({ taskTerminals }: { taskTerminals: Record<string, { text: string; status: string }> }) {
+  const { t } = useT();
   const tasks = Object.entries(taskTerminals);
   const [activeTab, setActiveTab] = useState(0);
-  if (tasks.length === 0) return <div className="px-4 py-6 text-center text-gray-500 text-sm">No sessions yet</div>;
+  if (tasks.length === 0) return <div className="px-4 py-6 text-center text-gray-500 text-sm">{t("card.noSessions")}</div>;
 
   const [taskId, task] = tasks[Math.min(activeTab, tasks.length - 1)];
   const shortId = taskId.length > 8 ? taskId.slice(0, 8) : taskId;
@@ -1027,6 +1033,7 @@ function TaskSessionsView({ taskTerminals }: { taskTerminals: Record<string, { t
 }
 
 function ViewToggle({ card }: { card: Card }) {
+  const { t } = useT();
   const toggleCardView = useChatStore((s) => s.toggleCardView);
   const viewMode = card.viewMode ?? "original";
   const family = card.appCardMode?.appId ?? card.appCardMode?.toolFamily;
@@ -1061,10 +1068,10 @@ function ViewToggle({ card }: { card: Card }) {
         <button
           onClick={() => toggleCardView(card.id, "original")}
           className={segClass(viewMode === "original")}
-          title="Original card content"
+          title={t("card.originalContent")}
         >
-          <span className="hidden sm:inline">Original</span>
-          <span className="sm:hidden">Orig</span>
+          <span className="hidden sm:inline">{t("card.original")}</span>
+          <span className="sm:hidden">{t("card.originalShort")}</span>
         </button>
         <button
           onClick={() => toggleCardView(card.id, "app")}
@@ -1077,7 +1084,7 @@ function ViewToggle({ card }: { card: Card }) {
         <button
           onClick={() => toggleCardView(card.id, "plan")}
           className={segClass(viewMode === "plan", isBuilding && viewMode === "plan")}
-          title="Orchestration plan"
+          title={t("card.orchestrationPlan")}
         >
           Plan
         </button>
@@ -1085,10 +1092,10 @@ function ViewToggle({ card }: { card: Card }) {
           <button
             onClick={() => toggleCardView(card.id, "sessions")}
             className={segClass(viewMode === "sessions")}
-            title="Claude Code sessions"
+            title={t("card.codeSessionsLabel")}
           >
-            <span className="hidden sm:inline">Sessions</span>
-            <span className="sm:hidden">Sess</span>
+            <span className="hidden sm:inline">{t("card.sessions")}</span>
+            <span className="sm:hidden">{t("card.sessionsShort")}</span>
           </button>
         )}
       </div>
@@ -1147,6 +1154,7 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
   onRefine: (instruction: string) => void;
   onImproveWithCode: (instruction: string) => void;
 }) {
+  const { t } = useT();
   const [showInput, setShowInput] = useState(false);
   const [instruction, setInstruction] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1193,13 +1201,13 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
               disabled={!instruction.trim()}
               className="px-2 py-1 text-[11px] rounded-md border border-violet-500/50 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 active:bg-violet-500/35 active:scale-[0.95] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Refine
+              {t("card.refine")}
             </button>
             <button
               onClick={handleCodeSubmit}
               disabled={!instruction.trim()}
               className="px-2 py-1 text-[11px] rounded-md border border-indigo-500/50 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 active:bg-indigo-500/35 active:scale-[0.95] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-              title="Improve with Claude Code (can modify executors, templates, and app structure)"
+              title={t("card.improveWithCode")}
             >
               <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="16 18 22 12 16 6" />
@@ -1222,13 +1230,13 @@ function RefineFooter({ cardId, onRefine, onImproveWithCode }: {
             <button
               onClick={() => setShowInput(true)}
               className="flex items-center justify-center gap-1 text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-2 py-0.5 rounded-full border border-gray-600/50 bg-gray-800/50 text-gray-400 hover:text-gray-200 hover:border-gray-500/60 active:bg-gray-700/60 active:scale-[0.95] transition-all duration-150 shrink-0 ml-2"
-              title="Refine this app's UI"
+              title={t("card.refineUI")}
             >
               <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
-              <span className="hidden sm:inline">Refine</span>
+              <span className="hidden sm:inline">{t("card.refine")}</span>
             </button>
           </div>
         )}
@@ -1311,6 +1319,7 @@ function CardContextMenu({ x, y, onRemove, onClose, cardText }: { x: number; y: 
 }
 
 function CapabilityDiscoveryBar({ card, userQuery }: { card: Card; userQuery: string | null }) {
+  const { t } = useT();
   const sendMessage = useChatStore((s) => s.sendMessage);
 
   if (!userQuery) return null;
@@ -1319,19 +1328,19 @@ function CapabilityDiscoveryBar({ card, userQuery }: { card: Card; userQuery: st
 
   const buttons: Array<{ label: string; icon: string; prefix: string }> = [];
   if (!isSlashCommand || !userQuery.startsWith("/research")) {
-    buttons.push({ label: "Deep Research", icon: "\uD83D\uDD0D", prefix: "/research " });
+    buttons.push({ label: t("card.deepResearch"), icon: "\uD83D\uDD0D", prefix: "/research " });
   }
   if (!isSlashCommand || !userQuery.startsWith("/orchestrate")) {
-    buttons.push({ label: "Orchestrate", icon: "\u26A1", prefix: "/orchestrate " });
+    buttons.push({ label: t("card.orchestrate"), icon: "\u26A1", prefix: "/orchestrate " });
   }
   if (!isSlashCommand || !userQuery.startsWith("/code")) {
-    buttons.push({ label: "Write Code", icon: "\uD83D\uDCBB", prefix: "/code " });
+    buttons.push({ label: t("card.writeCode"), icon: "\uD83D\uDCBB", prefix: "/code " });
   }
   if (buttons.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap px-3 pb-2 pt-1 border-t border-gray-700/30">
-      <span className="text-[10px] text-gray-600 mr-0.5">Try:</span>
+      <span className="text-[10px] text-gray-600 mr-0.5">{t("card.tryColon")}</span>
       {buttons.map((btn) => (
         <button
           key={btn.prefix}
@@ -1347,6 +1356,7 @@ function CapabilityDiscoveryBar({ card, userQuery }: { card: Card; userQuery: st
 }
 
 function CardContainerInner({ card, isActive }: CardContainerProps) {
+  const { t } = useT();
   const collapseCard = useChatStore((s) => s.collapseCard);
   const expandCard = useChatStore((s) => s.expandCard);
   const removeCard = useChatStore((s) => s.removeCard);
@@ -1729,7 +1739,7 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
                 <button
                   onClick={() => collapseCard(card.id)}
                   className="flex items-center gap-1 sm:gap-1.5 text-xs text-gray-400 min-w-0 hover:text-gray-200 active:text-gray-100 transition-all duration-150"
-                  title="Collapse card"
+                  title={t("card.collapseCard")}
                 >
                   <svg className="h-3 w-3 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="6 9 12 15 18 9" />
@@ -1764,13 +1774,13 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
                     }
                   }}
                   className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-cyan-300 hover:border-cyan-500/50 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
-                  title="Deep research on this topic"
+                  title={t("card.deepResearchTopic")}
                 >
                   <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8" />
                     <path d="m21 21-4.3-4.3" />
                   </svg>
-                  <span className="hidden sm:inline">Research</span>
+                  <span className="hidden sm:inline">{t("card.research")}</span>
                 </button>
               )}
               {(canSummarize || isSummaryGenerating || isPodcastGenerating) && (
@@ -1778,7 +1788,7 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
                   onClick={() => requestCardSummary(card.id)}
                   disabled={isSummaryGenerating || isPodcastGenerating}
                   className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-amber-300 hover:border-amber-500/50 active:bg-amber-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Summarize and generate podcast"
+                  title={t("card.summarizePodcast")}
                 >
                   {isSummaryGenerating || isPodcastGenerating ? (
                     <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
@@ -1800,10 +1810,10 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
                     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
                   }}
                   className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-cyan-500/50 text-cyan-400 hover:text-cyan-300 hover:border-cyan-400/70 active:bg-cyan-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
-                  title="Scroll to podcast"
+                  title={t("card.scrollToPodcast")}
                 >
                   <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6" /><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" /></svg>
-                  <span className="hidden sm:inline">Podcast</span>
+                  <span className="hidden sm:inline">{t("card.podcast")}</span>
                 </button>
               )}
               {card.role === "assistant" && card.status === "complete" && card.type !== "shell" && card.type !== "terminal" && (
@@ -1814,14 +1824,14 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
                   <button
                     onClick={() => setShowEvolveMenu(!showEvolveMenu)}
                     className="text-[10px] min-h-[36px] min-w-[36px] sm:min-h-[28px] sm:min-w-[28px] sm:min-w-0 px-1 sm:px-1.5 py-0.5 rounded-full border border-gray-600/50 text-gray-500 hover:text-violet-300 hover:border-violet-500/50 active:bg-violet-500/15 active:scale-[0.95] transition-all duration-150 flex items-center justify-center gap-1"
-                    title="Evolve this card"
+                    title={t("card.evolveCard")}
                   >
                     <svg className="h-3.5 w-3.5 sm:h-3 sm:w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 2L2 7l10 5 10-5-10-5z" />
                       <path d="M2 17l10 5 10-5" />
                       <path d="M2 12l10 5 10-5" />
                     </svg>
-                    <span className="hidden sm:inline">Evolve</span>
+                    <span className="hidden sm:inline">{t("card.evolve")}</span>
                   </button>
                   {showEvolveMenu && (
                     <div className="absolute top-full right-0 mt-1 bg-gray-900 border border-gray-700/80 rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[190px] z-[200]">
@@ -1985,7 +1995,7 @@ function CardContainerInner({ card, isActive }: CardContainerProps) {
             card.cardSummaryStatus === "generating" ? (
               <div className="mx-3 my-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-3 flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs text-amber-400">Generating summary...</span>
+                <span className="text-xs text-amber-400">{t("card.generatingSummary")}</span>
               </div>
             ) : (
               <SummaryPanel card={card} isPodcastGenerating={isPodcastGenerating} />

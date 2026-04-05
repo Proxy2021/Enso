@@ -1,11 +1,13 @@
 import { useChatStore } from "../store/chat";
 import { InstructionModal } from "./InstructionModal";
+import { useT } from "../lib/i18n";
 
 interface SystemEnhanceDialogProps {
   onClose: () => void;
 }
 
 export function SystemEnhanceDialog({ onClose }: SystemEnhanceDialogProps) {
+  const { t } = useT();
   const launchSystemEnhance = useChatStore((s) => s.launchSystemEnhance);
 
   return (
@@ -15,10 +17,10 @@ export function SystemEnhanceDialog({ onClose }: SystemEnhanceDialogProps) {
       onSubmit={(text) => {
         launchSystemEnhance(text);
       }}
-      title="System Enhance"
-      description="Describe what you want to improve across the Enso system. Claude Code will analyze and implement changes."
+      title={t("dialog.systemEnhance")}
+      description={t("dialog.systemEnhancePrompt")}
       placeholder="e.g., improve error handling across all tool families, add better loading states, optimize WebSocket reconnection..."
-      submitLabel="Enhance"
+      submitLabel={t("dialog.enhance")}
       multiline
     />
   );
