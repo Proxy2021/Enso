@@ -68,6 +68,7 @@ improvement sprint. Sprint scores: 4.5 → 7.5 over 4 cycles. No other developer
 | 🌐 Remote Browser | Full browser inside the conversation |
 | 📂 File Manager | Desktop-grade with previews and CRUD |
 | 🖥️ Remote Desktop | Control remote machines from within Enso |
+| 🧠 Knowledge Cortex | LLM-maintained knowledge base with graph visualization, web discovery, AI digest, daily intelligence briefing |
 | 🔬 Mission Planner | AI discovers project opportunities tailored to your interests |
 | ✨ Card Evolution | Click Evolve on any card — AI team turns it into a polished app |
 | 📝 Summarizer | One-click text + AI podcast summaries for any card |

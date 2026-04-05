@@ -325,6 +325,19 @@ openclaw gateway start              # 3. Restart gateway
 - Sprint results delivered as bespoke interactive JSX dashboard on the orchestration card
 - Key files: `evolution.ts`, `evolution-archive.ts`, `project-manager.ts`, `orchestrator-engine.ts` (backend); `OrchestrationCard.tsx`, `EvolutionHistoryCard.tsx` (frontend)
 
+### Knowledge Cortex (LLM Wiki)
+
+A persistent, LLM-maintained knowledge base at `~/.enso/wiki/` that compounds with use. Based on Karpathy's "LLM Wiki" pattern — instead of re-deriving knowledge via RAG, the LLM incrementally builds interlinked markdown pages.
+
+- **Wiki engine** (`server/src/wiki-tools.ts`): 6 agent tools (`enso_wiki_search`, `enso_wiki_read`, `enso_wiki_ingest`, `enso_wiki_list`, `enso_wiki_lint`, `enso_wiki_import_sources`). LLM-powered ingest pipeline creates entity/concept/synthesis pages from any source.
+- **Storage**: `~/.enso/wiki/` with `_index.md` (machine-parseable catalog), `_log.md` (operation log), and subdirs `entities/`, `concepts/`, `sources/`, `synthesis/`.
+- **Data source import**: Reads cached scans from user context system + live YouTube API data (subscriptions, liked videos, feed). Per-source ingests for quality.
+- **Context injection**: `getWikiContextSummary()` injected into `buildEnsoContext()` so the agent knows accumulated knowledge.
+- **Cortex Explorer app** (`server/apps/cortex/`): Shipped app with 8 executors:
+  - `explore` (dashboard: stats, top entities, gaps), `read` (article viewer with backlinks), `search`, `graph` (treemap visualization), `discover` (web search + AI branch suggestions), `ingest`, `digest` (AI knowledge summary), `daily_discovery` (scheduled task)
+- **Daily Discovery**: Scheduled task (`cortex-daily-discovery`) that searches the web for top Cortex topics, uses AI to filter/analyze/categorize findings with personalized relevance, ingests into wiki, and emails an HTML intelligence briefing.
+- Key files: `wiki-tools.ts` (engine), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection), `card-actions.ts` (wiki_ingest action)
+
 ### Deep Research Pipeline
 
 Standard research uses a two-phase streaming pipeline (Phase A: summary + findings in ~19s, Phase B: full analysis in ~30s) via the Gemini API. **Deep research** escalates to Claude Code for a fundamentally different output:
