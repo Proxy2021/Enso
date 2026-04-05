@@ -1184,6 +1184,48 @@ export async function startEnsoServer(opts: {
 
   // ── Email Cleanup API ──
 
+  app.get("/api/trigger/deploy", async (_req, res) => {
+    try {
+      const { execSync } = await import("node:child_process");
+      const cwd = process.env.ENSO_PROJECT_PATH || "D:/Github/Enso";
+
+      // Run build + commit + push (but NOT restart — that would kill this process)
+      const steps: Array<{ step: string; ok: boolean; output: string }> = [];
+
+      try {
+        execSync("npm run build", { cwd, encoding: "utf-8", timeout: 120_000 });
+        steps.push({ step: "Build", ok: true, output: "success" });
+      } catch (e) {
+        steps.push({ step: "Build", ok: false, output: (e as Error).message.slice(0, 200) });
+      }
+
+      try {
+        execSync("git add -A && git commit -m \"chore: deploy from email trigger\" --allow-empty", { cwd, encoding: "utf-8", timeout: 30_000 });
+        steps.push({ step: "Commit", ok: true, output: "success" });
+      } catch (e) {
+        steps.push({ step: "Commit", ok: false, output: (e as Error).message.slice(0, 200) });
+      }
+
+      try {
+        execSync("git push", { cwd, encoding: "utf-8", timeout: 30_000 });
+        steps.push({ step: "Push", ok: true, output: "success" });
+      } catch (e) {
+        steps.push({ step: "Push", ok: false, output: (e as Error).message.slice(0, 200) });
+      }
+
+      const allOk = steps.every(s => s.ok);
+      const stepsHtml = steps.map(s =>
+        `<div style="padding:6px 0;color:${s.ok ? "#4ade80" : "#f87171"}">${s.ok ? "✓" : "✗"} ${s.step}: ${s.output}</div>`
+      ).join("");
+
+      logAction({ ts: Date.now(), type: "action", category: "deploy", message: `Email-triggered deploy: ${allOk ? "success" : "partial"} (${steps.filter(s=>s.ok).length}/${steps.length} steps)` });
+
+      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:500px"><h1 style="color:${allOk ? "#4ade80" : "#fbbf24"};font-size:48px;margin-bottom:8px">${allOk ? "&#10003;" : "&#9888;"}</h1><h2>Deploy ${allOk ? "Complete" : "Partial"}</h2><div style="text-align:left;background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">${stepsHtml}</div><p style="color:#475569;font-size:13px">Note: Server restart must be done manually or via the next scheduled restart.</p></div></body></html>`);
+    } catch (err) {
+      res.status(500).send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f87171">Deploy Failed</h1><p style="color:#94a3b8">${err instanceof Error ? err.message : String(err)}</p></div></body></html>`);
+    }
+  });
+
   app.get("/api/email-cleanup/confirm", async (req, res) => {
     const token = req.query.token as string;
     if (!token) { res.status(400).send("Missing token"); return; }

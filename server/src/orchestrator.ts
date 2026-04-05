@@ -2339,12 +2339,22 @@ Use inline CSS. Use these colors: success=#4ade80, error=#f87171, accent=#f472b6
     const statusLabel = status === "completed" ? "Completed" : "Failed";
     const statusIcon = status === "completed" ? "✓" : "✗";
 
+    // Deploy button — only show for successful sprints
+    const deployButton = status === "completed" ? `
+    <div style="text-align:center;margin:24px 0">
+      <a href="https://pc1.enso.net/api/trigger/deploy" style="display:inline-block;background:#4ade80;color:#0f172a;padding:14px 36px;border-radius:10px;font-size:16px;font-weight:700;text-decoration:none;letter-spacing:0.5px">
+        🚀 Deploy Sprint Changes
+      </a>
+      <p style="color:#475569;font-size:11px;margin-top:8px">Builds, commits, and pushes all sprint changes to production</p>
+    </div>` : "";
+
     const html = `
 <div style="background:#0f172a;padding:30px 20px;font-family:system-ui,-apple-system,sans-serif">
   <div style="max-width:700px;margin:0 auto">
     <h1 style="color:#f472b6;text-align:center;font-size:22px;margin-bottom:4px">${statusIcon} Sprint ${statusLabel}</h1>
     <p style="color:#94a3b8;text-align:center;font-size:13px;margin-top:0">${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
     ${summaryHtml}
+    ${deployButton}
     <p style="color:#334155;text-align:center;font-size:11px;margin-top:24px">Enso AI · Sprint Report</p>
   </div>
 </div>`;
