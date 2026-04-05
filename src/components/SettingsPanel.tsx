@@ -85,7 +85,7 @@ export default function SettingsPanel() {
             </div>
 
             {/* Tab bar */}
-            <div className="flex gap-0.5 sm:gap-1 px-3 sm:px-4 pt-2 sm:pt-3 pb-1 shrink-0 border-b border-gray-800/50 overflow-x-auto scrollbar-hide">
+            <div className="flex flex-wrap gap-0.5 sm:gap-1 px-3 sm:px-4 pt-2 sm:pt-3 pb-1 shrink-0 border-b border-gray-800/50">
               {([
                 { id: "chatModel" as const, label: t("settings.chatModel") },
                 { id: "claudeCode" as const, label: t("settings.claudeCodeModel") },
@@ -99,7 +99,7 @@ export default function SettingsPanel() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 py-2 sm:py-1.5 text-xs rounded-md transition-all duration-150 whitespace-nowrap flex-shrink-0 active:scale-[0.95] ${
+                  className={`px-2.5 py-2 sm:py-1.5 text-xs rounded-md transition-all duration-150 whitespace-nowrap active:scale-[0.95] ${
                     activeTab === tab.id
                       ? "bg-indigo-500/20 text-indigo-300 font-medium"
                       : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
