@@ -239,7 +239,7 @@ export async function startEnsoServer(opts: {
   // reading the body as a Buffer.
   const jsonParser = express.json();
   app.use((req, res, next) => {
-    if (req.path === "/upload" || req.path === "/transcribe") return next();
+    if (req.path === "/upload" || req.path === "/transcribe" || req.path === "/api/settings/import") return next();
     jsonParser(req, res, next);
   });
 
@@ -1091,6 +1091,18 @@ export async function startEnsoServer(opts: {
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to save key" });
     }
+  });
+
+  // ── Settings Export / Import ──
+
+  app.get("/api/settings/export", async (req, res) => {
+    const { handleExport } = await import("./settings-transfer.js");
+    handleExport(req, res);
+  });
+
+  app.post("/api/settings/import", express.json({ limit: "50mb" }), async (req, res) => {
+    const { handleImport } = await import("./settings-transfer.js");
+    handleImport(req, res);
   });
 
   // ── YouTube OAuth API ──

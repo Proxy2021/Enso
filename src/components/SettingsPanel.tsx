@@ -36,7 +36,7 @@ function findPreset(model: string, thinking: string): ModelPreset {
 
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
-type SettingsTab = "appearance" | "chatModel" | "claudeCode" | "memory" | "apiKeys" | "dataSources" | "proactive";
+type SettingsTab = "appearance" | "chatModel" | "claudeCode" | "memory" | "apiKeys" | "dataSources" | "proactive" | "transfer";
 
 // ── Memory sub-tabs ─────────────────────────────────────────────────────────
 
@@ -94,6 +94,7 @@ export default function SettingsPanel() {
                 { id: "dataSources" as const, label: t("settings.dataSources") },
                 { id: "proactive" as const, label: t("settings.proactive") },
                 { id: "appearance" as const, label: t("settings.language") },
+                { id: "transfer" as const, label: "Transfer" },
               ]).map((tab) => (
                 <button
                   key={tab.id}
@@ -118,6 +119,7 @@ export default function SettingsPanel() {
               {activeTab === "claudeCode" && <ClaudeCodeSection onClose={() => setOpen(false)} />}
               {activeTab === "apiKeys" && <ServiceKeysSection />}
               {activeTab === "memory" && <MemorySection />}
+              {activeTab === "transfer" && <TransferSection />}
             </div>
           </div>
         </div>,
@@ -1072,6 +1074,256 @@ function ProactiveSection() {
       <p className="text-[10px] text-gray-600 text-center pt-1">
         {t("settings.proactivePrivacy")}
       </p>
+    </div>
+  );
+}
+
+// ── Transfer Section ───────────────────────────────────────────────────────
+
+interface CategoryInfo {
+  id: string;
+  label: string;
+  description: string;
+  sensitive: boolean;
+  available: boolean;
+  sizeBytes: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function TransferSection() {
+  const [categories, setCategories] = useState<CategoryInfo[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [mergeMode, setMergeMode] = useState<"skip" | "replace">("skip");
+  const [importBundle, setImportBundle] = useState<any>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importResult, setImportResult] = useState<Record<string, { imported: number; skipped: number; details?: string }> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Fetch available categories on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const base = getBackendBaseUrl();
+        const res = await fetch(`${base}/api/settings/export?dryRun=true`, { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          const cats: CategoryInfo[] = data.categories || [];
+          setCategories(cats);
+          // Default: select available sensitive + scheduledTasks + memory
+          const defaults = new Set(cats.filter((c) => c.available && (c.sensitive || c.id === "scheduledTasks" || c.id === "memory")).map((c) => c.id));
+          setSelected(defaults);
+        }
+      } catch { setError("Could not connect to server"); }
+      setLoading(false);
+    })();
+  }, []);
+
+  const toggleCategory = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const cats = Array.from(selected).join(",");
+      const base = getBackendBaseUrl();
+      const res = await fetch(`${base}/api/settings/export?categories=${cats}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `enso-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message || "Export failed");
+    }
+    setExporting(false);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFileName(file.name);
+    setImportResult(null);
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const bundle = JSON.parse(reader.result as string);
+        if (!bundle._enso?.version) throw new Error("Not a valid Enso export file");
+        setImportBundle(bundle);
+      } catch (err: any) {
+        setError(err.message || "Invalid file");
+        setImportBundle(null);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImport = async () => {
+    if (!importBundle) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const base = getBackendBaseUrl();
+      const res = await fetch(`${base}/api/settings/import`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bundle: importBundle,
+          options: { categories: importBundle._enso.categories, mergeMode },
+        }),
+      });
+      if (!res.ok) throw new Error(`Import failed (${res.status})`);
+      const data = await res.json();
+      setImportResult(data.summary);
+      setImportBundle(null);
+      setImportFileName("");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (err: any) {
+      setError(err.message || "Import failed");
+    }
+    setImporting(false);
+  };
+
+  if (loading) return <div className="text-xs text-gray-500 py-4 text-center">Loading...</div>;
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-3 py-2">{error}</div>
+      )}
+
+      {/* ── Export ── */}
+      <div>
+        <h3 className="text-sm font-medium text-gray-200 mb-2">Export Settings</h3>
+        <p className="text-[11px] text-gray-500 mb-3">Select categories to include in the export file.</p>
+
+        <div className="space-y-1.5 mb-3">
+          {categories.map((cat) => (
+            <label
+              key={cat.id}
+              className={`flex items-start gap-2 px-2.5 py-1.5 rounded text-xs cursor-pointer transition-colors ${
+                cat.available ? "hover:bg-gray-800" : "opacity-40 cursor-not-allowed"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(cat.id)}
+                onChange={() => cat.available && toggleCategory(cat.id)}
+                disabled={!cat.available}
+                className="mt-0.5 accent-indigo-500"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-200">{cat.label}</span>
+                  {cat.sensitive && <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-400">secrets</span>}
+                  {cat.available && <span className="text-[9px] text-gray-600">{formatBytes(cat.sizeBytes)}</span>}
+                  {!cat.available && <span className="text-[9px] text-gray-600">empty</span>}
+                </div>
+                <p className="text-[10px] text-gray-500 leading-tight">{cat.description}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        {selected.size > 0 && categories.some((c) => selected.has(c.id) && c.sensitive) && (
+          <div className="text-[10px] text-amber-400/80 bg-amber-400/5 border border-amber-400/10 rounded px-2.5 py-1.5 mb-3">
+            ⚠ Export contains API keys in plain text. Store the file securely and delete after importing.
+          </div>
+        )}
+
+        <button
+          onClick={handleExport}
+          disabled={selected.size === 0 || exporting}
+          className="px-3 py-1.5 text-xs rounded bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {exporting ? "Exporting..." : `Export ${selected.size} categories`}
+        </button>
+      </div>
+
+      {/* ── Divider ── */}
+      <div className="border-t border-gray-800" />
+
+      {/* ── Import ── */}
+      <div>
+        <h3 className="text-sm font-medium text-gray-200 mb-2">Import Settings</h3>
+        <p className="text-[11px] text-gray-500 mb-3">Load an export file from another machine.</p>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json"
+          onChange={handleFileSelect}
+          className="block w-full text-xs text-gray-400 file:mr-2 file:px-3 file:py-1 file:rounded file:border-0 file:text-xs file:bg-gray-800 file:text-gray-300 file:cursor-pointer hover:file:bg-gray-700 mb-3"
+        />
+
+        {importBundle && (
+          <div className="space-y-3">
+            <div className="text-[11px] text-gray-400 bg-gray-800/50 rounded px-3 py-2">
+              <div className="font-medium text-gray-300 mb-1">
+                From: {importBundle._enso.machine} · {new Date(importBundle._enso.exportedAt).toLocaleDateString()}
+              </div>
+              <div>Categories: {importBundle._enso.categories.map((c: string) =>
+                categories.find((cat) => cat.id === c)?.label || c
+              ).join(", ")}</div>
+            </div>
+
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="text-gray-500">Existing data:</span>
+              <label className="flex items-center gap-1 text-gray-300 cursor-pointer">
+                <input type="radio" name="merge" checked={mergeMode === "skip"} onChange={() => setMergeMode("skip")} className="accent-indigo-500" />
+                Keep (skip conflicts)
+              </label>
+              <label className="flex items-center gap-1 text-gray-300 cursor-pointer">
+                <input type="radio" name="merge" checked={mergeMode === "replace"} onChange={() => setMergeMode("replace")} className="accent-indigo-500" />
+                Replace
+              </label>
+            </div>
+
+            <button
+              onClick={handleImport}
+              disabled={importing}
+              className="px-3 py-1.5 text-xs rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {importing ? "Importing..." : "Import"}
+            </button>
+          </div>
+        )}
+
+        {importResult && (
+          <div className="mt-3 text-[11px] bg-emerald-500/5 border border-emerald-500/10 rounded px-3 py-2 space-y-1">
+            <div className="font-medium text-emerald-400 mb-1">Import complete</div>
+            {Object.entries(importResult).map(([catId, r]) => (
+              <div key={catId} className="flex items-center gap-2 text-gray-400">
+                <span className="text-gray-300">{categories.find((c) => c.id === catId)?.label || catId}:</span>
+                <span className="text-emerald-400">+{r.imported}</span>
+                {r.skipped > 0 && <span className="text-gray-500">{r.skipped} skipped</span>}
+                {r.details && <span className="text-amber-400/70 text-[10px]">{r.details}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
