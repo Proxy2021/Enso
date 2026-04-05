@@ -8,7 +8,7 @@
 
 import { randomUUID } from "crypto";
 import type { ResolvedEnsoAccount } from "./accounts.js";
-import type { CoreConfig, EnsoInboundMessage, ToolRouting } from "./types.js";
+import type { CoreConfig, EnsoInboundMessage, ToolRouting, OperationStage } from "./types.js";
 import type { EnsoRuntime, EnsoAgentTool } from "./local-types.js";
 import type { ConnectedClient } from "./server.js";
 import { deliverEnsoReply } from "./outbound.js";
@@ -304,6 +304,24 @@ function interimMessageForTool(toolName: string): string {
     return "Opening the browser tool to fetch live page data…";
   }
   return "Running a tool to get accurate, up-to-date results — one moment.";
+}
+
+/** User-facing status label for tool execution — shown as operation indicator */
+function toolStatusLabel(toolName: string): string {
+  if (toolName.startsWith("enso_researcher_")) return "Researching...";
+  if (toolName.startsWith("enso_fs_") || toolName.startsWith("enso_filesystem_")) return "Browsing files...";
+  if (toolName.startsWith("enso_media_")) return "Processing media...";
+  if (toolName.startsWith("enso_browser_") || toolName.startsWith("enso_web_browser_")) return "Opening browser...";
+  if (toolName.startsWith("enso_youtube_")) return "Querying YouTube...";
+  if (toolName.startsWith("enso_email_")) return "Sending email...";
+  if (toolName.startsWith("enso_photo_")) return "Processing photos...";
+  if (toolName.startsWith("enso_video_")) return "Processing video...";
+  if (toolName.startsWith("enso_screen_") || toolName.startsWith("enso_remote_")) return "Capturing screen...";
+  if (toolName.startsWith("enso_system_")) return "Running system command...";
+  if (toolName.startsWith("enso_shell_")) return "Executing command...";
+  if (toolName.startsWith("enso_memory_")) return "Searching memory...";
+  if (toolName.includes("launch_task") || toolName.includes("claude_code")) return "Launching Claude Code...";
+  return "Running tool...";
 }
 
 // ── Gemini function-calling API ──
@@ -771,7 +789,28 @@ export async function handleStandaloneInbound(params: {
     let deliverSeq = 0;
     let chatPrefix = "";
 
+    // Helper: send operation status update to keep user informed
+    const sendStatus = (stage: string, label: string) => {
+      client.send({
+        id: randomUUID(),
+        runId,
+        sessionKey,
+        seq: 0,
+        state: "delta",
+        operation: { operationId: stableCardId, stage: stage as OperationStage, label, cancellable: true },
+        targetCardId: stableCardId,
+        timestamp: Date.now(),
+      });
+    };
+
     for (let iteration = 0; iteration < 5; iteration++) {
+      // Update status based on iteration
+      if (iteration === 0) {
+        sendStatus("processing", "Thinking...");
+      } else {
+        sendStatus("processing", `Processing (step ${iteration + 1})...`);
+      }
+
       const response = await callGeminiWithTools({
         apiKey: account.geminiApiKey,
         systemPrompt,
@@ -788,6 +827,10 @@ export async function handleStandaloneInbound(params: {
       if (functionCallPart?.functionCall) {
         const { name, args } = functionCallPart.functionCall;
         logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Tool call: ${name}`, cardId: stableCardId });
+
+        // Send tool-specific status indicator
+        const toolLabel = toolStatusLabel(name);
+        sendStatus("calling_tool", toolLabel);
 
         const modelPartsForHistory = parts.filter((p) => p.text || p.functionCall);
         history.push({
@@ -813,6 +856,10 @@ export async function handleStandaloneInbound(params: {
           conversationId,
         });
 
+        // Re-send status after interim delivery so the indicator persists
+        // (deliverEnsoReply sends state:"final" which can clear the indicator)
+        sendStatus("calling_tool", toolLabel);
+
         let toolResult: unknown;
         try {
           const result = await executeLocalTool(name, args, { clientId: client.id, getClient: () => client });
@@ -823,6 +870,9 @@ export async function handleStandaloneInbound(params: {
           toolResult = { error: String(err) };
           logError("standalone-agent", `Tool ${name} failed`, err, { cardId: stableCardId });
         }
+
+        // Show "Analyzing results..." while Gemini processes the tool output
+        sendStatus("processing", "Analyzing results...");
 
         history.push({
           role: "user",
