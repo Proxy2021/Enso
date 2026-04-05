@@ -772,6 +772,11 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             </Button>
           )}
           {isComplete && (
+            <Button variant="ghost" onClick={() => onAction("wiki_ingest", { topic, summary: summary, keyFindings: keyFindings, sections: sections, sources: sources })}>
+              <LucideReact.BookOpen className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Wiki</span>
+            </Button>
+          )}
+          {isComplete && (
             <Button variant="ghost" onClick={() => onAction("search", { topic: "" })}>
               <LucideReact.Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">New</span>
             </Button>

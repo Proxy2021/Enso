@@ -8,6 +8,7 @@ import { getGeneralTemplateCode, isGeneralSignature } from "./templates/general.
 import { getBrowserTemplateCode, isBrowserSignature } from "./templates/browser.js";
 import { getResearcherTemplateCode, isResearcherSignature } from "./templates/researcher.js";
 import { getClawHubTemplateCode, isClawHubSignature } from "./templates/clawhub.js";
+// Wiki native template replaced by shipped Cortex app (server/apps/cortex/)
 import { APP_CATALOG, getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
 import { getPluginApi } from "../runtime.js";
@@ -627,6 +628,7 @@ export function getToolTemplateCode(signature: ToolTemplate): string {
   if (isResearcherSignature(signature.signatureId)) {
     return getResearcherTemplateCode(signature);
   }
+  // Wiki template now handled by shipped Cortex app
   if (isClawHubSignature(signature.signatureId)) {
     return getClawHubTemplateCode(signature);
   }

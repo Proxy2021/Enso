@@ -14,6 +14,8 @@
 
   "welcome.tile.researcher": "研究助手",
   "welcome.tile.researcher.desc": "实时网络来源和引用的深度研究",
+  "welcome.tile.wiki": "知识皮层",
+  "welcome.tile.wiki.desc": "探索 AI 维护的知识皮层",
   "welcome.tile.codeAssistant": "代码助手",
   "welcome.tile.codeAssistant.desc": "AI 工程师帮你编写、运行和调试代码",
   "welcome.tile.orchestrate": "编排协作",

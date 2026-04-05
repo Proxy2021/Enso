@@ -16,6 +16,7 @@ interface Template {
 const TEMPLATES: Template[] = [
   { icon: "\uD83D\uDCBB", titleKey: "welcome.tile.codeAssistant", descKey: "welcome.tile.codeAssistant.desc", prompt: "/code" },
   { icon: "\uD83D\uDD0D", titleKey: "welcome.tile.researcher", descKey: "welcome.tile.researcher.desc", toolFamily: "researcher" },
+  { icon: "\uD83E\uDDE0", titleKey: "welcome.tile.wiki", descKey: "welcome.tile.wiki.desc", toolFamily: "cortex" },
   { icon: "\uD83E\uDDEC", titleKey: "welcome.tile.evolve", descKey: "welcome.tile.evolve.desc", prompt: "/evolve" },
   { icon: "\u26A1", titleKey: "welcome.tile.orchestrate", descKey: "welcome.tile.orchestrate.desc", prompt: "/orchestrate" },
   { icon: "\uD83D\uDCC1", titleKey: "welcome.tile.browseFiles", descKey: "welcome.tile.browseFiles.desc", toolFamily: "filesystem" },

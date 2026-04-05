@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "createdAt": 1743854400000,
+  "spec": {
+    "toolFamily": "cortex",
+    "toolPrefix": "enso_cortex_",
+    "description": "Knowledge Cortex: explore, discover, and grow your AI-maintained knowledge base with graph visualization, web discovery, and daily digest",
+    "signatureId": "cortex_view",
+    "tools": [
+      {
+        "suffix": "explore",
+        "description": "Get Cortex dashboard: page stats by category, recent updates, top entities by connectivity, knowledge gaps, and recent operations log",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_cortex_explore",
+          "stats": { "total": 0, "entities": 0, "concepts": 0, "sources": 0, "synthesis": 0 },
+          "recent": [],
+          "topEntities": [],
+          "gaps": [],
+          "log": []
+        },
+        "requiredDataKeys": ["tool", "stats"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "read",
+        "description": "Read a specific Cortex page with backlinks, outgoing links, related pages, and tags",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "description": "Page path (e.g. 'entities/react.md')" }
+          },
+          "required": ["path"]
+        },
+        "sampleParams": { "path": "entities/react.md" },
+        "sampleData": {
+          "tool": "enso_cortex_read",
+          "path": "entities/react.md",
+          "title": "React",
+          "content": "# React\n\nA JavaScript library.",
+          "category": "entities",
+          "tags": ["framework"],
+          "backlinks": [],
+          "outgoingLinks": [],
+          "related": []
+        },
+        "requiredDataKeys": ["tool", "content"]
+      },
+      {
+        "suffix": "search",
+        "description": "Search Cortex pages by keyword with optional category and tag filters",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": { "type": "string", "description": "Search query" },
+            "category": { "type": "string", "description": "Filter by category: entities, concepts, sources, synthesis" },
+            "tag": { "type": "string", "description": "Filter by tag" }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "react" },
+        "sampleData": {
+          "tool": "enso_cortex_search",
+          "query": "react",
+          "results": [],
+          "totalResults": 0
+        },
+        "requiredDataKeys": ["tool", "results"]
+      },
+      {
+        "suffix": "graph",
+        "description": "Build knowledge graph with nodes (pages) and edges (wiki links) for visualization",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_cortex_graph",
+          "nodes": [],
+          "edges": [],
+          "categories": {}
+        },
+        "requiredDataKeys": ["tool", "nodes"]
+      },
+      {
+        "suffix": "discover",
+        "description": "Search the web for latest content related to a Cortex topic, with AI-suggested branches to explore",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "topic": { "type": "string", "description": "Topic to discover new content for" },
+            "path": { "type": "string", "description": "Optional: wiki page path to read context from" }
+          },
+          "required": ["topic"]
+        },
+        "sampleParams": { "topic": "React" },
+        "sampleData": {
+          "tool": "enso_cortex_discover",
+          "topic": "React",
+          "webResults": [],
+          "suggestions": [],
+          "existingContext": ""
+        },
+        "requiredDataKeys": ["tool", "topic"]
+      },
+      {
+        "suffix": "ingest",
+        "description": "Ingest new knowledge into the Cortex from text, URL, or topic",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": { "type": "string", "description": "Text content to ingest" },
+            "url": { "type": "string", "description": "Source URL for reference" },
+            "topic": { "type": "string", "description": "Topic label" }
+          },
+          "required": []
+        },
+        "sampleParams": { "topic": "React Hooks", "text": "React Hooks allow function components to use state." },
+        "sampleData": {
+          "tool": "enso_cortex_ingest",
+          "pagesCreated": [],
+          "pagesUpdated": [],
+          "summary": ""
+        },
+        "requiredDataKeys": ["tool"]
+      },
+      {
+        "suffix": "digest",
+        "description": "Generate an AI summary of the Cortex: strengths, knowledge gaps, and suggested next explorations",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_cortex_digest",
+          "summary": "",
+          "strengths": [],
+          "gaps": [],
+          "suggestions": []
+        },
+        "requiredDataKeys": ["tool", "summary"]
+      },
+      {
+        "suffix": "daily_discovery",
+        "description": "Daily scheduled task: search web for latest developments on top Cortex topics, ingest findings, and email a curated digest",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_cortex_daily_discovery",
+          "topicsSearched": 0,
+          "newFindings": 0,
+          "pagesCreated": [],
+          "pagesUpdated": [],
+          "emailSent": false
+        },
+        "requiredDataKeys": ["tool"]
+      }
+    ]
+  }
+}

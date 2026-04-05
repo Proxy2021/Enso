@@ -558,6 +558,13 @@ export async function buildEnsoContext(): Promise<string> {
     maybeRefreshProfile();
   } catch { /* user-context-builder not available — skip */ }
 
+  // Include wiki knowledge summary for domain awareness
+  try {
+    const { getWikiContextSummary } = await import("./wiki-tools.js");
+    const wikiSummary = getWikiContextSummary(500);
+    if (wikiSummary) sections.push(wikiSummary);
+  } catch { /* wiki not available — skip */ }
+
   // Include proactive engine insights for richer context-aware responses
   try {
     const { getTopSuggestions } = await import("./proactive-engine.js");
