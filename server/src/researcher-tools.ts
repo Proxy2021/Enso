@@ -824,9 +824,10 @@ function matchImagesToSections(
 
 /** Deterministic fallback queries (used when LLM generation fails or no Gemini key). */
 function generateSearchAnglesFallback(topic: string, depth: "quick" | "standard" | "deep"): string[] {
+  const year = new Date().getFullYear();
   const quick = [
     `${topic} overview explained`,
-    `${topic} latest developments 2025 2026`,
+    `${topic} latest developments ${year - 1} ${year}`,
     `${topic} expert analysis`,
   ];
   const standard = [
@@ -838,7 +839,7 @@ function generateSearchAnglesFallback(topic: string, depth: "quick" | "standard"
   const deep = [
     ...standard,
     `${topic} statistics data research studies`,
-    `${topic} future predictions outlook trends`,
+    `${topic} future predictions outlook trends ${year}`,
   ];
   if (depth === "quick") return quick;
   if (depth === "deep") return deep;
@@ -880,7 +881,7 @@ Return JSON with 3 arrays:
   "media": [1-2 queries to find recommended books, movies, TV shows, documentaries, podcasts about this topic]
 }
 
-Web queries should cover: core concepts, recent developments (2024-2026), expert analysis, data/statistics, challenges, comparisons.
+Web queries should cover: core concepts, recent developments (${new Date().getFullYear() - 1}-${new Date().getFullYear()}), expert analysis, data/statistics, challenges, comparisons.
 Video queries should find the BEST explainer videos, documentaries, and expert presentations — use specific terms.
 Media queries should find cultural/educational media (books, films, series, podcasts) related to the topic.
 
@@ -1474,6 +1475,55 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     }
   }
 
+  // ── Cache-first: return cached results instantly for repeat topics ──
+  if (!params.force) {
+    const slug = topicSlug(topic);
+    const cached = researchHistory.load(slug);
+    if (cached && cached.summary && cached.keyFindings?.length > 0) {
+      // Check cache age — serve if less than 24 hours old
+      const cacheAge = Date.now() - (cached.timestamp || 0);
+      const MAX_CACHE_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+      if (cacheAge < MAX_CACHE_AGE_MS) {
+        logAction({ ts: Date.now(), type: "action", category: "researcher", message: `cache hit for "${topic}" (age: ${Math.round(cacheAge / 60000)}min)` });
+
+        // Check if a deeper depth was requested than what's cached
+        const depthOrder = { quick: 0, standard: 1, deep: 2 };
+        const cachedMeta = researchHistory.list().find((e) => e.id === slug);
+        const cachedDepth = (cachedMeta?.meta?.depth ?? "standard") as keyof typeof depthOrder;
+        if (depthOrder[depth] <= depthOrder[cachedDepth]) {
+          return jsonResult({
+            tool: "enso_researcher_search",
+            topic: cached.topic,
+            depth: cachedDepth,
+            phase: "complete",
+            summary: cached.summary,
+            narrative: cached.narrative ?? "",
+            keyFindings: cached.keyFindings,
+            sections: cached.sections ?? [],
+            sources: cached.sources ?? [],
+            images: cached.images ?? [],
+            videos: cached.videos ?? [],
+            books: cached.books ?? [],
+            movies: cached.movies ?? [],
+            recommendedVideos: cached.recommendedVideos ?? [],
+            contradictions: cached.contradictions ?? [],
+            fromHistory: true,
+            metadata: {
+              queriesRun: 0,
+              sourcesFound: cached.sources?.length ?? 0,
+              sectionsGenerated: cached.sections?.length ?? 0,
+              timestamp: cached.timestamp,
+              note: "From research library",
+            },
+            recentTopics: researchHistory.list().slice(0, 12),
+          });
+        }
+        // Deeper depth requested → fall through to fresh search
+        logAction({ ts: Date.now(), type: "action", category: "researcher", message: `deeper depth "${depth}" requested vs cached "${cachedDepth}" — running fresh search` });
+      }
+    }
+  }
+
   // ── Deep research classification ──
   // The task-router already filters out simple Q&A before we get here,
   // so we only need to decide: standard pipeline vs deep research escalation.
@@ -1829,7 +1879,8 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       .catch((err) => { logError("researcher", "Phase B synthesis failed", err, { topic }); return null; });
 
     let gapQueries: string[] = [];
-    const gapPromise = (depth === "deep" && geminiKey && keyFindings.length > 0) ? (async () => {
+    const shouldGapCheck = (depth === "deep" || depth === "standard") && geminiKey && keyFindings.length > 0;
+    const gapPromise = shouldGapCheck ? (async () => {
       mark("gap_start");
       const gapPrompt = `Given this research synthesis about "${topic}":
 

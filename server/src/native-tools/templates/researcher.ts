@@ -396,22 +396,44 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                 <LucideReact.Trash2 className="w-3 h-3" /> Clear All
               </button>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="space-y-1.5">
               {recentTopics.map((entry) => {
                 var entryTopic = entry.meta?.topic || entry.id || "";
+                var meta = entry.meta || {};
+                var depthLabel = meta.depth || "";
+                var srcCount = meta.sourceCount || 0;
+                var findCount = meta.findingCount || 0;
+                var preview = meta.summaryPreview || "";
+                var age = timeAgo(entry.meta?.timestamp);
                 return (
                   <div
                     key={entry.id}
-                    className="rounded-lg bg-gray-800/40 hover:bg-gray-700/50 cursor-pointer transition-colors group px-3 py-1.5 flex items-center gap-2"
+                    className="rounded-lg bg-gray-800/40 hover:bg-gray-700/50 cursor-pointer transition-colors group px-3 py-2"
                     onClick={() => onAction("search", { topic: entryTopic })}
                   >
-                    <span className="text-sm text-gray-200">{entryTopic}</span>
-                    <button
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-600/50 shrink-0"
-                      onClick={(e) => { e.stopPropagation(); onAction("delete_history", { topic: entryTopic }); }}
-                    >
-                      <LucideReact.X className="w-3 h-3 text-gray-500" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-200 flex-1 min-w-0 truncate">{entryTopic}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {age && <span className="text-[10px] text-gray-600">{age}</span>}
+                        <button
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-600/50"
+                          onClick={(e) => { e.stopPropagation(); onAction("delete_history", { topic: entryTopic }); }}
+                        >
+                          <LucideReact.X className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </div>
+                    </div>
+                    {(srcCount > 0 || findCount > 0 || depthLabel) && (
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {depthLabel && <span className={"text-[9px] px-1.5 py-0.5 rounded " + (depthLabel === "deep" ? "bg-violet-500/15 text-violet-400" : "bg-gray-700/50 text-gray-500")}>{depthLabel}</span>}
+                        {srcCount > 0 && <span className="text-[9px] text-gray-500">{srcCount} sources</span>}
+                        {findCount > 0 && <span className="text-[9px] text-gray-500">{findCount} findings</span>}
+                        {meta.hasBooks && <LucideReact.BookOpen className="w-2.5 h-2.5 text-indigo-400/50" />}
+                        {meta.hasVideos && <LucideReact.Play className="w-2.5 h-2.5 text-red-400/50" />}
+                        {meta.hasContradictions && <LucideReact.AlertTriangle className="w-2.5 h-2.5 text-amber-400/50" />}
+                      </div>
+                    )}
+                    {preview && <div className="text-[11px] text-gray-500 mt-1 line-clamp-1">{preview}</div>}
                   </div>
                 );
               })}
@@ -495,13 +517,22 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             title: "Sources (" + sources.length + ")",
             content: (
               <div className="space-y-1">
-                {sources.slice(0, 10).map((s, i) => (
-                  <div key={i} className="text-xs text-gray-400">
-                    <span className="text-gray-500 font-mono">[{i + 1}]</span>{" "}
-                    <span className="text-blue-400">{String(s.title)}</span>
-                    <span className="text-gray-600"> — {String(s.domain)}</span>
-                  </div>
-                ))}
+                {sources.slice(0, 10).map((s, i) => {
+                  var trust = getSourceTrust(s.domain);
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-800/30 rounded px-1 transition-colors" onClick={() => s.url && onAction("open_url", { url: s.url })}>
+                      <span className="text-[10px] text-gray-500 font-mono w-4 shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-gray-500">{String(s.domain)}</span>
+                          {trust && <span className={"text-[9px] px-1 py-0.5 rounded " + trust.bg + " " + trust.color}>{trust.label}</span>}
+                        </div>
+                      </div>
+                      <LucideReact.ExternalLink className="w-3 h-3 text-gray-600 shrink-0" />
+                    </div>
+                  );
+                })}
               </div>
             ),
           }]} />
@@ -588,13 +619,22 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             title: "Sources (" + sources.length + ")",
             content: (
               <div className="space-y-1">
-                {sources.slice(0, 10).map((s, i) => (
-                  <div key={i} className="text-xs text-gray-400">
-                    <span className="text-gray-500 font-mono">[{i + 1}]</span>{" "}
-                    <span className="text-blue-400">{String(s.title)}</span>
-                    <span className="text-gray-600"> — {String(s.domain)}</span>
-                  </div>
-                ))}
+                {sources.slice(0, 10).map((s, i) => {
+                  var trust = getSourceTrust(s.domain);
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-800/30 rounded px-1 transition-colors" onClick={() => s.url && onAction("open_url", { url: s.url })}>
+                      <span className="text-[10px] text-gray-500 font-mono w-4 shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-gray-500">{String(s.domain)}</span>
+                          {trust && <span className={"text-[9px] px-1 py-0.5 rounded " + trust.bg + " " + trust.color}>{trust.label}</span>}
+                        </div>
+                      </div>
+                      <LucideReact.ExternalLink className="w-3 h-3 text-gray-600 shrink-0" />
+                    </div>
+                  );
+                })}
               </div>
             ),
           }]} />
@@ -642,13 +682,22 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
             title: "Sources (" + sources.length + ")",
             content: (
               <div className="space-y-1">
-                {sources.slice(0, 10).map((s, i) => (
-                  <div key={i} className="text-xs text-gray-400">
-                    <span className="text-gray-500 font-mono">[{i + 1}]</span>{" "}
-                    <span className="text-blue-400">{String(s.title)}</span>
-                    <span className="text-gray-600"> — {String(s.domain)}</span>
-                  </div>
-                ))}
+                {sources.slice(0, 10).map((s, i) => {
+                  var trust = getSourceTrust(s.domain);
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-800/30 rounded px-1 transition-colors" onClick={() => s.url && onAction("open_url", { url: s.url })}>
+                      <span className="text-[10px] text-gray-500 font-mono w-4 shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-blue-400 truncate">{String(s.title)}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-gray-500">{String(s.domain)}</span>
+                          {trust && <span className={"text-[9px] px-1 py-0.5 rounded " + trust.bg + " " + trust.color}>{trust.label}</span>}
+                        </div>
+                      </div>
+                      <LucideReact.ExternalLink className="w-3 h-3 text-gray-600 shrink-0" />
+                    </div>
+                  );
+                })}
               </div>
             ),
           }]} />
@@ -707,6 +756,19 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
           {isComplete && data?.depth !== "deep" && !data?.metadata?.isDeepResearch && !data?.hasDeepResearch && (
             <Button variant="ghost" onClick={() => onAction("search", { topic, depth: "deep" })}>
               <LucideReact.Sparkles className="w-3.5 h-3.5 text-violet-400" /> <span className="hidden sm:inline">Deep</span>
+            </Button>
+          )}
+          {isComplete && narrative && (
+            <Button variant="ghost" onClick={() => {
+              var reportText = "# " + topic + "\\n\\n" + summary + "\\n\\n" + (keyFindings.length > 0 ? "## Key Findings\\n" + keyFindings.map(function(f, i) { return (i + 1) + ". [" + f.type + "] " + f.text; }).join("\\n") + "\\n\\n" : "") + "## Analysis\\n\\n" + narrative + "\\n\\n" + (sections.length > 0 ? sections.map(function(s) { return "### " + s.title + "\\n" + (s.summary || "") + "\\n" + (s.bullets || []).map(function(b) { return "- " + b; }).join("\\n"); }).join("\\n\\n") + "\\n\\n" : "") + "## Sources\\n" + sources.map(function(s, i) { return "[" + (i + 1) + "] " + s.title + " — " + s.url; }).join("\\n");
+              onAction("__copy_text", { text: reportText, label: "Full Report (Markdown)" });
+            }}>
+              <LucideReact.FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy</span>
+            </Button>
+          )}
+          {isComplete && (
+            <Button variant="ghost" onClick={() => onAction("send_report", { topic })}>
+              <LucideReact.Mail className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Email</span>
             </Button>
           )}
           {isComplete && (
