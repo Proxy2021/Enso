@@ -18,11 +18,11 @@ Parameters:
 
 ### enso_youtube_manager_feed
 
-Personalized video feed from your subscribed channels, sorted by newest
+Personalized video feed from your subscribed channels, sorted by newest. Supports filtering by subscription category (resolves channel IDs from cached subscription data).
 
 Parameters:
 - `maxResults` (number): Number of videos (default 20)
-- `category` (string): Filter by subscription category
+- `category` (string): Filter by subscription category (e.g. "AI & Machine Learning", "Gaming")
 
 ### enso_youtube_manager_trending
 
@@ -35,7 +35,7 @@ Parameters:
 
 ### enso_youtube_manager_discover
 
-AI-powered channel discovery based on your Enso profile interests, browsing habits, and subscription gaps
+AI-powered channel discovery based on your Enso profile interests. Runs search queries in parallel for faster results. Deduplicates against existing subscriptions.
 
 Parameters:
 - `topic` (string): Specific topic to search for (overrides profile-driven discovery)
@@ -43,7 +43,7 @@ Parameters:
 
 ### enso_youtube_manager_analytics
 
-Subscription analytics: category distribution, channel health, engagement insights
+Subscription analytics: category distribution, channel size distribution, total/avg/median subscriber counts, engagement insights
 
 ### enso_youtube_manager_unsubscribe
 

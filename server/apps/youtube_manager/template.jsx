@@ -42,7 +42,9 @@ var [selectMode, setSelectMode] = useState(false);
 var [selected, setSelected] = useState(new Set());
 var [confirmUnsub, setConfirmUnsub] = useState(false);
 var [regionCode, setRegionCode] = useState("HK");
+var [trendingCategory, setTrendingCategory] = useState("");
 var [discoverTopic, setDiscoverTopic] = useState("");
+var [feedCategory, setFeedCategory] = useState("all");
 
 // ── Helpers ──
 function fmt(n) {
@@ -91,6 +93,23 @@ var REGIONS = [
   { code: "GB", label: "UK" }, { code: "JP", label: "Japan" },
   { code: "KR", label: "Korea" }, { code: "TW", label: "Taiwan" },
   { code: "CN", label: "China" }, { code: "SG", label: "Singapore" },
+];
+
+var TRENDING_CATEGORIES = [
+  { id: "", label: "All Categories" },
+  { id: "1", label: "Film & Animation" },
+  { id: "2", label: "Autos & Vehicles" },
+  { id: "10", label: "Music" },
+  { id: "15", label: "Pets & Animals" },
+  { id: "17", label: "Sports" },
+  { id: "20", label: "Gaming" },
+  { id: "22", label: "People & Blogs" },
+  { id: "23", label: "Comedy" },
+  { id: "24", label: "Entertainment" },
+  { id: "25", label: "News & Politics" },
+  { id: "26", label: "How-To & Style" },
+  { id: "27", label: "Education" },
+  { id: "28", label: "Science & Tech" },
 ];
 
 // ── Tab Navigation ──
@@ -172,7 +191,12 @@ var VideoCard = function(props) {
 // ── Channel Card Component ──
 var ChannelCard = function(props) {
   var ch = props.channel;
+  var maxSubs = props.maxSubs || 1000000;
   var isSelected = selected.has(ch.channelId);
+
+  // Subscriber size bar (log scale, capped)
+  var subBarPct = ch.subscriberCount > 0 ? Math.min(100, Math.round(Math.log10(ch.subscriberCount + 1) / Math.log10(Math.max(maxSubs, 10) + 1) * 100)) : 0;
+  var subBarColor = ch.subscriberCount >= 1000000 ? "bg-yellow-400/60" : ch.subscriberCount >= 100000 ? "bg-blue-400/50" : ch.subscriberCount >= 10000 ? "bg-emerald-400/40" : "bg-gray-600/40";
 
   return (
     <div
@@ -211,6 +235,11 @@ var ChannelCard = function(props) {
           <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-500">
             <span>{ch.subscriberCountFmt || fmt(ch.subscriberCount)} subs</span>
             <span>· {ch.videoCountFmt || fmt(ch.videoCount)} videos</span>
+            {ch.subscribedAt && <span>· {timeAgo(ch.subscribedAt)}</span>}
+          </div>
+          {/* Subscriber size bar */}
+          <div className="mt-1.5 h-1 w-full bg-gray-700/30 rounded-full overflow-hidden">
+            <div className={"h-full rounded-full transition-all " + subBarColor} style={{ width: subBarPct + "%" }} />
           </div>
           {ch.description && (
             <p className="text-[10px] text-gray-600 mt-1 truncate">{ch.description}</p>
@@ -242,8 +271,17 @@ var SubscriptionsView = function() {
     if (sortBy === "name") result = result.slice().sort(function(a, b) { return (a.title || "").localeCompare(b.title || ""); });
     else if (sortBy === "subs") result = result.slice().sort(function(a, b) { return (b.subscriberCount || 0) - (a.subscriberCount || 0); });
     else if (sortBy === "videos") result = result.slice().sort(function(a, b) { return (b.videoCount || 0) - (a.videoCount || 0); });
+    else if (sortBy === "recent") result = result.slice().sort(function(a, b) { return new Date(b.subscribedAt || 0).getTime() - new Date(a.subscribedAt || 0).getTime(); });
     return result;
   }, [channels, searchQuery, selectedCategory, sortBy]);
+
+  var maxSubs = useMemo(function() {
+    var max = 0;
+    for (var i = 0; i < channels.length; i++) {
+      if ((channels[i].subscriberCount || 0) > max) max = channels[i].subscriberCount;
+    }
+    return max;
+  }, [channels]);
 
   return (
     <div>
@@ -272,6 +310,7 @@ var SubscriptionsView = function() {
           { value: "name", label: "Sort: Name" },
           { value: "subs", label: "Sort: Subscribers" },
           { value: "videos", label: "Sort: Videos" },
+          { value: "recent", label: "Sort: Recent" },
         ]} onChange={setSortBy} />
 
         <button
@@ -302,13 +341,13 @@ var SubscriptionsView = function() {
       {viewMode === "grid" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {filtered.map(function(ch) {
-            return <ChannelCard key={ch.channelId} channel={ch} />;
+            return <ChannelCard key={ch.channelId} channel={ch} maxSubs={maxSubs} />;
           })}
         </div>
       ) : (
         <div className="space-y-1">
           {filtered.map(function(ch) {
-            return <ChannelCard key={ch.channelId} channel={ch} />;
+            return <ChannelCard key={ch.channelId} channel={ch} maxSubs={maxSubs} />;
           })}
         </div>
       )}
@@ -362,12 +401,36 @@ var SubscriptionsView = function() {
 // ── Feed Tab ──
 var FeedView = function() {
   var videos = data?.videos || [];
+  var activeFeedCategory = data?.category || null;
+
+  // Build category options from manage cache (if available)
+  var feedCatOptions = useMemo(function() {
+    var opts = [{ value: "all", label: "All Subscriptions" }];
+    // Categories may be available if manage was loaded before
+    var cats = data?.feedCategories || [];
+    for (var i = 0; i < cats.length; i++) {
+      opts.push({ value: cats[i].name, label: cats[i].name });
+    }
+    return opts;
+  }, [data]);
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-gray-500">{videos.length} videos from your subscriptions</p>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {feedCatOptions.length > 1 && (
+          <Select value={feedCategory} options={feedCatOptions} onChange={function(v) {
+            setFeedCategory(v);
+            onAction("feed", { category: v === "all" ? undefined : v, maxResults: 20 });
+          }} />
+        )}
+        {activeFeedCategory && (
+          <span className={"inline-flex px-2 py-0.5 text-[10px] font-medium rounded border " + catBadgeClass(activeFeedCategory)}>
+            Filtered: {activeFeedCategory}
+          </span>
+        )}
+        <p className="text-xs text-gray-500 ml-auto">{videos.length} videos</p>
         <button
-          onClick={function() { onAction("feed", { maxResults: 30 }); }}
+          onClick={function() { onAction("feed", { maxResults: (videos.length || 20) + 20, category: feedCategory === "all" ? undefined : feedCategory }); }}
           className="px-3 py-1.5 text-xs rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors"
         >
           Load More
@@ -389,10 +452,13 @@ var TrendingView = function() {
   var videos = data?.videos || [];
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <Select value={regionCode} options={
           REGIONS.map(function(r) { return { value: r.code, label: r.label }; })
-        } onChange={function(v) { setRegionCode(v); onAction("trending", { regionCode: v }); }} />
+        } onChange={function(v) { setRegionCode(v); onAction("trending", { regionCode: v, categoryId: trendingCategory || undefined }); }} />
+        <Select value={trendingCategory} options={
+          TRENDING_CATEGORIES.map(function(c) { return { value: c.id, label: c.label }; })
+        } onChange={function(v) { setTrendingCategory(v); onAction("trending", { regionCode: regionCode, categoryId: v || undefined }); }} />
         <p className="text-xs text-gray-500 ml-auto">{videos.length} trending</p>
       </div>
       {videos.length > 0 ? (
@@ -454,28 +520,47 @@ var DiscoverView = function() {
         </div>
       )}
 
+      {/* Results count */}
+      {channels.length > 0 && (
+        <p className="text-[10px] text-gray-600 mb-3">{channels.length} channels discovered</p>
+      )}
+
       {/* Discovered channels */}
       {channels.length > 0 ? (
         <div className="space-y-3">
-          {channels.map(function(ch) {
+          {channels.map(function(ch, idx) {
+            var confPct = ch.confidence ? Math.round(ch.confidence * 100) : null;
             return (
-              <div key={ch.channelId} className="rounded-xl border border-gray-700/30 bg-gray-800/40 p-4">
+              <div key={ch.channelId} className="rounded-xl border border-gray-700/30 bg-gray-800/40 p-4 hover:border-gray-600/50 transition-colors">
                 <div className="flex items-start gap-3">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-700/50 text-gray-400 text-xs font-bold shrink-0">
+                    {idx + 1}
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <a href={"https://youtube.com/channel/" + ch.channelId} target="_blank" rel="noopener"
-                      className="text-sm font-semibold text-gray-200 hover:text-white">
-                      {ch.channelTitle}
-                    </a>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-2">
+                      <a href={"https://youtube.com/channel/" + ch.channelId} target="_blank" rel="noopener"
+                        className="text-sm font-semibold text-gray-200 hover:text-white">
+                        {ch.channelTitle}
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25">
-                        Recommended: {ch.recommendedBecause}
+                        {ch.recommendedBecause}
                       </span>
                       <span className="text-[10px] text-gray-600">via {ch.source}</span>
+                      {confPct && (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-16 h-1.5 bg-gray-700/40 rounded-full overflow-hidden">
+                            <div className={"h-full rounded-full " + (confPct >= 70 ? "bg-emerald-400/70" : confPct >= 40 ? "bg-yellow-400/60" : "bg-gray-500/50")} style={{ width: confPct + "%" }} />
+                          </div>
+                          <span className="text-[9px] text-gray-500">{confPct}% match</span>
+                        </div>
+                      )}
                     </div>
                     {/* Sample video */}
                     {ch.sampleVideo && (
                       <div className="mt-3 flex gap-3">
-                        <a href={ch.sampleVideo.videoUrl} target="_blank" rel="noopener">
+                        <a href={ch.sampleVideo.videoUrl} target="_blank" rel="noopener" className="shrink-0">
                           <img src={ch.sampleVideo.thumbnailUrl} alt="" className="w-40 rounded-lg object-cover aspect-video" />
                         </a>
                         <div className="flex-1 min-w-0">
@@ -521,27 +606,32 @@ var AnalyticsView = function() {
 
   return (
     <div className="space-y-6">
-      {/* Summary stats */}
+      {/* Summary stats — 2 rows */}
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Total Channels" value={data?.totalChannels || 0} />
         <Stat label="Categories" value={data?.categoryCount || 0} />
         <Stat label="Total Videos" value={fmt(data?.totalVideos || 0)} />
       </div>
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="Total Subscribers" value={fmt(data?.totalSubscribers || 0)} />
+        <Stat label="Avg Subs/Channel" value={fmt(data?.avgSubscribers || 0)} />
+        <Stat label="Median Subs" value={fmt(data?.medianSubscribers || 0)} />
+      </div>
 
       {/* Category distribution */}
       <div>
         <h3 className="text-sm font-medium text-gray-300 mb-3">Channels by Category</h3>
-        <div style={{ width: "100%", height: 300 }}>
+        <div style={{ width: "100%", height: Math.max(300, categoryChart.length * 28) }}>
           <ResponsiveContainer>
-            <BarChart data={categoryChart} layout="vertical" margin={{ left: 120, right: 20, top: 5, bottom: 5 }}>
+            <BarChart data={categoryChart} layout="vertical" margin={{ left: 120, right: 40, top: 5, bottom: 5 }}>
               <XAxis type="number" tick={{ fill: "#64748b", fontSize: 10 }} />
               <YAxis type="category" dataKey="name" tick={{ fill: "#94a3b8", fontSize: 10 }} width={115} />
-              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+              <Bar dataKey="value" radius={[0, 4, 4, 0]} label={{ position: "right", fill: "#64748b", fontSize: 10, formatter: function(val) { var entry = categoryChart.find(function(e) { return e.value === val; }); return val + (entry && entry.pct ? " (" + entry.pct + "%)" : ""); } }}>
                 {categoryChart.map(function(entry, idx) {
                   return <Cell key={idx} fill={COLORS[idx % COLORS.length]} />;
                 })}
               </Bar>
-              <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} formatter={function(val, name, props) { var pct = props.payload.pct; return [val + " channels" + (pct ? " (" + pct + "%)" : ""), "Count"]; }} />
             </BarChart>
           </ResponsiveContainer>
         </div>

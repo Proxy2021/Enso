@@ -6,20 +6,20 @@ var CACHE_KEY = "yt_manager_subs";
 var CACHE_TTL = 600000; // 10 min
 
 var CATEGORIES = {
-  "Photography & Cameras": /photo|camera|leica|hasselblad|lightroom|zeiss|dpreview|petapixel|photography|photographer|lens|darkroom/i,
-  "AI & Machine Learning": /\bai\b|machine learn|deep ?learn|openai|deepmind|neural|llm|anthropic|karpathy|langchain|scale ai|neuralink|gemini|claude|gpt/i,
-  "Programming & Dev": /coding|program|developer|javascript|python|flutter|react|node|typescript|github|code monkey|net ninja|devops/i,
-  "Gaming": /gaming|game|esport|diablo|brawl|league of legends|xbox|playstation|ign |gamespot|asmongold|pewdiepie|mrbeast|tfue|larian|dungeons|dan allen/i,
-  "Cycling & Sports": /cycl|bike|zwift|triath|swimming|sport|golf|snooker|fitness/i,
-  "Film & Video": /film|cinema|movie|video production|capcut|filmmaker|studio ?binder|trailer/i,
-  "Finance & Business": /invest|stock|crypto|financ|trading|fund|market|cnbc|fortune|ray dalio|whiteboard crypto|business/i,
-  "Music": /music|song|singer|band|elvis|imagine ?dragon|red hot|u2\b|bts|ray chen|sing|vocal|歌|concert/i,
-  "Science & Education": /science|physics|math|engineer|khan|mit |stanford|ted\b|quanta|chemistry|biology|professor|lecture|course/i,
+  "Photography & Cameras": /photo|camera|leica|hasselblad|lightroom|zeiss|dpreview|petapixel|photography|photographer|lens|darkroom|fujifilm|nikon|canon eos|sigma fp|capture one/i,
+  "AI & Machine Learning": /\bai\b|machine learn|deep ?learn|openai|deepmind|neural|llm|anthropic|karpathy|langchain|scale ai|neuralink|gemini|claude|gpt|hugging ?face|stable diffus|midjourney|comfyui|ollama/i,
+  "Programming & Dev": /coding|program|developer|javascript|python|flutter|react|node|typescript|github|code monkey|net ninja|devops|rust ?lang|golang|\bvim\b|neovim|web ?dev|backend|frontend|fullstack|leetcode/i,
+  "Gaming": /gaming|game|esport|diablo|brawl|league of legends|xbox|playstation|ign |gamespot|asmongold|pewdiepie|mrbeast|tfue|larian|dungeons|dan allen|nintendo|steam deck|baldur/i,
+  "Cycling & Sports": /cycl|bike|zwift|triath|swimming|sport|golf|snooker|fitness|peloton|strava|running|marathon|workout/i,
+  "Film & Video": /film|cinema|movie|video production|capcut|filmmaker|studio ?binder|trailer|cinematograph|davinci resolve|premiere pro|color grad/i,
+  "Finance & Business": /invest|stock|crypto|financ|trading|fund|market|cnbc|fortune|ray dalio|whiteboard crypto|business|dividend|portfolio|economy|entrepreneur/i,
+  "Music": /music|song|singer|band|elvis|imagine ?dragon|red hot|u2\b|bts|ray chen|sing|vocal|歌|concert|guitar|piano|drum|beatbox|orchestra|spotify/i,
+  "Science & Education": /science|physics|math|engineer|khan|mit |stanford|ted\b|quanta|chemistry|biology|professor|lecture|course|veritasium|kurzgesagt|3blue1brown|minutephysics/i,
   "Hong Kong & Chinese": /tvb|港|hk|hong kong|粵|cantonese|中文|chinese|华|中国|青蛙|飞哥|钟文泽|影视|罗振宇|雪球|碎碎冰|轻风|陶艺|源理|左手|红墙|律師|蝴蝶/i,
-  "Cars & Automotive": /\bcar\b|auto|porsche|donut|leno|carwow|driving|vehicle/i,
-  "Tech & Gadgets": /\bapple\b|iphone|tech|gadget|dyson|unreal|product review/i,
-  "Documentary & History": /documentary|history|national geo|geography|welt/i,
-  "Art & Design": /\bart\b|design|creative|illustrat|graphic|museum/i
+  "Cars & Automotive": /\bcar\b|auto|porsche|donut|leno|carwow|driving|vehicle|tesla|bmw|mercedes|formula ?1|\bf1\b|motortrend/i,
+  "Tech & Gadgets": /\bapple\b|iphone|tech|gadget|dyson|unreal|product review|mkbhd|linus tech|unbox|samsung|pixel|laptop|setup tour/i,
+  "Documentary & History": /documentary|history|national geo|geography|welt|timeline|real stories|bbc earth/i,
+  "Art & Design": /\bart\b|design|creative|illustrat|graphic|museum|procreate|photoshop|figma|ui ?ux|typography/i
 };
 
 function categorize(title, desc) {
@@ -94,7 +94,8 @@ for (var i = 0; i < allSubs.length; i++) {
     subscriberCount: subCount,
     videoCount: vidCount,
     subscriberCountFmt: fmtCount(subCount),
-    videoCountFmt: fmtCount(vidCount)
+    videoCountFmt: fmtCount(vidCount),
+    subscribedAt: sub.subscribedAt || sub.publishedAt || null
   });
 }
 

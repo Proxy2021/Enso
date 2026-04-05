@@ -54,48 +54,55 @@ if (topic) {
   queries.push({ query: "best new YouTube channels 2026", source: "general", interest: "trending" });
 }
 
-// Search for channels
+// Search for channels — run all queries in parallel for speed
+var perQuery = Math.ceil(maxResults / queries.length) + 3;
+var searchPromises = queries.map(function(qObj) {
+  return ctx.callTool("enso_youtube_search", {
+    query: qObj.query,
+    maxResults: perQuery,
+    order: "relevance"
+  }).catch(function() { return null; });
+});
+
+var searchResults = await Promise.all(searchPromises);
+
 var discovered = [];
 var seen = {};
 
 for (var q = 0; q < queries.length; q++) {
-  try {
-    var searchResult = await ctx.callTool("enso_youtube_search", {
-      query: queries[q].query,
-      maxResults: Math.ceil(maxResults / queries.length) + 3,
-      order: "relevance"
+  var searchResult = searchResults[q];
+  if (!searchResult) continue;
+
+  var videos = [];
+  if (searchResult && searchResult.success && searchResult.data) {
+    videos = searchResult.data.videos || [];
+  } else if (searchResult && typeof searchResult === "string") {
+    try { videos = JSON.parse(searchResult).videos || []; } catch(e) {}
+  }
+
+  for (var v = 0; v < videos.length; v++) {
+    var video = videos[v];
+    var chId = video.channelId;
+    var chTitle = video.channelTitle;
+
+    if (!chId || existingChannels[chId] || existingChannels[(chTitle||"").toLowerCase()] || seen[chId]) continue;
+    seen[chId] = true;
+
+    discovered.push({
+      channelId: chId,
+      channelTitle: chTitle,
+      sampleVideo: {
+        videoId: video.videoId,
+        title: video.title,
+        thumbnailUrl: video.thumbnailUrl,
+        viewCount: video.viewCount,
+        videoUrl: video.videoUrl
+      },
+      recommendedBecause: queries[q].interest,
+      source: queries[q].source,
+      confidence: queries[q].confidence || null
     });
-    var videos = [];
-    if (searchResult && searchResult.success && searchResult.data) {
-      videos = searchResult.data.videos || [];
-    } else if (searchResult && typeof searchResult === "string") {
-      try { videos = JSON.parse(searchResult).videos || []; } catch(e) {}
-    }
-
-    for (var v = 0; v < videos.length; v++) {
-      var video = videos[v];
-      var chId = video.channelId;
-      var chTitle = video.channelTitle;
-
-      if (!chId || existingChannels[chId] || existingChannels[(chTitle||"").toLowerCase()] || seen[chId]) continue;
-      seen[chId] = true;
-
-      discovered.push({
-        channelId: chId,
-        channelTitle: chTitle,
-        sampleVideo: {
-          videoId: video.videoId,
-          title: video.title,
-          thumbnailUrl: video.thumbnailUrl,
-          viewCount: video.viewCount,
-          videoUrl: video.videoUrl
-        },
-        recommendedBecause: queries[q].interest,
-        source: queries[q].source,
-        confidence: queries[q].confidence || null
-      });
-    }
-  } catch(e) {}
+  }
 }
 
 var final = discovered.slice(0, maxResults);

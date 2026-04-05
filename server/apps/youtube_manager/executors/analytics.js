@@ -25,6 +25,8 @@ var totalChannels = channels.length;
 var categoryDist = {};
 var subRanges = { "0-1K": 0, "1K-10K": 0, "10K-100K": 0, "100K-1M": 0, "1M+": 0 };
 var totalVideos = 0;
+var totalSubscribers = 0;
+var allSubCounts = [];
 
 for (var i = 0; i < channels.length; i++) {
   var ch = channels[i];
@@ -32,6 +34,8 @@ for (var i = 0; i < channels.length; i++) {
   categoryDist[cat] = (categoryDist[cat] || 0) + 1;
 
   var subs = ch.subscriberCount || 0;
+  totalSubscribers += subs;
+  allSubCounts.push(subs);
   if (subs >= 1000000) subRanges["1M+"]++;
   else if (subs >= 100000) subRanges["100K-1M"]++;
   else if (subs >= 10000) subRanges["10K-100K"]++;
@@ -40,6 +44,15 @@ for (var i = 0; i < channels.length; i++) {
 
   totalVideos += (ch.videoCount || 0);
 }
+
+// Compute median subscriber count
+allSubCounts.sort(function(a, b) { return a - b; });
+var medianSubs = 0;
+if (allSubCounts.length > 0) {
+  var mid = Math.floor(allSubCounts.length / 2);
+  medianSubs = allSubCounts.length % 2 !== 0 ? allSubCounts[mid] : Math.round((allSubCounts[mid - 1] + allSubCounts[mid]) / 2);
+}
+var avgSubs = totalChannels > 0 ? Math.round(totalSubscribers / totalChannels) : 0;
 
 // Category chart data
 var categoryChart = Object.keys(categoryDist)
@@ -65,11 +78,19 @@ var smallest = channels.slice().sort(function(a, b) {
   return { name: ch.title, channelId: ch.channelId, value: ch.subscriberCount || 0, category: ch.category };
 });
 
+// Category percentage chart (for labels)
+var categoryPctChart = categoryChart.map(function(c) {
+  return { name: c.name, value: c.value, pct: totalChannels > 0 ? Math.round(c.value / totalChannels * 100) : 0 };
+});
+
 var data = {
   tool: "enso_youtube_manager_analytics",
   totalChannels: totalChannels,
   totalVideos: totalVideos,
-  categoryChart: categoryChart,
+  totalSubscribers: totalSubscribers,
+  avgSubscribers: avgSubs,
+  medianSubscribers: medianSubs,
+  categoryChart: categoryPctChart,
   subRangeChart: subRangeChart,
   topBySize: topBySize,
   smallest: smallest,
