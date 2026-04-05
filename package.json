@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.3.98",
   "versionCode": 200,
-  "description": "An AI sandbox that generates complete solutions — discovers opportunities, assembles AI teams to build, self-evolves, and ships products",
+  "description": "Self-hosted AI platform: 99 tools, 16 apps, Knowledge Cortex, multi-agent orchestration, self-evolution sprints — every answer is an interactive app",
   "type": "module",
   "scripts": {
     "dev": "vite",

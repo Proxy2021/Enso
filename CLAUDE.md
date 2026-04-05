@@ -4,11 +4,12 @@
 
 ## Vision
 
-**Enso — an AI sandbox that generates complete solutions. It discovers project opportunities, assembles AI teams to build, self-evolves, and ships products.** Every installation includes the complete source code and build pipeline — users own the factory, not just the product. It can run standalone or as an OpenClaw channel plugin.
+**Enso — a self-hosted AI platform with 99 tools, 16 apps, and a self-evolving knowledge system.** It discovers project opportunities, assembles AI teams to build, maintains an AI-curated knowledge base that compounds with use, self-evolves through autonomous sprints, and ships products. Every installation includes the complete source code and build pipeline — users own the factory, not just the product.
 
 **Core principles:**
-- **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline, delivering the most useful format for each answer — interactive research boards, data visualizations, photo studios, file managers — not walls of text. No LLM call needed for rendering.
+- **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline, delivering the most useful format for each answer — interactive research boards, data visualizations, photo studios, file managers, knowledge graphs — not walls of text. No LLM call needed for rendering.
 - **AI teams for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
+- **Knowledge Cortex** — A persistent, AI-maintained knowledge base (based on Karpathy's LLM Wiki pattern) that compounds with every use. Research results, data source imports, and manual knowledge flow into interlinked entity/concept/synthesis pages. A daily scheduled task searches the web for the user's top interests, ingests findings, and emails a personalized intelligence briefing.
 - **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
 - **User owns the factory** — Each installation is a complete codebase with build tools. During setup, Claude Code personalizes the source code based on who the user is — redesigning the UI, writing role-specific prompts, reordering tools. The resulting APK is a custom app, not a configured generic one. Future `/evolve` sprints continue modifying the same source.
 - **AI-native project management** — Each project has a team of AI agents (Project Leader, Architect, Engineer, QA, Marketing, Sales, AI Strategist) and customer personas that autonomously discover, build, and evolve projects through iterative sprints with real browser testing, code implementation, and validation cycles.

@@ -31,6 +31,7 @@ interface ExportBundle {
   apps?: Record<string, unknown>;
   skills?: Record<string, string>;
   projects?: Record<string, unknown>;
+  wiki?: Record<string, Record<string, string>>;
 }
 
 interface CategoryInfo {
@@ -49,6 +50,7 @@ const CATEGORIES: CategoryInfo[] = [
   { id: "apps", label: "App State", description: "Per-app persistent data (galleries, settings)", sensitive: false },
   { id: "skills", label: "Skills", description: "User-created skill definitions", sensitive: false },
   { id: "projects", label: "Projects", description: "Project definitions (team, personas, vision)", sensitive: false },
+  { id: "wiki", label: "Knowledge Cortex", description: "AI-maintained knowledge base (entities, concepts, sources, synthesis)", sensitive: false },
 ];
 
 // ── Readers ──
@@ -156,6 +158,37 @@ function readCategory(id: string): unknown | null {
         const data = readJsonFile(projFile);
         if (data) result[pDir] = data;
       }
+      return Object.keys(result).length > 0 ? result : null;
+    }
+
+    case "wiki": {
+      const wikiDir = join(ENSO_HOME, "wiki");
+      if (!existsSync(wikiDir)) return null;
+      const result: Record<string, Record<string, string>> = {};
+      const subdirs = ["entities", "concepts", "sources", "synthesis"];
+
+      // Root metadata files
+      const indexContent = readTextFile(join(wikiDir, "_index.md"));
+      const logContent = readTextFile(join(wikiDir, "_log.md"));
+      if (indexContent || logContent) {
+        result["_root"] = {};
+        if (indexContent) result["_root"]["_index.md"] = indexContent;
+        if (logContent) result["_root"]["_log.md"] = logContent;
+      }
+
+      // Subdirectory pages
+      for (const subdir of subdirs) {
+        const subdirPath = join(wikiDir, subdir);
+        if (!existsSync(subdirPath)) continue;
+        const files: Record<string, string> = {};
+        for (const file of readdirSync(subdirPath)) {
+          if (!file.endsWith(".md")) continue;
+          const content = readTextFile(join(subdirPath, file));
+          if (content) files[file] = content;
+        }
+        if (Object.keys(files).length > 0) result[subdir] = files;
+      }
+
       return Object.keys(result).length > 0 ? result : null;
     }
 
@@ -304,6 +337,8 @@ function importCategory(id: string, data: unknown, mergeMode: "skip" | "replace"
       return importSkills(data as Record<string, string>, mergeMode);
     case "projects":
       return importProjects(data as Record<string, unknown>, mergeMode);
+    case "wiki":
+      return importWiki(data as Record<string, Record<string, string>>, mergeMode);
     default:
       return { imported: 0, skipped: 0, details: "Unknown category" };
   }
@@ -523,5 +558,34 @@ function importProjects(data: Record<string, unknown>, mergeMode: "skip" | "repl
     writeFileSync(pFile, JSON.stringify(projData, null, 2), "utf-8");
     imported++;
   }
+  return { imported, skipped };
+}
+
+function importWiki(data: Record<string, Record<string, string>>, mergeMode: "skip" | "replace"): ImportSummary {
+  const wikiDir = join(ENSO_HOME, "wiki");
+  mkdirSync(wikiDir, { recursive: true });
+  let imported = 0, skipped = 0;
+
+  for (const [category, files] of Object.entries(data)) {
+    if (category === "_root") {
+      for (const [filename, content] of Object.entries(files)) {
+        const filePath = join(wikiDir, filename);
+        if (mergeMode === "skip" && existsSync(filePath)) { skipped++; continue; }
+        writeFileSync(filePath, content, "utf-8");
+        imported++;
+      }
+      continue;
+    }
+
+    const categoryDir = join(wikiDir, category);
+    mkdirSync(categoryDir, { recursive: true });
+    for (const [filename, content] of Object.entries(files)) {
+      const filePath = join(categoryDir, filename);
+      if (mergeMode === "skip" && existsSync(filePath)) { skipped++; continue; }
+      writeFileSync(filePath, content, "utf-8");
+      imported++;
+    }
+  }
+
   return { imported, skipped };
 }

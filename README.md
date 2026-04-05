@@ -6,22 +6,20 @@
 
 ## What is Enso?
 
-Enso is an open-source AI platform that doesn't just chat — it **builds**. Ask a question
-and get a structured research dashboard, not a wall of text. Describe an app and watch
-Claude Code build it in a live terminal. Run `/evolve` and an AI team improves your entire
-installation autonomously.
+Enso is a self-hosted AI platform that goes beyond chat. Ask a question and get a structured research dashboard, not a wall of text. Describe an app and watch Claude Code build it in a live terminal. Import your data sources and watch an AI-maintained knowledge base grow. Run `/evolve` and an AI team improves your entire installation autonomously.
 
-**Self-hosted. Self-evolving. Yours.**
+**99 tools. 16 apps. 1 command to install. Yours forever.**
 
 ## Why Enso?
 
 | What You Want | Others | Enso |
 |---|---|---|
-| Research a topic | Wall of text (ChatGPT) | Interactive research board with 48+ sources, charts, AI podcast |
-| Build an app | Component preview (v0) or code edits (Cursor) | Full app built live in Claude Code terminal |
+| Research a topic | Wall of text | Interactive research board with 48+ sources, charts, AI podcast |
+| Build an app | Component preview or code edits | Full app built live in Claude Code terminal |
+| Track knowledge | Re-derive from scratch every time | Knowledge Cortex: AI-maintained wiki that compounds with every use |
 | Improve your tools | Wait for vendor updates | AI team runs evolution sprints on YOUR installation |
-| Own your workspace | Rent SaaS ($20–200/mo) | Own source code, fork it, modify it, keep it forever |
-| Personalize | Config files, themes | Claude Code recompiles the entire app for your role |
+| Stay current | Manual news reading | Daily intelligence briefing: AI searches web for your interests, emails a digest |
+| Own your workspace | Rent SaaS ($20-200/mo) | Own source code + data + build pipeline. Fork it. Modify it. Keep it. |
 
 ## Get Started
 
@@ -49,29 +47,47 @@ See **[PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md)** for examples.
 ### 📱 Every Answer Is an App
 
 Research questions become interactive dashboards. Build requests become running apps.
-File operations become a desktop-grade file manager. 15+ built-in app types, plus custom
+File operations become a desktop-grade file manager. 16 built-in apps, plus unlimited custom
 apps from a single command.
 
 ### 🧬 AI That Evolves Itself
 
-Type `/evolve` and an AI team — project leader, architect, engineers, QA — runs a full
-improvement sprint. Sprint scores: 4.5 → 7.5 over 4 cycles. No other developer tool does this.
+Type `/evolve` and an AI team — project leader, architect, engineers, QA, marketing, sales — runs a full improvement sprint with real browser testing, code implementation, and validation. No other tool does this.
 
 ## Built-in Capabilities
 
 | Capability | Description |
 |---|---|
-| 🔍 Research Engine | 48+ source analysis with structured boards, AI podcast, PDF export |
-| 💻 Claude Code | `/code` — live terminal coding with model selection (Opus/Sonnet/Haiku) |
-| ⚡ Orchestrator | Multi-agent teams with dependency graphs for complex tasks |
-| 📸 Photo Studio | 28 film/cinematic styles, batch processing, EXIF editing |
-| 🌐 Remote Browser | Full browser inside the conversation |
-| 📂 File Manager | Desktop-grade with previews and CRUD |
-| 🖥️ Remote Desktop | Control remote machines from within Enso |
-| 🧠 Knowledge Cortex | LLM-maintained knowledge base with graph visualization, web discovery, AI digest, daily intelligence briefing |
-| 🔬 Mission Planner | AI discovers project opportunities tailored to your interests |
-| ✨ Card Evolution | Click Evolve on any card — AI team turns it into a polished app |
-| 📝 Summarizer | One-click text + AI podcast summaries for any card |
+| 🧠 Knowledge Cortex | AI-maintained knowledge base: 100+ interlinked pages, treemap graph, web discovery, AI digest, daily intelligence briefing with email delivery |
+| 🔍 Research Engine | 48+ source analysis with structured boards, AI podcast, contradiction detection, deep research escalation via Claude Code |
+| 💻 Claude Code | `/code` — live terminal coding with model selection (Opus/Sonnet/Haiku), extended thinking |
+| ⚡ Orchestrator | Multi-agent teams with DAG-based task decomposition for complex goals |
+| 🧬 Evolution | AI team sprints: 7 phases, 6 parallel agents, persona testing, fix-verify loops |
+| 📸 Photo Studio | 56 film/cinematic styles, batch processing, AI analysis, EXIF editing |
+| 🎬 Video Studio | AI video generation from text prompts via Seedance |
+| 🌐 Remote Browser | Full Puppeteer-driven browser inside the conversation |
+| 📂 File Manager | Desktop-grade with previews, search, CRUD, 14 file operations |
+| 🖥️ Remote Desktop | Control remote machines with screenshots, click, type, scroll |
+| 🐚 Terminal | Full PTY terminal (PowerShell/bash/zsh) with xterm.js rendering |
+| 📊 Data Analyzer | CSV/JSON analysis with statistics, charts, queries |
+| 📺 YouTube Manager | Subscription management, feed, trending, analytics (OAuth) |
+| 📧 Email | Gmail SMTP for reports, digests, and notifications |
+| 🔬 Mission Planner | AI VC team discovers project opportunities tailored to your interests |
+| ⏰ Scheduled Tasks | Durable cron system: run any tool or prompt on a schedule |
+| 🔄 Settings Transfer | Export/import 9 categories of data across machines |
+| 🛒 ClawHub | Skill store: browse, install, manage OpenClaw extensions |
+
+## Knowledge Cortex
+
+Based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — instead of re-deriving knowledge from scratch each time, the LLM incrementally builds and maintains a persistent, interlinked markdown knowledge base that compounds with every use.
+
+**Data sources:** Browser history, bookmarks, email, projects, YouTube subscriptions/likes/feed, system info — all consent-gated and local-only.
+
+**Explorer app:** Dashboard with stats and knowledge gaps, treemap graph visualization (60+ nodes, 280+ connections), full-text search with tag cloud, article reader with backlinks and related pages.
+
+**Discovery:** Enter any topic — AI searches the web, suggests 5 branches to explore, one-click ingest into the Cortex.
+
+**Daily Intelligence Briefing:** Scheduled task searches the web daily for your top 10 interests, AI analyzes findings with personalized impact assessment and action items, ingests significant discoveries into the Cortex, emails you a curated digest.
 
 ## How It Works
 
@@ -95,14 +111,15 @@ Your message
                   Interactive React App (instant)
 ```
 
-No commands. No configuration. The system figures out the right level of effort.
+No commands needed. The system auto-classifies every message and chooses the right level of effort.
 
 ## Tech Stack
 
 **Frontend:** React 19, Zustand 5, Tailwind CSS 4, Vite 6, Capacitor (Android)
-**Backend:** Express, WebSocket, TypeScript, node-pty
-**AI:** Claude Code, Multi-provider LLM (Claude, Gemini, GPT, DeepSeek, Ollama, OpenRouter)
+**Backend:** Express, WebSocket, TypeScript 5.7, node-pty
+**AI:** Claude Code (Opus/Sonnet/Haiku), Multi-provider LLM (Claude, Gemini, GPT, DeepSeek, Ollama, OpenRouter)
 **Mobile:** Capacitor Android APK + PWA (offline-capable)
+**Tools:** 99 registered tools across 14 families
 
 ## Architecture
 
@@ -112,27 +129,27 @@ No commands. No configuration. The system figures out the right level of effort.
 ```
 src/                          React frontend
 ├── cards/                    Card renderers (DynamicUI, Terminal, Shell, Orchestration, Mission)
-├── components/               Timeline, ChatInput, CardContainer, ConnectionPicker, MemoryPanel
+├── components/               Timeline, ChatInput, CardContainer, ConnectionPicker
 ├── store/chat.ts             Zustand state (cards, streaming, connections, evolution)
-└── lib/                      WS client, JSX sandbox (Sucrase), EnsoUI (17 components), connections
+└── lib/                      WS client, JSX sandbox (Sucrase), EnsoUI (27 components), connections
 
-server/              OpenClaw channel plugin (backend)
-├── apps/                     Shipped app packages (app.json + template.jsx + executors/)
+server/                       Backend
+├── apps/                     11 shipped app packages (app.json + template.jsx + executors/)
 └── src/
     ├── server.ts             Express + WS server with auth
-    ├── channel.ts            OpenClaw ChannelPlugin implementation
-    ├── inbound.ts            Message routing (browser → OpenClaw dispatch)
-    ├── outbound/             Response delivery, card actions, enhancement, context
-    ├── llm-provider.ts       Multi-provider LLM abstraction (callChatLLM)
-    ├── task-router.ts        3-tier message classifier (simple/one-off/orchestrated)
-    ├── orchestrator.ts       Multi-agent planner (goal → task DAG) with inline targeting
+    ├── standalone-agent.ts   Chat agent for standalone mode
+    ├── task-router.ts        4-tier message classifier (simple/research/one-off/orchestrated)
+    ├── orchestrator.ts       Multi-agent planner (goal → task DAG)
     ├── orchestrator-engine.ts  DAG executor with parallel agents
-    ├── card-evolution.ts     Card-type-specific evolution via orchestration
-    ├── card-summarizer.ts    Universal content extraction + text/podcast generation
+    ├── evolution.ts          Self-evolution sprint system (7 phases, 6 parallel agents)
     ├── researcher-tools.ts   Two-phase streaming research pipeline
-    ├── build-via-claude.ts   Natural language → app build via Claude Code
+    ├── wiki-tools.ts         Knowledge Cortex engine (ingest, search, lint, import)
     ├── claude-code.ts        Claude Code CLI integration (NDJSON streaming)
-    └── tool-factory.ts       Template refinement, auto-heal executor
+    ├── build-via-claude.ts   Natural language → app build via Claude Code
+    ├── scheduled-tasks.ts    Durable cron system with task execution
+    ├── settings-transfer.ts  Cross-machine export/import (9 categories)
+    ├── user-context-tools.ts Consent-gated desktop environment scanner
+    └── *-tools.ts            14 tool families (99 total tools)
 
 shared/types.ts               WebSocket protocol types (shared frontend ↔ backend)
 ```
