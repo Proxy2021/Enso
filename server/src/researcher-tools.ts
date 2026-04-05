@@ -872,7 +872,23 @@ async function generateSearchAngles(
 
   try {
     const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const prompt = `Generate search queries for thoroughly researching: "${topic}"
+
+    // Check Cortex for existing knowledge to make queries more targeted
+    let cortexContext = "";
+    try {
+      const { readIndex } = await import("./wiki-tools.js");
+      const index = readIndex();
+      const queryTerms = topic.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+      const relevant = index.filter(e => {
+        const hay = (e.title + " " + e.summary + " " + e.tags.join(" ")).toLowerCase();
+        return queryTerms.some(t => hay.includes(t));
+      }).slice(0, 3);
+      if (relevant.length > 0) {
+        cortexContext = `\n\nThe user already has knowledge about:\n${relevant.map(e => `- ${e.title}: ${e.summary}`).join("\n")}\nGenerate queries that go DEEPER (advanced topics, recent developments, edge cases) rather than covering basics they already know.`;
+      }
+    } catch { /* wiki not available */ }
+
+    const prompt = `Generate search queries for thoroughly researching: "${topic}"${cortexContext}
 
 Return JSON with 3 arrays:
 {
@@ -1351,6 +1367,13 @@ Rules:
       timestamp: Date.now(),
     };
     researchHistory.save(topicSlug(topic), cachedLlm, buildResearchMeta(cachedLlm, depth));
+
+    // Auto-ingest into Knowledge Cortex (fire-and-forget)
+    try {
+      import("./wiki-tools.js").then(({ ingestFromResearch }) => {
+        ingestFromResearch({ topic, summary: result.summary, keyFindings: result.keyFindings, sections: result.sections }).catch(() => {});
+      }).catch(() => {});
+    } catch { /* best effort */ }
 
     return jsonResult(result);
   } catch (err) {
@@ -2138,6 +2161,16 @@ Only include genuinely new information. If gap sources don't add meaningful new 
       timestamp: Date.now(),
     };
     researchHistory.save(topicSlug(topic), cachedEntry, buildResearchMeta(cachedEntry, depth));
+
+    // Auto-ingest research findings into Knowledge Cortex (fire-and-forget)
+    try {
+      import("./wiki-tools.js").then(({ ingestFromResearch }) => {
+        ingestFromResearch({ topic, summary: result.summary, narrative: result.narrative, keyFindings, sections, sources }).then(
+          (r) => logAction({ ts: Date.now(), type: "action", category: "researcher:cortex", message: `Auto-ingested to Cortex: ${r.pagesCreated.length} created, ${r.pagesUpdated.length} updated` }),
+          (e) => logAction({ ts: Date.now(), type: "action", category: "researcher:cortex", message: `Auto-ingest skipped: ${e instanceof Error ? e.message : String(e)}` }),
+        );
+      }).catch(() => { /* wiki-tools not available */ });
+    } catch { /* best effort */ }
 
     mark("complete");
     logAction({ ts: Date.now(), type: "action", category: "researcher", message: `research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos, ${books.length} books, ${movies.length} movies, ${contradictions.length} contradictions, ${gapQueries.length} gap queries` });

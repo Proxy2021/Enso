@@ -120,6 +120,29 @@ function buildSprintHistoryContext(projectId: string, limit = 3): string {
 
 // ── Planning Prompt Builder ──
 
+/** Inject Knowledge Cortex pages relevant to the project for domain-aware sprint planning. */
+function getCortexEvolutionContext(project: { name: string; id: string }): string {
+  try {
+    const { readIndex } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
+    const index = readIndex();
+    if (index.length === 0) return "";
+    const terms = (project.name + " " + project.id).toLowerCase().split(/[\s-_]+/).filter(t => t.length > 2);
+    const relevant = index.filter(e => {
+      const hay = (e.title + " " + e.summary + " " + e.tags.join(" ")).toLowerCase();
+      return terms.some(t => hay.includes(t));
+    }).slice(0, 5);
+    if (relevant.length === 0) return "";
+    return [
+      `## Project Knowledge (from Knowledge Cortex)`,
+      ``,
+      `Documented knowledge about this project and its domain:`,
+      ...relevant.map(e => `- **${e.title}**: ${e.summary}`),
+      `Use these insights to inform sprint planning, persona scenarios, and implementation choices.`,
+      ``,
+    ].join("\n");
+  } catch { return ""; }
+}
+
 function buildEvolutionPlanningPrompt(
   project: Project,
   goal: string,
@@ -242,6 +265,7 @@ function buildEvolutionPlanningPrompt(
     sprintHistory ? [
       sprintHistory,
     ].join("\n") : "",
+    getCortexEvolutionContext(project),
     `## Existing App Ecosystem (CRITICAL — read before planning)`,
     ``,
     `Before creating ANY new app or tool, the sprint MUST analyze what already exists.`,

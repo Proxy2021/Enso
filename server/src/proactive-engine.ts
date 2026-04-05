@@ -35,6 +35,7 @@ export type SuggestionPillar =
   | "workflow"
   | "learning"
   | "digest"
+  | "knowledge"
   | "ambient";
 
 export type SuggestionPriority = "urgent" | "high" | "medium" | "low";
@@ -982,6 +983,56 @@ async function resolveConsentReader(): Promise<() => ContextConsent> {
   return _consentReader;
 }
 
+/** Knowledge Cortex suggestions: stale pages, gaps, broken links. */
+function generateCortexSuggestions(profile: UserContextProfile): ProactiveSuggestion[] {
+  const suggestions: ProactiveSuggestion[] = [];
+  try {
+    const { readIndex, lintWiki } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[]; updated: string }>; lintWiki: () => { brokenLinks: Array<{ page: string; link: string }>; stalePages: string[]; stats: { totalPages: number } } };
+    const index = readIndex();
+    if (index.length === 0) return suggestions;
+    const lint = lintWiki();
+
+    // Stale pages (30+ days old)
+    for (const page of lint.stalePages.slice(0, 2)) {
+      const entry = index.find(e => e.path === page);
+      const title = entry?.title ?? page.replace(/.*\//, "").replace(/\.md$/, "").replace(/-/g, " ");
+      suggestions.push({
+        id: `cortex-stale-${page}`, pillar: "knowledge", priority: "low", score: 0.5,
+        title: `Refresh: ${title}`, description: `Your Cortex page on "${title}" hasn't been updated in 30+ days. Research new developments?`,
+        icon: "RefreshCw", action: { type: "deep_research", topic: title }, requiredConsent: [], createdAt: Date.now(),
+      });
+    }
+
+    // Broken links — referenced but missing topics
+    const gapSeen: Record<string, boolean> = {};
+    for (const bl of lint.brokenLinks.slice(0, 5)) {
+      if (gapSeen[bl.link]) continue;
+      gapSeen[bl.link] = true;
+      const name = bl.link.replace(/-/g, " ");
+      suggestions.push({
+        id: `cortex-gap-${bl.link}`, pillar: "knowledge", priority: "medium", score: 0.65,
+        title: `Knowledge gap: ${name}`, description: `Your Cortex references "${name}" but has no page. Explore this topic?`,
+        icon: "BookOpen", action: { type: "send_message", message: `Research ${name} and add it to my Knowledge Cortex` }, requiredConsent: [], createdAt: Date.now(),
+      });
+    }
+
+    // Interest without wiki page
+    const indexSlugs = new Set(index.map(e => e.path.replace(/.*\//, "").replace(/\.md$/, "")));
+    for (const interest of (profile.interests ?? []).slice(0, 8)) {
+      const slug = interest.topic.toLowerCase().replace(/\s+/g, "-");
+      if (!indexSlugs.has(slug) && interest.confidence > 0.6) {
+        suggestions.push({
+          id: `cortex-interest-${slug}`, pillar: "knowledge", priority: "low", score: 0.55,
+          title: `Document: ${interest.topic}`, description: `You're interested in "${interest.topic}" (confidence: ${Math.round(interest.confidence * 100)}%) but have no Cortex page. Create one?`,
+          icon: "PlusCircle", action: { type: "send_message", message: `Create a Knowledge Cortex page about ${interest.topic}` }, requiredConsent: [], createdAt: Date.now(),
+        });
+        if (suggestions.length > 8) break;
+      }
+    }
+  } catch { /* wiki-tools not available */ }
+  return suggestions;
+}
+
 export async function generateSuggestions(forceRefresh: boolean = false): Promise<ProactiveSuggestion[]> {
   if (!forceRefresh && _cachedSuggestions && Date.now() - _cachedSuggestions.generatedAt < CACHE_TTL) {
     return _cachedSuggestions.items;
@@ -1008,6 +1059,7 @@ export async function generateSuggestions(forceRefresh: boolean = false): Promis
     ...(pconsent.workflow ? analyzeWorkflowOpportunities(profile) : []),
     ...(pconsent.learning ? analyzeLearningOpportunities(profile) : []),
     ...runAmbientTasks(profile),
+    ...generateCortexSuggestions(profile),
   ];
 
   // Record suggestion count for analytics

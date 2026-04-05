@@ -35,6 +35,7 @@ async function callMemoryLLM(prompt: string, geminiApiKey?: string, providerKeys
 // ── Rate limiting ──
 
 let lastExtractionTime = 0;
+let _lastCortexIngestTime = 0;
 const EXTRACTION_COOLDOWN_MS = 30_000; // 30 seconds
 
 function canExtract(): boolean {
@@ -111,6 +112,18 @@ Assistant: ${assistantResponse.slice(0, 1000)}`;
       category: "memory-extractor",
       message: `Extracted: ${result.topic} (${result.facts.length} facts)`,
     });
+
+    // Bridge: also ingest substantial knowledge into Knowledge Cortex (fire-and-forget, rate-limited)
+    if (result.facts.length >= 2 && result.topic.length > 8) {
+      try {
+        if (Date.now() - _lastCortexIngestTime > 300_000) { // Max 1 cortex ingest per 5 minutes
+          _lastCortexIngestTime = Date.now();
+          import("./wiki-tools.js").then(({ ingestFromResearch }) => {
+            ingestFromResearch({ topic: result.topic, summary: result.facts.join(". ") }).catch(() => {});
+          }).catch(() => {});
+        }
+      } catch { /* best effort */ }
+    }
 
     // Prune if needed
     await pruneIfNeeded(geminiApiKey, providerKeys);

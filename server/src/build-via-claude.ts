@@ -663,6 +663,22 @@ function buildAppPrompt(
     lines.push(``);
   }
 
+  // Inject Knowledge Cortex tech preferences if available
+  try {
+    const { readIndex } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
+    const index = readIndex();
+    const techPages = index.filter(e => {
+      const cat = e.path.split("/")[0];
+      return (cat === "entities" || cat === "synthesis") && e.tags.some(t => ["technology", "framework", "software", "architecture", "ai"].includes(t));
+    }).slice(0, 5);
+    if (techPages.length > 0) {
+      lines.push(`## User's Tech Preferences (from Knowledge Cortex)`);
+      for (const p of techPages) lines.push(`- **${p.title}**: ${p.summary}`);
+      lines.push(`Use these preferences to inform your implementation choices when relevant.`);
+      lines.push(``);
+    }
+  } catch { /* wiki-tools not available */ }
+
   lines.push(`## Original Content to Enhance`);
   lines.push(`This AI response should be turned into an interactive app:`);
   lines.push("```");

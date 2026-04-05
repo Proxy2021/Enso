@@ -237,6 +237,14 @@ async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
     if (briefing) briefingBlock = `\n\n## Today's Context\n${briefing}`;
   } catch { /* user-context-proactive not available — skip */ }
 
+  // Inject Knowledge Cortex summary — accumulated wiki knowledge about user's interests, projects, tools
+  let cortexBlock = "";
+  try {
+    const { getWikiContextSummary } = await import("./wiki-tools.js");
+    const cortex = getWikiContextSummary(800);
+    if (cortex) cortexBlock = `\n\n## Knowledge Cortex\nYour persistent knowledge base with interlinked pages about the user's interests, projects, and expertise:\n${cortex}`;
+  } catch { /* wiki not available — skip */ }
+
   // Check if memory tools are available
   const hasMemoryTools = tools.some((t) => t.name === "enso_memory_search");
   const memoryRecallBlock = hasMemoryTools ? `
@@ -263,7 +271,7 @@ This is a NEW, independent conversation. You have NO memory of any prior convers
 
 ## Available Tools
 ${toolDescriptions}
-${profileBlock}${briefingBlock}${memoryRecallBlock}
+${profileBlock}${cortexBlock}${briefingBlock}${memoryRecallBlock}
 
 ## MANDATORY Tool Use Rules
 These rules override all other instructions. Violating them produces WRONG answers.

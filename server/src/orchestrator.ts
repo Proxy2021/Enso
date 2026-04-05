@@ -1109,6 +1109,22 @@ function buildAppInventoryContext(): string {
 
 // ── Planning Prompt ──
 
+/** Inject relevant Knowledge Cortex pages into orchestration planning for domain awareness. */
+function getCortexPlanningContext(userMessage: string): string {
+  try {
+    const { readIndex } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
+    const index = readIndex();
+    if (index.length === 0) return "";
+    const queryTerms = userMessage.toLowerCase().split(/\s+/).filter(t => t.length > 3).slice(0, 6);
+    const relevant = index.filter(e => {
+      const hay = (e.title + " " + e.summary + " " + e.tags.join(" ")).toLowerCase();
+      return queryTerms.some(t => hay.includes(t));
+    }).slice(0, 5);
+    if (relevant.length === 0) return "";
+    return `## Domain Knowledge (from Knowledge Cortex)\n${relevant.map(e => `- **${e.title}**: ${e.summary}`).join("\n")}\nUse this knowledge to inform task design and agent assignments.\n`;
+  } catch { return ""; }
+}
+
 function buildPlanningPrompt(
   userMessage: string,
   classification: TaskClassification,
@@ -1131,6 +1147,7 @@ function buildPlanningPrompt(
     `"${userMessage}"`,
     ``,
     classification.goalSummary ? `## Initial Analysis\n${classification.goalSummary}\n` : ``,
+    getCortexPlanningContext(userMessage),
     `## Agent Roles Available`,
     `- **researcher**: Gathers information via web search, analysis, synthesis`,
     `- **architect**: Designs plans, structures, frameworks from research`,
