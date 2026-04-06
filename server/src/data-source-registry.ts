@@ -174,7 +174,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "browserHistory",
     cacheFile: "browser-history.json",
-    scannerToolName: "enso_browser_history_scan",  // Browser History app
+    scannerToolName: "enso_browser_data_scan_history",  // Combined Browser app
     scannerParams: { browser: "all", limit: 500, sinceDays: 30 },
     ingestPriority: 20,
     formatForProfile: (cached: A) => {
@@ -206,7 +206,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "bookmarks",
     cacheFile: "bookmarks.json",
-    scannerToolName: "enso_bookmarks_scan",  // Bookmarks app
+    scannerToolName: "enso_browser_data_scan_bookmarks",  // Combined Browser app
     scannerParams: {},
     ingestPriority: 30,
     formatForProfile: (cached: A) => {
