@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "spec": {
+    "toolFamily": "email_scanner",
+    "toolPrefix": "enso_email_scanner",
+    "description": "Email Scanner: analyze email communication patterns — top contacts, recent subjects, and correspondence insights from Outlook or IMAP.",
+    "signatureId": "email_scanner_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Email Contacts",
+        "description": "Browse your email contacts, top correspondents, and recent email subjects.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Filter contacts or subjects" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Email",
+        "description": "Scan your email inbox for communication patterns.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "folder": { "type": "string", "description": "Email folder to scan (default: INBOX)" },
+            "limit": { "type": "number", "description": "Max emails to scan (default: 50)" }
+          },
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "createdAt": 1775460000000
+}

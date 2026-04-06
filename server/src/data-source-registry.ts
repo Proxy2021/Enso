@@ -118,7 +118,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "files",
     cacheFile: "file-index.json",
-    scannerToolName: "enso_context_scan_files",
+    scannerToolName: "enso_projects_scanner_scan",  // Projects app
     scannerParams: {},
     ingestPriority: 10,
     formatForProfile: (cached: A) => {
@@ -174,7 +174,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "browserHistory",
     cacheFile: "browser-history.json",
-    scannerToolName: "enso_context_scan_browser_history",
+    scannerToolName: "enso_browser_history_scan",  // Browser History app
     scannerParams: { browser: "all", limit: 500, sinceDays: 30 },
     ingestPriority: 20,
     formatForProfile: (cached: A) => {
@@ -206,7 +206,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "bookmarks",
     cacheFile: "bookmarks.json",
-    scannerToolName: "enso_context_scan_bookmarks",
+    scannerToolName: "enso_bookmarks_scan",  // Bookmarks app
     scannerParams: {},
     ingestPriority: 30,
     formatForProfile: (cached: A) => {
@@ -228,7 +228,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "email",
     cacheFile: "email-summary.json",
-    scannerToolName: "enso_context_scan_email",
+    scannerToolName: "enso_email_scanner_scan",  // Email Scanner app
     scannerParams: { folder: "inbox", limit: 100 },
     ingestPriority: 40,
     formatForProfile: (cached: A) => {
@@ -256,7 +256,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "system",
     cacheFile: "system-info.json",
-    scannerToolName: "enso_context_scan_system",
+    scannerToolName: "enso_system_info_scan",  // System Info app
     scannerParams: { include: ["apps", "processes"] },
     ingestPriority: 60,
     formatForProfile: (cached: A) => {

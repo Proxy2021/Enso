@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "spec": {
+    "toolFamily": "system_info",
+    "toolPrefix": "enso_system_info",
+    "description": "System Info: view installed applications, running processes, and system environment details.",
+    "signatureId": "system_info_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse System Info",
+        "description": "Browse installed applications and system environment.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Filter applications" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan System",
+        "description": "Scan installed applications and running processes.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "createdAt": 1775460000000
+}

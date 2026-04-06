@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "spec": {
+    "toolFamily": "browser_history",
+    "toolPrefix": "enso_browser_history",
+    "description": "Browser History: analyze browsing patterns, top domains, recent searches, and frequently visited pages from Chrome and Edge.",
+    "signatureId": "browser_history_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse History",
+        "description": "Browse your browser history — top domains, recent searches, and frequently visited pages.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Filter domains or searches" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Browser History",
+        "description": "Scan Chrome/Edge browsing history from the local SQLite database.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "browser": { "type": "string", "enum": ["chrome", "edge", "all"], "description": "Browser to scan (default: all)" },
+            "sinceDays": { "type": "number", "description": "Days of history to include (default: 30)" }
+          },
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "createdAt": 1775460000000
+}

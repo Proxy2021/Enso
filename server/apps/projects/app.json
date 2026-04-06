@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "spec": {
+    "toolFamily": "projects_scanner",
+    "toolPrefix": "enso_projects_scanner",
+    "description": "Projects Scanner: discover and browse software projects on your machine with tech stack detection.",
+    "signatureId": "projects_scanner_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Projects",
+        "description": "Browse detected software projects with technology stacks and file type analysis.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "description": "Filter by project type (node, python, rust, etc.)" },
+            "query": { "type": "string", "description": "Search by project name" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Projects",
+        "description": "Scan the filesystem for software projects.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "maxDepth": { "type": "number", "description": "Max directory depth (default: 3)" }
+          },
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "createdAt": 1775460000000
+}
