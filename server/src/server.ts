@@ -730,6 +730,18 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
+  // ── Wiki Import API (direct trigger) ──
+  app.post("/api/wiki-import", async (_req, res) => {
+    try {
+      const { ingestFromDataSources } = await import("./wiki-tools.js");
+      logAction({ ts: Date.now(), type: "action", category: "wiki", message: "Wiki import triggered via API" });
+      const result = await ingestFromDataSources();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── YouTube Unsubscribe API (for email links) ──
   app.get("/api/youtube/unsubscribe", async (req, res) => {
     const channelId = req.query.channelId as string | undefined;
