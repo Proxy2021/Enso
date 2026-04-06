@@ -299,7 +299,7 @@ function lintWiki(): {
 
 // ── LLM call ──
 
-async function callWikiLLM(prompt: string, timeoutMs = 30_000): Promise<string> {
+async function callWikiLLM(prompt: string, timeoutMs = 90_000): Promise<string> {
   const account = getActiveAccount();
   const geminiApiKey = account?.geminiApiKey;
   const providerKeys = account?.providerKeys;
@@ -362,9 +362,17 @@ async function runIngestPipeline(source: {
   try {
     ensureWikiDir();
     const index = readIndex();
-    const indexSummary = index.length > 0
-      ? index.map((e) => `- ${e.path}: ${e.title} — ${e.summary}`).join("\n")
-      : "(empty wiki — no pages yet)";
+    // Cap index summary to ~8K chars to leave room for source material in the prompt
+    let indexSummary: string;
+    if (index.length === 0) {
+      indexSummary = "(empty wiki — no pages yet)";
+    } else {
+      const lines = index.map((e) => `- ${e.path}: ${e.title} — ${e.summary}`);
+      indexSummary = lines.join("\n");
+      if (indexSummary.length > 8000) {
+        indexSummary = indexSummary.slice(0, 8000) + `\n... and ${index.length - lines.filter((_, i) => lines.slice(0, i + 1).join("\n").length <= 8000).length} more pages`;
+      }
+    }
 
     const sourceText = [
       source.topic ? `Topic: ${source.topic}` : "",
