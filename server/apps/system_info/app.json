@@ -28,6 +28,17 @@
           "properties": {},
           "additionalProperties": false
         }
+      },
+      {
+        "suffix": "update",
+        "label": "Update System Info",
+        "description": "Incremental scan — check for newly installed applications since last scan and update the Cortex with any changes.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
       }
     ]
   },

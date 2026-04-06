@@ -91,6 +91,16 @@
           "properties": {},
           "required": []
         }
+      },
+      {
+        "suffix": "update",
+        "description": "Incremental scan — check for new subscriptions, liked videos, and feed items since last scan and update the Cortex with any changes.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
       }
     ]
   }

@@ -43,6 +43,12 @@
         "label": "Scan Bookmarks",
         "description": "Scan Chrome/Edge bookmark files.",
         "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
+        "suffix": "update",
+        "label": "Update Browser Data",
+        "description": "Incremental scan — check for new browsing history and bookmarks since last scan and update the Cortex with any changes.",
+        "parameters": { "type": "object", "properties": {}, "required": [], "additionalProperties": false }
       }
     ]
   },

@@ -106,6 +106,34 @@ export function getDefaultScheduledTasks(): Array<{
       enabled: true,
       recurring: true,
     },
+    {
+      taskId: "daily-data-source-update",
+      name: "Daily Data Source Update",
+      description: "Update all active data sources early morning — fetch new books, videos, emails, and ingest changes into the Cortex",
+      cron: "0 5 * * *",
+      action: {
+        type: "prompt" as const,
+        prompt: `Update all active data sources and refresh the Cortex:
+
+1. For each enabled data source, run its update tool to fetch new data:
+   - Browser: scan last 3 days of history + refresh bookmarks
+   - Email: scan recent inbox messages
+   - Files: re-scan for new/changed projects
+   - Kindle: check for new book purchases
+   - YouTube: fetch latest subscriptions, liked videos, and feed
+   - System: refresh installed apps
+
+2. After all scans complete, rebuild the user profile from the updated caches.
+
+3. Run direct ingest to create Cortex pages for any new items (books, channels, projects).
+
+4. Log what changed: new items found, pages created, profile updated.
+
+Use the available scanner tools: enso_context_scan_browser_history, enso_context_scan_bookmarks, enso_context_scan_email, enso_context_scan_files, enso_context_scan_system, enso_context_scan_kindle_library, enso_context_scan_youtube.`,
+      },
+      enabled: true,
+      recurring: true,
+    },
   ];
 }
 
