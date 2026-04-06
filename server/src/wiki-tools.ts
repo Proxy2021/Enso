@@ -379,7 +379,7 @@ CURRENT WIKI INDEX (${index.length} pages):
 ${indexSummary}
 
 SOURCE MATERIAL TO INGEST:
-${sourceText.slice(0, 12_000)}`;
+${sourceText.slice(0, 60_000)}`;
 
     logAction({ ts: Date.now(), type: "action", category: "wiki", message: `Ingest started: ${source.topic ?? source.sourceLabel ?? "text"}` });
 

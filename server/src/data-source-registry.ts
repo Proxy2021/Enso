@@ -126,7 +126,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       }
       if (cached.topFileTypes?.length) {
         lines.push("\n## Most Used File Types");
-        for (const f of cached.topFileTypes.slice(0, 10)) lines.push(`- ${f.ext}: ${f.count} files`);
+        for (const f of cached.topFileTypes) lines.push(`- ${f.ext}: ${f.count} files`);
       }
       return { text: lines.join("\n"), topic: "Software Projects", label: "File system project scan" };
     },
@@ -150,15 +150,15 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       const lines = ["# Browser Activity\n"];
       if (cached.topDomains?.length) {
         lines.push("## Frequently Visited Sites");
-        for (const d of cached.topDomains.slice(0, 25)) lines.push(`- ${d.domain} (${d.visits} visits)`);
+        for (const d of cached.topDomains) lines.push(`- ${d.domain} (${d.visits} visits)`);
       }
       if (cached.recentSearches?.length) {
         lines.push("\n## Recent Search Queries");
-        for (const s of cached.recentSearches.slice(0, 20)) lines.push(`- ${s.query}`);
+        for (const s of cached.recentSearches) lines.push(`- ${s.query}`);
       }
       if (cached.recentPages?.length) {
         lines.push("\n## Recent Pages Visited");
-        for (const p of cached.recentPages.slice(0, 20)) lines.push(`- ${p.title} (${p.domain})`);
+        for (const p of cached.recentPages) lines.push(`- ${p.title} (${p.domain})`);
       }
       return { text: lines.join("\n"), topic: "Browser Activity", label: "Browser history scan" };
     },
@@ -178,9 +178,9 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
     formatForWiki: (cached: A) => {
       if (!cached?.folders?.length) return null;
       const lines = [`# Browser Bookmarks (${cached.totalBookmarks ?? "?"} total)\n`];
-      for (const folder of cached.folders.slice(0, 15)) {
+      for (const folder of cached.folders) {
         lines.push(`## ${folder.folder} (${folder.count} items)`);
-        for (const bm of folder.bookmarks.slice(0, 10)) lines.push(`- ${bm.title}: ${bm.url}`);
+        for (const bm of folder.bookmarks) lines.push(`- ${bm.title}: ${bm.url}`);
       }
       return { text: lines.join("\n"), topic: "Browser Bookmarks", label: "Bookmarks scan" };
     },
@@ -204,11 +204,11 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       const lines = ["# Email Communication\n"];
       if (cached.topSenders?.length) {
         lines.push("## Key Contacts");
-        for (const s of cached.topSenders.slice(0, 15)) lines.push(`- ${s.from} (${s.count} messages)`);
+        for (const s of cached.topSenders) lines.push(`- ${s.from} (${s.count} messages)`);
       }
       if (cached.recentSubjects?.length) {
         lines.push("\n## Recent Email Topics");
-        for (const e of cached.recentSubjects.slice(0, 15)) lines.push(`- ${e.subject} (from: ${e.from})`);
+        for (const e of cached.recentSubjects) lines.push(`- ${e.subject} (from: ${e.from})`);
       }
       return { text: lines.join("\n"), topic: "Email Communication", label: "Email scan" };
     },
@@ -230,7 +230,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       const lines = ["# Development Environment\n"];
       if (cached.platform) lines.push(`Platform: ${cached.platform}`);
       lines.push("\n## Installed Applications");
-      for (const app of cached.installedApps.slice(0, 50)) lines.push(`- ${app}`);
+      for (const app of cached.installedApps) lines.push(`- ${app}`);
       return { text: lines.join("\n"), topic: "Development Environment", label: "System scan" };
     },
   },
@@ -253,7 +253,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         `# Kindle Library (${cached.totalBooks ?? cached.books.length} books)\n`,
         "Books owned by this user on Amazon Kindle, revealing reading interests and knowledge domains.\n",
       ];
-      for (const b of cached.books.slice(0, 100)) {
+      for (const b of cached.books) {
         let line = `- **${b.title}** by ${b.author}`;
         if (b.categories?.length) line += ` [${b.categories.join(", ")}]`;
         if (b.description) line += `: ${b.description.slice(0, 150)}`;
