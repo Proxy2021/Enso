@@ -1,14 +1,14 @@
-# Enso — An AI sandbox that ships
+# Enso — A self-hosted AI platform with a Knowledge Cortex that compounds with every interaction
 
-> Every answer is an interactive app. Every sprint makes it smarter. You own the entire factory.
+> 99 tools, 16+ apps, 7 data sources, and a unified brain that learns from your books, browsing, projects, and conversations.
 
 ![Enso Screenshot](https://img.shields.io/badge/status-active-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Desktop%20%7C%20Android%20%7C%20PWA-orange)
 
 ## What is Enso?
 
-Enso is a self-hosted AI platform that goes beyond chat. Ask a question and get a structured research dashboard, not a wall of text. Describe an app and watch Claude Code build it in a live terminal. Import your data sources and watch an AI-maintained knowledge base grow. Run `/evolve` and an AI team improves your entire installation autonomously.
+Enso is a self-hosted AI platform with a Knowledge Cortex at its center. Ask a question and get a structured research dashboard, not a wall of text. Connect your data sources — Kindle library, YouTube subscriptions, browser history, email, projects — and watch the Cortex populate with hundreds of interlinked wiki pages on day one. Describe an app and watch Claude Code build it in a live terminal. Run `/evolve` and an AI team improves your entire installation autonomously.
 
-**99 tools. 16 apps. 1 command to install. Yours forever.**
+**99 tools. 16+ apps. 7 data sources. 1 brain that compounds. Yours forever.**
 
 ## Why Enso?
 
@@ -58,7 +58,7 @@ Type `/evolve` and an AI team — project leader, architect, engineers, QA, mark
 
 | Capability | Description |
 |---|---|
-| 🧠 Knowledge Cortex | AI-maintained knowledge base: 100+ interlinked pages, treemap graph, web discovery, AI digest, daily intelligence briefing with email delivery |
+| 🧠 Knowledge Cortex | The ONLY brain — 680+ interlinked wiki pages auto-populated from 7 data sources, treemap graph, web discovery, AI digest, daily intelligence briefing with email delivery |
 | 🔍 Research Engine | 48+ source analysis with structured boards, AI podcast, contradiction detection, deep research escalation via Claude Code |
 | 💻 Claude Code | `/code` — live terminal coding with model selection (Opus/Sonnet/Haiku), extended thinking |
 | ⚡ Orchestrator | Multi-agent teams with DAG-based task decomposition for complex goals |
@@ -70,18 +70,35 @@ Type `/evolve` and an AI team — project leader, architect, engineers, QA, mark
 | 🖥️ Remote Desktop | Control remote machines with screenshots, click, type, scroll |
 | 🐚 Terminal | Full PTY terminal (PowerShell/bash/zsh) with xterm.js rendering |
 | 📊 Data Analyzer | CSV/JSON analysis with statistics, charts, queries |
-| 📺 YouTube Manager | Subscription management, feed, trending, analytics (OAuth) |
-| 📧 Email | Gmail SMTP for reports, digests, and notifications |
+| 📚 Kindle Library | Browse 471+ books with covers, ratings, categories, one-click research into Cortex |
+| 📺 YouTube Manager | 208 subscriptions, liked videos, feed analysis — all ingested into Cortex |
+| 🌐 Browser Data | History + bookmarks combined — browsing patterns and interests into Cortex |
+| 📧 Email Scanner | Communication patterns, contacts, topics — feeds into Cortex |
+| 📁 Projects Scanner | Tech stack detection across local codebases — project knowledge into Cortex |
+| 💻 System Info | Environment analysis — installed apps, running processes |
 | 🔬 Mission Planner | AI VC team discovers project opportunities tailored to your interests |
 | ⏰ Scheduled Tasks | Durable cron system: run any tool or prompt on a schedule |
 | 🔄 Settings Transfer | Export/import 9 categories of data across machines |
 | 🛒 ClawHub | Skill store: browse, install, manage OpenClaw extensions |
 
-## Knowledge Cortex
+## Knowledge Cortex — The Unified Brain
 
-Based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — instead of re-deriving knowledge from scratch each time, the LLM incrementally builds and maintains a persistent, interlinked markdown knowledge base that compounds with every use.
+Based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — the Cortex is the ONLY brain for memory, profile, and knowledge. Instead of re-deriving knowledge from scratch each time, the LLM incrementally builds and maintains a persistent, interlinked markdown knowledge base that compounds with every interaction.
 
-**Data sources:** Browser history, bookmarks, email, projects, YouTube subscriptions/likes/feed, system info — all consent-gated and local-only.
+**Grand Unification architecture:** `buildEnsoContext()` reads from Cortex only. Memory, user profile, interests, and all accumulated knowledge live as wiki pages. No separate memory or profile systems — the Cortex is the single source of truth.
+
+**7 data source apps** (each a standalone Enso app with its own UI):
+- **Kindle Library** (`server/apps/kindle/`) — 471 books with covers, ratings, highlights, categories
+- **YouTube Manager** (`server/apps/youtube/`) — 208 subscriptions, liked videos, feed analysis
+- **Browser Data** (`server/apps/browser/`) — history + bookmarks combined
+- **Email Scanner** — communication patterns and contacts
+- **Projects Scanner** — tech stack detection across local codebases
+- **System Info** — installed apps, running processes, environment
+- **Manual ingest** — any topic via the Cortex Explorer
+
+**Auto-ingest pipeline:** scan -> cache -> change detection -> Cortex pages. Per-item pages (one book, one channel) are deterministic templates with zero LLM cost. Synthesis pages use AI to find cross-source patterns.
+
+**First-run onboarding:** Connect data sources during setup, populate the Cortex with 680+ pages from day one.
 
 **Explorer app:** Dashboard with stats and knowledge gaps, treemap graph visualization (60+ nodes, 280+ connections), full-text search with tag cloud, article reader with backlinks and related pages.
 
@@ -117,7 +134,7 @@ No commands needed. The system auto-classifies every message and chooses the rig
 
 **Frontend:** React 19, Zustand 5, Tailwind CSS 4, Vite 6, Capacitor (Android)
 **Backend:** Express, WebSocket, TypeScript 5.7, node-pty
-**AI:** Claude Code (Opus/Sonnet/Haiku), Multi-provider LLM (Claude, Gemini, GPT, DeepSeek, Ollama, OpenRouter)
+**AI:** Claude Code (Opus/Sonnet/Haiku), Unified `llm()` layer (Gemini, OpenAI, Anthropic, DeepSeek, Ollama, OpenRouter)
 **Mobile:** Capacitor Android APK + PWA (offline-capable)
 **Tools:** 99 registered tools across 14 families
 
@@ -134,7 +151,7 @@ src/                          React frontend
 └── lib/                      WS client, JSX sandbox (Sucrase), EnsoUI (27 components), connections
 
 server/                       Backend
-├── apps/                     11 shipped app packages (app.json + template.jsx + executors/)
+├── apps/                     16 shipped app packages incl. data source apps (kindle, youtube, browser, etc.)
 └── src/
     ├── server.ts             Express + WS server with auth
     ├── standalone-agent.ts   Chat agent for standalone mode
@@ -143,7 +160,8 @@ server/                       Backend
     ├── orchestrator-engine.ts  DAG executor with parallel agents
     ├── evolution.ts          Self-evolution sprint system (7 phases, 6 parallel agents)
     ├── researcher-tools.ts   Two-phase streaming research pipeline
-    ├── wiki-tools.ts         Knowledge Cortex engine (ingest, search, lint, import)
+    ├── wiki-tools.ts         Knowledge Cortex engine (ingest, search, lint, import) — the ONLY brain
+    ├── llm.ts                Unified LLM layer — single llm() call across 6 providers
     ├── claude-code.ts        Claude Code CLI integration (NDJSON streaming)
     ├── build-via-claude.ts   Natural language → app build via Claude Code
     ├── scheduled-tasks.ts    Durable cron system with task execution

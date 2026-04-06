@@ -9,7 +9,9 @@
 **Core principles:**
 - **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline, delivering the most useful format for each answer — interactive research boards, data visualizations, photo studios, file managers, knowledge graphs — not walls of text. No LLM call needed for rendering.
 - **AI teams for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
-- **Knowledge Cortex** — A persistent, AI-maintained knowledge base (based on Karpathy's LLM Wiki pattern) that compounds with every use. Research results, data source imports, and manual knowledge flow into interlinked entity/concept/synthesis pages. A daily scheduled task searches the web for the user's top interests, ingests findings, and emails a personalized intelligence briefing.
+- **Knowledge Cortex** — The single brain for all knowledge, memory, and profile. Every data source scan, research result, conversation memory, and user profile lives as interlinked wiki pages at `~/.enso/wiki/` (based on Karpathy's LLM Wiki pattern). `buildEnsoContext()` reads only from Cortex — no separate memory/profile stores. A daily scheduled task searches the web for top interests, ingests findings, and emails a personalized intelligence briefing.
+- **Data Source Apps** — Each data source (Kindle, YouTube, Browser, Email, Projects, System) is a self-contained Enso app with scan/browse/search tools. Post-scan, a pipeline auto-detects changes and ingests content into Cortex as per-item wiki pages. Adding a new data source = one app directory + one registry entry.
+- **Unified LLM layer** — Single `llm()` function (`server/src/llm.ts`) for all LLM calls across the platform. Tier-based model selection (fast/utility/pro), auto API key resolution, built-in retry with backoff.
 - **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
 - **User owns the factory** — Each installation is a complete codebase with build tools. During setup, Claude Code personalizes the source code based on who the user is — redesigning the UI, writing role-specific prompts, reordering tools. The resulting APK is a custom app, not a configured generic one. Future `/evolve` sprints continue modifying the same source.
 - **AI-native project management** — Each project has a team of AI agents (Project Leader, Architect, Engineer, QA, Marketing, Sales, AI Strategist) and customer personas that autonomously discover, build, and evolve projects through iterative sprints with real browser testing, code implementation, and validation cycles.
@@ -43,13 +45,27 @@ src/                          # React frontend (Vite entry)
 server/                       # Enso server (the backend)
 ├── index.ts                  # Server/plugin entry
 ├── apps/                     # Shipped apps (checked into git)
-│   └── <appId>/              # app.json + template.jsx + executors/*.js
+│   ├── <appId>/              # app.json + template.jsx + executors/*.js
+│   ├── cortex/               # Cortex Explorer (wiki dashboard, reader, graph, discovery)
+│   ├── kindle/               # Kindle Library (data source + browse/search)
+│   ├── youtube_manager/      # YouTube Manager (data source + browse/search)
+│   ├── browser/              # Browser Data (history + bookmarks, unified)
+│   ├── email_scanner/        # Email Scanner (data source + browse)
+│   ├── projects/             # Projects Scanner (data source + browse)
+│   └── system_info/          # System Info (data source + browse)
 └── src/
     ├── channel.ts            # ChannelPlugin implementation
     ├── server.ts             # Express + WS server
     ├── inbound.ts            # Browser msg → OpenClaw dispatch
     ├── outbound.ts           # Barrel re-export (delivery, enhance, card actions, context)
     ├── outbound/             # Outbound submodules (card-actions, card-context, delivery, helpers)
+    ├── llm.ts                # Unified LLM call layer (tier-based model, retry, timeout)
+    ├── cortex-tools.ts       # Cortex wiki engine (ingest, search, read, lint)
+    ├── cortex-direct-ingest.ts # Per-item Cortex page creation (zero-LLM)
+    ├── card-to-cortex.ts     # Auto-persist app cards as Cortex wiki pages
+    ├── data-source-registry.ts # Centralized DATA_SOURCES descriptors
+    ├── data-source-pipeline.ts # Post-scan auto-ingest to Cortex
+    ├── onboarding.ts         # First-run data source onboarding flow
     ├── ui-generator.ts       # Gemini-based tool selection for enhance
     ├── tool-factory.ts       # Validation, auto-heal, and refine utilities
     ├── task-router.ts        # Smart 3-tier message classifier (simple/one-off/orchestrated)
@@ -326,18 +342,21 @@ openclaw gateway start              # 3. Restart gateway
 - Sprint results delivered as bespoke interactive JSX dashboard on the orchestration card
 - Key files: `evolution.ts`, `evolution-archive.ts`, `project-manager.ts`, `orchestrator-engine.ts` (backend); `OrchestrationCard.tsx`, `EvolutionHistoryCard.tsx` (frontend)
 
-### Knowledge Cortex (LLM Wiki)
+### Knowledge Cortex (The Brain)
 
-A persistent, LLM-maintained knowledge base at `~/.enso/wiki/` that compounds with use. Based on Karpathy's "LLM Wiki" pattern — instead of re-deriving knowledge via RAG, the LLM incrementally builds interlinked markdown pages.
+Cortex is the ONLY brain — all knowledge, memory, profile, and data source content live as interlinked wiki pages at `~/.enso/wiki/`. Based on Karpathy's "LLM Wiki" pattern — instead of re-deriving knowledge via RAG, the LLM incrementally builds interlinked markdown pages. `buildEnsoContext()` reads only from Cortex; there are no separate memory or profile stores.
 
-- **Wiki engine** (`server/src/wiki-tools.ts`): 6 agent tools (`enso_wiki_search`, `enso_wiki_read`, `enso_wiki_ingest`, `enso_wiki_list`, `enso_wiki_lint`, `enso_wiki_import_sources`). LLM-powered ingest pipeline creates entity/concept/synthesis pages from any source.
+- **Wiki engine** (`server/src/cortex-tools.ts`): 6 agent tools (`enso_wiki_search`, `enso_wiki_read`, `enso_wiki_ingest`, `enso_wiki_list`, `enso_wiki_lint`, `enso_wiki_import_sources`). LLM-powered ingest pipeline creates entity/concept/synthesis pages from any source.
 - **Storage**: `~/.enso/wiki/` with `_index.md` (machine-parseable catalog), `_log.md` (operation log), and subdirs `entities/`, `concepts/`, `sources/`, `synthesis/`.
-- **Data source import**: Reads cached scans from user context system + live YouTube API data (subscriptions, liked videos, feed). Per-source ingests for quality.
+- **Protected pages**: `synthesis/user-profile.md` (user identity, role, interests — rebuilt from data source scans), `synthesis/conversation-memory.md` (persistent memory across conversations). These are the primary context sources for agent prompts.
+- **Data source content**: Each data source scan creates per-item wiki pages (e.g., `entities/kindle-<title>.md`, `entities/project-<name>.md`) via the direct ingest pipeline — zero LLM cost per item.
+- **LLM ingest**: Rich content (research results, manual knowledge) goes through the full LLM ingest pipeline for AI-organized entity/concept/synthesis pages.
 - **Context injection**: `getWikiContextSummary()` injected into `buildEnsoContext()` so the agent knows accumulated knowledge.
+- **Auto-persist app cards**: `card-to-cortex.ts` automatically persists significant app card results (research, analysis) as Cortex wiki pages.
 - **Cortex Explorer app** (`server/apps/cortex/`): Shipped app with 8 executors:
   - `explore` (dashboard: stats, top entities, gaps), `read` (article viewer with backlinks), `search`, `graph` (treemap visualization), `discover` (web search + AI branch suggestions), `ingest`, `digest` (AI knowledge summary), `daily_discovery` (scheduled task)
 - **Daily Discovery**: Scheduled task (`cortex-daily-discovery`) that searches the web for top Cortex topics, uses AI to filter/analyze/categorize findings with personalized relevance, ingests into wiki, and emails an HTML intelligence briefing.
-- Key files: `wiki-tools.ts` (engine), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection), `card-actions.ts` (wiki_ingest action)
+- Key files: `cortex-tools.ts` (engine), `cortex-direct-ingest.ts` (per-item pages), `card-to-cortex.ts` (auto-persist), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection)
 
 ### Deep Research Pipeline
 
@@ -361,19 +380,52 @@ Standard research uses a two-phase streaming pipeline (Phase A: summary + findin
 - **Components translated**: WelcomeCard, ChatInput, CardTimeline, BackgroundTaskBar, AppBuilderDialog, DynamicUICard
 - **Adding a new language**: Create `src/lib/i18n/<code>.json`, add to `SUPPORTED_LOCALES` and `LOCALE_LABELS` in index.ts, add validation in `server.ts` settings handler
 
-### User Context Discovery
+### Data Sources (Unified Architecture)
 
-Consent-gated system that scans the user's desktop environment to build a rich profile for deeply personalized assistance. All data stays local — only a compact summary (~600 chars) is injected into agent prompts.
+Consent-gated system that scans the user's desktop environment, ingests content into Cortex, and provides browsable app UIs for each source. All data stays local.
 
-- **Settings**: Settings > Data Sources tab — per-source toggles (Browser History, Bookmarks, Email, Files, System)
-- **Scanners** (7 tools in `user-context-tools.ts`): `enso_context_scan_browser_history` (SQLite via better-sqlite3, copies locked DB to temp), `enso_context_scan_bookmarks` (Chrome/Edge JSON), `enso_context_scan_email` (Outlook COM on Windows, Himalaya CLI fallback), `enso_context_scan_files` (project detection via markers like package.json/.git), `enso_context_scan_system` (installed apps + running processes), `enso_context_get_profile`, `enso_context_refresh`
-- **Profile builder** (`user-context-builder.ts`): Runs all consented scanners, reduces data locally, sends reduced summary to Gemini Flash for synthesis into structured `UserContextProfile` JSON
-- **Context injection**: `getContextProfileSummary(800)` called from `buildEnsoContext()` in `memory-bridge.ts` — injected between user memory and app usage
-- **Daily briefing** (`user-context-proactive.ts`): `getDailyBriefing()` injected into standalone agent system prompt on first message of session
-- **Auto-refresh**: Profile staleness checked on every `buildEnsoContext()` call — background rebuild if >24h old
+#### Registry & Pipeline
+
+- **`DATA_SOURCES` registry** (`data-source-registry.ts`): Centralized descriptor for each source. Each entry declares `id`, `scan()` function, `formatForProfile()` (compact summary for user profile page), `formatForCortex()` (rich content for LLM ingest), and `getDirectIngestPages()` (per-item wiki pages created without LLM).
+- **Post-scan pipeline** (`data-source-pipeline.ts`): After any scan completes, the pipeline auto-detects changes vs. previous scan, creates per-item Cortex pages via direct ingest, and triggers LLM ingest for the profile/summary content.
+- **Onboarding** (`onboarding.ts`): First-run flow that guides users through enabling data sources and runs initial scans.
+
+#### 7 Data Sources
+
+| Source | App | Scan Method | Per-Item Pages |
+|--------|-----|-------------|----------------|
+| **Browser** | `server/apps/browser/` | SQLite (Chrome/Edge history + bookmarks) | Top sites, bookmark folders |
+| **Email** | `server/apps/email_scanner/` | Outlook COM / Himalaya CLI | — |
+| **Files** | `server/apps/projects/` | Project detection (package.json, .git) | Per-project pages |
+| **System** | `server/apps/system_info/` | Installed apps + running processes | — |
+| **Kindle** | `server/apps/kindle/` | My Clippings.txt parser | Per-book pages with highlights |
+| **YouTube** | `server/apps/youtube_manager/` | YouTube Data API v3 | Per-channel pages |
+
+#### Data Source as App Pattern
+
+Each data source is also a full Enso app with its own UI. The pattern (`server/apps/kindle/` as canonical example):
+- `app.json` — tool definitions (scan, browse, search, enrich)
+- `template.jsx` — browsable UI with tabs for library, highlights, search
+- `executors/scan.js` — runs the scan, returns structured data
+- `executors/browse.js` — paginated browsing of scanned content
+- `executors/search.js` — full-text search across scanned data
+
+**Adding a new data source** = create one app directory + add one entry to `DATA_SOURCES` in `data-source-registry.ts`.
+
+- **Profile builder** (`user-context-builder.ts`): Runs all consented scanners, reduces via `formatForProfile()`, synthesizes into Cortex profile page via LLM
 - **Storage**: `~/.enso/data/user-context/` — `consent.json`, `profile.json`, `scan-log.json`, `cache/*.json`
-- **WS messages**: `settings.set_context_consent`, `settings.context_scan_now`, `settings.get_context_status`, `settings.context_clear_data`
-- Key files: `user-context-types.ts`, `user-context-tools.ts`, `user-context-builder.ts`, `user-context-proactive.ts` (backend); `SettingsPanel.tsx` DataSourcesSection (frontend)
+- **Settings UI**: Settings > Data Sources tab — per-source toggles
+- Key files: `data-source-registry.ts`, `data-source-pipeline.ts`, `cortex-direct-ingest.ts`, `user-context-builder.ts`, `onboarding.ts` (backend); `SettingsPanel.tsx` DataSourcesSection (frontend)
+
+### Unified LLM Layer
+
+Single entry point for all LLM calls across the platform, replacing scattered direct API calls.
+
+- **Module**: `server/src/llm.ts` — exports `llm(prompt, opts?)` function
+- **Tier-based model selection**: `fast` (Gemini Flash — classification, summaries), `utility` (default — ingest, synthesis), `pro` (Opus-class — planning, complex reasoning)
+- **Auto API key resolution**: reads from environment, no per-call key management
+- **Built-in retry**: exponential backoff on transient failures, configurable timeout
+- Used by: Cortex ingest pipeline, data source profile builder, task router, UI generator, team generator
 
 ### Claude Code Integration
 
@@ -467,7 +519,7 @@ Also: `server/apps/` is for **shipped/promoted apps only** (git-tracked). User-b
 
 ## Tech Stack
 
-Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + xterm.js + Vite 6. Backend: Express 4 + ws 8 + node-pty (standalone or started by OpenClaw). Language: TypeScript 5.7 strict, ESM. LLM: Gemini (via API key).
+Frontend: React 19 + Zustand 5 + Tailwind CSS 4 + Recharts + Lucide + Sucrase + xterm.js + Vite 6. Backend: Express 4 + ws 8 + node-pty (standalone or started by OpenClaw). Language: TypeScript 5.7 strict, ESM. LLM: Gemini (via API key). Unified LLM: `llm()` in `server/src/llm.ts` — auto-resolves API keys, tier-based model selection (fast/utility/pro), retry with backoff.
 
 ## One-Command Setup
 
