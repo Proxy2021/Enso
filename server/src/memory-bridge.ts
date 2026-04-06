@@ -4,14 +4,19 @@
  * Three responsibilities:
  *   1. Card History:     persist cards to disk, replay on reconnect
  *   2. Context Injection: feed Enso usage data into agent prompts
- *   3. Memory Surface:   local ENSO_USER.md + ENSO_MEMORY.md for personalization
+ *   3. Memory Surface:   Cortex wiki pages for user profile + memory (with flat-file fallback)
  *
- * Storage:
+ * Storage (primary — Cortex wiki):
+ *   ~/.enso/wiki/synthesis/user-profile.md         — user profile (editable)
+ *   ~/.enso/wiki/synthesis/conversation-memory.md   — accumulated conversation memory
+ *
+ * Storage (backward compat — old flat files):
+ *   ~/.enso/memory/ENSO_USER.md        — user profile (written alongside Cortex)
+ *   ~/.enso/memory/ENSO_MEMORY.md      — conversation memory (written alongside Cortex)
+ *
+ * Card journals:
  *   ~/.enso/cards/<clientId>/conversations.json — thread metadata (id, title, timestamps)
  *   ~/.enso/cards/<clientId>/<conversationId>.jsonl — per-thread card journal
- *   (legacy flat ~/.enso/cards/<clientId>.jsonl is migrated to .../default.jsonl on first access)
- *   ~/.enso/memory/ENSO_USER.md        — user profile (editable)
- *   ~/.enso/memory/ENSO_MEMORY.md      — accumulated conversation memory
  *
  * Cross-platform: uses os.homedir() + path.join() for Windows/macOS/Linux.
  */
@@ -33,8 +38,6 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import type { AgentStep, CardModeDetail } from "@shared/types";
 import { APP_CATALOG } from "./app-catalog.js";
-import { getRecentInteractions } from "./interaction-tracker.js";
-import { getRecentLog } from "./action-log.js";
 
 // ── Types ──
 
@@ -58,6 +61,8 @@ export interface CardRecord {
   cardSummary?: { overview: string; keyOutcomes: string[]; narrative: string };
   cardAudioUrl?: string;
   cardPodcastScript?: string;
+  /** Cortex wiki page path (set when card is auto-persisted to Cortex) */
+  cortexPath?: string;
   timestamp: number;
 }
 
@@ -440,6 +445,24 @@ export function persistCard(clientId: string, conversationId: string, record: Ca
     appendFileSync(path, JSON.stringify(record) + "\n");
     rotateJournal(path);
     touchConversationUpdatedAt(clientId, conversationId);
+
+    // Auto-persist app cards to Cortex (fire-and-forget)
+    try {
+      const { writeCortexPageFromCard } = require("./card-to-cortex.js") as { writeCortexPageFromCard: (r: CardRecord) => string | null };
+      const cortexPath = writeCortexPageFromCard(record);
+      if (cortexPath) {
+        // Store the cortex path back on the record for future reference
+        record.cortexPath = cortexPath;
+        // Re-write the line with cortexPath added
+        const content = readFileSync(path, "utf-8");
+        const lines = content.split("\n").filter(Boolean);
+        const idx = lines.findIndex((l) => { try { return JSON.parse(l).id === record.id; } catch { return false; } });
+        if (idx >= 0) {
+          lines[idx] = JSON.stringify(record);
+          writeFileSync(path, lines.join("\n") + "\n");
+        }
+      }
+    } catch { /* card-to-cortex not available — skip */ }
   } catch {
     // Never let history persistence break the main flow
   }
@@ -546,13 +569,13 @@ export async function buildEnsoContext(): Promise<string> {
 
   const sections: string[] = [];
 
-  // 1. Read user profile from Cortex wiki (falls back to old flat file)
+  // 1. Read user profile from Cortex (falls back to old flat file)
   const userProfile = readCortexPage(CORTEX_USER_PROFILE) ?? safeReadFile(join(MEMORY_DIR, USER_FILE));
   if (userProfile) {
     sections.push(`<user_profile>\n${userProfile.slice(0, 1000)}\n</user_profile>`);
   }
 
-  // 2. Read conversation memory from Cortex wiki (falls back to old flat file)
+  // 2. Read conversation memory from Cortex (falls back to old flat file)
   const memory = readCortexPage(CORTEX_CONVERSATION_MEMORY) ?? safeReadFile(join(MEMORY_DIR, MEMORY_FILE));
   if (memory) {
     // Take the last 1500 chars (most recent entries)
@@ -588,45 +611,6 @@ export async function buildEnsoContext(): Promise<string> {
   return text;
 }
 
-/** Summarize top used apps from interaction tracker. */
-function buildAppUsageSummary(): string {
-  try {
-    const familyCounts: Array<{ family: string; count: number }> = [];
-
-    for (const app of APP_CATALOG) {
-      const interactions = getRecentInteractions(app.appId, 200);
-      if (interactions.length > 0) {
-        familyCounts.push({ family: app.appId, count: interactions.length });
-      }
-    }
-
-    if (familyCounts.length === 0) return "";
-
-    familyCounts.sort((a, b) => b.count - a.count);
-    const top = familyCounts.slice(0, 7);
-    const items = top.map((f) => `${f.family} (${f.count})`).join(", ");
-    return `User's most-used Enso apps: ${items}`;
-  } catch {
-    return "";
-  }
-}
-
-/** Summarize recent errors from action log. */
-function buildRecentErrorsSummary(): string {
-  try {
-    const errors = getRecentLog(5, "error");
-    if (errors.length === 0) return "";
-
-    const items = errors.map((e) => {
-      const ago = formatTimeAgo(e.ts);
-      return `[${ago}] ${e.category}: ${e.message.slice(0, 100)}`;
-    });
-    return `Recent issues:\n${items.join("\n")}`;
-  } catch {
-    return "";
-  }
-}
-
 /** List available Enso apps. */
 function buildAvailableAppsSummary(): string {
   try {
@@ -636,18 +620,6 @@ function buildAvailableAppsSummary(): string {
   } catch {
     return "";
   }
-}
-
-/** Format a timestamp as a human-readable relative time. */
-function formatTimeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 // ── Part 3: Enso Memory (local, independent of OpenClaw workspace) ──
@@ -742,7 +714,7 @@ export function writeEnsoUser(content: string): boolean {
   }
 }
 
-/** Write conversation memory. Primary: Cortex wiki. Also writes to old path for backward compat. */
+/** Write conversation memory. Primary: Cortex. Also writes to old path for backward compat. */
 export function writeEnsoMemory(content: string): boolean {
   try {
     // Primary: Cortex
@@ -771,7 +743,7 @@ export function appendEnsoMemory(entry: string): boolean {
       ? `${existing.trimEnd()}\n\n## ${date}\n${entry.trim()}\n`
       : `# Enso Memory\n\n## ${date}\n${entry.trim()}\n`;
 
-    // Primary: Cortex wiki
+    // Primary: Cortex
     writeCortexPage(CORTEX_CONVERSATION_MEMORY, newContent);
     updateCortexIndex(CORTEX_CONVERSATION_MEMORY, "Conversation Memory", "Accumulated cross-conversation memory and learned facts");
 
@@ -853,7 +825,7 @@ interface MemorySearchResult {
 }
 
 /**
- * Search across all memory files (MEMORY.md, ENSO_USER.md, daily logs)
+ * Search across all memory files and Cortex pages
  * using keyword matching. Returns ranked snippets.
  */
 export function searchMemory(query: string, maxResults = 5): MemorySearchResult[] {
@@ -861,14 +833,38 @@ export function searchMemory(query: string, maxResults = 5): MemorySearchResult[
   const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
   if (queryTerms.length === 0) return [];
 
-  // Collect all memory files
+  // Collect all searchable files
   const files: Array<{ name: string; content: string }> = [];
 
+  // Cortex pages (primary)
+  const cortexProfile = readCortexPage(CORTEX_USER_PROFILE);
+  if (cortexProfile) files.push({ name: "cortex/user-profile.md", content: cortexProfile });
+
+  const cortexMemory = readCortexPage(CORTEX_CONVERSATION_MEMORY);
+  if (cortexMemory) files.push({ name: "cortex/conversation-memory.md", content: cortexMemory });
+
+  // Scan other Cortex pages (entities, concepts, synthesis, sources)
+  try {
+    const WIKI_SUBDIRS = ["entities", "concepts", "synthesis", "sources"];
+    for (const sub of WIKI_SUBDIRS) {
+      const subDir = join(CORTEX_DIR, sub);
+      if (!existsSync(subDir)) continue;
+      for (const f of readdirSync(subDir)) {
+        if (!f.endsWith(".md")) continue;
+        // Skip pages we already added above
+        if (sub === "synthesis" && (f === "user-profile.md" || f === "conversation-memory.md")) continue;
+        const content = safeReadFile(join(subDir, f));
+        if (content) files.push({ name: `cortex/${sub}/${f}`, content });
+      }
+    }
+  } catch { /* best-effort cortex scan */ }
+
+  // Legacy flat memory files (fallback / additional content)
   const memContent = safeReadFile(join(MEMORY_DIR, MEMORY_FILE));
-  if (memContent) files.push({ name: "ENSO_MEMORY.md", content: memContent });
+  if (memContent && !cortexMemory) files.push({ name: "ENSO_MEMORY.md", content: memContent });
 
   const userContent = safeReadFile(join(MEMORY_DIR, USER_FILE));
-  if (userContent) files.push({ name: "ENSO_USER.md", content: userContent });
+  if (userContent && !cortexProfile) files.push({ name: "ENSO_USER.md", content: userContent });
 
   // Add daily logs
   for (const f of listDailyLogFiles()) {
@@ -953,44 +949,17 @@ export function listMemoryFiles(): Array<{ name: string; size: number }> {
   return files;
 }
 
-/**
- * Build a compact memory context block for injection into LLM prompts.
- * Includes user profile and recent memory entries (truncated to budget).
- */
-const MAX_MEMORY_CHARS = 2000;
 const MAX_USER_CHARS = 1000;
-
-export function getMemoryContext(): string {
-  const { user, memory } = readEnsoMemory();
-  if (!user && !memory) return "";
-
-  const sections: string[] = [];
-
-  if (user) {
-    const trimmed = user.length > MAX_USER_CHARS
-      ? user.slice(0, MAX_USER_CHARS) + "\n... (truncated)"
-      : user;
-    sections.push(`<user_profile>\n${trimmed}\n</user_profile>`);
-  }
-
-  if (memory) {
-    const trimmed = memory.length > MAX_MEMORY_CHARS
-      ? memory.slice(memory.length - MAX_MEMORY_CHARS) // Keep most recent entries
-      : memory;
-    sections.push(`<memory>\n${trimmed}\n</memory>`);
-  }
-
-  return sections.join("\n");
-}
 
 /**
  * Returns only the user profile context (no cross-conversation memory).
+ * Reads from Cortex first, falls back to old flat file.
  * Use this in system prompts for chat agents to avoid context contamination
  * where the LLM hallucinates prior interactions based on memory from other conversations.
  * Cross-conversation memory should only be accessed on-demand via memory search tools.
  */
 export function getUserProfileContext(): string {
-  const { user } = readEnsoMemory();
+  const user = readCortexPage(CORTEX_USER_PROFILE) ?? safeReadFile(join(MEMORY_DIR, USER_FILE));
   if (!user) return "";
 
   const trimmed = user.length > MAX_USER_CHARS
