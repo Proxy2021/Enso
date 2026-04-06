@@ -106,6 +106,7 @@ export async function buildUserContextProfile(
   const emailData = readCache("email-summary.json") as { topSenders?: Array<{ from: string; count: number }>; recentSubjects?: Array<{ subject: string }> } | null;
   const fileData = readCache("file-index.json") as { projects?: Array<{ name: string; path: string; type: string; technologies: string[] }>; topFileTypes?: Array<{ ext: string; count: number }> } | null;
   const systemData = readCache("system-info.json") as { installedApps?: string[] } | null;
+  const kindleData = readCache("kindle-library.json") as { source?: string; totalBooks?: number; books?: Array<{ title: string; author: string; asin?: string; coverUrl?: string }> } | null;
 
   // Build reduced context for LLM (only summaries, never raw URLs or file paths)
   const contextParts: string[] = [];
@@ -136,6 +137,10 @@ export async function buildUserContextProfile(
   }
   if (systemData?.installedApps?.length) {
     contextParts.push(`## Installed Software\n${systemData.installedApps.slice(0, 30).join(", ")}`);
+  }
+  if (kindleData?.books?.length) {
+    const bookList = kindleData.books.slice(0, 20).map(b => `- "${b.title}" by ${b.author}`).join("\n");
+    contextParts.push(`## Kindle Library (${kindleData.totalBooks ?? kindleData.books.length} books)\n${bookList}`);
   }
 
   const contextSummary = contextParts.join("\n\n");
@@ -329,6 +334,13 @@ export function getContextProfileSummary(maxChars: number = 800): string {
     if (profile.tools.recentSearches.length > 0) {
       const searches = profile.tools.recentSearches.slice(0, 5).map(s => s.query).join("; ");
       parts.push(`**Recent interests**: ${searches}`);
+    }
+
+    // Kindle library reading interests
+    const kindleSummary = readCache("kindle-library.json") as { totalBooks?: number; books?: Array<{ title: string; author: string }> } | null;
+    if (kindleSummary?.books?.length) {
+      const topTitles = kindleSummary.books.slice(0, 3).map(b => `"${b.title}"`).join(", ");
+      parts.push(`**Reading**: ${kindleSummary.totalBooks ?? kindleSummary.books.length} Kindle books including ${topTitles}`);
     }
 
     if (parts.length === 0) return "";

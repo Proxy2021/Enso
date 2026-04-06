@@ -14,6 +14,7 @@ export interface ContextConsent {
   email: boolean;
   files: boolean;
   system: boolean;
+  kindleLibrary: boolean;
   updatedAt: number;
 }
 
@@ -23,6 +24,7 @@ export const DEFAULT_CONSENT: ContextConsent = {
   email: false,
   files: false,
   system: false,
+  kindleLibrary: false,
   updatedAt: 0,
 };
 
@@ -75,6 +77,14 @@ export interface SystemInfo {
   hostname: string;
 }
 
+export interface KindleBook {
+  title: string;
+  author: string;
+  asin?: string;
+  coverUrl?: string;
+  acquiredDate?: string;
+}
+
 // ── Aggregated Profile ───────────────────────────────────────────────────────
 
 export interface UserContextProfile {
@@ -117,6 +127,12 @@ export interface UserContextProfile {
     mostUsedFileTypes: string[];
     topDirectories: string[];
   };
+
+  /** Reading — Kindle library */
+  reading?: {
+    books: KindleBook[];
+    totalBooks: number;
+  };
 }
 
 export const EMPTY_PROFILE: UserContextProfile = {
@@ -137,6 +153,7 @@ export interface ScanLog {
   email?: number;
   files?: number;
   system?: number;
+  kindleLibrary?: number;
 }
 
 // ── Context Status (sent to frontend) ────────────────────────────────────────

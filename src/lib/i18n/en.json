@@ -534,6 +534,8 @@
   "settings.filesProjectsDesc": "Discover your active projects and tech stack",
   "settings.systemInfo": "System Info",
   "settings.systemInfoDesc": "Identify your tools and environment",
+  "settings.kindleLibrary": "Kindle Library",
+  "settings.kindleLibraryDesc": "Import your Amazon Kindle book collection",
   "settings.projectHealth": "Project Health",
   "settings.projectHealthDesc": "Check codebase for issues or improvements",
   "settings.researchLabel": "Research",

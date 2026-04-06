@@ -27,7 +27,7 @@ const esmRequire = createRequire(import.meta.url);
 import { logAction, logError } from "./action-log.js";
 import type {
   ContextConsent, BrowserHistoryEntry, BookmarkEntry, EmailSummary,
-  FileEntry, DetectedProject, SystemInfo, ScanLog, ContextStatus,
+  FileEntry, DetectedProject, SystemInfo, ScanLog, ContextStatus, KindleBook,
 } from "./user-context-types.js";
 import { DEFAULT_CONSENT } from "./user-context-types.js";
 
@@ -581,6 +581,122 @@ function scanSystem(include: string[]): SystemInfo {
   return info;
 }
 
+// ── Kindle Library (Puppeteer) ─────────────────────────────────────────────
+
+const KINDLE_BROWSER_DIR = join(homedir(), ".enso", "data", "kindle-browser");
+const KINDLE_LIBRARY_URL = "https://read.amazon.com/kindle-library";
+
+async function scanKindleLibrary(): Promise<KindleBook[]> {
+  const { mkdirSync, existsSync: fsExists } = await import("fs");
+  if (!fsExists(KINDLE_BROWSER_DIR)) mkdirSync(KINDLE_BROWSER_DIR, { recursive: true });
+
+  const puppeteer = await import("puppeteer");
+  const browser = await puppeteer.default.launch({
+    headless: true,
+    userDataDir: KINDLE_BROWSER_DIR,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--window-size=1280,900",
+    ],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(KINDLE_LIBRARY_URL, { waitUntil: "networkidle2", timeout: 30000 });
+
+    // Check if we're on a login page
+    const url = page.url();
+    if (url.includes("signin") || url.includes("ap/signin") || url.includes("auth")) {
+      throw new Error(
+        "Amazon login required. Please log in to your Amazon account first:\n" +
+        "1. Open the Enso browser tool (/browser)\n" +
+        "2. Navigate to https://read.amazon.com\n" +
+        "3. Log in to your Amazon account\n" +
+        "4. Then re-run this scan.\n\n" +
+        "Alternatively, run this in a terminal:\n" +
+        "  npx puppeteer launch --user-data-dir " + KINDLE_BROWSER_DIR
+      );
+    }
+
+    // Wait for library content to load
+    await page.waitForSelector('[class*="book"], [class*="title"], [id*="library"]', { timeout: 15000 }).catch(() => {});
+
+    // Scroll down to trigger lazy loading (repeat a few times)
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // Extract books using multiple strategies
+    const books: KindleBook[] = await page.evaluate(() => {
+      const results: Array<{ title: string; author: string; asin?: string; coverUrl?: string }> = [];
+      const seen = new Set<string>();
+
+      // Strategy 1: Look for structured book elements with data attributes
+      document.querySelectorAll("[data-asin], [data-item-id]").forEach((el) => {
+        const asin = el.getAttribute("data-asin") || el.getAttribute("data-item-id") || undefined;
+        const titleEl = el.querySelector("[class*='title'], h2, h3, [role='heading']");
+        const authorEl = el.querySelector("[class*='author'], [class*='subtitle']");
+        const imgEl = el.querySelector("img");
+        const title = titleEl?.textContent?.trim() || "";
+        if (!title || seen.has(title)) return;
+        seen.add(title);
+        results.push({
+          title,
+          author: authorEl?.textContent?.trim() || "",
+          asin,
+          coverUrl: imgEl?.src || undefined,
+        });
+      });
+
+      // Strategy 2: Look for book grid/list items
+      if (results.length === 0) {
+        document.querySelectorAll("li[class*='book'], div[class*='book-item'], div[class*='library-item']").forEach((el) => {
+          const title = el.querySelector("h2, h3, [class*='title']")?.textContent?.trim() || "";
+          const author = el.querySelector("[class*='author'], [class*='subtitle']")?.textContent?.trim() || "";
+          const imgEl = el.querySelector("img");
+          if (!title || seen.has(title)) return;
+          seen.add(title);
+          results.push({
+            title,
+            author,
+            coverUrl: imgEl?.src || undefined,
+          });
+        });
+      }
+
+      // Strategy 3: Broad fallback — any element with an img and nearby text
+      if (results.length === 0) {
+        document.querySelectorAll("img[src*='images-amazon'], img[src*='m.media-amazon']").forEach((img) => {
+          const parent = img.closest("div, li, a") || img.parentElement;
+          if (!parent) return;
+          const texts = [...parent.querySelectorAll("span, p, div, h2, h3")]
+            .map((e) => e.textContent?.trim())
+            .filter((t) => t && t.length > 2 && t.length < 200);
+          const title = texts[0] || "";
+          if (!title || seen.has(title)) return;
+          seen.add(title);
+          results.push({
+            title,
+            author: texts[1] || "",
+            coverUrl: (img as HTMLImageElement).src || undefined,
+          });
+        });
+      }
+
+      return results;
+    });
+
+    return books;
+  } finally {
+    await browser.close();
+  }
+}
+
 // ── Tool Factory ─────────────────────────────────────────────────────────────
 
 export function createUserContextTools(): EnsoAgentTool[] {
@@ -899,6 +1015,41 @@ export function createUserContextTools(): EnsoAgentTool[] {
         }
       },
     },
+
+    // ── Kindle Library (Puppeteer scrape) ──────────────────────────────────────
+    {
+      name: "enso_context_scan_kindle_library",
+      label: "Scan Kindle Library",
+      description: "Scrape your Amazon Kindle library via read.amazon.com. Requires consent and an active Amazon login session.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+        required: [],
+      },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("kindleLibrary");
+        if (denied) return denied;
+        ensureDirs();
+
+        try {
+          const books = await scanKindleLibrary();
+          const result = {
+            source: "kindle-library",
+            totalBooks: books.length,
+            books,
+            scannedAt: new Date().toISOString(),
+          };
+          writeFileSync(join(CACHE_DIR, "kindle-library.json"), JSON.stringify(result, null, 2));
+          updateScanLog("kindleLibrary");
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle library scanned: ${books.length} books` });
+          return jsonResult(result);
+        } catch (err) {
+          logError("user-context", "Kindle library scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
   ];
 }
 

@@ -534,6 +534,8 @@
   "settings.filesProjectsDesc": "发现你的活跃项目和技术栈",
   "settings.systemInfo": "系统信息",
   "settings.systemInfoDesc": "识别你的工具和环境",
+  "settings.kindleLibrary": "Kindle 书库",
+  "settings.kindleLibraryDesc": "导入你的亚马逊 Kindle 图书收藏",
   "settings.projectHealth": "项目健康",
   "settings.projectHealthDesc": "检查代码库问题或改进",
   "settings.researchLabel": "研究",

@@ -757,6 +757,7 @@ const DATA_SOURCES: SourceConfig[] = [
   { key: "email", icon: "📧", label: "settings.emailLabel", description: "settings.emailDesc" },
   { key: "files", icon: "📁", label: "settings.filesProjects", description: "settings.filesProjectsDesc" },
   { key: "system", icon: "💻", label: "settings.systemInfo", description: "settings.systemInfoDesc" },
+  { key: "kindleLibrary", icon: "📚", label: "settings.kindleLibrary", description: "settings.kindleLibraryDesc" },
 ];
 
 export function DataSourcesSection() {
