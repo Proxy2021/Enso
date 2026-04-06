@@ -88,11 +88,8 @@ export async function buildUserContextProfile(
     } catch (err) { logError("user-context-builder", "System scan failed", err); }
   }
 
-  if (sourcesScanned.length === 0) {
-    return { sourcesScanned, interestCount: 0, projectCount: 0 };
-  }
-
   // Step 2: Read cached scan results and build a reduced summary via registry
+  // Even if no new scans ran, rebuild profile from existing caches
   const contextParts: string[] = [];
   for (const ds of DATA_SOURCES) {
     const cached = readCache(ds.cacheFile);
