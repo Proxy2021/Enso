@@ -730,6 +730,52 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
+  // ── YouTube Unsubscribe API (for email links) ──
+  app.get("/api/youtube/unsubscribe", async (req, res) => {
+    const channelId = req.query.channelId as string | undefined;
+    const channelName = decodeURIComponent((req.query.channelName as string) || "");
+    if (!channelId) {
+      res.status(400).send(htmlPage("Missing channelId", "No channel ID provided.", "error"));
+      return;
+    }
+    try {
+      const { createYouTubeTools } = await import("./youtube-tools.js");
+      const tools = createYouTubeTools();
+      const unsubTool = tools.find((t) => t.name === "enso_youtube_unsubscribe");
+      if (!unsubTool) throw new Error("YouTube unsubscribe tool not available");
+      const result = await unsubTool.execute("api-unsub", { channelIds: [channelId] });
+      const parsed = typeof result === "string" ? JSON.parse(result) : result;
+      if (parsed.unsubscribed?.length > 0) {
+        res.send(htmlPage(
+          "Unsubscribed",
+          `Successfully unsubscribed from <strong>${channelName || parsed.unsubscribed[0]}</strong>. This channel will no longer appear in your daily picks.`,
+          "success",
+        ));
+      } else {
+        res.send(htmlPage(
+          "Could not unsubscribe",
+          parsed.errors?.join(", ") || "Channel not found in your subscriptions.",
+          "error",
+        ));
+      }
+    } catch (err) {
+      res.status(500).send(htmlPage("Error", `Failed: ${err instanceof Error ? err.message : String(err)}`, "error"));
+    }
+  });
+
+  function htmlPage(title: string, message: string, type: "success" | "error"): string {
+    const color = type === "success" ? "#10b981" : "#ef4444";
+    const icon = type === "success" ? "&#x2714;" : "&#x2718;";
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} — Enso</title></head>
+<body style="margin:0;background:#0f0f23;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh">
+<div style="text-align:center;padding:40px">
+<div style="font-size:48px;color:${color};margin-bottom:16px">${icon}</div>
+<h1 style="font-size:24px;margin:0 0 12px;color:${color}">${title}</h1>
+<p style="font-size:14px;color:#94a3b8;max-width:400px;line-height:1.5">${message}</p>
+<p style="font-size:12px;color:#475569;margin-top:24px">You can close this tab.</p>
+</div></body></html>`;
+  }
+
   // ── Wiki Stats API ──
   let _wikiStatsCache: { data: unknown; ts: number } | null = null;
   app.get("/api/wiki-stats", async (_req, res) => {
