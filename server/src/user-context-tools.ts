@@ -1266,6 +1266,681 @@ export function createUserContextTools(): EnsoAgentTool[] {
         }
       },
     } as EnsoAgentTool,
+
+    // ── Steam Games (ACF manifest parse) ──────────────────────────────────────
+    {
+      name: "enso_context_scan_steam",
+      label: "Scan Steam Library",
+      description: "Scan local Steam installation for installed games by parsing ACF manifest files.",
+      parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("steam" as keyof ContextConsent);
+        if (denied) return denied;
+        ensureDirs();
+
+        try {
+          // Find Steam directory
+          const steamPaths = [
+            "F:\\Steam\\steamapps",
+            "C:\\Program Files (x86)\\Steam\\steamapps",
+            "C:\\Program Files\\Steam\\steamapps",
+            join(homedir(), ".steam", "steam", "steamapps"),
+            join(homedir(), "Library", "Application Support", "Steam", "steamapps"),
+          ];
+          let steamDir = steamPaths.find(p => existsSync(p));
+          if (!steamDir) return errorResult("Steam installation not found. Checked common paths.");
+
+          // Parse ACF manifests
+          const acfFiles = readdirSync(steamDir).filter(f => f.startsWith("appmanifest_") && f.endsWith(".acf"));
+          const games: Array<Record<string, unknown>> = [];
+
+          for (const acfFile of acfFiles) {
+            try {
+              const content = readFileSync(join(steamDir, acfFile), "utf-8");
+              const kv: Record<string, string> = {};
+              for (const line of content.split("\n")) {
+                const match = line.match(/^\s*"(\w+)"\s+"(.+)"\s*$/);
+                if (match) kv[match[1]] = match[2];
+              }
+              if (kv.appid && kv.name) {
+                games.push({
+                  appId: kv.appid,
+                  name: kv.name,
+                  sizeOnDisk: kv.SizeOnDisk ? parseInt(kv.SizeOnDisk, 10) : 0,
+                  lastPlayed: kv.LastPlayed ? parseInt(kv.LastPlayed, 10) * 1000 : 0,
+                  installDir: kv.installdir || "",
+                  buildId: kv.buildid || "",
+                });
+              }
+            } catch { /* skip bad ACF */ }
+          }
+
+          // Merge with existing enriched data
+          const cachePath = join(CACHE_DIR, "steam-games.json");
+          let existing: Record<string, unknown>[] = [];
+          try {
+            const prev = JSON.parse(readFileSync(cachePath, "utf-8"));
+            existing = prev.games || [];
+          } catch { /* no cache */ }
+          const enrichedById = new Map<string, Record<string, unknown>>();
+          for (const g of existing) {
+            if (g.appId && g.enrichedAt) enrichedById.set(g.appId as string, g);
+          }
+          for (const game of games) {
+            const prev = enrichedById.get(game.appId as string);
+            if (prev) {
+              Object.assign(game, {
+                description: prev.description, headerImage: prev.headerImage,
+                genres: prev.genres, categories: prev.categories,
+                metacritic: prev.metacritic, releaseDate: prev.releaseDate,
+                developers: prev.developers, publishers: prev.publishers,
+                screenshots: prev.screenshots, enrichedAt: prev.enrichedAt,
+              });
+            }
+          }
+
+          const result = { source: "steam-games", games, totalGames: games.length, steamDir, scannedAt: new Date().toISOString() };
+          writeFileSync(cachePath, JSON.stringify(result, null, 2));
+          updateScanLog("steam" as keyof ScanLog);
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Steam library scanned: ${games.length} games` });
+          return jsonResult(result);
+        } catch (err) {
+          logError("user-context", "Steam scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
+
+    // ── Movies & TV (Filesystem scan) ─────────────────────────────────────────
+    {
+      name: "enso_context_scan_movies_tv",
+      label: "Scan Movies & TV",
+      description: "Scan local filesystem directories for video files and extract titles from filenames.",
+      parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("moviesTv" as keyof ContextConsent);
+        if (denied) return denied;
+        ensureDirs();
+
+        try {
+          const VIDEO_EXTS = new Set([".mkv", ".mp4", ".avi", ".mov", ".m4v", ".mts", ".mpeg", ".mpg", ".wmv"]);
+          const scanDirs: Array<{ path: string; category: string }> = [
+            { path: "F:\\迅雷下载\\Movies", category: "movies" },
+            { path: "F:\\迅雷下载\\TV Series", category: "tv" },
+            { path: "F:\\迅雷下载\\Movie Series", category: "movie_series" },
+            { path: "F:\\迅雷下载\\Documentaries", category: "documentaries" },
+            { path: "F:\\迅雷下载\\Concerts", category: "concerts" },
+            { path: "F:\\迅雷下载\\Comedy Specials", category: "comedy" },
+            { path: "H:\\moves", category: "movies" },
+          ];
+
+          // Also scan loose files in F:\迅雷下载\ root
+          scanDirs.push({ path: "F:\\迅雷下载", category: "movies" });
+
+          function extractTitle(filename: string): { title: string; year: string | null } {
+            let name = filename.replace(/\.[^.]+$/, ""); // strip extension
+            name = name.replace(/\[.*?\]/g, ""); // remove bracket tags
+            name = name.replace(/\(.*?\)/g, ""); // remove paren tags
+            // Find year
+            const yearMatch = name.match(/[.\s_-]((?:19|20)\d{2})[.\s_-]/);
+            const year = yearMatch ? yearMatch[1] : null;
+            if (yearMatch) name = name.slice(0, name.indexOf(yearMatch[0]));
+            // Strip quality/codec tags
+            name = name.replace(/\b(1080p|2160p|4K|720p|480p|BD|BluRay|WEB[-.]?DL|WEBRip|HDTV|DVDRip|HDRip|BRRip|NF|AMZN|COMPLETE)\b/gi, "");
+            name = name.replace(/\b(x264|x265|H\.?264|H\.?265|HEVC|AVC|10bit|8bit)\b/gi, "");
+            name = name.replace(/\b(AAC|DDP|DDP5\.?1|AC3|FLAC|TrueHD|Atmos|DD2\.?0|DD5\.?1|DTS)\b/gi, "");
+            name = name.replace(/\b(SPARKS|NukeHD|SONYHD|RARBG|YTS\.?MX|QuickIO|DreamHD|BDYS|YJYS|XLYS|HHWEB|MiniHD|TheMrG|LOST|B2B|NTb|TEPES|BONE|WAR|GalaxyTV|TGx|ION10|TRUMP|HANDJOB|rartv|CAMPEONES|i_c)\b/gi, "");
+            name = name.replace(/[._]/g, " ");
+            name = name.replace(/-+/g, " ");
+            name = name.replace(/\s{2,}/g, " ").trim();
+            return { title: name, year };
+          }
+
+          const items: Array<Record<string, unknown>> = [];
+          const seenPaths = new Set<string>();
+
+          for (const { path: dirPath, category } of scanDirs) {
+            if (!existsSync(dirPath)) continue;
+
+            function scanDir(dir: string, cat: string, depth: number): void {
+              if (depth > 3) return;
+              try {
+                const entries = readdirSync(dir);
+                for (const entry of entries) {
+                  const fullPath = join(dir, entry);
+                  try {
+                    const stat = statSync(fullPath);
+                    if (stat.isDirectory()) {
+                      // For root scan dir, skip non-video subdirs
+                      if (dir === "F:\\迅雷下载" && scanDirs.some(sd => sd.path === fullPath)) continue;
+                      scanDir(fullPath, cat, depth + 1);
+                    } else if (stat.isFile()) {
+                      const ext = extname(entry).toLowerCase();
+                      if (VIDEO_EXTS.has(ext) && !seenPaths.has(fullPath)) {
+                        seenPaths.add(fullPath);
+                        const { title, year } = extractTitle(entry);
+                        items.push({
+                          title, year, category: cat,
+                          filePath: fullPath,
+                          fileName: entry,
+                          fileSize: stat.size,
+                          ext,
+                        });
+                      }
+                    }
+                  } catch { /* skip */ }
+                }
+              } catch { /* skip */ }
+            }
+
+            if (dirPath === "F:\\迅雷下载") {
+              // Only scan loose files in root, not subdirs (handled by specific entries)
+              try {
+                for (const entry of readdirSync(dirPath)) {
+                  const fullPath = join(dirPath, entry);
+                  try {
+                    const stat = statSync(fullPath);
+                    if (stat.isFile()) {
+                      const ext = extname(entry).toLowerCase();
+                      if (VIDEO_EXTS.has(ext) && !seenPaths.has(fullPath)) {
+                        seenPaths.add(fullPath);
+                        const { title, year } = extractTitle(entry);
+                        items.push({ title, year, category, filePath: fullPath, fileName: entry, fileSize: stat.size, ext });
+                      }
+                    }
+                  } catch { /* skip */ }
+                }
+              } catch { /* skip */ }
+            } else {
+              scanDir(dirPath, category, 0);
+            }
+          }
+
+          // Merge with existing enriched data
+          const cachePath = join(CACHE_DIR, "movies-tv.json");
+          let existingItems: Array<Record<string, unknown>> = [];
+          try {
+            const prev = JSON.parse(readFileSync(cachePath, "utf-8"));
+            existingItems = prev.items || [];
+          } catch { /* no cache */ }
+          const enrichedByPath = new Map<string, Record<string, unknown>>();
+          for (const m of existingItems) {
+            if (m.filePath && m.enrichedAt) enrichedByPath.set(m.filePath as string, m);
+          }
+          for (const item of items) {
+            const prev = enrichedByPath.get(item.filePath as string);
+            if (prev) {
+              Object.assign(item, {
+                tmdbId: prev.tmdbId, overview: prev.overview, rating: prev.rating,
+                voteCount: prev.voteCount, posterPath: prev.posterPath, backdropPath: prev.backdropPath,
+                genres: prev.genres, runtime: prev.runtime, imdbId: prev.imdbId,
+                cast: prev.cast, directors: prev.directors, tagline: prev.tagline,
+                releaseDate: prev.releaseDate, numberOfSeasons: prev.numberOfSeasons,
+                enrichedAt: prev.enrichedAt, originalLanguage: prev.originalLanguage,
+              });
+            }
+          }
+
+          const result = { source: "movies-tv", items, totalItems: items.length, scannedAt: new Date().toISOString() };
+          writeFileSync(cachePath, JSON.stringify(result, null, 2));
+          updateScanLog("moviesTv" as keyof ScanLog);
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Movies/TV scanned: ${items.length} items` });
+          return jsonResult(result);
+        } catch (err) {
+          logError("user-context", "Movies/TV scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
+
+    // ── Photo Library (Filesystem scan + EXIF) ────────────────────────────────
+    {
+      name: "enso_context_scan_photos",
+      label: "Scan Photo Library",
+      description: "Scan configured directories for photos and extract EXIF metadata, organized by album.",
+      parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("photos" as keyof ContextConsent);
+        if (denied) return denied;
+        ensureDirs();
+
+        try {
+          const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".heic", ".webp", ".gif", ".cr2", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2"]);
+          const scanPaths = [
+            "H:\\Picture Base",
+            "H:\\5 Stars",
+            "H:\\Photographers",
+            join(homedir(), "Pictures"),
+          ].filter(p => existsSync(p));
+
+          interface AlbumData {
+            name: string;
+            path: string;
+            parentPath: string;
+            photoCount: number;
+            dateRange: { from: string | null; to: string | null };
+            cameras: string[];
+            extensions: Record<string, number>;
+          }
+
+          const albumMap = new Map<string, AlbumData>();
+          let totalPhotos = 0;
+          const allCameras = new Set<string>();
+          let minDate: string | null = null;
+          let maxDate: string | null = null;
+
+          for (const rootPath of scanPaths) {
+            function walkAlbums(dir: string, depth: number): void {
+              if (depth > 5) return;
+              try {
+                const entries = readdirSync(dir);
+                let photoCount = 0;
+                const extCounts: Record<string, number> = {};
+
+                for (const entry of entries) {
+                  const fullPath = join(dir, entry);
+                  try {
+                    const stat = statSync(fullPath);
+                    if (stat.isDirectory()) {
+                      walkAlbums(fullPath, depth + 1);
+                    } else if (stat.isFile()) {
+                      const ext = extname(entry).toLowerCase();
+                      if (IMAGE_EXTS.has(ext)) {
+                        photoCount++;
+                        extCounts[ext] = (extCounts[ext] || 0) + 1;
+                      }
+                    }
+                  } catch { /* skip */ }
+                }
+
+                if (photoCount > 0) {
+                  const albumName = basename(dir);
+                  const parentDir = basename(resolve(dir, ".."));
+                  albumMap.set(dir, {
+                    name: albumName,
+                    path: dir,
+                    parentPath: parentDir,
+                    photoCount,
+                    dateRange: { from: null, to: null },
+                    cameras: [],
+                    extensions: extCounts,
+                  });
+                  totalPhotos += photoCount;
+                }
+              } catch { /* skip */ }
+            }
+
+            walkAlbums(rootPath, 0);
+          }
+
+          // Sample EXIF from top albums (up to 3 photos per album, max 50 albums)
+          const { parseImageMeta } = await import("./exif-parser.js");
+          const sortedAlbums = [...albumMap.values()].sort((a, b) => b.photoCount - a.photoCount);
+
+          for (const album of sortedAlbums.slice(0, 50)) {
+            try {
+              const files = readdirSync(album.path)
+                .filter(f => IMAGE_EXTS.has(extname(f).toLowerCase()))
+                .slice(0, 3);
+
+              for (const file of files) {
+                try {
+                  const meta = parseImageMeta(join(album.path, file));
+                  if (meta?.dateTaken) {
+                    const d = meta.dateTaken.replace(/:/g, "-").slice(0, 10);
+                    if (!album.dateRange.from || d < album.dateRange.from) album.dateRange.from = d;
+                    if (!album.dateRange.to || d > album.dateRange.to) album.dateRange.to = d;
+                    if (!minDate || d < minDate) minDate = d;
+                    if (!maxDate || d > maxDate) maxDate = d;
+                  }
+                  if (meta?.cameraModel) {
+                    const cam = `${meta.cameraMake || ""} ${meta.cameraModel}`.trim();
+                    if (!album.cameras.includes(cam)) album.cameras.push(cam);
+                    allCameras.add(cam);
+                  }
+                } catch { /* skip */ }
+              }
+            } catch { /* skip */ }
+          }
+
+          const albums = sortedAlbums.map(a => ({
+            name: a.name,
+            path: a.path,
+            parentPath: a.parentPath,
+            photoCount: a.photoCount,
+            dateRange: a.dateRange,
+            cameras: a.cameras,
+            extensions: a.extensions,
+          }));
+
+          const result = {
+            source: "photo-library",
+            albums,
+            totalPhotos,
+            totalAlbums: albums.length,
+            cameras: [...allCameras].sort(),
+            yearRange: minDate && maxDate ? { from: minDate, to: maxDate } : null,
+            scanPaths,
+            scannedAt: new Date().toISOString(),
+          };
+
+          writeFileSync(join(CACHE_DIR, "photo-library.json"), JSON.stringify(result, null, 2));
+          updateScanLog("photos" as keyof ScanLog);
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Photo library scanned: ${totalPhotos} photos in ${albums.length} albums` });
+          return jsonResult(result);
+        } catch (err) {
+          logError("user-context", "Photo scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
+
+    // ── Twitter/X Following (Puppeteer scrape) ────────────────────────────────
+    {
+      name: "enso_context_scan_twitter",
+      label: "Scan Twitter/X Following",
+      description: "Scrape your Twitter/X following list using a persistent browser session. Requires manual login first: run with headless=false to open a visible browser for login.",
+      parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("twitterFollowing" as keyof ContextConsent);
+        if (denied) return denied;
+        ensureDirs();
+
+        const TWITTER_BROWSER_DIR = join(homedir(), ".enso", "data", "twitter-browser");
+        mkdirSync(TWITTER_BROWSER_DIR, { recursive: true });
+
+        const SCAN_TIMEOUT = 90_000;
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Twitter scan timed out after 90s. You may need to log in first — use /browser → x.com")), SCAN_TIMEOUT)
+        );
+
+        try {
+          return await Promise.race([timeoutPromise, (async () => {
+            const puppeteer = await import("puppeteer");
+            const browser = await puppeteer.default.launch({
+              headless: "new" as unknown as boolean,
+              userDataDir: TWITTER_BROWSER_DIR,
+              args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1280,900"],
+            });
+
+            try {
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1280, height: 900 });
+              await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+
+              // First navigate to home to verify login
+              await page.goto("https://x.com/home", { waitUntil: "domcontentloaded", timeout: 20000 });
+              await new Promise(r => setTimeout(r, 4000)); // Wait for JS render
+
+              // Check if logged in
+              const homeUrl = page.url();
+              logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Twitter home URL: ${homeUrl}` });
+              if (homeUrl.includes("/login") || homeUrl.includes("/i/flow/login") || homeUrl.includes("/i/flow/signup")) {
+                await browser.close();
+                return errorResult("Not logged in to Twitter/X. Use /browser to navigate to x.com and log in first, then retry the scan.");
+              }
+
+              // Get the user's own handle from the home page
+              const myHandle = await page.evaluate(`(() => {
+                // Try to find the user's handle from the nav/sidebar
+                var navLinks = document.querySelectorAll('a[href^="/"]');
+                for (var i = 0; i < navLinks.length; i++) {
+                  var href = navLinks[i].getAttribute('href');
+                  if (href && href.match(/^\\/[a-zA-Z0-9_]+$/) && !['/', '/home', '/explore', '/search', '/notifications', '/messages', '/settings', '/compose', '/i'].some(function(p) { return href === p || href.startsWith('/i/'); })) {
+                    return href.substring(1);
+                  }
+                }
+                return null;
+              })()`);
+
+              logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Twitter detected handle: ${myHandle || "unknown"}` });
+
+              // Navigate to following page
+              const followingUrl = myHandle ? `https://x.com/${myHandle}/following` : "https://x.com/following";
+              await page.goto(followingUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
+              await new Promise(r => setTimeout(r, 4000));
+
+              // Scroll and collect accounts
+              const accounts: Array<{ handle: string; displayName: string; bio: string; verified: boolean }> = [];
+              const seenHandles = new Set<string>();
+              let noNewCount = 0;
+
+              for (let scroll = 0; scroll < 60 && noNewCount < 5; scroll++) {
+                const newAccounts = await page.evaluate(`(() => {
+                  var cells = document.querySelectorAll('[data-testid="UserCell"]');
+                  var results = [];
+                  cells.forEach(function(cell) {
+                    try {
+                      // Find handle from profile links
+                      var links = cell.querySelectorAll('a[role="link"]');
+                      var handle = "";
+                      for (var i = 0; i < links.length; i++) {
+                        var href = links[i].getAttribute("href") || "";
+                        // Profile links are like /username (single segment, no slashes after the first)
+                        if (href.match(/^\\/[a-zA-Z0-9_]+$/)) {
+                          handle = href.substring(1);
+                          break;
+                        }
+                      }
+
+                      // Find display name
+                      var displayName = "";
+                      var nameSpans = cell.querySelectorAll('a[role="link"] span');
+                      for (var j = 0; j < nameSpans.length; j++) {
+                        var text = nameSpans[j].textContent || "";
+                        if (text && !text.startsWith("@") && text.length > 0 && text.length < 50) {
+                          displayName = text;
+                          break;
+                        }
+                      }
+
+                      // Find bio text
+                      var bio = "";
+                      var bioDiv = cell.querySelector('[data-testid="UserDescription"]');
+                      if (bioDiv) bio = bioDiv.textContent || "";
+
+                      // Check verified
+                      var verified = !!cell.querySelector('[data-testid="icon-verified"], svg[aria-label="Verified account"]');
+
+                      if (handle) results.push({ handle: handle, displayName: displayName || handle, bio: bio, verified: verified });
+                    } catch(e) {}
+                  });
+                  return results;
+                })()`);
+
+                let addedNew = false;
+                for (const acc of (newAccounts as typeof accounts)) {
+                  if (acc.handle && !seenHandles.has(acc.handle)) {
+                    seenHandles.add(acc.handle);
+                    accounts.push(acc);
+                    addedNew = true;
+                  }
+                }
+
+                if (!addedNew) noNewCount++;
+                else noNewCount = 0;
+
+                // Scroll down
+                await page.evaluate("window.scrollBy(0, 800)");
+                await new Promise(r => setTimeout(r, 1500));
+
+                if (accounts.length >= 500) break;
+
+                // Log progress every 10 scrolls
+                if (scroll > 0 && scroll % 10 === 0) {
+                  logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Twitter following scan progress: ${accounts.length} accounts after ${scroll} scrolls` });
+                }
+              }
+
+              await browser.close();
+
+              const result = {
+                source: "twitter-following",
+                accounts,
+                totalFollowing: accounts.length,
+                scannedAt: new Date().toISOString(),
+              };
+
+              writeFileSync(join(CACHE_DIR, "twitter-following.json"), JSON.stringify(result, null, 2));
+              updateScanLog("twitterFollowing" as keyof ScanLog);
+              logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Twitter following scanned: ${accounts.length} accounts` });
+              return jsonResult(result);
+            } catch (innerErr) {
+              try { await browser.close(); } catch { /* ignore */ }
+              throw innerErr;
+            }
+          })()]);
+        } catch (err) {
+          logError("user-context", "Twitter scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
+
+    // ── QQ Music (Puppeteer + local files) ────────────────────────────────────
+    {
+      name: "enso_context_scan_qq_music",
+      label: "Scan QQ Music",
+      description: "Scan QQ Music online profile and local audio files.",
+      parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("qqMusic" as keyof ContextConsent);
+        if (denied) return denied;
+        ensureDirs();
+
+        try {
+          const AUDIO_EXTS = new Set([".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac", ".wma", ".ape"]);
+          const localDirs = [
+            join(homedir(), "Music"),
+            join(homedir(), "AppData", "Local", "QQMusic", "Media"),
+            "D:\\Music",
+            "F:\\Music",
+          ].filter(p => existsSync(p));
+
+          const localFiles: Array<{ title: string; artist: string; filePath: string; ext: string; size: number }> = [];
+
+          for (const dir of localDirs) {
+            try {
+              function walkMusic(d: string, depth: number): void {
+                if (depth > 3) return;
+                try {
+                  for (const entry of readdirSync(d)) {
+                    const fullPath = join(d, entry);
+                    try {
+                      const stat = statSync(fullPath);
+                      if (stat.isDirectory()) walkMusic(fullPath, depth + 1);
+                      else if (stat.isFile()) {
+                        const ext = extname(entry).toLowerCase();
+                        if (AUDIO_EXTS.has(ext)) {
+                          // Parse "Artist - Title" from filename
+                          const name = entry.replace(/\.[^.]+$/, "");
+                          const parts = name.split(" - ");
+                          const artist = parts.length > 1 ? parts[0].trim() : "Unknown";
+                          const title = parts.length > 1 ? parts.slice(1).join(" - ").trim() : name;
+                          localFiles.push({ title, artist, filePath: fullPath, ext, size: stat.size });
+                        }
+                      }
+                    } catch { /* skip */ }
+                  }
+                } catch { /* skip */ }
+              }
+              walkMusic(dir, 0);
+            } catch { /* skip */ }
+          }
+
+          // Online scraping — QQ Music liked songs
+          const playlists: Array<{ name: string; trackCount: number; tracks: Array<{ title: string; artist: string; album: string }> }> = [];
+          const favorites: Array<{ title: string; artist: string; album: string }> = [];
+
+          const QQ_BROWSER_DIR = join(homedir(), ".enso", "data", "qqmusic-browser");
+          mkdirSync(QQ_BROWSER_DIR, { recursive: true });
+          try {
+            const puppeteer = await import("puppeteer");
+            const browser = await puppeteer.default.launch({
+              headless: "new" as unknown as boolean, // New headless mode — more compatible with auth
+              userDataDir: QQ_BROWSER_DIR,
+              args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1280,900"],
+            });
+            try {
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1280, height: 900 });
+              await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+              // Navigate to liked songs page
+              await page.goto("https://y.qq.com/n/ryqq_v2/profile/like/song", { waitUntil: "domcontentloaded", timeout: 20000 });
+              await new Promise(r => setTimeout(r, 6000)); // Wait for SPA to render
+
+              // Scroll to load all songs (QQ Music lazy-loads as you scroll)
+              let prevHeight = 0;
+              for (let i = 0; i < 50; i++) {
+                await page.evaluate("window.scrollBy(0, 1000)");
+                await new Promise(r => setTimeout(r, 600));
+                const newHeight = await page.evaluate("document.body.scrollHeight") as number;
+                if (newHeight === prevHeight) break; // No more content
+                prevHeight = newHeight;
+              }
+
+              // Extract songs using the exact QQ Music DOM structure:
+              // .songlist__item > .songlist__songname_txt a (title)
+              // .songlist__item > .songlist__artist a (artist)
+              // .songlist__item > .songlist__album a (album)
+              const data = await page.evaluate(`(() => {
+                var songs = [];
+                var rows = document.querySelectorAll('.songlist__item');
+                rows.forEach(function(row) {
+                  try {
+                    var titleEl = row.querySelector('.songlist__songname_txt a');
+                    var artistEl = row.querySelector('.songlist__artist a, .playlist__author');
+                    var albumEl = row.querySelector('.songlist__album a');
+                    var timeEl = row.querySelector('.songlist__time');
+                    var title = titleEl ? titleEl.textContent.trim() : '';
+                    var artist = artistEl ? artistEl.textContent.trim() : '';
+                    var album = albumEl ? albumEl.textContent.trim() : '';
+                    var duration = timeEl ? timeEl.textContent.trim() : '';
+                    if (title) songs.push({ title: title, artist: artist || 'Unknown', album: album || '', duration: duration });
+                  } catch(e) {}
+                });
+                return { songs: songs, url: window.location.href, loggedIn: !document.body.innerText.includes('登录') || songs.length > 0 };
+              })()`);
+
+              const extracted = data as { songs: Array<{ title: string; artist: string; album: string; duration?: string }>; url?: string; loggedIn?: boolean };
+              logAction({ ts: Date.now(), type: "action", category: "user-context", message: `QQ Music extracted ${extracted.songs.length} songs (loggedIn: ${extracted.loggedIn})` });
+
+              if (extracted.songs.length > 0) {
+                favorites.push(...extracted.songs);
+              } else if (!extracted.loggedIn) {
+                logAction({ ts: Date.now(), type: "action", category: "user-context", message: "QQ Music: not logged in. Use the Enso browser to log in at y.qq.com first." });
+              }
+
+              await browser.close();
+            } catch (innerErr) {
+              try { await browser.close(); } catch { /* ignore */ }
+              logError("user-context", "QQ Music browser scraping failed", innerErr);
+            }
+          } catch (outerErr) {
+            logError("user-context", "QQ Music browser launch failed", outerErr);
+          }
+
+          const result = {
+            source: "qq-music",
+            playlists,
+            favorites,
+            localFiles,
+            totalTracks: favorites.length + localFiles.length,
+            totalPlaylists: playlists.length,
+            localDirsScanned: localDirs,
+            scannedAt: new Date().toISOString(),
+          };
+
+          writeFileSync(join(CACHE_DIR, "qq-music.json"), JSON.stringify(result, null, 2));
+          updateScanLog("qqMusic" as keyof ScanLog);
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `QQ Music scanned: ${favorites.length} favorites, ${localFiles.length} local files` });
+          return jsonResult(result);
+        } catch (err) {
+          logError("user-context", "QQ Music scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
   ];
 }
 

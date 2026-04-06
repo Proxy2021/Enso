@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "createdAt": 1775460000000,
+  "spec": {
+    "toolFamily": "qq_music",
+    "toolPrefix": "enso_qq_music_",
+    "description": "QQ Music: browse playlists, favorites, and local music files. Scan your QQ Music library and local audio collection.",
+    "signatureId": "qq_music_library",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Music Library",
+        "description": "Browse your QQ Music playlists, favorites, and local music files.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "enum": ["playlists", "favorites", "local", "artists"],
+              "description": "Which view to show (default: playlists)"
+            },
+            "query": {
+              "type": "string",
+              "description": "Search by song title, artist, or playlist name"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Music Library",
+        "description": "Scan QQ Music online profile and local audio files.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "update",
+        "label": "Update Music Library",
+        "description": "Incremental scan — detect new playlists, favorites, and local files.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

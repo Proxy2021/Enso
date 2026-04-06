@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "createdAt": 1775460000000,
+  "spec": {
+    "toolFamily": "twitter",
+    "toolPrefix": "enso_twitter_",
+    "description": "Twitter/X: browse your following list with bios, verify status, and track the accounts you follow.",
+    "signatureId": "twitter_following",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Following",
+        "description": "Browse accounts you follow on Twitter/X with names, bios, and verification status.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search by name, handle, or bio"
+            },
+            "sortBy": {
+              "type": "string",
+              "enum": ["name", "handle"],
+              "description": "Sort order (default: name)"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Following List",
+        "description": "Scrape your Twitter/X following list using a persistent browser session.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "update",
+        "label": "Update Following List",
+        "description": "Incremental scan — detect newly followed/unfollowed accounts.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

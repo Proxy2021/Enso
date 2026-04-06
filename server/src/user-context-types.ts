@@ -16,6 +16,11 @@ export interface ContextConsent {
   system: boolean;
   kindleLibrary: boolean;
   youtube: boolean;
+  steam: boolean;
+  moviesTv: boolean;
+  photos: boolean;
+  twitterFollowing: boolean;
+  qqMusic: boolean;
   updatedAt: number;
   /** Extensible: new data sources can register custom consent keys */
   [key: string]: boolean | number;
@@ -29,6 +34,11 @@ export const DEFAULT_CONSENT: ContextConsent = {
   system: false,
   kindleLibrary: false,
   youtube: false,
+  steam: false,
+  moviesTv: false,
+  photos: false,
+  twitterFollowing: false,
+  qqMusic: false,
   updatedAt: 0,
 };
 
@@ -171,6 +181,12 @@ export interface ScanLog {
   files?: number;
   system?: number;
   kindleLibrary?: number;
+  youtube?: number;
+  steam?: number;
+  moviesTv?: number;
+  photos?: number;
+  twitterFollowing?: number;
+  qqMusic?: number;
 }
 
 // ── Context Status (sent to frontend) ────────────────────────────────────────

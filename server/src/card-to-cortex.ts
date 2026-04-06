@@ -28,6 +28,11 @@ const CORTEX_WORTHY_FAMILIES = new Set([
   "projects_scanner",
   "system_info",
   "cortex",
+  "steam",
+  "movies_tv",
+  "photo_library",
+  "twitter",
+  "qq_music",
 ]);
 
 interface CardRecord {

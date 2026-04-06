@@ -67,6 +67,11 @@ export const ONBOARDING_SOURCES = [
   { id: "system", icon: "💻", label: "System", description: "Installed apps and environment", defaultEnabled: true },
   { id: "kindleLibrary", icon: "📚", label: "Kindle", description: "Amazon Kindle book collection (requires login)", defaultEnabled: false },
   { id: "youtube", icon: "📺", label: "YouTube", description: "Subscriptions, liked videos, and feed (requires OAuth)", defaultEnabled: false },
+  { id: "steam", icon: "🎮", label: "Steam", description: "Installed Steam games and play history", defaultEnabled: false },
+  { id: "moviesTv", icon: "🎬", label: "Movies & TV", description: "Local video collection with TMDB metadata", defaultEnabled: false },
+  { id: "photos", icon: "📷", label: "Photos", description: "Photo library with EXIF metadata and album organization", defaultEnabled: false },
+  { id: "twitterFollowing", icon: "🐦", label: "Twitter/X", description: "Accounts you follow on Twitter/X (requires login)", defaultEnabled: false },
+  { id: "qqMusic", icon: "🎵", label: "QQ Music", description: "Playlists, favorites, and local audio files", defaultEnabled: false },
 ];
 
 /**
@@ -122,6 +127,11 @@ export function getDefaultScheduledTasks(): Array<{
    - Kindle: check for new book purchases
    - YouTube: fetch latest subscriptions, liked videos, and feed
    - System: refresh installed apps
+   - Steam: check for newly installed games
+   - Movies/TV: scan for new video files
+   - Photos: detect new photo albums
+   - Twitter/X: refresh following list
+   - QQ Music: scan for new tracks
 
 2. After all scans complete, rebuild the user profile from the updated caches.
 
@@ -129,7 +139,7 @@ export function getDefaultScheduledTasks(): Array<{
 
 4. Log what changed: new items found, pages created, profile updated.
 
-Use the available scanner tools: enso_context_scan_browser_history, enso_context_scan_bookmarks, enso_context_scan_email, enso_context_scan_files, enso_context_scan_system, enso_context_scan_kindle_library, enso_context_scan_youtube.`,
+Use the available scanner tools: enso_context_scan_browser_history, enso_context_scan_bookmarks, enso_context_scan_email, enso_context_scan_files, enso_context_scan_system, enso_context_scan_kindle_library, enso_context_scan_youtube, enso_context_scan_steam, enso_context_scan_movies_tv, enso_context_scan_photos, enso_context_scan_twitter, enso_context_scan_qq_music.`,
       },
       enabled: true,
       recurring: true,
@@ -181,6 +191,11 @@ export async function runOnboardingSetup(
         system: "enso_context_scan_system",
         kindleLibrary: "enso_context_scan_kindle_library",
         youtube: "enso_youtube_manager_scan",
+        steam: "enso_context_scan_steam",
+        moviesTv: "enso_context_scan_movies_tv",
+        photos: "enso_context_scan_photos",
+        twitterFollowing: "enso_context_scan_twitter",
+        qqMusic: "enso_context_scan_qq_music",
       };
       const toolName = toolMap[srcId];
       if (toolName) {

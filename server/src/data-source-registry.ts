@@ -408,7 +408,311 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
           summary: ch.description?.slice(0, 200) || `YouTube channel: ${ch.title}`,
           tags: ["youtube", "channel", "subscription"],
         };
-      }).filter(Boolean) as CortexPage[];
+      }).filter(Boolean) as DirectIngestPage[];
+    },
+  },
+  // ── Steam Games ──
+  {
+    id: "steam",
+    cacheFile: "steam-games.json",
+    scannerToolName: "enso_context_scan_steam",
+    scannerParams: {},
+    ingestPriority: 55,
+    formatForProfile: (cached: A) => {
+      if (!cached?.games?.length) return null;
+      const gameList = cached.games.slice(0, 15).map((g: A) => g.name).join(", ");
+      return `## Steam Games (${cached.games.length} installed)\n${gameList}`;
+    },
+    formatForCortex: (cached: A) => {
+      if (!cached?.games?.length) return null;
+      const lines = [`# Steam Game Library (${cached.games.length} games)\n`];
+      const byGenre = new Map<string, A[]>();
+      const noGenre: A[] = [];
+      for (const g of cached.games) {
+        if (g.genres?.length) {
+          for (const genre of g.genres) {
+            const list = byGenre.get(genre) ?? [];
+            list.push(g);
+            byGenre.set(genre, list);
+          }
+        } else {
+          noGenre.push(g);
+        }
+      }
+      const sorted = [...byGenre.entries()].sort((a, b) => b[1].length - a[1].length);
+      for (const [genre, games] of sorted.slice(0, 15)) {
+        lines.push(`## ${genre} (${games.length})`);
+        for (const g of games) lines.push(`- **${g.name}**${g.metacritic ? ` (Metacritic: ${g.metacritic})` : ""}${g.description ? `: ${g.description.slice(0, 100)}` : ""}`);
+      }
+      if (noGenre.length) {
+        lines.push(`\n## Other Games (${noGenre.length})`);
+        for (const g of noGenre) lines.push(`- ${g.name}`);
+      }
+      return { text: lines.join("\n"), topic: "Steam Game Library", label: "Steam library scan" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.games?.length) return [];
+      return cached.games.filter((g: A) => g.enrichedAt).map((g: A) => {
+        const slug = g.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        if (!slug) return null;
+        const lines = [`# ${g.name}\n`];
+        if (g.description) lines.push(`${g.description}\n`);
+        if (g.genres?.length) lines.push(`**Genres**: ${g.genres.join(", ")}`);
+        if (g.metacritic) lines.push(`**Metacritic**: ${g.metacritic}`);
+        if (g.developers?.length) lines.push(`**Developer**: ${g.developers.join(", ")}`);
+        if (g.releaseDate) lines.push(`**Release**: ${g.releaseDate}`);
+        const sizeGB = g.sizeOnDisk ? (g.sizeOnDisk / (1024 * 1024 * 1024)).toFixed(1) + " GB" : null;
+        if (sizeGB) lines.push(`**Size**: ${sizeGB}`);
+        if (g.lastPlayed) lines.push(`**Last Played**: ${new Date(g.lastPlayed).toISOString().slice(0, 10)}`);
+        if (g.headerImage) lines.push(`\n![header](${g.headerImage})`);
+        lines.push(`\n- **Steam**: [Store Page](https://store.steampowered.com/app/${g.appId})`);
+        return {
+          path: `entities/game-${slug}.md`,
+          title: g.name,
+          content: lines.join("\n"),
+          summary: g.description?.slice(0, 200) || `${g.name} — Steam game`,
+          tags: ["game", "steam", ...(g.genres || []).map((genre: string) => genre.toLowerCase())],
+        };
+      }).filter(Boolean) as DirectIngestPage[];
+    },
+  },
+
+  // ── Movies & TV ──
+  {
+    id: "moviesTv",
+    cacheFile: "movies-tv.json",
+    scannerToolName: "enso_context_scan_movies_tv",
+    scannerParams: {},
+    ingestPriority: 56,
+    formatForProfile: (cached: A) => {
+      if (!cached?.items?.length) return null;
+      const movies = cached.items.filter((m: A) => m.category === "movies").length;
+      const tv = cached.items.filter((m: A) => m.category === "tv").length;
+      const docs = cached.items.filter((m: A) => m.category === "documentaries").length;
+      const titles = cached.items.slice(0, 15).map((m: A) => `${m.title}${m.year ? ` (${m.year})` : ""}`).join(", ");
+      return `## Movies & TV (${cached.items.length} total: ${movies} movies, ${tv} TV, ${docs} docs)\n${titles}`;
+    },
+    formatForCortex: (cached: A) => {
+      if (!cached?.items?.length) return null;
+      const lines = [`# Movie & TV Collection (${cached.items.length} items)\n`];
+      const byCat = new Map<string, A[]>();
+      for (const m of cached.items) {
+        const list = byCat.get(m.category) ?? [];
+        list.push(m);
+        byCat.set(m.category, list);
+      }
+      for (const [cat, items] of byCat) {
+        lines.push(`\n## ${cat.charAt(0).toUpperCase() + cat.slice(1)} (${items.length})`);
+        for (const m of items.slice(0, 20)) {
+          let line = `- **${m.title}**${m.year ? ` (${m.year})` : ""}`;
+          if (m.rating) line += ` ⭐ ${m.rating.toFixed(1)}`;
+          if (m.genres?.length) line += ` — ${m.genres.join(", ")}`;
+          lines.push(line);
+        }
+        if (items.length > 20) lines.push(`- ... and ${items.length - 20} more`);
+      }
+      return { text: lines.join("\n"), topic: "Movie & TV Collection", label: "Video collection scan" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.items?.length) return [];
+      return cached.items.map((m: A) => {
+        const prefix = m.category === "tv" ? "tv-" : "movie-";
+        const slug = m.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        if (!slug) return null;
+        const lines = [`# ${m.title}${m.year ? ` (${m.year})` : ""}\n`];
+        if (m.tagline) lines.push(`*${m.tagline}*\n`);
+        if (m.rating) lines.push(`⭐ ${m.rating.toFixed(1)}/10${m.voteCount ? ` (${m.voteCount.toLocaleString()} votes)` : ""}`);
+        if (m.genres?.length) lines.push(`**Genres**: ${m.genres.join(", ")}`);
+        if (m.runtime) lines.push(`**Runtime**: ${m.runtime} min`);
+        if (m.directors?.length) lines.push(`**Director**: ${m.directors.join(", ")}`);
+        if (m.cast?.length) lines.push(`**Cast**: ${m.cast.join(", ")}`);
+        if (m.overview) lines.push(`\n${m.overview}`);
+        if (m.posterPath) lines.push(`\n![poster](${m.posterPath})`);
+        lines.push(`\n## Details`);
+        if (m.imdbId) lines.push(`- **IMDB**: [${m.imdbId}](https://www.imdb.com/title/${m.imdbId})`);
+        lines.push(`- **Category**: ${m.category}`);
+        lines.push(`- **File**: \`${m.filePath}\``);
+        return {
+          path: `entities/${prefix}${slug}.md`,
+          title: m.title,
+          content: lines.join("\n"),
+          summary: m.overview?.slice(0, 200) || `${m.title} (${m.year || "?"}) — ${m.category}`,
+          tags: [m.category === "tv" ? "tv-series" : "movie", "video", ...(m.genres || []).map((g: string) => g.toLowerCase())],
+        };
+      }).filter(Boolean) as DirectIngestPage[];
+    },
+  },
+
+  // ── Photo Library ──
+  {
+    id: "photos",
+    cacheFile: "photo-library.json",
+    scannerToolName: "enso_context_scan_photos",
+    scannerParams: {},
+    ingestPriority: 58,
+    formatForProfile: (cached: A) => {
+      if (!cached?.albums?.length) return null;
+      const topAlbums = cached.albums.slice(0, 10).map((a: A) => `${a.name} (${a.photoCount})`).join(", ");
+      return `## Photo Library (${cached.totalPhotos || 0} photos in ${cached.albums.length} albums)\nTop albums: ${topAlbums}`;
+    },
+    formatForCortex: (cached: A) => {
+      if (!cached?.albums?.length) return null;
+      const lines = [`# Photo Library (${cached.totalPhotos || 0} photos, ${cached.albums.length} albums)\n`];
+      if (cached.yearRange) lines.push(`Spanning ${cached.yearRange.from} to ${cached.yearRange.to}\n`);
+      if (cached.cameras?.length) lines.push(`**Cameras**: ${cached.cameras.join(", ")}\n`);
+      // Group by year (from parentPath)
+      const byYear = new Map<string, A[]>();
+      for (const a of cached.albums) {
+        const year = a.dateRange?.from?.substring(0, 4) || a.parentPath || "Unknown";
+        const list = byYear.get(year) ?? [];
+        list.push(a);
+        byYear.set(year, list);
+      }
+      const sortedYears = [...byYear.keys()].sort().reverse();
+      for (const year of sortedYears.slice(0, 15)) {
+        const albums = byYear.get(year)!;
+        const totalPhotos = albums.reduce((s: number, a: A) => s + a.photoCount, 0);
+        lines.push(`\n## ${year} (${albums.length} albums, ${totalPhotos} photos)`);
+        for (const a of albums.slice(0, 10)) lines.push(`- **${a.name}**: ${a.photoCount} photos${a.cameras?.length ? ` (${a.cameras[0]})` : ""}`);
+      }
+      return { text: lines.join("\n"), topic: "Photo Library", label: "Photo library scan" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.albums?.length) return [];
+      return cached.albums.filter((a: A) => a.photoCount >= 3).map((a: A) => {
+        const slug = a.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        if (!slug) return null;
+        const lines = [`# Photo Album: ${a.name}\n`];
+        lines.push(`**${a.photoCount} photos**`);
+        if (a.dateRange?.from) lines.push(`**Date Range**: ${a.dateRange.from} to ${a.dateRange.to || "present"}`);
+        if (a.cameras?.length) lines.push(`**Camera**: ${a.cameras.join(", ")}`);
+        lines.push(`**Path**: \`${a.path}\``);
+        return {
+          path: `entities/photo-album-${slug}.md`,
+          title: `Photo Album: ${a.name}`,
+          content: lines.join("\n"),
+          summary: `${a.name} — ${a.photoCount} photos${a.dateRange?.from ? ` from ${a.dateRange.from}` : ""}`,
+          tags: ["photo", "album", ...(a.cameras || []).map((c: string) => c.toLowerCase())],
+        };
+      }).filter(Boolean) as DirectIngestPage[];
+    },
+  },
+
+  // ── Twitter/X Following ──
+  {
+    id: "twitterFollowing",
+    cacheFile: "twitter-following.json",
+    scannerToolName: "enso_context_scan_twitter",
+    scannerParams: {},
+    ingestPriority: 57,
+    formatForProfile: (cached: A) => {
+      if (!cached?.accounts?.length) return null;
+      const names = cached.accounts.slice(0, 15).map((a: A) => `@${a.handle}`).join(", ");
+      return `## Twitter/X Following (${cached.accounts.length} accounts)\n${names}`;
+    },
+    formatForCortex: (cached: A) => {
+      if (!cached?.accounts?.length) return null;
+      const lines = [`# Twitter/X Following (${cached.accounts.length} accounts)\n`];
+      for (const a of cached.accounts) {
+        let line = `- **${a.displayName}** (@${a.handle})`;
+        if (a.verified) line += " ✓";
+        if (a.bio) line += `: ${a.bio.slice(0, 120)}`;
+        lines.push(line);
+      }
+      return { text: lines.join("\n"), topic: "Twitter/X Following", label: "Twitter following list" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.accounts?.length) return [];
+      return cached.accounts.map((a: A) => {
+        const slug = a.handle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        if (!slug) return null;
+        const lines = [`# @${a.handle}\n`];
+        lines.push(`**${a.displayName}**${a.verified ? " ✓ Verified" : ""}\n`);
+        if (a.bio) lines.push(`${a.bio}\n`);
+        lines.push(`- **Handle**: @${a.handle}`);
+        lines.push(`- **Profile**: [x.com/${a.handle}](https://x.com/${a.handle})`);
+        lines.push(`- **Source**: Twitter following list`);
+        return {
+          path: `entities/twitter-${slug}.md`,
+          title: `@${a.handle} (${a.displayName})`,
+          content: lines.join("\n"),
+          summary: `${a.displayName} (@${a.handle})${a.bio ? ` — ${a.bio.slice(0, 150)}` : ""}`,
+          tags: ["twitter", "social-media", "following"],
+        };
+      }).filter(Boolean) as DirectIngestPage[];
+    },
+  },
+
+  // ── QQ Music ──
+  {
+    id: "qqMusic",
+    cacheFile: "qq-music.json",
+    scannerToolName: "enso_context_scan_qq_music",
+    scannerParams: {},
+    ingestPriority: 59,
+    formatForProfile: (cached: A) => {
+      const parts: string[] = [];
+      if (cached?.favorites?.length) parts.push(`Favorites: ${cached.favorites.slice(0, 10).map((f: A) => `${f.title} by ${f.artist}`).join(", ")}`);
+      if (cached?.localFiles?.length) parts.push(`Local files: ${cached.localFiles.length} tracks`);
+      if (cached?.playlists?.length) parts.push(`Playlists: ${cached.playlists.map((p: A) => p.name).join(", ")}`);
+      return parts.length ? `## Music (QQ Music)\n${parts.join("\n")}` : null;
+    },
+    formatForCortex: (cached: A) => {
+      const total = (cached?.favorites?.length || 0) + (cached?.localFiles?.length || 0);
+      if (total === 0) return null;
+      const lines = [`# Music Library (${total} tracks)\n`];
+      if (cached.playlists?.length) {
+        lines.push("## Playlists");
+        for (const p of cached.playlists) lines.push(`- **${p.name}** (${p.trackCount || p.tracks?.length || 0} tracks)`);
+      }
+      if (cached.favorites?.length) {
+        lines.push("\n## Favorite Songs");
+        for (const f of cached.favorites.slice(0, 30)) lines.push(`- **${f.title}** by ${f.artist}`);
+      }
+      // Aggregate artists
+      const artistMap = new Map<string, number>();
+      for (const t of [...(cached.favorites || []), ...(cached.localFiles || [])]) {
+        if (t.artist && t.artist !== "Unknown") artistMap.set(t.artist, (artistMap.get(t.artist) || 0) + 1);
+      }
+      const topArtists = [...artistMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+      if (topArtists.length) {
+        lines.push("\n## Top Artists");
+        for (const [artist, count] of topArtists) lines.push(`- **${artist}** (${count} tracks)`);
+      }
+      return { text: lines.join("\n"), topic: "Music Library", label: "QQ Music scan" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      // Create per-artist pages (aggregated from all sources)
+      const artistMap = new Map<string, { tracks: string[]; albums: Set<string> }>();
+      for (const t of [...(cached?.favorites || []), ...(cached?.localFiles || [])]) {
+        if (t.artist && t.artist !== "Unknown") {
+          if (!artistMap.has(t.artist)) artistMap.set(t.artist, { tracks: [], albums: new Set() });
+          const entry = artistMap.get(t.artist)!;
+          if (entry.tracks.length < 20) entry.tracks.push(t.title);
+          if (t.album) entry.albums.add(t.album);
+        }
+      }
+      const pages: DirectIngestPage[] = [];
+      for (const [artist, data] of artistMap) {
+        if (data.tracks.length < 2) continue; // skip one-off artists
+        const slug = artist.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        if (!slug) continue;
+        const lines = [`# ${artist}\n`, `A music artist in your library with ${data.tracks.length} tracks.\n`];
+        lines.push("## Tracks");
+        for (const t of data.tracks) lines.push(`- ${t}`);
+        if (data.albums.size > 0) {
+          lines.push("\n## Albums");
+          for (const a of data.albums) lines.push(`- ${a}`);
+        }
+        pages.push({
+          path: `entities/artist-${slug}.md`,
+          title: artist,
+          content: lines.join("\n"),
+          summary: `${artist} — music artist with ${data.tracks.length} tracks in your library`,
+          tags: ["music", "artist", "qq-music"],
+        });
+      }
+      return pages;
     },
   },
 ];

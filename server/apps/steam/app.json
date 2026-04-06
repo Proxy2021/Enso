@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "createdAt": 1775460000000,
+  "spec": {
+    "toolFamily": "steam",
+    "toolPrefix": "enso_steam_",
+    "description": "Steam Gaming: browse your installed Steam games, scan local library, enrich with Steam Store metadata (genres, descriptions, metacritic scores), and track play history.",
+    "signatureId": "steam_games",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Steam Library",
+        "description": "Browse your Steam game library with genres, play time, sizes, and metacritic scores.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "genre": { "type": "string", "description": "Filter by genre (e.g., 'RPG', 'Action')" },
+            "sortBy": { "type": "string", "enum": ["name", "lastPlayed", "size", "metacritic"], "description": "Sort order (default: name)" },
+            "query": { "type": "string", "description": "Search by game name" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Steam Library",
+        "description": "Scan local Steam installation for installed games by reading ACF manifest files.",
+        "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
+        "suffix": "enrich",
+        "label": "Enrich Game Metadata",
+        "description": "Fetch rich metadata (genres, descriptions, images, metacritic scores) from the Steam Store API for games that haven't been enriched yet.",
+        "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
+        "suffix": "update",
+        "label": "Update Steam Library",
+        "description": "Incremental scan — check for new games since last scan and update the Cortex with any changes.",
+        "parameters": { "type": "object", "properties": {}, "required": [], "additionalProperties": false }
+      }
+    ]
+  }
+}

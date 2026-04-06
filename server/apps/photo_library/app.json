@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "createdAt": 1775460000000,
+  "spec": {
+    "toolFamily": "photo_library",
+    "toolPrefix": "enso_photo_library_",
+    "description": "Photo Library: catalog your photo collection with EXIF metadata, organize by albums/dates/cameras, and AI-powered content tagging.",
+    "signatureId": "photo_library",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Photo Library",
+        "description": "Browse your photo albums with counts, date ranges, cameras, and AI descriptions.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "groupBy": {
+              "type": "string",
+              "enum": ["directory", "year", "camera"],
+              "description": "Group albums by (default: directory)"
+            },
+            "query": {
+              "type": "string",
+              "description": "Search album names"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Photo Library",
+        "description": "Scan configured directories for photos and extract EXIF metadata.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "update",
+        "label": "Update Photo Library",
+        "description": "Incremental scan — detect new photos and albums since last scan.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

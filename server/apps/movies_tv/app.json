@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "createdAt": 1775460000000,
+  "spec": {
+    "toolFamily": "movies_tv",
+    "toolPrefix": "enso_movies_tv_",
+    "description": "Movies & TV: scan your local video collection, enrich with TMDB metadata (posters, ratings, genres, cast), browse by category, and track your library.",
+    "signatureId": "movies_tv_library",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Movies & TV",
+        "description": "Browse your movie and TV collection with posters, ratings, genres, and metadata.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": { "type": "string", "enum": ["all", "movies", "tv", "documentaries", "movie_series", "concerts", "comedy"], "description": "Filter by category (default: all)" },
+            "sortBy": { "type": "string", "enum": ["title", "year", "rating"], "description": "Sort order (default: title)" },
+            "query": { "type": "string", "description": "Search by title" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "search",
+        "label": "Search Movies & TV",
+        "description": "Search your video collection by title, genre, or cast.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Search query" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Video Collection",
+        "description": "Scan local filesystem for video files and extract titles from filenames.",
+        "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
+        "suffix": "enrich",
+        "label": "Enrich with TMDB",
+        "description": "Fetch rich metadata (posters, ratings, genres, cast, overview) from The Movie Database for un-enriched titles.",
+        "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
+        "suffix": "update",
+        "label": "Update Collection",
+        "description": "Incremental scan — check for new video files since last scan and update the Cortex.",
+        "parameters": { "type": "object", "properties": {}, "required": [], "additionalProperties": false }
+      }
+    ]
+  }
+}

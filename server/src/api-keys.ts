@@ -37,6 +37,7 @@ const SERVICE_KEYS: ServiceKeyDef[] = [
   { id: "youtubeClientId", envVar: "YOUTUBE_CLIENT_ID", label: "YouTube Client ID", description: "Google Cloud OAuth2 Client ID for YouTube API", setupUrl: "https://console.cloud.google.com/apis/credentials" },
   { id: "youtubeClientSecret", envVar: "YOUTUBE_CLIENT_SECRET", label: "YouTube Client Secret", description: "Google Cloud OAuth2 Client Secret", setupUrl: "https://console.cloud.google.com/apis/credentials" },
   { id: "youtubeRefreshToken", envVar: "YOUTUBE_REFRESH_TOKEN", label: "YouTube Refresh Token", description: "Auto-generated after OAuth authorization (do not edit manually)", setupUrl: "" },
+  { id: "tmdb", envVar: "TMDB_API_KEY", label: "TMDB (Movies)", description: "The Movie Database API key for movie/TV metadata enrichment", setupUrl: "https://www.themoviedb.org/settings/api" },
 ];
 
 export function getServiceKeyDefinitions(): ServiceKeyDef[] {
