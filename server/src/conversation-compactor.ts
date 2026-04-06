@@ -7,8 +7,7 @@
  * conversational context without hitting quality degradation from diluted history.
  */
 
-import { callGeminiLLMWithRetry } from "./ui-generator.js";
-import { GEMINI_MODEL_UTILITY } from "./config.js";
+import { llm } from "./llm.js";
 import { appendDailyMemory } from "./memory-bridge.js";
 import { logAction, logError } from "./action-log.js";
 import type { ConversationEntry } from "./standalone-agent.js";
@@ -177,7 +176,7 @@ export async function maybeCompactHistory(
       message: `Auto-compacting: ${history.length} entries (${toSummarize.length} to summarize, ${PRESERVE_RECENT} preserved), ~${estimateTokens(history)} tokens`,
     });
 
-    var summary = await callGeminiLLMWithRetry(prompt, apiKey, GEMINI_MODEL_UTILITY);
+    var summary = await llm({ prompt, tier: "utility", apiKey });
 
     if (!summary || summary.trim().length < 50) {
       logError("compaction", "Summarization returned empty or too-short result");
@@ -232,7 +231,7 @@ export async function forceCompactHistory(
     message: `Force-compacting: ${history.length} entries (${toSummarize.length} to summarize)`,
   });
 
-  var summary = await callGeminiLLMWithRetry(prompt, apiKey, GEMINI_MODEL_UTILITY);
+  var summary = await llm({ prompt, tier: "utility", apiKey });
 
   if (!summary || summary.trim().length < 50) {
     throw new Error("Summarization returned an unusable result");

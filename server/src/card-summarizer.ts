@@ -5,7 +5,7 @@
  * a structured summary using callChatLLM (any configured provider).
  */
 
-import { callChatLLM } from "./llm-provider.js";
+import { llm } from "./llm.js";
 import { logAction, logError } from "./action-log.js";
 import { LLM_FAST_TIMEOUT_MS } from "./config.js";
 
@@ -200,7 +200,7 @@ export async function summarizeCard(params: {
   const systemPrompt = SYSTEM_PROMPTS[cardType] ?? SYSTEM_PROMPTS.chat;
 
   try {
-    const raw = await callChatLLM({
+    const raw = await llm({
       prompt,
       systemPrompt,
       model,

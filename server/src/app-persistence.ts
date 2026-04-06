@@ -298,8 +298,8 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
           return { ok: false as const, text: "No LLM API key available" };
         }
         try {
-          const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-          const text = await callGeminiLLMWithRetry(prompt, apiKey);
+          const { llm } = await import("./llm.js");
+          const text = await llm({ prompt, tier: "fast", apiKey });
           return { ok: true as const, text };
         } catch (err) {
           return { ok: false as const, text: err instanceof Error ? err.message : String(err) };

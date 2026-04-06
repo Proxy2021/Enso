@@ -9,8 +9,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { callGeminiLLMWithRetry, GEMINI_MODEL_FAST } from "./ui-generator.js";
-import { callChatLLM } from "./llm-provider.js";
+import { llm } from "./llm.js";
 import { logAction, logError } from "./action-log.js";
 import { DATA_SOURCES, readCache } from "./data-source-registry.js";
 import { runPostScanPipeline } from "./data-source-pipeline.js";
@@ -28,12 +27,7 @@ const PROFILE_PATH = join(CONTEXT_DIR, "profile.json");
 // ── LLM caller (same pattern as memory-extractor.ts) ─────────────────────────
 
 async function callContextLLM(prompt: string): Promise<string> {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey) {
-    return callGeminiLLMWithRetry(prompt, geminiKey, GEMINI_MODEL_FAST, 30_000);
-  }
-  // Fallback to any configured provider
-  return callChatLLM({ prompt, model: GEMINI_MODEL_FAST, timeoutMs: 30_000 });
+  return llm({ prompt, tier: "fast", timeoutMs: 30_000 });
 }
 
 // ── Profile Builder ──────────────────────────────────────────────────────────

@@ -20,10 +20,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSy
 import { join, relative, sep } from "node:path";
 import { homedir } from "node:os";
 import type { EnsoAgentTool } from "./local-types.js";
-import { callGeminiLLMWithRetry, GEMINI_MODEL_FAST } from "./ui-generator.js";
-import { callChatLLM } from "./llm-provider.js";
+import { llm } from "./llm.js";
 import { logAction, logError } from "./action-log.js";
-import { getActiveAccount } from "./server.js";
 import { DATA_SOURCES, readCache as registryReadCache } from "./data-source-registry.js";
 
 // ── Constants ──
@@ -300,20 +298,7 @@ function lintWiki(): {
 // ── LLM call ──
 
 async function callWikiLLM(prompt: string, timeoutMs = 90_000): Promise<string> {
-  const account = getActiveAccount();
-  const geminiApiKey = account?.geminiApiKey;
-  const providerKeys = account?.providerKeys;
-
-  if (geminiApiKey) {
-    return callGeminiLLMWithRetry(prompt, geminiApiKey, GEMINI_MODEL_FAST, timeoutMs);
-  }
-  if (providerKeys && Object.keys(providerKeys).length > 0) {
-    const model = providerKeys.gemini ? GEMINI_MODEL_FAST
-      : providerKeys.openai ? "gpt-4o-mini"
-      : GEMINI_MODEL_FAST;
-    return callChatLLM({ prompt, model, providerKeys, timeoutMs });
-  }
-  throw new Error("No LLM provider available for wiki operations");
+  return llm({ prompt, tier: "fast", timeoutMs });
 }
 
 // ─�� Ingest mutex ──

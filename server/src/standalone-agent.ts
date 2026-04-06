@@ -16,7 +16,7 @@ import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { logAction, logError } from "./action-log.js";
 import { setLastUserMessage } from "./researcher-tools.js";
 import { GEMINI_MODEL_FAST } from "./ui-generator.js";
-import { callChatLLM } from "./llm-provider.js";
+import { llm } from "./llm.js";
 import { getAllLocalTools, executeLocalTool, getAllLocalToolNames } from "./tool-registry-local.js";
 import { getUserProfileContext, appendDailyMemory, loadCardHistory } from "./memory-bridge.js";
 import type { CardRecord } from "./memory-bridge.js";
@@ -620,7 +620,7 @@ export async function handleStandaloneInbound(params: {
     try {
       const tools = getAllLocalTools();
       const systemPrompt = await buildSystemPrompt(tools);
-      const answer = await callChatLLM({
+      const answer = await llm({
         prompt: rawBody,
         systemPrompt,
         model: userChatModel,

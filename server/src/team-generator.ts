@@ -10,7 +10,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, basename, extname } from "path";
-import { callGeminiLLMWithRetry } from "./ui-generator.js";
+import { llm } from "./llm.js";
 import { logAction, logError } from "./action-log.js";
 import type { TeamAgent, Persona } from "./project-manager.js";
 
@@ -190,7 +190,7 @@ export async function generateTeamForProject(params: GenerateTeamParams): Promis
   });
 
   // Step 3: Call Gemini
-  const raw = await callGeminiLLMWithRetry(prompt, geminiApiKey, undefined, 60_000);
+  const raw = await llm({ prompt, tier: "fast", timeoutMs: 60_000, apiKey: geminiApiKey });
 
   // Step 4: Parse response
   const result = parseTeamGenResponse(raw, projectId);

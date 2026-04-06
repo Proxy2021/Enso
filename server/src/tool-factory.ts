@@ -7,7 +7,8 @@
  */
 
 import type { ExecutorContext } from "./types.js";
-import { callGeminiLLMWithRetry, GEMINI_MODEL_PRO, STRUCTURED_DATA_SYSTEM_PROMPT } from "./ui-generator.js";
+import { STRUCTURED_DATA_SYSTEM_PROMPT } from "./ui-generator.js";
+import { llm } from "./llm.js";
 import { buildExecutorContext } from "./app-persistence.js";
 import { logError } from "./action-log.js";
 
@@ -125,13 +126,7 @@ export async function autoHealExecutor(params: {
 }): Promise<{ success: boolean; fixedBody?: string; error?: string }> {
   try {
     const prompt = buildExecutorFixPrompt(params);
-    let raw: string;
-    if (params.model && params.providerKeys) {
-      const { callChatLLM } = await import("./llm-provider.js");
-      raw = await callChatLLM({ prompt, model: params.model, providerKeys: params.providerKeys });
-    } else {
-      raw = await callGeminiLLMWithRetry(prompt, params.apiKey);
-    }
+    const raw = await llm({ prompt, tier: "fast", providerKeys: params.providerKeys, apiKey: params.apiKey, model: params.model });
     const fixedBody = stripMarkdownFences(raw);
 
     // Validate the fixed executor
@@ -244,11 +239,7 @@ ${existingTemplate
 Respond with ONLY the JSX component code. Must start with: export default function GeneratedUI({ data, onAction })`;
 
   const callLLM = async (p: string) => {
-    if (model && providerKeys) {
-      const { callChatLLM } = await import("./llm-provider.js");
-      return callChatLLM({ prompt: p, model, providerKeys });
-    }
-    return callGeminiLLMWithRetry(p, apiKey, GEMINI_MODEL_PRO);
+    return llm({ prompt: p, tier: "pro", providerKeys, apiKey, model });
   };
 
   let rawJSX = await callLLM(prompt);

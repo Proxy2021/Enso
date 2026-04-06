@@ -10,6 +10,7 @@ import {
   LLM_FAST_TIMEOUT_MS,
   LLM_PRO_TIMEOUT_MS,
 } from "./config.js";
+import { llm, llmVision } from "./llm.js";
 
 export { GEMINI_MODEL_FAST, GEMINI_MODEL_PRO };
 
@@ -551,24 +552,13 @@ async function callGeminiLLM(prompt: string, apiKey: string, timeoutMs = LLM_FAS
 }
 
 export async function callGeminiLLMWithRetry(prompt: string, apiKey: string, model?: string, overrideTimeoutMs?: number): Promise<string> {
-  const maxAttempts = 3;
-  // Pro models need longer timeouts for large code-generation prompts
-  const timeoutMs = overrideTimeoutMs ?? (model === GEMINI_MODEL_PRO ? LLM_PRO_TIMEOUT_MS : LLM_FAST_TIMEOUT_MS);
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      return await callGeminiLLM(prompt, apiKey, timeoutMs, model);
-    } catch (err) {
-      lastError = err;
-      if (!isRetryableGeminiError(err) || attempt === maxAttempts) {
-        throw err;
-      }
-      const delayMs = 500 * 2 ** (attempt - 1);
-      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Retrying Gemini call (${attempt}/${maxAttempts}) in ${delayMs}ms — model=${model ?? GEMINI_MODEL_FAST}` });
-      await sleep(delayMs);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("Gemini call failed");
+  // Delegate to unified llm() — preserves backward compat for any remaining callers
+  return llm({
+    prompt,
+    apiKey,
+    model: model ?? GEMINI_MODEL_FAST,
+    timeoutMs: overrideTimeoutMs ?? (model === GEMINI_MODEL_PRO ? LLM_PRO_TIMEOUT_MS : LLM_FAST_TIMEOUT_MS),
+  });
 }
 
 /**
@@ -600,74 +590,17 @@ export async function callGeminiVision(params: {
     throw new Error("Image too large for vision API (max 10 MB)");
   }
   const imageBase64 = imageBuffer.toString("base64");
-  const model = params.model ?? GEMINI_MODEL_FAST;
-  const maxAttempts = 3;
 
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), LLM_FAST_TIMEOUT_MS);
-    try {
-      const response = await fetch(
-        geminiUrl(model, params.apiKey),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { inlineData: { mimeType, data: imageBase64 } },
-                { text: params.prompt },
-              ],
-            }],
-            generationConfig: {
-              maxOutputTokens: params.maxOutputTokens ?? 1024,
-              temperature: 0.2,
-            },
-          }),
-          signal: controller.signal,
-        },
-      );
-
-      if (!response.ok) {
-        const errText = await response.text().catch(() => "");
-        const err = new Error(`Gemini API error: ${response.status} ${errText.slice(0, 200)}`);
-        if (isRetryableGeminiError(err) && attempt < maxAttempts) {
-          lastError = err;
-          const delayMs = 500 * 2 ** (attempt - 1);
-          logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Vision retrying (${attempt}/${maxAttempts}) in ${delayMs}ms` });
-          await sleep(delayMs);
-          continue;
-        }
-        throw err;
-      }
-
-      const result = (await response.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      };
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error("Empty Gemini Vision response");
-
-      return text
-        .replace(/^```(?:json|jsx?|tsx?)?\n?/m, "")
-        .replace(/\n?```$/m, "")
-        .trim();
-    } catch (err) {
-      lastError = err;
-      if ((err as Error).name === "AbortError") {
-        lastError = new Error(`Gemini Vision timeout after ${LLM_FAST_TIMEOUT_MS}ms`);
-      }
-      if (!isRetryableGeminiError(lastError) || attempt === maxAttempts) {
-        throw lastError instanceof Error ? lastError : new Error(String(lastError));
-      }
-      const delayMs = 500 * 2 ** (attempt - 1);
-      logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Vision retrying (${attempt}/${maxAttempts}) in ${delayMs}ms` });
-      await sleep(delayMs);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("Gemini Vision call failed");
+  // Delegate to unified llmVision() — preserves backward compat for any remaining callers
+  return llmVision({
+    prompt: params.prompt,
+    apiKey: params.apiKey,
+    model: params.model ?? GEMINI_MODEL_FAST,
+    maxOutputTokens: params.maxOutputTokens ?? 1024,
+    temperature: 0.2,
+    imageBase64,
+    imageMimeType: mimeType,
+  });
 }
 
 /**
@@ -714,10 +647,11 @@ Assistant context: ${params.assistantText.slice(0, 500)}${actionSection}${domain
 Remember: output ONLY the component code, starting with "export default function GeneratedUI"`;
 
   try {
-    const code = await callGeminiLLMWithRetry(
-      `${STRUCTURED_DATA_SYSTEM_PROMPT}\n\n${userPrompt}`,
+    const code = await llm({
+      prompt: `${STRUCTURED_DATA_SYSTEM_PROMPT}\n\n${userPrompt}`,
+      tier: "fast",
       apiKey,
-    );
+    });
     cache.set(shapeKey, code);
     return { code, shapeKey, cached: false };
   } catch (err) {
@@ -768,10 +702,11 @@ ${params.assistantText}${actionSection}${domainSection}`;
 
   try {
     logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: "Requesting UI generation from Gemini" });
-    const raw = await callGeminiLLMWithRetry(
-      `${TEXT_ANALYSIS_SYSTEM_PROMPT}\n\n${userPrompt}`,
+    const raw = await llm({
+      prompt: `${TEXT_ANALYSIS_SYSTEM_PROMPT}\n\n${userPrompt}`,
+      tier: "fast",
       apiKey,
-    );
+    });
 
     if (raw.includes("__NO_UI__")) {
       logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: "LLM decided no UI needed" });
@@ -953,50 +888,22 @@ ${params.cardText.slice(0, 4000)}`;
   try {
     let text: string | undefined;
 
-    if (params.chatModel && params.providerKeys) {
-      const { callChatLLM } = await import("./llm-provider.js");
-      const raw = await callChatLLM({ prompt, model: params.chatModel, providerKeys: params.providerKeys });
+    try {
+      const raw = await llm({
+        prompt,
+        tier: "utility",
+        maxOutputTokens: 512,
+        temperature: 0,
+        responseMimeType: "application/json",
+        timeoutMs: 8000,
+        model: params.chatModel,
+        providerKeys: params.providerKeys,
+        apiKey: params.geminiApiKey,
+      });
       text = raw?.trim();
-    } else {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      try {
-        const response = await fetch(
-          geminiUrl(GEMINI_MODEL_UTILITY, params.geminiApiKey),
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                maxOutputTokens: 512,
-                temperature: 0,
-                responseMimeType: "application/json",
-              },
-            }),
-            signal: controller.signal,
-          },
-        );
-        if (!response.ok) {
-          logError("ui-gen", `Tool select: Gemini returned HTTP ${response.status}`);
-          return null;
-        }
-
-        const result = (await response.json()) as {
-          candidates?: Array<{
-            content?: { parts?: Array<{ text?: string; thought?: boolean }> };
-          }>;
-        };
-        const parts = result.candidates?.[0]?.content?.parts;
-        const textPart = parts?.filter((p) => p.text && !p.thought).pop();
-        text = textPart?.text;
-        if (!text) {
-          logAction({ ts: Date.now(), type: "action", category: "ui-gen", message: `Tool select: Gemini returned no text. parts: ${JSON.stringify(parts?.map((p) => ({ len: p.text?.length, thought: p.thought })))}` });
-          return null;
-        }
-      } finally {
-        clearTimeout(timeout);
-      }
+    } catch (err) {
+      logError("ui-gen", `Tool select: LLM call failed`, err);
+      return null;
     }
 
     if (!text) return null;

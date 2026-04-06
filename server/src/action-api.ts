@@ -95,9 +95,9 @@ export function createActionRouter(deps: {
           timestamp: Date.now(),
         });
       } else {
-        const { callChatLLM } = await import("./llm-provider.js");
+        const { llm } = await import("./llm.js");
         const providerKeys = { ...account.providerKeys, gemini: account.geminiApiKey };
-        const answer = await callChatLLM({ prompt: text, model: chatModel, providerKeys });
+        const answer = await llm({ prompt: text, model: chatModel, providerKeys });
         client.send({
           id: randomUUID(), runId, sessionKey: client.sessionKey, seq: 0,
           state: "final", text: answer, timestamp: Date.now(),

@@ -7,8 +7,7 @@
  * Fire-and-forget — never blocks the main response path.
  */
 
-import { callChatLLM } from "./llm-provider.js";
-import { callGeminiLLMWithRetry, GEMINI_MODEL_FAST } from "./ui-generator.js";
+import { llm } from "./llm.js";
 import { appendDailyMemory, readRecentDailyLogs, appendEnsoMemory, readEnsoMemory, writeEnsoMemory } from "./memory-bridge.js";
 import { logAction, logError } from "./action-log.js";
 
@@ -17,19 +16,7 @@ import { logAction, logError } from "./action-log.js";
  * falls back to user's configured chat model via unified provider system.
  */
 async function callMemoryLLM(prompt: string, geminiApiKey?: string, providerKeys?: Record<string, string>): Promise<string> {
-  // Prefer direct Gemini Flash — cheapest for background tasks
-  if (geminiApiKey) {
-    return callGeminiLLMWithRetry(prompt, geminiApiKey, GEMINI_MODEL_FAST, 10_000);
-  }
-  // Fallback: use unified provider system with any configured model
-  if (providerKeys && Object.keys(providerKeys).length > 0) {
-    // Pick cheapest available: gemini flash → gpt-4o-mini → first configured
-    const model = providerKeys.gemini ? GEMINI_MODEL_FAST
-      : providerKeys.openai ? "gpt-4o-mini"
-      : GEMINI_MODEL_FAST;
-    return callChatLLM({ prompt, model, providerKeys, timeoutMs: 10_000 });
-  }
-  throw new Error("No LLM provider available for memory extraction");
+  return llm({ prompt, tier: "fast", timeoutMs: 10_000, apiKey: geminiApiKey, providerKeys });
 }
 
 // ── Rate limiting ──

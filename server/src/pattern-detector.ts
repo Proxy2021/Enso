@@ -11,7 +11,7 @@
  */
 
 import { logAction, logError } from "./action-log.js";
-import { geminiUrl, GEMINI_MODEL_UTILITY } from "./config.js";
+import { llm } from "./llm.js";
 
 // ── Types ──
 
@@ -295,28 +295,7 @@ ${text.slice(0, 500)}
 
 Respond with ONLY a JSON object: { "family": "<family_name>" or "none", "label": "<short suggestion label>" }`;
 
-    const response = await fetch(
-      geminiUrl(GEMINI_MODEL_UTILITY, apiKey),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 100,
-          },
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      logError("pattern-detector", `LLM refinement failed: ${response.status}`, null);
-      return suggestion;
-    }
-
-    const data = await response.json() as any;
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const rawText = await llm({ prompt, tier: "utility", maxOutputTokens: 100, temperature: 0.1, responseMimeType: "application/json", apiKey });
     const jsonMatch = rawText.match(/\{[^}]+\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);

@@ -7,7 +7,7 @@
  */
 
 import { GEMINI_API_BASE, LLM_FAST_TIMEOUT_MS } from "./config.js";
-import { callChatLLM } from "./llm-provider.js";
+import { llm } from "./llm.js";
 import { logAction, logError } from "./action-log.js";
 
 // ── Types ──
@@ -75,7 +75,7 @@ ${pointsSummary}
 ${contradictionsSummary ? `\nContradictions/Challenges:\n${contradictionsSummary}` : ""}
 ${content.narrative ? `\nDetailed Narrative (condensed):\n${content.narrative.slice(0, 1500)}` : ""}`;
 
-  const script = await callChatLLM({
+  const script = await llm({
     prompt,
     model,
     providerKeys,

@@ -382,8 +382,8 @@ async function planWithLLM(params: {
     const providerKeys = { ...params.account.providerKeys };
     if (params.account.geminiApiKey) providerKeys.gemini = params.account.geminiApiKey;
 
-    const { callChatLLM } = await import("./llm-provider.js");
-    raw = await callChatLLM({ prompt, model: chatModel, providerKeys, timeoutMs: 8_000 });
+    const { llm } = await import("./llm.js");
+    raw = await llm({ prompt, model: chatModel, providerKeys, timeoutMs: 8_000 });
 
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const parsed = JSON.parse(cleaned);
@@ -2295,7 +2295,7 @@ async function sendOrchestrationCompletionEmail(plan: OrchestrationPlan, status:
     // Use the user's configured chat LLM to generate a concise summary
     let summaryHtml = "";
     try {
-      const { callChatLLM } = await import("./llm-provider.js");
+      const { llm } = await import("./llm.js");
       const { loadProviderKeys } = await import("./accounts.js");
       const providerKeys = { ...loadProviderKeys(), gemini: process.env.GEMINI_API_KEY || "" };
       // Use the default chat model (Gemini Flash as fallback)
@@ -2318,7 +2318,7 @@ Keep the ENTIRE email under 400 words. No task-by-task breakdown. No raw data du
 
 Use inline CSS. Use these colors: success=#4ade80, error=#f87171, accent=#f472b6, muted=#94a3b8, card-bg=#1e293b, bg=#0f172a.`;
 
-      summaryHtml = await callChatLLM({ prompt, model, providerKeys, timeoutMs: 30_000 });
+      summaryHtml = await llm({ prompt, model, providerKeys, timeoutMs: 30_000 });
       // Strip markdown code fences if present
       summaryHtml = summaryHtml.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
     } catch (llmErr) {

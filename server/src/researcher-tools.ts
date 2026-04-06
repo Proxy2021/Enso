@@ -8,10 +8,9 @@ import {
   BRAVE_IMAGE_SEARCH,
   BRAVE_VIDEO_SEARCH,
   BRAVE_SEARCH_TIMEOUT_MS,
-  GEMINI_MODEL_UTILITY,
   LLM_RESEARCH_TIMEOUT_MS,
-  geminiUrl,
 } from "./config.js";
+import { llm } from "./llm.js";
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
 
@@ -871,8 +870,6 @@ async function generateSearchAngles(
   if (!geminiKey) return fallback;
 
   try {
-    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-
     // Check Cortex for existing knowledge to make queries more targeted
     let cortexContext = "";
     try {
@@ -912,7 +909,7 @@ Example for "quantum computing":
   "media": ["best books about quantum computing beginners to advanced", "quantum computing movies documentaries TV shows"]
 }`;
 
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, GEMINI_MODEL_UTILITY);
+    const raw = await llm({ prompt, tier: "utility", apiKey: geminiKey });
     const parsed = JSON.parse(cleanJson(raw));
     if (parsed && Array.isArray(parsed.web) && parsed.web.length >= 2) {
       const result: GeneratedQueries = {
@@ -1317,8 +1314,7 @@ Rules:
 - sourceRefs can be empty (no web search available)`;
 
   try {
-    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, undefined, 60_000);
+    const raw = await llm({ prompt, tier: "fast", timeoutMs: 60_000, apiKey: geminiKey });
     const parsed = JSON.parse(cleanJson(raw)) as {
       summary: string;
       narrative: string;
@@ -1436,7 +1432,6 @@ type RouteResult = {
 
 async function classifyResearchRoute(topic: string, geminiKey: string, _language: string): Promise<RouteResult> {
   try {
-    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const prompt = `Classify whether this research topic needs standard web search or deep iterative research.
 
 Topic: "${topic}"
@@ -1450,7 +1445,7 @@ IMPORTANT: Default to "standard". Deep research takes 5+ minutes and uses expens
 Return valid JSON (no markdown fences):
 { "route": "standard" | "deep", "reason": "One sentence explaining" }`;
 
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey, GEMINI_MODEL_UTILITY);
+    const raw = await llm({ prompt, tier: "utility", apiKey: geminiKey });
     const parsed = JSON.parse(cleanJson(raw)) as RouteResult;
     const route = (["simple", "standard", "deep"].includes(parsed.route) ? parsed.route : "standard") as RouteResult["route"];
     logAction({ ts: Date.now(), type: "action", category: "researcher", message: `route: ${route} for "${topic}" — ${parsed.reason ?? ""}` });
@@ -1825,8 +1820,6 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
   }
 
   try {
-    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
-
     // ── Two-phase synthesis for faster perceived results ──
     // Phase A (Flash): summary + narrative + key findings → push to UI immediately (~8-12s)
     // Phase B (Flash): sections + books/movies/contradictions → runs in parallel with gap check
@@ -1836,16 +1829,16 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     // Phase A: Core synthesis (summary + narrative + key findings)
     mark("synthesis_start");
     const phaseAPrompt = buildPhaseAPrompt(topic, sourceContext, language, videoContext, allSourcesForLLM.length);
-    let phaseARaw = await callGeminiLLMWithRetry(phaseAPrompt, geminiKey, GEMINI_MODEL_UTILITY, LLM_RESEARCH_TIMEOUT_MS);
+    let phaseARaw = await llm({ prompt: phaseAPrompt, tier: "utility", timeoutMs: LLM_RESEARCH_TIMEOUT_MS, apiKey: geminiKey });
     let phaseAParsed: Record<string, unknown>;
     try {
       phaseAParsed = JSON.parse(cleanJson(phaseARaw));
     } catch {
       logAction({ ts: Date.now(), type: "action", category: "researcher", message: `retrying Phase A synthesis for "${topic}"` });
-      phaseARaw = await callGeminiLLMWithRetry(
-        phaseAPrompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no comments, no trailing commas.",
-        geminiKey, GEMINI_MODEL_UTILITY, LLM_RESEARCH_TIMEOUT_MS,
-      );
+      phaseARaw = await llm({
+        prompt: phaseAPrompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no comments, no trailing commas.",
+        tier: "utility", timeoutMs: LLM_RESEARCH_TIMEOUT_MS, apiKey: geminiKey,
+      });
       phaseAParsed = JSON.parse(cleanJson(phaseARaw));
     }
     mark("synthesis_a_done");
@@ -1895,7 +1888,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
     const phaseBPrompt = buildPhaseBPrompt(topic, sourceContext, language, videoContext, allSourcesForLLM.length, videos.length);
 
     // Start Phase B and gap check concurrently
-    const phaseBPromise = callGeminiLLMWithRetry(phaseBPrompt, geminiKey, GEMINI_MODEL_UTILITY, LLM_RESEARCH_TIMEOUT_MS)
+    const phaseBPromise = llm({ prompt: phaseBPrompt, tier: "utility", timeoutMs: LLM_RESEARCH_TIMEOUT_MS, apiKey: geminiKey })
       .then((raw) => {
         try { return JSON.parse(cleanJson(raw)); } catch { return null; }
       })
@@ -1920,7 +1913,7 @@ Generate gap queries in the same language as the topic "${topic}".
 If the research is already comprehensive, return: { "gaps": [] }`;
 
       try {
-        const gapRaw = await callGeminiLLMWithRetry(gapPrompt, geminiKey, GEMINI_MODEL_UTILITY);
+        const gapRaw = await llm({ prompt: gapPrompt, tier: "utility", apiKey: geminiKey });
         const gapParsed = JSON.parse(cleanJson(gapRaw)) as { gaps: string[] };
         gapQueries = (gapParsed.gaps ?? []).filter((g) => typeof g === "string").slice(0, 3);
         return gapQueries;
@@ -2067,7 +2060,7 @@ Return valid JSON (no markdown fences) with ONLY new content to merge:
 Only include genuinely new information. If gap sources don't add meaningful new content, return empty arrays and empty string.`;
 
           try {
-            const mergeRaw = await callGeminiLLMWithRetry(mergePrompt, geminiKey, GEMINI_MODEL_UTILITY);
+            const mergeRaw = await llm({ prompt: mergePrompt, tier: "utility", apiKey: geminiKey });
             const mergeParsed = JSON.parse(cleanJson(mergeRaw)) as {
               additionalFindings?: KeyFinding[];
               narrativeAddendum?: string;
@@ -2286,12 +2279,11 @@ async function researcherDeepDive(params: DeepDiveParams): Promise<AgentToolResu
   }
 
   try {
-    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const snippetsForLLM: BraveWebResult[] = sources.slice(0, 20).map((s) => ({
       title: s.title, url: s.url, description: s.snippet,
     }));
     const prompt = buildDeepDivePrompt(topic, subtopic, parentContext, snippetsForLLM, sources);
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
+    const raw = await llm({ prompt, tier: "fast", apiKey: geminiKey });
     const parsed = JSON.parse(cleanJson(raw)) as {
       content: string;
       bullets: string[];
@@ -2362,12 +2354,11 @@ async function researcherCompare(params: CompareParams): Promise<AgentToolResult
   }
 
   try {
-    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const snippetsForLLM: BraveWebResult[] = sources.slice(0, 25).map((s) => ({
       title: s.title, url: s.url, description: s.snippet,
     }));
     const prompt = buildComparePrompt(topicA, topicB, context, snippetsForLLM, sources);
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
+    const raw = await llm({ prompt, tier: "fast", apiKey: geminiKey });
     const parsed = JSON.parse(cleanJson(raw)) as {
       similarities: ComparisonPoint[];
       differences: ComparisonPoint[];
@@ -2437,12 +2428,11 @@ async function researcherFollowUp(params: FollowUpParams): Promise<AgentToolResu
   }
 
   try {
-    const { callGeminiLLMWithRetry } = await import("./ui-generator.js");
     const snippetsForLLM: BraveWebResult[] = sources.slice(0, 15).map((s) => ({
       title: s.title, url: s.url, description: s.snippet,
     }));
     const prompt = buildFollowUpPrompt(topic, question, parentContext, snippetsForLLM, sources);
-    const raw = await callGeminiLLMWithRetry(prompt, geminiKey);
+    const raw = await llm({ prompt, tier: "fast", apiKey: geminiKey });
     const parsed = JSON.parse(cleanJson(raw)) as {
       answer: string;
       suggestedFollowUps: string[];
