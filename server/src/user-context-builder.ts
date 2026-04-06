@@ -260,7 +260,7 @@ Rules:
  * Returns empty string if no profile exists or consent is empty.
  */
 export function getContextProfileSummary(maxChars: number = 800): string {
-  // Primary source: Cortex wiki page (single source of truth)
+  // Primary source: Cortex page (single source of truth)
   try {
     const cortexPath = join(homedir(), ".enso", "wiki", "synthesis", "user-profile.md");
     if (existsSync(cortexPath)) {

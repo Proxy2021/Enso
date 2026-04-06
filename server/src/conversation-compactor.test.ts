@@ -28,7 +28,6 @@ vi.mock("./config.js", () => ({
 
 vi.mock("./memory-bridge.js", () => ({
   appendDailyMemory: vi.fn(),
-  getMemoryContext: vi.fn(() => ""),
   loadCardHistory: vi.fn(() => []),
 }));
 

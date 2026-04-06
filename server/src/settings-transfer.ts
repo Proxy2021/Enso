@@ -163,13 +163,13 @@ function readCategory(id: string): unknown | null {
 
     case "cortex": {
       const cortexDir = join(ENSO_HOME, "wiki");
-      if (!existsSync(wikiDir)) return null;
+      if (!existsSync(cortexDir)) return null;
       const result: Record<string, Record<string, string>> = {};
       const subdirs = ["entities", "concepts", "sources", "synthesis"];
 
       // Root metadata files
-      const indexContent = readTextFile(join(wikiDir, "_index.md"));
-      const logContent = readTextFile(join(wikiDir, "_log.md"));
+      const indexContent = readTextFile(join(cortexDir, "_index.md"));
+      const logContent = readTextFile(join(cortexDir, "_log.md"));
       if (indexContent || logContent) {
         result["_root"] = {};
         if (indexContent) result["_root"]["_index.md"] = indexContent;
@@ -178,7 +178,7 @@ function readCategory(id: string): unknown | null {
 
       // Subdirectory pages
       for (const subdir of subdirs) {
-        const subdirPath = join(wikiDir, subdir);
+        const subdirPath = join(cortexDir, subdir);
         if (!existsSync(subdirPath)) continue;
         const files: Record<string, string> = {};
         for (const file of readdirSync(subdirPath)) {
@@ -337,8 +337,8 @@ function importCategory(id: string, data: unknown, mergeMode: "skip" | "replace"
       return importSkills(data as Record<string, string>, mergeMode);
     case "projects":
       return importProjects(data as Record<string, unknown>, mergeMode);
-    case "wiki":
-      return importWiki(data as Record<string, Record<string, string>>, mergeMode);
+    case "cortex":
+      return importCortex(data as Record<string, Record<string, string>>, mergeMode);
     default:
       return { imported: 0, skipped: 0, details: "Unknown category" };
   }
@@ -561,15 +561,15 @@ function importProjects(data: Record<string, unknown>, mergeMode: "skip" | "repl
   return { imported, skipped };
 }
 
-function importWiki(data: Record<string, Record<string, string>>, mergeMode: "skip" | "replace"): ImportSummary {
-  const wikiDir = join(ENSO_HOME, "wiki");
-  mkdirSync(wikiDir, { recursive: true });
+function importCortex(data: Record<string, Record<string, string>>, mergeMode: "skip" | "replace"): ImportSummary {
+  const cortexDir = join(ENSO_HOME, "wiki");
+  mkdirSync(cortexDir, { recursive: true });
   let imported = 0, skipped = 0;
 
   for (const [category, files] of Object.entries(data)) {
     if (category === "_root") {
       for (const [filename, content] of Object.entries(files)) {
-        const filePath = join(wikiDir, filename);
+        const filePath = join(cortexDir, filename);
         if (mergeMode === "skip" && existsSync(filePath)) { skipped++; continue; }
         writeFileSync(filePath, content, "utf-8");
         imported++;
@@ -577,7 +577,7 @@ function importWiki(data: Record<string, Record<string, string>>, mergeMode: "sk
       continue;
     }
 
-    const categoryDir = join(wikiDir, category);
+    const categoryDir = join(cortexDir, category);
     mkdirSync(categoryDir, { recursive: true });
     for (const [filename, content] of Object.entries(files)) {
       const filePath = join(categoryDir, filename);
