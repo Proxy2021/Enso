@@ -710,6 +710,25 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
     }
   }
 
+  // ── Kindle Library ──
+  if (consent.kindleLibrary) {
+    const data = readCache("kindle-library.json") as {
+      totalBooks?: number;
+      books?: Array<{ title: string; author: string; categories?: string[]; description?: string }>;
+    } | null;
+    if (data?.books?.length) {
+      const lines = [`# Kindle Library (${data.totalBooks ?? data.books.length} books)\n`,
+        "Books owned by this user on Amazon Kindle, revealing reading interests and knowledge domains.\n"];
+      for (const b of data.books.slice(0, 100)) {
+        let line = `- **${b.title}** by ${b.author}`;
+        if (b.categories?.length) line += ` [${b.categories.join(", ")}]`;
+        if (b.description) line += `: ${b.description.slice(0, 150)}`;
+        lines.push(line);
+      }
+      sources.push({ text: lines.join("\n"), topic: "Kindle Library", label: "Kindle library scan" });
+    }
+  }
+
   if (sources.length === 0) {
     return { pagesCreated: [], pagesUpdated: [], summary: "No data sources available. Enable and scan data sources in Settings first." };
   }

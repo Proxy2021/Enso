@@ -686,6 +686,128 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
   })()]);
 }
 
+// ── Kindle Metadata Enrichment (background) ────────────────────────────────
+
+let _enrichmentRunning = false;
+
+/**
+ * Background-enrich Kindle books with metadata from Amazon product pages.
+ * Only processes books without `enrichedAt`. Saves incrementally every 10 books.
+ * Rate-limited: 2-second delay between requests to avoid Amazon blocking.
+ */
+export async function enrichKindleMetadata(): Promise<{ enriched: number; total: number; errors: number }> {
+  if (_enrichmentRunning) return { enriched: 0, total: 0, errors: 0 };
+  _enrichmentRunning = true;
+
+  const cachePath = join(CACHE_DIR, "kindle-library.json");
+  let cacheData: { source: string; totalBooks: number; books: KindleBook[]; scannedAt: string };
+  try {
+    cacheData = JSON.parse(readFileSync(cachePath, "utf-8"));
+  } catch {
+    _enrichmentRunning = false;
+    return { enriched: 0, total: 0, errors: 0 };
+  }
+
+  const unenriched = cacheData.books.filter((b) => !b.enrichedAt && b.asin);
+  if (unenriched.length === 0) {
+    _enrichmentRunning = false;
+    return { enriched: 0, total: cacheData.books.length, errors: 0 };
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle enrichment starting: ${unenriched.length} books to enrich` });
+
+  const puppeteer = await import("puppeteer");
+  const browser = await puppeteer.default.launch({
+    headless: true,
+    userDataDir: KINDLE_BROWSER_DIR,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+  });
+
+  let enriched = 0;
+  let errors = 0;
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+
+    for (const book of unenriched) {
+      try {
+        await page.goto(`https://www.amazon.com/dp/${book.asin}`, {
+          waitUntil: "domcontentloaded",
+          timeout: 15000,
+        });
+        await new Promise((r) => setTimeout(r, 1500));
+
+        // Use string-based evaluate to avoid tsx __name injection issue
+        const meta = await page.evaluate(`(() => {
+          var get = function(sel) { return (document.querySelector(sel) || {}).textContent?.trim() || ""; };
+          var detailBullets = Array.from(document.querySelectorAll("#detailBullets_feature_div li span span"))
+            .map(function(s) { return s.textContent?.trim() || ""; });
+          var findDetail = function(key) {
+            for (var i = 0; i < detailBullets.length - 1; i++) {
+              if (detailBullets[i].toLowerCase().includes(key)) return detailBullets[i + 1];
+            }
+            return "";
+          };
+          var ratingText = get("#acrPopover .a-size-base") || get("#acrPopover");
+          var ratingMatch = ratingText.match(/([\\d.]+)\\s*out\\s*of/) || ratingText.match(/([\\d.]+)/);
+          var reviewText = get("#acrCustomerReviewText") || get("#acrCustomerReviewLink");
+          var reviewMatch = reviewText.match(/([\\d,]+)/);
+          var pagesText = findDetail("print length") || findDetail("pages");
+          var pagesMatch = pagesText.match(/([\\d,]+)/);
+          var categories = detailBullets.filter(function(t) { return t.startsWith("#"); })
+            .map(function(t) { return t.replace(/^#\\d+\\s+in\\s+/, "").trim(); });
+          return {
+            description: (get("#bookDescription_feature_div span") || get("#bookDesc_override_CSS span") || "").slice(0, 500),
+            publisher: findDetail("publisher"),
+            publicationDate: findDetail("publication date"),
+            language: findDetail("language"),
+            isbn: findDetail("isbn-13") || findDetail("isbn"),
+            pageCount: pagesMatch ? parseInt(pagesMatch[1].replace(/,/g, ""), 10) : undefined,
+            rating: ratingMatch ? parseFloat(ratingMatch[1]) : undefined,
+            reviewCount: reviewMatch ? parseInt(reviewMatch[1].replace(/,/g, ""), 10) : undefined,
+            categories: categories.length > 0 ? categories : undefined,
+          };
+        })()`) as Record<string, unknown>;
+
+        // Apply metadata to book
+        if (meta.description) book.description = meta.description.slice(0, 500);
+        if (meta.publisher) book.publisher = meta.publisher;
+        if (meta.publicationDate) book.publicationDate = meta.publicationDate;
+        if (meta.language) book.language = meta.language;
+        if (meta.isbn) book.isbn = meta.isbn;
+        if (meta.pageCount) book.pageCount = meta.pageCount;
+        if (meta.rating) book.rating = meta.rating;
+        if (meta.reviewCount) book.reviewCount = meta.reviewCount;
+        if (meta.categories) book.categories = meta.categories;
+        book.enrichedAt = Date.now();
+        enriched++;
+
+        // Save incrementally every 10 books
+        if (enriched % 10 === 0) {
+          writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle enrichment progress: ${enriched}/${unenriched.length}` });
+        }
+
+        // Rate limit — 2 second delay between requests
+        await new Promise((r) => setTimeout(r, 2000));
+      } catch (bookErr) {
+        errors++;
+        logError("user-context", `Kindle enrich failed for "${book.title}"`, bookErr);
+        book.enrichedAt = Date.now(); // Mark as attempted to avoid retrying failed ones
+      }
+    }
+  } finally {
+    await browser.close();
+    // Final save
+    writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
+    _enrichmentRunning = false;
+    logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle enrichment complete: ${enriched} enriched, ${errors} errors` });
+  }
+
+  return { enriched, total: cacheData.books.length, errors };
+}
+
 // ── Tool Factory ─────────────────────────────────────────────────────────────
 
 export function createUserContextTools(): EnsoAgentTool[] {
@@ -1023,16 +1145,56 @@ export function createUserContextTools(): EnsoAgentTool[] {
 
         try {
           const books = await scanKindleLibrary();
+
+          // Merge with existing enriched data — preserve metadata for books we already enriched
+          const cachePath = join(CACHE_DIR, "kindle-library.json");
+          let existingBooks: KindleBook[] = [];
+          try {
+            const existing = JSON.parse(readFileSync(cachePath, "utf-8"));
+            existingBooks = existing.books || [];
+          } catch { /* no existing cache */ }
+          const enrichedByAsin = new Map<string, KindleBook>();
+          for (const b of existingBooks) {
+            if (b.asin && b.enrichedAt) enrichedByAsin.set(b.asin, b);
+          }
+          // Merge: keep fresh scan data but overlay enriched metadata
+          for (const book of books) {
+            const prev = book.asin ? enrichedByAsin.get(book.asin) : undefined;
+            if (prev) {
+              book.description = prev.description;
+              book.publisher = prev.publisher;
+              book.publicationDate = prev.publicationDate;
+              book.pageCount = prev.pageCount;
+              book.rating = prev.rating;
+              book.reviewCount = prev.reviewCount;
+              book.categories = prev.categories;
+              book.language = prev.language;
+              book.isbn = prev.isbn;
+              book.enrichedAt = prev.enrichedAt;
+            }
+          }
+
+          const newBooks = books.filter((b) => b.asin && !enrichedByAsin.has(b.asin));
           const result = {
             source: "kindle-library",
             totalBooks: books.length,
             books,
             scannedAt: new Date().toISOString(),
           };
-          writeFileSync(join(CACHE_DIR, "kindle-library.json"), JSON.stringify(result, null, 2));
+          writeFileSync(cachePath, JSON.stringify(result, null, 2));
           updateScanLog("kindleLibrary");
-          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle library scanned: ${books.length} books` });
-          return jsonResult(result);
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle library scanned: ${books.length} books (${newBooks.length} new)` });
+
+          // Auto-trigger background enrichment for unenriched books
+          const unenrichedCount = books.filter((b) => !b.enrichedAt && b.asin).length;
+          if (unenrichedCount > 0) {
+            logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Starting background Kindle enrichment for ${unenrichedCount} books...` });
+            enrichKindleMetadata().catch((err) =>
+              logError("user-context", "Background Kindle enrichment failed", err)
+            );
+          }
+
+          return jsonResult({ ...result, enrichmentStarted: unenrichedCount > 0, unenrichedCount });
         } catch (err) {
           logError("user-context", "Kindle library scan failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));

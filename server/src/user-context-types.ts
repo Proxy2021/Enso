@@ -85,6 +85,17 @@ export interface KindleBook {
   readerUrl?: string;
   percentageRead?: number;
   originType?: string;      // PURCHASE, SAMPLE, PRIME_BORROW, etc.
+  // Rich metadata (from Amazon product page, populated by background enrichment)
+  description?: string;
+  publisher?: string;
+  publicationDate?: string;
+  pageCount?: number;
+  rating?: number;          // e.g. 4.6
+  reviewCount?: number;     // e.g. 2130
+  categories?: string[];    // e.g. ["Anatomy Science", "Evolution"]
+  language?: string;
+  isbn?: string;
+  enrichedAt?: number;      // epoch ms — when metadata was fetched
 }
 
 // ── Aggregated Profile ───────────────────────────────────────────────────────
