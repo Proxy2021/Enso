@@ -405,6 +405,10 @@ ${sourceText.slice(0, 60_000)}`;
       const category = path.split("/")[0];
       if (!SUBDIRS.includes(category as CortexCategory)) continue;
 
+      // Protected pages — owned by specific subsystems, not the LLM ingest
+      const PROTECTED_PAGES = ["synthesis/user-profile.md", "synthesis/conversation-memory.md"];
+      if (PROTECTED_PAGES.includes(path)) continue;
+
       const existing = readCortexPage(path);
       if (existing) {
         // Merge: append new content if it adds new info
