@@ -42,7 +42,7 @@ export interface DataSourceDescriptor {
   formatForProfile: (cached: unknown) => string | null;
 
   /**
-   * Format cached data for Cortex wiki ingestion.
+   * Format cached data for Cortex ingestion.
    * Returns { text, topic, label } or null if no useful data.
    */
   formatForCortex: (cached: unknown) => CortexSourceBlock | null;
@@ -50,19 +50,19 @@ export interface DataSourceDescriptor {
   /** Priority for ingestion ordering (lower = first). Default 50. */
   ingestPriority?: number;
 
-  /** Whether this source fetches live data (not from cache) during wiki import */
+  /** Whether this source fetches live data (not from cache) during cortex import */
   liveSource?: boolean;
 
   /**
-   * Generate per-item wiki pages directly (no LLM cost).
-   * Returns an array of wiki pages to write. Each page becomes a first-class
+   * Generate per-item cortex pages directly (no LLM cost).
+   * Returns an array of cortex pages to write. Each page becomes a first-class
    * Cortex entity that supports all actions (read, research, podcast, etc.).
    */
   getDirectIngestPages?: (cached: unknown) => DirectIngestPage[];
 }
 
 export interface DirectIngestPage {
-  /** Wiki path, e.g. "entities/the-story-of-the-human-body.md" */
+  /** Cortex path, e.g. "entities/the-story-of-the-human-body.md" */
   path: string;
   title: string;
   content: string;

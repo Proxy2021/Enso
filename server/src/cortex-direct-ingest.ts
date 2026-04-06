@@ -25,7 +25,7 @@ function ensureCortexDir(): void {
 }
 
 /**
- * Read the current wiki index to check for existing pages.
+ * Read the current cortex index to check for existing pages.
  */
 function readExistingPaths(): Set<string> {
   const paths = new Set<string>();
@@ -40,7 +40,7 @@ function readExistingPaths(): Set<string> {
 }
 
 /**
- * Append a page entry to the wiki index.
+ * Append a page entry to the cortex index.
  */
 function appendToIndex(page: DirectIngestPage): void {
   const entry = `\n## ${page.path}\n**${page.title}** — ${page.summary.slice(0, 200)}. Tags: ${page.tags.join(", ")}.\nUpdated: ${new Date().toISOString()}\n`;
@@ -48,7 +48,7 @@ function appendToIndex(page: DirectIngestPage): void {
 }
 
 /**
- * Update an existing entry in the wiki index (replace its block).
+ * Update an existing entry in the cortex index (replace its block).
  */
 function updateIndexEntry(page: DirectIngestPage): void {
   if (!existsSync(INDEX_PATH)) { appendToIndex(page); return; }
@@ -63,7 +63,7 @@ function updateIndexEntry(page: DirectIngestPage): void {
 }
 
 /**
- * Run direct ingest for all data sources. Creates per-item wiki pages
+ * Run direct ingest for all data sources. Creates per-item cortex pages
  * for items that don't already have pages (or updates existing ones).
  *
  * @param options.forceUpdate - Update pages even if they already exist

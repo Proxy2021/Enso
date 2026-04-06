@@ -1016,7 +1016,7 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
       });
     }
 
-    // Interest without wiki page
+    // Interest without cortex page
     const indexSlugs = new Set(index.map(e => e.path.replace(/.*\//, "").replace(/\.md$/, "")));
     for (const interest of (profile.interests ?? []).slice(0, 8)) {
       const slug = interest.topic.toLowerCase().replace(/\s+/g, "-");

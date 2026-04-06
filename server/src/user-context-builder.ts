@@ -189,13 +189,23 @@ Rules:
       };
     }
 
+    // DEPRECATED: profile.json — being replaced by Cortex page (synthesis/user-profile.md).
+    // Kept during transition phase; will be removed once all consumers read from Cortex.
     writeFileSync(PROFILE_PATH, JSON.stringify(profile, null, 2));
 
     // Always update ENSO_USER.md to reflect the latest profile data
     try {
       const { writeEnsoUser } = await import("./memory-bridge.js");
       const userMd = buildUserMarkdown(profile, synthesized.summary, synthesized.readingInterests);
-      if (userMd) writeEnsoUser(userMd);
+      if (userMd) {
+        writeEnsoUser(userMd);
+        // Also write directly to Cortex page as backup
+        try {
+          const cortexDir = join(homedir(), ".enso", "wiki", "synthesis");
+          if (!existsSync(cortexDir)) mkdirSync(cortexDir, { recursive: true });
+          writeFileSync(join(cortexDir, "user-profile.md"), userMd);
+        } catch { /* ignore */ }
+      }
     } catch { /* memory-bridge not available — skip */ }
 
     logAction({
@@ -203,7 +213,7 @@ Rules:
       message: `Profile built: ${profile.interests.length} interests, ${profile.workProjects.length} projects, ${sourcesScanned.length} sources`,
     });
 
-    // Auto-ingest changed data sources into Cortex wiki (background, fire-and-forget)
+    // Auto-ingest changed data sources into Cortex (background, fire-and-forget)
     runPostScanPipeline(sourcesScanned).catch((err) =>
       logError("user-context-builder", "Post-scan pipeline failed", err)
     );
@@ -250,6 +260,20 @@ Rules:
  * Returns empty string if no profile exists or consent is empty.
  */
 export function getContextProfileSummary(maxChars: number = 800): string {
+  // Primary source: Cortex wiki page (single source of truth)
+  try {
+    const cortexPath = join(homedir(), ".enso", "wiki", "synthesis", "user-profile.md");
+    if (existsSync(cortexPath)) {
+      const content = readFileSync(cortexPath, "utf-8");
+      if (content.trim().length > 10) {
+        let text = `<user_context>\n${content}\n</user_context>`;
+        if (text.length > maxChars) text = text.slice(0, maxChars - 20) + "\n</user_context>";
+        return text;
+      }
+    }
+  } catch { /* fall through to legacy */ }
+
+  // Fallback: legacy profile.json (deprecated — will be removed once Cortex is fully adopted)
   if (!existsSync(PROFILE_PATH)) return "";
 
   try {
@@ -286,7 +310,6 @@ export function getContextProfileSummary(maxChars: number = 800): string {
     }
 
     if (profile.tools.installedApps.length > 0) {
-      // Pick notable dev tools
       const notable = profile.tools.installedApps
         .filter(a => /code|studio|docker|git|node|python|java|android|slack|teams|discord|notion/i.test(a))
         .slice(0, 8);
@@ -314,7 +337,6 @@ export function getContextProfileSummary(maxChars: number = 800): string {
 
     let summary = `<user_context>\n${parts.join("\n")}\n</user_context>`;
     if (summary.length > maxChars) {
-      // Trim from the bottom
       while (summary.length > maxChars && parts.length > 1) {
         parts.pop();
         summary = `<user_context>\n${parts.join("\n")}\n</user_context>`;

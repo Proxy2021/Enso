@@ -31,7 +31,7 @@ interface ExportBundle {
   apps?: Record<string, unknown>;
   skills?: Record<string, string>;
   projects?: Record<string, unknown>;
-  wiki?: Record<string, Record<string, string>>;
+  cortex?: Record<string, Record<string, string>>;
 }
 
 interface CategoryInfo {
@@ -50,7 +50,7 @@ const CATEGORIES: CategoryInfo[] = [
   { id: "apps", label: "App State", description: "Per-app persistent data (galleries, settings)", sensitive: false },
   { id: "skills", label: "Skills", description: "User-created skill definitions", sensitive: false },
   { id: "projects", label: "Projects", description: "Project definitions (team, personas, vision)", sensitive: false },
-  { id: "wiki", label: "Knowledge Cortex", description: "AI-maintained knowledge base (entities, concepts, sources, synthesis)", sensitive: false },
+  { id: "cortex", label: "Knowledge Cortex", description: "AI-maintained knowledge base (entities, concepts, sources, synthesis)", sensitive: false },
 ];
 
 // ── Readers ──
@@ -161,8 +161,8 @@ function readCategory(id: string): unknown | null {
       return Object.keys(result).length > 0 ? result : null;
     }
 
-    case "wiki": {
-      const wikiDir = join(ENSO_HOME, "wiki");
+    case "cortex": {
+      const cortexDir = join(ENSO_HOME, "wiki");
       if (!existsSync(wikiDir)) return null;
       const result: Record<string, Record<string, string>> = {};
       const subdirs = ["entities", "concepts", "sources", "synthesis"];

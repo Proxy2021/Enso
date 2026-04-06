@@ -546,47 +546,44 @@ export async function buildEnsoContext(): Promise<string> {
 
   const sections: string[] = [];
 
-  // Include user profile + memory
-  const memCtx = getMemoryContext();
-  if (memCtx) sections.push(memCtx);
+  // 1. Read user profile from Cortex wiki (falls back to old flat file)
+  const userProfile = readCortexPage(CORTEX_USER_PROFILE) ?? safeReadFile(join(MEMORY_DIR, USER_FILE));
+  if (userProfile) {
+    sections.push(`<user_profile>\n${userProfile.slice(0, 1000)}\n</user_profile>`);
+  }
 
-  // Include user context from desktop scans (browser, email, files, etc.)
-  try {
-    const { getContextProfileSummary, maybeRefreshProfile } = await import("./user-context-builder.js");
-    const contextSummary = getContextProfileSummary(800);
-    if (contextSummary) sections.push(contextSummary);
-    maybeRefreshProfile();
-  } catch { /* user-context-builder not available — skip */ }
+  // 2. Read conversation memory from Cortex wiki (falls back to old flat file)
+  const memory = readCortexPage(CORTEX_CONVERSATION_MEMORY) ?? safeReadFile(join(MEMORY_DIR, MEMORY_FILE));
+  if (memory) {
+    // Take the last 1500 chars (most recent entries)
+    const recent = memory.length > 1500 ? memory.slice(-1500) : memory;
+    sections.push(`<memory>\n${recent}\n</memory>`);
+  }
 
-  // Include wiki knowledge summary for domain awareness
+  // 3. Cortex knowledge summary (entities, concepts, sources)
   try {
     const { getCortexContextSummary } = await import("./cortex-tools.js");
-    const cortexSummary = getCortexContextSummary(500);
-    if (cortexSummary) sections.push(cortexSummary);
-  } catch { /* cortex not available — skip */ }
+    const cortex = getCortexContextSummary(2000);
+    if (cortex) sections.push(cortex);
+  } catch { /* cortex not available */ }
 
-  // Include proactive engine insights for richer context-aware responses
+  // 4. Proactive suggestions
   try {
     const { getTopSuggestions } = await import("./proactive-engine.js");
     const suggestions = await getTopSuggestions(5);
     if (suggestions.length > 0) {
-      const lines = suggestions.map(s => `- [${s.pillar}] ${s.title}: ${s.description}`);
-      sections.push(`<proactive_insights>\nPending suggestions the user may benefit from:\n${lines.join("\n")}\n</proactive_insights>`);
+      const lines = suggestions.map(s => `- ${s.title}: ${s.description}`);
+      sections.push(`<proactive_insights>\n${lines.join("\n")}\n</proactive_insights>`);
     }
-  } catch { /* proactive-engine not available — skip */ }
+  } catch { /* proactive not available */ }
 
-  const usage = buildAppUsageSummary();
-  if (usage) sections.push(usage);
-
-  const errors = buildRecentErrorsSummary();
-  if (errors) sections.push(errors);
-
+  // 5. Available apps
   const apps = buildAvailableAppsSummary();
   if (apps) sections.push(apps);
 
   if (sections.length === 0) return "";
 
-  const text = `<enso_context>\n${sections.join("\n")}\n</enso_context>`;
+  const text = `<enso_context>\n${sections.join("\n\n")}\n</enso_context>`;
   cachedContext = { text, timestamp: Date.now() };
   return text;
 }
@@ -660,10 +657,50 @@ const DAILY_DIR = join(MEMORY_DIR, "daily");
 const USER_FILE = "ENSO_USER.md";
 const MEMORY_FILE = "ENSO_MEMORY.md";
 
+// ── Cortex paths (primary storage) ──
+const CORTEX_DIR = join(homedir(), ".enso", "wiki");
+const CORTEX_USER_PROFILE = "synthesis/user-profile.md";
+const CORTEX_CONVERSATION_MEMORY = "synthesis/conversation-memory.md";
+
 function ensureMemoryDir(): void {
   if (!existsSync(MEMORY_DIR)) {
     mkdirSync(MEMORY_DIR, { recursive: true });
   }
+}
+
+/** Read a page from the Cortex by relative path. */
+function readCortexPage(pagePath: string): string | null {
+  try {
+    const fullPath = join(CORTEX_DIR, pagePath);
+    if (existsSync(fullPath)) return readFileSync(fullPath, "utf-8");
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** Write a page to the Cortex, ensuring directory exists. */
+function writeCortexPage(pagePath: string, content: string): void {
+  const fullPath = join(CORTEX_DIR, pagePath);
+  const dir = join(fullPath, "..");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(fullPath, content, "utf-8");
+}
+
+/** Update the Cortex _index.md with an entry for a page. */
+function updateCortexIndex(pagePath: string, title: string, summary: string): void {
+  try {
+    const indexPath = join(CORTEX_DIR, "_index.md");
+    const existing = existsSync(indexPath) ? readFileSync(indexPath, "utf-8") : "<!-- WIKI INDEX — machine-maintained, do not hand-edit -->\n";
+    const ts = new Date().toISOString();
+    const entryBlock = `## ${pagePath}\n**${title}** — ${summary}.\nUpdated: ${ts}\n`;
+
+    // Replace existing entry or append
+    const entryPattern = new RegExp(`## ${pagePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n[\\s\\S]*?(?=\\n## |$)`);
+    if (entryPattern.test(existing)) {
+      writeFileSync(indexPath, existing.replace(entryPattern, entryBlock), "utf-8");
+    } else {
+      writeFileSync(indexPath, existing.trimEnd() + "\n\n" + entryBlock, "utf-8");
+    }
+  } catch { /* best-effort index update */ }
 }
 
 function ensureDailyDir(): void {
@@ -682,18 +719,21 @@ export function safeReadFile(path: string): string | null {
   }
 }
 
-/** Read Enso's local ENSO_USER.md and ENSO_MEMORY.md. */
+/** Read Enso's user profile and memory. Cortex is primary, falls back to old flat files. */
 export function readEnsoMemory(): { user: string | null; memory: string | null } {
   ensureMemoryDir();
-  return {
-    user: safeReadFile(join(MEMORY_DIR, USER_FILE)),
-    memory: safeReadFile(join(MEMORY_DIR, MEMORY_FILE)),
-  };
+  const user = readCortexPage(CORTEX_USER_PROFILE) ?? safeReadFile(join(MEMORY_DIR, USER_FILE));
+  const memory = readCortexPage(CORTEX_CONVERSATION_MEMORY) ?? safeReadFile(join(MEMORY_DIR, MEMORY_FILE));
+  return { user, memory };
 }
 
-/** Write ENSO_USER.md content. */
+/** Write user profile. Primary: Cortex. Also writes to old path for backward compat. */
 export function writeEnsoUser(content: string): boolean {
   try {
+    // Primary: Cortex
+    writeCortexPage(CORTEX_USER_PROFILE, content);
+    updateCortexIndex(CORTEX_USER_PROFILE, "User Profile", "Enso user identity, preferences, and personalization data");
+    // Backward compat: old flat file
     ensureMemoryDir();
     writeFileSync(join(MEMORY_DIR, USER_FILE), content, "utf-8");
     return true;
@@ -702,9 +742,13 @@ export function writeEnsoUser(content: string): boolean {
   }
 }
 
-/** Write ENSO_MEMORY.md content. */
+/** Write conversation memory. Primary: Cortex wiki. Also writes to old path for backward compat. */
 export function writeEnsoMemory(content: string): boolean {
   try {
+    // Primary: Cortex
+    writeCortexPage(CORTEX_CONVERSATION_MEMORY, content);
+    updateCortexIndex(CORTEX_CONVERSATION_MEMORY, "Conversation Memory", "Accumulated cross-conversation memory and learned facts");
+    // Backward compat: old flat file
     ensureMemoryDir();
     writeFileSync(join(MEMORY_DIR, MEMORY_FILE), content, "utf-8");
     return true;
@@ -713,17 +757,27 @@ export function writeEnsoMemory(content: string): boolean {
   }
 }
 
-/** Append a new entry to ENSO_MEMORY.md with a timestamp header. */
+/** Append a new entry to conversation memory with a timestamp header. Writes to Cortex + old path. */
 export function appendEnsoMemory(entry: string): boolean {
   try {
-    ensureMemoryDir();
-    const filePath = join(MEMORY_DIR, MEMORY_FILE);
-    const existing = safeReadFile(filePath) ?? "";
     const date = new Date().toISOString().slice(0, 10);
+
+    // Read from Cortex first, fall back to old file
+    const existing = readCortexPage(CORTEX_CONVERSATION_MEMORY)
+      ?? safeReadFile(join(MEMORY_DIR, MEMORY_FILE))
+      ?? "";
+
     const newContent = existing
       ? `${existing.trimEnd()}\n\n## ${date}\n${entry.trim()}\n`
       : `# Enso Memory\n\n## ${date}\n${entry.trim()}\n`;
-    writeFileSync(filePath, newContent, "utf-8");
+
+    // Primary: Cortex wiki
+    writeCortexPage(CORTEX_CONVERSATION_MEMORY, newContent);
+    updateCortexIndex(CORTEX_CONVERSATION_MEMORY, "Conversation Memory", "Accumulated cross-conversation memory and learned facts");
+
+    // Backward compat: old flat file
+    ensureMemoryDir();
+    writeFileSync(join(MEMORY_DIR, MEMORY_FILE), newContent, "utf-8");
     return true;
   } catch {
     return false;

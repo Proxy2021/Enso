@@ -237,13 +237,13 @@ async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
     if (briefing) briefingBlock = `\n\n## Today's Context\n${briefing}`;
   } catch { /* user-context-proactive not available — skip */ }
 
-  // Inject Knowledge Cortex summary — accumulated wiki knowledge about user's interests, projects, tools
+  // Inject Knowledge Cortex summary — accumulated cortex knowledge about user's interests, projects, tools
   let cortexBlock = "";
   try {
     const { getCortexContextSummary } = await import("./cortex-tools.js");
     const cortex = getCortexContextSummary(800);
     if (cortex) cortexBlock = `\n\n## Knowledge Cortex\nYour persistent knowledge base with interlinked pages about the user's interests, projects, and expertise:\n${cortex}`;
-  } catch { /* wiki not available — skip */ }
+  } catch { /* cortex not available — skip */ }
 
   // Check if memory tools are available
   const hasMemoryTools = tools.some((t) => t.name === "enso_memory_search");

@@ -1,14 +1,14 @@
 import type { ToolTemplate } from "../registry.js";
 
-export function isWikiSignature(signatureId: string): boolean {
-  return signatureId === "wiki_browser";
+export function isCortexSignature(signatureId: string): boolean {
+  return signatureId === "wiki_browser" || signatureId === "cortex_browser";
 }
 
-export function getWikiTemplateCode(_signature: ToolTemplate): string {
-  return WIKI_TEMPLATE;
+export function getCortexTemplateCode(_signature: ToolTemplate): string {
+  return CORTEX_TEMPLATE;
 }
 
-const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
+const CORTEX_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
   // ── ALL hooks at top level (React rules) ──
   var [activeTab, setActiveTab] = useState("browse");
   var [searchInput, setSearchInput] = useState("");
@@ -83,7 +83,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
       if (line.startsWith("### ")) return React.createElement("h3", { key: i, className: "text-base font-medium text-gray-300 mt-3 mb-1" }, line.slice(4));
       if (line.startsWith("- ")) return React.createElement("li", { key: i, className: "text-gray-300 ml-4 list-disc" }, line.slice(2));
       if (line.trim() === "") return React.createElement("div", { key: i, className: "h-2" });
-      // Highlight [[wiki links]]
+      // Highlight [[cortex links]]
       var parts = line.split(/(\\[\\[[^\\]]+\\]\\])/g);
       if (parts.length > 1) {
         return React.createElement("p", { key: i, className: "text-gray-300 leading-relaxed" },
@@ -116,7 +116,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <LucideReact.BookOpen className="w-5 h-5 text-blue-400" />
-          <span className="text-lg font-semibold text-gray-100">Knowledge Wiki</span>
+          <span className="text-lg font-semibold text-gray-100">Knowledge Cortex</span>
           {totalPages > 0 && (
             <Badge variant="outline">{totalPages} pages</Badge>
           )}
@@ -137,7 +137,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
       {/* ── Search bar ── */}
       <div className="flex gap-2">
         <Input
-          placeholder="Search wiki pages..."
+          placeholder="Search cortex pages..."
           value={searchInput}
           onChange={setSearchInput}
           onKeyDown={function(e) { if (e.key === "Enter") handleSearch(); }}
@@ -170,7 +170,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
       {(isEmpty || (!hasData && !isRead)) && !isLint && activeTab !== "add" && (
         <EmptyState
           icon={React.createElement(LucideReact.BookOpen, { className: "w-12 h-12" })}
-          title="Your wiki is empty"
+          title="Your cortex is empty"
           description="Start building your knowledge base by adding topics, articles, or research results. The AI will organize everything into interlinked pages."
         />
       )}
@@ -264,7 +264,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
         <div className="space-y-3 p-4 bg-gray-800/30 rounded-lg border border-gray-700/30">
           <div className="text-sm font-medium text-gray-200 flex items-center gap-2">
             <LucideReact.PlusCircle className="w-4 h-4 text-blue-400" />
-            Add knowledge to your wiki
+            Add knowledge to your cortex
           </div>
           <Input
             placeholder="Topic or title (e.g., 'Machine Learning', 'React Hooks')"
@@ -280,7 +280,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
             />
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-xs text-gray-500">The AI will extract entities, concepts, and create interlinked wiki pages.</span>
+            <span className="text-xs text-gray-500">The AI will extract entities, concepts, and create interlinked cortex pages.</span>
             <Button variant="primary" onClick={handleIngest}>
               <LucideReact.Sparkles className="w-3.5 h-3.5" /> Ingest
             </Button>
@@ -294,7 +294,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                   <LucideReact.Database className="w-4 h-4 text-purple-400" />
                   Import from Data Sources
                 </div>
-                <div className="text-xs text-gray-500 mt-1">Import browser history, bookmarks, projects, email contacts, and installed tools into your wiki. Uses data from Settings &gt; Data Sources.</div>
+                <div className="text-xs text-gray-500 mt-1">Import browser history, bookmarks, projects, email contacts, and installed tools into your cortex. Uses data from Settings &gt; Data Sources.</div>
               </div>
               <Button variant="outline" onClick={function() { onAction("import_sources", {}); }}>
                 <LucideReact.Download className="w-3.5 h-3.5" /> Import
@@ -348,7 +348,7 @@ const WIKI_TEMPLATE = `export default function GeneratedUI({ data, onAction }) {
                 ? React.createElement(LucideReact.CheckCircle, { className: "w-4 h-4 text-green-400" })
                 : React.createElement(LucideReact.AlertTriangle, { className: "w-4 h-4 text-amber-400" })}
               <span className={"font-medium " + (isHealthy ? "text-green-300" : "text-amber-300")}>
-                {isHealthy ? "Wiki is healthy" : "Issues found"}
+                {isHealthy ? "Cortex is healthy" : "Issues found"}
               </span>
             </div>
             <div className="text-sm text-gray-400">

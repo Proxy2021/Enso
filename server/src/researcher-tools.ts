@@ -883,7 +883,7 @@ async function generateSearchAngles(
       if (relevant.length > 0) {
         cortexContext = `\n\nThe user already has knowledge about:\n${relevant.map(e => `- ${e.title}: ${e.summary}`).join("\n")}\nGenerate queries that go DEEPER (advanced topics, recent developments, edge cases) rather than covering basics they already know.`;
       }
-    } catch { /* wiki not available */ }
+    } catch { /* cortex not available */ }
 
     const prompt = `Generate search queries for thoroughly researching: "${topic}"${cortexContext}
 

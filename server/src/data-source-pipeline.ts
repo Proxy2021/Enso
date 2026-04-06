@@ -3,7 +3,7 @@
  *
  * After a scan completes, this pipeline:
  * 1. Computes cache file hashes to detect changes
- * 2. Triggers Cortex wiki ingestion only for CHANGED data sources
+ * 2. Triggers Cortex ingestion only for CHANGED data sources
  * 3. Rate-limits LLM calls to avoid excessive cost
  *
  * Called automatically at the end of buildUserContextProfile().
