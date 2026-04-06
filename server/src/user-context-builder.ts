@@ -117,13 +117,16 @@ Based on this data, produce a JSON object with this exact schema (no markdown, j
   "installedApps": ["string"],
   "mostUsedFileTypes": ["string"],
   "activeHoursEstimate": {"start": number, "end": number},
-  "summary": "A 2-3 sentence natural language summary of who this user is and what they work on"
+  "readingInterests": ["string — top reading themes/categories inferred from Kindle books, if present"],
+  "summary": "A 2-3 sentence natural language summary of who this user is, what they work on, and what they read"
 }
 
 Rules:
-- Infer interests from browsing patterns, searches, bookmarks, and project types
+- Infer interests from browsing patterns, searches, bookmarks, project types, AND Kindle books if present
+- Kindle Library data reveals deep intellectual interests — weight these highly in the interests list
 - Confidence should reflect how strongly the data supports each interest (0.5+ = moderate, 0.8+ = strong)
 - List max 10 interests, 10 projects, 10 contacts
+- readingInterests: extract 5-8 key themes from the Kindle library (e.g., "Evolutionary Biology", "Quantitative Finance")
 - Be concise but accurate
 - Return ONLY valid JSON, no markdown fences`;
 
@@ -141,6 +144,7 @@ Rules:
       installedApps?: string[];
       mostUsedFileTypes?: string[];
       activeHoursEstimate?: { start: number; end: number };
+      readingInterests?: string[];
       summary?: string;
     };
 
@@ -176,16 +180,22 @@ Rules:
       },
     };
 
+    // Populate reading field from Kindle cache if available
+    const kindleCache = readCache("kindle-library.json") as { totalBooks?: number; books?: Array<{ title: string; author: string }> } | null;
+    if (kindleCache?.books?.length) {
+      profile.reading = {
+        books: kindleCache.books.slice(0, 50).map(b => ({ title: b.title, author: b.author })),
+        totalBooks: kindleCache.totalBooks ?? kindleCache.books.length,
+      };
+    }
+
     writeFileSync(PROFILE_PATH, JSON.stringify(profile, null, 2));
 
-    // Auto-populate ENSO_USER.md if it's empty — so the Me page profile card shows discovered data
+    // Always update ENSO_USER.md to reflect the latest profile data
     try {
-      const { readEnsoMemory, writeEnsoUser } = await import("./memory-bridge.js");
-      const { user: existingUser } = readEnsoMemory();
-      if (!existingUser?.trim()) {
-        const userMd = buildUserMarkdown(profile, synthesized.summary);
-        if (userMd) writeEnsoUser(userMd);
-      }
+      const { writeEnsoUser } = await import("./memory-bridge.js");
+      const userMd = buildUserMarkdown(profile, synthesized.summary, synthesized.readingInterests);
+      if (userMd) writeEnsoUser(userMd);
     } catch { /* memory-bridge not available — skip */ }
 
     logAction({
@@ -360,7 +370,7 @@ export function maybeRefreshProfile(): void {
 
 // ── Auto-populate ENSO_USER.md from discovered context ──────────────────────
 
-function buildUserMarkdown(profile: UserContextProfile, summary?: string): string | null {
+function buildUserMarkdown(profile: UserContextProfile, summary?: string, readingInterests?: string[]): string | null {
   const lines: string[] = ["# About Me", ""];
 
   if (summary) {
@@ -382,6 +392,15 @@ function buildUserMarkdown(profile: UserContextProfile, summary?: string): strin
       lines.push(`- ${p.name}${tech}`);
     }
     lines.push("");
+  }
+
+  // Reading / Kindle library
+  if (profile.reading?.totalBooks) {
+    const topBooks = profile.reading.books.slice(0, 5).map(b => `"${b.title}"`).join(", ");
+    lines.push(`**Reading:** ${profile.reading.totalBooks} Kindle books including ${topBooks}`, "");
+    if (readingInterests?.length) {
+      lines.push(`**Reading themes:** ${readingInterests.join(", ")}`, "");
+    }
   }
 
   if (profile.tools.frequentSites.length > 0) {
