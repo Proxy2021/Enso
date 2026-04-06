@@ -6,6 +6,7 @@ import PinnedSidebar from "./components/PinnedSidebar";
 import ConversationSidebar from "./components/ConversationSidebar";
 import ConnectionPicker from "./components/ConnectionPicker";
 import SetupWizard from "./components/SetupWizard";
+import DataSourceOnboarding from "./components/DataSourceOnboarding";
 import { DesktopTabRail, MobileTabBar, TabHeader } from "./components/TabNavigation";
 import MobileConversationList from "./components/MobileConversationList";
 import TasksView from "./components/TasksView";
@@ -311,6 +312,7 @@ export default function App() {
         <ToastContainer />
         <ConnectionPicker />
         <SetupWizard />
+        <DataSourceOnboarding />
       </div>
     </AppErrorBoundary>
   );

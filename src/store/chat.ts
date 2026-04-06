@@ -145,6 +145,9 @@ interface CardStore {
     _ts: number;
   } | null;
 
+  // Onboarding
+  _onboardingUpdate: { step?: string; status?: string; detail?: string; complete?: boolean; result?: unknown; _ts: number } | null;
+
   // Proactive engine
   proactiveSuggestions: Array<{ id: string; pillar: string; priority: string; title: string; description: string; icon: string; action: unknown }>;
   _proactiveUpdate: { suggestions?: unknown[]; digest?: unknown; consent?: unknown; analytics?: unknown; _ts: number } | null;
@@ -394,6 +397,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   _serverBootId: null as string | null,
   _lastDisconnectWasRestart: false,
   _contextUpdate: null,
+  _onboardingUpdate: null,
   proactiveSuggestions: [],
   _proactiveUpdate: null,
   recentTopics: [],
@@ -2230,6 +2234,12 @@ export const useChatStore = create<CardStore>((set, get) => ({
           }
         }
       }
+      return;
+    }
+
+    // ── Onboarding progress ──
+    if (msg.onboardingProgress) {
+      set({ _onboardingUpdate: { ...msg.onboardingProgress, _ts: Date.now() } });
       return;
     }
 

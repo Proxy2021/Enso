@@ -1657,9 +1657,14 @@ export async function handleWebSocketMessage(
     case "settings.get_context_status": {
       try {
         const { getContextStatus } = await import("./user-context-tools.js");
+        let isFirstRun = false;
+        try {
+          const onboarding = await import("./onboarding.js");
+          isFirstRun = onboarding.isFirstRun();
+        } catch { /* onboarding module not available */ }
         send({
           id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
-          data: { contextStatus: getContextStatus() },
+          data: { contextStatus: getContextStatus(), isFirstRun },
           timestamp: Date.now(),
         });
       } catch (err) {
@@ -1686,6 +1691,40 @@ export async function handleWebSocketMessage(
       } catch (err) {
         runtime.error?.("[enso] context clear error:", err);
       }
+      break;
+    }
+
+    // ── Onboarding ──
+    case "onboarding.setup": {
+      const { sources, createTasks } = msg as { sources: string[]; createTasks: boolean; type: string };
+      try {
+        const { runOnboardingSetup } = await import("./onboarding.js");
+        const result = await runOnboardingSetup(sources, { createTasks }, (update) => {
+          send({
+            id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "delta",
+            onboardingProgress: update,
+            timestamp: Date.now(),
+          });
+        });
+        send({
+          id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "final",
+          onboardingProgress: { complete: true, result },
+          timestamp: Date.now(),
+        });
+      } catch (err) {
+        send({
+          id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "error",
+          text: `Onboarding failed: ${err instanceof Error ? err.message : String(err)}`,
+          timestamp: Date.now(),
+        });
+      }
+      break;
+    }
+    case "onboarding.skip": {
+      try {
+        const { markOnboardingDone } = await import("./onboarding.js");
+        markOnboardingDone();
+      } catch { /* ignore */ }
       break;
     }
 

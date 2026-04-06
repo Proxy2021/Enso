@@ -195,6 +195,8 @@ export interface ServerMessage {
   scheduledTasks?: ScheduledTaskDef[];
   scheduledTaskUpdate?: ScheduledTaskDef;
   scheduledTaskRun?: ScheduledTaskRun;
+  /** Onboarding progress updates */
+  onboardingProgress?: { step?: string; status?: string; detail?: string; complete?: boolean; result?: unknown };
   /** Proactive engine: consent state */
   proactiveConsent?: ProactiveConsentDTO;
   /** Proactive engine: analytics */
