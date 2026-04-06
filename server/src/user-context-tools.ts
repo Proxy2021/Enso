@@ -1201,6 +1201,71 @@ export function createUserContextTools(): EnsoAgentTool[] {
         }
       },
     } as EnsoAgentTool,
+
+    // ── YouTube Data (API fetch + cache) ──────────────────────────────────────
+    {
+      name: "enso_context_scan_youtube",
+      label: "Scan YouTube Data",
+      description: "Fetch YouTube subscriptions, liked videos, and feed via API. Caches for Cortex ingestion.",
+      parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("youtube" as keyof ContextConsent);
+        if (denied) return denied;
+        ensureDirs();
+
+        try {
+          const { createYouTubeTools } = await import("./youtube-tools.js");
+          const ytTools = createYouTubeTools();
+
+          let subscriptions: unknown[] = [];
+          let likedVideos: unknown[] = [];
+          let feed: unknown[] = [];
+
+          // Fetch subscriptions (all pages)
+          try {
+            const subTool = ytTools.find(t => t.name === "enso_youtube_subscriptions");
+            if (subTool) {
+              const r = JSON.parse((await subTool.execute("yt-scan", { all: true })).content[0].text!);
+              subscriptions = r.channels || [];
+            }
+          } catch { /* subscriptions not available */ }
+
+          // Fetch liked videos
+          try {
+            const likedTool = ytTools.find(t => t.name === "enso_youtube_liked_videos");
+            if (likedTool) {
+              const r = JSON.parse((await likedTool.execute("yt-scan", { maxResults: 50 })).content[0].text!);
+              likedVideos = r.videos || [];
+            }
+          } catch { /* liked not available */ }
+
+          // Fetch feed
+          try {
+            const feedTool = ytTools.find(t => t.name === "enso_youtube_my_feed");
+            if (feedTool) {
+              const r = JSON.parse((await feedTool.execute("yt-scan", { maxResults: 50 })).content[0].text!);
+              feed = r.videos || [];
+            }
+          } catch { /* feed not available */ }
+
+          const cacheData = {
+            source: "youtube", subscriptions, likedVideos, feed,
+            totalSubscriptions: subscriptions.length,
+            totalLikedVideos: likedVideos.length,
+            totalFeedVideos: feed.length,
+            scannedAt: new Date().toISOString(),
+          };
+
+          writeFileSync(join(CACHE_DIR, "youtube-data.json"), JSON.stringify(cacheData, null, 2));
+          updateScanLog("youtube" as keyof ScanLog);
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `YouTube scanned: ${subscriptions.length} subs, ${likedVideos.length} liked, ${feed.length} feed` });
+          return jsonResult(cacheData);
+        } catch (err) {
+          logError("user-context", "YouTube scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
   ];
 }
 

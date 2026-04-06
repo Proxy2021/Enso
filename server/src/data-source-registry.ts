@@ -369,7 +369,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "youtube",
     cacheFile: "youtube-data.json",
-    scannerToolName: "enso_youtube_manager_scan",  // YouTube Manager app
+    scannerToolName: "enso_context_scan_youtube",  // YouTube scanner in user-context-tools
     scannerParams: {},
     ingestPriority: 45,
     formatForProfile: (cached: A) => {
