@@ -249,15 +249,41 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
     },
     formatForWiki: (cached: A) => {
       if (!cached?.books?.length) return null;
+      // Group books by category for a more structured, LLM-friendly format
+      const categorized = new Map<string, Array<{ title: string; author: string; description?: string }>>();
+      const uncategorized: Array<{ title: string; author: string; description?: string }> = [];
+      for (const b of cached.books) {
+        if (b.categories?.length) {
+          for (const cat of b.categories) {
+            const list = categorized.get(cat) ?? [];
+            list.push(b);
+            categorized.set(cat, list);
+          }
+        } else {
+          uncategorized.push(b);
+        }
+      }
       const lines = [
         `# Kindle Library (${cached.totalBooks ?? cached.books.length} books)\n`,
-        "Books owned by this user on Amazon Kindle, revealing reading interests and knowledge domains.\n",
+        "Complete book collection revealing reading interests and knowledge domains.\n",
       ];
-      for (const b of cached.books) {
-        let line = `- **${b.title}** by ${b.author}`;
-        if (b.categories?.length) line += ` [${b.categories.join(", ")}]`;
-        if (b.description) line += `: ${b.description.slice(0, 150)}`;
-        lines.push(line);
+      // Top categories with their books
+      const sortedCats = [...categorized.entries()].sort((a, b) => b[1].length - a[1].length);
+      for (const [cat, books] of sortedCats.slice(0, 30)) {
+        lines.push(`\n## ${cat} (${books.length} books)`);
+        for (const b of books.slice(0, 15)) {
+          let line = `- **${b.title}** by ${b.author}`;
+          if (b.description) line += `: ${b.description.slice(0, 100)}`;
+          lines.push(line);
+        }
+        if (books.length > 15) lines.push(`- ... and ${books.length - 15} more in this category`);
+      }
+      if (uncategorized.length > 0) {
+        lines.push(`\n## Other Books (${uncategorized.length})`);
+        for (const b of uncategorized.slice(0, 20)) {
+          lines.push(`- **${b.title}** by ${b.author}`);
+        }
+        if (uncategorized.length > 20) lines.push(`- ... and ${uncategorized.length - 20} more`);
       }
       return { text: lines.join("\n"), topic: "Kindle Library", label: "Kindle library scan" };
     },
