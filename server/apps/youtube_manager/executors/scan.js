@@ -12,7 +12,7 @@ var feed = [];
 
 // Fetch subscriptions
 try {
-  var subResult = await ctx.callTool("enso_youtube_subscriptions", {});
+  var subResult = await ctx.callTool("enso_youtube_subscriptions", { all: true });
   if (subResult && subResult.channels) {
     subscriptions = subResult.channels;
   }
@@ -20,7 +20,7 @@ try {
 
 // Fetch liked videos
 try {
-  var likedResult = await ctx.callTool("enso_youtube_liked_videos", {});
+  var likedResult = await ctx.callTool("enso_youtube_liked_videos", { maxResults: 50 });
   if (likedResult && likedResult.videos) {
     likedVideos = likedResult.videos;
   }
