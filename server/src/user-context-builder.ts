@@ -50,36 +50,15 @@ export async function buildUserContextProfile(
   const shouldScan = (key: string) =>
     consent[key as keyof ContextConsent] && (!sources || sources.includes(key));
 
-  // Step 1: Run each consented scanner (collect fresh data)
-  if (shouldScan("browserHistory")) {
+  // Step 1: Run each consented scanner via the DATA_SOURCES registry
+  for (const ds of DATA_SOURCES) {
+    if (!shouldScan(ds.id)) continue;
     try {
-      await executeLocalTool("enso_context_scan_browser_history", { browser: "all", limit: 500, sinceDays: 30 });
-      sourcesScanned.push("browserHistory");
-    } catch (err) { logError("user-context-builder", "Browser history scan failed", err); }
-  }
-  if (shouldScan("bookmarks")) {
-    try {
-      await executeLocalTool("enso_context_scan_bookmarks", {});
-      sourcesScanned.push("bookmarks");
-    } catch (err) { logError("user-context-builder", "Bookmark scan failed", err); }
-  }
-  if (shouldScan("email")) {
-    try {
-      await executeLocalTool("enso_context_scan_email", { folder: "INBOX", limit: 50 });
-      sourcesScanned.push("email");
-    } catch (err) { logError("user-context-builder", "Email scan failed", err); }
-  }
-  if (shouldScan("files")) {
-    try {
-      await executeLocalTool("enso_context_scan_files", { maxDepth: 3 });
-      sourcesScanned.push("files");
-    } catch (err) { logError("user-context-builder", "File scan failed", err); }
-  }
-  if (shouldScan("system")) {
-    try {
-      await executeLocalTool("enso_context_scan_system", { include: ["apps"] });
-      sourcesScanned.push("system");
-    } catch (err) { logError("user-context-builder", "System scan failed", err); }
+      await executeLocalTool(ds.scannerToolName, ds.scannerParams || {});
+      sourcesScanned.push(ds.id);
+    } catch (err) {
+      logError("user-context-builder", `${ds.id} scan failed`, err);
+    }
   }
 
   // Step 2: Read cached scan results and build a reduced summary via registry
