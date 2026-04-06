@@ -66,6 +66,7 @@ export const ONBOARDING_SOURCES = [
   { id: "email", icon: "📧", label: "Email", description: "Communication patterns from Outlook/IMAP", defaultEnabled: false },
   { id: "system", icon: "💻", label: "System", description: "Installed apps and environment", defaultEnabled: true },
   { id: "kindleLibrary", icon: "📚", label: "Kindle", description: "Amazon Kindle book collection (requires login)", defaultEnabled: false },
+  { id: "youtube", icon: "📺", label: "YouTube", description: "Subscriptions, liked videos, and feed (requires OAuth)", defaultEnabled: false },
 ];
 
 /**
@@ -151,6 +152,7 @@ export async function runOnboardingSetup(
         files: "enso_context_scan_files",
         system: "enso_context_scan_system",
         kindleLibrary: "enso_context_scan_kindle_library",
+        youtube: "enso_youtube_manager_scan",
       };
       const toolName = toolMap[srcId];
       if (toolName) {

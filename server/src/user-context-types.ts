@@ -15,6 +15,7 @@ export interface ContextConsent {
   files: boolean;
   system: boolean;
   kindleLibrary: boolean;
+  youtube: boolean;
   updatedAt: number;
   /** Extensible: new data sources can register custom consent keys */
   [key: string]: boolean | number;
@@ -27,6 +28,7 @@ export const DEFAULT_CONSENT: ContextConsent = {
   files: false,
   system: false,
   kindleLibrary: false,
+  youtube: false,
   updatedAt: 0,
 };
 

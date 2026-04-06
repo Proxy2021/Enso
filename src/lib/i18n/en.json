@@ -549,6 +549,8 @@
   "settings.systemInfoDesc": "Identify your tools and environment",
   "settings.kindleLibrary": "Kindle Library",
   "settings.kindleLibraryDesc": "Import your Amazon Kindle book collection",
+  "settings.youtube": "YouTube",
+  "settings.youtubeDesc": "Subscriptions, liked videos, and feed from YouTube",
   "settings.projectHealth": "Project Health",
   "settings.projectHealthDesc": "Check codebase for issues or improvements",
   "settings.researchLabel": "Research",

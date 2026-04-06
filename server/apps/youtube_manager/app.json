@@ -81,6 +81,16 @@
           },
           "required": ["channelIds"]
         }
+      },
+      {
+        "suffix": "scan",
+        "description": "Scan YouTube data (subscriptions, liked videos, recent feed) and cache for Cortex ingestion",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
       }
     ]
   }

@@ -549,6 +549,8 @@
   "settings.systemInfoDesc": "识别你的工具和环境",
   "settings.kindleLibrary": "Kindle 书库",
   "settings.kindleLibraryDesc": "导入你的亚马逊 Kindle 图书收藏",
+  "settings.youtube": "YouTube",
+  "settings.youtubeDesc": "YouTube 订阅、喜欢的视频和推送",
   "settings.projectHealth": "项目健康",
   "settings.projectHealthDesc": "检查代码库问题或改进",
   "settings.researchLabel": "研究",

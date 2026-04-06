@@ -364,6 +364,53 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
 
   // ── Files & Projects — per-project pages ──
   // (The 'files' descriptor is above; add getDirectIngestPages to it)
+
+  // ── YouTube ──
+  {
+    id: "youtube",
+    cacheFile: "youtube-data.json",
+    scannerToolName: "enso_youtube_manager_scan",  // YouTube Manager app
+    scannerParams: {},
+    ingestPriority: 45,
+    formatForProfile: (cached: A) => {
+      const parts: string[] = [];
+      if (cached?.subscriptions?.length) parts.push(`YouTube subscriptions: ${cached.subscriptions.slice(0, 15).map((c: A) => c.title).join(", ")}`);
+      if (cached?.likedVideos?.length) parts.push(`Liked: ${cached.likedVideos.slice(0, 10).map((v: A) => v.title).join(", ")}`);
+      return parts.length ? `## YouTube\n${parts.join("\n")}` : null;
+    },
+    formatForCortex: (cached: A) => {
+      if (!cached?.subscriptions?.length && !cached?.likedVideos?.length && !cached?.feed?.length) return null;
+      const lines = ["# YouTube Activity\n", "Subscriptions, liked videos, and recent feed revealing content interests.\n"];
+      if (cached.subscriptions?.length) {
+        lines.push("## Subscriptions (" + cached.subscriptions.length + " channels)");
+        for (const ch of cached.subscriptions) lines.push(`- **${ch.title}**: ${ch.description?.slice(0, 120) || "No description"}`);
+      }
+      if (cached.likedVideos?.length) {
+        lines.push("\n## Liked Videos (" + cached.likedVideos.length + ")");
+        for (const v of cached.likedVideos) lines.push(`- **${v.title}** by ${v.channelTitle || "unknown"}`);
+      }
+      if (cached.feed?.length) {
+        lines.push("\n## Recent Feed (" + cached.feed.length + ")");
+        for (const v of cached.feed) lines.push(`- **${v.title}** by ${v.channelTitle || "unknown"}`);
+      }
+      return { text: lines.join("\n"), topic: "YouTube Activity", label: "YouTube API data" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.subscriptions?.length) return [];
+      // Create pages for top subscribed channels (by engagement, not all)
+      return cached.subscriptions.slice(0, 30).map((ch: A) => {
+        const slug = (ch.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+        if (!slug) return null;
+        return {
+          path: `entities/${slug}.md`,
+          title: ch.title,
+          content: `# ${ch.title}\n\nA YouTube channel you subscribe to.\n\n${ch.description || ""}\n\n## Details\n- **Channel**: ${ch.title}\n- **Source**: YouTube subscription`,
+          summary: ch.description?.slice(0, 200) || `YouTube channel: ${ch.title}`,
+          tags: ["youtube", "channel", "subscription"],
+        };
+      }).filter(Boolean) as CortexPage[];
+    },
+  },
 ];
 
 // ── Lookup ──
