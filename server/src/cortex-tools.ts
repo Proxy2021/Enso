@@ -1,9 +1,9 @@
 /**
- * wiki-tools.ts — LLM Wiki engine + agent tools.
+ * cortex-tools.ts — Knowledge Cortex engine + agent tools.
  *
  * Implements Karpathy's "LLM Wiki" pattern: a persistent, interlinked markdown
  * knowledge base maintained by the LLM. Three layers: raw sources (immutable),
- * the wiki (LLM-maintained markdown), and a schema (_index.md conventions).
+ * the cortex (LLM-maintained markdown), and a schema (_index.md conventions).
  *
  * Storage: ~/.enso/wiki/
  *   _index.md          — page catalog with summaries (machine-parseable)
@@ -26,15 +26,15 @@ import { DATA_SOURCES, readCache as registryReadCache } from "./data-source-regi
 
 // ── Constants ──
 
-const WIKI_DIR = join(homedir(), ".enso", "wiki");
-const INDEX_PATH = join(WIKI_DIR, "_index.md");
-const LOG_PATH = join(WIKI_DIR, "_log.md");
+const CORTEX_DIR = join(homedir(), ".enso", "wiki");
+const INDEX_PATH = join(CORTEX_DIR, "_index.md");
+const LOG_PATH = join(CORTEX_DIR, "_log.md");
 const SUBDIRS = ["entities", "concepts", "sources", "synthesis"] as const;
-type WikiCategory = (typeof SUBDIRS)[number];
+type CortexCategory = (typeof SUBDIRS)[number];
 
 // ── Types ──
 
-export interface WikiIndexEntry {
+export interface CortexIndexEntry {
   path: string;      // e.g. "entities/react.md"
   title: string;     // e.g. "React"
   summary: string;   // one-line summary
@@ -42,7 +42,7 @@ export interface WikiIndexEntry {
   updated: string;   // ISO 8601
 }
 
-interface WikiPageInfo {
+interface CortexPageInfo {
   path: string;
   title: string;
   sizeBytes: number;
@@ -57,10 +57,10 @@ export interface IngestResult {
 
 // ── Directory setup ──
 
-function ensureWikiDir(): void {
-  if (!existsSync(WIKI_DIR)) mkdirSync(WIKI_DIR, { recursive: true });
+function ensureCortexDir(): void {
+  if (!existsSync(CORTEX_DIR)) mkdirSync(CORTEX_DIR, { recursive: true });
   for (const sub of SUBDIRS) {
-    const dir = join(WIKI_DIR, sub);
+    const dir = join(CORTEX_DIR, sub);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 }
@@ -86,12 +86,12 @@ function safeWrite(path: string, content: string): void {
  *   **React** — A JavaScript library for building UIs. Tags: framework, javascript.
  *   Updated: 2026-04-05T12:00:00Z
  */
-export function readIndex(): WikiIndexEntry[] {
-  ensureWikiDir();
+export function readIndex(): CortexIndexEntry[] {
+  ensureCortexDir();
   const raw = safeRead(INDEX_PATH);
   if (!raw) return [];
 
-  const entries: WikiIndexEntry[] = [];
+  const entries: CortexIndexEntry[] = [];
   const blocks = raw.split(/\n(?=## )/).filter((b) => b.trim());
 
   for (const block of blocks) {
@@ -114,8 +114,8 @@ export function readIndex(): WikiIndexEntry[] {
   return entries;
 }
 
-function writeIndex(entries: WikiIndexEntry[]): void {
-  ensureWikiDir();
+function writeIndex(entries: CortexIndexEntry[]): void {
+  ensureCortexDir();
   const lines = ["<!-- WIKI INDEX — machine-maintained, do not hand-edit -->\n"];
   for (const e of entries) {
     lines.push(`## ${e.path}`);
@@ -129,7 +129,7 @@ function writeIndex(entries: WikiIndexEntry[]): void {
 // ── Log ──
 
 function appendLog(operation: string, details: string): void {
-  ensureWikiDir();
+  ensureCortexDir();
   const ts = new Date().toISOString();
   const entry = `- [${ts}] ${operation}: ${details}\n`;
   const existing = safeRead(LOG_PATH) ?? "# Wiki Log\n\n";
@@ -141,32 +141,32 @@ function appendLog(operation: string, details: string): void {
 function resolvePage(pagePath: string): string | null {
   // Normalize slashes
   const normalized = pagePath.replace(/\\/g, "/");
-  const full = join(WIKI_DIR, normalized);
-  // Security: ensure within wiki dir
-  if (!full.startsWith(WIKI_DIR)) return null;
+  const full = join(CORTEX_DIR, normalized);
+  // Security: ensure within cortex dir
+  if (!full.startsWith(CORTEX_DIR)) return null;
   return full;
 }
 
-export function readWikiPage(pagePath: string): string | null {
+export function readCortexPage(pagePath: string): string | null {
   const full = resolvePage(pagePath);
   if (!full) return null;
   return safeRead(full);
 }
 
-function writeWikiPage(pagePath: string, content: string): void {
+function writeCortexPage(pagePath: string, content: string): void {
   const full = resolvePage(pagePath);
-  if (!full) throw new Error(`Invalid wiki path: ${pagePath}`);
+  if (!full) throw new Error(`Invalid cortex path: ${pagePath}`);
   safeWrite(full, content);
 }
 
 // ── Search ──
 
-function searchIndex(query: string, maxResults = 10): WikiIndexEntry[] {
+function searchIndex(query: string, maxResults = 10): CortexIndexEntry[] {
   const entries = readIndex();
   const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
   if (queryTerms.length === 0) return entries.slice(0, maxResults);
 
-  const scored: Array<{ entry: WikiIndexEntry; score: number }> = [];
+  const scored: Array<{ entry: CortexIndexEntry; score: number }> = [];
 
   for (const entry of entries) {
     const haystack = `${entry.title} ${entry.summary} ${entry.tags.join(" ")}`.toLowerCase();
@@ -191,15 +191,15 @@ function searchIndex(query: string, maxResults = 10): WikiIndexEntry[] {
 
 // ── List pages ──
 
-function listAllPages(category?: string): WikiPageInfo[] {
-  ensureWikiDir();
-  const pages: WikiPageInfo[] = [];
-  const dirs = category && SUBDIRS.includes(category as WikiCategory)
+function listAllPages(category?: string): CortexPageInfo[] {
+  ensureCortexDir();
+  const pages: CortexPageInfo[] = [];
+  const dirs = category && SUBDIRS.includes(category as CortexCategory)
     ? [category]
     : [...SUBDIRS];
 
   for (const sub of dirs) {
-    const dir = join(WIKI_DIR, sub);
+    const dir = join(CORTEX_DIR, sub);
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir)) {
       if (!file.endsWith(".md")) continue;
@@ -227,14 +227,14 @@ function listAllPages(category?: string): WikiPageInfo[] {
 
 // ── Lint ──
 
-function lintWiki(): {
+function lintCortex(): {
   orphanPages: string[];
   missingPages: string[];
   brokenLinks: Array<{ page: string; link: string }>;
   stalePages: string[];
   stats: { totalPages: number; totalIndexed: number; categories: Record<string, number> };
 } {
-  ensureWikiDir();
+  ensureCortexDir();
   const index = readIndex();
   const indexedPaths = new Set(index.map((e) => e.path));
   const allPages = listAllPages();
@@ -253,7 +253,7 @@ function lintWiki(): {
   // Broken links: [[reference]] to non-existent pages
   const brokenLinks: Array<{ page: string; link: string }> = [];
   for (const page of allPages) {
-    const content = readWikiPage(page.path);
+    const content = readCortexPage(page.path);
     if (!content) continue;
     const linkMatches = content.matchAll(/\[\[([^\]]+)\]\]/g);
     for (const match of linkMatches) {
@@ -297,7 +297,7 @@ function lintWiki(): {
 
 // ── LLM call ──
 
-async function callWikiLLM(prompt: string, timeoutMs = 90_000): Promise<string> {
+async function callCortexLLM(prompt: string, timeoutMs = 90_000): Promise<string> {
   return llm({ prompt, tier: "fast", timeoutMs });
 }
 
@@ -341,16 +341,16 @@ async function runIngestPipeline(source: {
   topic?: string;
   sourceLabel?: string;
 }): Promise<IngestResult> {
-  if (_ingestBusy) throw new Error("Wiki ingest already in progress");
+  if (_ingestBusy) throw new Error("Cortex ingest already in progress");
   _ingestBusy = true;
 
   try {
-    ensureWikiDir();
+    ensureCortexDir();
     const index = readIndex();
     // Cap index summary to ~8K chars to leave room for source material in the prompt
     let indexSummary: string;
     if (index.length === 0) {
-      indexSummary = "(empty wiki — no pages yet)";
+      indexSummary = "(empty cortex — no pages yet)";
     } else {
       const lines = index.map((e) => `- ${e.path}: ${e.title} — ${e.summary}`);
       indexSummary = lines.join("\n");
@@ -368,15 +368,15 @@ async function runIngestPipeline(source: {
 
     const prompt = `${INGEST_PROMPT}
 
-CURRENT WIKI INDEX (${index.length} pages):
+CURRENT CORTEX INDEX (${index.length} pages):
 ${indexSummary}
 
 SOURCE MATERIAL TO INGEST:
 ${sourceText.slice(0, 60_000)}`;
 
-    logAction({ ts: Date.now(), type: "action", category: "wiki", message: `Ingest started: ${source.topic ?? source.sourceLabel ?? "text"}` });
+    logAction({ ts: Date.now(), type: "action", category: "cortex", message: `Ingest started: ${source.topic ?? source.sourceLabel ?? "text"}` });
 
-    const raw = await callWikiLLM(prompt);
+    const raw = await callCortexLLM(prompt);
 
     // Parse JSON response — handle markdown fences if present
     const jsonStr = raw.replace(/^```(?:json)?\s*\n?/m, "").replace(/\n?```\s*$/m, "").trim();
@@ -387,8 +387,8 @@ ${sourceText.slice(0, 60_000)}`;
     try {
       parsed = JSON.parse(jsonStr);
     } catch {
-      logError("wiki", "Failed to parse ingest LLM response", null, { raw: raw.slice(0, 500) });
-      throw new Error("Wiki ingest: LLM returned invalid JSON");
+      logError("cortex", "Failed to parse ingest LLM response", null, { raw: raw.slice(0, 500) });
+      throw new Error("Cortex ingest: LLM returned invalid JSON");
     }
 
     if (!Array.isArray(parsed.pages) || parsed.pages.length === 0) {
@@ -403,16 +403,16 @@ ${sourceText.slice(0, 60_000)}`;
       // Normalize path
       const path = page.path.replace(/\\/g, "/");
       const category = path.split("/")[0];
-      if (!SUBDIRS.includes(category as WikiCategory)) continue;
+      if (!SUBDIRS.includes(category as CortexCategory)) continue;
 
-      const existing = readWikiPage(path);
+      const existing = readCortexPage(path);
       if (existing) {
         // Merge: append new content if it adds new info
         const merged = mergePageContent(existing, page.content);
-        writeWikiPage(path, merged);
+        writeCortexPage(path, merged);
         updated.push(path);
       } else {
-        writeWikiPage(path, page.content);
+        writeCortexPage(path, page.content);
         created.push(path);
       }
 
@@ -430,7 +430,7 @@ ${sourceText.slice(0, 60_000)}`;
     appendLog("INGEST", parsed.logEntry || `Created ${created.length}, updated ${updated.length} pages`);
 
     const summary = `Ingested: ${created.length} pages created (${created.join(", ") || "none"}), ${updated.length} updated (${updated.join(", ") || "none"})`;
-    logAction({ ts: Date.now(), type: "action", category: "wiki", message: summary });
+    logAction({ ts: Date.now(), type: "action", category: "cortex", message: summary });
 
     return { pagesCreated: created, pagesUpdated: updated, summary };
   } finally {
@@ -555,7 +555,7 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
     if (!(consent as Record<string, boolean>)[ds.id]) continue;
     const cached = registryReadCache(ds.cacheFile);
     if (!cached) continue;
-    const formatted = ds.formatForWiki(cached);
+    const formatted = ds.formatForCortex(cached);
     if (formatted) sources.push(formatted);
   }
 
@@ -598,7 +598,7 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
     return { pagesCreated: [], pagesUpdated: [], summary: "No data sources available. Enable and scan data sources in Settings first." };
   }
 
-  logAction({ ts: Date.now(), type: "action", category: "wiki", message: `Data source import started: ${sources.length} sources` });
+  logAction({ ts: Date.now(), type: "action", category: "cortex", message: `Data source import started: ${sources.length} sources` });
 
   // Run separate ingests per source for better quality
   const allCreated: string[] = [];
@@ -616,19 +616,19 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
       allUpdated.push(...result.pagesUpdated);
       summaries.push(`${source.topic}: ${result.pagesCreated.length} created, ${result.pagesUpdated.length} updated`);
     } catch (err) {
-      logError("wiki", `Data source ingest failed for ${source.topic}`, err);
+      logError("cortex", `Data source ingest failed for ${source.topic}`, err);
       summaries.push(`${source.topic}: failed`);
     }
   }
 
   const summary = `Imported ${sources.length} data sources:\n${summaries.join("\n")}`;
-  logAction({ ts: Date.now(), type: "action", category: "wiki", message: `Data source import complete: ${allCreated.length} created, ${allUpdated.length} updated` });
+  logAction({ ts: Date.now(), type: "action", category: "cortex", message: `Data source import complete: ${allCreated.length} created, ${allUpdated.length} updated` });
 
   return { pagesCreated: allCreated, pagesUpdated: allUpdated, summary };
 }
 
 /**
- * Ingest only specific data sources into the wiki (used by the auto-pipeline).
+ * Ingest only specific data sources into the cortex (used by the auto-pipeline).
  */
 export async function ingestChangedSources(sourceIds: string[]): Promise<{ pagesCreated: string[]; pagesUpdated: string[]; summary: string }> {
   const sources: Array<{ text: string; topic: string; label: string }> = [];
@@ -638,7 +638,7 @@ export async function ingestChangedSources(sourceIds: string[]): Promise<{ pages
     if (!ds) continue;
     const cached = registryReadCache(ds.cacheFile);
     if (!cached) continue;
-    const formatted = ds.formatForWiki(cached);
+    const formatted = ds.formatForCortex(cached);
     if (formatted) sources.push(formatted);
   }
 
@@ -661,7 +661,7 @@ export async function ingestChangedSources(sourceIds: string[]): Promise<{ pages
       allUpdated.push(...result.pagesUpdated);
       summaries.push(`${source.topic}: ${result.pagesCreated.length} created, ${result.pagesUpdated.length} updated`);
     } catch (err) {
-      logError("wiki", `Changed source ingest failed for ${source.topic}`, err);
+      logError("cortex", `Changed source ingest failed for ${source.topic}`, err);
       summaries.push(`${source.topic}: failed`);
     }
   }
@@ -670,10 +670,10 @@ export async function ingestChangedSources(sourceIds: string[]): Promise<{ pages
 }
 
 /**
- * Compact wiki context summary for injection into agent prompts.
+ * Compact cortex context summary for injection into agent prompts.
  */
-export function getWikiContextSummary(maxChars: number): string {
-  ensureWikiDir();
+export function getCortexContextSummary(maxChars: number): string {
+  ensureCortexDir();
   if (!existsSync(INDEX_PATH)) return "";
   const entries = readIndex();
   if (entries.length === 0) return "";
@@ -690,7 +690,7 @@ export function getWikiContextSummary(maxChars: number): string {
     .slice(0, 10);
 
   const lines = recent.map((e) => `- ${e.title}: ${e.summary}`);
-  const header = `Wiki: ${entries.length} pages (${byCat.entities ?? 0} entities, ${byCat.concepts ?? 0} concepts, ${byCat.sources ?? 0} sources, ${byCat.synthesis ?? 0} synthesis)`;
+  const header = `Cortex: ${entries.length} pages (${byCat.entities ?? 0} entities, ${byCat.concepts ?? 0} concepts, ${byCat.sources ?? 0} sources, ${byCat.synthesis ?? 0} synthesis)`;
 
   let text = `<wiki_knowledge>\n${header}\nRecent:\n${lines.join("\n")}\n</wiki_knowledge>`;
   if (text.length > maxChars) {
@@ -701,7 +701,7 @@ export function getWikiContextSummary(maxChars: number): string {
 
 // ── Agent Tools ──
 
-export function createWikiTools(): EnsoAgentTool[] {
+export function createCortexTools(): EnsoAgentTool[] {
   return [
     // ── Search ──
     {
@@ -722,9 +722,9 @@ export function createWikiTools(): EnsoAgentTool[] {
         const query = String(params.query ?? "");
         const max = Number(params.maxResults ?? 10);
 
-        ensureWikiDir();
+        ensureCortexDir();
         const results = query.trim() ? searchIndex(query, max) : readIndex().slice(0, max);
-        const stats = lintWiki().stats;
+        const stats = lintCortex().stats;
 
         return {
           content: [{
@@ -762,7 +762,7 @@ export function createWikiTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         const pagePath = String(params.path ?? "");
-        const content = readWikiPage(pagePath);
+        const content = readCortexPage(pagePath);
 
         if (content === null) {
           return {
@@ -779,7 +779,7 @@ export function createWikiTools(): EnsoAgentTool[] {
         const backlinks: string[] = [];
         for (const p of allPages) {
           if (p.path === pagePath) continue;
-          const pContent = readWikiPage(p.path);
+          const pContent = readCortexPage(p.path);
           if (pContent?.toLowerCase().includes(`[[${pageName}]]`)) {
             backlinks.push(p.path);
           }
@@ -844,7 +844,7 @@ export function createWikiTools(): EnsoAgentTool[] {
           };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          logError("wiki", "Ingest failed", err);
+          logError("cortex", "Ingest failed", err);
           return {
             content: [{
               type: "text",
@@ -909,7 +909,7 @@ export function createWikiTools(): EnsoAgentTool[] {
         additionalProperties: false,
       },
       execute: async (_callId, _params) => {
-        const report = lintWiki();
+        const report = lintCortex();
         return {
           content: [{
             type: "text",
@@ -950,7 +950,7 @@ export function createWikiTools(): EnsoAgentTool[] {
           };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          logError("wiki", "Data source import failed", err);
+          logError("cortex", "Data source import failed", err);
           return {
             content: [{
               type: "text",

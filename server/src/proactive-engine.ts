@@ -987,10 +987,10 @@ async function resolveConsentReader(): Promise<() => ContextConsent> {
 function generateCortexSuggestions(profile: UserContextProfile): ProactiveSuggestion[] {
   const suggestions: ProactiveSuggestion[] = [];
   try {
-    const { readIndex, lintWiki } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[]; updated: string }>; lintWiki: () => { brokenLinks: Array<{ page: string; link: string }>; stalePages: string[]; stats: { totalPages: number } } };
+    const { readIndex, lintCortex } = require("./cortex-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[]; updated: string }>; lintCortex: () => { brokenLinks: Array<{ page: string; link: string }>; stalePages: string[]; stats: { totalPages: number } } };
     const index = readIndex();
     if (index.length === 0) return suggestions;
-    const lint = lintWiki();
+    const lint = lintCortex();
 
     // Stale pages (30+ days old)
     for (const page of lint.stalePages.slice(0, 2)) {
@@ -1057,7 +1057,7 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
         });
       }
     } catch { /* pipeline module not available */ }
-  } catch { /* wiki-tools not available */ }
+  } catch { /* cortex-tools not available */ }
   return suggestions;
 }
 

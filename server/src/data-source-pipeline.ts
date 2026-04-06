@@ -36,8 +36,8 @@ export interface PipelineResult {
   changedSources: string[];
   ingestedSources: string[];
   skippedReason?: string;
-  wikiPagesCreated: number;
-  wikiPagesUpdated: number;
+  cortexPagesCreated: number;
+  cortexPagesUpdated: number;
 }
 
 /**
@@ -45,13 +45,13 @@ export interface PipelineResult {
  *
  * @param scannedSources - IDs of sources that were just scanned (or "all" to check everything)
  * @param options.forceIngest - Skip change detection, ingest regardless
- * @param options.skipWikiIngest - Only detect changes, don't actually ingest
+ * @param options.skipCortexIngest - Only detect changes, don't actually ingest
  */
 export async function runPostScanPipeline(
   scannedSources: string[],
-  options?: { forceIngest?: boolean; skipWikiIngest?: boolean },
+  options?: { forceIngest?: boolean; skipCortexIngest?: boolean },
 ): Promise<PipelineResult> {
-  const result: PipelineResult = { changedSources: [], ingestedSources: [], wikiPagesCreated: 0, wikiPagesUpdated: 0 };
+  const result: PipelineResult = { changedSources: [], ingestedSources: [], cortexPagesCreated: 0, cortexPagesUpdated: 0 };
 
   // Step 1: Detect changes via hash comparison
   const hashes = readIngestHashes();
@@ -80,25 +80,25 @@ export async function runPostScanPipeline(
   logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Post-scan pipeline: ${result.changedSources.length} source(s) changed: ${result.changedSources.join(", ")}` });
 
   // Step 2: Check rate limit
-  if (options?.skipWikiIngest) {
-    result.skippedReason = "skipWikiIngest option set";
+  if (options?.skipCortexIngest) {
+    result.skippedReason = "skipCortexIngest option set";
     return result;
   }
 
   if (isRateLimited()) {
     result.skippedReason = `Rate limited — ${MAX_INGESTS_PER_HOUR} ingests in the last hour`;
-    logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Skipping wiki ingest: ${result.skippedReason}` });
+    logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Skipping cortex ingest: ${result.skippedReason}` });
     return result;
   }
 
-  // Step 3: Ingest changed sources to Cortex wiki via ingestChangedSources()
+  // Step 3: Ingest changed sources to Cortex via ingestChangedSources()
   try {
-    const { ingestChangedSources } = await import("./wiki-tools.js");
+    const { ingestChangedSources } = await import("./cortex-tools.js");
 
     const ingestResult = await ingestChangedSources(result.changedSources);
     result.ingestedSources = [...result.changedSources];
-    result.wikiPagesCreated = ingestResult.pagesCreated.length;
-    result.wikiPagesUpdated = ingestResult.pagesUpdated.length;
+    result.cortexPagesCreated = ingestResult.pagesCreated.length;
+    result.cortexPagesUpdated = ingestResult.pagesUpdated.length;
     recordIngest();
 
     logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Auto-ingested ${result.changedSources.length} source(s): ${ingestResult.pagesCreated.length} created, ${ingestResult.pagesUpdated.length} updated` });
@@ -118,12 +118,12 @@ export async function runPostScanPipeline(
     result.skippedReason = `Ingest error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
-  // Step 4: Direct ingest — create per-item wiki pages (no LLM cost)
+  // Step 4: Direct ingest — create per-item cortex pages (no LLM cost)
   try {
-    const { directIngestFromSources } = await import("./wiki-direct-ingest.js");
+    const { directIngestFromSources } = await import("./cortex-direct-ingest.js");
     const directResult = await directIngestFromSources({ sourceIds: result.changedSources });
-    result.wikiPagesCreated += directResult.created;
-    result.wikiPagesUpdated += directResult.updated;
+    result.cortexPagesCreated += directResult.created;
+    result.cortexPagesUpdated += directResult.updated;
     if (directResult.created > 0 || directResult.updated > 0) {
       logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Direct ingest: ${directResult.created} pages created, ${directResult.updated} updated` });
     }
@@ -131,7 +131,7 @@ export async function runPostScanPipeline(
     logError("data-pipeline", "Direct ingest failed", err);
   }
 
-  logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Pipeline complete: ${result.ingestedSources.length} ingested, ${result.wikiPagesCreated} pages created, ${result.wikiPagesUpdated} updated` });
+  logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Pipeline complete: ${result.ingestedSources.length} ingested, ${result.cortexPagesCreated} pages created, ${result.cortexPagesUpdated} pages updated` });
 
   return result;
 }

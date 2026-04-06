@@ -56,12 +56,12 @@ const QUICK_ACTIONS = [
   { icon: "\uD83D\uDCBB", labelKey: "welcome.tile.codeAssistant", command: "/code " },
   { icon: "\u26A1", labelKey: "welcome.tile.orchestrate", command: "/orchestrate " },
   { icon: "\uD83D\uDDA5\uFE0F", labelKey: "welcome.tile.terminal", command: "/shell" },
-  { icon: "\uD83E\uDDE0", labelKey: "welcome.tile.wiki", family: "cortex" },
+  { icon: "\uD83E\uDDE0", labelKey: "welcome.tile.cortex", family: "cortex" },
 ];
 
-// ── Wiki stats type ──
+// ── Cortex stats type ──
 
-interface WikiStats {
+interface CortexStats {
   totalPages: number;
   categories: Record<string, number>;
   recentPages: Array<{ path: string; title: string; summary: string; updated: string }>;
@@ -358,18 +358,18 @@ function ScheduledTaskRow({ task, disabled, onTrigger, t }: { task: ScheduledTas
 // ── Knowledge Pulse ──
 
 function KnowledgePulse({ disabled }: { disabled: boolean }) {
-  const [stats, setStats] = useState<WikiStats | null>(null);
+  const [stats, setStats] = useState<CortexStats | null>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const { t } = useT();
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(`${getBackendBaseUrl()}${API.WIKI_STATS}`, {
+    fetch(`${getBackendBaseUrl()}${API.CORTEX_STATS}`, {
       headers: authHeaders(),
       signal: ctrl.signal,
     })
       .then((r) => r.json())
-      .then((data) => setStats(data as WikiStats))
+      .then((data) => setStats(data as CortexStats))
       .catch(() => {});
     return () => ctrl.abort();
   }, []);

@@ -1,8 +1,8 @@
 /**
- * Wiki Direct Ingest — Create per-item wiki pages from data sources without LLM cost.
+ * Cortex Direct Ingest — Create per-item cortex pages from data sources without LLM cost.
  *
  * Each data source in the registry can declare getDirectIngestPages() which returns
- * structured wiki pages for individual items (books, projects, etc.). These pages
+ * structured cortex pages for individual items (books, projects, etc.). These pages
  * are written directly to ~/.enso/wiki/ and indexed, making them first-class Cortex
  * entities that support all actions (read, research, podcast, discover, etc.).
  */
@@ -13,13 +13,13 @@ import { homedir } from "os";
 import { DATA_SOURCES, readCache, type DirectIngestPage } from "./data-source-registry.js";
 import { logAction, logError } from "./action-log.js";
 
-const WIKI_DIR = join(homedir(), ".enso", "wiki");
-const INDEX_PATH = join(WIKI_DIR, "_index.md");
-const LOG_PATH = join(WIKI_DIR, "_log.md");
+const CORTEX_DIR = join(homedir(), ".enso", "wiki");
+const INDEX_PATH = join(CORTEX_DIR, "_index.md");
+const LOG_PATH = join(CORTEX_DIR, "_log.md");
 
-function ensureWikiDir(): void {
+function ensureCortexDir(): void {
   for (const sub of ["entities", "concepts", "sources", "synthesis"]) {
-    const dir = join(WIKI_DIR, sub);
+    const dir = join(CORTEX_DIR, sub);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 }
@@ -73,7 +73,7 @@ export async function directIngestFromSources(options?: {
   forceUpdate?: boolean;
   sourceIds?: string[];
 }): Promise<{ created: number; updated: number; sources: string[] }> {
-  ensureWikiDir();
+  ensureCortexDir();
 
   const existingPaths = readExistingPaths();
   let created = 0;
@@ -111,7 +111,7 @@ export async function directIngestFromSources(options?: {
     sourcesProcessed.push(ds.id);
 
     for (const page of pages) {
-      const fullPath = join(WIKI_DIR, page.path);
+      const fullPath = join(CORTEX_DIR, page.path);
       const exists = existingPaths.has(page.path) || existsSync(fullPath);
 
       if (exists && !options?.forceUpdate) continue; // Skip existing pages
@@ -132,15 +132,15 @@ export async function directIngestFromSources(options?: {
     }
 
     logAction({
-      ts: Date.now(), type: "action", category: "wiki-direct",
+      ts: Date.now(), type: "action", category: "cortex-direct",
       message: `Direct ingest from ${ds.id}: ${pages.length} items, ${created} created, ${updated} updated`,
     });
   }
 
   if (created > 0 || updated > 0) {
-    // Append to wiki log
+    // Append to cortex log
     const logEntry = `\n- ${new Date().toISOString()} — Direct ingest: ${created} pages created, ${updated} updated from ${sourcesProcessed.join(", ")}\n`;
-    writeFileSync(LOG_PATH, (existsSync(LOG_PATH) ? readFileSync(LOG_PATH, "utf-8") : "# Wiki Log\n") + logEntry);
+    writeFileSync(LOG_PATH, (existsSync(LOG_PATH) ? readFileSync(LOG_PATH, "utf-8") : "# Cortex Log\n") + logEntry);
   }
 
   return { created, updated, sources: sourcesProcessed };

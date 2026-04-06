@@ -1112,7 +1112,7 @@ function buildAppInventoryContext(): string {
 /** Inject relevant Knowledge Cortex pages into orchestration planning for domain awareness. */
 function getCortexPlanningContext(userMessage: string): string {
   try {
-    const { readIndex } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
+    const { readIndex } = require("./cortex-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
     const index = readIndex();
     if (index.length === 0) return "";
     const queryTerms = userMessage.toLowerCase().split(/\s+/).filter(t => t.length > 3).slice(0, 6);

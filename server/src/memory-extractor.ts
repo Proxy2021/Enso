@@ -105,7 +105,7 @@ Assistant: ${assistantResponse.slice(0, 1000)}`;
       try {
         if (Date.now() - _lastCortexIngestTime > 300_000) { // Max 1 cortex ingest per 5 minutes
           _lastCortexIngestTime = Date.now();
-          import("./wiki-tools.js").then(({ ingestFromResearch }) => {
+          import("./cortex-tools.js").then(({ ingestFromResearch }) => {
             ingestFromResearch({ topic: result.topic, summary: result.facts.join(". ") }).catch(() => {});
           }).catch(() => {});
         }

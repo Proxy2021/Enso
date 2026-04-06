@@ -2,8 +2,8 @@
  * Data Source Registry — Centralized descriptor for all user-context data sources.
  *
  * Each data source declares how it formats data for both the user profile builder
- * and the Cortex wiki ingest pipeline. Adding a new data source means adding ONE
- * entry here — the profile builder, wiki ingest, post-scan pipeline, and proactive
+ * and the Cortex ingest pipeline. Adding a new data source means adding ONE
+ * entry here — the profile builder, cortex ingest, post-scan pipeline, and proactive
  * engine all pick it up automatically through the registry loop.
  */
 
@@ -19,7 +19,7 @@ const HASHES_PATH = join(CACHE_DIR, "_hashes.json");
 
 // ── Types ──
 
-export interface WikiSourceBlock {
+export interface CortexSourceBlock {
   text: string;
   topic: string;
   label: string;
@@ -45,7 +45,7 @@ export interface DataSourceDescriptor {
    * Format cached data for Cortex wiki ingestion.
    * Returns { text, topic, label } or null if no useful data.
    */
-  formatForWiki: (cached: unknown) => WikiSourceBlock | null;
+  formatForCortex: (cached: unknown) => CortexSourceBlock | null;
 
   /** Priority for ingestion ordering (lower = first). Default 50. */
   ingestPriority?: number;
@@ -127,7 +127,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       if (cached?.topFileTypes?.length) parts.push(`File types: ${cached.topFileTypes.map((f: A) => `${f.ext} (${f.count})`).join(", ")}`);
       return parts.length ? `## Projects & Files\n${parts.join("\n")}` : null;
     },
-    formatForWiki: (cached: A) => {
+    formatForCortex: (cached: A) => {
       if (!cached?.projects?.length) return null;
       const lines = ["# Software Projects on this machine\n"];
       const byType = new Map<string, A[]>();
@@ -183,7 +183,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       if (cached?.recentSearches?.length) parts.push(`Recent searches: ${cached.recentSearches.slice(0, 15).map((s: A) => s.query).join(", ")}`);
       return parts.length ? `## Browser Activity\n${parts.join("\n")}` : null;
     },
-    formatForWiki: (cached: A) => {
+    formatForCortex: (cached: A) => {
       if (!cached?.topDomains?.length && !cached?.recentSearches?.length) return null;
       const lines = ["# Browser Activity\n"];
       if (cached.topDomains?.length) {
@@ -213,7 +213,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       if (!cached?.folders?.length) return null;
       return `## Bookmarks\nFolders: ${cached.folders.slice(0, 10).map((f: A) => `${f.folder} (${f.count})`).join(", ")}`;
     },
-    formatForWiki: (cached: A) => {
+    formatForCortex: (cached: A) => {
       if (!cached?.folders?.length) return null;
       const lines = [`# Browser Bookmarks (${cached.totalBookmarks ?? "?"} total)\n`];
       for (const folder of cached.folders) {
@@ -237,7 +237,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       if (cached?.recentSubjects?.length) parts.push(`Recent subjects: ${cached.recentSubjects.slice(0, 10).map((s: A) => s.subject).join("; ")}`);
       return parts.length ? `## Email\n${parts.join("\n")}` : null;
     },
-    formatForWiki: (cached: A) => {
+    formatForCortex: (cached: A) => {
       if (!cached?.topSenders?.length && !cached?.recentSubjects?.length) return null;
       const lines = ["# Email Communication\n"];
       if (cached.topSenders?.length) {
@@ -263,7 +263,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       if (!cached?.installedApps?.length) return null;
       return `## Installed Software\n${cached.installedApps.slice(0, 30).join(", ")}`;
     },
-    formatForWiki: (cached: A) => {
+    formatForCortex: (cached: A) => {
       if (!cached?.installedApps?.length) return null;
       const lines = ["# Development Environment\n"];
       if (cached.platform) lines.push(`Platform: ${cached.platform}`);
@@ -285,7 +285,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       const bookList = cached.books.slice(0, 20).map((b: A) => `- "${b.title}" by ${b.author}`).join("\n");
       return `## Kindle Library (${cached.totalBooks ?? cached.books.length} books)\n${bookList}`;
     },
-    formatForWiki: (cached: A) => {
+    formatForCortex: (cached: A) => {
       if (!cached?.books?.length) return null;
       // Group books by category for a more structured, LLM-friendly format
       const categorized = new Map<string, Array<{ title: string; author: string; description?: string }>>();

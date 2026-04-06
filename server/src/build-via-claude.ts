@@ -665,7 +665,7 @@ function buildAppPrompt(
 
   // Inject Knowledge Cortex tech preferences if available
   try {
-    const { readIndex } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
+    const { readIndex } = require("./cortex-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
     const index = readIndex();
     const techPages = index.filter(e => {
       const cat = e.path.split("/")[0];
@@ -677,7 +677,7 @@ function buildAppPrompt(
       lines.push(`Use these preferences to inform your implementation choices when relevant.`);
       lines.push(``);
     }
-  } catch { /* wiki-tools not available */ }
+  } catch { /* cortex-tools not available */ }
 
   lines.push(`## Original Content to Enhance`);
   lines.push(`This AI response should be turned into an interactive app:`);

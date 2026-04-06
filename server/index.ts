@@ -29,7 +29,7 @@ import { registerSeedanceTools, createSeedanceTools } from "./src/seedance-tools
 import { createUserContextTools } from "./src/user-context-tools.js";
 import { registerEmailTools, createEmailTools } from "./src/email-tools.js";
 import { registerYouTubeTools, createYouTubeTools } from "./src/youtube-tools.js";
-import { createWikiTools } from "./src/wiki-tools.js";
+import { createCortexTools } from "./src/cortex-tools.js";
 import { registerLocalTool } from "./src/tool-registry-local.js";
 import { APP_CATALOG } from "./src/app-catalog.js";
 import type { EnsoPluginApi } from "./src/local-types.js";
@@ -55,7 +55,7 @@ function registerAllToolsLocally(): void {
     createUserContextTools(),
     createEmailTools(),
     createYouTubeTools(),
-    createWikiTools(),
+    createCortexTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

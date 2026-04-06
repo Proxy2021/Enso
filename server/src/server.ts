@@ -730,11 +730,11 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
-  // ── Wiki Import API (direct trigger) ──
-  app.post("/api/wiki-import", async (_req, res) => {
+  // ── Cortex Import API (direct trigger) ──
+  app.post("/api/cortex-import", async (_req, res) => {
     try {
-      const { ingestFromDataSources } = await import("./wiki-tools.js");
-      logAction({ ts: Date.now(), type: "action", category: "wiki", message: "Wiki import triggered via API" });
+      const { ingestFromDataSources } = await import("./cortex-tools.js");
+      logAction({ ts: Date.now(), type: "action", category: "cortex", message: "Cortex import triggered via API" });
       const result = await ingestFromDataSources();
       res.json(result);
     } catch (err) {
@@ -742,10 +742,10 @@ export async function startEnsoServer(opts: {
     }
   });
 
-  // ── Wiki Direct Ingest API (per-item pages, no LLM cost) ──
-  app.post("/api/wiki-direct-ingest", async (req, res) => {
+  // ── Cortex Direct Ingest API (per-item pages, no LLM cost) ──
+  app.post("/api/cortex-direct-ingest", async (req, res) => {
     try {
-      const { directIngestFromSources } = await import("./wiki-direct-ingest.js");
+      const { directIngestFromSources } = await import("./cortex-direct-ingest.js");
       const sourceIds = (req.query.sources as string)?.split(",").filter(Boolean);
       const forceUpdate = req.query.force === "true";
       const result = await directIngestFromSources({ sourceIds, forceUpdate });
@@ -801,15 +801,15 @@ export async function startEnsoServer(opts: {
 </div></body></html>`;
   }
 
-  // ── Wiki Stats API ──
-  let _wikiStatsCache: { data: unknown; ts: number } | null = null;
-  app.get("/api/wiki-stats", async (_req, res) => {
+  // ── Cortex Stats API ──
+  let _cortexStatsCache: { data: unknown; ts: number } | null = null;
+  app.get("/api/cortex-stats", async (_req, res) => {
     try {
-      if (_wikiStatsCache && Date.now() - _wikiStatsCache.ts < 60_000) {
-        res.json(_wikiStatsCache.data);
+      if (_cortexStatsCache && Date.now() - _cortexStatsCache.ts < 60_000) {
+        res.json(_cortexStatsCache.data);
         return;
       }
-      const { readIndex } = await import("./wiki-tools.js");
+      const { readIndex } = await import("./cortex-tools.js");
       const index = readIndex();
       const categories: Record<string, number> = {};
       for (const e of index) {
@@ -821,7 +821,7 @@ export async function startEnsoServer(opts: {
         .slice(0, 5)
         .map((e) => ({ path: e.path, title: e.title, summary: e.summary, updated: e.updated }));
       const data = { totalPages: index.length, categories, recentPages };
-      _wikiStatsCache = { data, ts: Date.now() };
+      _cortexStatsCache = { data, ts: Date.now() };
       res.json(data);
     } catch {
       res.json({ totalPages: 0, categories: {}, recentPages: [] });

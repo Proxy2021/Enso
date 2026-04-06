@@ -63,7 +63,7 @@ function tryReconstructContext(
   const p = (payload ?? {}) as Record<string, unknown>;
 
   // ── Researcher family ──
-  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "send_report", "delete_history", "clear_all_history", "build_from_research", "monitor_topic", "wiki_ingest"];
+  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "send_report", "delete_history", "clear_all_history", "build_from_research", "monitor_topic", "cortex_ingest"];
   if (researcherActions.includes(action) || (p.topic && typeof p.topic === "string")) {
     const account = getActiveAccount();
     if (!account) return null;
@@ -1038,8 +1038,8 @@ Requirements:
         return;
       }
 
-      // ── Save to Wiki ──
-      if (action === "wiki_ingest") {
+      // ── Save to Cortex ──
+      if (action === "cortex_ingest") {
         const researchData = ctx.currentData as Record<string, unknown>;
         const p = (payload ?? {}) as Record<string, unknown>;
         const topic = String(p.topic ?? researchData?.topic ?? "");
@@ -1049,45 +1049,45 @@ Requirements:
         const sections = (p.sections ?? researchData?.sections ?? []) as Array<{ title: string; summary?: string; bullets?: string[] }>;
         const sources = (p.sources ?? researchData?.sources ?? []) as Array<{ url?: string; title?: string; snippet?: string }>;
 
-        logAction({ ts: Date.now(), type: "action", category: "action:wiki", message: `Wiki ingest from research: "${topic}"`, cardId });
-        sendOperation("processing", "Saving to Wiki");
+        logAction({ ts: Date.now(), type: "action", category: "action:cortex", message: `Cortex ingest from research: "${topic}"`, cardId });
+        sendOperation("processing", "Saving to Cortex");
 
         try {
-          const { ingestFromResearch } = await import("../wiki-tools.js");
+          const { ingestFromResearch } = await import("../cortex-tools.js");
           const result = await ingestFromResearch({ topic, summary, narrative, keyFindings, sections, sources });
 
-          sendOperation("complete", "Saved to Wiki");
+          sendOperation("complete", "Saved to Cortex");
           client.send({
             id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0, state: "final",
-            text: `Saved to Wiki: ${result.pagesCreated.length} pages created, ${result.pagesUpdated.length} updated.\n${result.summary}`,
+            text: `Saved to Cortex: ${result.pagesCreated.length} pages created, ${result.pagesUpdated.length} updated.\n${result.summary}`,
             timestamp: Date.now(),
           });
         } catch (err) {
-          logError("action:wiki_ingest", "Wiki ingest failed", err, { cardId });
-          sendOperation("error", "Wiki ingest failed");
+          logError("action:cortex_ingest", "Cortex ingest failed", err, { cardId });
+          sendOperation("error", "Cortex ingest failed");
         }
         return;
       }
 
-      // ── Import Data Sources to Wiki ──
+      // ── Import Data Sources to Cortex ──
       if (action === "import_sources") {
-        logAction({ ts: Date.now(), type: "action", category: "action:wiki", message: "Wiki import from data sources", cardId });
-        sendOperation("processing", "Importing data sources to Wiki");
+        logAction({ ts: Date.now(), type: "action", category: "action:cortex", message: "Cortex import from data sources", cardId });
+        sendOperation("processing", "Importing data sources to Cortex");
 
         try {
-          const { ingestFromDataSources } = await import("../wiki-tools.js");
+          const { ingestFromDataSources } = await import("../cortex-tools.js");
           const result = await ingestFromDataSources();
 
-          sendOperation("complete", "Imported to Wiki");
+          sendOperation("complete", "Imported to Cortex");
           client.send({
             id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0, state: "final",
             text: result.pagesCreated.length === 0 && result.pagesUpdated.length === 0
               ? `No data sources to import. ${result.summary}`
-              : `Imported data sources to Wiki: ${result.pagesCreated.length} pages created, ${result.pagesUpdated.length} updated.\n${result.summary}`,
+              : `Imported data sources to Cortex: ${result.pagesCreated.length} pages created, ${result.pagesUpdated.length} updated.\n${result.summary}`,
             timestamp: Date.now(),
           });
         } catch (err) {
-          logError("action:import_sources", "Wiki data source import failed", err, { cardId });
+          logError("action:import_sources", "Cortex data source import failed", err, { cardId });
           sendOperation("error", "Import failed");
         }
         return;

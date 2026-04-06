@@ -560,10 +560,10 @@ export async function buildEnsoContext(): Promise<string> {
 
   // Include wiki knowledge summary for domain awareness
   try {
-    const { getWikiContextSummary } = await import("./wiki-tools.js");
-    const wikiSummary = getWikiContextSummary(500);
-    if (wikiSummary) sections.push(wikiSummary);
-  } catch { /* wiki not available — skip */ }
+    const { getCortexContextSummary } = await import("./cortex-tools.js");
+    const cortexSummary = getCortexContextSummary(500);
+    if (cortexSummary) sections.push(cortexSummary);
+  } catch { /* cortex not available — skip */ }
 
   // Include proactive engine insights for richer context-aware responses
   try {

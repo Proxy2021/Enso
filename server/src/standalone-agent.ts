@@ -240,8 +240,8 @@ async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
   // Inject Knowledge Cortex summary — accumulated wiki knowledge about user's interests, projects, tools
   let cortexBlock = "";
   try {
-    const { getWikiContextSummary } = await import("./wiki-tools.js");
-    const cortex = getWikiContextSummary(800);
+    const { getCortexContextSummary } = await import("./cortex-tools.js");
+    const cortex = getCortexContextSummary(800);
     if (cortex) cortexBlock = `\n\n## Knowledge Cortex\nYour persistent knowledge base with interlinked pages about the user's interests, projects, and expertise:\n${cortex}`;
   } catch { /* wiki not available — skip */ }
 

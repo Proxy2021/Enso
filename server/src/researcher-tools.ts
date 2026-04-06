@@ -873,7 +873,7 @@ async function generateSearchAngles(
     // Check Cortex for existing knowledge to make queries more targeted
     let cortexContext = "";
     try {
-      const { readIndex } = await import("./wiki-tools.js");
+      const { readIndex } = await import("./cortex-tools.js");
       const index = readIndex();
       const queryTerms = topic.toLowerCase().split(/\s+/).filter(t => t.length > 2);
       const relevant = index.filter(e => {
@@ -1366,7 +1366,7 @@ Rules:
 
     // Auto-ingest into Knowledge Cortex (fire-and-forget)
     try {
-      import("./wiki-tools.js").then(({ ingestFromResearch }) => {
+      import("./cortex-tools.js").then(({ ingestFromResearch }) => {
         ingestFromResearch({ topic, summary: result.summary, keyFindings: result.keyFindings, sections: result.sections }).catch(() => {});
       }).catch(() => {});
     } catch { /* best effort */ }
@@ -2157,12 +2157,12 @@ Only include genuinely new information. If gap sources don't add meaningful new 
 
     // Auto-ingest research findings into Knowledge Cortex (fire-and-forget)
     try {
-      import("./wiki-tools.js").then(({ ingestFromResearch }) => {
+      import("./cortex-tools.js").then(({ ingestFromResearch }) => {
         ingestFromResearch({ topic, summary: result.summary, narrative: result.narrative, keyFindings, sections, sources }).then(
           (r) => logAction({ ts: Date.now(), type: "action", category: "researcher:cortex", message: `Auto-ingested to Cortex: ${r.pagesCreated.length} created, ${r.pagesUpdated.length} updated` }),
           (e) => logAction({ ts: Date.now(), type: "action", category: "researcher:cortex", message: `Auto-ingest skipped: ${e instanceof Error ? e.message : String(e)}` }),
         );
-      }).catch(() => { /* wiki-tools not available */ });
+      }).catch(() => { /* cortex-tools not available */ });
     } catch { /* best effort */ }
 
     mark("complete");

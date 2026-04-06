@@ -123,7 +123,7 @@ function buildSprintHistoryContext(projectId: string, limit = 3): string {
 /** Inject Knowledge Cortex pages relevant to the project for domain-aware sprint planning. */
 function getCortexEvolutionContext(project: { name: string; id: string }): string {
   try {
-    const { readIndex } = require("./wiki-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
+    const { readIndex } = require("./cortex-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[] }> };
     const index = readIndex();
     if (index.length === 0) return "";
     const terms = (project.name + " " + project.id).toLowerCase().split(/[\s-_]+/).filter(t => t.length > 2);

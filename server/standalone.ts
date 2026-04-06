@@ -34,7 +34,7 @@ import { createSeedanceTools } from "./src/seedance-tools.js";
 import { createUserContextTools } from "./src/user-context-tools.js";
 import { createEmailTools } from "./src/email-tools.js";
 import { createYouTubeTools } from "./src/youtube-tools.js";
-import { createWikiTools } from "./src/wiki-tools.js";
+import { createCortexTools } from "./src/cortex-tools.js";
 import { startSelfHealing } from "./src/self-heal.js";
 
 // ── Exit codes ──
@@ -58,7 +58,7 @@ function registerAllTools(): void {
     createUserContextTools(),
     createEmailTools(),
     createYouTubeTools(),
-    createWikiTools(),
+    createCortexTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {
