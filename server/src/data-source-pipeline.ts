@@ -91,50 +91,31 @@ export async function runPostScanPipeline(
     return result;
   }
 
-  // Step 3: Ingest changed sources to Cortex wiki
+  // Step 3: Ingest changed sources to Cortex wiki via ingestChangedSources()
   try {
-    const { runIngestPipeline } = await import("./wiki-tools.js");
+    const { ingestChangedSources } = await import("./wiki-tools.js");
 
-    // Sort by priority
-    const changedDescriptors = result.changedSources
-      .map((id) => getDataSource(id))
-      .filter((ds): ds is NonNullable<typeof ds> => !!ds)
-      .sort((a, b) => (a.ingestPriority ?? 50) - (b.ingestPriority ?? 50));
+    const ingestResult = await ingestChangedSources(result.changedSources);
+    result.ingestedSources = [...result.changedSources];
+    result.wikiPagesCreated = ingestResult.pagesCreated.length;
+    result.wikiPagesUpdated = ingestResult.pagesUpdated.length;
+    recordIngest();
 
-    for (const ds of changedDescriptors) {
-      const cached = readCache(ds.cacheFile);
-      if (!cached) continue;
+    logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Auto-ingested ${result.changedSources.length} source(s): ${ingestResult.pagesCreated.length} created, ${ingestResult.pagesUpdated.length} updated` });
 
-      const formatted = ds.formatForWiki(cached);
-      if (!formatted) continue;
-
-      try {
-        const ingestResult = await runIngestPipeline({
-          text: formatted.text,
-          topic: formatted.topic,
-          sourceLabel: formatted.label,
-        });
-
-        result.ingestedSources.push(ds.id);
-        result.wikiPagesCreated += ingestResult.pagesCreated.length;
-        result.wikiPagesUpdated += ingestResult.pagesUpdated.length;
-        recordIngest();
-
-        logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Auto-ingested ${ds.id}: ${ingestResult.pagesCreated.length} created, ${ingestResult.pagesUpdated.length} updated` });
-
-        // Update hash for this source
-        const newHash = computeCacheHash(ds.cacheFile);
-        if (newHash) {
-          hashes[ds.cacheFile] = { hash: newHash, ingestedAt: Date.now() };
-          writeIngestHashes(hashes);
-        }
-      } catch (err) {
-        logError("data-pipeline", `Auto-ingest failed for ${ds.id}`, err);
+    // Update hashes for all ingested sources
+    for (const sourceId of result.changedSources) {
+      const ds = getDataSource(sourceId);
+      if (!ds) continue;
+      const newHash = computeCacheHash(ds.cacheFile);
+      if (newHash) {
+        hashes[ds.cacheFile] = { hash: newHash, ingestedAt: Date.now() };
       }
     }
+    writeIngestHashes(hashes);
   } catch (err) {
-    logError("data-pipeline", "Wiki import module load failed", err);
-    result.skippedReason = "Wiki module unavailable";
+    logError("data-pipeline", "Auto-ingest failed", err);
+    result.skippedReason = `Ingest error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Pipeline complete: ${result.ingestedSources.length} ingested, ${result.wikiPagesCreated} pages created, ${result.wikiPagesUpdated} updated` });
