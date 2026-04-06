@@ -631,61 +631,47 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
         );
       }
 
-      // Wait for any library content to appear
-      await page.waitForSelector('[class*="book"], [class*="title"], [id*="library"], [class*="content-list"]', { timeout: 10000 }).catch(() => {});
+      // Wait for page JS to render
+      await new Promise(r => setTimeout(r, 3000));
 
-      // Scroll to trigger lazy loading (3 iterations, faster)
-      for (let i = 0; i < 3; i++) {
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-        await new Promise(r => setTimeout(r, 1000));
+      // Extract first page from the embedded JSON script tag
+      const firstPage = await page.evaluate(() => {
+        const el = document.getElementById("itemViewResponse");
+        if (!el) return { items: [], token: null };
+        try {
+          const data = JSON.parse(el.textContent || "");
+          return { items: data.itemsList || [], token: data.paginationToken || null };
+        } catch { return { items: [], token: null }; }
+      });
+
+      type KindleItem = { asin: string; title: string; authors?: string[]; productUrl?: string; percentageRead?: number; resourceType?: string };
+      const allItems: KindleItem[] = [...firstPage.items];
+      let nextToken = firstPage.token;
+
+      // Paginate through the API to get all books (50 per page, cap at 500 total)
+      const MAX_BOOKS = 500;
+      while (nextToken && allItems.length < MAX_BOOKS) {
+        const pageData = await page.evaluate(async (token: string) => {
+          try {
+            const res = await fetch(`/kindle-library/search?query=&libraryType=BOOKS&paginationToken=${token}&sortType=recency&querySize=50`);
+            const data = await res.json();
+            return { items: data.itemsList || [], token: data.paginationToken || null };
+          } catch { return { items: [], token: null }; }
+        }, nextToken);
+        if (pageData.items.length === 0) break;
+        allItems.push(...pageData.items);
+        nextToken = pageData.token;
       }
 
-      // Extract books using multiple strategies
-      const books: KindleBook[] = await page.evaluate(() => {
-        const results: Array<{ title: string; author: string; asin?: string; coverUrl?: string }> = [];
-        const seen = new Set<string>();
-
-        // Strategy 1: data-asin or data-item-id elements (Kindle content manager)
-        document.querySelectorAll("[data-asin], [data-item-id]").forEach((el) => {
-          const asin = el.getAttribute("data-asin") || el.getAttribute("data-item-id") || undefined;
-          const titleEl = el.querySelector("[class*='title'], h2, h3, [role='heading']");
-          const authorEl = el.querySelector("[class*='author'], [class*='subtitle']");
-          const imgEl = el.querySelector("img");
-          const title = titleEl?.textContent?.trim() || "";
-          if (!title || seen.has(title)) return;
-          seen.add(title);
-          results.push({ title, author: authorEl?.textContent?.trim() || "", asin, coverUrl: imgEl?.src || undefined });
-        });
-
-        // Strategy 2: book grid/list items
-        if (results.length === 0) {
-          document.querySelectorAll("li[class*='book'], div[class*='book-item'], div[class*='library-item'], div[class*='content-item']").forEach((el) => {
-            const title = el.querySelector("h2, h3, [class*='title']")?.textContent?.trim() || "";
-            const author = el.querySelector("[class*='author'], [class*='subtitle']")?.textContent?.trim() || "";
-            const imgEl = el.querySelector("img");
-            if (!title || seen.has(title)) return;
-            seen.add(title);
-            results.push({ title, author, coverUrl: imgEl?.src || undefined });
-          });
-        }
-
-        // Strategy 3: Amazon image-based fallback
-        if (results.length === 0) {
-          document.querySelectorAll("img[src*='images-amazon'], img[src*='m.media-amazon']").forEach((img) => {
-            const parent = img.closest("div, li, a") || img.parentElement;
-            if (!parent) return;
-            const texts = Array.from(parent.querySelectorAll("span, p, div, h2, h3"))
-              .map((e) => e.textContent?.trim())
-              .filter((t): t is string => !!t && t.length > 2 && t.length < 200);
-            const title = texts[0] || "";
-            if (!title || seen.has(title)) return;
-            seen.add(title);
-            results.push({ title, author: texts[1] || "", coverUrl: (img as HTMLImageElement).src || undefined });
-          });
-        }
-
-        return results;
-      });
+      // Map to KindleBook format — only actual books, not periodicals/docs
+      const books: KindleBook[] = allItems
+        .filter((item: KindleItem) => item.title && (!item.resourceType || item.resourceType === "EBOOK"))
+        .map((item: KindleItem) => ({
+          title: item.title,
+          author: Array.isArray(item.authors) ? item.authors.join(", ") : String(item.authors || ""),
+          asin: item.asin || undefined,
+          coverUrl: (item.productUrl as string) || undefined,
+        }));
 
       // Log what page we ended up on for debugging
       logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle scan: landed on ${url}, found ${books.length} books` });
