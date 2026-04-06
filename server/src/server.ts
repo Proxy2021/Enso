@@ -730,6 +730,33 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
+  // ── Wiki Stats API ──
+  let _wikiStatsCache: { data: unknown; ts: number } | null = null;
+  app.get("/api/wiki-stats", async (_req, res) => {
+    try {
+      if (_wikiStatsCache && Date.now() - _wikiStatsCache.ts < 60_000) {
+        res.json(_wikiStatsCache.data);
+        return;
+      }
+      const { readIndex } = await import("./wiki-tools.js");
+      const index = readIndex();
+      const categories: Record<string, number> = {};
+      for (const e of index) {
+        const cat = e.path.split("/")[0] ?? "other";
+        categories[cat] = (categories[cat] ?? 0) + 1;
+      }
+      const recentPages = [...index]
+        .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""))
+        .slice(0, 5)
+        .map((e) => ({ path: e.path, title: e.title, summary: e.summary, updated: e.updated }));
+      const data = { totalPages: index.length, categories, recentPages };
+      _wikiStatsCache = { data, ts: Date.now() };
+      res.json(data);
+    } catch {
+      res.json({ totalPages: 0, categories: {}, recentPages: [] });
+    }
+  });
+
   // ── Projects API ──
   app.get("/api/projects", async (_req, res) => {
     const { listProjects } = await import("./project-manager.js");

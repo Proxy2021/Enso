@@ -26,6 +26,7 @@ export const API = {
   CLAUDE_COMMANDS: "/api/claude-commands",
   WS_DEBUG: "/api/ws-debug",
   CARD_STATE: (cardId: string) => `/api/card/${cardId}/state`,
+  WIKI_STATS: "/api/wiki-stats",
 } as const;
 
 // ── localStorage Keys ──
