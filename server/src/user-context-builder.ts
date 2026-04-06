@@ -404,6 +404,13 @@ function buildUserMarkdown(profile: UserContextProfile, summary?: string, readin
     }
   }
 
+  // YouTube subscriptions
+  const ytCache = readCache("youtube-data.json") as { totalSubscriptions?: number; subscriptions?: Array<{ title: string }> } | null;
+  if (ytCache?.subscriptions?.length) {
+    const topChannels = ytCache.subscriptions.slice(0, 10).map(c => c.title).join(", ");
+    lines.push(`**YouTube:** ${ytCache.totalSubscriptions} subscriptions including ${topChannels}`, "");
+  }
+
   if (profile.tools.frequentSites.length > 0) {
     const sites = profile.tools.frequentSites.slice(0, 6).map(s => s.domain).join(", ");
     lines.push(`**Frequent sites:** ${sites}`, "");
