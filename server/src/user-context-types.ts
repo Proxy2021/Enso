@@ -16,6 +16,8 @@ export interface ContextConsent {
   system: boolean;
   kindleLibrary: boolean;
   updatedAt: number;
+  /** Extensible: new data sources can register custom consent keys */
+  [key: string]: boolean | number;
 }
 
 export const DEFAULT_CONSENT: ContextConsent = {

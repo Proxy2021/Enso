@@ -24,6 +24,7 @@ import { callGeminiLLMWithRetry, GEMINI_MODEL_FAST } from "./ui-generator.js";
 import { callChatLLM } from "./llm-provider.js";
 import { logAction, logError } from "./action-log.js";
 import { getActiveAccount } from "./server.js";
+import { DATA_SOURCES, readCache as registryReadCache } from "./data-source-registry.js";
 
 // ── Constants ──
 
@@ -539,7 +540,6 @@ export async function ingestFromResearch(data: {
  */
 export async function ingestFromDataSources(): Promise<IngestResult> {
   const contextDir = join(homedir(), ".enso", "data", "user-context");
-  const cacheDir = join(contextDir, "cache");
 
   // Read consent — only ingest consented sources
   let consent: Record<string, boolean> = {};
@@ -553,52 +553,22 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
     } catch { /* no consent */ }
   }
 
-  const readCache = (filename: string): unknown | null => {
-    const path = join(cacheDir, filename);
-    try {
-      if (existsSync(path)) return JSON.parse(readFileSync(path, "utf-8"));
-    } catch { /* ignore */ }
-    return null;
-  };
-
   // Collect separate source blocks — each will be ingested individually
   const sources: Array<{ text: string; topic: string; label: string }> = [];
 
-  // ── Files & Projects (most knowledge-rich — ingest first) ──
-  if (consent.files) {
-    const data = readCache("file-index.json") as {
-      projects?: Array<{ name: string; path: string; type: string; technologies: string[] }>;
-      topFileTypes?: Array<{ ext: string; count: number }>;
-    } | null;
-    if (data?.projects?.length) {
-      const lines = ["# Software Projects on this machine\n"];
-      // Group projects by type for clarity
-      const byType = new Map<string, Array<{ name: string; path: string; technologies: string[] }>>();
-      for (const p of data.projects) {
-        const list = byType.get(p.type) ?? [];
-        list.push(p);
-        byType.set(p.type, list);
-      }
-      for (const [type, projects] of byType) {
-        lines.push(`## ${type.charAt(0).toUpperCase() + type.slice(1)} Projects (${projects.length})`);
-        for (const p of projects) {
-          lines.push(`- **${p.name}**: ${p.technologies.join(", ")}. Path: ${p.path}`);
-        }
-      }
-      if (data.topFileTypes?.length) {
-        lines.push("\n## Most Used File Types");
-        for (const f of data.topFileTypes.slice(0, 10)) lines.push(`- ${f.ext}: ${f.count} files`);
-      }
-      sources.push({ text: lines.join("\n"), topic: "Software Projects", label: "File system project scan" });
-    }
+  // ── Registry-based sources (cache files) ──
+  const sortedSources = [...DATA_SOURCES].sort((a, b) => (a.ingestPriority ?? 50) - (b.ingestPriority ?? 50));
+  for (const ds of sortedSources) {
+    if (!(consent as Record<string, boolean>)[ds.id]) continue;
+    const cached = registryReadCache(ds.cacheFile);
+    if (!cached) continue;
+    const formatted = ds.formatForWiki(cached);
+    if (formatted) sources.push(formatted);
   }
 
-  // ── YouTube (live data via tool registry) ──
-  // executeLocalTool returns parsed JSON directly (not wrapped in content array)
+  // ── YouTube (live data via tool registry — not cache-based) ──
   try {
     const { executeLocalTool } = await import("./tool-registry-local.js");
-
-    // Subscriptions — channels the user follows
     try {
       const subJson = await executeLocalTool("enso_youtube_subscriptions", {}) as { channels?: Array<{ title: string; description?: string }> };
       if (subJson?.channels?.length) {
@@ -609,8 +579,6 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
         sources.push({ text: lines.join("\n"), topic: "YouTube Subscriptions", label: "YouTube API subscriptions" });
       }
     } catch { /* YouTube subscriptions not available */ }
-
-    // Liked videos — explicit preferences
     try {
       const likedJson = await executeLocalTool("enso_youtube_liked_videos", {}) as { videos?: Array<{ title: string; channelTitle?: string; description?: string }> };
       if (likedJson?.videos?.length) {
@@ -621,8 +589,6 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
         sources.push({ text: lines.join("\n"), topic: "YouTube Liked Videos", label: "YouTube API liked videos" });
       }
     } catch { /* YouTube liked videos not available */ }
-
-    // Recent feed — current interests
     try {
       const feedJson = await executeLocalTool("enso_youtube_my_feed", {}) as { videos?: Array<{ title: string; channelTitle?: string }> };
       if (feedJson?.videos?.length) {
@@ -634,100 +600,6 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
       }
     } catch { /* YouTube feed not available */ }
   } catch { /* YouTube tools not available */ }
-
-  // ── Browser History ──
-  if (consent.browserHistory) {
-    const data = readCache("browser-history.json") as {
-      topDomains?: Array<{ domain: string; visits: number }>;
-      recentSearches?: Array<{ query: string }>;
-      recentPages?: Array<{ title: string; domain: string; visits: number }>;
-    } | null;
-    if (data && (data.topDomains?.length || data.recentSearches?.length)) {
-      const lines = ["# Browser Activity\n"];
-      if (data.topDomains?.length) {
-        lines.push("## Frequently Visited Sites");
-        for (const d of data.topDomains.slice(0, 25)) lines.push(`- ${d.domain} (${d.visits} visits)`);
-      }
-      if (data.recentSearches?.length) {
-        lines.push("\n## Recent Search Queries");
-        for (const s of data.recentSearches.slice(0, 20)) lines.push(`- ${s.query}`);
-      }
-      if (data.recentPages?.length) {
-        lines.push("\n## Recent Pages Visited");
-        for (const p of data.recentPages.slice(0, 20)) lines.push(`- ${p.title} (${p.domain})`);
-      }
-      sources.push({ text: lines.join("\n"), topic: "Browser Activity", label: "Browser history scan" });
-    }
-  }
-
-  // ── Bookmarks ──
-  if (consent.bookmarks) {
-    const data = readCache("bookmarks.json") as {
-      totalBookmarks?: number;
-      folders?: Array<{ folder: string; count: number; bookmarks: Array<{ title: string; url: string }> }>;
-    } | null;
-    if (data?.folders?.length) {
-      const lines = [`# Browser Bookmarks (${data.totalBookmarks ?? "?"} total)\n`];
-      for (const folder of data.folders.slice(0, 15)) {
-        lines.push(`## ${folder.folder} (${folder.count} items)`);
-        for (const bm of folder.bookmarks.slice(0, 10)) lines.push(`- ${bm.title}: ${bm.url}`);
-      }
-      sources.push({ text: lines.join("\n"), topic: "Browser Bookmarks", label: "Bookmarks scan" });
-    }
-  }
-
-  // ── Email ──
-  if (consent.email) {
-    const data = readCache("email-summary.json") as {
-      topSenders?: Array<{ from: string; count: number }>;
-      recentSubjects?: Array<{ from: string; subject: string; date?: string }>;
-    } | null;
-    if (data && (data.topSenders?.length || data.recentSubjects?.length)) {
-      const lines = ["# Email Communication\n"];
-      if (data.topSenders?.length) {
-        lines.push("## Key Contacts");
-        for (const s of data.topSenders.slice(0, 15)) lines.push(`- ${s.from} (${s.count} messages)`);
-      }
-      if (data.recentSubjects?.length) {
-        lines.push("\n## Recent Email Topics");
-        for (const e of data.recentSubjects.slice(0, 15)) lines.push(`- ${e.subject} (from: ${e.from})`);
-      }
-      sources.push({ text: lines.join("\n"), topic: "Email Communication", label: "Email scan" });
-    }
-  }
-
-  // ── System Info ──
-  if (consent.system) {
-    const data = readCache("system-info.json") as {
-      platform?: string; hostname?: string; installedApps?: string[];
-    } | null;
-    if (data?.installedApps?.length) {
-      const lines = ["# Development Environment\n"];
-      if (data.platform) lines.push(`Platform: ${data.platform}`);
-      lines.push("\n## Installed Applications");
-      for (const app of data.installedApps.slice(0, 50)) lines.push(`- ${app}`);
-      sources.push({ text: lines.join("\n"), topic: "Development Environment", label: "System scan" });
-    }
-  }
-
-  // ── Kindle Library ──
-  if (consent.kindleLibrary) {
-    const data = readCache("kindle-library.json") as {
-      totalBooks?: number;
-      books?: Array<{ title: string; author: string; categories?: string[]; description?: string }>;
-    } | null;
-    if (data?.books?.length) {
-      const lines = [`# Kindle Library (${data.totalBooks ?? data.books.length} books)\n`,
-        "Books owned by this user on Amazon Kindle, revealing reading interests and knowledge domains.\n"];
-      for (const b of data.books.slice(0, 100)) {
-        let line = `- **${b.title}** by ${b.author}`;
-        if (b.categories?.length) line += ` [${b.categories.join(", ")}]`;
-        if (b.description) line += `: ${b.description.slice(0, 150)}`;
-        lines.push(line);
-      }
-      sources.push({ text: lines.join("\n"), topic: "Kindle Library", label: "Kindle library scan" });
-    }
-  }
 
   if (sources.length === 0) {
     return { pagesCreated: [], pagesUpdated: [], summary: "No data sources available. Enable and scan data sources in Settings first." };
@@ -760,6 +632,48 @@ export async function ingestFromDataSources(): Promise<IngestResult> {
   logAction({ ts: Date.now(), type: "action", category: "wiki", message: `Data source import complete: ${allCreated.length} created, ${allUpdated.length} updated` });
 
   return { pagesCreated: allCreated, pagesUpdated: allUpdated, summary };
+}
+
+/**
+ * Ingest only specific data sources into the wiki (used by the auto-pipeline).
+ */
+export async function ingestChangedSources(sourceIds: string[]): Promise<{ pagesCreated: string[]; pagesUpdated: string[]; summary: string }> {
+  const sources: Array<{ text: string; topic: string; label: string }> = [];
+
+  for (const id of sourceIds) {
+    const ds = DATA_SOURCES.find((d) => d.id === id);
+    if (!ds) continue;
+    const cached = registryReadCache(ds.cacheFile);
+    if (!cached) continue;
+    const formatted = ds.formatForWiki(cached);
+    if (formatted) sources.push(formatted);
+  }
+
+  if (sources.length === 0) {
+    return { pagesCreated: [], pagesUpdated: [], summary: "No data to ingest." };
+  }
+
+  const allCreated: string[] = [];
+  const allUpdated: string[] = [];
+  const summaries: string[] = [];
+
+  for (const source of sources) {
+    try {
+      const result = await runIngestPipeline({
+        text: source.text,
+        topic: source.topic,
+        sourceLabel: source.label,
+      });
+      allCreated.push(...result.pagesCreated);
+      allUpdated.push(...result.pagesUpdated);
+      summaries.push(`${source.topic}: ${result.pagesCreated.length} created, ${result.pagesUpdated.length} updated`);
+    } catch (err) {
+      logError("wiki", `Changed source ingest failed for ${source.topic}`, err);
+      summaries.push(`${source.topic}: failed`);
+    }
+  }
+
+  return { pagesCreated: allCreated, pagesUpdated: allUpdated, summary: summaries.join("\n") };
 }
 
 /**

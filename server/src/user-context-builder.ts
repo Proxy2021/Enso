@@ -12,6 +12,8 @@ import { homedir } from "os";
 import { callGeminiLLMWithRetry, GEMINI_MODEL_FAST } from "./ui-generator.js";
 import { callChatLLM } from "./llm-provider.js";
 import { logAction, logError } from "./action-log.js";
+import { DATA_SOURCES, readCache } from "./data-source-registry.js";
+import { runPostScanPipeline } from "./data-source-pipeline.js";
 import type { ContextConsent, UserContextProfile } from "./user-context-types.js";
 import { EMPTY_PROFILE } from "./user-context-types.js";
 import { executeLocalTool } from "./tool-registry-local.js";
@@ -32,16 +34,6 @@ async function callContextLLM(prompt: string): Promise<string> {
   }
   // Fallback to any configured provider
   return callChatLLM({ prompt, model: GEMINI_MODEL_FAST, timeoutMs: 30_000 });
-}
-
-// ── Cache readers ────────────────────────────────────────────────────────────
-
-function readCache(filename: string): unknown | null {
-  const path = join(CACHE_DIR, filename);
-  try {
-    if (existsSync(path)) return JSON.parse(readFileSync(path, "utf-8"));
-  } catch { /* ignore */ }
-  return null;
 }
 
 // ── Profile Builder ──────────────────────────────────────────────────────────
@@ -100,47 +92,13 @@ export async function buildUserContextProfile(
     return { sourcesScanned, interestCount: 0, projectCount: 0 };
   }
 
-  // Step 2: Read cached scan results and build a reduced summary
-  const browserData = readCache("browser-history.json") as { topDomains?: Array<{ domain: string; visits: number }>; recentSearches?: Array<{ query: string }> } | null;
-  const bookmarkData = readCache("bookmarks.json") as { folders?: Array<{ folder: string; count: number; bookmarks: Array<{ title: string }> }> } | null;
-  const emailData = readCache("email-summary.json") as { topSenders?: Array<{ from: string; count: number }>; recentSubjects?: Array<{ subject: string }> } | null;
-  const fileData = readCache("file-index.json") as { projects?: Array<{ name: string; path: string; type: string; technologies: string[] }>; topFileTypes?: Array<{ ext: string; count: number }> } | null;
-  const systemData = readCache("system-info.json") as { installedApps?: string[] } | null;
-  const kindleData = readCache("kindle-library.json") as { source?: string; totalBooks?: number; books?: Array<{ title: string; author: string; asin?: string; coverUrl?: string }> } | null;
-
-  // Build reduced context for LLM (only summaries, never raw URLs or file paths)
+  // Step 2: Read cached scan results and build a reduced summary via registry
   const contextParts: string[] = [];
-
-  if (browserData && (browserData.topDomains?.length || browserData.recentSearches?.length)) {
-    const domains = browserData.topDomains?.slice(0, 20).map(d => `${d.domain} (${d.visits} visits)`).join(", ");
-    const searches = browserData.recentSearches?.slice(0, 15).map(s => s.query).join(", ");
-    const parts = [];
-    if (domains) parts.push(`Top sites: ${domains}`);
-    if (searches) parts.push(`Recent searches: ${searches}`);
-    if (parts.length) contextParts.push(`## Browser Activity\n${parts.join("\n")}`);
-  }
-  if (bookmarkData?.folders?.length) {
-    const folders = bookmarkData.folders.slice(0, 10).map(f => `${f.folder} (${f.count})`).join(", ");
-    contextParts.push(`## Bookmarks\nFolders: ${folders}`);
-  }
-  if (emailData && (emailData.topSenders?.length || emailData.recentSubjects?.length)) {
-    const parts = [];
-    if (emailData.topSenders?.length) parts.push(`Top senders: ${emailData.topSenders.slice(0, 10).map(s => `${s.from} (${s.count}x)`).join(", ")}`);
-    if (emailData.recentSubjects?.length) parts.push(`Recent subjects: ${emailData.recentSubjects.slice(0, 10).map(s => s.subject).join("; ")}`);
-    if (parts.length) contextParts.push(`## Email\n${parts.join("\n")}`);
-  }
-  if (fileData && (fileData.projects?.length || fileData.topFileTypes?.length)) {
-    const parts = [];
-    if (fileData.projects?.length) parts.push(`Projects: ${fileData.projects.map(p => `${p.name} (${p.technologies.join(", ")})`).join(", ")}`);
-    if (fileData.topFileTypes?.length) parts.push(`File types: ${fileData.topFileTypes.map(f => `${f.ext} (${f.count})`).join(", ")}`);
-    if (parts.length) contextParts.push(`## Projects & Files\n${parts.join("\n")}`);
-  }
-  if (systemData?.installedApps?.length) {
-    contextParts.push(`## Installed Software\n${systemData.installedApps.slice(0, 30).join(", ")}`);
-  }
-  if (kindleData?.books?.length) {
-    const bookList = kindleData.books.slice(0, 20).map(b => `- "${b.title}" by ${b.author}`).join("\n");
-    contextParts.push(`## Kindle Library (${kindleData.totalBooks ?? kindleData.books.length} books)\n${bookList}`);
+  for (const ds of DATA_SOURCES) {
+    const cached = readCache(ds.cacheFile);
+    if (!cached) continue;
+    const part = ds.formatForProfile(cached);
+    if (part) contextParts.push(part);
   }
 
   const contextSummary = contextParts.join("\n\n");
@@ -202,7 +160,7 @@ Rules:
       interests: (synthesized.interests || []).map(i => ({
         ...i, lastSeen: Date.now(),
       })),
-      workProjects: (synthesized.workProjects || fileData?.projects || []).map(p => ({
+      workProjects: (synthesized.workProjects || (readCache("file-index.json") as { projects?: Array<{ name: string; path: string; technologies: string[] }> } | null)?.projects || []).map(p => ({
         name: p.name,
         path: ("path" in p ? (p as { path?: string }).path : undefined) || "",
         technologies: p.technologies || [],
@@ -214,7 +172,7 @@ Rules:
         primaryFolders: [],
       },
       tools: {
-        installedApps: synthesized.installedApps || systemData?.installedApps || [],
+        installedApps: synthesized.installedApps || (readCache("system-info.json") as { installedApps?: string[] } | null)?.installedApps || [],
         frequentSites: synthesized.frequentSites || [],
         recentSearches: (synthesized.recentSearches || []).map(s => ({
           query: s.query, timestamp: Date.now(),
@@ -223,7 +181,7 @@ Rules:
       habits: {
         activeHours: synthesized.activeHoursEstimate || { start: 9, end: 22 },
         mostUsedFileTypes: synthesized.mostUsedFileTypes || [],
-        topDirectories: fileData?.projects?.map(p => p.path).filter(Boolean) as string[] || [],
+        topDirectories: (readCache("file-index.json") as { projects?: Array<{ path: string }> } | null)?.projects?.map(p => p.path).filter(Boolean) as string[] || [],
       },
     };
 
@@ -244,6 +202,11 @@ Rules:
       message: `Profile built: ${profile.interests.length} interests, ${profile.workProjects.length} projects, ${sourcesScanned.length} sources`,
     });
 
+    // Auto-ingest changed data sources into Cortex wiki (background, fire-and-forget)
+    runPostScanPipeline(sourcesScanned).catch((err) =>
+      logError("user-context-builder", "Post-scan pipeline failed", err)
+    );
+
     return {
       sourcesScanned,
       interestCount: profile.interests.length,
@@ -252,22 +215,25 @@ Rules:
   } catch (err) {
     logError("user-context-builder", "Profile synthesis failed", err);
     // If LLM fails, build a minimal profile from raw data
+    const fbFileData = readCache("file-index.json") as { projects?: Array<{ name: string; path: string; type: string; technologies: string[] }>; topFileTypes?: Array<{ ext: string; count: number }> } | null;
+    const fbSystemData = readCache("system-info.json") as { installedApps?: string[] } | null;
+    const fbBrowserData = readCache("browser-history.json") as { topDomains?: Array<{ domain: string; visits: number }>; recentSearches?: Array<{ query: string }> } | null;
     const fallbackProfile: UserContextProfile = {
       ...EMPTY_PROFILE,
       lastUpdated: Date.now(),
-      workProjects: (fileData?.projects || []).map(p => ({
+      workProjects: (fbFileData?.projects || []).map(p => ({
         name: p.name, path: p.path, technologies: p.technologies, lastActivity: Date.now(),
       })),
       tools: {
-        installedApps: systemData?.installedApps || [],
-        frequentSites: browserData?.topDomains?.slice(0, 20) || [],
-        recentSearches: (browserData?.recentSearches || []).slice(0, 10).map(s => ({
+        installedApps: fbSystemData?.installedApps || [],
+        frequentSites: fbBrowserData?.topDomains?.slice(0, 20) || [],
+        recentSearches: (fbBrowserData?.recentSearches || []).slice(0, 10).map(s => ({
           query: s.query, timestamp: Date.now(),
         })),
       },
       habits: {
         ...EMPTY_PROFILE.habits,
-        mostUsedFileTypes: fileData?.topFileTypes?.map(f => f.ext) || [],
+        mostUsedFileTypes: fbFileData?.topFileTypes?.map(f => f.ext) || [],
       },
     };
     writeFileSync(PROFILE_PATH, JSON.stringify(fallbackProfile, null, 2));

@@ -1029,6 +1029,34 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
         if (suggestions.length > 8) break;
       }
     }
+
+    // Data sources scanned but not yet ingested into Cortex
+    try {
+      const { getUningestedSources, getStaleIngestSources } = require("./data-source-pipeline.js") as {
+        getUningestedSources: () => string[];
+        getStaleIngestSources: () => string[];
+      };
+      const uningestedIds = getUningestedSources();
+      if (uningestedIds.length > 0) {
+        suggestions.push({
+          id: "cortex-unimported-data", pillar: "knowledge", priority: "high", score: 0.8,
+          title: `Import ${uningestedIds.length} data source(s) to Cortex`,
+          description: `Your ${uningestedIds.join(", ")} data has been scanned but not imported into the Knowledge Cortex. Import to enhance your knowledge base?`,
+          icon: "Database", action: { type: "send_message", message: "Import all my data sources into the Knowledge Cortex" },
+          requiredConsent: [], createdAt: Date.now(),
+        });
+      }
+      const staleIds = getStaleIngestSources();
+      if (staleIds.length > 0) {
+        suggestions.push({
+          id: "cortex-stale-import", pillar: "knowledge", priority: "medium", score: 0.65,
+          title: `Update ${staleIds.length} stale Cortex import(s)`,
+          description: `Data for ${staleIds.join(", ")} has changed since last Cortex import. Re-import to keep knowledge current?`,
+          icon: "RefreshCw", action: { type: "send_message", message: "Re-import my changed data sources into the Knowledge Cortex" },
+          requiredConsent: [], createdAt: Date.now(),
+        });
+      }
+    } catch { /* pipeline module not available */ }
   } catch { /* wiki-tools not available */ }
   return suggestions;
 }
