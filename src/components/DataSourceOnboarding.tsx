@@ -46,19 +46,17 @@ export default function DataSourceOnboarding() {
 
   // Listen for context status response to detect first run
   useEffect(() => {
-    const contextUpdate = useChatStore.getState()._contextUpdate;
-    if (contextUpdate?.contextStatus) {
-      const status = contextUpdate.contextStatus as {
-        consent?: Record<string, boolean>;
-        scanLog?: Record<string, number>;
-        isFirstRun?: boolean;
-      };
-      // First run: no consent enabled AND no scan log entries
-      if (status.isFirstRun) {
+    const unsub = useChatStore.subscribe((state) => {
+      const ctx = state._contextUpdate as Record<string, unknown> | null;
+      if (ctx?.isFirstRun === true && !show) {
         setShow(true);
       }
-    }
-  });
+    });
+    // Also check immediately in case the response arrived before this effect
+    const ctx = useChatStore.getState()._contextUpdate as Record<string, unknown> | null;
+    if (ctx?.isFirstRun === true) setShow(true);
+    return unsub;
+  }, [show]);
 
   // Listen for onboarding progress from server
   useEffect(() => {
