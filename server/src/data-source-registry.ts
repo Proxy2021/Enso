@@ -52,6 +52,22 @@ export interface DataSourceDescriptor {
 
   /** Whether this source fetches live data (not from cache) during wiki import */
   liveSource?: boolean;
+
+  /**
+   * Generate per-item wiki pages directly (no LLM cost).
+   * Returns an array of wiki pages to write. Each page becomes a first-class
+   * Cortex entity that supports all actions (read, research, podcast, etc.).
+   */
+  getDirectIngestPages?: (cached: unknown) => DirectIngestPage[];
+}
+
+export interface DirectIngestPage {
+  /** Wiki path, e.g. "entities/the-story-of-the-human-body.md" */
+  path: string;
+  title: string;
+  content: string;
+  summary: string;
+  tags: string[];
 }
 
 // ── Shared Cache Reader ──
@@ -129,6 +145,28 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         for (const f of cached.topFileTypes) lines.push(`- ${f.ext}: ${f.count} files`);
       }
       return { text: lines.join("\n"), topic: "Software Projects", label: "File system project scan" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.projects?.length) return [];
+      return cached.projects.map((p: A) => {
+        const slug = p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60);
+        const lines = [`# ${p.name}\n`];
+        lines.push(`A **${p.type}** project located at \`${p.path}\`.\n`);
+        if (p.technologies?.length) {
+          lines.push("## Tech Stack");
+          for (const t of p.technologies) lines.push(`- [[${t.toLowerCase()}]]`);
+        }
+        lines.push(`\n## Details`);
+        lines.push(`- **Type**: ${p.type}`);
+        lines.push(`- **Path**: \`${p.path}\``);
+        return {
+          path: `entities/${slug}.md`,
+          title: p.name,
+          content: lines.join("\n"),
+          summary: `${p.name} — a ${p.type} project using ${(p.technologies || []).join(", ")}`,
+          tags: ["project", p.type, ...(p.technologies || []).map((t: string) => t.toLowerCase())],
+        };
+      });
     },
   },
 
@@ -287,7 +325,45 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       }
       return { text: lines.join("\n"), topic: "Kindle Library", label: "Kindle library scan" };
     },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.books?.length) return [];
+      const pages: DirectIngestPage[] = [];
+      for (const b of cached.books) {
+        if (!b.title || !b.enrichedAt) continue; // only enriched books get pages
+        const slug = b.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+        if (!slug) continue;
+        const ratingStr = b.rating ? `⭐ ${b.rating}${b.reviewCount ? ` (${b.reviewCount.toLocaleString()} reviews)` : ""}` : "";
+        const catLinks = (b.categories || []).map((c: string) => `[[${c.toLowerCase().replace(/[^a-z0-9]+/g, "-")}]]`).join(", ");
+        const lines = [`# ${b.title}\n`];
+        lines.push(`By **${b.author}**.${b.publisher ? ` Published by ${b.publisher}` : ""}${b.publicationDate ? `, ${b.publicationDate}` : ""}.${b.pageCount ? ` ${b.pageCount} pages.` : ""}\n`);
+        if (ratingStr) lines.push(`${ratingStr}${catLinks ? ` · Categories: ${catLinks}` : ""}\n`);
+        if (b.description) lines.push(`${b.description}\n`);
+        lines.push("## Details");
+        lines.push(`- **Author**: ${b.author}`);
+        if (b.publisher) lines.push(`- **Publisher**: ${b.publisher}`);
+        if (b.isbn) lines.push(`- **ISBN**: ${b.isbn}`);
+        if (b.language) lines.push(`- **Language**: ${b.language}`);
+        if (b.asin) lines.push(`- **ASIN**: ${b.asin}`);
+        if (b.readerUrl) lines.push(`- **Amazon**: [Read on Kindle](${b.readerUrl})`);
+        if (b.coverUrl) lines.push(`- **Cover**: ![cover](${b.coverUrl})`);
+        if (b.categories?.length) {
+          lines.push("\n## Categories");
+          for (const c of b.categories) lines.push(`- [[${c.toLowerCase().replace(/[^a-z0-9]+/g, "-")}]]`);
+        }
+        pages.push({
+          path: `entities/${slug}.md`,
+          title: b.title,
+          content: lines.join("\n"),
+          summary: b.description?.slice(0, 200) || `${b.title} by ${b.author}`,
+          tags: ["book", "kindle", ...(b.categories || []).map((c: string) => c.toLowerCase())],
+        });
+      }
+      return pages;
+    },
   },
+
+  // ── Files & Projects — per-project pages ──
+  // (The 'files' descriptor is above; add getDirectIngestPages to it)
 ];
 
 // ── Lookup ──

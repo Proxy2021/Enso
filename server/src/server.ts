@@ -742,6 +742,19 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Wiki Direct Ingest API (per-item pages, no LLM cost) ──
+  app.post("/api/wiki-direct-ingest", async (req, res) => {
+    try {
+      const { directIngestFromSources } = await import("./wiki-direct-ingest.js");
+      const sourceIds = (req.query.sources as string)?.split(",").filter(Boolean);
+      const forceUpdate = req.query.force === "true";
+      const result = await directIngestFromSources({ sourceIds, forceUpdate });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── YouTube Unsubscribe API (for email links) ──
   app.get("/api/youtube/unsubscribe", async (req, res) => {
     const channelId = req.query.channelId as string | undefined;

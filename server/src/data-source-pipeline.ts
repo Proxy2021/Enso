@@ -118,6 +118,19 @@ export async function runPostScanPipeline(
     result.skippedReason = `Ingest error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
+  // Step 4: Direct ingest — create per-item wiki pages (no LLM cost)
+  try {
+    const { directIngestFromSources } = await import("./wiki-direct-ingest.js");
+    const directResult = await directIngestFromSources({ sourceIds: result.changedSources });
+    result.wikiPagesCreated += directResult.created;
+    result.wikiPagesUpdated += directResult.updated;
+    if (directResult.created > 0 || directResult.updated > 0) {
+      logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Direct ingest: ${directResult.created} pages created, ${directResult.updated} updated` });
+    }
+  } catch (err) {
+    logError("data-pipeline", "Direct ingest failed", err);
+  }
+
   logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Pipeline complete: ${result.ingestedSources.length} ingested, ${result.wikiPagesCreated} pages created, ${result.wikiPagesUpdated} updated` });
 
   return result;

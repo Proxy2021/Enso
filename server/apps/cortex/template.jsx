@@ -16,6 +16,7 @@ export default function GeneratedUI({ data, onAction }) {
   var isDiscover = tool === "enso_cortex_discover";
   var isIngest = tool === "enso_cortex_ingest";
   var isDigest = tool === "enso_cortex_digest";
+  var isBrowseSources = tool === "enso_cortex_browse_sources";
   var isDailyDiscovery = tool === "enso_cortex_daily_discovery";
 
   // activeView is the source of truth when user clicks a tab
@@ -84,11 +85,12 @@ export default function GeneratedUI({ data, onAction }) {
           { id: "dashboard", label: "Dashboard", icon: "LayoutDashboard", action: "explore" },
           { id: "graph", label: "Graph", icon: "Network", action: "graph" },
           { id: "search", label: "Search", icon: "Search", action: null },
+          { id: "sources", label: "\u{1F4DA} Sources", icon: null, action: "browse_sources" },
           { id: "discover", label: "Discover", icon: "Compass", action: null },
           { id: "digest", label: "Digest", icon: "Sparkles", action: "digest" },
         ].map(function(tab) {
           var Icon = LucideReact[tab.icon];
-          var isActive = currentView === tab.id || (tab.id === "dashboard" && isExplore) || (tab.id === "reader" && isRead);
+          var isActive = currentView === tab.id || (tab.id === "dashboard" && isExplore) || (tab.id === "reader" && isRead) || (tab.id === "sources" && isBrowseSources);
           return (
             <Button key={tab.id} variant={isActive ? "default" : "ghost"} onClick={function() {
               setActiveView(tab.id);
@@ -389,6 +391,135 @@ export default function GeneratedUI({ data, onAction }) {
           )}
         </div>
       )}
+
+      {/* ═══════════ SOURCES VIEW ═══════════ */}
+      {(currentView === "sources") && (function() {
+        var sources = data.sources || [];
+        var selectedId = data.selectedSource || (sources[0] && sources[0].id) || "";
+        var selected = sources.find(function(s) { return s.id === selectedId; });
+        var searchQ = data.searchQuery || "";
+
+        return React.createElement("div", { className: "space-y-4" },
+          // Source selector pills
+          React.createElement("div", { className: "flex gap-2 flex-wrap" },
+            sources.map(function(src) {
+              return React.createElement(Button, {
+                key: src.id,
+                variant: src.id === selectedId ? "default" : "outline",
+                size: "sm",
+                onClick: function() { onAction("browse_sources", { source: src.id }); },
+              }, src.icon + " " + src.label + " (" + src.totalItems + ")");
+            })
+          ),
+
+          // Search bar (for sources that support it)
+          selected && selected.id === "kindleLibrary" && React.createElement("div", { className: "flex gap-2" },
+            React.createElement(Input, {
+              placeholder: "Search by title or author...",
+              value: searchQ,
+              onChange: function() {},
+              onKeyDown: function(e) {
+                if (e.key === "Enter") onAction("browse_sources", { source: selectedId, query: e.target.value });
+              },
+              className: "flex-1",
+            })
+          ),
+
+          // Category filter pills
+          selected && selected.categories && selected.categories.length > 0 && React.createElement("div", { className: "flex gap-1.5 flex-wrap" },
+            React.createElement(Badge, {
+              variant: !data.selectedCategory ? "default" : "secondary",
+              style: { cursor: "pointer" },
+              onClick: function() { onAction("browse_sources", { source: selectedId }); },
+            }, "All"),
+            selected.categories.slice(0, 15).map(function(cat) {
+              return React.createElement(Badge, {
+                key: cat.name,
+                variant: data.selectedCategory === cat.name ? "default" : "secondary",
+                style: { cursor: "pointer" },
+                onClick: function() { onAction("browse_sources", { source: selectedId, category: cat.name }); },
+              }, cat.name + " (" + cat.count + ")");
+            })
+          ),
+
+          // Items grid
+          selected && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" } },
+            (selected.items || []).slice(0, 100).map(function(item, idx) {
+              return React.createElement(UICard, { key: idx, style: { padding: "12px" } },
+                React.createElement("div", { style: { display: "flex", gap: "12px" } },
+                  // Cover image (if available)
+                  item.imageUrl && React.createElement("img", {
+                    src: item.imageUrl,
+                    alt: item.title,
+                    style: { width: "60px", height: "90px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 },
+                  }),
+                  React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                    // Title
+                    React.createElement("div", { style: { fontWeight: 600, fontSize: "14px", lineHeight: 1.3 } }, item.title),
+                    // Subtitle (author, folder, etc.)
+                    item.subtitle && React.createElement("div", { style: { fontSize: "12px", color: "#94a3b8", marginTop: "2px" } }, item.subtitle),
+                    // Rating
+                    item.rating && React.createElement("div", { style: { fontSize: "11px", color: "#f59e0b", marginTop: "4px" } },
+                      "\u2B50 " + item.rating + (item.reviewCount ? " (" + item.reviewCount.toLocaleString() + " reviews)" : "") +
+                      (item.pageCount ? " \u00B7 " + item.pageCount + "pp" : "")
+                    ),
+                    // Categories
+                    item.categories && item.categories.length > 0 && React.createElement("div", { style: { display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" } },
+                      item.categories.slice(0, 3).map(function(c) {
+                        return React.createElement(Badge, { key: c, variant: "secondary", style: { fontSize: "9px" } }, c);
+                      })
+                    ),
+                    // Description (truncated)
+                    item.description && React.createElement("div", { style: { fontSize: "11px", color: "#64748b", marginTop: "6px", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } }, item.description)
+                  )
+                ),
+                // Action buttons
+                React.createElement("div", { style: { display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap" } },
+                  // View in Cortex (if wiki page exists)
+                  item.hasWikiPage && React.createElement(Button, {
+                    variant: "outline",
+                    size: "sm",
+                    onClick: function() { onAction("read", { path: item.wikiPath }); },
+                    style: { fontSize: "11px" },
+                  }, "\u{1F4C4} Wiki Page"),
+                  // Deep Research
+                  React.createElement(Button, {
+                    variant: "outline",
+                    size: "sm",
+                    onClick: function() { onAction("discover", { topic: item.title }); },
+                    style: { fontSize: "11px" },
+                  }, "\u{1F50D} Research"),
+                  // Open external link
+                  item.externalUrl && React.createElement(Button, {
+                    variant: "outline",
+                    size: "sm",
+                    onClick: function() { window.open(item.externalUrl, "_blank"); },
+                    style: { fontSize: "11px" },
+                  }, "\u{1F517} Open"),
+                  // Add to Cortex (if no wiki page yet)
+                  !item.hasWikiPage && React.createElement(Button, {
+                    variant: "outline",
+                    size: "sm",
+                    onClick: function() { onAction("ingest", { topic: item.title, text: (item.description || item.title) + " by " + (item.subtitle || "") }); },
+                    style: { fontSize: "11px" },
+                  }, "\u2795 Add to Cortex")
+                )
+              );
+            })
+          ),
+
+          // Empty state
+          selected && (!selected.items || selected.items.length === 0) && React.createElement(EmptyState, {
+            title: "No items",
+            description: "This data source has no cached data. Go to Settings > Data Sources to scan.",
+          }),
+
+          // Item count
+          selected && selected.filteredCount > 0 && React.createElement("div", { style: { textAlign: "center", fontSize: "12px", color: "#64748b" } },
+            "Showing " + Math.min(selected.filteredCount, 100) + " of " + selected.totalItems + " items"
+          )
+        );
+      })()}
 
       {/* ═══════════ DISCOVER VIEW ═══════════ */}
       {(currentView === "discover") && (

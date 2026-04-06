@@ -175,6 +175,29 @@
           "emailSent": false
         },
         "requiredDataKeys": ["tool"]
+      },
+      {
+        "suffix": "browse_sources",
+        "label": "Browse Data Sources",
+        "description": "Browse all imported data sources — Kindle books, bookmarks, projects, email, browser history. Each item links to its wiki page for full actions.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "Data source ID to browse (kindleLibrary, bookmarks, files, browserHistory, email)"
+            },
+            "category": {
+              "type": "string",
+              "description": "Filter by category within the selected source"
+            },
+            "query": {
+              "type": "string",
+              "description": "Search query to filter items by title"
+            }
+          },
+          "additionalProperties": false
+        }
       }
     ]
   }
