@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "spec": {
+    "toolFamily": "kindle",
+    "toolPrefix": "enso_kindle",
+    "description": "Kindle Library: browse, search, and manage your Amazon Kindle book collection. Scan your library, search by title/author/category, view enriched metadata, and research topics from your reading.",
+    "signatureId": "kindle_library",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Kindle Library",
+        "description": "Browse your Kindle book collection with covers, ratings, categories, and descriptions. Supports filtering by category and search.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "description": "Filter by book category (e.g., 'Evolution', 'Python Programming')"
+            },
+            "query": {
+              "type": "string",
+              "description": "Search by title or author"
+            },
+            "sortBy": {
+              "type": "string",
+              "enum": ["title", "rating", "pageCount", "author"],
+              "description": "Sort order (default: title)"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sampleData": {
+          "tool": "enso_kindle_browse",
+          "totalBooks": 471,
+          "filteredCount": 471,
+          "books": [],
+          "categories": []
+        }
+      },
+      {
+        "suffix": "search",
+        "label": "Search Kindle Books",
+        "description": "Search your Kindle library by title, author, or keyword. Returns matching books with full metadata.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query (matches title, author, description, categories)"
+            }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan",
+        "label": "Scan Kindle Library",
+        "description": "Scan your Amazon Kindle library via read.amazon.com. Requires Amazon login session. Creates/updates the local book cache.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "enrich",
+        "label": "Enrich Book Metadata",
+        "description": "Fetch rich metadata (descriptions, ratings, categories, page counts) from Amazon product pages for books that haven't been enriched yet.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "createdAt": 1775460000000
+}

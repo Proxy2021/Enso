@@ -277,7 +277,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "kindleLibrary",
     cacheFile: "kindle-library.json",
-    scannerToolName: "enso_context_scan_kindle_library",
+    scannerToolName: "enso_kindle_scan",  // Now points to the Kindle app's scan tool
     scannerParams: {},
     ingestPriority: 50,
     formatForProfile: (cached: A) => {
