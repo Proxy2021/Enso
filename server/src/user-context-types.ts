@@ -82,7 +82,9 @@ export interface KindleBook {
   author: string;
   asin?: string;
   coverUrl?: string;
-  acquiredDate?: string;
+  readerUrl?: string;
+  percentageRead?: number;
+  originType?: string;      // PURCHASE, SAMPLE, PRIME_BORROW, etc.
 }
 
 // ── Aggregated Profile ───────────────────────────────────────────────────────

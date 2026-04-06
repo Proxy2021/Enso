@@ -644,7 +644,7 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
         } catch { return { items: [], token: null }; }
       });
 
-      type KindleItem = { asin: string; title: string; authors?: string[]; productUrl?: string; percentageRead?: number; resourceType?: string };
+      type KindleItem = { asin: string; title: string; authors?: string[]; productUrl?: string; webReaderUrl?: string; percentageRead?: number; resourceType?: string; originType?: string };
       const allItems: KindleItem[] = [...firstPage.items];
       let nextToken = firstPage.token;
 
@@ -668,9 +668,12 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
         .filter((item: KindleItem) => item.title && (!item.resourceType || item.resourceType === "EBOOK"))
         .map((item: KindleItem) => ({
           title: item.title,
-          author: Array.isArray(item.authors) ? item.authors.join(", ") : String(item.authors || ""),
+          author: (Array.isArray(item.authors) ? item.authors.join(", ") : String(item.authors || "")).replace(/:$/g, "").replace(/,\s*$/, "").trim(),
           asin: item.asin || undefined,
           coverUrl: (item.productUrl as string) || undefined,
+          readerUrl: (item.webReaderUrl as string) || undefined,
+          percentageRead: typeof item.percentageRead === "number" ? item.percentageRead : undefined,
+          originType: (item.originType as string) || undefined,
         }));
 
       // Log what page we ended up on for debugging
