@@ -2258,6 +2258,8 @@ export const useChatStore = create<CardStore>((set, get) => ({
           _ts: Date.now(),
         } as CardStore["_proactiveUpdate"],
       });
+      // Pure proactive/digest updates — don't create cards
+      if (!msg.text && !msg.data && !msg.generatedUI) return;
     }
 
     if (msg.conversationsList) {
