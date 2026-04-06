@@ -618,15 +618,16 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
       // Give page extra time to render JS
       await new Promise(r => setTimeout(r, 3000));
 
-      // Check if we're on a login page
+      // Check if we're on a login/landing page (not the actual library)
       const url = page.url();
-      if (url.includes("signin") || url.includes("ap/signin") || url.includes("auth") || url.includes("ap/mfa")) {
+      if (url.includes("signin") || url.includes("ap/signin") || url.includes("auth") || url.includes("ap/mfa") || url.includes("/landing") || !url.includes("kindle-library")) {
         throw new Error(
           "Amazon login required. Please log in first:\n" +
           "1. In Enso, type: /browser\n" +
           "2. Navigate to https://read.amazon.com\n" +
           "3. Log in to your Amazon account\n" +
-          "4. Then come back to Settings > Data Sources and scan again."
+          "4. Then come back to Settings > Data Sources and scan again.\n\n" +
+          "(Landed on: " + url + ")"
         );
       }
 
