@@ -10,6 +10,7 @@ function GeneratedUI({ data, onAction }) {
   // Hooks MUST be at top level — never inside conditionals
   var [searchInput, setSearchInput] = React.useState(d.query || "");
   var [sortBy, setSortBy] = React.useState(d.sortBy || "title");
+  var [showTranscript, setShowTranscript] = React.useState(false);
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
   var navStack = d.navStack || [];
@@ -44,7 +45,6 @@ function GeneratedUI({ data, onAction }) {
     var podcastDuration = d.podcastDuration;
     var podcastDetail = d.podcastStatusDetail;
     var podcastPercent = d.podcastPercent || 0;
-    var [showTranscript, setShowTranscript] = React.useState(false);
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
