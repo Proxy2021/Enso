@@ -730,6 +730,31 @@ export async function startEnsoServer(opts: {
     res.json(getRecentLog(count, typeFilter));
   });
 
+  // ── Entity Index API ──
+  app.get("/api/entities", async (req, res) => {
+    try {
+      const { getEntityIndex, getEntitiesBySource, getEntitiesByType, lookupEntity } = await import("./entity-model.js");
+      const source = req.query.source as string | undefined;
+      const type = req.query.type as string | undefined;
+      const id = req.query.id as string | undefined;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 500);
+
+      if (id) {
+        const entity = lookupEntity(id);
+        return res.json(entity ?? { error: "Entity not found" });
+      }
+      if (source) return res.json(getEntitiesBySource(source as never, limit));
+      if (type) return res.json(getEntitiesByType(type as never, limit));
+      // Default: return index stats
+      const index = getEntityIndex();
+      const stats: Record<string, number> = {};
+      for (const e of index.values()) stats[e.source] = (stats[e.source] || 0) + 1;
+      return res.json({ totalEntities: index.size, bySource: stats });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── Cortex Import API (direct trigger) ──
   app.post("/api/cortex-import", async (_req, res) => {
     try {
@@ -1898,6 +1923,11 @@ export async function startEnsoServer(opts: {
 
       // Prune stale card history files on startup
       try { pruneStaleJournals(); } catch { /* best-effort */ }
+
+      // Build entity index from data source caches + Cortex (background, non-blocking)
+      import("./entity-model.js").then(({ buildEntityIndex }) =>
+        buildEntityIndex().catch(() => {})
+      ).catch(() => {});
 
       // Start scheduled task scheduler
       import("./scheduled-tasks.js").then(async ({ initScheduler }) => {
