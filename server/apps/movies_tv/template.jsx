@@ -1,10 +1,259 @@
 function GeneratedUI({ data, onAction }) {
-  var tool = data.tool || "";
+  var d = data || {};
+  var tool = d.tool || "";
   var isBrowse = tool === "enso_movies_tv_browse";
   var isSearch = tool === "enso_movies_tv_search";
   var isScan = tool === "enso_movies_tv_scan";
   var isEnrich = tool === "enso_movies_tv_enrich";
   var isUpdate = tool === "enso_movies_tv_update";
+  var isEntityDetail = tool === "entity_detail" || !!d.focusEntity;
+
+  // Hooks MUST be at top level — never inside conditionals
+  var [searchInput, setSearchInput] = React.useState("");
+  var [sortBy, setSortBy] = React.useState("title");
+  var [activeCategory, setActiveCategory] = React.useState("all");
+  var [showTranscript, setShowTranscript] = React.useState(false);
+
+  // ── Breadcrumb navigation bar ──
+  var navStack = d.navStack || [];
+  var breadcrumb = navStack.length > 0 ? (
+    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", fontSize: "12px" }}>
+      <Button variant="outline" size="sm" style={{ fontSize: "11px", padding: "2px 8px" }}
+        onClick={function() { onAction("nav_back", {}); }}
+      >← Back</Button>
+      {navStack.map(function(entry, i) {
+        return (
+          <span key={i} style={{ color: "#64748b" }}>
+            {entry.title}
+            <span style={{ margin: "0 4px", color: "#475569" }}>/</span>
+          </span>
+        );
+      })}
+      {d.entity && <span style={{ color: "#e2e8f0", fontWeight: 500 }}>{d.entity.title}</span>}
+    </div>
+  ) : null;
+
+  // ── Entity Detail View ──
+  if (isEntityDetail && d.entity) {
+    var entity = d.entity;
+    var fields = d.detailFields || [];
+    var cortexContent = d.cortexContent;
+    var related = d.relatedEntities || [];
+    var processed = d.processedBook;
+    var research = processed ? processed.research : null;
+    var podcastStatus = d.podcastStatus;
+    var podcastAudioUrl = d.podcastAudioUrl;
+    var podcastScript = d.podcastScript;
+    var podcastDuration = d.podcastDuration;
+    var podcastDetail = d.podcastStatusDetail;
+    var podcastPercent = d.podcastPercent || 0;
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {breadcrumb}
+
+        {/* Entity header */}
+        <UICard style={{ padding: "16px" }}>
+          <div style={{ display: "flex", gap: "16px" }}>
+            {entity.imageUrl && (
+              <img src={entity.imageUrl} alt={entity.title}
+                style={{ width: "90px", height: "135px", objectFit: "cover", borderRadius: "6px", flexShrink: 0 }} />
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "18px", fontWeight: 700, lineHeight: 1.3 }}>{entity.title}</div>
+              <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
+                <Badge variant="default">{entity.type}</Badge>
+                <Badge variant="secondary">{entity.source}</Badge>
+                {entity.cortexPath && <Badge variant="secondary">In Cortex</Badge>}
+                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>Podcast Ready</Badge>}
+              </div>
+              {entity.summary && (
+                <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.5 }}>
+                  {entity.summary.length > 300 ? entity.summary.slice(0, 300) + "..." : entity.summary}
+                </div>
+              )}
+            </div>
+          </div>
+        </UICard>
+
+        {/* Podcast Player */}
+        {podcastAudioUrl && (
+          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <Film size={16} style={{ color: "#c4b5fd" }} />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#c4b5fd" }}>AI Film Podcast</span>
+              {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
+            </div>
+            <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}>
+              <source src={podcastAudioUrl} type="audio/wav" />
+            </audio>
+            {podcastScript && (
+              <div style={{ marginTop: "8px" }}>
+                <button onClick={function() { setShowTranscript(!showTranscript); }}
+                  style={{ background: "none", border: "none", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: 0 }}>
+                  {showTranscript ? "Hide transcript" : "Show transcript"}
+                </button>
+                {showTranscript && (
+                  <div style={{ marginTop: "6px", maxHeight: "300px", overflow: "auto", fontSize: "11px", lineHeight: 1.6 }}>
+                    {podcastScript.split("\n").map(function(line, i) {
+                      var hostA = line.match(/^Host A:\s*(.*)/);
+                      var hostB = line.match(/^Host B:\s*(.*)/);
+                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>Host A:</span> {hostA[1]}</div>;
+                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>Host B:</span> {hostB[1]}</div>;
+                      return line.trim() ? <div key={i} style={{ color: "#64748b" }}>{line}</div> : null;
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </UICard>
+        )}
+
+        {/* Podcast Generation Progress */}
+        {podcastStatus && podcastStatus !== "ready" && podcastStatus !== "error" && !podcastAudioUrl && (
+          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "14px", height: "14px", border: "2px solid #7c3aed", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <span style={{ fontSize: "12px", color: "#c4b5fd" }}>{podcastDetail || "Generating podcast..."}</span>
+            </div>
+            {podcastPercent > 0 && (
+              <div style={{ marginTop: "8px", height: "4px", background: "#1e1b4b", borderRadius: "2px", overflow: "hidden" }}>
+                <div style={{ height: "100%", background: "#7c3aed", width: podcastPercent + "%", transition: "width 0.5s" }} />
+              </div>
+            )}
+          </UICard>
+        )}
+
+        {/* Podcast Error */}
+        {podcastStatus === "error" && (
+          <UICard style={{ padding: "12px", borderColor: "#ef444444" }}>
+            <div style={{ fontSize: "12px", color: "#ef4444" }}>Podcast generation failed: {d.podcastError || "Unknown error"}</div>
+            <Button variant="outline" size="sm" style={{ marginTop: "6px", fontSize: "10px" }}
+              onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+            >Retry</Button>
+          </UICard>
+        )}
+
+        {/* Deep Research Content */}
+        {research && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {research.coreThesis && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "6px", color: "#94a3b8" }}>Core Thesis</div>
+                <div style={{ fontSize: "13px", color: "#e2e8f0", lineHeight: 1.6 }}>{research.coreThesis}</div>
+              </UICard>
+            )}
+            {research.keyInsights && research.keyInsights.length > 0 && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Key Insights</div>
+                {research.keyInsights.map(function(ins, i) {
+                  return (
+                    <div key={i} style={{ marginBottom: "8px", paddingLeft: "12px", borderLeft: "2px solid #475569" }}>
+                      <div style={{ fontSize: "12px", color: "#e2e8f0", lineHeight: 1.5 }}>{ins.insight}</div>
+                      {ins.example && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px", fontStyle: "italic" }}>{ins.example}</div>}
+                    </div>
+                  );
+                })}
+              </UICard>
+            )}
+            {research.chapterSummaries && research.chapterSummaries.length > 0 && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Section Summaries</div>
+                {research.chapterSummaries.map(function(ch, i) {
+                  return (
+                    <div key={i} style={{ marginBottom: "8px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#93c5fd" }}>{ch.chapter}</div>
+                      <div style={{ fontSize: "11px", color: "#cbd5e1", lineHeight: 1.5, marginTop: "2px" }}>{ch.summary}</div>
+                    </div>
+                  );
+                })}
+              </UICard>
+            )}
+            {research.criticalPerspectives && research.criticalPerspectives.length > 0 && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Critical Perspectives</div>
+                {research.criticalPerspectives.map(function(cp, i) {
+                  return <div key={i} style={{ fontSize: "12px", color: "#fbbf24", marginBottom: "4px", lineHeight: 1.5 }}>{cp}</div>;
+                })}
+              </UICard>
+            )}
+          </div>
+        )}
+
+        {/* Detail fields */}
+        {fields.length > 0 && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Details</div>
+            <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "4px 12px", fontSize: "12px" }}>
+              {fields.map(function(f) {
+                var val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
+                return [
+                  <div key={f.key + "-label"} style={{ color: "#64748b", fontWeight: 500 }}>{f.label}</div>,
+                  <div key={f.key + "-value"} style={{ color: "#e2e8f0" }}>{val}</div>
+                ];
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* Cortex wiki content */}
+        {cortexContent && !research && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Knowledge (Cortex)</div>
+            <div style={{ fontSize: "12px", color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: "300px", overflow: "auto" }}>
+              {cortexContent.replace(/^#.*\n/gm, "").trim().slice(0, 2000)}
+            </div>
+          </UICard>
+        )}
+
+        {/* Related entities */}
+        {related.length > 0 && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Related</div>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {related.map(function(r) {
+                return (
+                  <Button key={r.entityId} variant="outline" size="sm" style={{ fontSize: "10px" }}
+                    onClick={function() { onAction("view_entity", { entityId: r.entityId }); }}
+                  >{r.title} ({r.source})</Button>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {!podcastAudioUrl && !podcastStatus && (
+            <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+              onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+            >Deep Podcast</Button>
+          )}
+          <Button variant="outline" size="sm"
+            onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\" " + (entity.year || "") + " movie review" }); }}
+          ><Search size={12} style={{ marginRight: "4px" }} />Research</Button>
+          {entity.externalUrl && (
+            <Button variant="outline" size="sm"
+              onClick={function() { window.open(entity.externalUrl, "_blank"); }}
+            ><ExternalLink size={12} style={{ marginRight: "4px" }} />Open External</Button>
+          )}
+          {entity.cortexPath && (
+            <Button variant="outline" size="sm"
+              onClick={function() { onAction("send_message", { message: "/wiki read " + entity.cortexPath }); }}
+            >View in Cortex</Button>
+          )}
+          {podcastAudioUrl && (
+            <Button variant="outline" size="sm"
+              onClick={function() {
+                var email = prompt("Send film report + podcast to:");
+                if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
+              }}
+            >Email Summary + Podcast</Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ── Scan / Enrich / Update result ──
   if (isScan || isEnrich || isUpdate) {
@@ -16,24 +265,24 @@ function GeneratedUI({ data, onAction }) {
         <div style={{ padding: "20px", textAlign: "center" }}>
           <IconComp size={28} style={{ margin: "0 auto 8px", color: "#a78bfa" }} />
           <div style={{ fontWeight: 600, marginBottom: "6px" }}>{heading}</div>
-          {data.error || data.message ? (
-            <div style={{ fontSize: "13px", color: data.error ? "#ef4444" : "#94a3b8" }}>
-              {data.error || data.message}
+          {d.error || d.message ? (
+            <div style={{ fontSize: "13px", color: d.error ? "#ef4444" : "#94a3b8" }}>
+              {d.error || d.message}
             </div>
           ) : null}
-          {isScan && data.data && (
+          {isScan && d.data && (
             <div style={{ fontSize: "13px", color: "#94a3b8" }}>
-              {"Found " + (data.data.totalItems || data.data.count || "?") + " video files"}
+              {"Found " + (d.data.totalItems || d.data.count || "?") + " video files"}
             </div>
           )}
-          {isEnrich && !data.message && (
+          {isEnrich && !d.message && (
             <div style={{ fontSize: "13px", color: "#94a3b8" }}>
-              {data.enriched + " enriched, " + data.errors + " errors" + (data.unenrichedRemaining > 0 ? ", " + data.unenrichedRemaining + " remaining" : "")}
+              {d.enriched + " enriched, " + d.errors + " errors" + (d.unenrichedRemaining > 0 ? ", " + d.unenrichedRemaining + " remaining" : "")}
             </div>
           )}
-          {isUpdate && data.newItems && data.newItems.length > 0 && (
+          {isUpdate && d.newItems && d.newItems.length > 0 && (
             <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "6px" }}>
-              {data.newItems.map(function(n) { return n.title; }).join(", ")}
+              {d.newItems.map(function(n) { return n.title; }).join(", ")}
             </div>
           )}
           <div style={{ marginTop: "14px" }}>
@@ -46,15 +295,16 @@ function GeneratedUI({ data, onAction }) {
 
   // ── Search results ──
   if (isSearch) {
-    var results = data.results || [];
+    var results = d.results || [];
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {breadcrumb}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>
             <Clapperboard size={14} style={{ marginRight: "4px" }} /> Library
           </Button>
           <span style={{ fontSize: "13px", color: "#94a3b8" }}>
-            {data.totalMatches} result{data.totalMatches !== 1 ? "s" : ""} for "{data.query}"
+            {d.totalMatches} result{d.totalMatches !== 1 ? "s" : ""} for "{d.query}"
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "10px" }}>
@@ -62,18 +312,15 @@ function GeneratedUI({ data, onAction }) {
             return <MediaCard key={i} item={item} onAction={onAction} />;
           })}
         </div>
-        {results.length === 0 && <EmptyState title="No results" description={"Nothing matching \"" + data.query + "\""} />}
+        {results.length === 0 && <EmptyState title="No results" description={"Nothing matching \"" + d.query + "\""} />}
       </div>
     );
   }
 
   // ── Browse (primary view) ──
   if (isBrowse) {
-    var [searchInput, setSearchInput] = React.useState("");
-    var [sortBy, setSortBy] = React.useState("title");
-    var [activeCategory, setActiveCategory] = React.useState("all");
-    var items = data.items || [];
-    var categories = data.categories || {};
+    var items = d.items || [];
+    var categories = d.categories || {};
 
     var CATEGORY_LABELS = {
       all: "All",
@@ -111,9 +358,9 @@ function GeneratedUI({ data, onAction }) {
             <Clapperboard size={22} style={{ color: "#a78bfa" }} />
             <span style={{ fontWeight: 600, fontSize: "16px" }}>Movies & TV</span>
             <span style={{ fontSize: "12px", color: "#64748b" }}>
-              {data.filteredCount === data.totalItems
-                ? data.totalItems + " titles"
-                : data.filteredCount + " of " + data.totalItems}
+              {d.filteredCount === d.totalItems
+                ? d.totalItems + " titles"
+                : d.filteredCount + " of " + d.totalItems}
             </span>
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
@@ -130,12 +377,12 @@ function GeneratedUI({ data, onAction }) {
         </div>
 
         {/* Stats row */}
-        {data.totalItems > 0 && (
+        {d.totalItems > 0 && (
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <Stat label="Total" value={data.totalItems} />
+            <Stat label="Total" value={d.totalItems} />
             <Stat label="Enriched" value={totalEnriched} />
             {avgRating > 0 && <Stat label="Avg Rating" value={avgRating.toFixed(1)} />}
-            {data.genres && <Stat label="Genres" value={data.genres.length} />}
+            {d.genres && <Stat label="Genres" value={d.genres.length} />}
           </div>
         )}
 
@@ -163,7 +410,7 @@ function GeneratedUI({ data, onAction }) {
         {/* Category tabs */}
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
           {Object.keys(CATEGORY_LABELS).map(function(cat) {
-            var count = cat === "all" ? data.totalItems : (categories[cat] || 0);
+            var count = cat === "all" ? d.totalItems : (categories[cat] || 0);
             if (cat !== "all" && !count) return null;
             var isActive = activeCategory === cat;
             var CatIcon = CATEGORY_ICONS[cat] || Film;
@@ -186,9 +433,9 @@ function GeneratedUI({ data, onAction }) {
         </div>
 
         {/* Genre pills */}
-        {data.genres && data.genres.length > 0 && (
+        {d.genres && d.genres.length > 0 && (
           <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-            {data.genres.slice(0, 20).map(function(genre) {
+            {d.genres.slice(0, 20).map(function(genre) {
               return (
                 <Badge
                   key={genre}
@@ -214,7 +461,7 @@ function GeneratedUI({ data, onAction }) {
             description={
               activeCategory !== "all"
                 ? "No titles in this category."
-                : data.totalItems === 0
+                : d.totalItems === 0
                   ? "Your collection is empty. Click Scan to import your video files."
                   : "No titles matching your filter."
             }
@@ -222,15 +469,15 @@ function GeneratedUI({ data, onAction }) {
         )}
 
         {/* Footer */}
-        {data.filteredCount > 200 && (
+        {d.filteredCount > 200 && (
           <div style={{ textAlign: "center", fontSize: "12px", color: "#64748b" }}>
-            Showing 200 of {data.filteredCount} titles. Use search to narrow down.
+            Showing 200 of {d.filteredCount} titles. Use search to narrow down.
           </div>
         )}
 
-        {data.scannedAt && (
+        {d.scannedAt && (
           <div style={{ textAlign: "center", fontSize: "11px", color: "#475569" }}>
-            Last scanned: {new Date(data.scannedAt).toLocaleDateString()}
+            Last scanned: {new Date(d.scannedAt).toLocaleDateString()}
           </div>
         )}
       </div>
@@ -261,7 +508,9 @@ function MediaCard({ item, onAction }) {
           <img
             src={item.posterPath}
             alt={item.title}
-            style={{ width: "90px", minHeight: "135px", objectFit: "cover", flexShrink: 0 }}
+            style={{ width: "90px", minHeight: "135px", objectFit: "cover", flexShrink: 0,
+              cursor: item.entityId ? "pointer" : "default" }}
+            onClick={function() { if (item.entityId) onAction("view_entity", { entityId: item.entityId }); }}
           />
         ) : (
           <div style={{
@@ -275,7 +524,10 @@ function MediaCard({ item, onAction }) {
         {/* Info */}
         <div style={{ flex: 1, padding: "10px", minWidth: 0 }}>
           {/* Title */}
-          <div style={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3 }}>{item.title}</div>
+          <div style={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3,
+            cursor: item.entityId ? "pointer" : "default", color: item.entityId ? "#c4b5fd" : "inherit" }}
+            onClick={function() { if (item.entityId) onAction("view_entity", { entityId: item.entityId }); }}
+          >{item.isProcessed && <span style={{ marginRight: "4px" }} title="Deep podcast available">🎙️</span>}{item.title}</div>
 
           {/* Year + Runtime + Category */}
           <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
@@ -351,6 +603,11 @@ function MediaCard({ item, onAction }) {
 
       {/* Actions */}
       <div style={{ display: "flex", gap: "5px", padding: "6px 10px 8px", flexWrap: "wrap", borderTop: "1px solid #27272a" }}>
+        {item.entityId && (
+          <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
+            onClick={function() { onAction("view_entity", { entityId: item.entityId }); }}
+          >View</Button>
+        )}
         {item.hasWikiPage && (
           <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
             onClick={function() {
