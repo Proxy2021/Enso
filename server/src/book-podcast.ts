@@ -196,7 +196,7 @@ export async function researchBook(params: {
     ? `\nExisting knowledge about this book:\n${cortexContent.slice(0, 2000)}`
     : "";
 
-  const synthesisPrompt = `You are a book analysis expert. Given web sources about the book "${title}" by ${author}, synthesize a comprehensive research result.
+  const synthesisPrompt = `You are a book analysis expert creating an exhaustive deep-dive into "${title}" by ${author}. Your goal is to capture the FULL essence of this book — every major idea, argument, and insight.
 ${userContext}${cortexContext}
 
 SOURCES:
@@ -204,21 +204,24 @@ ${sourcesText}
 
 Respond in JSON format:
 {
-  "chapterSummaries": [{ "chapter": "Chapter N: Title", "summary": "2-3 sentence summary" }],
-  "coreThesis": "The book's central argument in 2-3 sentences",
+  "chapterSummaries": [{ "chapter": "Chapter/Part/Section Title", "summary": "3-5 sentence detailed summary covering the key arguments and examples" }],
+  "coreThesis": "The book's central argument explained thoroughly in 3-5 sentences with nuance",
   "keyThemes": ["theme1", "theme2", ...],
-  "keyInsights": [{ "insight": "Key insight text", "example": "Supporting example or quote" }],
-  "criticalPerspectives": ["criticism or alternative viewpoint 1", ...],
-  "authorBackground": "Brief author bio and credibility",
+  "keyInsights": [{ "insight": "Detailed key insight (2-3 sentences)", "example": "Specific example, case study, quote, or data point that illustrates this insight" }],
+  "criticalPerspectives": ["detailed criticism or alternative viewpoint with reasoning"],
+  "authorBackground": "Author bio, credibility, what makes them uniquely positioned to write this book",
   "estimatedDepth": "light|moderate|rich"
 }
 
-Rules:
-- Extract as many chapter summaries as the sources support (aim for completeness)
-- Include 5-10 key insights with specific examples where possible
-- Include 2-4 critical perspectives or counterarguments
-- If sources are thin, set estimatedDepth to "light"; if rich with chapter details, "rich"
-- All content must be factual and sourced from the provided materials
+CRITICAL RULES:
+- You MUST provide at least 8-15 chapter/section summaries. If the sources don't have explicit chapter names, infer the book's structure from its themes and create section summaries (e.g., "Part 1: The Problem", "The Core Framework", "Case Studies", etc.)
+- Each chapter summary should be 3-5 detailed sentences, not brief one-liners
+- Include 8-15 key insights with SPECIFIC examples, quotes, data points, or case studies for each
+- Include 3-6 critical perspectives with substantive reasoning
+- The coreThesis should be a rich 3-5 sentence explanation, not a one-liner
+- Use your own knowledge of this book to supplement the sources — you likely know this book well
+- estimatedDepth: "light" ONLY if the book is truly obscure with <3 sources; most well-known books should be "moderate" or "rich"
+- Aim for maximum depth and completeness — this will be turned into a 15-30 minute podcast
 - Respond ONLY with the JSON object, no other text`;
 
   const synthesisResult = await llm({
@@ -271,13 +274,14 @@ export async function generatePodcastOutline(
   research: BookResearchResult,
 ): Promise<PodcastOutline> {
   // Determine target duration based on research depth
+  // Real conversational speech ≈ 150 words/min ≈ 900 chars/min for dialogue text
   const depthConfig = {
-    light: { minSections: 3, maxSections: 4, targetMinutes: 6 },
-    moderate: { minSections: 5, maxSections: 7, targetMinutes: 14 },
-    rich: { minSections: 8, maxSections: 12, targetMinutes: 25 },
+    light: { minSections: 5, maxSections: 7, targetMinutes: 12 },
+    moderate: { minSections: 7, maxSections: 10, targetMinutes: 20 },
+    rich: { minSections: 10, maxSections: 15, targetMinutes: 35 },
   };
   const config = depthConfig[research.estimatedDepth];
-  const charsPerMinute = 150; // ~150 dialogue chars per minute of audio
+  const charsPerMinute = 900; // ~150 words/min ≈ 900 chars/min for natural dialogue
 
   const outlinePrompt = `You are a podcast producer planning a book discussion episode.
 
@@ -317,14 +321,16 @@ Rules:
     const jsonStr = result?.replace(/```json\n?|\n?```/g, "").trim() ?? "{}";
     return JSON.parse(jsonStr) as PodcastOutline;
   } catch {
-    // Fallback outline
+    // Fallback outline with substantial section lengths
+    const perSection = Math.round(config.targetMinutes / 5 * charsPerMinute);
     return {
       estimatedMinutes: config.targetMinutes,
       sections: [
-        { id: "intro", title: "Introduction", purpose: "Why this book matters", targetCharCount: 600, keyPoints: [research.coreThesis] },
-        { id: "themes", title: "Key Themes", purpose: "Main themes and arguments", targetCharCount: 900, keyPoints: research.keyThemes.slice(0, 5) },
-        { id: "insights", title: "Key Insights", purpose: "Most important takeaways", targetCharCount: 900, keyPoints: research.keyInsights.slice(0, 5).map(i => i.insight) },
-        { id: "takeaways", title: "Final Takeaways", purpose: "Summary and listener relevance", targetCharCount: 600, keyPoints: ["Synthesis", "Recommendations"] },
+        { id: "intro", title: "Introduction & Context", purpose: "Why this book matters and author background", targetCharCount: perSection, keyPoints: [research.coreThesis, research.authorBackground || "Author credentials"] },
+        { id: "thesis", title: "The Core Thesis", purpose: "The book's central argument in depth", targetCharCount: perSection, keyPoints: [research.coreThesis, ...research.keyThemes.slice(0, 3)] },
+        { id: "chapters", title: "Key Chapters & Ideas", purpose: "Walk through the book's major sections", targetCharCount: Math.round(perSection * 1.5), keyPoints: research.chapterSummaries.slice(0, 5).map(c => c.chapter) },
+        { id: "insights", title: "Deep Insights & Examples", purpose: "Most important takeaways with real examples", targetCharCount: Math.round(perSection * 1.5), keyPoints: research.keyInsights.slice(0, 5).map(i => i.insight) },
+        { id: "takeaways", title: "Final Takeaways & Action Items", purpose: "What listeners should do differently", targetCharCount: perSection, keyPoints: ["Synthesis", "Practical applications", "Recommendations"] },
       ],
     };
   }
@@ -354,12 +360,16 @@ async function generateSectionScript(params: {
 
   const criticalPoints = research.criticalPerspectives.join("\n- ");
 
-  const prompt = `You are writing section ${sectionIndex + 1} of ${totalSections} for a podcast about "${title}" by ${author}.
+  // Ensure minimum per-section length for meaningful content
+  const minChars = 1200;
+  const targetChars = Math.max(section.targetCharCount, minChars);
+
+  const prompt = `You are writing section ${sectionIndex + 1} of ${totalSections} for a deep-dive podcast about "${title}" by ${author}. This is NOT a quick summary — it's a thorough, engaging exploration that captures the book's full richness.
 
 SECTION: "${section.title}"
 PURPOSE: ${section.purpose}
 KEY POINTS TO COVER: ${section.keyPoints.join(", ")}
-TARGET LENGTH: ~${section.targetCharCount} characters of dialogue
+TARGET LENGTH: ~${targetChars} characters of dialogue (write LONG, detailed exchanges)
 
 BOOK CONTEXT:
 Core Thesis: ${research.coreThesis}
@@ -370,15 +380,18 @@ ${previousEnding ? `\nPREVIOUS SECTION ENDED WITH: "${previousEnding}"` : ""}
 
 Rules:
 - Use "Host A:" and "Host B:" speaker tags (one per line)
-- Host A drives conversation; Host B adds depth and challenges
-- ${sectionIndex === 0 ? "Start with an engaging hook about the book" : "Transition naturally from the previous section"}
-- ${sectionIndex === totalSections - 1 ? "End with clear takeaways and a warm sign-off" : "End with a natural transition to the next topic"}
-- Reference specific examples, data points, and chapter content
-- Keep it conversational — reactions, follow-ups, genuine curiosity
-- Target ~${section.targetCharCount} characters
+- Host A drives conversation, asks probing questions, provides context
+- Host B provides deep insights, challenges assumptions, adds nuance
+- WRITE LONG — each host should speak 2-4 sentences per turn, not just one-liners
+- Include specific examples, case studies, data points, and quotes from the book
+- Explore the "why" behind each insight — don't just state facts
+- ${sectionIndex === 0 ? "Start with a compelling hook — why should someone care about this book? What problem does it solve?" : "Transition naturally from the previous section"}
+- ${sectionIndex === totalSections - 1 ? "End with powerful takeaways: what should listeners DO differently after learning this? Give a warm sign-off." : "End with a natural transition that makes the listener eager for the next topic"}
+- Keep it genuinely conversational — real reactions, "that reminds me of...", "wait, so you're saying...", follow-up questions
+- IMPORTANT: Write at LEAST ${targetChars} characters. This section should feel substantive, not rushed.
 - Output ONLY the dialogue script`;
 
-  const script = await llm({ prompt, tier: "utility", timeoutMs: 45_000, maxOutputTokens: 4096 });
+  const script = await llm({ prompt, tier: "pro", timeoutMs: 90_000, maxOutputTokens: 8192 });
   return script?.trim() ?? "";
 }
 
