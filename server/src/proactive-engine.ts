@@ -17,6 +17,36 @@ import { homedir } from "os";
 import { logAction } from "./action-log.js";
 import type { UserContextProfile, ContextConsent } from "./user-context-types.js";
 
+// Lazy-loaded modules (ESM-compatible, avoids require())
+let _readIndex: (() => Array<{ path: string; title: string; summary: string; tags: string[]; updated: string }>) | null = null;
+let _lintCortex: (() => { brokenLinks: Array<{ page: string; link: string }>; stalePages: string[]; stats: { totalPages: number } }) | null = null;
+let _readCache: ((f: string) => unknown) | null = null;
+let _getUningestedSources: (() => string[]) | null = null;
+let _getStaleIngestSources: (() => string[]) | null = null;
+
+async function ensureModules(): Promise<void> {
+  if (!_readIndex) {
+    try {
+      const cortex = await import("./cortex-tools.js");
+      _readIndex = cortex.readIndex;
+      _lintCortex = cortex.lintCortex;
+    } catch { /* cortex-tools not available */ }
+  }
+  if (!_readCache) {
+    try {
+      const reg = await import("./data-source-registry.js");
+      _readCache = reg.readCache;
+    } catch { /* data-source-registry not available */ }
+  }
+  if (!_getUningestedSources) {
+    try {
+      const pipe = await import("./data-source-pipeline.js");
+      _getUningestedSources = pipe.getUningestedSources;
+      _getStaleIngestSources = pipe.getStaleIngestSources;
+    } catch { /* pipeline not available */ }
+  }
+}
+
 // ── Paths ────────────────────────────────────────────────────────────────────
 
 const ENSO_HOME = join(homedir(), ".enso");
@@ -987,10 +1017,10 @@ async function resolveConsentReader(): Promise<() => ContextConsent> {
 function generateCortexSuggestions(profile: UserContextProfile): ProactiveSuggestion[] {
   const suggestions: ProactiveSuggestion[] = [];
   try {
-    const { readIndex, lintCortex } = require("./cortex-tools.js") as { readIndex: () => Array<{ path: string; title: string; summary: string; tags: string[]; updated: string }>; lintCortex: () => { brokenLinks: Array<{ page: string; link: string }>; stalePages: string[]; stats: { totalPages: number } } };
-    const index = readIndex();
+    if (!_readIndex || !_lintCortex) return suggestions;
+    const index = _readIndex();
     if (index.length === 0) return suggestions;
-    const lint = lintCortex();
+    const lint = _lintCortex();
 
     // Stale pages (30+ days old)
     for (const page of lint.stalePages.slice(0, 2)) {
@@ -1032,11 +1062,8 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
 
     // Data sources scanned but not yet ingested into Cortex
     try {
-      const { getUningestedSources, getStaleIngestSources } = require("./data-source-pipeline.js") as {
-        getUningestedSources: () => string[];
-        getStaleIngestSources: () => string[];
-      };
-      const uningestedIds = getUningestedSources();
+      if (!_getUningestedSources || !_getStaleIngestSources) throw new Error("not loaded");
+      const uningestedIds = _getUningestedSources();
       if (uningestedIds.length > 0) {
         suggestions.push({
           id: "cortex-unimported-data", pillar: "knowledge", priority: "high", score: 0.8,
@@ -1046,7 +1073,7 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
           requiredConsent: [], createdAt: Date.now(),
         });
       }
-      const staleIds = getStaleIngestSources();
+      const staleIds = _getStaleIngestSources!();
       if (staleIds.length > 0) {
         suggestions.push({
           id: "cortex-stale-import", pillar: "knowledge", priority: "medium", score: 0.65,
@@ -1070,8 +1097,8 @@ function generateCrossAppIntelligence(profile: UserContextProfile): ProactiveSug
   const suggestions: ProactiveSuggestion[] = [];
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { readCache } = require("./data-source-registry.js") as { readCache: (f: string) => unknown };
+    if (!_readCache) return suggestions;
+    const readCache = _readCache;
 
     // 1. Trending Convergence — when YouTube channels post about the same topic
     try {
@@ -1106,9 +1133,8 @@ function generateCrossAppIntelligence(profile: UserContextProfile): ProactiveSug
 
     // 2. Knowledge Gap — you have many items in a domain but no synthesis
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { readIndex } = require("./cortex-tools.js") as { readIndex: () => Array<{ path: string; title: string; tags: string[] }> };
-      const index = readIndex();
+      if (!_readIndex) throw new Error("not loaded");
+      const index = _readIndex();
 
       // Count entities by source type
       const sourceCounts: Record<string, number> = {};
@@ -1224,6 +1250,9 @@ export async function generateSuggestions(forceRefresh: boolean = false): Promis
   if (!forceRefresh && _cachedSuggestions && Date.now() - _cachedSuggestions.generatedAt < CACHE_TTL) {
     return _cachedSuggestions.items;
   }
+
+  // Ensure lazy-loaded modules are ready
+  await ensureModules();
 
   const profile = loadProfile();
   if (!profile) return [];

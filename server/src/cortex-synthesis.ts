@@ -287,23 +287,32 @@ IMPORTANT: Find SEMANTIC connections, not just keyword matches. "Machine Learnin
 
 Return ONLY valid JSON, no markdown fencing.`;
 
-    const raw = await llm(prompt, {
+    const raw = await llm({
+      prompt,
       tier: "fast",
-      maxTokens: opts?.maxTokens || 800,
-      timeout: 30000,
+      maxOutputTokens: opts?.maxTokens || 1500,
+      timeoutMs: 30000,
+      responseMimeType: "application/json",
     });
 
     if (!raw?.trim()) throw new Error("Empty LLM response");
 
-    // Parse LLM response
+    // Parse LLM response — extract JSON from possibly wrapped output
     let parsed: Record<string, unknown>;
     try {
       // Strip markdown code fences if present
-      const cleaned = raw.trim().replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+      let cleaned = raw.trim();
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+      // Find the first { and last } to extract JSON object
+      const firstBrace = cleaned.indexOf("{");
+      const lastBrace = cleaned.lastIndexOf("}");
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+      }
       parsed = JSON.parse(cleaned);
     } catch {
       // LLM didn't return valid JSON — use the raw text as narrative
-      parsed = { narrative: raw.trim(), connections: [], suggestedActions: [], themes: [], relatedItems: [] };
+      parsed = { narrative: raw.trim().slice(0, 500), connections: [], suggestedActions: [], themes: [], relatedItems: [] };
     }
 
     // Convert LLM's relatedItems to CrossReferenceHits
@@ -468,7 +477,7 @@ End with a **Meta-Pattern** section: 1-2 overarching patterns that connect multi
 
 Be deeply insightful. Reference specific titles. Reveal connections they wouldn't see themselves.`;
 
-    const thematicMap = await llm(prompt, { tier: "utility", maxTokens: 2000, timeout: 60000 });
+    const thematicMap = await llm({ prompt, tier: "utility", maxOutputTokens: 2000, timeoutMs: 60000 });
     if (!thematicMap?.trim()) return "";
 
     const content = `# Thematic Map\n\nAuto-generated synthesis of cross-source knowledge themes.\nLast updated: ${new Date().toISOString()}\n\n${thematicMap.trim()}`;
