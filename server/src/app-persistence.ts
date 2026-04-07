@@ -535,6 +535,10 @@ export function loadAllApps(basePath?: string): LoadedApp[] {
 // AsyncFunction constructor: supports `await` in executor bodies
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as typeof Function;
 
+// Provide CJS require() for executor bodies that use require("os"), require("fs"), etc.
+import { createRequire } from "node:module";
+const executorRequire = createRequire(import.meta.url);
+
 export function registerLoadedApp(app: LoadedApp): void {
   const { spec } = app;
   trackAppSpec(spec);
@@ -546,11 +550,13 @@ export function registerLoadedApp(app: LoadedApp): void {
     if (!body) continue;
 
     const toolName = `${spec.toolPrefix}${toolDef.suffix}`;
-    // Executor receives 3 args: callId, params, ctx — uses AsyncFunction to support await
-    const executeFn = new AsyncFunction("callId", "params", "ctx", body) as (
+    // Executor receives 4 args: callId, params, ctx, require — uses AsyncFunction to support await
+    // `require` is injected so executor bodies can use require("os"), require("fs"), etc.
+    const executeFn = new AsyncFunction("callId", "params", "ctx", "require", body) as (
       callId: string,
       params: Record<string, unknown>,
       ctx: ExecutorContext,
+      require: NodeRequire,
     ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
     registerAppTool({
@@ -564,7 +570,7 @@ export function registerLoadedApp(app: LoadedApp): void {
         const activeApiKey = getActiveAccount()?.geminiApiKey;
         const ctx = buildExecutorContext(spec.toolFamily, toolDef.suffix, activeApiKey);
         try {
-          const result = await executeFn(callId, toolParams, ctx);
+          const result = await executeFn(callId, toolParams, ctx, executorRequire);
           return result;
         } catch (err) {
           // Record error interaction for Living Apps contextual debugging

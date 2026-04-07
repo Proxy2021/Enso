@@ -1,9 +1,13 @@
 function GeneratedUI({ data, onAction }) {
-  var tool = data.tool || "";
+  var tool = (data || {}).tool || "";
   var isBrowse = tool === "enso_kindle_browse";
   var isSearch = tool === "enso_kindle_search";
   var isScan = tool === "enso_kindle_scan";
   var isEnrich = tool === "enso_kindle_enrich";
+
+  // Hooks MUST be at top level — never inside conditionals
+  var [searchInput, setSearchInput] = React.useState((data || {}).query || "");
+  var [sortBy, setSortBy] = React.useState((data || {}).sortBy || "title");
 
   // ── Scan / Enrich result ──
   if (isScan || isEnrich) {
@@ -49,8 +53,6 @@ function GeneratedUI({ data, onAction }) {
 
   // ── Browse (primary view) ──
   if (isBrowse) {
-    var [searchInput, setSearchInput] = React.useState(data.query || "");
-    var [sortBy, setSortBy] = React.useState(data.sortBy || "title");
     var books = data.books || [];
     var categories = data.categories || [];
 
@@ -80,12 +82,16 @@ function GeneratedUI({ data, onAction }) {
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy }); }}
             style={{ flex: 1 }}
           />
-          <Select value={sortBy} onValueChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v }); }}>
-            <option value="title">Title</option>
-            <option value="rating">Rating</option>
-            <option value="pageCount">Pages</option>
-            <option value="author">Author</option>
-          </Select>
+          <Select
+            value={sortBy}
+            onChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v }); }}
+            options={[
+              { value: "title", label: "Title" },
+              { value: "rating", label: "Rating" },
+              { value: "pageCount", label: "Pages" },
+              { value: "author", label: "Author" }
+            ]}
+          />
         </div>
 
         {/* Category pills */}
