@@ -44,17 +44,32 @@ if (p.query) {
   });
 }
 
-// Sort
-var sortBy = p.sortBy || "title";
-if (sortBy === "rating") {
+// Sort — default to publication date (newest first)
+var sortBy = p.sortBy || "publicationDate";
+if (sortBy === "publicationDate") {
+  filtered.sort(function(a, b) {
+    var da = a.publicationDate ? new Date(a.publicationDate).getTime() : 0;
+    var db = b.publicationDate ? new Date(b.publicationDate).getTime() : 0;
+    return db - da; // newest first
+  });
+} else if (sortBy === "rating") {
   filtered.sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); });
 } else if (sortBy === "pageCount") {
   filtered.sort(function(a, b) { return (b.pageCount || 0) - (a.pageCount || 0); });
 } else if (sortBy === "author") {
   filtered.sort(function(a, b) { return (a.author || "").localeCompare(b.author || ""); });
-} else {
+} else if (sortBy === "title") {
   filtered.sort(function(a, b) { return (a.title || "").localeCompare(b.title || ""); });
+} else if (sortBy === "reviewCount") {
+  filtered.sort(function(a, b) { return (b.reviewCount || 0) - (a.reviewCount || 0); });
 }
+
+// Pagination
+var pageSize = p.pageSize || 20;
+var page = p.page || 1;
+var totalPages = Math.ceil(filtered.length / pageSize);
+var startIdx = (page - 1) * pageSize;
+var pageBooks = filtered.slice(startIdx, startIdx + pageSize);
 
 // Check wiki pages
 var wikiDir = path.join(os.homedir(), ".enso", "wiki");
@@ -73,7 +88,6 @@ function slugify(title) {
 }
 
 // Check which books have been deep-processed (podcast generated)
-// Check both old (kindle/podcasts) and new (deep-content) storage paths
 var deepContentDir = path.join(os.homedir(), ".enso", "data", "deep-content");
 var oldPodcastDir = path.join(os.homedir(), ".enso", "data", "kindle", "podcasts");
 var processedSlugs = new Set();
@@ -114,11 +128,14 @@ return { content: [{ type: "text", text: JSON.stringify({
   processedBooks: processedBooks,
   totalProcessed: processedBooks.length,
   filteredCount: filtered.length,
+  page: page,
+  pageSize: pageSize,
+  totalPages: totalPages,
   category: p.category || null,
   query: p.query || null,
   sortBy: sortBy,
   categories: categories,
-  books: filtered.slice(0, 200).map(function(b) {
+  books: pageBooks.map(function(b) {
     var slug = slugify(b.title);
     return {
       entityId: "kindle:book:" + slug,

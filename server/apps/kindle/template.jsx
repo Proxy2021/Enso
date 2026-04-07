@@ -9,7 +9,7 @@ function GeneratedUI({ data, onAction }) {
 
   // Hooks MUST be at top level — never inside conditionals
   var [searchInput, setSearchInput] = React.useState(d.query || "");
-  var [sortBy, setSortBy] = React.useState(d.sortBy || "title");
+  var [sortBy, setSortBy] = React.useState(d.sortBy || "publicationDate");
   var [showTranscript, setShowTranscript] = React.useState(false);
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
@@ -351,23 +351,25 @@ function GeneratedUI({ data, onAction }) {
           </div>
         </div>
 
-        {/* Search bar */}
+        {/* Search bar + Sort */}
         <div style={{ display: "flex", gap: "8px" }}>
           <Input
             placeholder="Search by title, author, or topic..."
             value={searchInput}
             onChange={function(e) { setSearchInput(e.target.value); }}
-            onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy }); }}
+            onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy, page: 1 }); }}
             style={{ flex: 1 }}
           />
           <Select
             value={sortBy}
-            onChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v }); }}
+            onChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v, page: 1, category: d.category }); }}
             options={[
-              { value: "title", label: "Title" },
+              { value: "publicationDate", label: "Newest" },
               { value: "rating", label: "Rating" },
-              { value: "pageCount", label: "Pages" },
-              { value: "author", label: "Author" }
+              { value: "reviewCount", label: "Most Reviewed" },
+              { value: "title", label: "Title A-Z" },
+              { value: "author", label: "Author" },
+              { value: "pageCount", label: "Pages" }
             ]}
           />
         </div>
@@ -378,7 +380,7 @@ function GeneratedUI({ data, onAction }) {
             <Badge
               variant={!d.category ? "default" : "secondary"}
               style={{ cursor: "pointer" }}
-              onClick={function() { onAction("browse", { sortBy: sortBy }); }}
+              onClick={function() { onAction("browse", { sortBy: sortBy, page: 1 }); }}
             >All</Badge>
             {categories.slice(0, 15).map(function(cat) {
               return (
@@ -386,7 +388,7 @@ function GeneratedUI({ data, onAction }) {
                   key={cat.name}
                   variant={d.category === cat.name ? "default" : "secondary"}
                   style={{ cursor: "pointer" }}
-                  onClick={function() { onAction("browse", { category: cat.name, sortBy: sortBy }); }}
+                  onClick={function() { onAction("browse", { category: cat.name, sortBy: sortBy, page: 1 }); }}
                 >{cat.name} ({cat.count})</Badge>
               );
             })}
@@ -407,10 +409,39 @@ function GeneratedUI({ data, onAction }) {
           />
         )}
 
-        {/* Footer */}
-        {d.filteredCount > 200 && (
-          <div style={{ textAlign: "center", fontSize: "12px", color: "#64748b" }}>
-            Showing 200 of {d.filteredCount} books. Use search or categories to narrow down.
+        {/* Pagination Controls */}
+        {(d.totalPages || 1) > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "8px 0" }}>
+            <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+              onClick={function() { if (d.page > 1) onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: d.page - 1 }); }}
+            >{d.page > 1 ? "← Previous" : ""}</Button>
+
+            <div style={{ display: "flex", gap: "4px" }}>
+              {Array.from({ length: Math.min(d.totalPages || 1, 7) }, function(_, i) {
+                var pg;
+                var tp = d.totalPages || 1;
+                var cp = d.page || 1;
+                // Show pages around current page
+                if (tp <= 7) { pg = i + 1; }
+                else if (cp <= 4) { pg = i + 1; }
+                else if (cp >= tp - 3) { pg = tp - 6 + i; }
+                else { pg = cp - 3 + i; }
+                return (
+                  <Button key={pg} variant={pg === cp ? "default" : "outline"} size="sm"
+                    style={{ fontSize: "11px", minWidth: "32px", padding: "4px 8px" }}
+                    onClick={function() { onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: pg }); }}
+                  >{pg}</Button>
+                );
+              })}
+            </div>
+
+            <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+              onClick={function() { if (d.page < d.totalPages) onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: d.page + 1 }); }}
+            >{d.page < d.totalPages ? "Next →" : ""}</Button>
+
+            <span style={{ fontSize: "11px", color: "#64748b", marginLeft: "8px" }}>
+              Page {d.page || 1} of {d.totalPages || 1} · {d.filteredCount} books
+            </span>
           </div>
         )}
       </div>

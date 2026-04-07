@@ -24,8 +24,16 @@
             },
             "sortBy": {
               "type": "string",
-              "enum": ["title", "rating", "pageCount", "author"],
-              "description": "Sort order (default: title)"
+              "enum": ["publicationDate", "title", "rating", "pageCount", "author", "reviewCount"],
+              "description": "Sort order (default: publicationDate)"
+            },
+            "page": {
+              "type": "number",
+              "description": "Page number (1-based, default: 1)"
+            },
+            "pageSize": {
+              "type": "number",
+              "description": "Books per page (default: 20)"
             }
           },
           "additionalProperties": false
