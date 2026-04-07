@@ -515,7 +515,21 @@ function scanFiles(
 
   // Sort by most recently modified, take top 100
   recentFiles.sort((a, b) => b.modified - a.modified);
-  return { recentFiles: recentFiles.slice(0, 100), projects };
+
+  // Deduplicate projects: remove sub-projects that are inside a parent project
+  // (e.g., openclaw/extensions/slack is inside openclaw — keep only openclaw)
+  projects.sort((a, b) => a.path.length - b.path.length); // shortest paths first
+  const topLevelProjects: DetectedProject[] = [];
+  for (const proj of projects) {
+    const normalizedPath = proj.path.replace(/\\/g, "/") + "/";
+    const isSubProject = topLevelProjects.some(parent => {
+      const parentPath = parent.path.replace(/\\/g, "/") + "/";
+      return normalizedPath.startsWith(parentPath);
+    });
+    if (!isSubProject) topLevelProjects.push(proj);
+  }
+
+  return { recentFiles: recentFiles.slice(0, 100), projects: topLevelProjects };
 }
 
 function getDefaultScanDirs(): string[] {
@@ -927,7 +941,7 @@ export function createUserContextTools(): EnsoAgentTool[] {
           },
           limit: {
             type: "number",
-            description: "Max emails to scan (default: 50)",
+            description: "Max emails to scan (default: 500)",
           },
         },
         additionalProperties: false,
@@ -938,7 +952,7 @@ export function createUserContextTools(): EnsoAgentTool[] {
 
         ensureDirs();
         const folder = (params.folder as string) || "INBOX";
-        const limit = (params.limit as number) || 50;
+        const limit = (params.limit as number) || 500;
 
         const emails = scanEmail(folder, limit);
 

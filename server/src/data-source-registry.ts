@@ -229,7 +229,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
     id: "email",
     cacheFile: "email-summary.json",
     scannerToolName: "enso_email_scanner_scan",  // Email Scanner app
-    scannerParams: { folder: "inbox", limit: 100 },
+    scannerParams: { folder: "inbox", limit: 500 },
     ingestPriority: 40,
     formatForProfile: (cached: A) => {
       const parts: string[] = [];
