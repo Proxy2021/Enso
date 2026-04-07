@@ -146,6 +146,104 @@ try {
   ctx.log("Cross-reference step failed: " + (xre2.message || xre2));
 }
 
+// ── Step 3.6: Gather personal data for morning briefing sections ──
+var briefingData = { onThisDay: [], freshVideos: [], trendingTopics: [], readingNudge: null, projectPulse: [], knowledgeGrowth: null };
+
+// On This Day — photo memories from today's date in past years
+try {
+  var os = require("os");
+  var path = require("path");
+  var fs = require("fs");
+  var photoCache = null;
+  var photoCachePath = path.join(os.homedir(), ".enso", "data", "user-context", "cache", "photo-library.json");
+  try { photoCache = JSON.parse(fs.readFileSync(photoCachePath, "utf-8")); } catch(e) {}
+  if (photoCache && photoCache.albums) {
+    var today = new Date();
+    var monthDay = (today.getMonth() + 1).toString().padStart(2, "0") + "-" + today.getDate().toString().padStart(2, "0");
+    var thisYear = today.getFullYear();
+    for (var ai = 0; ai < photoCache.albums.length; ai++) {
+      var album = photoCache.albums[ai];
+      if (album.dateRange && album.dateRange.from) {
+        var albumDate = album.dateRange.from; // "2023-04-07" format
+        if (albumDate.substring(5, 10) === monthDay && parseInt(albumDate.substring(0, 4)) < thisYear) {
+          var yearsAgo = thisYear - parseInt(albumDate.substring(0, 4));
+          briefingData.onThisDay.push({ name: album.name, yearsAgo: yearsAgo, photoCount: album.photoCount, path: album.path });
+        }
+      }
+    }
+    briefingData.onThisDay.sort(function(a, b) { return a.yearsAgo - b.yearsAgo; });
+  }
+} catch(e) { ctx.log("On This Day failed: " + (e.message || e)); }
+
+// Fresh Videos — new videos from YouTube subscriptions
+try {
+  var ytCachePath = path.join(os.homedir(), ".enso", "data", "user-context", "cache", "youtube-data.json");
+  var ytCache = null;
+  try { ytCache = JSON.parse(fs.readFileSync(ytCachePath, "utf-8")); } catch(e) {}
+  if (ytCache && ytCache.feed) {
+    var oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    for (var fi = 0; fi < Math.min(ytCache.feed.length, 20); fi++) {
+      var video = ytCache.feed[fi];
+      briefingData.freshVideos.push({ title: video.title, channel: video.channelTitle || "", publishedAt: video.publishedAt || "" });
+    }
+  }
+} catch(e) { ctx.log("Fresh Videos failed: " + (e.message || e)); }
+
+// Reading Nudge — check Kindle last scan time
+try {
+  var scanLogPath = path.join(os.homedir(), ".enso", "data", "user-context", "scan-log.json");
+  var scanLog = {};
+  try { scanLog = JSON.parse(fs.readFileSync(scanLogPath, "utf-8")); } catch(e) {}
+  var kindleCachePath = path.join(os.homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json");
+  var kindleCache = null;
+  try { kindleCache = JSON.parse(fs.readFileSync(kindleCachePath, "utf-8")); } catch(e) {}
+  if (kindleCache && kindleCache.books) {
+    var totalBooks = kindleCache.books.length;
+    var enrichedBooks = kindleCache.books.filter(function(b) { return b.enrichedAt; }).length;
+    var topCategories = {};
+    kindleCache.books.forEach(function(b) { (b.categories || []).forEach(function(c) { topCategories[c] = (topCategories[c] || 0) + 1; }); });
+    var topCats = Object.entries(topCategories).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 3).map(function(e) { return e[0]; });
+    briefingData.readingNudge = { totalBooks: totalBooks, enriched: enrichedBooks, topCategories: topCats };
+  }
+} catch(e) { ctx.log("Reading Nudge failed: " + (e.message || e)); }
+
+// Project Pulse — recent activity and stale projects
+try {
+  var fileCachePath = path.join(os.homedir(), ".enso", "data", "user-context", "cache", "file-index.json");
+  var fileCache = null;
+  try { fileCache = JSON.parse(fs.readFileSync(fileCachePath, "utf-8")); } catch(e) {}
+  if (fileCache && fileCache.projects) {
+    var oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    var active = [];
+    var stale = [];
+    for (var pi = 0; pi < fileCache.projects.length; pi++) {
+      var proj = fileCache.projects[pi];
+      if (proj.lastModified && proj.lastModified > oneWeekAgo) {
+        active.push({ name: proj.name, tech: (proj.technologies || []).join(", ") });
+      } else if (proj.lastModified && proj.lastModified < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) {
+        stale.push({ name: proj.name, tech: (proj.technologies || []).join(", ") });
+      }
+    }
+    briefingData.projectPulse = { active: active.slice(0, 5), stale: stale.slice(0, 3), total: fileCache.projects.length };
+  }
+} catch(e) { ctx.log("Project Pulse failed: " + (e.message || e)); }
+
+// Knowledge Growth — Cortex stats
+try {
+  var wikiIndex = path.join(os.homedir(), ".enso", "wiki", "_index.md");
+  if (fs.existsSync(wikiIndex)) {
+    var indexContent = fs.readFileSync(wikiIndex, "utf-8");
+    var totalPages = (indexContent.match(/^## /gm) || []).length;
+    var entityCount = (indexContent.match(/entities\//g) || []).length;
+    var conceptCount = (indexContent.match(/concepts\//g) || []).length;
+    var sourceCount = (indexContent.match(/sources\//g) || []).length;
+    var synthesisCount = (indexContent.match(/synthesis\//g) || []).length;
+    briefingData.knowledgeGrowth = { totalPages: totalPages, entities: entityCount, concepts: conceptCount, sources: sourceCount, synthesis: synthesisCount };
+  }
+} catch(e) { ctx.log("Knowledge Growth failed: " + (e.message || e)); }
+
+ctx.log("Briefing data gathered: " + briefingData.onThisDay.length + " memories, " + briefingData.freshVideos.length + " videos, " + (briefingData.projectPulse.active || []).length + " active projects");
+
 // ── Step 4: Ingest significant findings ──
 var pagesCreated = [];
 var pagesUpdated = [];
@@ -287,6 +385,71 @@ if (analysisResult && analysisResult.blindSpots && analysisResult.blindSpots.len
   emailBody += "</div>";
 }
 
+// ── On This Day — photo memories ──
+if (briefingData.onThisDay.length > 0) {
+  emailBody += "<div style='margin:24px 0;padding:16px;background:#fff7ed;border-radius:8px;border:1px solid #fed7aa;'>";
+  emailBody += "<h3 style='margin:0 0 10px;font-size:14px;color:#c2410c;'>📅 On This Day</h3>";
+  for (var otdi = 0; otdi < Math.min(briefingData.onThisDay.length, 5); otdi++) {
+    var memory = briefingData.onThisDay[otdi];
+    emailBody += "<p style='margin:4px 0;font-size:13px;color:#9a3412;'><strong>" + memory.yearsAgo + " year" + (memory.yearsAgo > 1 ? "s" : "") + " ago</strong> — " + memory.name + " (" + memory.photoCount + " photos)</p>";
+  }
+  emailBody += "</div>";
+}
+
+// ── Fresh from Your Channels — YouTube ──
+if (briefingData.freshVideos.length > 0) {
+  emailBody += "<div style='margin:24px 0;padding:16px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;'>";
+  emailBody += "<h3 style='margin:0 0 10px;font-size:14px;color:#dc2626;'>📺 Fresh from Your Channels</h3>";
+  for (var fvi = 0; fvi < Math.min(briefingData.freshVideos.length, 8); fvi++) {
+    var vid = briefingData.freshVideos[fvi];
+    emailBody += "<p style='margin:4px 0;font-size:13px;color:#991b1b;'>• <strong>" + vid.title + "</strong>" + (vid.channel ? " — " + vid.channel : "") + "</p>";
+  }
+  if (briefingData.freshVideos.length > 8) {
+    emailBody += "<p style='margin:4px 0;font-size:11px;color:#b91c1c;'>+" + (briefingData.freshVideos.length - 8) + " more videos</p>";
+  }
+  emailBody += "</div>";
+}
+
+// ── Reading Nudge — Kindle ──
+if (briefingData.readingNudge) {
+  var rn = briefingData.readingNudge;
+  emailBody += "<div style='margin:24px 0;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;'>";
+  emailBody += "<h3 style='margin:0 0 8px;font-size:14px;color:#166534;'>📚 Your Library</h3>";
+  emailBody += "<p style='margin:4px 0;font-size:13px;color:#15803d;'>" + rn.totalBooks + " books in your Kindle library</p>";
+  if (rn.topCategories.length > 0) {
+    emailBody += "<p style='margin:4px 0;font-size:12px;color:#16a34a;'>Strongest in: " + rn.topCategories.join(", ") + "</p>";
+  }
+  emailBody += "</div>";
+}
+
+// ── Project Pulse ──
+if (briefingData.projectPulse && (briefingData.projectPulse.active || []).length > 0) {
+  var pp = briefingData.projectPulse;
+  emailBody += "<div style='margin:24px 0;padding:16px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;'>";
+  emailBody += "<h3 style='margin:0 0 8px;font-size:14px;color:#1e40af;'>💻 Project Pulse</h3>";
+  if (pp.active.length > 0) {
+    emailBody += "<p style='margin:4px 0;font-size:12px;color:#1e3a8a;font-weight:600;'>Active this week:</p>";
+    for (var ppi = 0; ppi < pp.active.length; ppi++) {
+      emailBody += "<p style='margin:2px 0 2px 12px;font-size:13px;color:#1e40af;'>• " + pp.active[ppi].name + " <span style='color:#60a5fa;'>(" + pp.active[ppi].tech + ")</span></p>";
+    }
+  }
+  if (pp.stale.length > 0) {
+    emailBody += "<p style='margin:8px 0 4px;font-size:12px;color:#6b7280;font-weight:600;'>Going stale (30+ days):</p>";
+    for (var psi = 0; psi < pp.stale.length; psi++) {
+      emailBody += "<p style='margin:2px 0 2px 12px;font-size:12px;color:#9ca3af;'>• " + pp.stale[psi].name + "</p>";
+    }
+  }
+  emailBody += "</div>";
+}
+
+// ── Knowledge Growth ──
+if (briefingData.knowledgeGrowth) {
+  var kg = briefingData.knowledgeGrowth;
+  emailBody += "<div style='margin:24px 0;padding:12px 16px;background:#f5f3ff;border-radius:8px;border:1px solid #ddd6fe;'>";
+  emailBody += "<p style='margin:0;font-size:13px;color:#5b21b6;'>🧠 <strong>Cortex: " + kg.totalPages + " pages</strong> — " + kg.entities + " entities, " + kg.concepts + " concepts, " + kg.sources + " sources, " + kg.synthesis + " synthesis</p>";
+  emailBody += "</div>";
+}
+
 // Library Connections — cross-source synthesis
 var connectionTopics = Object.keys(libraryConnections);
 if (connectionTopics.length > 0) {
@@ -362,6 +525,13 @@ return {
     executiveSummary: analysisResult ? analysisResult.executiveSummary : "",
     blindSpots: analysisResult ? analysisResult.blindSpots : [],
     libraryConnections: libraryConnections,
+    briefing: {
+      onThisDay: briefingData.onThisDay,
+      freshVideos: briefingData.freshVideos.length,
+      readingNudge: briefingData.readingNudge,
+      projectPulse: briefingData.projectPulse,
+      knowledgeGrowth: briefingData.knowledgeGrowth
+    },
     findings: sections.reduce(function(acc, s) {
       return acc.concat((s.items || []).map(function(item) {
         return { headline: item.headline, impact: item.impact, action: item.actionItem, connections: item.connections };
