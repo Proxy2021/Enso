@@ -572,25 +572,45 @@ export async function generateFullScript(
   research: EntityResearchResult,
   onProgress?: (sectionIndex: number, totalSections: number) => void,
 ): Promise<{ fullScript: string; sectionScripts: string[] }> {
-  const sectionScripts: string[] = [];
-  let previousEnding = "";
+  const total = outline.sections.length;
 
-  for (let i = 0; i < outline.sections.length; i++) {
-    onProgress?.(i, outline.sections.length);
+  // Generate sections in parallel batches of 4
+  // Each section gets outline context instead of previous section ending
+  // (parallel sections can't have sequential continuity, but the outline
+  // provides enough context for natural transitions)
+  const SCRIPT_CONCURRENCY = 4;
+  const sectionScripts: string[] = new Array(total).fill("");
+  let completed = 0;
 
-    const script = await generateSectionScript({
-      title,
-      author,
-      section: outline.sections[i],
-      research,
-      previousEnding,
-      sectionIndex: i,
-      totalSections: outline.sections.length,
-    });
+  for (let batchStart = 0; batchStart < total; batchStart += SCRIPT_CONCURRENCY) {
+    const batchEnd = Math.min(batchStart + SCRIPT_CONCURRENCY, total);
+    const promises = [];
 
-    sectionScripts.push(script);
-    // Capture last 200 chars for continuity
-    previousEnding = script.slice(-200);
+    for (let i = batchStart; i < batchEnd; i++) {
+      // For continuity: first section of a batch uses the ending of the
+      // last completed section (if available); others use outline context
+      const previousEnding = i > 0 && sectionScripts[i - 1]
+        ? sectionScripts[i - 1].slice(-200)
+        : (i > 0 ? `[Previous section: "${outline.sections[i - 1].title}" covered: ${outline.sections[i - 1].keyPoints.join(", ")}]` : "");
+
+      promises.push(
+        generateSectionScript({
+          title,
+          author,
+          section: outline.sections[i],
+          research,
+          previousEnding,
+          sectionIndex: i,
+          totalSections: total,
+        }).then(script => {
+          sectionScripts[i] = script;
+          completed++;
+          onProgress?.(completed - 1, total);
+        })
+      );
+    }
+
+    await Promise.all(promises);
   }
 
   return {
@@ -635,27 +655,32 @@ export async function renderLongformAudio(
 
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Rendering ${allSegments.length} audio segments` });
 
-  // Render segments with concurrency limit of 3
-  const pcmBuffers: Buffer[] = [];
-  const concurrency = 3;
+  // Render segments with concurrency limit of 5
+  const pcmBuffers: Buffer[] = new Array(allSegments.length).fill(Buffer.alloc(0));
+  const concurrency = 5;
 
+  let completed = 0;
   for (let i = 0; i < allSegments.length; i += concurrency) {
     const batch = allSegments.slice(i, i + concurrency);
     const promises = batch.map((seg, j) => {
       const idx = i + j;
-      onProgress?.(idx, allSegments.length);
-      return renderPodcastAudio(seg, geminiKey).catch(err => {
+      return renderPodcastAudio(seg, geminiKey).then(buf => {
+        pcmBuffers[idx] = buf;
+        completed++;
+        onProgress?.(completed - 1, allSegments.length);
+      }).catch(err => {
         logError("book-podcast", `Failed to render segment ${idx}`, err);
-        return Buffer.alloc(0); // Skip failed segments
+        completed++;
+        onProgress?.(completed - 1, allSegments.length);
+        // pcmBuffers[idx] stays as empty Buffer — segment skipped
       });
     });
 
-    const results = await Promise.all(promises);
-    pcmBuffers.push(...results.filter(b => b.length > 0));
+    await Promise.all(promises);
   }
 
-  // Concatenate PCM and wrap with WAV header
-  const totalPcm = Buffer.concat(pcmBuffers);
+  // Concatenate PCM in order (preserves audio sequence) and wrap with WAV header
+  const totalPcm = Buffer.concat(pcmBuffers.filter(b => b.length > 0));
   return pcmToWav(totalPcm);
 }
 
