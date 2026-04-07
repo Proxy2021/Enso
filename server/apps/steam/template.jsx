@@ -387,12 +387,14 @@ function GeneratedUI({ data, onAction }) {
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy, genre: activeGenre }); }}
             style={{ flex: 1 }}
           />
-          <Select value={sortBy} onValueChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v, genre: activeGenre }); }}>
-            <option value="name">Name</option>
-            <option value="lastPlayed">Last Played</option>
-            <option value="size">Size</option>
-            <option value="metacritic">Metacritic</option>
-          </Select>
+          <Select value={sortBy} onChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v, genre: activeGenre }); }}
+            options={[
+              { value: "name", label: "Name" },
+              { value: "lastPlayed", label: "Last Played" },
+              { value: "size", label: "Size" },
+              { value: "metacritic", label: "Metacritic" }
+            ]}
+          />
         </div>
 
         {/* Genre pills */}

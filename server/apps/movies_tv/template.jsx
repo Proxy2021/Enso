@@ -400,11 +400,13 @@ function GeneratedUI({ data, onAction }) {
               }}
             />
           </div>
-          <Select value={sortBy} onValueChange={function(v) { setSortBy(v); onAction("browse", { category: activeCategory, sortBy: v }); }}>
-            <option value="title">Title</option>
-            <option value="year">Year</option>
-            <option value="rating">Rating</option>
-          </Select>
+          <Select value={sortBy} onChange={function(v) { setSortBy(v); onAction("browse", { category: activeCategory, sortBy: v }); }}
+            options={[
+              { value: "title", label: "Title" },
+              { value: "year", label: "Year" },
+              { value: "rating", label: "Rating" }
+            ]}
+          />
         </div>
 
         {/* Category tabs */}

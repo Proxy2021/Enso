@@ -92,10 +92,12 @@ function GeneratedUI({ data, onAction }) {
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy }); }}
             style={{ flex: 1 }}
           />
-          <Select value={sortBy} onValueChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v }); }}>
-            <option value="name">Name</option>
-            <option value="handle">Handle</option>
-          </Select>
+          <Select value={sortBy} onChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v }); }}
+            options={[
+              { value: "name", label: "Name" },
+              { value: "handle", label: "Handle" }
+            ]}
+          />
         </div>
 
         {/* Account grid */}

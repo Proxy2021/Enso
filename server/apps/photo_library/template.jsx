@@ -93,11 +93,13 @@ function GeneratedUI({ data, onAction }) {
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, groupBy: groupBy }); }}
             style={{ flex: 1 }}
           />
-          <Select value={groupBy} onValueChange={function(v) { setGroupBy(v); onAction("browse", { query: searchInput, groupBy: v }); }}>
-            <option value="directory">By Folder</option>
-            <option value="year">By Year</option>
-            <option value="camera">By Camera</option>
-          </Select>
+          <Select value={groupBy} onChange={function(v) { setGroupBy(v); onAction("browse", { query: searchInput, groupBy: v }); }}
+            options={[
+              { value: "directory", label: "By Folder" },
+              { value: "year", label: "By Year" },
+              { value: "camera", label: "By Camera" }
+            ]}
+          />
         </div>
 
         {/* Grouped album grid */}
