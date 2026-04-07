@@ -198,6 +198,22 @@
           },
           "additionalProperties": false
         }
+      },
+      {
+        "suffix": "cross_reference",
+        "label": "Cross-Reference Topic",
+        "description": "Search ALL data sources for content related to a topic and generate an AI-synthesized insight connecting the dots across books, movies, games, YouTube, projects, and more.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "topic": {
+              "type": "string",
+              "description": "Topic to cross-reference across all sources"
+            }
+          },
+          "required": ["topic"],
+          "additionalProperties": false
+        }
       }
     ]
   }

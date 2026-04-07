@@ -40,6 +40,8 @@ export interface CortexIndexEntry {
   summary: string;   // one-line summary
   tags: string[];    // e.g. ["framework", "javascript"]
   updated: string;   // ISO 8601
+  source?: string;   // data source that created it: "kindle", "steam", "movies_tv", "youtube", "photos", "project", "research", "manual"
+  themes?: string[]; // higher-level thematic categories derived from tags
 }
 
 interface CortexPageInfo {
@@ -107,8 +109,12 @@ export function readIndex(): CortexIndexEntry[] {
     const tags = titleMatch?.[3]?.split(",").map((t) => t.trim()).filter(Boolean) ?? [];
     const updatedLine = lines.find((l) => l.startsWith("Updated:"));
     const updated = updatedLine?.replace("Updated:", "").trim() ?? new Date().toISOString();
+    const sourceLine = lines.find((l) => l.startsWith("Source:"));
+    const source = sourceLine?.replace("Source:", "").trim() ?? undefined;
+    const themesLine = lines.find((l) => l.startsWith("Themes:"));
+    const themes = themesLine?.replace("Themes:", "").trim().split(",").map(t => t.trim()).filter(Boolean) ?? undefined;
 
-    entries.push({ path, title, summary, tags, updated });
+    entries.push({ path, title, summary, tags, updated, source, themes });
   }
 
   return entries;
@@ -121,7 +127,10 @@ function writeIndex(entries: CortexIndexEntry[]): void {
     lines.push(`## ${e.path}`);
     const tagStr = e.tags.length > 0 ? `. Tags: ${e.tags.join(", ")}` : "";
     lines.push(`**${e.title}** — ${e.summary}${tagStr}.`);
-    lines.push(`Updated: ${e.updated}\n`);
+    lines.push(`Updated: ${e.updated}`);
+    if (e.source) lines.push(`Source: ${e.source}`);
+    if (e.themes?.length) lines.push(`Themes: ${e.themes.join(", ")}`);
+    lines.push("");
   }
   safeWrite(INDEX_PATH, lines.join("\n"));
 }
@@ -161,8 +170,26 @@ function writeCortexPage(pagePath: string, content: string): void {
 
 // ── Search ──
 
-function searchIndex(query: string, maxResults = 10): CortexIndexEntry[] {
-  const entries = readIndex();
+function searchIndex(query: string, maxResults = 10, opts?: { source?: string; theme?: string }): CortexIndexEntry[] {
+  let entries = readIndex();
+
+  // Apply source filter
+  if (opts?.source) {
+    const src = opts.source.toLowerCase();
+    entries = entries.filter(e => (e.source || inferSource(e)).toLowerCase() === src);
+  }
+
+  // Apply theme filter
+  if (opts?.theme) {
+    const targetTheme = opts.theme.toLowerCase();
+    entries = entries.filter(e => {
+      const themes = e.themes?.length
+        ? e.themes
+        : [...new Set(e.tags.map(t => TAG_TO_THEME[t.toLowerCase()]).filter(Boolean))];
+      return themes.some(t => t.toLowerCase().includes(targetTheme));
+    });
+  }
+
   const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
   if (queryTerms.length === 0) return entries.slice(0, maxResults);
 
@@ -682,6 +709,7 @@ export function getCortexContextSummary(maxChars: number): string {
   const entries = readIndex();
   if (entries.length === 0) return "";
 
+  // Category counts
   const byCat: Record<string, number> = {};
   for (const sub of SUBDIRS) byCat[sub] = 0;
   for (const e of entries) {
@@ -689,18 +717,153 @@ export function getCortexContextSummary(maxChars: number): string {
     if (byCat[cat] !== undefined) byCat[cat]++;
   }
 
-  const recent = [...entries]
-    .sort((a, b) => b.updated.localeCompare(a.updated))
-    .slice(0, 10);
+  // Source counts
+  const bySource: Record<string, number> = {};
+  for (const e of entries) {
+    const src = e.source || inferSource(e);
+    bySource[src] = (bySource[src] || 0) + 1;
+  }
+  const sourceSummary = Object.entries(bySource)
+    .sort((a, b) => b[1] - a[1])
+    .map(([src, count]) => `${src}: ${count}`)
+    .join(", ");
 
-  const lines = recent.map((e) => `- ${e.title}: ${e.summary}`);
+  // Build theme map from all tags + explicit themes
+  const themeMap = buildThemeMap(entries);
+  const themeLines = [...themeMap.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 12)
+    .map(([theme, data]) => `- **${theme}** (${data.count} pages): ${data.topTitles.slice(0, 3).join(", ")}`);
+
+  // Read thematic map synthesis if it exists
+  const thematicMapPath = join(CORTEX_DIR, "synthesis", "thematic-map.md");
+  let thematicSummary = "";
+  if (existsSync(thematicMapPath)) {
+    const content = safeRead(thematicMapPath) ?? "";
+    // Extract just the first section (up to 400 chars)
+    thematicSummary = content.split("\n").slice(1, 8).join("\n").trim();
+    if (thematicSummary.length > 400) thematicSummary = thematicSummary.slice(0, 400) + "...";
+  }
+
   const header = `Cortex: ${entries.length} pages (${byCat.entities ?? 0} entities, ${byCat.concepts ?? 0} concepts, ${byCat.sources ?? 0} sources, ${byCat.synthesis ?? 0} synthesis)`;
+  const sourceHeader = `Sources: ${sourceSummary}`;
 
-  let text = `<wiki_knowledge>\n${header}\nRecent:\n${lines.join("\n")}\n</wiki_knowledge>`;
+  const parts = [
+    `<wiki_knowledge>`,
+    header,
+    sourceHeader,
+    `\nThemes:`,
+    ...themeLines,
+  ];
+
+  if (thematicSummary) {
+    parts.push(`\nSynthesis:\n${thematicSummary}`);
+  }
+
+  parts.push(`</wiki_knowledge>`);
+
+  let text = parts.join("\n");
   if (text.length > maxChars) {
-    text = text.slice(0, maxChars - 20) + "\n...</wiki_knowledge>";
+    // Trim themes to fit
+    while (text.length > maxChars && themeLines.length > 4) {
+      themeLines.pop();
+      text = [
+        `<wiki_knowledge>`, header, sourceHeader,
+        `\nThemes:`, ...themeLines,
+        ...(thematicSummary ? [`\nSynthesis:\n${thematicSummary}`] : []),
+        `</wiki_knowledge>`,
+      ].join("\n");
+    }
+    if (text.length > maxChars) {
+      text = text.slice(0, maxChars - 20) + "\n...</wiki_knowledge>";
+    }
   }
   return text;
+}
+
+/** Infer source from page path/tags for legacy pages without explicit source field */
+function inferSource(entry: CortexIndexEntry): string {
+  const p = entry.path;
+  if (p.startsWith("entities/game-")) return "steam";
+  if (p.startsWith("entities/movie-") || p.startsWith("entities/tv-")) return "movies_tv";
+  if (p.startsWith("entities/photo-album-")) return "photos";
+  if (p.startsWith("entities/twitter-")) return "twitter";
+  if (p.startsWith("entities/artist-") || p.startsWith("entities/playlist-")) return "qq_music";
+  if (entry.tags.includes("book") || entry.tags.includes("kindle")) return "kindle";
+  if (entry.tags.includes("youtube") || entry.tags.includes("channel")) return "youtube";
+  if (entry.tags.includes("project")) return "project";
+  if (p.startsWith("sources/")) return "research";
+  if (p.startsWith("synthesis/")) return "synthesis";
+  return "manual";
+}
+
+/** Theme tag mapping — maps low-level tags to high-level themes */
+const TAG_TO_THEME: Record<string, string> = {
+  // Science & Nature
+  "evolution": "Science & Nature", "biology": "Science & Nature", "genetics": "Science & Nature",
+  "neuroscience": "Science & Nature", "science": "Science & Nature", "nature": "Science & Nature",
+  "physics": "Science & Nature", "chemistry": "Science & Nature", "ecology": "Science & Nature",
+  // Technology & AI
+  "ai": "Technology & AI", "machine-learning": "Technology & AI", "llm": "Technology & AI",
+  "technology": "Technology & AI", "programming": "Technology & AI", "software": "Technology & AI",
+  "node": "Technology & AI", "typescript": "Technology & AI", "python": "Technology & AI",
+  // Finance & Business
+  "finance": "Finance & Business", "investing": "Finance & Business", "economics": "Finance & Business",
+  "business": "Finance & Business", "trading": "Finance & Business", "market": "Finance & Business",
+  // Arts & Culture
+  "photography": "Arts & Culture", "film": "Arts & Culture", "music": "Arts & Culture",
+  "art": "Arts & Culture", "cinema": "Arts & Culture", "creative": "Arts & Culture",
+  // Gaming
+  "game": "Gaming", "steam": "Gaming", "rpg": "Gaming", "action": "Gaming", "strategy": "Gaming",
+  "adventure": "Gaming", "indie": "Gaming", "simulation": "Gaming",
+  // Entertainment
+  "movie": "Entertainment", "tv-series": "Entertainment", "documentary": "Entertainment",
+  "video": "Entertainment", "comedy": "Entertainment", "drama": "Entertainment",
+  "thriller": "Entertainment", "animation": "Entertainment",
+  // History & Society
+  "history": "History & Society", "politics": "History & Society", "society": "History & Society",
+  "philosophy": "History & Society", "biography": "History & Society",
+  // Personal
+  "photo": "Personal", "album": "Personal", "travel": "Personal", "family": "Personal",
+  // Literature
+  "book": "Literature", "kindle": "Literature", "fiction": "Literature", "non-fiction": "Literature",
+};
+
+interface ThemeData {
+  count: number;
+  topTitles: string[];
+  sources: Set<string>;
+}
+
+function buildThemeMap(entries: CortexIndexEntry[]): Map<string, ThemeData> {
+  const themeMap = new Map<string, ThemeData>();
+
+  for (const e of entries) {
+    // Use explicit themes if set, otherwise derive from tags
+    const themes = e.themes?.length
+      ? e.themes
+      : [...new Set(e.tags.map(t => TAG_TO_THEME[t.toLowerCase()]).filter(Boolean))];
+
+    if (themes.length === 0) {
+      // Fallback: use the source as a theme
+      const src = e.source || inferSource(e);
+      const fallbackTheme = src === "kindle" ? "Literature" : src === "steam" ? "Gaming" :
+        src === "movies_tv" ? "Entertainment" : src === "photos" ? "Personal" :
+        src === "youtube" ? "Media" : src === "project" ? "Technology & AI" : "Other";
+      themes.push(fallbackTheme);
+    }
+
+    const src = e.source || inferSource(e);
+    for (const theme of themes) {
+      if (!themeMap.has(theme)) themeMap.set(theme, { count: 0, topTitles: [], sources: new Set() });
+      const data = themeMap.get(theme)!;
+      data.count++;
+      if (data.topTitles.length < 5) data.topTitles.push(e.title);
+      data.sources.add(src);
+    }
+  }
+
+  return themeMap;
 }
 
 // ── Agent Tools ──
@@ -711,12 +874,14 @@ export function createCortexTools(): EnsoAgentTool[] {
     {
       name: "enso_wiki_search",
       label: "Wiki Search",
-      description: "Search the knowledge wiki for pages matching a query. Returns matching page summaries from the wiki index. Use this first to discover relevant wiki knowledge before answering questions that might benefit from accumulated knowledge.",
+      description: "Search the knowledge wiki for pages matching a query. Returns matching page summaries from the wiki index. Use this first to discover relevant wiki knowledge before answering questions that might benefit from accumulated knowledge. Supports filtering by source (kindle, steam, movies_tv, youtube, photos, project) and theme (Science & Nature, Technology & AI, Gaming, Entertainment, etc.).",
       parameters: {
         type: "object",
         properties: {
           query: { type: "string", description: "Search query — keywords or phrases to find in wiki pages" },
           maxResults: { type: "number", description: "Maximum results to return (default: 10)" },
+          source: { type: "string", description: "Filter by data source: kindle, steam, movies_tv, youtube, photos, project, research, manual" },
+          theme: { type: "string", description: "Filter by theme: Science & Nature, Technology & AI, Finance & Business, Gaming, Entertainment, Literature, Arts & Culture, History & Society, Personal" },
         },
         required: ["query"],
         additionalProperties: false,
@@ -725,9 +890,11 @@ export function createCortexTools(): EnsoAgentTool[] {
       execute: async (_callId, params) => {
         const query = String(params.query ?? "");
         const max = Number(params.maxResults ?? 10);
+        const source = params.source ? String(params.source) : undefined;
+        const theme = params.theme ? String(params.theme) : undefined;
 
         ensureCortexDir();
-        const results = query.trim() ? searchIndex(query, max) : readIndex().slice(0, max);
+        const results = query.trim() ? searchIndex(query, max, { source, theme }) : readIndex().slice(0, max);
         const stats = lintCortex().stats;
 
         return {
@@ -959,6 +1126,74 @@ export function createCortexTools(): EnsoAgentTool[] {
             content: [{
               type: "text",
               text: JSON.stringify({ tool: "enso_wiki_import_sources", error: msg }),
+            }],
+          };
+        }
+      },
+    },
+
+    // ── Cross-Reference (Synthesis Engine) ──
+    {
+      name: "enso_cross_reference",
+      label: "Cross-Reference",
+      description: "Search ALL data sources (Kindle books, YouTube channels, movies, Steam games, photos, projects, bookmarks, music, Twitter) for content related to a topic. Returns matches from every source plus an AI-synthesized insight connecting them. Use this to discover how a topic connects across the user's entire digital life.",
+      parameters: {
+        type: "object",
+        properties: {
+          topic: { type: "string", description: "Topic to cross-reference across all sources" },
+          synthesize: { type: "boolean", description: "Whether to generate an AI synthesis narrative (default: true)" },
+        },
+        required: ["topic"],
+        additionalProperties: false,
+      },
+      execute: async (_callId, params) => {
+        const topic = String(params.topic ?? "");
+        const doSynthesize = params.synthesize !== false;
+
+        try {
+          const { findRelatedContent, formatCrossReference, synthesizeInsight } = await import("./cortex-synthesis.js");
+          const related = findRelatedContent(topic);
+
+          let synthesis = "";
+          if (doSynthesize && related.totalMatches >= 2) {
+            // Read profile for context
+            const profilePath = join(CORTEX_DIR, "synthesis", "user-profile.md");
+            const profile = existsSync(profilePath) ? safeRead(profilePath)?.slice(0, 500) : undefined;
+            synthesis = await synthesizeInsight(topic, related, profile || undefined);
+          }
+
+          const formatted = formatCrossReference(related);
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                tool: "enso_cross_reference",
+                topic,
+                totalMatches: related.totalMatches,
+                sourceCount: Object.keys(related.bySource).length,
+                cortexPageCount: related.cortexPages.length,
+                bySource: Object.fromEntries(
+                  Object.entries(related.bySource).map(([src, hits]) => [
+                    src,
+                    hits.map(h => ({ title: h.title, score: h.score, metadata: h.metadata })),
+                  ]),
+                ),
+                cortexPages: related.cortexPages.slice(0, 5).map(p => ({ path: p.path, title: p.title, summary: p.summary })),
+                synthesis,
+                formatted,
+              }),
+            }],
+          };
+        } catch (err) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                tool: "enso_cross_reference",
+                topic,
+                error: err instanceof Error ? err.message : String(err),
+              }),
             }],
           };
         }

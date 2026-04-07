@@ -241,8 +241,8 @@ async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
   let cortexBlock = "";
   try {
     const { getCortexContextSummary } = await import("./cortex-tools.js");
-    const cortex = getCortexContextSummary(800);
-    if (cortex) cortexBlock = `\n\n## Knowledge Cortex\nYour persistent knowledge base with interlinked pages about the user's interests, projects, and expertise:\n${cortex}`;
+    const cortex = getCortexContextSummary(1500);
+    if (cortex) cortexBlock = `\n\n## Knowledge Cortex\nYour persistent knowledge base with interlinked pages about the user's interests, projects, and expertise. Organized by themes spanning multiple data sources (books, movies, games, photos, YouTube, projects). Use enso_wiki_search with source/theme filters for targeted retrieval:\n${cortex}`;
   } catch { /* cortex not available — skip */ }
 
   // Check if memory tools are available
