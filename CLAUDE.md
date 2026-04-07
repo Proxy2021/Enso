@@ -10,7 +10,8 @@
 - **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline, delivering the most useful format for each answer — interactive research boards, data visualizations, photo studios, file managers, knowledge graphs — not walls of text. No LLM call needed for rendering.
 - **AI teams for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
 - **Knowledge Cortex** — The single brain for all knowledge, memory, and profile. Every data source scan, research result, conversation memory, and user profile lives as interlinked wiki pages at `~/.enso/wiki/` (based on Karpathy's LLM Wiki pattern). `buildEnsoContext()` reads only from Cortex — no separate memory/profile stores. A daily scheduled task searches the web for top interests, ingests findings, and emails a personalized intelligence briefing.
-- **Data Source Apps** — Each data source (Kindle, YouTube, Browser, Email, Projects, System) is a self-contained Enso app with scan/browse/search tools. Post-scan, a pipeline auto-detects changes and ingests content into Cortex as per-item wiki pages. Adding a new data source = one app directory + one registry entry.
+- **Data Source Apps** — Each data source (Kindle, YouTube, Browser, Email, Projects, System, Steam, Movies/TV, Photos, Twitter/X, QQ Music) is a self-contained Enso app with scan/browse/search tools. Post-scan, a pipeline auto-detects changes and ingests content into Cortex as per-item wiki pages. Adding a new data source = one app directory + one registry entry.
+- **Cortex Intelligence** — Cross-source synthesis engine (`cortex-synthesis.ts`) that connects data across all 12 sources. `synthesize(topic)` sends the full data inventory to an LLM which semantically finds connections (e.g., linking a Kindle book to a Steam game to a YouTube channel). `findRelatedContent(topic)` provides fast keyword pre-filtering. Feeds into: agent context (every conversation is Cortex-aware), research results ("From Your Brain" section), morning briefing (cross-source narrative), and proactive suggestions (trending convergence, knowledge gaps, cross-source connections, photo memories).
 - **Unified LLM layer** — Single `llm()` function (`server/src/llm.ts`) for all LLM calls across the platform. Tier-based model selection (fast/utility/pro), auto API key resolution, built-in retry with backoff.
 - **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
 - **User owns the factory** — Each installation is a complete codebase with build tools. During setup, Claude Code personalizes the source code based on who the user is — redesigning the UI, writing role-specific prompts, reordering tools. The resulting APK is a custom app, not a configured generic one. Future `/evolve` sprints continue modifying the same source.
@@ -46,7 +47,7 @@ server/                       # Enso server (the backend)
 ├── index.ts                  # Server/plugin entry
 ├── apps/                     # Shipped apps (checked into git)
 │   ├── <appId>/              # app.json + template.jsx + executors/*.js
-│   ├── cortex/               # Cortex Explorer (wiki dashboard, reader, graph, discovery)
+│   ├── cortex/               # Cortex Explorer (wiki dashboard, reader, graph, discovery, cross-reference)
 │   ├── kindle/               # Kindle Library (data source + browse/search)
 │   ├── youtube_manager/      # YouTube Manager (data source + browse/search)
 │   ├── browser/              # Browser Data (history + bookmarks, unified)
@@ -60,7 +61,8 @@ server/                       # Enso server (the backend)
     ├── outbound.ts           # Barrel re-export (delivery, enhance, card actions, context)
     ├── outbound/             # Outbound submodules (card-actions, card-context, delivery, helpers)
     ├── llm.ts                # Unified LLM call layer (tier-based model, retry, timeout)
-    ├── cortex-tools.ts       # Cortex wiki engine (ingest, search, read, lint)
+    ├── cortex-tools.ts       # Cortex wiki engine (ingest, search, read, lint, cross-reference)
+    ├── cortex-synthesis.ts   # Cross-source synthesis engine (LLM-first intelligence)
     ├── cortex-direct-ingest.ts # Per-item Cortex page creation (zero-LLM)
     ├── card-to-cortex.ts     # Auto-persist app cards as Cortex wiki pages
     ├── data-source-registry.ts # Centralized DATA_SOURCES descriptors
@@ -346,7 +348,8 @@ openclaw gateway start              # 3. Restart gateway
 
 Cortex is the ONLY brain — all knowledge, memory, profile, and data source content live as interlinked wiki pages at `~/.enso/wiki/`. Based on Karpathy's "LLM Wiki" pattern — instead of re-deriving knowledge via RAG, the LLM incrementally builds interlinked markdown pages. `buildEnsoContext()` reads only from Cortex; there are no separate memory or profile stores.
 
-- **Wiki engine** (`server/src/cortex-tools.ts`): 6 agent tools (`enso_wiki_search`, `enso_wiki_read`, `enso_wiki_ingest`, `enso_wiki_list`, `enso_wiki_lint`, `enso_wiki_import_sources`). LLM-powered ingest pipeline creates entity/concept/synthesis pages from any source.
+- **Wiki engine** (`server/src/cortex-tools.ts`): 7 agent tools (`enso_wiki_search`, `enso_wiki_read`, `enso_wiki_ingest`, `enso_wiki_list`, `enso_wiki_lint`, `enso_wiki_import_sources`, `enso_cross_reference`). LLM-powered ingest pipeline creates entity/concept/synthesis pages from any source. Enhanced index with `source` and `themes` fields for targeted retrieval. `enso_wiki_search` supports `source` and `theme` filters.
+- **Synthesis engine** (`server/src/cortex-synthesis.ts`): LLM-first cross-source intelligence. `synthesize(topic)` sends full data inventory to LLM for semantic connection finding across books, movies, games, YouTube, projects, photos, music. `findRelatedContent(topic)` provides fast keyword pre-filter (zero LLM). `generateThematicMap()` creates deep cross-cutting life theme analysis. `buildDataInventory()` compiles compact view of all 12 data sources for LLM context.
 - **Storage**: `~/.enso/wiki/` with `_index.md` (machine-parseable catalog), `_log.md` (operation log), and subdirs `entities/`, `concepts/`, `sources/`, `synthesis/`.
 - **Protected pages**: `synthesis/user-profile.md` (user identity, role, interests — rebuilt from data source scans), `synthesis/conversation-memory.md` (persistent memory across conversations). These are the primary context sources for agent prompts.
 - **Data source content**: Each data source scan creates per-item wiki pages (e.g., `entities/kindle-<title>.md`, `entities/project-<name>.md`) via the direct ingest pipeline — zero LLM cost per item.
@@ -356,7 +359,11 @@ Cortex is the ONLY brain — all knowledge, memory, profile, and data source con
 - **Cortex Explorer app** (`server/apps/cortex/`): Shipped app with 8 executors:
   - `explore` (dashboard: stats, top entities, gaps), `read` (article viewer with backlinks), `search`, `graph` (treemap visualization), `discover` (web search + AI branch suggestions), `ingest`, `digest` (AI knowledge summary), `daily_discovery` (scheduled task)
 - **Daily Discovery**: Scheduled task (`cortex-daily-discovery`) that searches the web for top Cortex topics, uses AI to filter/analyze/categorize findings with personalized relevance, ingests into wiki, and emails an HTML intelligence briefing.
-- Key files: `cortex-tools.ts` (engine), `cortex-direct-ingest.ts` (per-item pages), `card-to-cortex.ts` (auto-persist), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection)
+- **Context injection** (`memory-bridge.ts`): `buildEnsoContext()` injects data source inventory (book/movie/game/photo counts), theme-based Cortex summary (1500 chars), and cross-reference instructions into every agent conversation.
+- **Research integration** (`researcher-tools.ts`): Every research result includes `cortexSynthesis` — auto cross-references topic against personal library with LLM narrative.
+- **Morning briefing** (`daily_discovery.js`): 9-section daily email: executive summary, findings, On This Day (photo memories), Fresh Videos (YouTube), Library stats, Project Pulse, Knowledge Growth, From Your Brain (cross-source synthesis), Blind Spots.
+- **Active intelligence** (`proactive-engine.ts`): 5 cross-app suggestion types: trending convergence (YouTube), knowledge gaps, cross-source connections, photo memories, stale project alerts.
+- Key files: `cortex-tools.ts` (engine), `cortex-synthesis.ts` (LLM synthesis), `cortex-direct-ingest.ts` (per-item pages), `card-to-cortex.ts` (auto-persist), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection), `proactive-engine.ts` (active intelligence)
 
 ### Deep Research Pipeline
 
@@ -400,6 +407,11 @@ Consent-gated system that scans the user's desktop environment, ingests content 
 | **System** | `server/apps/system_info/` | Installed apps + running processes | — |
 | **Kindle** | `server/apps/kindle/` | My Clippings.txt parser | Per-book pages with highlights |
 | **YouTube** | `server/apps/youtube_manager/` | YouTube Data API v3 | Per-channel pages |
+| **Steam** | `server/apps/steam/` | ACF manifest parsing | Per-game pages with genres, metacritic |
+| **Movies/TV** | `server/apps/movies_tv/` | Filesystem scan + TMDB API | Per-movie/show pages with posters, cast |
+| **Photos** | `server/apps/photo_library/` | Filesystem + EXIF parser | Per-album pages with date/camera |
+| **Twitter/X** | `server/apps/twitter/` | Puppeteer (persistent session) | Per-account pages |
+| **QQ Music** | `server/apps/qq_music/` | Puppeteer + local file scan | Per-artist pages |
 
 #### Data Source as App Pattern
 
