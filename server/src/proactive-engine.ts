@@ -1061,6 +1061,165 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
   return suggestions;
 }
 
+/**
+ * Cross-App Intelligence — LLM-powered suggestions that find patterns
+ * across data sources. Detects convergences, connections, and gaps
+ * that span books, movies, games, YouTube, projects, and photos.
+ */
+function generateCrossAppIntelligence(profile: UserContextProfile): ProactiveSuggestion[] {
+  const suggestions: ProactiveSuggestion[] = [];
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readCache } = require("./data-source-registry.js") as { readCache: (f: string) => unknown };
+
+    // 1. Trending Convergence — when YouTube channels post about the same topic
+    try {
+      const ytCache = readCache("youtube-data.json") as { feed?: Array<{ title: string; channelTitle: string }> } | null;
+      if (ytCache?.feed?.length) {
+        // Find topic clusters in recent feed
+        const wordCounts: Record<string, { count: number; channels: Set<string>; titles: string[] }> = {};
+        const stopwords = new Set(["the", "a", "an", "how", "why", "what", "new", "my", "your", "this", "with", "for", "and", "from", "that"]);
+        for (const v of ytCache.feed.slice(0, 50)) {
+          const words = (v.title || "").toLowerCase().split(/[\s\-:!?|,()[\]]+/).filter(w => w.length > 3 && !stopwords.has(w));
+          for (const w of words) {
+            if (!wordCounts[w]) wordCounts[w] = { count: 0, channels: new Set(), titles: [] };
+            wordCounts[w].count++;
+            wordCounts[w].channels.add(v.channelTitle || "");
+            if (wordCounts[w].titles.length < 3) wordCounts[w].titles.push(v.title);
+          }
+        }
+        // Find topics where 3+ different channels converge
+        for (const [word, data] of Object.entries(wordCounts)) {
+          if (data.channels.size >= 3 && data.count >= 3) {
+            suggestions.push({
+              id: `crossapp-trending-${word}`, pillar: "knowledge", priority: "medium", score: 0.7,
+              title: `Trending: "${word}" across ${data.channels.size} channels`,
+              description: `${data.channels.size} YouTube channels you follow are discussing "${word}": ${data.titles.slice(0, 2).join("; ")}. This may signal an emerging trend worth exploring.`,
+              icon: "TrendingUp", action: { type: "deep_research", topic: word }, requiredConsent: ["youtube" as keyof ContextConsent], createdAt: Date.now(),
+            });
+            break; // Only one trending suggestion
+          }
+        }
+      }
+    } catch { /* YouTube not available */ }
+
+    // 2. Knowledge Gap — you have many items in a domain but no synthesis
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readIndex } = require("./cortex-tools.js") as { readIndex: () => Array<{ path: string; title: string; tags: string[] }> };
+      const index = readIndex();
+
+      // Count entities by source type
+      const sourceCounts: Record<string, number> = {};
+      for (const e of index) {
+        const p = e.path;
+        if (p.startsWith("entities/game-")) sourceCounts.steam = (sourceCounts.steam || 0) + 1;
+        else if (p.startsWith("entities/movie-") || p.startsWith("entities/tv-")) sourceCounts.movies = (sourceCounts.movies || 0) + 1;
+        else if (p.startsWith("entities/photo-album-")) sourceCounts.photos = (sourceCounts.photos || 0) + 1;
+        else if (p.includes("kindle") || e.tags.includes("book")) sourceCounts.kindle = (sourceCounts.kindle || 0) + 1;
+      }
+
+      // Count synthesis pages
+      const synthPages = index.filter(e => e.path.startsWith("synthesis/")).length;
+      const totalEntities = index.filter(e => e.path.startsWith("entities/")).length;
+
+      // If we have many entities but few synthesis pages, suggest synthesis
+      if (totalEntities > 50 && synthPages < 5) {
+        suggestions.push({
+          id: "crossapp-synthesis-needed", pillar: "knowledge", priority: "high", score: 0.8,
+          title: `Your Cortex has ${totalEntities} entities but only ${synthPages} synthesis pages`,
+          description: `You have rich data across ${Object.keys(sourceCounts).length} sources, but the Cortex hasn't deeply connected them yet. Generate a Thematic Map to discover cross-cutting patterns?`,
+          icon: "Sparkles", action: { type: "send_message", message: "Generate a thematic map of my Knowledge Cortex to find cross-cutting themes" }, requiredConsent: [], createdAt: Date.now(),
+        });
+      }
+
+      // 3. Cross-Source Connection — find specific cross-domain insights
+      // Check if user's top interests have content in multiple sources
+      const interests = (profile.interests ?? []).slice(0, 5);
+      for (const interest of interests) {
+        const topic = interest.topic.toLowerCase();
+        let sourceHits = 0;
+        const matchedSources: string[] = [];
+
+        // Check each source for this interest
+        const kindleCache = readCache("kindle-library.json") as { books?: Array<{ title: string; categories?: string[] }> } | null;
+        if (kindleCache?.books?.some(b => b.title.toLowerCase().includes(topic) || (b.categories || []).some(c => c.toLowerCase().includes(topic)))) {
+          sourceHits++; matchedSources.push("books");
+        }
+        const movieCache = readCache("movies-tv.json") as { items?: Array<{ title: string; genres?: string[] }> } | null;
+        if (movieCache?.items?.some(m => m.title.toLowerCase().includes(topic) || (m.genres || []).some(g => g.toLowerCase().includes(topic)))) {
+          sourceHits++; matchedSources.push("movies/TV");
+        }
+        const ytCache = readCache("youtube-data.json") as { subscriptions?: Array<{ title: string; description?: string }> } | null;
+        if (ytCache?.subscriptions?.some(c => c.title.toLowerCase().includes(topic) || (c.description || "").toLowerCase().includes(topic))) {
+          sourceHits++; matchedSources.push("YouTube");
+        }
+        const steamCache = readCache("steam-games.json") as { games?: Array<{ name: string; genres?: string[] }> } | null;
+        if (steamCache?.games?.some(g => g.name.toLowerCase().includes(topic) || (g.genres || []).some(ge => ge.toLowerCase().includes(topic)))) {
+          sourceHits++; matchedSources.push("games");
+        }
+
+        // If this interest spans 3+ sources, it's a cross-source pattern worth highlighting
+        if (sourceHits >= 3) {
+          suggestions.push({
+            id: `crossapp-connection-${topic.replace(/\s+/g, "-")}`, pillar: "knowledge", priority: "high", score: 0.85,
+            title: `"${interest.topic}" spans ${sourceHits} sources`,
+            description: `Your interest in "${interest.topic}" appears across ${matchedSources.join(", ")}. Cross-reference to discover deeper connections?`,
+            icon: "Network", action: { type: "send_message", message: `Cross-reference "${interest.topic}" across all my data sources` }, requiredConsent: [], createdAt: Date.now(),
+          });
+          break; // Only one connection suggestion
+        }
+      }
+    } catch { /* cortex or data not available */ }
+
+    // 4. Photo Memory — "On This Day" prompt
+    try {
+      const photoCache = readCache("photo-library.json") as { albums?: Array<{ name: string; dateRange?: { from?: string }; photoCount: number }> } | null;
+      if (photoCache?.albums) {
+        const today = new Date();
+        const monthDay = (today.getMonth() + 1).toString().padStart(2, "0") + "-" + today.getDate().toString().padStart(2, "0");
+        const thisYear = today.getFullYear();
+        const memories = photoCache.albums.filter(a => {
+          if (!a.dateRange?.from) return false;
+          return a.dateRange.from.substring(5, 10) === monthDay && parseInt(a.dateRange.from.substring(0, 4)) < thisYear;
+        });
+        if (memories.length > 0) {
+          const oldest = memories.sort((a, b) => (a.dateRange!.from! > b.dateRange!.from! ? 1 : -1))[0];
+          const yearsAgo = thisYear - parseInt(oldest.dateRange!.from!.substring(0, 4));
+          suggestions.push({
+            id: `crossapp-memory-${monthDay}`, pillar: "ambient" as SuggestionPillar, priority: "low", score: 0.6,
+            title: `📅 ${yearsAgo} year${yearsAgo > 1 ? "s" : ""} ago: ${oldest.name}`,
+            description: `On this day ${yearsAgo} year${yearsAgo > 1 ? "s" : ""} ago, you captured ${oldest.photoCount} photos in "${oldest.name}".`,
+            icon: "Camera", action: { type: "run_app", appId: "photo_library" }, requiredConsent: ["photos" as keyof ContextConsent], createdAt: Date.now(),
+          });
+        }
+      }
+    } catch { /* photos not available */ }
+
+    // 5. Stale Project Alert — projects with no activity for 30+ days
+    try {
+      const fileCache = readCache("file-index.json") as { projects?: Array<{ name: string; lastModified?: string; technologies: string[] }> } | null;
+      if (fileCache?.projects) {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const staleProjects = fileCache.projects.filter(p => p.lastModified && p.lastModified < thirtyDaysAgo);
+        if (staleProjects.length >= 3) {
+          suggestions.push({
+            id: "crossapp-stale-projects", pillar: "project_health", priority: "medium", score: 0.6,
+            title: `${staleProjects.length} projects haven't been touched in 30+ days`,
+            description: `Projects going stale: ${staleProjects.slice(0, 3).map(p => p.name).join(", ")}${staleProjects.length > 3 ? ` (+${staleProjects.length - 3} more)` : ""}. Time to revisit or archive?`,
+            icon: "Archive", action: { type: "run_app", appId: "projects" }, requiredConsent: ["files" as keyof ContextConsent], createdAt: Date.now(),
+          });
+        }
+      }
+    } catch { /* files not available */ }
+  } catch (err) {
+    logAction({ ts: Date.now(), type: "action", category: "proactive-engine", message: `Cross-app intelligence error: ${err}` });
+  }
+
+  return suggestions;
+}
+
 export async function generateSuggestions(forceRefresh: boolean = false): Promise<ProactiveSuggestion[]> {
   if (!forceRefresh && _cachedSuggestions && Date.now() - _cachedSuggestions.generatedAt < CACHE_TTL) {
     return _cachedSuggestions.items;
@@ -1088,6 +1247,7 @@ export async function generateSuggestions(forceRefresh: boolean = false): Promis
     ...(pconsent.learning ? analyzeLearningOpportunities(profile) : []),
     ...runAmbientTasks(profile),
     ...generateCortexSuggestions(profile),
+    ...generateCrossAppIntelligence(profile),
   ];
 
   // Record suggestion count for analytics
