@@ -1869,46 +1869,50 @@ export function createUserContextTools(): EnsoAgentTool[] {
               await page.goto("https://y.qq.com/n/ryqq_v2/profile/like/song", { waitUntil: "domcontentloaded", timeout: 20000 });
               await new Promise(r => setTimeout(r, 6000)); // Wait for SPA to render
 
-              // Scroll to load all songs (QQ Music lazy-loads as you scroll)
-              let prevHeight = 0;
-              for (let i = 0; i < 50; i++) {
-                await page.evaluate("window.scrollBy(0, 1000)");
-                await new Promise(r => setTimeout(r, 600));
-                const newHeight = await page.evaluate("document.body.scrollHeight") as number;
-                if (newHeight === prevHeight) break; // No more content
-                prevHeight = newHeight;
-              }
-
-              // Extract songs using the exact QQ Music DOM structure:
-              // .songlist__item > .songlist__songname_txt a (title)
-              // .songlist__item > .songlist__artist a (artist)
-              // .songlist__item > .songlist__album a (album)
-              const data = await page.evaluate(`(() => {
-                var songs = [];
-                var rows = document.querySelectorAll('.songlist__item');
-                rows.forEach(function(row) {
-                  try {
-                    var titleEl = row.querySelector('.songlist__songname_txt a');
-                    var artistEl = row.querySelector('.songlist__artist a, .playlist__author');
-                    var albumEl = row.querySelector('.songlist__album a');
-                    var timeEl = row.querySelector('.songlist__time');
-                    var title = titleEl ? titleEl.textContent.trim() : '';
-                    var artist = artistEl ? artistEl.textContent.trim() : '';
-                    var album = albumEl ? albumEl.textContent.trim() : '';
-                    var duration = timeEl ? timeEl.textContent.trim() : '';
-                    if (title) songs.push({ title: title, artist: artist || 'Unknown', album: album || '', duration: duration });
-                  } catch(e) {}
-                });
-                return { songs: songs, url: window.location.href, loggedIn: !document.body.innerText.includes('登录') || songs.length > 0 };
+              // Step 1: Get the user's liked playlist ID from profile API
+              const profileData = await page.evaluate(`(async () => {
+                try {
+                  var uin = document.cookie.match(/uin=(\\d+)/);
+                  var loginUin = uin ? uin[1] : '';
+                  if (!loginUin) return { loggedIn: false };
+                  var url = 'https://c6.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg?cv=4747474&ct=20&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=1&uin=' + loginUin + '&cid=205360838&userid=' + loginUin + '&reqfrom=1&reqtype=0';
+                  var resp = await fetch(url, { credentials: 'include' });
+                  var data = await resp.json();
+                  if (data.data && data.data.mymusic && data.data.mymusic[0]) {
+                    return { loggedIn: true, playlistId: data.data.mymusic[0].id, totalSongs: data.data.mymusic[0].num0 };
+                  }
+                  return { loggedIn: true, playlistId: null };
+                } catch(e) { return { loggedIn: false, error: e.message }; }
               })()`);
 
-              const extracted = data as { songs: Array<{ title: string; artist: string; album: string; duration?: string }>; url?: string; loggedIn?: boolean };
-              logAction({ ts: Date.now(), type: "action", category: "user-context", message: `QQ Music extracted ${extracted.songs.length} songs (loggedIn: ${extracted.loggedIn})` });
+              const profile = profileData as { loggedIn: boolean; playlistId?: string; totalSongs?: number };
 
-              if (extracted.songs.length > 0) {
-                favorites.push(...extracted.songs);
-              } else if (!extracted.loggedIn) {
+              if (!profile.loggedIn) {
                 logAction({ ts: Date.now(), type: "action", category: "user-context", message: "QQ Music: not logged in. Use the Enso browser to log in at y.qq.com first." });
+              } else if (profile.playlistId) {
+                // Step 2: Fetch all songs via the playlist API (supports up to 300 per request)
+                const songData = await page.evaluate(`(async () => {
+                  var playlistId = '${profile.playlistId}';
+                  var url = 'https://c6.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&new_format=1&disstid=' + playlistId + '&g_tk=5381&loginUin=0&hostUin=0&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0&song_begin=0&song_num=500';
+                  var resp = await fetch(url, { credentials: 'include' });
+                  var data = await resp.json();
+                  if (data.cdlist && data.cdlist[0] && data.cdlist[0].songlist) {
+                    return data.cdlist[0].songlist.map(function(s) {
+                      return {
+                        title: s.songname || s.name || '',
+                        artist: (s.singer || []).map(function(si) { return si.name; }).join(', '),
+                        album: s.albumname || '',
+                        mid: s.songmid || '',
+                        duration: s.interval ? (Math.floor(s.interval / 60) + ':' + ('0' + (s.interval % 60)).slice(-2)) : ''
+                      };
+                    });
+                  }
+                  return [];
+                })()`);
+
+                const songs = songData as Array<{ title: string; artist: string; album: string; mid?: string; duration?: string }>;
+                logAction({ ts: Date.now(), type: "action", category: "user-context", message: `QQ Music: fetched ${songs.length} songs via playlist API (playlist ${profile.playlistId})` });
+                favorites.push(...songs);
               }
 
               await browser.close();
