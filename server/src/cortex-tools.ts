@@ -1151,40 +1151,59 @@ export function createCortexTools(): EnsoAgentTool[] {
         const doSynthesize = params.synthesize !== false;
 
         try {
-          const { findRelatedContent, formatCrossReference, synthesizeInsight } = await import("./cortex-synthesis.js");
-          const related = findRelatedContent(topic);
+          if (doSynthesize) {
+            // Full LLM-powered synthesis — semantic understanding
+            const { synthesize, formatSynthesis } = await import("./cortex-synthesis.js");
+            const result = await synthesize(topic);
+            const formatted = formatSynthesis(result);
 
-          let synthesis = "";
-          if (doSynthesize && related.totalMatches >= 2) {
-            // Read profile for context
-            const profilePath = join(CORTEX_DIR, "synthesis", "user-profile.md");
-            const profile = existsSync(profilePath) ? safeRead(profilePath)?.slice(0, 500) : undefined;
-            synthesis = await synthesizeInsight(topic, related, profile || undefined);
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  tool: "enso_cross_reference",
+                  topic,
+                  narrative: result.narrative,
+                  connections: result.connections,
+                  suggestedActions: result.suggestedActions,
+                  themes: result.themes,
+                  totalMatches: result.relatedContent.totalMatches,
+                  sourceCount: Object.keys(result.relatedContent.bySource).length,
+                  cortexPageCount: result.relatedContent.cortexPages.length,
+                  bySource: Object.fromEntries(
+                    Object.entries(result.relatedContent.bySource).map(([src, hits]) => [
+                      src,
+                      hits.slice(0, 5).map(h => ({ title: h.title, score: h.score, reason: h.reason, metadata: h.metadata })),
+                    ]),
+                  ),
+                  cortexPages: result.relatedContent.cortexPages.slice(0, 5).map(p => ({ path: p.path, title: p.title, summary: p.summary })),
+                  formatted,
+                }),
+              }],
+            };
+          } else {
+            // Fast keyword-only cross-reference (no LLM)
+            const { findRelatedContent, formatCrossReference } = await import("./cortex-synthesis.js");
+            const related = findRelatedContent(topic);
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  tool: "enso_cross_reference",
+                  topic,
+                  totalMatches: related.totalMatches,
+                  sourceCount: Object.keys(related.bySource).length,
+                  bySource: Object.fromEntries(
+                    Object.entries(related.bySource).map(([src, hits]) => [
+                      src, hits.slice(0, 5).map(h => ({ title: h.title, score: h.score })),
+                    ]),
+                  ),
+                  cortexPages: related.cortexPages.slice(0, 5).map(p => ({ path: p.path, title: p.title })),
+                  formatted: formatCrossReference(related),
+                }),
+              }],
+            };
           }
-
-          const formatted = formatCrossReference(related);
-
-          return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                tool: "enso_cross_reference",
-                topic,
-                totalMatches: related.totalMatches,
-                sourceCount: Object.keys(related.bySource).length,
-                cortexPageCount: related.cortexPages.length,
-                bySource: Object.fromEntries(
-                  Object.entries(related.bySource).map(([src, hits]) => [
-                    src,
-                    hits.map(h => ({ title: h.title, score: h.score, metadata: h.metadata })),
-                  ]),
-                ),
-                cortexPages: related.cortexPages.slice(0, 5).map(p => ({ path: p.path, title: p.title, summary: p.summary })),
-                synthesis,
-                formatted,
-              }),
-            }],
-          };
         } catch (err) {
           return {
             content: [{
