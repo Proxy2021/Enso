@@ -924,8 +924,11 @@ export async function handlePluginCardAction(params: {
     sendOperation("processing", "Loading entity");
 
     try {
+      logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Resolving entity: ${entityId}`, cardId });
       const { buildEntityDetailData } = await import("../entity-model.js");
+      logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Import OK, calling buildEntityDetailData...`, cardId });
       const detailData = await buildEntityDetailData(entityId);
+      logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Detail data: ${detailData ? 'OK' : 'NULL'} for ${entityId}`, cardId });
       if (!detailData) {
         sendOperation("error", "Entity not found");
         client.send({
@@ -955,12 +958,28 @@ export async function handlePluginCardAction(params: {
 
       // Resolve the generatedUI — use entity detail template
       const { getGeneratedTemplateCodeBySignature: getTemplateBySignature } = await import("../native-tools/registry.js");
-      let generatedUI = ctx.currentGeneratedUI; // keep current template; entity detail rendering is template-adaptive
+      let generatedUI = ctx.currentGeneratedUI;
 
       // Try to find the app's template (which should handle focusEntity via scope-adaptive rendering)
       if (ctx.signatureId) {
         const appTemplate = getTemplateBySignature(ctx.signatureId);
-        if (appTemplate) generatedUI = appTemplate;
+        if (appTemplate) {
+          generatedUI = appTemplate;
+        }
+      }
+
+      // If still no template, get it from the loaded app's templateJSX
+      if (!generatedUI) {
+        try {
+          const { loadAllApps } = await import("../app-persistence.js");
+          const apps = loadAllApps();
+          const app = apps.find(a => a.spec.signatureId === ctx.signatureId || a.spec.toolFamily === ctx.toolFamily);
+          if (app?.templateJSX) generatedUI = app.templateJSX;
+        } catch { /* best effort */ }
+      }
+
+      if (!generatedUI) {
+        logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `WARNING: no template found for signatureId=${ctx.signatureId} toolFamily=${ctx.toolFamily}`, cardId });
       }
 
       ctx.currentGeneratedUI = generatedUI;

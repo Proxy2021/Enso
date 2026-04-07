@@ -20,7 +20,7 @@ var p = params || {};
     if (m.overview && m.overview.toLowerCase().includes(q)) score += 2;
     if (m.directors && m.directors.some(function(d) { return d.toLowerCase().includes(q); })) score += 7;
     var prefix = m.category === "tv" ? "tv-series" : "movie";
-    var slug = m.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+    var slug = (m.title + (m.year ? "-" + m.year : "")).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
     return Object.assign({}, m, { _score: score, entityId: "movies_tv:" + prefix + ":" + slug });
   }).filter(function(m) { return m._score > 0; });
 
