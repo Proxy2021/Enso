@@ -726,7 +726,7 @@ export async function startEnsoServer(opts: {
   // ── Podcast Streaming API (for email sharing) ──
   app.get("/api/podcast/stream/:slug", (req, res) => {
     const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
-    const audioPath = join(homedir(), ".enso", "data", "kindle", "audio", `${slug}.wav`);
+    const audioPath = join(homedir(), ".enso", "data", "deep-content", "audio", `${slug}.wav`);
     if (!existsSync(audioPath)) {
       res.status(404).json({ error: "Podcast not found" });
       return;
@@ -743,7 +743,7 @@ export async function startEnsoServer(opts: {
   app.get("/api/podcast/info/:slug", async (req, res) => {
     try {
       const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
-      const metaPath = join(homedir(), ".enso", "data", "kindle", "podcasts", `${slug}.json`);
+      const metaPath = join(homedir(), ".enso", "data", "deep-content", `${slug}.json`);
       if (!existsSync(metaPath)) {
         res.status(404).json({ error: "Podcast not found" });
         return;

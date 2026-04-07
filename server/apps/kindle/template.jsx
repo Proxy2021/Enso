@@ -127,7 +127,7 @@ function GeneratedUI({ data, onAction }) {
           <UICard style={{ padding: "12px", borderColor: "#ef444444" }}>
             <div style={{ fontSize: "12px", color: "#ef4444" }}>Podcast generation failed: {d.podcastError || "Unknown error"}</div>
             <Button variant="outline" size="sm" style={{ marginTop: "6px", fontSize: "10px" }}
-              onClick={function() { onAction("book_podcast", { entityId: entity.entityId || d.focusEntity }); }}
+              onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
             >🔄 Retry</Button>
           </UICard>
         )}
@@ -231,7 +231,7 @@ function GeneratedUI({ data, onAction }) {
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
           {!podcastAudioUrl && !podcastStatus && (
             <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
-              onClick={function() { onAction("book_podcast", { entityId: entity.entityId || d.focusEntity }); }}
+              onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
             >🎙️ Deep Podcast</Button>
           )}
           <Button variant="outline" size="sm"
@@ -251,7 +251,7 @@ function GeneratedUI({ data, onAction }) {
             <Button variant="outline" size="sm"
               onClick={function() {
                 var email = prompt("Send book report + podcast to:");
-                if (email) onAction("book_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
+                if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
               }}
             >📧 Email Summary + Podcast</Button>
           )}

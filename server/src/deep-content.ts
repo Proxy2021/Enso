@@ -1,11 +1,16 @@
 /**
- * book-podcast.ts — Book Intelligence Pipeline for the Kindle app.
+ * deep-content.ts — Universal Deep Content Pipeline for any entity type.
  *
- * Deeply researches books via web search, generates long-form podcast scripts
- * (5-30+ min), renders multi-speaker audio via Gemini TTS, and caches results.
+ * Deeply researches entities (books, games, movies, channels, projects, etc.)
+ * via web search, generates long-form podcast scripts (5-30+ min), renders
+ * multi-speaker audio via Gemini TTS, and caches results.
+ *
+ * Supports any entity type through ENTITY_PROFILES with per-type search
+ * queries and synthesis hints. Accepts input from cards, entities, or
+ * orchestration results via extractDeepContentSource().
  *
  * Three entry points:
- *   1. Single book: onAction("book_podcast", { entityId }) from entity detail
+ *   1. Single entity: onAction("book_podcast", { entityId }) from entity detail
  *   2. Batch: onAction("book_batch_process", { entityIds }) from collection view
  *   3. Scheduled: weekly recommendation task
  */
@@ -22,7 +27,7 @@ import { braveWebSearch, fetchPageContent } from "./researcher-tools.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export interface BookResearchResult {
+export interface EntityResearchResult {
   chapterSummaries: Array<{ chapter: string; summary: string }>;
   coreThesis: string;
   keyThemes: string[];
@@ -45,12 +50,14 @@ export interface PodcastOutline {
   }>;
 }
 
-export interface ProcessedBook {
+export interface ProcessedContent {
   entityId: string;
   title: string;
   author: string;
+  contentType: string;
+  entityType?: string;
   processedAt: string;
-  research: BookResearchResult;
+  research: EntityResearchResult;
   outline: PodcastOutline;
   script: string;
   audioUrl: string;
@@ -58,25 +65,122 @@ export interface ProcessedBook {
   durationMinutes: number;
 }
 
-export type BookPodcastPhase =
+export type DeepContentPhase =
   | "researching" | "generating_outline" | "writing_section"
   | "rendering_audio" | "stitching" | "complete" | "error";
 
-export interface BookPodcastProgress {
-  phase: BookPodcastPhase;
+export interface DeepContentProgress {
+  phase: DeepContentPhase;
   detail?: string;
   sectionIndex?: number;
   totalSections?: number;
   percentComplete?: number;
 }
 
+/** Input for the deep content pipeline — extracted from any card or entity */
+export interface DeepContentSource {
+  sourceId: string;          // entityId or cardId
+  title: string;
+  contentType: "entity" | "research" | "orchestration" | "text";
+  sections?: Array<{ title: string; content: string; bullets?: string[] }>;
+  findings?: Array<{ text: string; type?: string; confidence?: string; example?: string }>;
+  narrative?: string;
+  summary?: string;
+  keyPoints?: string[];
+  contradictions?: string[];
+  sources?: Array<{ url: string; title: string }>;
+  entityId?: string;
+  entityType?: string;
+  metadata?: Record<string, unknown>;
+  cortexContent?: string;
+}
+
+/** Per-entity-type web research configuration */
+interface EntityProfile {
+  searchQueries: (title: string, metadata: Record<string, unknown>) => string[];
+  synthesisHint: string;
+}
+
+const ENTITY_PROFILES: Record<string, EntityProfile> = {
+  book: {
+    searchQueries: (title, meta) => [
+      `"${title}" by ${meta.author || ""} chapter summary`,
+      `"${title}" key themes main arguments insights`,
+      `"${title}" book review analysis`,
+      `"${title}" chapter by chapter breakdown`,
+      `"${title}" criticism counterarguments perspectives`,
+      ...(meta.categories?.[0] ? [`"${title}" ${meta.categories[0]} implications`] : []),
+    ],
+    synthesisHint: "book analysis expert creating chapter summaries, core thesis, key insights with examples",
+  },
+  game: {
+    searchQueries: (title, meta) => [
+      `"${title}" game review analysis gameplay`,
+      `"${title}" ${(meta.genres as string[])?.[0] || ""} game mechanics`,
+      `"${title}" ${meta.developer || ""} game design philosophy`,
+      `"${title}" metacritic community discussion`,
+      `"${title}" story narrative analysis`,
+    ],
+    synthesisHint: "game critic analyzing gameplay mechanics, story, art direction, technical performance, and player reception",
+  },
+  movie: {
+    searchQueries: (title, meta) => [
+      `"${title}" ${meta.year || ""} film review analysis`,
+      `"${title}" plot themes cinematography`,
+      `"${title}" cast performances review`,
+      `"${title}" ${meta.director || ""} director vision`,
+      `"${title}" cultural impact significance`,
+    ],
+    synthesisHint: "film critic analyzing plot, performances, themes, cinematography, and cultural significance",
+  },
+  "tv-series": {
+    searchQueries: (title, meta) => [
+      `"${title}" tv series review analysis`,
+      `"${title}" season breakdown best episodes`,
+      `"${title}" cast character development`,
+      `"${title}" themes storytelling`,
+      `"${title}" critical reception audience response`,
+    ],
+    synthesisHint: "TV critic analyzing story arcs, character development, production quality, and cultural impact",
+  },
+  channel: {
+    searchQueries: (title, meta) => [
+      `"${title}" youtube channel content analysis`,
+      `"${title}" youtube best videos recommendations`,
+      `${meta.category || ""} youtube content creators strategy`,
+      `"${title}" subscriber community engagement`,
+    ],
+    synthesisHint: "YouTube content analyst examining content strategy, audience engagement, production quality, and growth",
+  },
+  project: {
+    searchQueries: (title, meta) => [
+      `"${title}" project architecture documentation`,
+      `"${title}" ${(meta.technologies as string[])?.[0] || ""} analysis`,
+      `"${title}" github alternatives comparison`,
+      `"${title}" tutorial getting started`,
+    ],
+    synthesisHint: "software architect analyzing architecture, code quality, ecosystem positioning, and developer experience",
+  },
+};
+
+function getEntityProfile(entityType: string): EntityProfile {
+  return ENTITY_PROFILES[entityType] || {
+    searchQueries: (title) => [
+      `"${title}" analysis review`,
+      `"${title}" deep dive discussion insights`,
+      `"${title}" significance importance`,
+    ],
+    synthesisHint: "subject matter expert providing comprehensive analysis with specific examples and evidence",
+  };
+}
+
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
-const PODCAST_DIR = join(homedir(), ".enso", "data", "kindle", "podcasts");
-const AUDIO_DIR = join(homedir(), ".enso", "data", "kindle", "audio");
+const CONTENT_DIR = join(homedir(), ".enso", "data", "deep-content");
+const AUDIO_DIR = join(homedir(), ".enso", "data", "deep-content", "audio");
 
 function ensureDirs(): void {
-  if (!existsSync(PODCAST_DIR)) mkdirSync(PODCAST_DIR, { recursive: true });
+  if (!existsSync(CONTENT_DIR)) mkdirSync(CONTENT_DIR, { recursive: true });
   if (!existsSync(AUDIO_DIR)) mkdirSync(AUDIO_DIR, { recursive: true });
 }
 
@@ -86,28 +190,28 @@ function slugFromEntityId(entityId: string): string {
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
 
-export function getProcessedBook(entityId: string): ProcessedBook | null {
+export function getProcessedContent(entityId: string): ProcessedContent | null {
   ensureDirs();
   const slug = slugFromEntityId(entityId);
-  const path = join(PODCAST_DIR, `${slug}.json`);
+  const path = join(CONTENT_DIR, `${slug}.json`);
   try {
     if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8")) as ProcessedBook;
+    return JSON.parse(readFileSync(path, "utf-8")) as ProcessedContent;
   } catch { return null; }
 }
 
-export function isBookProcessed(entityId: string): boolean {
-  return getProcessedBook(entityId) !== null;
+export function isContentProcessed(entityId: string): boolean {
+  return getProcessedContent(entityId) !== null;
 }
 
-export function listProcessedBooks(): string[] {
+export function listProcessedContent(): string[] {
   ensureDirs();
   try {
-    return readdirSync(PODCAST_DIR)
+    return readdirSync(CONTENT_DIR)
       .filter(f => f.endsWith(".json"))
       .map(f => {
         try {
-          const data = JSON.parse(readFileSync(join(PODCAST_DIR, f), "utf-8"));
+          const data = JSON.parse(readFileSync(join(CONTENT_DIR, f), "utf-8"));
           return data.entityId as string;
         } catch { return null; }
       })
@@ -115,40 +219,106 @@ export function listProcessedBooks(): string[] {
   } catch { return []; }
 }
 
-function saveProcessedBook(book: ProcessedBook): void {
+function saveProcessedContent(book: ProcessedContent): void {
   ensureDirs();
   const slug = slugFromEntityId(book.entityId);
-  writeFileSync(join(PODCAST_DIR, `${slug}.json`), JSON.stringify(book, null, 2));
+  writeFileSync(join(CONTENT_DIR, `${slug}.json`), JSON.stringify(book, null, 2));
 }
 
-// ─── Phase 1: Book Research ──────────────────────────────────────────────────
+// ─── Content Extraction ─────────────────────────────────────────────────────
 
-export async function researchBook(params: {
+/**
+ * Extract structured content from any card data for the deep content pipeline.
+ * Detects the content type and maps fields appropriately.
+ */
+export function extractDeepContentSource(
+  cardData: Record<string, unknown>,
+  cardId: string,
+): DeepContentSource | null {
+  // Research card (from researcher tool)
+  if (cardData.keyFindings || cardData.sections) {
+    const findings = (cardData.keyFindings as Array<Record<string, unknown>> || []).map(f => ({
+      text: String(f.text || ""),
+      type: f.type as string | undefined,
+      confidence: f.confidence as string | undefined,
+      example: f.example as string | undefined,
+    }));
+    const sections = (cardData.sections as Array<Record<string, unknown>> || []).map(s => ({
+      title: String(s.title || ""),
+      content: String(s.summary || ""),
+      bullets: s.bullets as string[] | undefined,
+    }));
+    return {
+      sourceId: cardId,
+      title: String(cardData.topic || cardData.query || "Research"),
+      contentType: "research",
+      findings: findings.length > 0 ? findings : undefined,
+      sections: sections.length > 0 ? sections : undefined,
+      narrative: cardData.narrative as string | undefined,
+      summary: cardData.summary as string | undefined,
+      keyPoints: findings.slice(0, 10).map(f => f.text),
+      contradictions: (cardData.contradictions as Array<Record<string, unknown>> || []).map(c => String(c.claim || c)),
+      sources: (cardData.sources as Array<Record<string, unknown>> || []).map(s => ({
+        url: String(s.url || ""),
+        title: String(s.title || s.name || ""),
+      })),
+    };
+  }
+
+  // Entity detail card (from view_entity action)
+  if (cardData.focusEntity) {
+    const entity = cardData.entity as Record<string, unknown> | undefined;
+    const processed = cardData.processedBook as Record<string, unknown> | undefined;
+    return {
+      sourceId: String(cardData.focusEntity),
+      title: String(entity?.title || "Entity"),
+      contentType: "entity",
+      entityId: String(cardData.focusEntity),
+      entityType: String(entity?.type || ""),
+      metadata: entity || {},
+      cortexContent: cardData.cortexContent as string | undefined,
+      // If already processed, pull research data
+      findings: processed ? (processed.research as Record<string, unknown>)?.keyInsights as any : undefined,
+      sections: processed ? (processed.research as Record<string, unknown>)?.chapterSummaries as any : undefined,
+      summary: entity?.summary as string | undefined,
+    };
+  }
+
+  // Orchestration card
+  if (cardData.orchestrationPlan || cardData.orchestrationProgress) {
+    return {
+      sourceId: cardId,
+      title: String(cardData.goal || "Orchestration Result"),
+      contentType: "orchestration",
+      summary: String(cardData.summary || cardData.goal || ""),
+      narrative: cardData.narrative as string | undefined,
+    };
+  }
+
+  // Not rich enough for deep content
+  return null;
+}
+
+// ─── Phase 1: Entity Research ───────────────────────────────────────────────
+
+export async function researchEntity(params: {
   entityId: string;
   title: string;
   author: string;
   description?: string;
   categories?: string[];
+  entityType?: string;
+  metadata?: Record<string, unknown>;
   cortexContent?: string;
   relatedEntityTitles?: string[];
-  onProgress?: (progress: BookPodcastProgress) => void;
-}): Promise<BookResearchResult> {
+  onProgress?: (progress: DeepContentProgress) => void;
+}): Promise<EntityResearchResult> {
   const { title, author, categories, cortexContent, relatedEntityTitles, onProgress } = params;
-  onProgress?.({ phase: "researching", detail: "Searching the web for book content..." });
+  onProgress?.({ phase: "researching", detail: "Searching the web for content..." });
 
-  // Generate targeted search queries
-  const queries = [
-    `"${title}" by ${author} chapter summary`,
-    `"${title}" by ${author} key themes main arguments`,
-    `"${title}" book review analysis insights`,
-    `"${title}" chapter by chapter breakdown`,
-    `${author} "${title}" core thesis arguments`,
-    `"${title}" criticism counterarguments different perspectives`,
-  ];
-  // Add category-specific query if available
-  if (categories?.length) {
-    queries.push(`"${title}" ${categories[0]} implications applications`);
-  }
+  // Generate targeted search queries from entity profile
+  const profile = getEntityProfile(params.entityType || "book");
+  const queries = profile.searchQueries(title, { author, categories, ...params.metadata });
 
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Researching "${title}" with ${queries.length} queries` });
 
@@ -181,7 +351,7 @@ export async function researchBook(params: {
   const richSources = sourcesWithContent.filter(s => s.content.length > 100);
 
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Extracted content from ${richSources.length} sources for "${title}"` });
-  onProgress?.({ phase: "researching", detail: `Synthesizing ${richSources.length} sources into book analysis...` });
+  onProgress?.({ phase: "researching", detail: `Synthesizing ${richSources.length} sources into analysis...` });
 
   // Build synthesis prompt
   const sourcesText = richSources.map((s, i) =>
@@ -193,10 +363,10 @@ export async function researchBook(params: {
     : "";
 
   const cortexContext = cortexContent
-    ? `\nExisting knowledge about this book:\n${cortexContent.slice(0, 2000)}`
+    ? `\nExisting knowledge about this content:\n${cortexContent.slice(0, 2000)}`
     : "";
 
-  const synthesisPrompt = `You are a book analysis expert creating an exhaustive deep-dive into "${title}" by ${author}. Your goal is to capture the FULL essence of this book — every major idea, argument, and insight.
+  const synthesisPrompt = `You are a ${profile.synthesisHint} creating an exhaustive deep-dive into "${title}" by ${author}. Your goal is to capture the FULL essence of this content — every major idea, argument, and insight.
 ${userContext}${cortexContext}
 
 SOURCES:
@@ -236,7 +406,7 @@ CRITICAL RULES:
     const jsonStr = synthesisResult?.replace(/```json\n?|\n?```/g, "").trim() ?? "{}";
     const parsed = JSON.parse(jsonStr);
 
-    const result: BookResearchResult = {
+    const result: EntityResearchResult = {
       chapterSummaries: parsed.chapterSummaries || [],
       coreThesis: parsed.coreThesis || `A book by ${author}`,
       keyThemes: parsed.keyThemes || [],
@@ -271,7 +441,7 @@ CRITICAL RULES:
 export async function generatePodcastOutline(
   title: string,
   author: string,
-  research: BookResearchResult,
+  research: EntityResearchResult,
 ): Promise<PodcastOutline> {
   // Determine target duration based on research depth
   // Real conversational speech ≈ 150 words/min ≈ 900 chars/min for dialogue text
@@ -342,7 +512,7 @@ async function generateSectionScript(params: {
   title: string;
   author: string;
   section: PodcastOutline["sections"][0];
-  research: BookResearchResult;
+  research: EntityResearchResult;
   previousEnding?: string;
   sectionIndex: number;
   totalSections: number;
@@ -399,7 +569,7 @@ export async function generateFullScript(
   title: string,
   author: string,
   outline: PodcastOutline,
-  research: BookResearchResult,
+  research: EntityResearchResult,
   onProgress?: (sectionIndex: number, totalSections: number) => void,
 ): Promise<{ fullScript: string; sectionScripts: string[] }> {
   const sectionScripts: string[] = [];
@@ -491,14 +661,14 @@ export async function renderLongformAudio(
 
 // ─── Full Pipeline ───────────────────────────────────────────────────────────
 
-export async function generateBookPodcast(params: {
+export async function generateDeepContent(params: {
   entityId: EntityId;
-  onProgress?: (progress: BookPodcastProgress) => void;
-}): Promise<ProcessedBook> {
+  onProgress?: (progress: DeepContentProgress) => void;
+}): Promise<ProcessedContent> {
   const { entityId, onProgress } = params;
 
   // Check cache first
-  const cached = getProcessedBook(entityId);
+  const cached = getProcessedContent(entityId);
   if (cached) {
     logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Cache hit for ${entityId}` });
     onProgress?.({ phase: "complete", percentComplete: 100 });
@@ -536,7 +706,7 @@ export async function generateBookPodcast(params: {
 
   // Phase 1: Research
   onProgress?.({ phase: "researching", detail: "Searching the web...", percentComplete: 5 });
-  const research = await researchBook({
+  const research = await researchEntity({
     entityId, title, author, description, categories,
     cortexContent, relatedEntityTitles: relatedTitles,
     onProgress,
@@ -602,10 +772,12 @@ export async function generateBookPodcast(params: {
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Podcast complete for "${title}": ${durationMinutes} min, ${wavData.length} bytes` });
 
   // Build result
-  const processed: ProcessedBook = {
+  const processed: ProcessedContent = {
     entityId,
     title,
     author,
+    contentType: entity.type || "book",
+    entityType: entity.type,
     processedAt: new Date().toISOString(),
     research,
     outline,
@@ -616,7 +788,7 @@ export async function generateBookPodcast(params: {
   };
 
   // Persist
-  saveProcessedBook(processed);
+  saveProcessedContent(processed);
   onProgress?.({ phase: "complete", percentComplete: 100 });
 
   return processed;
@@ -624,9 +796,9 @@ export async function generateBookPodcast(params: {
 
 // ─── Batch Processing ────────────────────────────────────────────────────────
 
-export async function processBookBatch(params: {
+export async function processEntityBatch(params: {
   entityIds: string[];
-  onBookProgress?: (bookIndex: number, totalBooks: number, bookTitle: string, progress: BookPodcastProgress) => void;
+  onBookProgress?: (bookIndex: number, totalBooks: number, bookTitle: string, progress: DeepContentProgress) => void;
 }): Promise<{ processed: number; failed: number; results: Array<{ entityId: string; success: boolean; error?: string }> }> {
   const { entityIds, onBookProgress } = params;
   const results: Array<{ entityId: string; success: boolean; error?: string }> = [];
@@ -636,7 +808,7 @@ export async function processBookBatch(params: {
   for (let i = 0; i < entityIds.length; i++) {
     const entityId = entityIds[i];
     try {
-      const result = await generateBookPodcast({
+      const result = await generateDeepContent({
         entityId,
         onProgress: (progress) => {
           onBookProgress?.(i, entityIds.length, result?.title ?? entityId, progress);
@@ -664,10 +836,10 @@ export async function processBookBatch(params: {
  * Select N unprocessed books that best match the user's Cortex interests.
  * Uses tag overlap between books and Cortex theme distribution.
  */
-export async function recommendUnprocessedBooks(count = 3): Promise<Array<{ entityId: string; title: string; reason: string }>> {
+export async function recommendUnprocessedEntities(count = 3): Promise<Array<{ entityId: string; title: string; reason: string }>> {
   const { getEntitiesBySource } = await import("./entity-model.js");
   const allBooks = getEntitiesBySource("kindle" as never, 500);
-  const processedIds = new Set(listProcessedBooks());
+  const processedIds = new Set(listProcessedContent());
 
   // Filter to unprocessed books
   const unprocessed = allBooks.filter(b => !processedIds.has(b.entityId));
@@ -726,7 +898,7 @@ function escapeHtml(s: string): string {
 /**
  * Build a rich HTML email for a processed book with summary + podcast link.
  */
-export function buildBookEmailHtml(processed: ProcessedBook, baseUrl: string): string {
+export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: string): string {
   const slug = slugFromEntityId(processed.entityId);
   const podcastUrl = `${baseUrl}/api/podcast/stream/${slug}`;
   const r = processed.research;
@@ -789,3 +961,15 @@ export function buildBookEmailHtml(processed: ProcessedBook, baseUrl: string): s
 
   return parts.join("\n");
 }
+
+// Backward compatibility aliases (for existing book-podcast.ts callers)
+export const researchBook = researchEntity;
+export const generateBookPodcast = generateDeepContent;
+export const processBookBatch = processEntityBatch;
+export const getProcessedBook = getProcessedContent;
+export const isBookProcessed = isContentProcessed;
+export const listProcessedBooks = listProcessedContent;
+export const buildBookEmailHtml = buildEntityEmailHtml;
+export const recommendUnprocessedBooks = recommendUnprocessedEntities;
+export type BookResearchResult = EntityResearchResult;
+export type ProcessedBook = ProcessedContent;

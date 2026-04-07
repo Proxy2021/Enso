@@ -1026,8 +1026,8 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
-  // ── Book Podcast: generate deep research + long-form podcast for a book ──
-  if (action === "book_podcast") {
+  // ── Deep Content: generate deep research + long-form podcast for any entity or rich card ──
+  if (action === "deep_content" || action === "book_podcast") {
     const p = (payload ?? {}) as Record<string, unknown>;
     const entityId = String(p.entityId ?? "").trim();
     if (!entityId) { sendOperation("error", "No entity ID"); return; }
@@ -1035,7 +1035,7 @@ export async function handlePluginCardAction(params: {
     logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `book_podcast: ${entityId}`, cardId });
 
     // Check cache first
-    const { getProcessedBook, generateBookPodcast } = await import("../book-podcast.js");
+    const { getProcessedBook, generateBookPodcast } = await import("../deep-content.js");
     const cached = getProcessedBook(entityId);
     if (cached) {
       // Return cached podcast immediately
@@ -1131,7 +1131,7 @@ export async function handlePluginCardAction(params: {
   }
 
   // ── Book Batch Process: process multiple books as a background task ──
-  if (action === "book_batch_process") {
+  if (action === "batch_deep_content" || action === "book_batch_process") {
     const p = (payload ?? {}) as Record<string, unknown>;
     const entityIds = (p.entityIds ?? []) as string[];
     if (!entityIds.length) { sendOperation("error", "No books selected"); return; }
@@ -1139,7 +1139,7 @@ export async function handlePluginCardAction(params: {
     logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Batch process: ${entityIds.length} books`, cardId });
     sendOperation("processing", `Processing ${entityIds.length} books...`);
 
-    const { processBookBatch } = await import("../book-podcast.js");
+    const { processBookBatch } = await import("../deep-content.js");
 
     processBookBatch({
       entityIds,
@@ -1186,7 +1186,7 @@ export async function handlePluginCardAction(params: {
   }
 
   // ── Book Email Share: send processed book summary + podcast link via email ──
-  if (action === "book_share_email") {
+  if (action === "entity_share_email" || action === "book_share_email") {
     const p = (payload ?? {}) as Record<string, unknown>;
     const recipient = String(p.recipient ?? "").trim();
     const entityId = String(p.entityId ?? "").trim();
@@ -1200,7 +1200,7 @@ export async function handlePluginCardAction(params: {
     }
 
     try {
-      const { getProcessedBook, buildBookEmailHtml } = await import("../book-podcast.js");
+      const { getProcessedBook, buildBookEmailHtml } = await import("../deep-content.js");
       const processed = getProcessedBook(entityId);
       if (!processed) {
         sendOperation("error", "Book not yet processed. Generate the podcast first.");

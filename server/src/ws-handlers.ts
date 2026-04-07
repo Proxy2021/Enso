@@ -809,42 +809,83 @@ export async function handleWebSocketMessage(
             } catch { /* best effort */ }
 
             // Automatically follow up with podcast generation
+            // Detect if card has rich structured data → use deep content pipeline
+            // Otherwise → use short-form 3-5 min podcast
+            const cardData = (msg.cardContent?.data ?? {}) as Record<string, unknown>;
+            const isRichContent = !!(
+              (Array.isArray(cardData.keyFindings) && cardData.keyFindings.length > 3) ||
+              (Array.isArray(cardData.sections) && cardData.sections.length > 2) ||
+              cardData.focusEntity ||
+              (Array.isArray(cardData.chapterSummaries) && cardData.chapterSummaries.length > 0)
+            );
+
+            runtime.log?.(`[enso] card.summarize podcast: rich=${isRichContent} for ${sumCardId}`);
+
             send({
               id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
               state: "delta", targetCardId: sumCardId,
-              cardPodcastStatus: "writing_script",
+              cardPodcastStatus: isRichContent ? "researching" : "writing_script",
               timestamp: Date.now(),
             });
 
             try {
-              const { generatePodcastAudio } = await import("./podcast.js");
-              const slug = sumCardId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 60);
-              const result = await generatePodcastAudio({
-                content: {
-                  title: summary.overview.slice(0, 100),
-                  summary: summary.overview,
-                  keyPoints: summary.keyOutcomes,
-                  narrative: summary.narrative,
-                },
-                audioSlug: slug,
-                subdirectory: "card-summaries",
-                model: chatModel,
-                providerKeys,
-                onProgress: (status) => {
-                  send({
-                    id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
-                    state: "delta", targetCardId: sumCardId,
-                    cardPodcastStatus: status,
-                    timestamp: Date.now(),
+              let audioUrl: string;
+              let script: string;
+
+              if (isRichContent) {
+                // DEEP MODE — long-form podcast from structured data
+                const { extractDeepContentSource, generateDeepContent } = await import("./deep-content.js");
+                const source = extractDeepContentSource(cardData, sumCardId);
+                if (source) {
+                  // Use the source title or summary overview for identification
+                  source.title = source.title || summary.overview.slice(0, 100);
+                  source.summary = source.summary || summary.overview;
+                  source.keyPoints = source.keyPoints || summary.keyOutcomes;
+
+                  const result = await generateDeepContent({
+                    entityId: source.sourceId,
+                    onProgress: (progress) => {
+                      send({
+                        id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
+                        state: "delta", targetCardId: sumCardId,
+                        cardPodcastStatus: progress.phase,
+                        timestamp: Date.now(),
+                      });
+                    },
                   });
-                },
-              });
+                  audioUrl = result.audioUrl;
+                  script = result.script;
+                } else {
+                  // Fallback to short-form if extraction fails
+                  const { generatePodcastAudio } = await import("./podcast.js");
+                  const slug = sumCardId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 60);
+                  const r = await generatePodcastAudio({
+                    content: { title: summary.overview.slice(0, 100), summary: summary.overview, keyPoints: summary.keyOutcomes, narrative: summary.narrative },
+                    audioSlug: slug, subdirectory: "card-summaries", model: chatModel, providerKeys,
+                  });
+                  audioUrl = r.audioUrl;
+                  script = r.script;
+                }
+              } else {
+                // QUICK MODE — short-form 3-5 min podcast (existing behavior)
+                const { generatePodcastAudio } = await import("./podcast.js");
+                const slug = sumCardId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 60);
+                const r = await generatePodcastAudio({
+                  content: { title: summary.overview.slice(0, 100), summary: summary.overview, keyPoints: summary.keyOutcomes, narrative: summary.narrative },
+                  audioSlug: slug, subdirectory: "card-summaries", model: chatModel, providerKeys,
+                  onProgress: (status) => {
+                    send({ id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0, state: "delta", targetCardId: sumCardId, cardPodcastStatus: status, timestamp: Date.now() });
+                  },
+                });
+                audioUrl = r.audioUrl;
+                script = r.script;
+              }
 
               send({
                 id: randomUUID(), runId: randomUUID(), sessionKey, seq: 0,
                 state: "delta", targetCardId: sumCardId,
-                cardAudioUrl: result.audioUrl,
-                cardPodcastScript: result.script,
+                cardAudioUrl: audioUrl,
+                cardPodcastScript: script,
                 cardPodcastStatus: "ready",
                 timestamp: Date.now(),
               });
@@ -853,8 +894,8 @@ export async function handleWebSocketMessage(
                 persistCard(clientId, sumConvId, {
                   id: sumCardId, runId: "", type: msg.cardType!, role: "assistant",
                   cardSummary: summary,
-                  cardAudioUrl: result.audioUrl,
-                  cardPodcastScript: result.script,
+                  cardAudioUrl: audioUrl,
+                  cardPodcastScript: script,
                   timestamp: Date.now(),
                 });
               } catch { /* best effort */ }
