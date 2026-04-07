@@ -73,19 +73,46 @@ function slugify(title) {
 }
 
 // Check which books have been deep-processed (podcast generated)
-var podcastDir = path.join(os.homedir(), ".enso", "data", "kindle", "podcasts");
+// Check both old (kindle/podcasts) and new (deep-content) storage paths
+var deepContentDir = path.join(os.homedir(), ".enso", "data", "deep-content");
+var oldPodcastDir = path.join(os.homedir(), ".enso", "data", "kindle", "podcasts");
 var processedSlugs = new Set();
+var processedBooks = [];
 try {
-  if (fs.existsSync(podcastDir)) {
-    fs.readdirSync(podcastDir).forEach(function(f) {
-      if (f.endsWith(".json")) processedSlugs.add(f.replace(".json", ""));
-    });
-  }
+  var dirs = [deepContentDir, oldPodcastDir];
+  dirs.forEach(function(dir) {
+    if (fs.existsSync(dir)) {
+      fs.readdirSync(dir).forEach(function(f) {
+        if (f.endsWith(".json") && f.startsWith("kindle_book_")) {
+          var slug = f.replace(".json", "");
+          if (!processedSlugs.has(slug)) {
+            processedSlugs.add(slug);
+            try {
+              var meta = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8"));
+              processedBooks.push({
+                entityId: meta.entityId,
+                title: meta.title,
+                author: meta.author,
+                durationMinutes: meta.durationMinutes,
+                processedAt: meta.processedAt,
+                audioSizeBytes: meta.audioSizeBytes,
+                depth: meta.research ? meta.research.estimatedDepth : "unknown",
+                chapters: meta.research ? meta.research.chapterSummaries.length : 0,
+                insights: meta.research ? meta.research.keyInsights.length : 0,
+              });
+            } catch (e2) {}
+          }
+        }
+      });
+    }
+  });
 } catch (e) {}
 
 return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_kindle_browse",
   totalBooks: totalBooks,
+  processedBooks: processedBooks,
+  totalProcessed: processedBooks.length,
   filteredCount: filtered.length,
   category: p.category || null,
   query: p.query || null,

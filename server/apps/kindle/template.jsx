@@ -311,6 +311,31 @@ function GeneratedUI({ data, onAction }) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {breadcrumb}
+        {/* Processed Books Banner */}
+        {(d.processedBooks || []).length > 0 && (
+          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "16px" }}>🎙️</span>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "#c4b5fd" }}>Deep Podcasts Ready</span>
+                <Badge variant="secondary">{(d.processedBooks || []).length} books</Badge>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {(d.processedBooks || []).map(function(pb) {
+                return (
+                  <div key={pb.entityId} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#1e1b4b", padding: "6px 10px", borderRadius: "8px", cursor: "pointer" }}
+                    onClick={function() { onAction("view_entity", { entityId: pb.entityId }); }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0" }}>{pb.title}</span>
+                    <Badge variant="secondary" style={{ fontSize: "9px" }}>{pb.durationMinutes} min</Badge>
+                    <span style={{ fontSize: "9px", color: "#64748b" }}>{pb.chapters} ch · {pb.insights} insights</span>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>

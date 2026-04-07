@@ -120,7 +120,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "files",
     cacheFile: "file-index.json",
-    scannerToolName: "enso_projects_scanner_scan",  // Projects app
+    scannerToolName: "enso_context_scan_files",
     scannerParams: {},
     ingestPriority: 10,
     formatForProfile: (cached: A) => {
@@ -177,7 +177,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "browserHistory",
     cacheFile: "browser-history.json",
-    scannerToolName: "enso_browser_data_scan_history",  // Combined Browser app
+    scannerToolName: "enso_context_scan_browser_history",
     scannerParams: { browser: "all", limit: 500, sinceDays: 30 },
     ingestPriority: 20,
     formatForProfile: (cached: A) => {
@@ -209,7 +209,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "bookmarks",
     cacheFile: "bookmarks.json",
-    scannerToolName: "enso_browser_data_scan_bookmarks",  // Combined Browser app
+    scannerToolName: "enso_context_scan_bookmarks",
     scannerParams: {},
     ingestPriority: 30,
     formatForProfile: (cached: A) => {
@@ -231,7 +231,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "email",
     cacheFile: "email-summary.json",
-    scannerToolName: "enso_email_scanner_scan",  // Email Scanner app
+    scannerToolName: "enso_context_scan_email",
     scannerParams: { folder: "inbox", limit: 500 },
     ingestPriority: 40,
     formatForProfile: (cached: A) => {
@@ -259,7 +259,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "system",
     cacheFile: "system-info.json",
-    scannerToolName: "enso_system_info_scan",  // System Info app
+    scannerToolName: "enso_context_scan_system",
     scannerParams: { include: ["apps", "processes"] },
     ingestPriority: 60,
     formatForProfile: (cached: A) => {
@@ -280,7 +280,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
   {
     id: "kindleLibrary",
     cacheFile: "kindle-library.json",
-    scannerToolName: "enso_kindle_scan",  // Now points to the Kindle app's scan tool
+    scannerToolName: "enso_context_scan_kindle_library",
     scannerParams: {},
     ingestPriority: 50,
     formatForProfile: (cached: A) => {
