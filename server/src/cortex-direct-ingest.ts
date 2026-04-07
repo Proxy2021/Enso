@@ -43,7 +43,8 @@ function readExistingPaths(): Set<string> {
  * Append a page entry to the cortex index.
  */
 function appendToIndex(page: DirectIngestPage): void {
-  const entry = `\n## ${page.path}\n**${page.title}** — ${page.summary.slice(0, 200)}. Tags: ${page.tags.join(", ")}.\nUpdated: ${new Date().toISOString()}\n`;
+  const entityIdLine = page.entityId ? `\nEntityId: ${page.entityId}` : "";
+  const entry = `\n## ${page.path}\n**${page.title}** — ${page.summary.slice(0, 200)}. Tags: ${page.tags.join(", ")}.\nUpdated: ${new Date().toISOString()}${entityIdLine}\n`;
   writeFileSync(INDEX_PATH, (existsSync(INDEX_PATH) ? readFileSync(INDEX_PATH, "utf-8") : "") + entry);
 }
 
@@ -54,7 +55,8 @@ function updateIndexEntry(page: DirectIngestPage): void {
   if (!existsSync(INDEX_PATH)) { appendToIndex(page); return; }
   const raw = readFileSync(INDEX_PATH, "utf-8");
   const pattern = new RegExp(`\n## ${page.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n[\\s\\S]*?(?=\\n## |$)`, "m");
-  const replacement = `\n## ${page.path}\n**${page.title}** — ${page.summary.slice(0, 200)}. Tags: ${page.tags.join(", ")}.\nUpdated: ${new Date().toISOString()}\n`;
+  const entityIdLine = page.entityId ? `\nEntityId: ${page.entityId}` : "";
+  const replacement = `\n## ${page.path}\n**${page.title}** — ${page.summary.slice(0, 200)}. Tags: ${page.tags.join(", ")}.\nUpdated: ${new Date().toISOString()}${entityIdLine}\n`;
   if (pattern.test(raw)) {
     writeFileSync(INDEX_PATH, raw.replace(pattern, replacement));
   } else {

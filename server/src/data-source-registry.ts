@@ -68,6 +68,8 @@ export interface DirectIngestPage {
   content: string;
   summary: string;
   tags: string[];
+  /** Stable entity identifier linking to entity-model.ts, e.g. "kindle:book:sapiens" */
+  entityId?: string;
 }
 
 // ── Shared Cache Reader ──
@@ -165,6 +167,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
           content: lines.join("\n"),
           summary: `${p.name} — a ${p.type} project using ${(p.technologies || []).join(", ")}`,
           tags: ["project", p.type, ...(p.technologies || []).map((t: string) => t.toLowerCase())],
+          entityId: `files:project:${slug}`,
         };
       });
     },
@@ -356,6 +359,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
           content: lines.join("\n"),
           summary: b.description?.slice(0, 200) || `${b.title} by ${b.author}`,
           tags: ["book", "kindle", ...(b.categories || []).map((c: string) => c.toLowerCase())],
+          entityId: `kindle:book:${slug}`,
         });
       }
       return pages;
@@ -403,6 +407,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         if (!slug) return null;
         return {
           path: `entities/${slug}.md`,
+          entityId: `youtube:channel:${slug}`,
           title: ch.title,
           content: `# ${ch.title}\n\nA YouTube channel you subscribe to.\n\n${ch.description || ""}\n\n## Details\n- **Channel**: ${ch.title}\n- **Source**: YouTube subscription`,
           summary: ch.description?.slice(0, 200) || `YouTube channel: ${ch.title}`,
@@ -468,6 +473,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         lines.push(`\n- **Steam**: [Store Page](https://store.steampowered.com/app/${g.appId})`);
         return {
           path: `entities/game-${slug}.md`,
+          entityId: `steam:game:${slug}`,
           title: g.name,
           content: lines.join("\n"),
           summary: g.description?.slice(0, 200) || `${g.name} — Steam game`,
@@ -534,6 +540,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         lines.push(`- **File**: \`${m.filePath}\``);
         return {
           path: `entities/${prefix}${slug}.md`,
+          entityId: `movies_tv:${m.category === "tv" ? "tv-series" : "movie"}:${slug}`,
           title: m.title,
           content: lines.join("\n"),
           summary: m.overview?.slice(0, 200) || `${m.title} (${m.year || "?"}) — ${m.category}`,
@@ -589,6 +596,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         lines.push(`**Path**: \`${a.path}\``);
         return {
           path: `entities/photo-album-${slug}.md`,
+          entityId: `photos:album:${slug}`,
           title: `Photo Album: ${a.name}`,
           content: lines.join("\n"),
           summary: `${a.name} — ${a.photoCount} photos${a.dateRange?.from ? ` from ${a.dateRange.from}` : ""}`,
@@ -634,6 +642,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         lines.push(`- **Source**: Twitter following list`);
         return {
           path: `entities/twitter-${slug}.md`,
+          entityId: `twitter:twitter-account:${slug}`,
           title: `@${a.handle} (${a.displayName})`,
           content: lines.join("\n"),
           summary: `${a.displayName} (@${a.handle})${a.bio ? ` — ${a.bio.slice(0, 150)}` : ""}`,
@@ -706,6 +715,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
         }
         pages.push({
           path: `entities/artist-${slug}.md`,
+          entityId: `qq_music:artist:${slug}`,
           title: artist,
           content: lines.join("\n"),
           summary: `${artist} — music artist with ${data.tracks.length} tracks in your library`,

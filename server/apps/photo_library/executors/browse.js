@@ -48,6 +48,12 @@ var p = params || {};
     grouped[key].sort(function(a, b) { return b.photoCount - a.photoCount; });
   }
 
+  // Add entityId to albums
+  albums = albums.map(function(a) {
+    var slug = a.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+    return Object.assign({}, a, { entityId: "photos:album:" + slug });
+  });
+
   return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_photo_library_browse",
     albums: albums.slice(0, 200),

@@ -77,7 +77,7 @@ if (view === "bookmarks") {
 
   var domainsWithWiki = topDomains.map(function(d) {
     var slug = slugify(d.domain);
-    return { domain: d.domain, visits: d.visits, hasWikiPage: existingPages.has("entities/" + slug + ".md"), wikiPath: "entities/" + slug + ".md" };
+    return { entityId: "browser:concept:" + slug, domain: d.domain, visits: d.visits, hasWikiPage: existingPages.has("entities/" + slug + ".md"), wikiPath: "entities/" + slug + ".md" };
   });
 
   return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_browser_data_browse", view: "history", totalEntries: totalEntries, query: p.query || null, topDomains: domainsWithWiki, recentSearches: recentSearches, recentPages: recentPages }) }] };

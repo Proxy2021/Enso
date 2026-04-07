@@ -45,6 +45,7 @@ var p = params || {};
   games = games.map(function(gm) {
     var slug = gm.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
     return Object.assign({}, gm, {
+      entityId: "steam:game:" + slug,
       hasWikiPage: indexContent.includes("entities/game-" + slug + ".md"),
       wikiSlug: "entities/game-" + slug + ".md",
       sizeGB: gm.sizeOnDisk ? (gm.sizeOnDisk / (1024*1024*1024)).toFixed(1) + " GB" : null

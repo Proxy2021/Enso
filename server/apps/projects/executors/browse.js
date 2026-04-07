@@ -78,6 +78,7 @@ return { content: [{ type: "text", text: JSON.stringify({
   projects: filtered.map(function(p) {
     var slug = slugify(p.name || "unknown");
     return {
+      entityId: "files:project:" + slug,
       name: p.name,
       path: p.path,
       type: p.type,

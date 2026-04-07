@@ -28,6 +28,12 @@ var p = params || {};
     accounts.sort(function(a, b) { return a.handle.localeCompare(b.handle); });
   }
 
+  // Add entityId
+  accounts = accounts.map(function(a) {
+    var slug = (a.handle || a.displayName).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+    return Object.assign({}, a, { entityId: "twitter:twitter-account:" + slug });
+  });
+
   return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_twitter_browse",
     accounts: accounts.slice(0, 200),

@@ -84,7 +84,9 @@ for (var i = 0; i < allSubs.length; i++) {
   var stats = statsMap[sub.channelId] || {};
   var subCount = stats.subscriberCount || 0;
   var vidCount = stats.videoCount || 0;
+  var slug = (sub.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
   enriched.push({
+    entityId: "youtube:channel:" + slug,
     subscriptionId: sub.subscriptionId || "",
     channelId: sub.channelId || "",
     title: sub.title || "",

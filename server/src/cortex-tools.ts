@@ -42,6 +42,7 @@ export interface CortexIndexEntry {
   updated: string;   // ISO 8601
   source?: string;   // data source that created it: "kindle", "steam", "movies_tv", "youtube", "photos", "project", "research", "manual"
   themes?: string[]; // higher-level thematic categories derived from tags
+  entityId?: string; // stable entity identifier: "{source}:{type}:{slug}" — links to entity-model.ts
 }
 
 interface CortexPageInfo {
@@ -113,8 +114,10 @@ export function readIndex(): CortexIndexEntry[] {
     const source = sourceLine?.replace("Source:", "").trim() ?? undefined;
     const themesLine = lines.find((l) => l.startsWith("Themes:"));
     const themes = themesLine?.replace("Themes:", "").trim().split(",").map(t => t.trim()).filter(Boolean) ?? undefined;
+    const entityIdLine = lines.find((l) => l.startsWith("EntityId:"));
+    const entityId = entityIdLine?.replace("EntityId:", "").trim() ?? undefined;
 
-    entries.push({ path, title, summary, tags, updated, source, themes });
+    entries.push({ path, title, summary, tags, updated, source, themes, entityId });
   }
 
   return entries;
@@ -130,9 +133,21 @@ function writeIndex(entries: CortexIndexEntry[]): void {
     lines.push(`Updated: ${e.updated}`);
     if (e.source) lines.push(`Source: ${e.source}`);
     if (e.themes?.length) lines.push(`Themes: ${e.themes.join(", ")}`);
+    if (e.entityId) lines.push(`EntityId: ${e.entityId}`);
     lines.push("");
   }
   safeWrite(INDEX_PATH, lines.join("\n"));
+}
+
+/** Link a Cortex wiki page to an entity by setting its entityId in the index. */
+export function linkCortexPageToEntity(pagePath: string, entityId: string): boolean {
+  const entries = readIndex();
+  const entry = entries.find(e => e.path === pagePath);
+  if (!entry) return false;
+  if (entry.entityId === entityId) return true; // already linked
+  entry.entityId = entityId;
+  writeIndex(entries);
+  return true;
 }
 
 // ── Log ──

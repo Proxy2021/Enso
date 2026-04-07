@@ -83,6 +83,7 @@ return { content: [{ type: "text", text: JSON.stringify({
   books: filtered.slice(0, 200).map(function(b) {
     var slug = slugify(b.title);
     return {
+      entityId: "kindle:book:" + slug,
       title: b.title,
       author: b.author,
       coverUrl: b.coverUrl,

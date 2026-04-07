@@ -13,17 +13,22 @@ if (!cached) {
   var view = p.view || "playlists";
   var q = p.query ? p.query.toLowerCase() : null;
 
+  function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "").slice(0, 80); }
+
   if (view === "playlists") {
     var playlists = (cached.playlists || []).slice();
     if (q) playlists = playlists.filter(function(p) { return p.name.toLowerCase().indexOf(q) >= 0; });
+    playlists = playlists.map(function(pl) { return Object.assign({}, pl, { entityId: "qq_music:playlist:" + slugify(pl.name || "untitled") }); });
     return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_qq_music_browse", view: "playlists", playlists: playlists, totalPlaylists: (cached.playlists || []).length }) }] };
   } else if (view === "favorites") {
     var favs = (cached.favorites || []).slice();
     if (q) favs = favs.filter(function(f) { return f.title.toLowerCase().indexOf(q) >= 0 || f.artist.toLowerCase().indexOf(q) >= 0; });
+    favs = favs.map(function(f) { return Object.assign({}, f, { entityId: "qq_music:song:" + slugify((f.artist || "") + "-" + f.title) }); });
     return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_qq_music_browse", view: "favorites", favorites: favs, totalFavorites: (cached.favorites || []).length }) }] };
   } else if (view === "local") {
     var files = (cached.localFiles || []).slice();
     if (q) files = files.filter(function(f) { return f.title.toLowerCase().indexOf(q) >= 0 || (f.artist && f.artist.toLowerCase().indexOf(q) >= 0); });
+    files = files.map(function(f) { return Object.assign({}, f, { entityId: "qq_music:song:" + slugify((f.artist || "") + "-" + f.title) }); });
     return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_qq_music_browse", view: "local", localFiles: files, totalLocalFiles: (cached.localFiles || []).length }) }] };
   } else if (view === "artists") {
     var artistMap = {};
@@ -36,6 +41,7 @@ if (!cached) {
     });
     var artists = Object.values(artistMap).sort(function(a, b) { return b.trackCount - a.trackCount; });
     if (q) artists = artists.filter(function(a) { return a.name.toLowerCase().indexOf(q) >= 0; });
+    artists = artists.map(function(a) { return Object.assign({}, a, { entityId: "qq_music:artist:" + slugify(a.name) }); });
     return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_qq_music_browse", view: "artists", artists: artists, totalArtists: artists.length }) }] };
   }
 

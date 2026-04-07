@@ -48,8 +48,12 @@ var p = params || {};
 
   items = items.map(function(m) {
     var prefix = m.category === "tv" ? "tv-" : "movie-";
+    var etype = m.category === "tv" ? "tv-series" : "movie";
     var slug = m.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
-    return Object.assign({}, m, { hasWikiPage: indexContent.includes("entities/" + prefix + slug + ".md") });
+    return Object.assign({}, m, {
+      entityId: "movies_tv:" + etype + ":" + slug,
+      hasWikiPage: indexContent.includes("entities/" + prefix + slug + ".md"),
+    });
   });
 
   return { content: [{ type: "text", text: JSON.stringify({

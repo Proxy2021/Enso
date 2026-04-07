@@ -41,7 +41,9 @@ return { content: [{ type: "text", text: JSON.stringify({
   query: p.query,
   totalResults: matches.length,
   results: matches.slice(0, 50).map(function(b) {
+    var slug = b.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
     return {
+      entityId: "kindle:book:" + slug,
       title: b.title,
       author: b.author,
       coverUrl: b.coverUrl,
