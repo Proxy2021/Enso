@@ -2111,6 +2111,29 @@ Only include genuinely new information. If gap sources don't add meaningful new 
       sections
     );
 
+    // Cross-reference topic against user's entire Cortex & data sources (fire-and-forget, non-blocking)
+    let cortexSynthesis: { narrative?: string; connections?: Array<{ items: string[]; insight: string }>; themes?: string[]; suggestedActions?: string[]; bySource?: Record<string, Array<{ title: string; reason?: string }>> } = {};
+    try {
+      const { synthesize } = await import("./cortex-synthesis.js");
+      const synthResult = await synthesize(topic);
+      if (synthResult.narrative) {
+        cortexSynthesis = {
+          narrative: synthResult.narrative,
+          connections: synthResult.connections,
+          themes: synthResult.themes,
+          suggestedActions: synthResult.suggestedActions,
+          bySource: Object.fromEntries(
+            Object.entries(synthResult.relatedContent.bySource).map(([src, hits]) => [
+              src, hits.slice(0, 3).map(h => ({ title: h.title, reason: h.reason })),
+            ]),
+          ),
+        };
+        logAction({ ts: Date.now(), type: "action", category: "researcher:cortex-synth", message: `Cross-referenced "${topic}": ${synthResult.connections.length} connections across ${Object.keys(synthResult.relatedContent.bySource).length} sources` });
+      }
+    } catch (synthErr) {
+      logAction({ ts: Date.now(), type: "action", category: "researcher:cortex-synth", message: `Cross-reference skipped: ${synthErr instanceof Error ? synthErr.message : String(synthErr)}` });
+    }
+
     const result = {
       tool: "enso_researcher_search",
       topic,
@@ -2127,6 +2150,8 @@ Only include genuinely new information. If gap sources don't add meaningful new 
       movies,
       recommendedVideos,
       contradictions,
+      // Cross-source synthesis from user's personal Cortex
+      cortexSynthesis: cortexSynthesis.narrative ? cortexSynthesis : undefined,
       metadata: {
         queriesRun: queries.web.length,
         sourcesFound: sources.length,

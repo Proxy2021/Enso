@@ -118,6 +118,34 @@ for (var sci = 0; sci < sections.length; sci++) {
   totalItems += (sections[sci].items || []).length;
 }
 
+// ── Step 3.5: Cross-reference top topics against all data sources ──
+var libraryConnections = {};
+try {
+  for (var xri = 0; xri < Math.min(ranked.length, 5); xri++) {
+    var xrefTopic = ranked[xri].title;
+    try {
+      var xrefResult = await ctx.callTool("enso_cross_reference", { topic: xrefTopic, synthesize: true });
+      if (xrefResult && xrefResult.data) {
+        var xd = typeof xrefResult.data === "string" ? JSON.parse(xrefResult.data) : xrefResult.data;
+        if (xd.narrative || xd.totalMatches > 0) {
+          libraryConnections[xrefTopic] = {
+            narrative: xd.narrative || "",
+            totalMatches: xd.totalMatches || 0,
+            sources: Object.keys(xd.bySource || {}),
+            connections: (xd.connections || []).slice(0, 2),
+            themes: xd.themes || []
+          };
+        }
+      }
+    } catch(xre) {
+      ctx.log("Cross-ref failed for " + xrefTopic + ": " + (xre.message || xre));
+    }
+  }
+  ctx.log("Cross-referenced " + Object.keys(libraryConnections).length + " topics against library");
+} catch(xre2) {
+  ctx.log("Cross-reference step failed: " + (xre2.message || xre2));
+}
+
 // ── Step 4: Ingest significant findings ──
 var pagesCreated = [];
 var pagesUpdated = [];
@@ -259,6 +287,27 @@ if (analysisResult && analysisResult.blindSpots && analysisResult.blindSpots.len
   emailBody += "</div>";
 }
 
+// Library Connections — cross-source synthesis
+var connectionTopics = Object.keys(libraryConnections);
+if (connectionTopics.length > 0) {
+  emailBody += "<div style='margin:24px 0;padding:16px;background:#faf5ff;border-radius:8px;border:1px solid #e9d5ff;'>";
+  emailBody += "<h3 style='margin:0 0 12px;font-size:14px;color:#6b21a8;'>\uD83E\uDDE0 From Your Brain</h3>";
+  for (var lci = 0; lci < connectionTopics.length; lci++) {
+    var lcTopic = connectionTopics[lci];
+    var lc = libraryConnections[lcTopic];
+    emailBody += "<div style='margin:8px 0;padding:10px;background:white;border-radius:6px;border:1px solid #f3e8ff;'>";
+    emailBody += "<p style='margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;'>" + lcTopic + "</p>";
+    if (lc.narrative) {
+      emailBody += "<p style='margin:0 0 6px;font-size:12px;color:#4c1d95;line-height:1.5;'>" + lc.narrative + "</p>";
+    }
+    if (lc.sources.length > 0) {
+      emailBody += "<p style='margin:0;font-size:11px;color:#8b5cf6;'>Across: " + lc.sources.join(", ") + " (" + lc.totalMatches + " matches)</p>";
+    }
+    emailBody += "</div>";
+  }
+  emailBody += "</div>";
+}
+
 // Cortex Updates
 if (pagesCreated.length > 0 || pagesUpdated.length > 0) {
   emailBody += "<div style='margin:24px 0;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;'>";
@@ -312,6 +361,7 @@ return {
     topTopics: ranked.map(function(r) { return r.title; }),
     executiveSummary: analysisResult ? analysisResult.executiveSummary : "",
     blindSpots: analysisResult ? analysisResult.blindSpots : [],
+    libraryConnections: libraryConnections,
     findings: sections.reduce(function(acc, s) {
       return acc.concat((s.items || []).map(function(item) {
         return { headline: item.headline, impact: item.impact, action: item.actionItem, connections: item.connections };

@@ -590,7 +590,28 @@ export async function buildEnsoContext(): Promise<string> {
     if (cortex) sections.push(cortex);
   } catch { /* cortex not available */ }
 
-  // 4. Proactive suggestions
+  // 4. Data source inventory — compact summary of what the user has across all sources
+  try {
+    const { readCache } = await import("./data-source-registry.js");
+    const inventory: string[] = [];
+    const kindle = readCache("kindle-library.json") as { totalBooks?: number } | null;
+    if (kindle?.totalBooks) inventory.push(`📚 ${kindle.totalBooks} Kindle books`);
+    const yt = readCache("youtube-data.json") as { totalSubscriptions?: number } | null;
+    if (yt?.totalSubscriptions) inventory.push(`📺 ${yt.totalSubscriptions} YouTube subs`);
+    const movies = readCache("movies-tv.json") as { totalItems?: number } | null;
+    if (movies?.totalItems) inventory.push(`🎬 ${movies.totalItems} movies/TV`);
+    const steam = readCache("steam-games.json") as { totalGames?: number } | null;
+    if (steam?.totalGames) inventory.push(`🎮 ${steam.totalGames} Steam games`);
+    const photos = readCache("photo-library.json") as { totalPhotos?: number; totalAlbums?: number } | null;
+    if (photos?.totalPhotos) inventory.push(`📷 ${photos.totalPhotos} photos (${photos.totalAlbums} albums)`);
+    const projects = readCache("file-index.json") as { projects?: unknown[] } | null;
+    if (projects?.projects?.length) inventory.push(`💻 ${projects.projects.length} projects`);
+    if (inventory.length > 0) {
+      sections.push(`<data_sources>\nUser's digital life: ${inventory.join(", ")}.\nUse enso_cross_reference(topic) to semantically search ALL sources at once and synthesize connections. Use enso_wiki_search(query, source, theme) for targeted wiki retrieval.\n</data_sources>`);
+    }
+  } catch { /* data sources not available */ }
+
+  // 5. Proactive suggestions
   try {
     const { getTopSuggestions } = await import("./proactive-engine.js");
     const suggestions = await getTopSuggestions(5);
