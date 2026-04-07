@@ -42,11 +42,11 @@ if (newApps.length > 0) {
   } catch (e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_system_info_update",
   beforeCount: beforeCount,
   afterCount: updated.apps ? updated.apps.length : 0,
   newApps: newApps.length,
   newNames: newApps.slice(0, 20).map(function(a) { return a.displayName || a.name; }),
   cortexIngested: cortexIngested,
-};
+}) }] };

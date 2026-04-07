@@ -33,10 +33,10 @@ if (newGames.length > 0) {
   } catch(e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_steam_update",
   beforeCount: oldIds.size,
   afterCount: newCache ? newCache.games.length : 0,
   newGames: newGames.map(function(g) { return g.name; }),
   message: newGames.length > 0 ? newGames.length + " new game(s) found" : "No new games detected"
-};
+}) }] };

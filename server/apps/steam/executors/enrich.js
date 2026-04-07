@@ -7,7 +7,7 @@ var cached = null;
 try { cached = JSON.parse(fs.readFileSync(cachePath, "utf-8")); } catch(e) {}
 
 if (!cached || !cached.games || cached.games.length === 0) {
-  result = { tool: "enso_steam_enrich", enriched: 0, total: 0, message: "No games to enrich. Run a scan first." };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_steam_enrich", enriched: 0, total: 0, message: "No games to enrich. Run a scan first." }) }] };
 } else {
   var enriched = 0;
   var errors = 0;
@@ -53,5 +53,5 @@ if (!cached || !cached.games || cached.games.length === 0) {
   // Final save
   fs.writeFileSync(cachePath, JSON.stringify(cached, null, 2));
 
-  result = { tool: "enso_steam_enrich", enriched: enriched, errors: errors, total: total, unenrichedRemaining: unenriched.length - enriched - errors };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_steam_enrich", enriched: enriched, errors: errors, total: total, unenrichedRemaining: unenriched.length - enriched - errors }) }] };
 }

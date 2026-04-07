@@ -27,10 +27,10 @@ if (diff > 0) {
   } catch(e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_qq_music_update",
   beforeTracks: oldTrackCount,
   afterTracks: newTrackCount,
   newTracks: diff > 0 ? diff : 0,
   message: diff > 0 ? diff + " new track(s) found" : "No new tracks detected"
-};
+}) }] };

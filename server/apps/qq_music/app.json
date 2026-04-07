@@ -17,7 +17,12 @@
           "properties": {
             "view": {
               "type": "string",
-              "enum": ["playlists", "favorites", "local", "artists"],
+              "enum": [
+                "playlists",
+                "favorites",
+                "local",
+                "artists"
+              ],
               "description": "Which view to show (default: playlists)"
             },
             "query": {
@@ -26,7 +31,8 @@
             }
           },
           "additionalProperties": false
-        }
+        },
+        "sampleParams": {}
       },
       {
         "suffix": "scan",

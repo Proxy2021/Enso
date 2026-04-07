@@ -45,11 +45,11 @@ if (newProjects.length > 0) {
   } catch (e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_projects_scanner_update",
   beforeCount: beforeCount,
   afterCount: updated.projects ? updated.projects.length : 0,
   newProjects: newProjects.length,
   newNames: newProjects.slice(0, 20).map(function(p) { return p.name || path.basename(p.path || "unknown"); }),
   cortexIngested: cortexIngested,
-};
+}) }] };

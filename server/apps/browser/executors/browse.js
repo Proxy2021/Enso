@@ -3,7 +3,8 @@ var fs = require("fs");
 var path = require("path");
 
 var cacheDir = path.join(os.homedir(), ".enso", "data", "user-context", "cache");
-var view = params.view || "history";
+var p = params || {};
+var view = p.view || "history";
 
 // Wiki page lookup
 var wikiDir = path.join(os.homedir(), ".enso", "wiki");
@@ -31,16 +32,15 @@ if (view === "bookmarks") {
     folders = bkData.folders || [];
     totalBookmarks = bkData.totalBookmarks || 0;
   } catch (e) {
-    result = { tool: "enso_browser_data_browse", view: "bookmarks", totalBookmarks: 0, folders: [], error: "No bookmarks cached." };
-    return;
+    return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_browser_data_browse", view: "bookmarks", totalBookmarks: 0, folders: [], error: "No bookmarks cached." }) }] };
   }
 
-  if (params.folder) {
-    var folderName = params.folder.toLowerCase();
+  if (p.folder) {
+    var folderName = p.folder.toLowerCase();
     folders = folders.filter(function(f) { return f.folder.toLowerCase().indexOf(folderName) >= 0; });
   }
-  if (params.query) {
-    var q = params.query.toLowerCase();
+  if (p.query) {
+    var q = p.query.toLowerCase();
     folders = folders.map(function(f) {
       var filtered = f.bookmarks.filter(function(b) {
         return (b.title && b.title.toLowerCase().indexOf(q) >= 0) || (b.url && b.url.toLowerCase().indexOf(q) >= 0);
@@ -49,7 +49,7 @@ if (view === "bookmarks") {
     }).filter(function(f) { return f.count > 0; });
   }
 
-  result = { tool: "enso_browser_data_browse", view: "bookmarks", totalBookmarks: totalBookmarks, folder: params.folder || null, query: params.query || null, folders: folders };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_browser_data_browse", view: "bookmarks", totalBookmarks: totalBookmarks, folder: p.folder || null, query: p.query || null, folders: folders }) }] };
 
 } else {
   // ── History view (default) ──
@@ -65,12 +65,11 @@ if (view === "bookmarks") {
     recentPages = histData.recentPages || [];
     totalEntries = histData.totalEntries || 0;
   } catch (e) {
-    result = { tool: "enso_browser_data_browse", view: "history", totalEntries: 0, topDomains: [], recentSearches: [], recentPages: [], error: "No browser history cached." };
-    return;
+    return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_browser_data_browse", view: "history", totalEntries: 0, topDomains: [], recentSearches: [], recentPages: [], error: "No browser history cached." }) }] };
   }
 
-  if (params.query) {
-    var q2 = params.query.toLowerCase();
+  if (p.query) {
+    var q2 = p.query.toLowerCase();
     topDomains = topDomains.filter(function(d) { return d.domain.toLowerCase().indexOf(q2) >= 0; });
     recentSearches = recentSearches.filter(function(s) { return ((typeof s === "string") ? s : (s.query || "")).toLowerCase().indexOf(q2) >= 0; });
     recentPages = recentPages.filter(function(p) { return (p.title && p.title.toLowerCase().indexOf(q2) >= 0) || (p.domain && p.domain.toLowerCase().indexOf(q2) >= 0); });
@@ -81,5 +80,5 @@ if (view === "bookmarks") {
     return { domain: d.domain, visits: d.visits, hasWikiPage: existingPages.has("entities/" + slug + ".md"), wikiPath: "entities/" + slug + ".md" };
   });
 
-  result = { tool: "enso_browser_data_browse", view: "history", totalEntries: totalEntries, query: params.query || null, topDomains: domainsWithWiki, recentSearches: recentSearches, recentPages: recentPages };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_browser_data_browse", view: "history", totalEntries: totalEntries, query: p.query || null, topDomains: domainsWithWiki, recentSearches: recentSearches, recentPages: recentPages }) }] };
 }

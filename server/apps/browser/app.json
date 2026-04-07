@@ -16,14 +16,24 @@
           "properties": {
             "view": {
               "type": "string",
-              "enum": ["history", "bookmarks"],
+              "enum": [
+                "history",
+                "bookmarks"
+              ],
               "description": "Which view to show (default: history)"
             },
-            "query": { "type": "string", "description": "Filter by domain, search term, or bookmark title" },
-            "folder": { "type": "string", "description": "Filter bookmarks by folder name" }
+            "query": {
+              "type": "string",
+              "description": "Filter by domain, search term, or bookmark title"
+            },
+            "folder": {
+              "type": "string",
+              "description": "Filter bookmarks by folder name"
+            }
           },
           "additionalProperties": false
-        }
+        },
+        "sampleParams": {}
       },
       {
         "suffix": "scan_history",
@@ -32,8 +42,19 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "browser": { "type": "string", "enum": ["chrome", "edge", "all"], "description": "Browser to scan (default: all)" },
-            "sinceDays": { "type": "number", "description": "Days of history to include (default: 30)" }
+            "browser": {
+              "type": "string",
+              "enum": [
+                "chrome",
+                "edge",
+                "all"
+              ],
+              "description": "Browser to scan (default: all)"
+            },
+            "sinceDays": {
+              "type": "number",
+              "description": "Days of history to include (default: 30)"
+            }
           },
           "additionalProperties": false
         }
@@ -42,13 +63,22 @@
         "suffix": "scan_bookmarks",
         "label": "Scan Bookmarks",
         "description": "Scan Chrome/Edge bookmark files.",
-        "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
       },
       {
         "suffix": "update",
         "label": "Update Browser Data",
         "description": "Incremental scan — check for new browsing history and bookmarks since last scan and update the Cortex with any changes.",
-        "parameters": { "type": "object", "properties": {}, "required": [], "additionalProperties": false }
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
       }
     ]
   },

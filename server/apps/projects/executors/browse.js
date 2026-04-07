@@ -12,20 +12,20 @@ try {
   projects = data.projects || [];
   topFileTypes = data.topFileTypes || [];
 } catch (e) {
-  result = { tool: "enso_projects_scanner_browse", projects: [], topFileTypes: [], groups: {}, error: "No project data cached. Run a scan first." };
-  return;
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_projects_scanner_browse", projects: [], topFileTypes: [], groups: {}, error: "No project data cached. Run a scan first." }) }] };
 }
 
 // Apply filters
 var filtered = projects;
-if (params.type) {
-  var t = params.type.toLowerCase();
+var p = params || {};
+if (p.type) {
+  var t = p.type.toLowerCase();
   filtered = filtered.filter(function(p) {
     return p.type && p.type.toLowerCase() === t;
   });
 }
-if (params.query) {
-  var q = params.query.toLowerCase();
+if (p.query) {
+  var q = p.query.toLowerCase();
   filtered = filtered.filter(function(p) {
     return (p.name && p.name.toLowerCase().indexOf(q) >= 0) ||
       (p.path && p.path.toLowerCase().indexOf(q) >= 0);
@@ -66,12 +66,12 @@ function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_projects_scanner_browse",
   totalProjects: projects.length,
   filteredCount: filtered.length,
-  typeFilter: params.type || null,
-  query: params.query || null,
+  typeFilter: p.type || null,
+  query: p.query || null,
   typeList: typeList,
   topFileTypes: topFileTypes,
   groups: groups,
@@ -86,4 +86,4 @@ result = {
       wikiPath: "entities/" + slug + ".md",
     };
   }),
-};
+}) }] };

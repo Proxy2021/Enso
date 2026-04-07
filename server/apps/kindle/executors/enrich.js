@@ -5,17 +5,15 @@ try {
   if (mod.enrichKindleMetadata) {
     enrichResult = await mod.enrichKindleMetadata();
   } else {
-    result = { tool: "enso_kindle_enrich", error: "Enrichment function not available" };
-    return;
+    return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_kindle_enrich", error: "Enrichment function not available" }) }] };
   }
 } catch (e) {
-  result = { tool: "enso_kindle_enrich", error: "Enrichment failed: " + e.message };
-  return;
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_kindle_enrich", error: "Enrichment failed: " + e.message }) }] };
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_kindle_enrich",
   enriched: enrichResult.enriched,
   total: enrichResult.total,
   errors: enrichResult.errors,
-};
+}) }] };

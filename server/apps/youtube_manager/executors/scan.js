@@ -60,10 +60,10 @@ try {
   } catch (e2) { /* cache write failed - data still in result */ }
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_youtube_manager_scan",
   totalSubscriptions: subscriptions.length,
   totalLikedVideos: likedVideos.length,
   totalFeedVideos: feed.length,
   scannedAt: cacheData.scannedAt,
-};
+}) }] };

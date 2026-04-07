@@ -1,6 +1,7 @@
 var os = require("os");
 var fs = require("fs");
 var path = require("path");
+var p = params || {};
 
 var cacheFile = path.join(os.homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json");
 var books = [];
@@ -9,14 +10,12 @@ try {
   var data = JSON.parse(fs.readFileSync(cacheFile, "utf-8"));
   books = data.books || [];
 } catch (e) {
-  result = { tool: "enso_kindle_search", query: params.query, results: [], error: "No Kindle library cached." };
-  return;
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_kindle_search", query: p.query, results: [], error: "No Kindle library cached." }) }] };
 }
 
-var q = (params.query || "").toLowerCase();
+var q = (p.query || "").toLowerCase();
 if (!q) {
-  result = { tool: "enso_kindle_search", query: "", results: [], error: "Please provide a search query." };
-  return;
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_kindle_search", query: "", results: [], error: "Please provide a search query." }) }] };
 }
 
 var matches = books.filter(function(b) {
@@ -37,9 +36,9 @@ matches.sort(function(a, b) {
   return scoreB - scoreA;
 });
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_kindle_search",
-  query: params.query,
+  query: p.query,
   totalResults: matches.length,
   results: matches.slice(0, 50).map(function(b) {
     return {
@@ -54,4 +53,4 @@ result = {
       readerUrl: b.readerUrl,
     };
   }),
-};
+}) }] };

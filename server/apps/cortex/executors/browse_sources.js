@@ -189,11 +189,11 @@ if (email && email.topSenders && email.topSenders.length > 0) {
   });
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_cortex_browse_sources",
   sources: sources,
   selectedSource: selectedSource,
   selectedCategory: filterCategory,
   searchQuery: searchQuery,
   totalSources: sources.length,
-};
+}) }] };

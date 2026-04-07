@@ -14,11 +14,15 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "refresh": { "type": "boolean", "description": "Force refresh (bypass 10-min cache)" }
+            "refresh": {
+              "type": "boolean",
+              "description": "Force refresh (bypass 10-min cache)"
+            }
           },
           "required": []
         },
-        "isPrimary": true
+        "isPrimary": true,
+        "sampleParams": {}
       },
       {
         "suffix": "feed",
@@ -27,8 +31,14 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "maxResults": { "type": "number", "description": "Number of videos (default 20)" },
-            "category": { "type": "string", "description": "Filter by subscription category" }
+            "maxResults": {
+              "type": "number",
+              "description": "Number of videos (default 20)"
+            },
+            "category": {
+              "type": "string",
+              "description": "Filter by subscription category"
+            }
           },
           "required": []
         }
@@ -40,9 +50,18 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "regionCode": { "type": "string", "description": "Country code (default HK). Examples: US, GB, JP, KR" },
-            "categoryId": { "type": "string", "description": "YouTube category: 10=Music, 20=Gaming, 28=Science" },
-            "maxResults": { "type": "number", "description": "Number of videos (default 20)" }
+            "regionCode": {
+              "type": "string",
+              "description": "Country code (default HK). Examples: US, GB, JP, KR"
+            },
+            "categoryId": {
+              "type": "string",
+              "description": "YouTube category: 10=Music, 20=Gaming, 28=Science"
+            },
+            "maxResults": {
+              "type": "number",
+              "description": "Number of videos (default 20)"
+            }
           },
           "required": []
         }
@@ -54,8 +73,14 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "topic": { "type": "string", "description": "Specific topic to search for (overrides profile-driven discovery)" },
-            "maxResults": { "type": "number", "description": "Number of channels to discover (default 10)" }
+            "topic": {
+              "type": "string",
+              "description": "Specific topic to search for (overrides profile-driven discovery)"
+            },
+            "maxResults": {
+              "type": "number",
+              "description": "Number of channels to discover (default 10)"
+            }
           },
           "required": []
         }
@@ -77,9 +102,17 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "channelIds": { "type": "array", "items": { "type": "string" }, "description": "Channel IDs to unsubscribe from" }
+            "channelIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Channel IDs to unsubscribe from"
+            }
           },
-          "required": ["channelIds"]
+          "required": [
+            "channelIds"
+          ]
         }
       },
       {

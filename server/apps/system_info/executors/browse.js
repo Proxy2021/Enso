@@ -16,34 +16,34 @@ try {
   installedApps = data.installedApps || data.apps || [];
   runningProcesses = data.runningProcesses || data.processes || [];
 } catch (e) {
-  result = {
+  return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_system_info_browse",
     platform: os.platform(),
     hostname: os.hostname(),
     installedApps: [],
     runningProcesses: [],
     error: "No system data cached. Run a scan first.",
-  };
-  return;
+  }) }] };
 }
 
 // Apply query filter
 var filteredApps = installedApps;
-if (params.query) {
-  var q = params.query.toLowerCase();
+var p = params || {};
+if (p.query) {
+  var q = p.query.toLowerCase();
   filteredApps = installedApps.filter(function(app) {
     var name = (typeof app === "string") ? app : (app.name || "");
     return name.toLowerCase().indexOf(q) >= 0;
   });
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_system_info_browse",
   platform: platform,
   hostname: hostname,
   totalApps: installedApps.length,
   filteredApps: filteredApps.length,
-  query: params.query || null,
+  query: p.query || null,
   installedApps: filteredApps,
   runningProcesses: runningProcesses,
-};
+}) }] };

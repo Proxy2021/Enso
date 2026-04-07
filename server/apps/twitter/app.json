@@ -21,12 +21,16 @@
             },
             "sortBy": {
               "type": "string",
-              "enum": ["name", "handle"],
+              "enum": [
+                "name",
+                "handle"
+              ],
               "description": "Sort order (default: name)"
             }
           },
           "additionalProperties": false
-        }
+        },
+        "sampleParams": {}
       },
       {
         "suffix": "scan",

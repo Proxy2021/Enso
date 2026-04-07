@@ -67,7 +67,7 @@ if (newUrls.length > 5) {
   } catch (e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_browser_data_update",
   history: {
     newUrls: newUrls.length,
@@ -78,4 +78,4 @@ result = {
     totalBookmarks: afterBookmarkCount,
   },
   cortexIngested: cortexIngested,
-};
+}) }] };

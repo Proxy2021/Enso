@@ -9,24 +9,25 @@ var cached = null;
 try { cached = JSON.parse(fs.readFileSync(cachePath, "utf-8")); } catch(e) {}
 
 if (!cached || !cached.games || cached.games.length === 0) {
-  result = { tool: "enso_steam_browse", games: [], totalGames: 0, message: "No Steam games found. Run a scan first.", genres: [] };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_steam_browse", games: [], totalGames: 0, message: "No Steam games found. Run a scan first.", genres: [] }) }] };
 } else {
   var games = cached.games.slice();
 
   // Filter by genre
-  if (params.genre) {
-    var g = params.genre.toLowerCase();
+var p = params || {};
+  if (p.genre) {
+    var g = p.genre.toLowerCase();
     games = games.filter(function(gm) { return gm.genres && gm.genres.some(function(genre) { return genre.toLowerCase().includes(g); }); });
   }
 
   // Search by name
-  if (params.query) {
-    var q = params.query.toLowerCase();
+  if (p.query) {
+    var q = p.query.toLowerCase();
     games = games.filter(function(gm) { return gm.name.toLowerCase().includes(q); });
   }
 
   // Sort
-  var sortBy = params.sortBy || "name";
+  var sortBy = p.sortBy || "name";
   if (sortBy === "name") games.sort(function(a, b) { return a.name.localeCompare(b.name); });
   else if (sortBy === "lastPlayed") games.sort(function(a, b) { return (b.lastPlayed || 0) - (a.lastPlayed || 0); });
   else if (sortBy === "size") games.sort(function(a, b) { return (b.sizeOnDisk || 0) - (a.sizeOnDisk || 0); });
@@ -50,12 +51,12 @@ if (!cached || !cached.games || cached.games.length === 0) {
     });
   });
 
-  result = {
+  return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_steam_browse",
     games: games.slice(0, 100),
     totalGames: cached.games.length,
     filteredCount: games.length,
     genres: allGenres,
     scannedAt: cached.scannedAt
-  };
+  }) }] };
 }

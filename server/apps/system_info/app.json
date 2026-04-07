@@ -14,10 +14,14 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "query": { "type": "string", "description": "Filter applications" }
+            "query": {
+              "type": "string",
+              "description": "Filter applications"
+            }
           },
           "additionalProperties": false
-        }
+        },
+        "sampleParams": {}
       },
       {
         "suffix": "scan",

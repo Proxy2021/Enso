@@ -27,10 +27,10 @@ if (newItems.length > 0) {
   } catch(e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_movies_tv_update",
   beforeCount: oldPaths.size,
   afterCount: newCache ? newCache.items.length : 0,
   newItems: newItems.map(function(m) { return { title: m.title, category: m.category }; }),
   message: newItems.length > 0 ? newItems.length + " new item(s) found" : "No new items detected"
-};
+}) }] };

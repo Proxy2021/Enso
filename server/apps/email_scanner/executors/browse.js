@@ -12,16 +12,16 @@ try {
   topSenders = data.topSenders || [];
   recentSubjects = data.recentSubjects || [];
 } catch (e) {
-  result = { tool: "enso_email_scanner_browse", topSenders: [], recentSubjects: [], error: "No email data cached. Run a scan first." };
-  return;
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_email_scanner_browse", topSenders: [], recentSubjects: [], error: "No email data cached. Run a scan first." }) }] };
 }
 
 // Apply query filter
 var filteredSenders = topSenders;
 var filteredSubjects = recentSubjects;
 
-if (params.query) {
-  var q = params.query.toLowerCase();
+var p = params || {};
+if (p.query) {
+  var q = p.query.toLowerCase();
   filteredSenders = topSenders.filter(function(s) {
     return (s.from && s.from.toLowerCase().indexOf(q) >= 0) ||
       (s.name && s.name.toLowerCase().indexOf(q) >= 0) ||
@@ -33,13 +33,13 @@ if (params.query) {
   });
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_email_scanner_browse",
   totalSenders: topSenders.length,
   filteredSenders: filteredSenders.length,
   totalSubjects: recentSubjects.length,
   filteredSubjects: filteredSubjects.length,
-  query: params.query || null,
+  query: p.query || null,
   topSenders: filteredSenders,
   recentSubjects: filteredSubjects,
-};
+}) }] };

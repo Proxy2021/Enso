@@ -3,4 +3,4 @@ var scanResult = await ctx.callTool("enso_context_scan_browser_history", {
   sinceDays: params.sinceDays || 30,
   limit: 500,
 });
-result = { tool: "enso_browser_history_scan", success: true, data: scanResult };
+return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_browser_history_scan", success: true, data: scanResult }) }] };

@@ -7,13 +7,14 @@ var cached = null;
 try { cached = JSON.parse(fs.readFileSync(cachePath, "utf-8")); } catch(e) {}
 
 if (!cached || !cached.albums || cached.albums.length === 0) {
-  result = { tool: "enso_photo_library_browse", albums: [], totalPhotos: 0, totalAlbums: 0, message: "No photos found. Run a scan first." };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_photo_library_browse", albums: [], totalPhotos: 0, totalAlbums: 0, message: "No photos found. Run a scan first." }) }] };
 } else {
   var albums = cached.albums.slice();
-  var groupBy = params.groupBy || "directory";
+var p = params || {};
+  var groupBy = p.groupBy || "directory";
 
-  if (params.query) {
-    var q = params.query.toLowerCase();
+  if (p.query) {
+    var q = p.query.toLowerCase();
     albums = albums.filter(function(a) {
       return a.name.toLowerCase().indexOf(q) >= 0 ||
         (a.parentPath && a.parentPath.toLowerCase().indexOf(q) >= 0);
@@ -47,7 +48,7 @@ if (!cached || !cached.albums || cached.albums.length === 0) {
     grouped[key].sort(function(a, b) { return b.photoCount - a.photoCount; });
   }
 
-  result = {
+  return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_photo_library_browse",
     albums: albums.slice(0, 200),
     grouped: grouped,
@@ -58,5 +59,5 @@ if (!cached || !cached.albums || cached.albums.length === 0) {
     cameras: cached.cameras || [],
     yearRange: cached.yearRange || null,
     scannedAt: cached.scannedAt
-  };
+  }) }] };
 }

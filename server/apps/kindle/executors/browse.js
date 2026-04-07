@@ -12,8 +12,7 @@ try {
   books = data.books || [];
   totalBooks = data.totalBooks || books.length;
 } catch (e) {
-  result = { tool: "enso_kindle_browse", totalBooks: 0, filteredCount: 0, books: [], categories: [], error: "No Kindle library cached. Run a scan first." };
-  return;
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_kindle_browse", totalBooks: 0, filteredCount: 0, books: [], categories: [], error: "No Kindle library cached. Run a scan first." }) }] };
 }
 
 // Build category index
@@ -31,12 +30,13 @@ var categories = Object.entries(catCounts)
   .map(function(e) { return { name: e[0], count: e[1] }; });
 
 // Apply filters
+var p = params || {};
 var filtered = books;
-if (params.category) {
-  filtered = filtered.filter(function(b) { return b.categories && b.categories.indexOf(params.category) >= 0; });
+if (p.category) {
+  filtered = filtered.filter(function(b) { return b.categories && b.categories.indexOf(p.category) >= 0; });
 }
-if (params.query) {
-  var q = params.query.toLowerCase();
+if (p.query) {
+  var q = p.query.toLowerCase();
   filtered = filtered.filter(function(b) {
     return b.title.toLowerCase().indexOf(q) >= 0 ||
       (b.author && b.author.toLowerCase().indexOf(q) >= 0) ||
@@ -45,7 +45,7 @@ if (params.query) {
 }
 
 // Sort
-var sortBy = params.sortBy || "title";
+var sortBy = p.sortBy || "title";
 if (sortBy === "rating") {
   filtered.sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); });
 } else if (sortBy === "pageCount") {
@@ -72,12 +72,12 @@ function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_kindle_browse",
   totalBooks: totalBooks,
   filteredCount: filtered.length,
-  category: params.category || null,
-  query: params.query || null,
+  category: p.category || null,
+  query: p.query || null,
   sortBy: sortBy,
   categories: categories,
   books: filtered.slice(0, 200).map(function(b) {
@@ -99,4 +99,4 @@ result = {
       wikiPath: "entities/" + slug + ".md",
     };
   }),
-};
+}) }] };

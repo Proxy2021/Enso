@@ -1,7 +1,8 @@
-var topic = params.topic || "";
+var p = params || {};
+var topic = p.topic || "";
 
 if (!topic) {
-  result = { tool: "enso_cortex_cross_reference", error: "Please provide a topic to cross-reference." };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_cortex_cross_reference", error: "Please provide a topic to cross-reference." }) }] };
 } else {
   var xrefResult = await ctx.callTool("enso_cross_reference", { topic: topic, synthesize: true });
 
@@ -15,5 +16,5 @@ if (!topic) {
     data = xrefResult || {};
   }
 
-  result = Object.assign({ tool: "enso_cortex_cross_reference" }, data);
+  return { content: [{ type: "text", text: JSON.stringify(Object.assign({ tool: "enso_cortex_cross_reference" }, data)) }] };
 }

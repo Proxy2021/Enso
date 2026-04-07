@@ -15,9 +15,9 @@ if (!tmdbKey) {
 }
 
 if (!tmdbKey) {
-  result = { tool: "enso_movies_tv_enrich", enriched: 0, message: "TMDB API key not configured. Add it in Settings > API Keys." };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_movies_tv_enrich", enriched: 0, message: "TMDB API key not configured. Add it in Settings > API Keys." }) }] };
 } else if (!cached || !cached.items) {
-  result = { tool: "enso_movies_tv_enrich", enriched: 0, message: "No items to enrich. Run a scan first." };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_movies_tv_enrich", enriched: 0, message: "No items to enrich. Run a scan first." }) }] };
 } else {
   var enriched = 0;
   var errors = 0;
@@ -84,5 +84,5 @@ if (!tmdbKey) {
 
   fs.writeFileSync(cachePath, JSON.stringify(cached, null, 2));
 
-  result = { tool: "enso_movies_tv_enrich", enriched: enriched, errors: errors, total: cached.items.length, unenrichedRemaining: unenriched.length - enriched - errors };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_movies_tv_enrich", enriched: enriched, errors: errors, total: cached.items.length, unenrichedRemaining: unenriched.length - enriched - errors }) }] };
 }

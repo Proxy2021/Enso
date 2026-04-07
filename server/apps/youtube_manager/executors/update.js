@@ -67,7 +67,7 @@ if (newSubs.length > 0 || newLiked.length > 3) {
   } catch (e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_youtube_manager_update",
   subscriptions: {
     before: beforeSubCount,
@@ -81,4 +81,4 @@ result = {
     new: newLiked.length,
   },
   cortexIngested: cortexIngested,
-};
+}) }] };

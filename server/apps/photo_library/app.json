@@ -17,7 +17,11 @@
           "properties": {
             "groupBy": {
               "type": "string",
-              "enum": ["directory", "year", "camera"],
+              "enum": [
+                "directory",
+                "year",
+                "camera"
+              ],
               "description": "Group albums by (default: directory)"
             },
             "query": {
@@ -26,7 +30,8 @@
             }
           },
           "additionalProperties": false
-        }
+        },
+        "sampleParams": {}
       },
       {
         "suffix": "scan",

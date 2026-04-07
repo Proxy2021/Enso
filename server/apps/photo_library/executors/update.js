@@ -27,10 +27,10 @@ if (newAlbums.length > 0) {
   } catch(e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_photo_library_update",
   beforeAlbums: oldAlbumPaths.size,
   afterAlbums: newCache ? newCache.albums.length : 0,
   newAlbums: newAlbums.map(function(a) { return { name: a.name, photoCount: a.photoCount }; }),
   message: newAlbums.length > 0 ? newAlbums.length + " new album(s) found" : "No new albums detected"
-};
+}) }] };

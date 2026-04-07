@@ -34,11 +34,11 @@ if (newBooks.length > 0) {
   } catch (e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_kindle_update",
   beforeCount: beforeCount,
   afterCount: updated.books.length,
   newBooks: newBooks.length,
   newTitles: newBooks.slice(0, 20).map(function(b) { return b.title + (b.author ? " — " + b.author : ""); }),
   cortexIngested: cortexResult.created > 0,
-};
+}) }] };

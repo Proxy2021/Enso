@@ -32,7 +32,7 @@ if (newFollows.length > 0) {
   } catch(e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_twitter_update",
   beforeCount: oldHandles.size,
   afterCount: newCache ? newCache.accounts.length : 0,
@@ -40,4 +40,4 @@ result = {
   unfollowed: unfollowed,
   message: (newFollows.length > 0 || unfollowed.length > 0) ?
     newFollows.length + " new follow(s), " + unfollowed.length + " unfollow(s)" : "No changes detected"
-};
+}) }] };

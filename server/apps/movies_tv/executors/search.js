@@ -7,9 +7,10 @@ var cached = null;
 try { cached = JSON.parse(fs.readFileSync(cachePath, "utf-8")); } catch(e) {}
 
 if (!cached || !cached.items) {
-  result = { tool: "enso_movies_tv_search", results: [], query: params.query, message: "No data. Run a scan first." };
+var p = params || {};
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_movies_tv_search", results: [], query: p.query, message: "No data. Run a scan first." }) }] };
 } else {
-  var q = (params.query || "").toLowerCase();
+  var q = (p.query || "").toLowerCase();
   var scored = cached.items.map(function(m) {
     var score = 0;
     if (m.title.toLowerCase().includes(q)) score += 10;
@@ -23,5 +24,5 @@ if (!cached || !cached.items) {
 
   scored.sort(function(a, b) { return b._score - a._score; });
 
-  result = { tool: "enso_movies_tv_search", results: scored.slice(0, 50), query: params.query, totalMatches: scored.length };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_movies_tv_search", results: scored.slice(0, 50), query: p.query, totalMatches: scored.length }) }] };
 }

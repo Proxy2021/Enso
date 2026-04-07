@@ -30,6 +30,7 @@
           },
           "additionalProperties": false
         },
+        "sampleParams": {},
         "sampleData": {
           "tool": "enso_kindle_browse",
           "totalBooks": 471,

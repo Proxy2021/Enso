@@ -9,17 +9,18 @@ var cached = null;
 try { cached = JSON.parse(fs.readFileSync(cachePath, "utf-8")); } catch(e) {}
 
 if (!cached || !cached.items || cached.items.length === 0) {
-  result = { tool: "enso_movies_tv_browse", items: [], totalItems: 0, message: "No movies/TV found. Run a scan first.", categories: [], genres: [] };
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_movies_tv_browse", items: [], totalItems: 0, message: "No movies/TV found. Run a scan first.", categories: [], genres: [] }) }] };
 } else {
   var items = cached.items.slice();
-  var category = params.category || "all";
+var p = params || {};
+  var category = p.category || "all";
 
   if (category !== "all") {
     items = items.filter(function(m) { return m.category === category; });
   }
 
-  if (params.query) {
-    var q = params.query.toLowerCase();
+  if (p.query) {
+    var q = p.query.toLowerCase();
     items = items.filter(function(m) {
       return m.title.toLowerCase().includes(q) ||
              (m.originalTitle && m.originalTitle.toLowerCase().includes(q)) ||
@@ -28,7 +29,7 @@ if (!cached || !cached.items || cached.items.length === 0) {
     });
   }
 
-  var sortBy = params.sortBy || "title";
+  var sortBy = p.sortBy || "title";
   if (sortBy === "title") items.sort(function(a, b) { return a.title.localeCompare(b.title); });
   else if (sortBy === "year") items.sort(function(a, b) { return (b.year || 0) - (a.year || 0); });
   else if (sortBy === "rating") items.sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); });
@@ -51,7 +52,7 @@ if (!cached || !cached.items || cached.items.length === 0) {
     return Object.assign({}, m, { hasWikiPage: indexContent.includes("entities/" + prefix + slug + ".md") });
   });
 
-  result = {
+  return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_movies_tv_browse",
     items: items.slice(0, 200),
     totalItems: cached.items.length,
@@ -59,5 +60,5 @@ if (!cached || !cached.items || cached.items.length === 0) {
     categories: catCounts,
     genres: Object.keys(genreSet).sort(),
     scannedAt: cached.scannedAt
-  };
+  }) }] };
 }

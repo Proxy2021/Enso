@@ -14,10 +14,14 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "query": { "type": "string", "description": "Filter contacts or subjects" }
+            "query": {
+              "type": "string",
+              "description": "Filter contacts or subjects"
+            }
           },
           "additionalProperties": false
-        }
+        },
+        "sampleParams": {}
       },
       {
         "suffix": "scan",
@@ -26,8 +30,14 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "folder": { "type": "string", "description": "Email folder to scan (default: INBOX)" },
-            "limit": { "type": "number", "description": "Max emails to scan (default: 50)" }
+            "folder": {
+              "type": "string",
+              "description": "Email folder to scan (default: INBOX)"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max emails to scan (default: 50)"
+            }
           },
           "additionalProperties": false
         }

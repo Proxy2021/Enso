@@ -51,11 +51,11 @@ if (newEmails.length > 0) {
   } catch (e) {}
 }
 
-result = {
+return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_email_scanner_update",
   beforeCount: beforeCount,
   afterCount: afterCount,
   newEmails: newEmails.length,
   newSubjects: newEmails.slice(0, 10).map(function(e) { return e.subject; }),
   cortexIngested: cortexIngested,
-};
+}) }] };
