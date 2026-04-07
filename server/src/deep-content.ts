@@ -193,11 +193,35 @@ function slugFromEntityId(entityId: string): string {
 export function getProcessedContent(entityId: string): ProcessedContent | null {
   ensureDirs();
   const slug = slugFromEntityId(entityId);
-  const path = join(CONTENT_DIR, `${slug}.json`);
-  try {
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8")) as ProcessedContent;
-  } catch { return null; }
+
+  // Search in both new (deep-content/) and old (kindle/podcasts/) directories
+  const OLD_KINDLE_DIR = join(homedir(), ".enso", "data", "kindle", "podcasts");
+  const searchDirs = [CONTENT_DIR, OLD_KINDLE_DIR];
+
+  for (const dir of searchDirs) {
+    // Try exact match first
+    const exactPath = join(dir, `${slug}.json`);
+    try {
+      if (existsSync(exactPath)) {
+        return JSON.parse(readFileSync(exactPath, "utf-8")) as ProcessedContent;
+      }
+    } catch { /* continue */ }
+
+    // Try prefix match (handles different slug truncation lengths)
+    try {
+      if (existsSync(dir)) {
+        const files = readdirSync(dir);
+        // Slug prefix: first 40 chars should be enough to match uniquely
+        const prefix = slug.slice(0, 40);
+        const match = files.find(f => f.startsWith(prefix) && f.endsWith(".json"));
+        if (match) {
+          return JSON.parse(readFileSync(join(dir, match), "utf-8")) as ProcessedContent;
+        }
+      }
+    } catch { /* continue */ }
+  }
+
+  return null;
 }
 
 export function isContentProcessed(entityId: string): boolean {
