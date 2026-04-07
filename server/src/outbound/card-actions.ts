@@ -908,6 +908,124 @@ export async function handlePluginCardAction(params: {
     logAction({ ts: Date.now(), type: "action", category: "action:cross-app", message: `Cross-app fallback: target=${targetFamily} not resolved, falling through`, cardId });
   }
 
+  // ── Entity Navigation: view_entity / nav_back ──
+  // These actions support in-place card navigation across entity scopes.
+  // view_entity pushes the current card state onto the navStack and shows entity detail.
+  // nav_back pops the stack and restores the previous state.
+  if (action === "view_entity") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const entityId = String(p.entityId ?? "").trim();
+    if (!entityId) {
+      sendOperation("error", "No entity ID provided");
+      return;
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `view_entity: ${entityId}`, cardId });
+    sendOperation("processing", "Loading entity");
+
+    try {
+      const { buildEntityDetailData } = await import("../entity-model.js");
+      const detailData = await buildEntityDetailData(entityId);
+      if (!detailData) {
+        sendOperation("error", "Entity not found");
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "error", targetCardId: cardId,
+          text: `Entity "${entityId}" not found in index or cache.`,
+          operation: { operationId, stage: "error", label: "Entity not found", cancellable: false },
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Push current state onto nav stack
+      if (!ctx.navStack) ctx.navStack = [];
+      const currentTitle = ((ctx.currentData as Record<string, unknown>)?.entity as Record<string, unknown>)?.title
+        ?? ctx.toolFamily ?? "Previous view";
+      ctx.navStack.push({
+        data: structuredClone(ctx.currentData),
+        generatedUI: ctx.currentGeneratedUI,
+        title: String(currentTitle),
+        focusEntity: ((ctx.currentData as Record<string, unknown>)?.focusEntity) as string | undefined,
+      });
+
+      // Update context with detail data
+      detailData.navStack = ctx.navStack.map(e => ({ title: e.title })); // breadcrumb info only
+      ctx.currentData = detailData;
+
+      // Resolve the generatedUI — use entity detail template
+      const { getGeneratedTemplateCodeBySignature: getTemplateBySignature } = await import("../native-tools/registry.js");
+      let generatedUI = ctx.currentGeneratedUI; // keep current template; entity detail rendering is template-adaptive
+
+      // Try to find the app's template (which should handle focusEntity via scope-adaptive rendering)
+      if (ctx.signatureId) {
+        const appTemplate = getTemplateBySignature(ctx.signatureId);
+        if (appTemplate) generatedUI = appTemplate;
+      }
+
+      ctx.currentGeneratedUI = generatedUI;
+
+      // Send in-place update
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: detailData,
+        generatedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "complete", label: "Entity loaded", cancellable: false },
+        timestamp: Date.now(),
+      });
+
+      // Persist
+      persistCard(client.id, capturedConvId, {
+        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+        data: detailData, generatedUI,
+        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+      });
+    } catch (err) {
+      logError("action:entity", `view_entity failed for ${entityId}`, err, { cardId });
+      sendOperation("error", "Failed to load entity");
+    }
+    return;
+  }
+
+  if (action === "nav_back") {
+    if (!ctx.navStack?.length) {
+      logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `nav_back: stack empty`, cardId });
+      sendOperation("complete", "Already at root");
+      return;
+    }
+
+    const entry = ctx.navStack.pop()!;
+    logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `nav_back: restoring "${entry.title}"`, cardId });
+
+    // Restore previous state
+    ctx.currentData = entry.data;
+    ctx.currentGeneratedUI = entry.generatedUI;
+
+    // Add navStack breadcrumb to restored data
+    const restoredData = structuredClone(entry.data) as Record<string, unknown>;
+    restoredData.navStack = ctx.navStack.map(e => ({ title: e.title }));
+
+    client.send({
+      id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+      state: "final", targetCardId: cardId,
+      data: restoredData,
+      generatedUI: entry.generatedUI,
+      cardMode: cardModeFromContext(ctx),
+      operation: { operationId, stage: "complete", label: "Navigated back", cancellable: false },
+      timestamp: Date.now(),
+    });
+
+    // Persist
+    persistCard(client.id, capturedConvId, {
+      id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+      data: restoredData, generatedUI: entry.generatedUI,
+      cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+    });
+    return;
+  }
+
   // ── Path 2: Native tool invocation ──
   // If the card was produced by a tool from a co-loaded OpenClaw plugin,
   // try to handle the action by calling the tool directly via the registry.

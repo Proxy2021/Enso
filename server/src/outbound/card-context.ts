@@ -11,6 +11,14 @@ import { logAction } from "../action-log.js";
 
 // ── Card Interaction Context ──
 
+/** Entry in the card navigation stack — saved when drilling into an entity */
+export interface NavStackEntry {
+  data: unknown;
+  generatedUI?: string;
+  title: string;
+  focusEntity?: string;  // EntityId of what was being shown
+}
+
 export interface CardContext {
   cardId: string;
   originalPrompt: string;
@@ -43,6 +51,10 @@ export interface CardContext {
   coverageStatus?: ToolTemplateCoverageStatus;
   /** When set, restricts all path-based tool actions to this directory and its children. */
   allowedRoot?: string;
+  /** Navigation stack for entity drill-down. Each entry is a snapshot of the card before navigating deeper. */
+  navStack?: NavStackEntry[];
+  /** Current generatedUI template (tracked so nav_back can restore it). */
+  currentGeneratedUI?: string;
 }
 
 export const cardContexts = new Map<string, CardContext>();

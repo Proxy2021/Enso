@@ -588,3 +588,205 @@ export async function buildEntityIndex(): Promise<number> {
 
   return entityIndex.size;
 }
+
+// ─── Entity Resolution ───────────────────────────────────────────────────────
+
+/** Cache-level item finder by source and slug */
+function findInCache(source: string, type: string, slug: string): Record<string, unknown> | null {
+  const cached = readCache(source);
+  if (!cached || typeof cached !== "object") return null;
+  const data = cached as Record<string, unknown>;
+
+  // Each source has a different array key and match strategy
+  const matchBySlug = (title: string) => slugify(title) === slug;
+
+  if (source === "kindle" && Array.isArray(data.books)) {
+    return (data.books as Array<Record<string, unknown>>).find(b => typeof b.title === "string" && matchBySlug(b.title)) ?? null;
+  }
+  if (source === "steam" && Array.isArray(data.games)) {
+    return (data.games as Array<Record<string, unknown>>).find(g => typeof g.name === "string" && matchBySlug(g.name)) ?? null;
+  }
+  if (source === "movies_tv" && Array.isArray(data.items)) {
+    return (data.items as Array<Record<string, unknown>>).find(m => {
+      if (typeof m.title !== "string") return false;
+      const titleSlug = slugify(m.title + (m.year ? `-${m.year}` : ""));
+      return titleSlug === slug;
+    }) ?? null;
+  }
+  if (source === "photos" && Array.isArray(data.albums)) {
+    return (data.albums as Array<Record<string, unknown>>).find(a => typeof a.name === "string" && matchBySlug(a.name)) ?? null;
+  }
+  if (source === "youtube" && Array.isArray(data.subscriptions)) {
+    return (data.subscriptions as Array<Record<string, unknown>>).find(c => typeof c.title === "string" && matchBySlug(c.title)) ?? null;
+  }
+  if (source === "qq_music") {
+    if (type === "artist" && Array.isArray(data.favorites)) {
+      // Build artist from favorites
+      const artistTracks = (data.favorites as Array<Record<string, unknown>>).filter(f => typeof f.artist === "string" && matchBySlug(f.artist));
+      if (artistTracks.length > 0) {
+        return { name: artistTracks[0].artist, trackCount: artistTracks.length, tracks: artistTracks.slice(0, 10).map(t => t.title) };
+      }
+    }
+  }
+  if (source === "twitter" && Array.isArray(data.accounts)) {
+    return (data.accounts as Array<Record<string, unknown>>).find(a => {
+      const handle = typeof a.handle === "string" ? a.handle : typeof a.displayName === "string" ? a.displayName : "";
+      return matchBySlug(handle);
+    }) ?? null;
+  }
+  if (source === "files" && Array.isArray(data.projects)) {
+    return (data.projects as Array<Record<string, unknown>>).find(p => typeof p.name === "string" && matchBySlug(p.name)) ?? null;
+  }
+  return null;
+}
+
+/** Read Cortex wiki page content */
+function readCortexPage(cortexPath: string): { content: string; backlinks: string[] } | null {
+  const fullPath = join(ENSO_HOME, "wiki", cortexPath);
+  try {
+    if (!existsSync(fullPath)) return null;
+    const content = readFileSync(fullPath, "utf-8");
+
+    // Find backlinks from _index.md
+    const indexPath = join(ENSO_HOME, "wiki", "_index.md");
+    const backlinks: string[] = [];
+    if (existsSync(indexPath)) {
+      const idx = readFileSync(indexPath, "utf-8");
+      const pageName = cortexPath.replace(/.*\//, "").replace(/\.md$/, "");
+      const linkPattern = new RegExp(`\\[\\[${pageName}\\]\\]`, "gi");
+      const blocks = idx.split(/\n(?=## )/);
+      for (const block of blocks) {
+        if (linkPattern.test(block)) {
+          const pathMatch = block.match(/^## (.+\.md)$/m);
+          if (pathMatch && pathMatch[1] !== cortexPath) backlinks.push(pathMatch[1]);
+        }
+      }
+    }
+    return { content, backlinks };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a full Entity from its ID by merging index, cache, and Cortex data.
+ */
+export async function resolveEntity(entityId: EntityId): Promise<Entity | null> {
+  const parsed = parseEntityId(entityId);
+  if (!parsed) return null;
+
+  // 1. Index lookup
+  const indexEntry = lookupEntity(entityId);
+
+  // 2. Cache enrichment
+  const cacheItem = findInCache(parsed.source, parsed.type, parsed.slug);
+
+  // 3. Cortex enrichment
+  const cortexPath = indexEntry?.cortexPath ?? entityCortexPath(entityId);
+  const cortexData = cortexPath ? readCortexPage(cortexPath) : null;
+
+  // If nothing found anywhere, return null
+  if (!indexEntry && !cacheItem) return null;
+
+  // 4. Merge into full Entity
+  const entity: Entity = {
+    entityId,
+    type: parsed.type as EntityType,
+    source: parsed.source as EntitySource,
+    title: indexEntry?.title ?? (cacheItem?.title || cacheItem?.name || parsed.slug) as string,
+    slug: parsed.slug,
+    imageUrl: indexEntry?.imageUrl ?? (cacheItem?.coverUrl || cacheItem?.posterPath || cacheItem?.thumbnailUrl) as string | undefined,
+    summary: (cacheItem?.description || cacheItem?.overview || cacheItem?.bio) as string | undefined,
+    tags: indexEntry?.tags ?? [],
+    themes: [],
+    cortexPath: cortexData ? cortexPath : indexEntry?.cortexPath,
+    metadata: cacheItem ?? {},
+    externalUrl: (cacheItem?.readerUrl || cacheItem?.storeUrl || cacheItem?.externalUrl) as string | undefined,
+    updatedAt: indexEntry?.updatedAt ?? new Date().toISOString(),
+  };
+
+  return entity;
+}
+
+/**
+ * Build the data payload for an entity detail card.
+ * Includes: entity metadata, Cortex wiki content, related entities.
+ */
+export async function buildEntityDetailData(entityId: EntityId): Promise<Record<string, unknown> | null> {
+  const entity = await resolveEntity(entityId);
+  if (!entity) return null;
+
+  const parsed = parseEntityId(entityId);
+  const typeDef = parsed ? ENTITY_TYPES[parsed.type] : undefined;
+
+  // Read Cortex content
+  let cortexContent: string | undefined;
+  let backlinks: string[] = [];
+  if (entity.cortexPath) {
+    const page = readCortexPage(entity.cortexPath);
+    if (page) {
+      cortexContent = page.content;
+      backlinks = page.backlinks;
+    }
+  }
+
+  // Find related entities (by tag overlap)
+  const relatedEntities: EntityRef[] = [];
+  if (entity.tags.length > 0) {
+    const tagSet = new Set(entity.tags);
+    let count = 0;
+    for (const entry of entityIndex.values()) {
+      if (entry.entityId === entityId) continue;
+      if (count >= 10) break;
+      const overlap = entry.tags?.filter(t => tagSet.has(t)).length ?? 0;
+      if (overlap >= 2) {
+        relatedEntities.push({
+          entityId: entry.entityId,
+          type: entry.type,
+          source: entry.source,
+          title: entry.title,
+          slug: entry.slug,
+          imageUrl: entry.imageUrl,
+        });
+        count++;
+      }
+    }
+  }
+
+  // Build detail fields from metadata
+  const detailFields: Array<{ key: string; label: string; value: unknown }> = [];
+  if (typeDef) {
+    for (const key of typeDef.detailFields) {
+      const value = entity.metadata[key];
+      if (value !== undefined && value !== null && value !== "") {
+        detailFields.push({
+          key,
+          label: key.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase()),
+          value,
+        });
+      }
+    }
+  }
+
+  return {
+    tool: `entity_detail`,
+    focusEntity: entityId,
+    entity: {
+      entityId: entity.entityId,
+      type: entity.type,
+      source: entity.source,
+      title: entity.title,
+      slug: entity.slug,
+      imageUrl: entity.imageUrl,
+      summary: entity.summary,
+      cortexPath: entity.cortexPath,
+      externalUrl: entity.externalUrl,
+    },
+    detailFields,
+    cortexContent,
+    backlinks,
+    relatedEntities,
+    childEntities: entity.children ?? [],
+    navigationDepth: 1,
+  };
+}
