@@ -270,10 +270,20 @@ export default function GeneratedUI({ data, onAction }) {
                 </UICard>
               )}
 
-              {/* Discover More */}
-              <Button variant="primary" onClick={function() { onAction("discover", { topic: data?.title || "", path: data?.path }); }}>
-                <LucideReact.Compass className="w-3.5 h-3.5" /> Discover More About {data?.title}
-              </Button>
+              {/* Deep Content + Discover */}
+              <div className="flex flex-wrap gap-2">
+                {data?.entityId && (
+                  <Button variant="primary" onClick={function() { onAction("deep_content", { entityId: data.entityId }); }}>
+                    <LucideReact.Mic className="w-3.5 h-3.5" /> Deep Podcast
+                  </Button>
+                )}
+                <Button variant="outline" onClick={function() { onAction("discover", { topic: data?.title || "", path: data?.path }); }}>
+                  <LucideReact.Compass className="w-3.5 h-3.5" /> Discover More About {data?.title}
+                </Button>
+                <Button variant="outline" onClick={function() { onAction("send_message", { message: '/research "' + (data?.title || "") + '"' }); }}>
+                  <LucideReact.Search className="w-3.5 h-3.5" /> Research
+                </Button>
+              </div>
             </>
           )}
         </div>

@@ -52,6 +52,27 @@ if (tags.length > 0) {
   related = related.slice(0, 10);
 }
 
+// Derive entityId from index entry (if available) or page path
+var entityId = thisEntry ? thisEntry.entityId : null;
+if (!entityId && category === "entities") {
+  // Infer from path: entities/game-x.md → steam:game:x, entities/movie-x.md → movies_tv:movie:x, etc.
+  var filename = pagePath.replace(/.*\//, "").replace(/\.md$/, "");
+  if (filename.startsWith("game-")) entityId = "steam:game:" + filename.replace("game-", "");
+  else if (filename.startsWith("movie-")) entityId = "movies_tv:movie:" + filename.replace("movie-", "");
+  else if (filename.startsWith("tv-")) entityId = "movies_tv:tv-series:" + filename.replace("tv-", "");
+  else if (filename.startsWith("photo-album-")) entityId = "photos:album:" + filename.replace("photo-album-", "");
+  else if (filename.startsWith("artist-")) entityId = "qq_music:artist:" + filename.replace("artist-", "");
+  else if (filename.startsWith("twitter-")) entityId = "twitter:twitter-account:" + filename.replace("twitter-", "");
+  else {
+    // Check source tag for kindle books (no prefix)
+    var source = thisEntry ? thisEntry.source : null;
+    if (source === "kindle") entityId = "kindle:book:" + filename;
+    else if (source === "youtube") entityId = "youtube:channel:" + filename;
+    else if (source === "project") entityId = "files:project:" + filename;
+    else entityId = "cortex:concept:" + filename;
+  }
+}
+
 return {
   content: [{ type: "text", text: JSON.stringify({
     tool: "enso_cortex_read",
@@ -60,6 +81,7 @@ return {
     content: content,
     category: category,
     tags: tags,
+    entityId: entityId,
     backlinks: backlinks.map(function(bl) { return typeof bl === "string" ? { path: bl, title: bl.replace(/.*\//, "").replace(/\.md$/, "").replace(/-/g, " ") } : bl; }),
     outgoingLinks: outgoingLinks,
     related: related
