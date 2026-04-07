@@ -1026,6 +1026,165 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Book Podcast: generate deep research + long-form podcast for a book ──
+  if (action === "book_podcast") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const entityId = String(p.entityId ?? "").trim();
+    if (!entityId) { sendOperation("error", "No entity ID"); return; }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `book_podcast: ${entityId}`, cardId });
+
+    // Check cache first
+    const { getProcessedBook, generateBookPodcast } = await import("../book-podcast.js");
+    const cached = getProcessedBook(entityId);
+    if (cached) {
+      // Return cached podcast immediately
+      const detailData = ctx.currentData as Record<string, unknown>;
+      detailData.processedBook = cached;
+      detailData.podcastAudioUrl = cached.audioUrl;
+      detailData.podcastScript = cached.script;
+      detailData.podcastDuration = cached.durationMinutes;
+      detailData.podcastStatus = "ready";
+      ctx.currentData = detailData;
+
+      sendOperation("complete", "Podcast loaded from cache");
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: detailData,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    // Generate podcast in background (non-blocking for the WS handler)
+    sendOperation("processing", "Starting book podcast pipeline...");
+
+    generateBookPodcast({
+      entityId,
+      onProgress: (progress) => {
+        // Stream progress as delta messages
+        const detailData = structuredClone(ctx.currentData) as Record<string, unknown>;
+        detailData.podcastStatus = progress.phase;
+        detailData.podcastStatusDetail = progress.detail;
+        detailData.podcastPercent = progress.percentComplete;
+
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "delta", targetCardId: cardId,
+          data: detailData,
+          generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx),
+          timestamp: Date.now(),
+        });
+      },
+    }).then((processed) => {
+      // Update card with completed podcast
+      const detailData = ctx.currentData as Record<string, unknown>;
+      detailData.processedBook = processed;
+      detailData.podcastAudioUrl = processed.audioUrl;
+      detailData.podcastScript = processed.script;
+      detailData.podcastDuration = processed.durationMinutes;
+      detailData.podcastStatus = "ready";
+      detailData.podcastPercent = 100;
+      ctx.currentData = detailData;
+
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: detailData,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "complete", label: `Podcast ready (${processed.durationMinutes} min)`, cancellable: false },
+        timestamp: Date.now(),
+      });
+
+      persistCard(client.id, capturedConvId, {
+        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+        data: detailData, generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+      });
+
+      logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Podcast complete for ${entityId}: ${processed.durationMinutes} min` });
+    }).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logError("action:book-podcast", `Podcast generation failed for ${entityId}`, err, { cardId });
+
+      const detailData = ctx.currentData as Record<string, unknown>;
+      detailData.podcastStatus = "error";
+      detailData.podcastError = msg;
+
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: detailData,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "error", label: "Podcast failed", message: msg, cancellable: false },
+        timestamp: Date.now(),
+      });
+    });
+
+    return;
+  }
+
+  // ── Book Batch Process: process multiple books as a background task ──
+  if (action === "book_batch_process") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const entityIds = (p.entityIds ?? []) as string[];
+    if (!entityIds.length) { sendOperation("error", "No books selected"); return; }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Batch process: ${entityIds.length} books`, cardId });
+    sendOperation("processing", `Processing ${entityIds.length} books...`);
+
+    const { processBookBatch } = await import("../book-podcast.js");
+
+    processBookBatch({
+      entityIds,
+      onBookProgress: (bookIdx, totalBooks, bookTitle, progress) => {
+        const detailData = structuredClone(ctx.currentData) as Record<string, unknown>;
+        detailData.batchStatus = `Processing ${bookIdx + 1}/${totalBooks}: "${bookTitle}"`;
+        detailData.batchPhase = progress.phase;
+        detailData.batchDetail = progress.detail;
+        detailData.batchPercent = Math.round(((bookIdx + (progress.percentComplete || 0) / 100) / totalBooks) * 100);
+
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "delta", targetCardId: cardId,
+          data: detailData,
+          generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx),
+          timestamp: Date.now(),
+        });
+      },
+    }).then((result) => {
+      const detailData = ctx.currentData as Record<string, unknown>;
+      detailData.batchStatus = `Complete: ${result.processed} processed, ${result.failed} failed`;
+      detailData.batchPercent = 100;
+      detailData.batchResults = result.results;
+      ctx.currentData = detailData;
+
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: detailData,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "complete", label: `Batch complete: ${result.processed}/${entityIds.length}`, cancellable: false },
+        timestamp: Date.now(),
+      });
+
+      logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Batch complete: ${result.processed} processed, ${result.failed} failed` });
+    }).catch((err) => {
+      logError("action:book-podcast", "Batch processing failed", err, { cardId });
+      sendOperation("error", `Batch failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+
+    return;
+  }
+
   // ── Path 2: Native tool invocation ──
   // If the card was produced by a tool from a co-loaded OpenClaw plugin,
   // try to handle the action by calling the tool directly via the registry.

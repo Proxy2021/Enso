@@ -72,6 +72,17 @@ function slugify(title) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
 
+// Check which books have been deep-processed (podcast generated)
+var podcastDir = path.join(os.homedir(), ".enso", "data", "kindle", "podcasts");
+var processedSlugs = new Set();
+try {
+  if (fs.existsSync(podcastDir)) {
+    fs.readdirSync(podcastDir).forEach(function(f) {
+      if (f.endsWith(".json")) processedSlugs.add(f.replace(".json", ""));
+    });
+  }
+} catch (e) {}
+
 return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_kindle_browse",
   totalBooks: totalBooks,
@@ -98,6 +109,7 @@ return { content: [{ type: "text", text: JSON.stringify({
       asin: b.asin,
       hasWikiPage: existingPages.has("entities/" + slug + ".md"),
       wikiPath: "entities/" + slug + ".md",
+      isProcessed: processedSlugs.has("kindle_book_" + slug),
     };
   }),
 }) }] };

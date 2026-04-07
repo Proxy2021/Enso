@@ -597,7 +597,7 @@ function extractArticleText(html: string): string {
  * Fetch a URL and extract its article text content.
  * Returns empty string on failure (timeout, error, non-HTML, etc.)
  */
-async function fetchPageContent(url: string): Promise<string> {
+export async function fetchPageContent(url: string): Promise<string> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -659,7 +659,7 @@ async function enrichSourcesWithContent(sources: Source[]): Promise<void> {
 
 // ── Brave Search ──
 
-async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[]> {
+export async function braveWebSearch(query: string, count = 6): Promise<BraveWebResult[]> {
   const apiKey = getBraveApiKey();
   if (!apiKey) {
     logError("researcher", "braveWebSearch: no BRAVE_API_KEY", undefined, {});

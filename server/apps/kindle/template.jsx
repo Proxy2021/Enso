@@ -36,6 +36,15 @@ function GeneratedUI({ data, onAction }) {
     var fields = d.detailFields || [];
     var cortexContent = d.cortexContent;
     var related = d.relatedEntities || [];
+    var processed = d.processedBook;
+    var research = processed ? processed.research : null;
+    var podcastStatus = d.podcastStatus;
+    var podcastAudioUrl = d.podcastAudioUrl;
+    var podcastScript = d.podcastScript;
+    var podcastDuration = d.podcastDuration;
+    var podcastDetail = d.podcastStatusDetail;
+    var podcastPercent = d.podcastPercent || 0;
+    var [showTranscript, setShowTranscript] = React.useState(false);
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -54,6 +63,7 @@ function GeneratedUI({ data, onAction }) {
                 <Badge variant="default">{entity.type}</Badge>
                 <Badge variant="secondary">{entity.source}</Badge>
                 {entity.cortexPath && <Badge variant="secondary">📄 In Cortex</Badge>}
+                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ Podcast Ready</Badge>}
               </div>
               {entity.summary && (
                 <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.5 }}>
@@ -63,6 +73,117 @@ function GeneratedUI({ data, onAction }) {
             </div>
           </div>
         </UICard>
+
+        {/* Podcast Player (when ready) */}
+        {podcastAudioUrl && (
+          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "16px" }}>🎙️</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#c4b5fd" }}>AI Book Podcast</span>
+              {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
+            </div>
+            <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}>
+              <source src={podcastAudioUrl} type="audio/wav" />
+            </audio>
+            {podcastScript && (
+              <div style={{ marginTop: "8px" }}>
+                <button onClick={function() { setShowTranscript(!showTranscript); }}
+                  style={{ background: "none", border: "none", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: 0 }}>
+                  {showTranscript ? "Hide transcript ▲" : "Show transcript ▼"}
+                </button>
+                {showTranscript && (
+                  <div style={{ marginTop: "6px", maxHeight: "300px", overflow: "auto", fontSize: "11px", lineHeight: 1.6 }}>
+                    {podcastScript.split("\n").map(function(line, i) {
+                      var hostA = line.match(/^Host A:\s*(.*)/);
+                      var hostB = line.match(/^Host B:\s*(.*)/);
+                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>Host A:</span> {hostA[1]}</div>;
+                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>Host B:</span> {hostB[1]}</div>;
+                      return line.trim() ? <div key={i} style={{ color: "#64748b" }}>{line}</div> : null;
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </UICard>
+        )}
+
+        {/* Podcast Generation Progress */}
+        {podcastStatus && podcastStatus !== "ready" && podcastStatus !== "error" && !podcastAudioUrl && (
+          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "14px", height: "14px", border: "2px solid #7c3aed", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <span style={{ fontSize: "12px", color: "#c4b5fd" }}>{podcastDetail || "Generating podcast..."}</span>
+            </div>
+            {podcastPercent > 0 && (
+              <div style={{ marginTop: "8px", height: "4px", background: "#1e1b4b", borderRadius: "2px", overflow: "hidden" }}>
+                <div style={{ height: "100%", background: "#7c3aed", width: podcastPercent + "%", transition: "width 0.5s" }} />
+              </div>
+            )}
+          </UICard>
+        )}
+
+        {/* Podcast Error */}
+        {podcastStatus === "error" && (
+          <UICard style={{ padding: "12px", borderColor: "#ef444444" }}>
+            <div style={{ fontSize: "12px", color: "#ef4444" }}>Podcast generation failed: {d.podcastError || "Unknown error"}</div>
+            <Button variant="outline" size="sm" style={{ marginTop: "6px", fontSize: "10px" }}
+              onClick={function() { onAction("book_podcast", { entityId: entity.entityId || d.focusEntity }); }}
+            >🔄 Retry</Button>
+          </UICard>
+        )}
+
+        {/* Deep Research Content (from processedBook) */}
+        {research && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {/* Core Thesis */}
+            {research.coreThesis && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "6px", color: "#94a3b8" }}>💡 Core Thesis</div>
+                <div style={{ fontSize: "13px", color: "#e2e8f0", lineHeight: 1.6 }}>{research.coreThesis}</div>
+              </UICard>
+            )}
+
+            {/* Key Insights */}
+            {research.keyInsights && research.keyInsights.length > 0 && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>🔑 Key Insights</div>
+                {research.keyInsights.map(function(ins, i) {
+                  return (
+                    <div key={i} style={{ marginBottom: "8px", paddingLeft: "12px", borderLeft: "2px solid #475569" }}>
+                      <div style={{ fontSize: "12px", color: "#e2e8f0", lineHeight: 1.5 }}>{ins.insight}</div>
+                      {ins.example && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px", fontStyle: "italic" }}>{ins.example}</div>}
+                    </div>
+                  );
+                })}
+              </UICard>
+            )}
+
+            {/* Chapter Summaries */}
+            {research.chapterSummaries && research.chapterSummaries.length > 0 && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>📑 Chapter Summaries</div>
+                {research.chapterSummaries.map(function(ch, i) {
+                  return (
+                    <div key={i} style={{ marginBottom: "8px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#93c5fd" }}>{ch.chapter}</div>
+                      <div style={{ fontSize: "11px", color: "#cbd5e1", lineHeight: 1.5, marginTop: "2px" }}>{ch.summary}</div>
+                    </div>
+                  );
+                })}
+              </UICard>
+            )}
+
+            {/* Critical Perspectives */}
+            {research.criticalPerspectives && research.criticalPerspectives.length > 0 && (
+              <UICard style={{ padding: "12px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>⚖️ Critical Perspectives</div>
+                {research.criticalPerspectives.map(function(cp, i) {
+                  return <div key={i} style={{ fontSize: "12px", color: "#fbbf24", marginBottom: "4px", lineHeight: 1.5 }}>• {cp}</div>;
+                })}
+              </UICard>
+            )}
+          </div>
+        )}
 
         {/* Detail fields */}
         {fields.length > 0 && (
@@ -81,7 +202,7 @@ function GeneratedUI({ data, onAction }) {
         )}
 
         {/* Cortex wiki content */}
-        {cortexContent && (
+        {cortexContent && !research && (
           <UICard style={{ padding: "12px" }}>
             <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>📖 Knowledge (Cortex)</div>
             <div style={{ fontSize: "12px", color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: "300px", overflow: "auto" }}>
@@ -108,6 +229,11 @@ function GeneratedUI({ data, onAction }) {
 
         {/* Actions */}
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {!podcastAudioUrl && !podcastStatus && (
+            <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+              onClick={function() { onAction("book_podcast", { entityId: entity.entityId || d.focusEntity }); }}
+            >🎙️ Deep Podcast</Button>
+          )}
           <Button variant="outline" size="sm"
             onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\"" }); }}
           >🔍 Research</Button>
@@ -120,6 +246,11 @@ function GeneratedUI({ data, onAction }) {
             <Button variant="outline" size="sm"
               onClick={function() { onAction("send_message", { message: "/wiki read " + entity.cortexPath }); }}
             >📄 View in Cortex</Button>
+          )}
+          {podcastAudioUrl && (
+            <Button variant="outline" size="sm"
+              onClick={function() { onAction("share_email", { title: entity.title + " — Book Intelligence Report" }); }}
+            >📧 Email Summary + Podcast</Button>
           )}
         </div>
       </div>
@@ -282,7 +413,7 @@ function BookCard({ book, onAction }) {
           <div style={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3,
             cursor: book.entityId ? "pointer" : "default", color: book.entityId ? "#93c5fd" : "inherit" }}
             onClick={function() { if (book.entityId) onAction("view_entity", { entityId: book.entityId }); }}
-          >{book.title}</div>
+          >{book.isProcessed && <span style={{ marginRight: "4px" }} title="Deep podcast available">🎙️</span>}{book.title}</div>
           {book.author && <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>{book.author}</div>}
 
           {/* Rating + meta */}
