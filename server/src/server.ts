@@ -723,6 +723,44 @@ export async function startEnsoServer(opts: {
     } catch { res.json([]); }
   });
 
+  // ── Podcast Streaming API (for email sharing) ──
+  app.get("/api/podcast/stream/:slug", (req, res) => {
+    const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
+    const audioPath = join(homedir(), ".enso", "data", "kindle", "audio", `${slug}.wav`);
+    if (!existsSync(audioPath)) {
+      res.status(404).json({ error: "Podcast not found" });
+      return;
+    }
+    const stat = statSync(audioPath);
+    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Disposition", `inline; filename="${slug}.wav"`);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    createReadStream(audioPath).pipe(res);
+  });
+
+  // Podcast metadata API (for email link previews)
+  app.get("/api/podcast/info/:slug", async (req, res) => {
+    try {
+      const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
+      const metaPath = join(homedir(), ".enso", "data", "kindle", "podcasts", `${slug}.json`);
+      if (!existsSync(metaPath)) {
+        res.status(404).json({ error: "Podcast not found" });
+        return;
+      }
+      const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+      res.json({
+        title: meta.title,
+        author: meta.author,
+        durationMinutes: meta.durationMinutes,
+        processedAt: meta.processedAt,
+        streamUrl: `/api/podcast/stream/${slug}`,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── Action Log API (for Claude Code review) ──
   app.get("/api/action-log", (req, res) => {
     const count = Math.min(Math.max(parseInt(req.query.count as string) || 100, 1), 500);

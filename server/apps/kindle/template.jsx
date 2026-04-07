@@ -249,7 +249,10 @@ function GeneratedUI({ data, onAction }) {
           )}
           {podcastAudioUrl && (
             <Button variant="outline" size="sm"
-              onClick={function() { onAction("share_email", { title: entity.title + " — Book Intelligence Report" }); }}
+              onClick={function() {
+                var email = prompt("Send book report + podcast to:");
+                if (email) onAction("book_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
+              }}
             >📧 Email Summary + Podcast</Button>
           )}
         </div>

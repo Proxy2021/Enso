@@ -1185,6 +1185,49 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Book Email Share: send processed book summary + podcast link via email ──
+  if (action === "book_share_email") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const recipient = String(p.recipient ?? "").trim();
+    const entityId = String(p.entityId ?? "").trim();
+    if (!recipient) {
+      sendOperation("error", "Recipient email required");
+      return;
+    }
+    if (!entityId) {
+      sendOperation("error", "No entity ID");
+      return;
+    }
+
+    try {
+      const { getProcessedBook, buildBookEmailHtml } = await import("../book-podcast.js");
+      const processed = getProcessedBook(entityId);
+      if (!processed) {
+        sendOperation("error", "Book not yet processed. Generate the podcast first.");
+        return;
+      }
+
+      // Determine base URL for podcast streaming links
+      const tunnelUrl = process.env.ENSO_TUNNEL_URL || `http://localhost:${process.env.PORT || 3001}`;
+      const html = buildBookEmailHtml(processed, tunnelUrl);
+
+      sendOperation("processing", "Sending email...");
+      const result = await sendHtmlEmail({
+        to: recipient,
+        subject: `📚 ${processed.title} — Book Intelligence Report + Podcast`,
+        html,
+        textFallback: `${processed.title} by ${processed.author}\n\n${processed.research.coreThesis}\n\nPodcast: ${tunnelUrl}/api/podcast/stream/${entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80)}`,
+      });
+
+      sendOperation("complete", result.success ? "Email sent" : "Email failed");
+      logAction({ ts: Date.now(), type: "action", category: "action:book-email", message: `Book email sent for "${processed.title}" to ${recipient}` });
+    } catch (err) {
+      logError("action:book-email", "Email failed", err, { cardId, entityId });
+      sendOperation("error", `Email failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return;
+  }
+
   // ── Path 2: Native tool invocation ──
   // If the card was produced by a tool from a co-loaded OpenClaw plugin,
   // try to handle the action by calling the tool directly via the registry.

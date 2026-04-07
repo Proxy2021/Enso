@@ -642,3 +642,137 @@ export async function processBookBatch(params: {
 
   return { processed, failed, results };
 }
+
+// ─── Email Sharing ───────────────────────────────────────────────────────────
+
+// ─── Book Recommendations (for scheduled tasks) ────────────────────────────
+
+/**
+ * Select N unprocessed books that best match the user's Cortex interests.
+ * Uses tag overlap between books and Cortex theme distribution.
+ */
+export async function recommendUnprocessedBooks(count = 3): Promise<Array<{ entityId: string; title: string; reason: string }>> {
+  const { getEntitiesBySource } = await import("./entity-model.js");
+  const allBooks = getEntitiesBySource("kindle" as never, 500);
+  const processedIds = new Set(listProcessedBooks());
+
+  // Filter to unprocessed books
+  const unprocessed = allBooks.filter(b => !processedIds.has(b.entityId));
+  if (!unprocessed.length) return [];
+
+  // Read Cortex themes to find user's top interests
+  let topThemes: string[] = [];
+  try {
+    const indexPath = join(homedir(), ".enso", "wiki", "_index.md");
+    if (existsSync(indexPath)) {
+      const idx = readFileSync(indexPath, "utf-8");
+      const themeMatches = idx.matchAll(/Themes:\s*(.+)/g);
+      const themeCounts: Record<string, number> = {};
+      for (const m of themeMatches) {
+        m[1].split(",").forEach(t => {
+          const theme = t.trim().toLowerCase();
+          if (theme) themeCounts[theme] = (themeCounts[theme] || 0) + 1;
+        });
+      }
+      topThemes = Object.entries(themeCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(e => e[0]);
+    }
+  } catch { /* ignore */ }
+
+  // Score books by tag overlap with top themes
+  const scored = unprocessed.map(book => {
+    const bookTags = new Set((book.tags || []).map(t => t.toLowerCase()));
+    let score = 0;
+    for (const theme of topThemes) {
+      if (bookTags.has(theme)) score += 3;
+      // Partial match
+      for (const tag of bookTags) {
+        if (tag.includes(theme) || theme.includes(tag)) score += 1;
+      }
+    }
+    // Bonus for enriched books (they have more metadata → better podcasts)
+    if (bookTags.size > 3) score += 2;
+    return { ...book, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, count).map(b => ({
+    entityId: b.entityId,
+    title: b.title,
+    reason: `Matches your interests in ${topThemes.slice(0, 3).join(", ")}`,
+  }));
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/**
+ * Build a rich HTML email for a processed book with summary + podcast link.
+ */
+export function buildBookEmailHtml(processed: ProcessedBook, baseUrl: string): string {
+  const slug = slugFromEntityId(processed.entityId);
+  const podcastUrl = `${baseUrl}/api/podcast/stream/${slug}`;
+  const r = processed.research;
+
+  const parts: string[] = [];
+  parts.push(`<div style="font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;background:#f8fafc;padding:24px;border-radius:12px;">`);
+
+  // Header
+  parts.push(`<h1 style="color:#1e40af;font-size:22px;margin-bottom:4px;">${escapeHtml(processed.title)}</h1>`);
+  parts.push(`<p style="font-size:14px;color:#6b7280;margin-top:0;">by ${escapeHtml(processed.author)}</p>`);
+  parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />`);
+
+  // Podcast CTA
+  parts.push(`<div style="background:#7c3aed;color:white;padding:16px;border-radius:8px;margin-bottom:16px;text-align:center;">`);
+  parts.push(`<p style="margin:0 0 8px;font-size:16px;font-weight:600;">🎙️ Listen to the AI Podcast (${processed.durationMinutes} min)</p>`);
+  parts.push(`<a href="${escapeHtml(podcastUrl)}" style="display:inline-block;background:white;color:#7c3aed;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">▶ Play / Download Podcast</a>`);
+  parts.push(`</div>`);
+
+  // Core Thesis
+  if (r.coreThesis) {
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">💡 Core Thesis</h2>`);
+    parts.push(`<p style="font-size:14px;line-height:1.6;color:#374151;">${escapeHtml(r.coreThesis)}</p>`);
+  }
+
+  // Key Insights
+  if (r.keyInsights.length > 0) {
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">🔑 Key Insights</h2>`);
+    parts.push(`<ul style="padding-left:20px;">`);
+    for (const ins of r.keyInsights.slice(0, 8)) {
+      parts.push(`<li style="font-size:13px;line-height:1.5;margin-bottom:6px;color:#374151;">${escapeHtml(ins.insight)}`);
+      if (ins.example) parts.push(`<br/><span style="color:#6b7280;font-style:italic;font-size:12px;">${escapeHtml(ins.example)}</span>`);
+      parts.push(`</li>`);
+    }
+    parts.push(`</ul>`);
+  }
+
+  // Chapter Summaries
+  if (r.chapterSummaries.length > 0) {
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">📑 Chapter Overview</h2>`);
+    for (const ch of r.chapterSummaries.slice(0, 12)) {
+      parts.push(`<p style="margin-bottom:8px;"><strong style="color:#1e40af;font-size:13px;">${escapeHtml(ch.chapter)}</strong><br/>`);
+      parts.push(`<span style="font-size:12px;color:#374151;line-height:1.5;">${escapeHtml(ch.summary)}</span></p>`);
+    }
+  }
+
+  // Critical Perspectives
+  if (r.criticalPerspectives.length > 0) {
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">⚖️ Different Perspectives</h2>`);
+    parts.push(`<ul style="padding-left:20px;">`);
+    for (const cp of r.criticalPerspectives) {
+      parts.push(`<li style="font-size:12px;line-height:1.5;margin-bottom:4px;color:#92400e;">${escapeHtml(cp)}</li>`);
+    }
+    parts.push(`</ul>`);
+  }
+
+  // Footer
+  parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />`);
+  parts.push(`<p style="font-size:11px;color:#9ca3af;text-align:center;">Generated by Enso Book Intelligence • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
+  parts.push(`</div>`);
+
+  return parts.join("\n");
+}
