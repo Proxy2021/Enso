@@ -929,6 +929,23 @@ export async function handlePluginCardAction(params: {
       logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Import OK, calling buildEntityDetailData...`, cardId });
       const detailData = await buildEntityDetailData(entityId);
       logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Detail data: ${detailData ? 'OK' : 'NULL'} for ${entityId}`, cardId });
+
+      // If entity has been deep-processed, merge podcast + research data
+      if (detailData) {
+        try {
+          const { getProcessedContent } = await import("../deep-content.js");
+          const processed = getProcessedContent(entityId);
+          if (processed) {
+            detailData.processedBook = processed;
+            detailData.podcastAudioUrl = processed.audioUrl;
+            detailData.podcastScript = processed.script;
+            detailData.podcastDuration = processed.durationMinutes;
+            detailData.podcastStatus = "ready";
+            logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Merged processed content: ${processed.durationMinutes} min podcast for ${entityId}`, cardId });
+          }
+        } catch { /* deep-content not available, skip */ }
+      }
+
       if (!detailData) {
         sendOperation("error", "Entity not found");
         client.send({
