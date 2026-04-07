@@ -50,6 +50,12 @@ if (sortBy === "publicationDate") {
   filtered.sort(function(a, b) {
     var da = a.publicationDate ? new Date(a.publicationDate).getTime() : 0;
     var db = b.publicationDate ? new Date(b.publicationDate).getTime() : 0;
+    // Handle NaN from unparseable dates — push to end
+    if (isNaN(da)) da = 0;
+    if (isNaN(db)) db = 0;
+    // Books with no date go to end
+    if (da === 0 && db !== 0) return 1;
+    if (db === 0 && da !== 0) return -1;
     return db - da; // newest first
   });
 } else if (sortBy === "rating") {
