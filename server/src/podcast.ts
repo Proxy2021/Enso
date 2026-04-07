@@ -104,24 +104,50 @@ export async function renderPodcastAudio(script: string, geminiKey: string): Pro
     },
   };
 
-  const res = await fetch(`${endpoint}?key=${geminiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // Retry up to 3 times on transient network errors
+  const maxAttempts = 3;
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "unknown");
-    throw new Error(`Gemini TTS API error ${res.status}: ${errText}`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(`${endpoint}?key=${geminiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "unknown");
+        const status = res.status;
+        // Retry on 429 (rate limit) and 5xx (server errors)
+        if ((status === 429 || status >= 500) && attempt < maxAttempts) {
+          lastError = new Error(`Gemini TTS API error ${status}: ${errText}`);
+          await new Promise(r => setTimeout(r, 2000 * attempt));
+          continue;
+        }
+        throw new Error(`Gemini TTS API error ${status}: ${errText}`);
+      }
+
+      const json = await res.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
+      };
+      const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!b64) throw new Error("No audio data in Gemini TTS response");
+
+      return Buffer.from(b64, "base64");
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const msg = lastError.message;
+      const isRetryable = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("429") || msg.includes("500") || msg.includes("502") || msg.includes("503");
+      if (isRetryable && attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+      throw lastError;
+    }
   }
 
-  const json = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
-  };
-  const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!b64) throw new Error("No audio data in Gemini TTS response");
-
-  return Buffer.from(b64, "base64");
+  throw lastError ?? new Error("TTS rendering failed after retries");
 }
 
 // ── WAV Encoding ──

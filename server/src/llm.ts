@@ -286,7 +286,7 @@ async function callGeminiWithRetry(
       const msg = lastError.message;
 
       // Only retry on transient errors
-      const isRetryable = msg.includes("timeout") || msg.includes("429") || msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("AbortError");
+      const isRetryable = msg.includes("timeout") || msg.includes("429") || msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("AbortError") || msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR");
       if (!isRetryable || attempt === maxAttempts) break;
 
       const delayMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
