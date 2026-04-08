@@ -38,7 +38,7 @@ export type EntityType =
 
 /** Data source identifiers */
 export type EntitySource =
-  | "kindle" | "steam" | "movies_tv" | "photos" | "qq_music"
+  | "kindle" | "weread" | "steam" | "movies_tv" | "photos" | "qq_music"
   | "youtube" | "twitter" | "files" | "browser" | "email"
   | "cortex" | "research" | "manual";
 
@@ -88,7 +88,7 @@ export interface EntityTypeDef {
  */
 export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
   "book": {
-    sources: ["kindle", "research"],
+    sources: ["kindle", "weread", "research"],
     cortexPrefix: "entities/",
     detailFields: ["author", "rating", "reviewCount", "pageCount", "publisher", "publicationDate", "categories", "description"],
   },
@@ -359,6 +359,7 @@ export function saveEntityIndex(): void {
 /** Cache file paths by source ID (matches data-source-registry.ts cacheFile fields) */
 const CACHE_FILES: Record<string, string> = {
   kindle: "kindle-library.json",
+  weread: "weread-library.json",
   steam: "steam-games.json",
   movies_tv: "movies-tv.json",
   photos: "photo-library.json",
@@ -399,6 +400,25 @@ function extractKindleEntities(cached: unknown): EntityIndexEntry[] {
       imageUrl: b.coverUrl,
       cortexPath: `entities/${slug}.md`,
       tags: ["book", "kindle", ...(b.categories || []).map(c => c.toLowerCase())],
+    };
+  });
+}
+
+/** Extract EntityRefs from a WeRead library cache */
+function extractWereadEntities(cached: unknown): EntityIndexEntry[] {
+  const data = cached as { books?: Array<{ title: string; author?: string; coverUrl?: string; wereadBookId?: string; categories?: string[] }> };
+  if (!data?.books) return [];
+  return data.books.filter(b => b.title).map(b => {
+    const slug = slugify(b.title);
+    return {
+      entityId: buildEntityId("weread", "book", slug),
+      type: "book" as EntityType,
+      source: "weread" as EntitySource,
+      title: b.title,
+      slug,
+      imageUrl: b.coverUrl,
+      cortexPath: `entities/weread-${slug}.md`,
+      tags: ["book", "weread", ...(b.categories || []).map(c => c.toLowerCase())],
     };
   });
 }
@@ -526,6 +546,7 @@ function extractProjectEntities(cached: unknown): EntityIndexEntry[] {
 /** Source → extractor mapping */
 const EXTRACTORS: Record<string, (cached: unknown) => EntityIndexEntry[]> = {
   kindle: extractKindleEntities,
+  weread: extractWereadEntities,
   steam: extractSteamEntities,
   movies_tv: extractMoviesTvEntities,
   photos: extractPhotoEntities,

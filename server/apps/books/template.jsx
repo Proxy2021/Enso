@@ -1,16 +1,17 @@
 function GeneratedUI({ data, onAction }) {
   var d = data || {};
   var tool = d.tool || "";
-  var isBrowse = tool === "enso_kindle_browse";
-  var isSearch = tool === "enso_kindle_search";
-  var isScan = tool === "enso_kindle_scan";
-  var isEnrich = tool === "enso_kindle_enrich";
+  var isBrowse = tool === "enso_books_browse" || tool === "enso_kindle_browse";
+  var isSearch = tool === "enso_books_search" || tool === "enso_kindle_search";
+  var isScan = tool === "enso_books_scan_kindle" || tool === "enso_books_scan_weread" || tool === "enso_kindle_scan" || tool === "enso_context_scan_weread";
+  var isEnrich = tool === "enso_books_enrich" || tool === "enso_kindle_enrich";
   var isEntityDetail = tool === "entity_detail" || !!d.focusEntity;
 
   // Hooks MUST be at top level — never inside conditionals
   var [searchInput, setSearchInput] = React.useState(d.query || "");
   var [sortBy, setSortBy] = React.useState(d.sortBy || "publicationDate");
   var [showTranscript, setShowTranscript] = React.useState(false);
+  var [activeTab, setActiveTab] = React.useState(d.tab || "all");
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
   var navStack = d.navStack || [];
@@ -362,15 +363,36 @@ function GeneratedUI({ data, onAction }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <span style={{ fontSize: "20px", marginRight: "8px" }}>📚</span>
-            <span style={{ fontWeight: 600 }}>Kindle Library</span>
+            <span style={{ fontWeight: 600 }}>Books</span>
             <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>
-              {d.filteredCount === d.totalBooks ? d.totalBooks + " books" : d.filteredCount + " of " + d.totalBooks + " books"}
+              {(d.kindleCount || 0) > 0 && (d.wereadCount || 0) > 0
+                ? (d.kindleCount + " Kindle + " + d.wereadCount + " WeRead")
+                : (d.filteredCount === d.totalBooks ? d.totalBooks + " books" : d.filteredCount + " of " + d.totalBooks + " books")}
             </span>
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
-            <Button variant="outline" size="sm" onClick={function() { onAction("scan", {}); }}>🔄 Scan</Button>
+            <Button variant="outline" size="sm" onClick={function() { onAction("scan_kindle", {}); }}>📱 Kindle</Button>
+            <Button variant="outline" size="sm" onClick={function() { onAction("scan_weread", {}); }}>📖 WeRead</Button>
             <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>✨ Enrich</Button>
           </div>
+        </div>
+
+        {/* Source Tabs */}
+        <div style={{ display: "flex", gap: "4px", borderBottom: "1px solid #374151", paddingBottom: "8px" }}>
+          {[
+            { id: "all", label: "All", count: d.totalBooks || 0 },
+            { id: "kindle", label: "Kindle", count: d.kindleCount || 0 },
+            { id: "weread", label: "WeRead", count: d.wereadCount || 0 },
+          ].map(function(t) {
+            var isActive = activeTab === t.id;
+            return (
+              <Button key={t.id} variant={isActive ? "default" : "ghost"} size="sm"
+                style={{ fontSize: "12px", opacity: t.count === 0 && t.id !== "all" ? 0.5 : 1 }}
+                onClick={function() { setActiveTab(t.id); onAction("browse", { tab: t.id, sortBy: sortBy, page: 1 }); }}>
+                {t.label} <Badge variant="secondary" style={{ marginLeft: "4px", fontSize: "10px" }}>{t.count}</Badge>
+              </Button>
+            );
+          })}
         </div>
 
         {/* Search bar + Sort */}
@@ -379,12 +401,12 @@ function GeneratedUI({ data, onAction }) {
             placeholder="Search by title, author, or topic..."
             value={searchInput}
             onChange={function(e) { setSearchInput(e.target.value); }}
-            onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy, page: 1 }); }}
+            onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy, page: 1, tab: activeTab }); }}
             style={{ flex: 1 }}
           />
           <Select
             value={sortBy}
-            onChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v, page: 1, category: d.category }); }}
+            onChange={function(v) { setSortBy(v); onAction("browse", { query: searchInput, sortBy: v, page: 1, category: d.category, tab: activeTab }); }}
             options={[
               { value: "publicationDate", label: "Newest" },
               { value: "rating", label: "Rating" },
@@ -402,7 +424,7 @@ function GeneratedUI({ data, onAction }) {
             <Badge
               variant={!d.category ? "default" : "secondary"}
               style={{ cursor: "pointer" }}
-              onClick={function() { onAction("browse", { sortBy: sortBy, page: 1 }); }}
+              onClick={function() { onAction("browse", { sortBy: sortBy, page: 1, tab: activeTab }); }}
             >All</Badge>
             {categories.slice(0, 15).map(function(cat) {
               return (
@@ -410,7 +432,7 @@ function GeneratedUI({ data, onAction }) {
                   key={cat.name}
                   variant={d.category === cat.name ? "default" : "secondary"}
                   style={{ cursor: "pointer" }}
-                  onClick={function() { onAction("browse", { category: cat.name, sortBy: sortBy, page: 1 }); }}
+                  onClick={function() { onAction("browse", { category: cat.name, sortBy: sortBy, page: 1, tab: activeTab }); }}
                 >{cat.name} ({cat.count})</Badge>
               );
             })}
@@ -435,7 +457,7 @@ function GeneratedUI({ data, onAction }) {
         {(d.totalPages || 1) > 1 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "8px 0" }}>
             <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
-              onClick={function() { if (d.page > 1) onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: d.page - 1 }); }}
+              onClick={function() { if (d.page > 1) onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: d.page - 1, tab: activeTab }); }}
             >{d.page > 1 ? "← Previous" : ""}</Button>
 
             <div style={{ display: "flex", gap: "4px" }}>
@@ -451,14 +473,14 @@ function GeneratedUI({ data, onAction }) {
                 return (
                   <Button key={pg} variant={pg === cp ? "default" : "outline"} size="sm"
                     style={{ fontSize: "11px", minWidth: "32px", padding: "4px 8px" }}
-                    onClick={function() { onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: pg }); }}
+                    onClick={function() { onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: pg, tab: activeTab }); }}
                   >{pg}</Button>
                 );
               })}
             </div>
 
             <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
-              onClick={function() { if (d.page < d.totalPages) onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: d.page + 1 }); }}
+              onClick={function() { if (d.page < d.totalPages) onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: d.page + 1, tab: activeTab }); }}
             >{d.page < d.totalPages ? "Next →" : ""}</Button>
 
             <span style={{ fontSize: "11px", color: "#64748b", marginLeft: "8px" }}>
@@ -494,8 +516,10 @@ function BookCard({ book, onAction }) {
           <div style={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3,
             cursor: book.entityId ? "pointer" : "default", color: book.entityId ? "#93c5fd" : "inherit" }}
             onClick={function() { if (book.entityId) onAction("view_entity", { entityId: book.entityId }); }}
-          >{book.isProcessed && <span style={{ marginRight: "4px" }} title="Deep podcast available">🎙️</span>}{book.title}</div>
-          {book.author && <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>{book.author}</div>}
+          >{book.isProcessed && <span style={{ marginRight: "4px" }} title="Deep podcast available">🎙️</span>}{book.title}
+          {book.source === "weread" && <Badge variant="info" style={{ fontSize: "8px", marginLeft: "6px", verticalAlign: "middle" }}>WeRead</Badge>}
+          </div>
+          {book.author && <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>{book.author}{book.readingProgress > 0 ? " · " + book.readingProgress + "% read" : ""}{book.noteCount > 0 ? " · " + book.noteCount + " notes" : ""}</div>}
 
           {/* Rating + meta */}
           {book.rating && (

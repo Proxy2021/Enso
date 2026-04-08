@@ -1,19 +1,24 @@
 {
   "version": 1,
   "spec": {
-    "toolFamily": "kindle",
-    "toolPrefix": "enso_kindle",
-    "description": "Kindle Library: browse, search, and manage your Amazon Kindle book collection. Scan your library, search by title/author/category, view enriched metadata, and research topics from your reading.",
-    "signatureId": "kindle_library",
+    "toolFamily": "books",
+    "toolPrefix": "enso_books_",
+    "description": "Books: unified library across Kindle and WeRead (微信读书). Browse, search, scan from multiple sources, view enriched metadata, deep AI podcasts, and research from your reading.",
+    "signatureId": "books_library",
     "tools": [
       {
         "suffix": "browse",
-        "label": "Browse Kindle Library",
-        "description": "Browse your Kindle book collection with covers, ratings, categories, and descriptions. Supports filtering by category and search.",
+        "label": "Browse Books",
+        "description": "Browse your book collection from all sources (Kindle + WeRead). Supports tabs (all/kindle/weread), filtering by category, search, sorting, and pagination.",
         "isPrimary": true,
         "parameters": {
           "type": "object",
           "properties": {
+            "tab": {
+              "type": "string",
+              "enum": ["all", "kindle", "weread"],
+              "description": "Source tab filter (default: all)"
+            },
             "category": {
               "type": "string",
               "description": "Filter by book category (e.g., 'Evolution', 'Python Programming')"
@@ -40,17 +45,19 @@
         },
         "sampleParams": {},
         "sampleData": {
-          "tool": "enso_kindle_browse",
-          "totalBooks": 471,
-          "filteredCount": 471,
+          "tool": "enso_books_browse",
+          "totalBooks": 556,
+          "filteredCount": 556,
           "books": [],
-          "categories": []
+          "categories": [],
+          "kindleCount": 471,
+          "wereadCount": 85
         }
       },
       {
         "suffix": "search",
-        "label": "Search Kindle Books",
-        "description": "Search your Kindle library by title, author, or keyword. Returns matching books with full metadata.",
+        "label": "Search Books",
+        "description": "Search your book library across all sources by title, author, or keyword.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -64,9 +71,19 @@
         }
       },
       {
-        "suffix": "scan",
-        "label": "Scan Kindle Library",
-        "description": "Scan your Amazon Kindle library via read.amazon.com. Requires Amazon login session. Creates/updates the local book cache.",
+        "suffix": "scan_kindle",
+        "label": "Scan Kindle",
+        "description": "Scan your Amazon Kindle library via read.amazon.com. Requires Amazon login session.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "scan_weread",
+        "label": "Scan WeRead",
+        "description": "Scan your WeRead (微信读书) library via weread.qq.com. Requires WeChat login — use /browser to log in first.",
         "parameters": {
           "type": "object",
           "properties": {},
@@ -75,8 +92,8 @@
       },
       {
         "suffix": "enrich",
-        "label": "Enrich Book Metadata",
-        "description": "Fetch rich metadata (descriptions, ratings, categories, page counts) from Amazon product pages for books that haven't been enriched yet.",
+        "label": "Enrich Kindle Metadata",
+        "description": "Fetch rich metadata (descriptions, ratings, categories, page counts) from Amazon product pages for Kindle books.",
         "parameters": {
           "type": "object",
           "properties": {},
@@ -85,8 +102,8 @@
       },
       {
         "suffix": "update",
-        "label": "Update Kindle Library",
-        "description": "Incremental scan — check for new books since last scan and update the Cortex with any changes.",
+        "label": "Update Libraries",
+        "description": "Incremental scan — check for new books across all sources and update the Cortex.",
         "parameters": {
           "type": "object",
           "properties": {},

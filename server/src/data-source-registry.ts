@@ -366,6 +366,69 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
     },
   },
 
+  // ── WeRead (微信读书) ──
+  {
+    id: "wereadLibrary",
+    cacheFile: "weread-library.json",
+    scannerToolName: "enso_context_scan_weread",
+    scannerParams: {},
+    ingestPriority: 49,
+    formatForProfile: (cached: A) => {
+      if (!cached?.books?.length) return null;
+      const bookList = cached.books.slice(0, 20).map((b: A) => `- "${b.title}" by ${b.author}`).join("\n");
+      return `## WeRead Library (${cached.totalBooks ?? cached.books.length} books)\n${bookList}`;
+    },
+    formatForCortex: (cached: A) => {
+      if (!cached?.books?.length) return null;
+      const lines = [
+        `# WeRead Library (${cached.totalBooks ?? cached.books.length} books)\n`,
+        "Books from WeRead (微信读书) — Chinese digital reading platform.\n",
+      ];
+      for (const b of cached.books.slice(0, 50)) {
+        let line = `- **${b.title}** by ${b.author}`;
+        if (b.description) line += `: ${b.description.slice(0, 100)}`;
+        lines.push(line);
+      }
+      if (cached.books.length > 50) lines.push(`- ... and ${cached.books.length - 50} more`);
+      return { text: lines.join("\n"), topic: "WeRead Library", label: "WeRead library scan" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.books?.length) return [];
+      const pages: DirectIngestPage[] = [];
+      for (const b of cached.books) {
+        if (!b.title) continue;
+        const slug = b.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 80);
+        if (!slug) continue;
+        const lines = [`# ${b.title}\n`];
+        lines.push(`By **${b.author || "Unknown"}**.${b.publisher ? ` Published by ${b.publisher}` : ""}${b.publishTime ? `, ${b.publishTime}` : ""}\n`);
+        if (b.rating) lines.push(`⭐ ${b.rating}\n`);
+        if (b.description) lines.push(`${b.description}\n`);
+        lines.push("## Details");
+        lines.push(`- **Author**: ${b.author || "Unknown"}`);
+        lines.push(`- **Source**: WeRead (微信读书)`);
+        if (b.publisher) lines.push(`- **Publisher**: ${b.publisher}`);
+        if (b.isbn) lines.push(`- **ISBN**: ${b.isbn}`);
+        if (b.wereadBookId) lines.push(`- **WeRead ID**: ${b.wereadBookId}`);
+        if (b.readingProgress) lines.push(`- **Reading Progress**: ${b.readingProgress}%`);
+        if (b.noteCount) lines.push(`- **Notes/Highlights**: ${b.noteCount}`);
+        if (b.coverUrl) lines.push(`- **Cover**: ![cover](${b.coverUrl})`);
+        if (b.categories?.length) {
+          lines.push("\n## Categories");
+          for (const c of b.categories) lines.push(`- [[${c.toLowerCase().replace(/[^a-z0-9]+/g, "-")}]]`);
+        }
+        pages.push({
+          path: `entities/weread-${slug}.md`,
+          title: b.title,
+          content: lines.join("\n"),
+          summary: b.description?.slice(0, 200) || `${b.title} by ${b.author || "Unknown"} (WeRead)`,
+          tags: ["book", "weread", ...(b.categories || []).map((c: string) => c.toLowerCase())],
+          entityId: `weread:book:${slug}`,
+        });
+      }
+      return pages;
+    },
+  },
+
   // ── Files & Projects — per-project pages ──
   // (The 'files' descriptor is above; add getDirectIngestPages to it)
 

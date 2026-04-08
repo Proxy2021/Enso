@@ -21,6 +21,7 @@ export interface ContextConsent {
   photos: boolean;
   twitterFollowing: boolean;
   qqMusic: boolean;
+  wereadLibrary: boolean;
   updatedAt: number;
   /** Extensible: new data sources can register custom consent keys */
   [key: string]: boolean | number;
@@ -39,6 +40,7 @@ export const DEFAULT_CONSENT: ContextConsent = {
   photos: false,
   twitterFollowing: false,
   qqMusic: false,
+  wereadLibrary: false,
   updatedAt: 0,
 };
 

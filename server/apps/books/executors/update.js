@@ -35,7 +35,7 @@ if (newBooks.length > 0) {
 }
 
 return { content: [{ type: "text", text: JSON.stringify({
-  tool: "enso_kindle_update",
+  tool: "enso_books_update",
   beforeCount: beforeCount,
   afterCount: updated.books.length,
   newBooks: newBooks.length,

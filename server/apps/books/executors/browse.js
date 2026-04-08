@@ -2,22 +2,49 @@ var os = require("os");
 var fs = require("fs");
 var path = require("path");
 
-var cacheFile = path.join(os.homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json");
-var books = [];
-var totalBooks = 0;
+var cacheDir = path.join(os.homedir(), ".enso", "data", "user-context", "cache");
 
+// Load Kindle books
+var kindleBooks = [];
+var kindleCount = 0;
 try {
-  var raw = fs.readFileSync(cacheFile, "utf-8");
-  var data = JSON.parse(raw);
-  books = data.books || [];
-  totalBooks = data.totalBooks || books.length;
-} catch (e) {
-  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_kindle_browse", totalBooks: 0, filteredCount: 0, books: [], categories: [], error: "No Kindle library cached. Run a scan first." }) }] };
+  var kindleRaw = fs.readFileSync(path.join(cacheDir, "kindle-library.json"), "utf-8");
+  var kindleData = JSON.parse(kindleRaw);
+  kindleBooks = (kindleData.books || []).map(function(b) {
+    return Object.assign({}, b, { source: "kindle" });
+  });
+  kindleCount = kindleBooks.length;
+} catch (e) {}
+
+// Load WeRead books
+var wereadBooks = [];
+var wereadCount = 0;
+try {
+  var wereadRaw = fs.readFileSync(path.join(cacheDir, "weread-library.json"), "utf-8");
+  var wereadData = JSON.parse(wereadRaw);
+  wereadBooks = (wereadData.books || []).map(function(b) {
+    return Object.assign({}, b, { source: b.source || "weread" });
+  });
+  wereadCount = wereadBooks.length;
+} catch (e) {}
+
+var allBooks = kindleBooks.concat(wereadBooks);
+var totalBooks = allBooks.length;
+
+if (totalBooks === 0) {
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_books_browse", totalBooks: 0, kindleCount: 0, wereadCount: 0, filteredCount: 0, books: [], categories: [], tab: "all", error: "No books found. Run a Kindle or WeRead scan first." }) }] };
 }
 
-// Build category index
+// Tab filter
+var p = params || {};
+var tab = p.tab || "all";
+var filtered = allBooks;
+if (tab === "kindle") filtered = kindleBooks;
+else if (tab === "weread") filtered = wereadBooks;
+
+// Build category index from the current tab's books
 var catCounts = {};
-for (var b of books) {
+for (var b of filtered) {
   if (b.categories) {
     for (var c of b.categories) {
       catCounts[c] = (catCounts[c] || 0) + 1;
@@ -30,8 +57,6 @@ var categories = Object.entries(catCounts)
   .map(function(e) { return { name: e[0], count: e[1] }; });
 
 // Apply filters
-var p = params || {};
-var filtered = books;
 if (p.category) {
   filtered = filtered.filter(function(b) { return b.categories && b.categories.indexOf(p.category) >= 0; });
 }
@@ -48,15 +73,13 @@ if (p.query) {
 var sortBy = p.sortBy || "publicationDate";
 if (sortBy === "publicationDate") {
   filtered.sort(function(a, b) {
-    var da = a.publicationDate ? new Date(a.publicationDate).getTime() : 0;
-    var db = b.publicationDate ? new Date(b.publicationDate).getTime() : 0;
-    // Handle NaN from unparseable dates — push to end
+    var da = a.publicationDate ? new Date(a.publicationDate).getTime() : (a.publishTime ? new Date(a.publishTime).getTime() : 0);
+    var db = b.publicationDate ? new Date(b.publicationDate).getTime() : (b.publishTime ? new Date(b.publishTime).getTime() : 0);
     if (isNaN(da)) da = 0;
     if (isNaN(db)) db = 0;
-    // Books with no date go to end
     if (da === 0 && db !== 0) return 1;
     if (db === 0 && da !== 0) return -1;
-    return db - da; // newest first
+    return db - da;
   });
 } else if (sortBy === "rating") {
   filtered.sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); });
@@ -79,31 +102,30 @@ var pageBooks = filtered.slice(startIdx, startIdx + pageSize);
 
 // Check wiki pages
 var wikiDir = path.join(os.homedir(), ".enso", "wiki");
-var indexPath = path.join(wikiDir, "_index.md");
+var wikiIndexPath = path.join(wikiDir, "_index.md");
 var existingPages = new Set();
 try {
-  if (fs.existsSync(indexPath)) {
-    var idx = fs.readFileSync(indexPath, "utf-8");
+  if (fs.existsSync(wikiIndexPath)) {
+    var idx = fs.readFileSync(wikiIndexPath, "utf-8");
     var matches = idx.matchAll(/^## (.+\.md)$/gm);
     for (var m of matches) existingPages.add(m[1]);
   }
 } catch (e) {}
 
 function slugify(title) {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+  return title.toLowerCase().replace(/[^\u4e00-\u9fff\u3400-\u4dbfa-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
 
-// Check which books have been deep-processed (podcast generated)
+// Check deep-processed books
 var deepContentDir = path.join(os.homedir(), ".enso", "data", "deep-content");
 var oldPodcastDir = path.join(os.homedir(), ".enso", "data", "kindle", "podcasts");
 var processedSlugs = new Set();
 var processedBooks = [];
 try {
-  var dirs = [deepContentDir, oldPodcastDir];
-  dirs.forEach(function(dir) {
+  [deepContentDir, oldPodcastDir].forEach(function(dir) {
     if (fs.existsSync(dir)) {
       fs.readdirSync(dir).forEach(function(f) {
-        if (f.endsWith(".json") && f.startsWith("kindle_book_")) {
+        if (f.endsWith(".json") && (f.startsWith("kindle_book_") || f.startsWith("weread_book_") || f.startsWith("research_book_"))) {
           var slug = f.replace(".json", "");
           if (!processedSlugs.has(slug)) {
             processedSlugs.add(slug);
@@ -115,8 +137,7 @@ try {
                 author: meta.author,
                 durationMinutes: meta.durationMinutes,
                 processedAt: meta.processedAt,
-                audioSizeBytes: meta.audioSizeBytes,
-                depth: meta.research ? meta.research.estimatedDepth : "unknown",
+                source: meta.entityId ? meta.entityId.split(":")[0] : "kindle",
                 chapters: meta.research ? meta.research.chapterSummaries.length : 0,
                 insights: meta.research ? meta.research.keyInsights.length : 0,
               });
@@ -128,24 +149,19 @@ try {
   });
 } catch (e) {}
 
-// Check for research-discovered books (recommendations)
+// Research-discovered books (recommendations)
 var recommendations = [];
 try {
-  var indexPath = path.join(os.homedir(), ".enso", "data", "entity-index.json");
-  if (fs.existsSync(indexPath)) {
-    var entityIndex = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+  var eiPath = path.join(os.homedir(), ".enso", "data", "entity-index.json");
+  if (fs.existsSync(eiPath)) {
+    var entityIndex = JSON.parse(fs.readFileSync(eiPath, "utf-8"));
     var entries = Object.values(entityIndex);
     for (var ei = 0; ei < entries.length; ei++) {
-      var e = entries[ei];
-      if (e.source === "research" && e.type === "book") {
+      var ent = entries[ei];
+      if (ent.source === "research" && ent.type === "book") {
         recommendations.push({
-          entityId: e.entityId,
-          title: e.title,
-          slug: e.slug,
-          imageUrl: e.imageUrl,
-          cortexPath: e.cortexPath,
-          tags: e.tags || [],
-          updatedAt: e.updatedAt,
+          entityId: ent.entityId, title: ent.title, slug: ent.slug,
+          cortexPath: ent.cortexPath, tags: ent.tags || [], updatedAt: ent.updatedAt,
         });
       }
     }
@@ -153,8 +169,11 @@ try {
 } catch(e) {}
 
 return { content: [{ type: "text", text: JSON.stringify({
-  tool: "enso_kindle_browse",
+  tool: "enso_books_browse",
   totalBooks: totalBooks,
+  kindleCount: kindleCount,
+  wereadCount: wereadCount,
+  tab: tab,
   recommendations: recommendations,
   processedBooks: processedBooks,
   totalProcessed: processedBooks.length,
@@ -168,8 +187,11 @@ return { content: [{ type: "text", text: JSON.stringify({
   categories: categories,
   books: pageBooks.map(function(b) {
     var slug = slugify(b.title);
+    var src = b.source || "kindle";
+    var prefix = src === "weread" ? "weread-" : "";
     return {
-      entityId: "kindle:book:" + slug,
+      entityId: src + ":book:" + slug,
+      source: src,
       title: b.title,
       author: b.author,
       coverUrl: b.coverUrl,
@@ -178,13 +200,16 @@ return { content: [{ type: "text", text: JSON.stringify({
       reviewCount: b.reviewCount,
       pageCount: b.pageCount,
       publisher: b.publisher,
-      publicationDate: b.publicationDate,
+      publicationDate: b.publicationDate || b.publishTime,
       categories: b.categories,
       readerUrl: b.readerUrl,
       asin: b.asin,
-      hasWikiPage: existingPages.has("entities/" + slug + ".md"),
-      wikiPath: "entities/" + slug + ".md",
-      isProcessed: processedSlugs.has("kindle_book_" + slug),
+      wereadBookId: b.wereadBookId,
+      readingProgress: b.readingProgress || b.percentageRead,
+      noteCount: b.noteCount,
+      hasWikiPage: existingPages.has("entities/" + prefix + slug + ".md") || existingPages.has("entities/" + slug + ".md"),
+      wikiPath: "entities/" + prefix + slug + ".md",
+      isProcessed: processedSlugs.has(src + "_book_" + slug),
     };
   }),
 }) }] };

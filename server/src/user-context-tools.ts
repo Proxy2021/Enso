@@ -1811,6 +1811,238 @@ export function createUserContextTools(): EnsoAgentTool[] {
       },
     } as EnsoAgentTool,
 
+    // ── WeRead / 微信读书 (Puppeteer) ─────────────────────────────────────────
+    {
+      name: "enso_context_scan_weread",
+      label: "Scan WeRead (微信读书)",
+      description: "Scan your WeRead library via weread.qq.com. Requires WeChat login — use /browser to log in first.",
+      parameters: { type: "object", additionalProperties: false, properties: {}, required: [] },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        const denied = checkConsent("wereadLibrary" as keyof ContextConsent);
+        if (denied) return denied;
+        ensureDirs();
+
+        const WEREAD_BROWSER_DIR = join(homedir(), ".enso", "data", "weread-browser");
+        mkdirSync(WEREAD_BROWSER_DIR, { recursive: true });
+
+        const SCAN_TIMEOUT = 120_000;
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("WeRead scan timed out after 120s. You may need to log in first — use /browser → weread.qq.com")), SCAN_TIMEOUT)
+        );
+
+        try {
+          return await Promise.race([timeoutPromise, (async () => {
+            const puppeteer = await import("puppeteer");
+            const browser = await puppeteer.default.launch({
+              headless: "new" as unknown as boolean,
+              userDataDir: WEREAD_BROWSER_DIR,
+              args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--window-size=1280,900"],
+            });
+
+            try {
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1280, height: 900 });
+              await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+
+              // Navigate to WeRead shelf
+              await page.goto("https://weread.qq.com/web/shelf", { waitUntil: "networkidle2", timeout: 30000 });
+              await new Promise(r => setTimeout(r, 3000));
+
+              // Check if logged in by looking for shelf content or login prompt
+              const isLoggedIn = await page.evaluate(() => {
+                // If we see a QR code or login prompt, we're not logged in
+                const qrCode = document.querySelector(".login_dialog, .readerLogin_container, [class*=login]");
+                const shelfContent = document.querySelector(".shelf_list, .shelf_bookList, [class*=shelf], [class*=bookshelf]");
+                // Also check URL — if redirected to login page
+                if (window.location.href.includes("/login") || window.location.href.includes("/web/login")) return false;
+                if (qrCode && !shelfContent) return false;
+                return true;
+              });
+
+              if (!isLoggedIn) {
+                await browser.close();
+                return {
+                  content: [{ type: "text", text: JSON.stringify({
+                    tool: "enso_context_scan_weread",
+                    error: "Not logged in to WeRead. Please use /browser → navigate to weread.qq.com → scan QR code with WeChat to log in. Your session will be saved for future scans."
+                  }) }],
+                };
+              }
+
+              // Try to use WeRead's API to get books (more reliable than DOM scraping)
+              const books: Array<Record<string, unknown>> = [];
+
+              // Method 1: Try the shelf API
+              const apiBooks = await page.evaluate(async () => {
+                try {
+                  // WeRead shelf API
+                  const res = await fetch("https://weread.qq.com/web/shelf/sync", {
+                    method: "GET",
+                    credentials: "include",
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    return data;
+                  }
+                } catch { /* fallback to DOM */ }
+                return null;
+              });
+
+              if (apiBooks && (apiBooks.books || apiBooks.bookInfos || apiBooks.shelf)) {
+                // Parse API response — WeRead returns books in various formats
+                const bookList = apiBooks.books || apiBooks.bookInfos || [];
+                const shelfBooks = apiBooks.shelf || [];
+
+                // If shelf has bookIds, map them to book details
+                const bookMap: Record<string, Record<string, unknown>> = {};
+                for (const b of bookList) {
+                  if (b.bookId) bookMap[b.bookId] = b;
+                }
+
+                const processedIds = new Set<string>();
+
+                // Process books from API
+                for (const item of [...bookList, ...shelfBooks]) {
+                  const b = item.bookId ? (bookMap[item.bookId] || item) : item;
+                  const bookId = String(b.bookId || b.book_id || "");
+                  if (!bookId || processedIds.has(bookId)) continue;
+                  processedIds.add(bookId);
+
+                  books.push({
+                    title: b.title || b.bookName || "",
+                    author: b.author || "",
+                    coverUrl: b.cover || b.coverUrl || "",
+                    wereadBookId: bookId,
+                    description: b.intro || b.description || "",
+                    categories: b.categories ? (Array.isArray(b.categories) ? b.categories.map((c: Record<string, string>) => c.title || c.name || c) : []) : [],
+                    readingProgress: b.readingProgress || b.progress || 0,
+                    noteCount: b.noteCount || b.notesCount || 0,
+                    rating: b.newRating ? b.newRating / 10 : (b.rating || 0),
+                    publisher: b.publisher || "",
+                    publishTime: b.publishTime || "",
+                    isbn: b.isbn || "",
+                  });
+                }
+              }
+
+              // Method 2: Fallback to DOM scraping if API didn't work
+              if (books.length === 0) {
+                // Scroll to load all books
+                for (let i = 0; i < 30; i++) {
+                  await page.evaluate(() => window.scrollBy(0, 800));
+                  await new Promise(r => setTimeout(r, 1000));
+                }
+
+                const domBooks = await page.evaluate(() => {
+                  const results: Array<Record<string, string>> = [];
+                  // Try various selectors WeRead might use
+                  const bookElements = document.querySelectorAll(
+                    ".shelf_book, .bookshelf_book, [class*=shelf_book], [class*=book_item], .book-item, .wr_bookCover_img"
+                  );
+
+                  bookElements.forEach((el) => {
+                    const titleEl = el.querySelector("[class*=title], .book_title, h3, h4");
+                    const authorEl = el.querySelector("[class*=author], .book_author");
+                    const coverEl = el.querySelector("img") as HTMLImageElement | null;
+                    const linkEl = el.closest("a") || el.querySelector("a");
+
+                    const title = titleEl?.textContent?.trim() || "";
+                    if (!title) return;
+
+                    let bookId = "";
+                    if (linkEl) {
+                      const href = linkEl.getAttribute("href") || "";
+                      const match = href.match(/\/web\/reader\/([a-f0-9]+)/);
+                      if (match) bookId = match[1];
+                    }
+
+                    results.push({
+                      title,
+                      author: authorEl?.textContent?.trim() || "",
+                      coverUrl: coverEl?.src || "",
+                      wereadBookId: bookId,
+                    });
+                  });
+
+                  return results;
+                });
+
+                for (const b of domBooks) {
+                  if (b.title) {
+                    books.push({
+                      ...b,
+                      description: "",
+                      categories: [],
+                      readingProgress: 0,
+                      noteCount: 0,
+                      rating: 0,
+                    });
+                  }
+                }
+              }
+
+              await browser.close();
+
+              // Normalize books and save to cache
+              const normalizedBooks = books.filter(b => b.title).map(b => ({
+                title: String(b.title || ""),
+                author: String(b.author || ""),
+                coverUrl: String(b.coverUrl || ""),
+                wereadBookId: String(b.wereadBookId || ""),
+                description: String(b.description || ""),
+                categories: Array.isArray(b.categories) ? b.categories.map(String) : [],
+                readingProgress: Number(b.readingProgress || 0),
+                noteCount: Number(b.noteCount || 0),
+                rating: Number(b.rating || 0),
+                publisher: String(b.publisher || ""),
+                publishTime: String(b.publishTime || ""),
+                isbn: String(b.isbn || ""),
+                source: "weread" as const,
+              }));
+
+              const cacheData = {
+                source: "weread.qq.com",
+                totalBooks: normalizedBooks.length,
+                scannedAt: new Date().toISOString(),
+                books: normalizedBooks,
+              };
+
+              writeFileSync(
+                join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json"),
+                JSON.stringify(cacheData, null, 2),
+                "utf-8",
+              );
+
+              updateScanLog("wereadLibrary" as keyof ContextConsent);
+
+              return {
+                content: [{ type: "text", text: JSON.stringify({
+                  tool: "enso_context_scan_weread",
+                  totalBooks: normalizedBooks.length,
+                  scannedAt: cacheData.scannedAt,
+                  sampleBooks: normalizedBooks.slice(0, 5).map(b => `"${b.title}" by ${b.author}`),
+                  message: `Successfully scanned ${normalizedBooks.length} books from WeRead.`,
+                }) }],
+              };
+            } catch (err) {
+              await browser.close();
+              throw err;
+            }
+          })()]);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logError("weread-scan", "WeRead scan failed", err);
+          return {
+            content: [{ type: "text", text: JSON.stringify({
+              tool: "enso_context_scan_weread",
+              error: msg,
+              help: "If you haven't logged in yet, use /browser → navigate to weread.qq.com → scan QR code with WeChat.",
+            }) }],
+          };
+        }
+      },
+    } as EnsoAgentTool,
+
     // ── QQ Music (Puppeteer + local files) ────────────────────────────────────
     {
       name: "enso_context_scan_qq_music",
