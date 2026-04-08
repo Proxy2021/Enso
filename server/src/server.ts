@@ -875,7 +875,8 @@ export async function startEnsoServer(opts: {
       const emailHtml = buildEntityEmailHtml(processed, baseUrl, reqLanguage);
       const emailResult = await sendHtmlEmail({
         to: "kkwong@xiaomi.com",
-        subject: `📚 New Book Discovery: ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
+        from: "Enso AI <noreply@enso.ai>",
+        subject: `📚 ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
         html: emailHtml,
       });
 
@@ -1004,12 +1005,12 @@ Return ONLY JSON.`;
       const entityType = picked.type || contentType;
       logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Discovered ${entityType}: "${picked.title}" by ${picked.creator}` });
 
-      // Ingest + enrich
+      // Ingest + enrich (await enrichment so metadata is available for podcast)
       const result = await ingestDiscoveredEntity({
         title: picked.title, type: entityType, source: "research",
         creator: picked.creator, year: picked.year, description: picked.description,
       });
-      enrichEntity(result.entityId).catch(() => {});
+      try { await enrichEntity(result.entityId); } catch { /* best effort */ }
 
       // Respond immediately
       res.json({ success: true, message: `Discovered "${picked.title}" — generating podcast + email`, entityId: result.entityId, title: picked.title, creator: picked.creator, type: entityType, whyRecommended: picked.whyRecommended });
@@ -1023,10 +1024,12 @@ Return ONLY JSON.`;
 
         const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
         const emailHtml = buildEntityEmailHtml(processed, baseUrl, reqLanguage);
-        const typeEmoji = { movie: "🎬", game: "🎮", channel: "📺" }[contentType] || "🎯";
+        const typeEmoji = { movie: "🎬", game: "🎮", channel: "📺", article: "📰", place: "🌍" }[contentType] || "🎯";
+        const creatorStr = picked.creator ? ` by ${picked.creator}` : "";
         await sendHtmlEmail({
           to: "kkwong@xiaomi.com",
-          subject: `${typeEmoji} Daily ${entityType} Recommendation: ${picked.title} — ${processed.durationMinutes} min AI Podcast`,
+          from: "Enso AI <noreply@enso.ai>",
+          subject: `${typeEmoji} ${picked.title}${creatorStr} — ${processed.durationMinutes} min AI Podcast`,
           html: emailHtml,
         });
         logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Email sent for ${entityType} "${picked.title}"` });
