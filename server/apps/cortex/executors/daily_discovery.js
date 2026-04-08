@@ -1,5 +1,15 @@
 // Cortex Daily Discovery v2 — deep analysis, personalized relevance, executive summary
 
+// Determine server base URL for quick-add links in email
+var serverBaseUrl = "https://pc1.enso.net";
+try {
+  var os = require("os");
+  var hostname = os.hostname().toLowerCase();
+  if (hostname.includes("pc1")) serverBaseUrl = "https://pc1.enso.net";
+  else if (hostname.includes("pc2")) serverBaseUrl = "https://pc2.enso.net";
+  else serverBaseUrl = "http://localhost:3001";
+} catch(e) {}
+
 ctx.log("Cortex Daily Discovery v2 starting...");
 
 // ── Step 1: Read Cortex state — understand what the user knows ──
@@ -80,7 +90,10 @@ if (allFindings.length > 0) {
       '          "impact": "high|medium|low",\n' +
       '          "impactReason": "1 sentence on why this impact level",\n' +
       '          "actionItem": "specific suggestion: what should they do with this info (read more, update a project, explore a new direction, etc.)",\n' +
-      '          "connections": ["names of existing Cortex entities/concepts this connects to"]\n' +
+      '          "connections": ["names of existing Cortex entities/concepts this connects to"],\n' +
+      '          "entityTitle": "if about a specific book/movie/game/TV show, the exact title, else null",\n' +
+      '          "entityType": "book|movie|tv-series|game|documentary or null",\n' +
+      '          "entityCreator": "author/director/developer or null"\n' +
       '        }\n' +
       '      ]\n' +
       '    }\n' +
@@ -368,6 +381,15 @@ for (var es = 0; es < sections.length; es++) {
       emailBody += item.connections.map(function(c) {
         return "<span style='display:inline-block;padding:1px 6px;margin:1px;background:#e0e7ff;border-radius:8px;font-size:11px;color:#4338ca;'>" + c + "</span>";
       }).join(" ");
+      emailBody += "</p>";
+    }
+
+    // Quick-add to Cortex link (for discovered entities)
+    if (item.entityTitle && item.entityType) {
+      var quickAddUrl = serverBaseUrl + "/api/cortex/quick-add?title=" + encodeURIComponent(item.entityTitle) + "&type=" + encodeURIComponent(item.entityType);
+      if (item.entityCreator) quickAddUrl += "&creator=" + encodeURIComponent(item.entityCreator);
+      emailBody += "<p style='margin:8px 0 0;'>";
+      emailBody += "<a href='" + quickAddUrl + "' style='display:inline-block;padding:4px 10px;background:#059669;color:white;border-radius:4px;text-decoration:none;font-size:11px;font-weight:600;'>\uD83D\uDCE5 Add \"" + item.entityTitle + "\" to Cortex</a>";
       emailBody += "</p>";
     }
 

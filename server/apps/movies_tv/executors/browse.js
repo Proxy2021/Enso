@@ -56,11 +56,28 @@ var p = params || {};
     });
   });
 
+  // Check for research-discovered movies/TV
+  var recommendations = [];
+  try {
+    var eiPath = path.join(os.homedir(), ".enso", "data", "entity-index.json");
+    if (fs.existsSync(eiPath)) {
+      var entityIndex = JSON.parse(fs.readFileSync(eiPath, "utf-8"));
+      var entries = Object.values(entityIndex);
+      for (var ri = 0; ri < entries.length; ri++) {
+        var re = entries[ri];
+        if (re.source === "research" && (re.type === "movie" || re.type === "tv-series" || re.type === "documentary")) {
+          recommendations.push({ entityId: re.entityId, title: re.title, slug: re.slug, type: re.type, cortexPath: re.cortexPath, tags: re.tags || [], updatedAt: re.updatedAt });
+        }
+      }
+    }
+  } catch(e) {}
+
   return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_movies_tv_browse",
     items: items.slice(0, 200),
     totalItems: cached.items.length,
     filteredCount: items.length,
+    recommendations: recommendations,
     categories: catCounts,
     genres: Object.keys(genreSet).sort(),
     scannedAt: cached.scannedAt

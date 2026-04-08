@@ -52,11 +52,28 @@ var p = params || {};
     });
   });
 
+  // Check for research-discovered games
+  var recommendations = [];
+  try {
+    var eiPath = path.join(os.homedir(), ".enso", "data", "entity-index.json");
+    if (fs.existsSync(eiPath)) {
+      var entityIndex = JSON.parse(fs.readFileSync(eiPath, "utf-8"));
+      var entries = Object.values(entityIndex);
+      for (var ri = 0; ri < entries.length; ri++) {
+        var re = entries[ri];
+        if (re.source === "research" && re.type === "game") {
+          recommendations.push({ entityId: re.entityId, title: re.title, slug: re.slug, cortexPath: re.cortexPath, tags: re.tags || [], updatedAt: re.updatedAt });
+        }
+      }
+    }
+  } catch(e) {}
+
   return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_steam_browse",
     games: games.slice(0, 100),
     totalGames: cached.games.length,
     filteredCount: games.length,
+    recommendations: recommendations,
     genres: allGenres,
     scannedAt: cached.scannedAt
   }) }] };

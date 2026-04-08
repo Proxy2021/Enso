@@ -1063,7 +1063,8 @@ Return valid JSON (no markdown fences):
   "narrative": "A 4-8 paragraph comprehensive article. Engaging magazine-feature style. Flowing prose only — NO bullet points, NO numbered lists. Separate paragraphs with double newlines.",
   "keyFindings": [
     { "text": "Clear, specific finding", "type": "fact|trend|insight|warning", "confidence": "high|medium|low", "sourceRefs": [0, 3] }
-  ]
+  ],
+  "detectedEntity": null
 }
 
 Rules:
@@ -1073,6 +1074,7 @@ Rules:
 - If the topic appears to be a comparison (mentions "vs", "versus", "compare", "which", "better than", "pros and cons"), your first paragraph MUST state your recommendation and the comparison entities' relative positions. Then provide evidence.
 - Generate 6-10 key findings. Mix fact, trend, insight, warning types
 - sourceRefs: valid 0-indexed integers from 0 to ${sourceCount - 1}
+- detectedEntity: If this topic is about ONE specific identifiable media entity (a specific book, movie, game, TV show, documentary, or YouTube channel), set to { "type": "book|movie|tv-series|game|documentary|channel", "title": "exact title", "creator": "author/director/developer or null", "year": "release year or null" }. Set to null if the topic is general, comparative, or conceptual.
 - CRITICAL: Return ONLY valid JSON. No markdown fences, no comments`;
 }
 
@@ -1850,7 +1852,16 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
 
     const typedA = phaseAParsed as {
       summary: string; narrative: string; keyFindings: KeyFinding[];
+      detectedEntity?: { type?: string; title?: string; creator?: string; year?: string } | null;
     };
+
+    // Parse entity detection from Phase A
+    const validEntityTypes = ["book", "movie", "tv-series", "game", "documentary", "channel"];
+    const rawDetected = typedA.detectedEntity;
+    const detectedEntity = rawDetected?.title && rawDetected?.type && validEntityTypes.includes(rawDetected.type)
+      ? { type: rawDetected.type, title: rawDetected.title, creator: rawDetected.creator || null, year: rawDetected.year || null }
+      : null;
+
     const keyFindings = (typedA.keyFindings ?? []).slice(0, 8).map((f) => ({
       text: f.text ?? "",
       type: (["fact", "trend", "insight", "warning"].includes(f.type) ? f.type : "insight") as KeyFinding["type"],
@@ -1874,6 +1885,7 @@ async function researcherSearch(params: SearchParams): Promise<AgentToolResult> 
       summary: typedA.summary ?? "",
       narrative: typedA.narrative ?? "",
       keyFindings,
+      detectedEntity,
       sections: [],  // populated by Phase B
       sources: sources.slice(0, 25),
       images: [],
@@ -1991,6 +2003,7 @@ If the research is already comprehensive, return: { "gaps": [] }`;
       summary: typedA.summary ?? "",
       narrative: typedA.narrative ?? "",
       keyFindings,
+      detectedEntity,
       sections: dedupedSections,
       sources: sources.slice(0, 25),
       images,
@@ -2142,6 +2155,7 @@ Only include genuinely new information. If gap sources don't add meaningful new 
       summary: typedA.summary ?? "",
       narrative: typedA.narrative ?? "",
       keyFindings,
+      detectedEntity,
       sections: finalSections,
       sources: sources.slice(0, 25),
       images,

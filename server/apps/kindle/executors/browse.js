@@ -128,9 +128,34 @@ try {
   });
 } catch (e) {}
 
+// Check for research-discovered books (recommendations)
+var recommendations = [];
+try {
+  var indexPath = path.join(os.homedir(), ".enso", "data", "entity-index.json");
+  if (fs.existsSync(indexPath)) {
+    var entityIndex = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+    var entries = Object.values(entityIndex);
+    for (var ei = 0; ei < entries.length; ei++) {
+      var e = entries[ei];
+      if (e.source === "research" && e.type === "book") {
+        recommendations.push({
+          entityId: e.entityId,
+          title: e.title,
+          slug: e.slug,
+          imageUrl: e.imageUrl,
+          cortexPath: e.cortexPath,
+          tags: e.tags || [],
+          updatedAt: e.updatedAt,
+        });
+      }
+    }
+  }
+} catch(e) {}
+
 return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_kindle_browse",
   totalBooks: totalBooks,
+  recommendations: recommendations,
   processedBooks: processedBooks,
   totalProcessed: processedBooks.length,
   filteredCount: filtered.length,

@@ -354,6 +354,28 @@ function GeneratedUI({ data, onAction }) {
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Research Discoveries */}
+        {(d.recommendations || []).length > 0 && (
+          <UICard style={{ padding: "12px", borderColor: "#059669" + "44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+              <LucideReact.Search size={14} style={{ color: "#6ee7b7" }} />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#6ee7b7" }}>Discovered via Research</span>
+              <Badge variant="secondary">{(d.recommendations || []).length}</Badge>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {(d.recommendations || []).map(function(rec) {
+                return (
+                  <div key={rec.entityId} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#064e3b", padding: "6px 10px", borderRadius: "8px", cursor: "pointer" }}
+                    onClick={function() { onAction("view_entity", { entityId: rec.entityId }); }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0" }}>{rec.title}</span>
+                    <Badge variant="info" style={{ fontSize: "9px" }}>recommended</Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

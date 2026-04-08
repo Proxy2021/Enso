@@ -63,7 +63,7 @@ function tryReconstructContext(
   const p = (payload ?? {}) as Record<string, unknown>;
 
   // ── Researcher family ──
-  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "send_report", "delete_history", "clear_all_history", "build_from_research", "monitor_topic", "cortex_ingest"];
+  const researcherActions = ["follow_up", "compare", "deep_dive", "search", "deep_research", "send_report", "delete_history", "clear_all_history", "build_from_research", "monitor_topic", "cortex_ingest", "add_to_cortex"];
   if (researcherActions.includes(action) || (p.topic && typeof p.topic === "string")) {
     const account = getActiveAccount();
     if (!account) return null;
@@ -1062,6 +1062,57 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Add to Cortex: create a Cortex entity page from discovered/recommended content ──
+  if (action === "add_to_cortex") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const title = String(p.title ?? "").trim();
+    const type = String(p.type ?? "").trim();
+    if (!title || !type) { sendOperation("error", "Missing title or type"); return; }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:add-to-cortex", message: `Add to Cortex: ${title} (${type})`, cardId });
+
+    try {
+      const { ingestDiscoveredEntity } = await import("../cortex-direct-ingest.js");
+      const result = await ingestDiscoveredEntity({
+        title,
+        type,
+        creator: p.creator ? String(p.creator) : undefined,
+        year: p.year ? String(p.year) : undefined,
+        description: p.description ? String(p.description) : undefined,
+        imageUrl: p.imageUrl ? String(p.imageUrl) : undefined,
+        url: p.url ? String(p.url) : undefined,
+      });
+
+      // Track added entities in card data so template can show checkmarks
+      const currentData = ctx.currentData as Record<string, unknown>;
+      const added = Array.isArray(currentData._addedToCortex) ? [...currentData._addedToCortex as string[]] : [];
+      if (!added.includes(title)) added.push(title);
+      currentData._addedToCortex = added;
+      ctx.currentData = currentData;
+
+      sendOperation("complete", result.created ? `Added "${title}" to Cortex` : `"${title}" already in Cortex`);
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: currentData,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        timestamp: Date.now(),
+      });
+
+      // Persist
+      persistCard(client.id, capturedConvId, {
+        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+        data: currentData, generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+      });
+    } catch (err) {
+      logError("action:add-to-cortex", `Failed to add "${title}" to Cortex`, err, { cardId });
+      sendOperation("error", `Failed to add to Cortex: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return;
+  }
+
   // ── Deep Content: generate deep research + long-form podcast for any entity or rich card ──
   if (action === "deep_content" || action === "book_podcast") {
     const p = (payload ?? {}) as Record<string, unknown>;
@@ -1069,6 +1120,24 @@ export async function handlePluginCardAction(params: {
     if (!entityId) { sendOperation("error", "No entity ID"); return; }
 
     logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `book_podcast: ${entityId}`, cardId });
+
+    // Auto-create entity in Cortex if it doesn't exist (e.g., triggered from researcher)
+    const { lookupEntity: lookupEnt } = await import("../entity-model.js");
+    if (!lookupEnt(entityId) && p.title) {
+      try {
+        const { ingestDiscoveredEntity } = await import("../cortex-direct-ingest.js");
+        await ingestDiscoveredEntity({
+          title: String(p.title),
+          type: String(p.type ?? "book"),
+          creator: p.creator ? String(p.creator) : undefined,
+          year: p.year ? String(p.year) : undefined,
+          description: p.description ? String(p.description) : undefined,
+        });
+        logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Auto-created entity for deep content: ${entityId}`, cardId });
+      } catch (err) {
+        logError("action:book-podcast", "Failed to auto-create entity", err, { entityId });
+      }
+    }
 
     // Check cache first
     const { getProcessedBook, generateBookPodcast } = await import("../deep-content.js");

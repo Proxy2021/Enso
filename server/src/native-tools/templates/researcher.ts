@@ -55,6 +55,8 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
   var galleryImages = images.filter((img) => !imgErrors[img.url]);
   var handleImgError = (url) => setImgErrors((prev) => ({ ...prev, [url]: true }));
   var heroImage = images.find((img) => img.sectionIdx === 0) || images[0];
+  var detectedEntity = data?.detectedEntity || null;
+  var addedToCortex = Array.isArray(data?._addedToCortex) ? data._addedToCortex : [];
 
   // ── Research history ──
   var recentTopics = Array.isArray(data?.recentTopics) ? data.recentTopics : [];
@@ -784,6 +786,48 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
         </div>
       </div>
 
+      {/* ── Entity detection callout ── */}
+      {isComplete && detectedEntity && (
+        <UICard accent="violet">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center shrink-0">
+              {detectedEntity.type === "book" ? <LucideReact.BookOpen className="w-5 h-5 text-violet-400" /> :
+               detectedEntity.type === "movie" || detectedEntity.type === "documentary" ? <LucideReact.Film className="w-5 h-5 text-violet-400" /> :
+               detectedEntity.type === "game" ? <LucideReact.Gamepad2 className="w-5 h-5 text-violet-400" /> :
+               detectedEntity.type === "tv-series" ? <LucideReact.Monitor className="w-5 h-5 text-violet-400" /> :
+               detectedEntity.type === "channel" ? <LucideReact.Youtube className="w-5 h-5 text-violet-400" /> :
+               <LucideReact.Sparkles className="w-5 h-5 text-violet-400" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-violet-200">Deep {detectedEntity.type === "book" ? "Book" : detectedEntity.type === "movie" ? "Film" : detectedEntity.type === "game" ? "Game" : detectedEntity.type === "tv-series" ? "TV" : detectedEntity.type === "documentary" ? "Documentary" : detectedEntity.type === "channel" ? "Channel" : "Media"} Analysis Available</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Generate a deep AI podcast exploring {detectedEntity.title}{detectedEntity.creator ? " by " + detectedEntity.creator : ""}</div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button variant="default" size="sm" onClick={() => {
+                var slug = detectedEntity.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+                onAction("deep_content", {
+                  entityId: "research:" + detectedEntity.type + ":" + slug,
+                  title: detectedEntity.title,
+                  type: detectedEntity.type,
+                  creator: detectedEntity.creator,
+                  year: detectedEntity.year,
+                });
+              }}>
+                <LucideReact.Mic className="w-3.5 h-3.5 mr-1" /> Generate Podcast
+              </Button>
+              {!addedToCortex.includes(detectedEntity.title) && (
+                <Button variant="outline" size="sm" onClick={() => onAction("add_to_cortex", { title: detectedEntity.title, type: detectedEntity.type, creator: detectedEntity.creator, year: detectedEntity.year })}>
+                  <LucideReact.Plus className="w-3 h-3 mr-1" /> Cortex
+                </Button>
+              )}
+              {addedToCortex.includes(detectedEntity.title) && (
+                <Badge variant="success">✓ In Cortex</Badge>
+              )}
+            </div>
+          </div>
+        </UICard>
+      )}
+
       {/* ── Phase indicator with progress ── */}
       {isLoading && (
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
@@ -1412,19 +1456,29 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                         </div>
                         {books.map((b, i) => {
                           var bookUrl = b.url || "https://www.google.com/search?q=" + encodeURIComponent(b.title + (b.author ? " " + b.author : "") + " book");
+                          var isAdded = addedToCortex.includes(b.title);
                           return (
                           <UICard key={i} accent="indigo">
-                            <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: bookUrl })}>
-                              <div className="w-8 h-12 bg-indigo-900/30 rounded flex items-center justify-center shrink-0">
+                            <div className="flex gap-3">
+                              <div className="w-8 h-12 bg-indigo-900/30 rounded flex items-center justify-center shrink-0 cursor-pointer" onClick={() => onAction("open_url", { url: bookUrl })}>
                                 <LucideReact.BookOpen className="w-4 h-4 text-indigo-400" />
                               </div>
-                              <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onAction("open_url", { url: bookUrl })}>
                                 <div className="text-sm font-medium text-gray-100">{b.title}</div>
                                 <div className="text-[11px] text-gray-400">{b.author}{b.year ? " (" + b.year + ")" : ""}</div>
                                 {b.description && <div className="text-xs text-gray-400 mt-1">{b.description}</div>}
                               </div>
-                              <div className="flex items-center shrink-0">
-                                <LucideReact.ExternalLink className="w-3 h-3 text-gray-500" />
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isAdded ? (
+                                  <Badge variant="success" style={{ fontSize: "10px" }}>✓ Cortex</Badge>
+                                ) : (
+                                  <Button variant="outline" size="sm" style={{ fontSize: "10px", padding: "2px 6px" }} onClick={() => onAction("add_to_cortex", { title: b.title, type: "book", creator: b.author, year: b.year, description: b.description, url: b.url })}>
+                                    <LucideReact.Plus className="w-3 h-3" /> Cortex
+                                  </Button>
+                                )}
+                                <div className="cursor-pointer" onClick={() => onAction("open_url", { url: bookUrl })}>
+                                  <LucideReact.ExternalLink className="w-3 h-3 text-gray-500" />
+                                </div>
                               </div>
                             </div>
                           </UICard>
@@ -1445,13 +1499,15 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                           var IconComp = LucideReact[typeIcon[m.type]] || LucideReact.Film;
                           var searchSuffix = { movie: "movie", tv: "tv show", documentary: "documentary", podcast: "podcast" };
                           var movieUrl = m.url || "https://www.google.com/search?q=" + encodeURIComponent(m.title + (m.year ? " " + m.year : "") + " " + (searchSuffix[m.type] || "movie"));
+                          var entityType = m.type === "tv" ? "tv-series" : (m.type === "documentary" ? "documentary" : "movie");
+                          var isAdded = addedToCortex.includes(m.title);
                           return (
                             <UICard key={i} accent={typeAccent[m.type] || "rose"}>
-                              <div className="flex gap-3 cursor-pointer" onClick={() => onAction("open_url", { url: movieUrl })}>
-                                <div className="w-8 h-12 bg-gray-800/50 rounded flex items-center justify-center shrink-0">
+                              <div className="flex gap-3">
+                                <div className="w-8 h-12 bg-gray-800/50 rounded flex items-center justify-center shrink-0 cursor-pointer" onClick={() => onAction("open_url", { url: movieUrl })}>
                                   <IconComp className="w-4 h-4 text-gray-400" />
                                 </div>
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onAction("open_url", { url: movieUrl })}>
                                   <div className="flex items-center gap-2">
                                     <div className="text-sm font-medium text-gray-100">{m.title}</div>
                                     {m.year && <span className="text-[10px] text-gray-500">({m.year})</span>}
@@ -1459,8 +1515,17 @@ const RESEARCHER_TEMPLATE = `export default function GeneratedUI({ data, onActio
                                   <Badge variant={m.type === "documentary" ? "info" : m.type === "podcast" ? "warning" : "default"}>{m.type}</Badge>
                                   {m.description && <div className="text-xs text-gray-400 mt-1">{m.description}</div>}
                                 </div>
-                                <div className="flex items-center shrink-0">
-                                  <LucideReact.ExternalLink className="w-3 h-3 text-gray-500" />
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {isAdded ? (
+                                    <Badge variant="success" style={{ fontSize: "10px" }}>✓ Cortex</Badge>
+                                  ) : (
+                                    <Button variant="outline" size="sm" style={{ fontSize: "10px", padding: "2px 6px" }} onClick={() => onAction("add_to_cortex", { title: m.title, type: entityType, year: m.year, description: m.description, url: m.url })}>
+                                      <LucideReact.Plus className="w-3 h-3" /> Cortex
+                                    </Button>
+                                  )}
+                                  <div className="cursor-pointer" onClick={() => onAction("open_url", { url: movieUrl })}>
+                                    <LucideReact.ExternalLink className="w-3 h-3 text-gray-500" />
+                                  </div>
                                 </div>
                               </div>
                             </UICard>

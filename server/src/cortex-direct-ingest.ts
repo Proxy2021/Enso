@@ -12,6 +12,11 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { DATA_SOURCES, readCache, type DirectIngestPage } from "./data-source-registry.js";
 import { logAction, logError } from "./action-log.js";
+import {
+  slugify, buildEntityId, entityCortexPath, ENTITY_TYPES,
+  upsertEntityIndex, saveEntityIndex, lookupEntity,
+  type EntityType, type EntitySource,
+} from "./entity-model.js";
 
 const CORTEX_DIR = join(homedir(), ".enso", "wiki");
 const INDEX_PATH = join(CORTEX_DIR, "_index.md");
@@ -146,4 +151,119 @@ export async function directIngestFromSources(options?: {
   }
 
   return { created, updated, sources: sourcesProcessed };
+}
+
+// ─── Discovered Entity Ingest ────────────────────────────────────────────────
+
+/**
+ * Create a Cortex entity page from a discovered entity (e.g., book recommended
+ * during research, movie found in daily discovery email). Zero LLM cost.
+ *
+ * Idempotent: if the page already exists, returns `created: false`.
+ */
+export async function ingestDiscoveredEntity(opts: {
+  title: string;
+  type: string;
+  source?: string;
+  creator?: string;
+  year?: string;
+  description?: string;
+  imageUrl?: string;
+  url?: string;
+}): Promise<{ entityId: string; cortexPath: string; created: boolean }> {
+  ensureCortexDir();
+
+  const source = (opts.source || "research") as EntitySource;
+  const type = opts.type as EntityType;
+  const slug = slugify(opts.title);
+  const entityId = buildEntityId(source, type, slug);
+
+  // Derive cortex path from ENTITY_TYPES registry
+  const typeDef = ENTITY_TYPES[type];
+  const cortexPath = typeDef?.cortexPrefix
+    ? `${typeDef.cortexPrefix}${slug}.md`
+    : `entities/${slug}.md`;
+
+  const fullPath = join(CORTEX_DIR, cortexPath);
+
+  // Idempotent: if page exists, just ensure entity index is updated
+  if (existsSync(fullPath)) {
+    // Still ensure the entity index entry exists
+    if (!lookupEntity(entityId)) {
+      upsertEntityIndex({
+        entityId,
+        type,
+        source,
+        title: opts.title,
+        slug,
+        imageUrl: opts.imageUrl,
+        cortexPath,
+        tags: [type, source, "discovered"],
+        updatedAt: new Date().toISOString(),
+      });
+      saveEntityIndex();
+    }
+    return { entityId, cortexPath, created: false };
+  }
+
+  // Build markdown content
+  const lines: string[] = [`# ${opts.title}`];
+  if (opts.creator) lines.push(`\n**By ${opts.creator}**`);
+  if (opts.year) lines.push(`\n*${opts.year}*`);
+  lines.push("");
+  if (opts.description) {
+    lines.push("## Overview");
+    lines.push("");
+    lines.push(opts.description);
+    lines.push("");
+  }
+  lines.push("## Details");
+  lines.push("");
+  lines.push(`- **Type**: ${type}`);
+  lines.push(`- **Discovered via**: Research`);
+  if (opts.creator) lines.push(`- **Creator**: ${opts.creator}`);
+  if (opts.year) lines.push(`- **Year**: ${opts.year}`);
+  if (opts.url) lines.push(`- **URL**: ${opts.url}`);
+  lines.push(`- **Added**: ${new Date().toISOString().split("T")[0]}`);
+  lines.push("");
+
+  const content = lines.join("\n");
+
+  // Write page
+  const dir = dirname(fullPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(fullPath, content, "utf-8");
+
+  // Update cortex index
+  const page: DirectIngestPage = {
+    path: cortexPath,
+    title: opts.title,
+    content,
+    summary: opts.description?.slice(0, 200) || `${type} discovered via research`,
+    tags: [type, source, "discovered", ...(opts.creator ? [opts.creator.toLowerCase()] : [])],
+    entityId,
+  };
+  appendToIndex(page);
+
+  // Update entity index
+  upsertEntityIndex({
+    entityId,
+    type,
+    source,
+    title: opts.title,
+    slug,
+    imageUrl: opts.imageUrl,
+    cortexPath,
+    tags: page.tags,
+    updatedAt: new Date().toISOString(),
+  });
+  saveEntityIndex();
+
+  // Log
+  logAction({
+    ts: Date.now(), type: "action", category: "cortex-direct",
+    message: `Discovered entity ingested: ${entityId} → ${cortexPath}`,
+  });
+
+  return { entityId, cortexPath, created: true };
 }

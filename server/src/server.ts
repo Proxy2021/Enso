@@ -818,6 +818,33 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Cortex Quick-Add API (for email links and external quick-add) ──
+  app.get("/api/cortex/quick-add", async (req, res) => {
+    const title = decodeURIComponent((req.query.title as string) || "");
+    const type = decodeURIComponent((req.query.type as string) || "");
+    if (!title || !type) {
+      res.status(400).send(htmlPage("Missing Parameters", "Both title and type are required.", "error"));
+      return;
+    }
+    try {
+      const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
+      const result = await ingestDiscoveredEntity({
+        title,
+        type,
+        creator: req.query.creator ? decodeURIComponent(req.query.creator as string) : undefined,
+        year: req.query.year ? decodeURIComponent(req.query.year as string) : undefined,
+        description: req.query.description ? decodeURIComponent(req.query.description as string) : undefined,
+      });
+      if (result.created) {
+        res.send(htmlPage("Added to Cortex", `"${title}" has been added to your Knowledge Cortex as a ${type}.`, "success"));
+      } else {
+        res.send(htmlPage("Already in Cortex", `"${title}" already exists in your Knowledge Cortex.`, "success"));
+      }
+    } catch (err) {
+      res.status(500).send(htmlPage("Error", `Failed to add "${title}": ${err instanceof Error ? err.message : String(err)}`, "error"));
+    }
+  });
+
   // ── YouTube Unsubscribe API (for email links) ──
   app.get("/api/youtube/unsubscribe", async (req, res) => {
     const channelId = req.query.channelId as string | undefined;

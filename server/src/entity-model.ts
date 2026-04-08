@@ -88,27 +88,27 @@ export interface EntityTypeDef {
  */
 export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
   "book": {
-    sources: ["kindle"],
+    sources: ["kindle", "research"],
     cortexPrefix: "entities/",
     detailFields: ["author", "rating", "reviewCount", "pageCount", "publisher", "publicationDate", "categories", "description"],
   },
   "game": {
-    sources: ["steam"],
+    sources: ["steam", "research"],
     cortexPrefix: "entities/game-",
     detailFields: ["genres", "developer", "metacritic", "releaseDate", "sizeOnDisk", "lastPlayed", "description"],
   },
   "movie": {
-    sources: ["movies_tv"],
+    sources: ["movies_tv", "research"],
     cortexPrefix: "entities/movie-",
     detailFields: ["director", "cast", "rating", "voteCount", "runtime", "genres", "year", "overview"],
   },
   "tv-series": {
-    sources: ["movies_tv"],
+    sources: ["movies_tv", "research"],
     cortexPrefix: "entities/tv-",
     detailFields: ["seasons", "cast", "rating", "genres", "year", "overview"],
   },
   "documentary": {
-    sources: ["movies_tv"],
+    sources: ["movies_tv", "research"],
     cortexPrefix: "entities/movie-",
     detailFields: ["director", "rating", "runtime", "genres", "year", "overview"],
   },
@@ -141,7 +141,7 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
     detailFields: ["trackCount", "genres"],
   },
   "channel": {
-    sources: ["youtube"],
+    sources: ["youtube", "research"],
     cortexPrefix: "entities/",
     canContain: ["video"],
     detailFields: ["subscriberCount", "videoCount", "category", "description"],
@@ -300,6 +300,19 @@ export function getEntitiesByType(type: EntityType, limit?: number): EntityIndex
   const results: EntityIndexEntry[] = [];
   for (const entry of entityIndex.values()) {
     if (entry.type === type) {
+      results.push(entry);
+      if (limit && results.length >= limit) break;
+    }
+  }
+  return results;
+}
+
+/** Get entities discovered via research for a specific type */
+export function getDiscoveredEntities(type: EntityType, limit?: number): EntityIndexEntry[] {
+  if (!indexLoaded) loadEntityIndex();
+  const results: EntityIndexEntry[] = [];
+  for (const entry of entityIndex.values()) {
+    if (entry.source === "research" && entry.type === type) {
       results.push(entry);
       if (limit && results.length >= limit) break;
     }
