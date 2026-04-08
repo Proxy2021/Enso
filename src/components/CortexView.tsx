@@ -109,9 +109,35 @@ export default function CortexView() {
       });
   }, []);
 
-  // No WS listener needed — data loaded via REST API calls to tool executors
+  // Virtual card IDs for each app (used to route WS responses back)
+  const cortexCardIds = useMemo(() => {
+    const ids: Record<string, string> = {};
+    for (const app of apps) {
+      ids[app.family] = `cortex-${app.family}`;
+    }
+    return ids;
+  }, [apps]);
 
-  // Load data when switching to an app sub-tab
+  // Register virtual cards in the store and listen for updates
+  const cards = useChatStore((s) => s.cards);
+  const sendCardAction = useChatStore((s) => s.sendCardAction);
+
+  // Sync card data back to app states
+  useEffect(() => {
+    for (const app of apps) {
+      const cardId = cortexCardIds[app.family];
+      const card = cardId ? cards[cardId] : undefined;
+      if (card?.data && card.status !== "streaming") {
+        setAppStates(prev => {
+          const current = prev[app.family];
+          if (current?.data === card.data) return prev; // No change
+          return { ...prev, [app.family]: { data: card.data, loading: false } };
+        });
+      }
+    }
+  }, [cards, apps, cortexCardIds]);
+
+  // Load data when switching to an app sub-tab (via REST for initial load)
   useEffect(() => {
     if (activeSubTab === "overview") return;
     const app = apps.find(a => a.family === activeSubTab);
@@ -119,6 +145,35 @@ export default function CortexView() {
       loadAppData(app);
     }
   }, [activeSubTab, apps, appStates, loadAppData]);
+
+  // When initial data loads, register a virtual card in the store
+  useEffect(() => {
+    for (const app of apps) {
+      const state = appStates[app.family];
+      if (state?.data && !cards[cortexCardIds[app.family]]) {
+        // Register virtual card so sendCardAction can find it
+        useChatStore.setState((s) => ({
+          cards: {
+            ...s.cards,
+            [cortexCardIds[app.family]]: {
+              id: cortexCardIds[app.family],
+              runId: `cortex-run-${app.family}`,
+              type: "dynamic-ui" as const,
+              role: "assistant" as const,
+              status: "complete" as const,
+              display: "expanded" as const,
+              data: state.data,
+              generatedUI: apps.find(a => a.family === app.family)?.templateJSX,
+              toolMeta: { toolId: app.primaryTool, params: {} },
+              timestamp: Date.now(),
+              updatedAt: Date.now(),
+              createdAt: Date.now(),
+            },
+          },
+        }));
+      }
+    }
+  }, [appStates, apps, cards, cortexCardIds]);
 
   // Compile templates
   const compiledTemplates = useMemo(() => {
@@ -131,12 +186,13 @@ export default function CortexView() {
     return result;
   }, [apps]);
 
-  // Action handler — runs tool via REST and updates state
+  // Action handler — uses the existing card action system via WS
   const handleAction = useCallback((action: string, payload?: unknown) => {
     const activeApp = apps.find(a => a.family === activeSubTab);
     if (!activeApp) return;
+    const cardId = cortexCardIds[activeApp.family];
 
-    // Special actions
+    // Client-side only actions
     if (action === "open_url" && payload && typeof payload === "object" && "url" in payload) {
       window.open((payload as { url: string }).url, "_blank");
       return;
@@ -146,9 +202,14 @@ export default function CortexView() {
       return;
     }
 
-    // Build tool ID from app prefix + action
-    const toolId = `${activeApp.primaryTool.replace(/_[^_]+$/, "")}_${action}`;
+    // If virtual card exists, use the store's sendCardAction (same WS pipeline as chat cards)
+    if (cards[cardId]) {
+      sendCardAction(cardId, action, payload);
+      return;
+    }
 
+    // Fallback: direct REST call for initial actions before card is registered
+    const toolId = `${activeApp.primaryTool.replace(/_[^_]+$/, "")}_${action}`;
     setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: true } }));
 
     const baseUrl = getBackendBaseUrl();
@@ -164,10 +225,10 @@ export default function CortexView() {
       .catch(() => {
         setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
       });
-  }, [apps, activeSubTab]);
+  }, [apps, activeSubTab, cortexCardIds, cards, sendCardAction]);
 
   const handleSendMessage = useCallback((_text: string) => {
-    // Messages from Cortex view not sent to chat — actions go through REST API
+    // Messages from Cortex view go through action system
   }, []);
 
   // Sub-tabs: Overview + apps
