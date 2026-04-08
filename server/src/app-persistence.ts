@@ -918,3 +918,23 @@ export function generateSkillMd(spec: PluginSpec, userProposal?: string): string
 
   return lines.join("\n");
 }
+
+/**
+ * Execute a tool executor body string directly (for REST API calls from Cortex tab).
+ * Creates a minimal ExecutorContext and runs the executor.
+ */
+export async function executeToolBody(
+  body: string,
+  params: Record<string, unknown>,
+): Promise<{ content: Array<{ type: string; text?: string }> }> {
+  const { getActiveAccount } = await import("./server.js");
+  const activeApiKey = getActiveAccount()?.geminiApiKey;
+  const ctx = buildExecutorContext("api", "run", activeApiKey);
+  const executeFn = new AsyncFunction("callId", "params", "ctx", "require", body) as (
+    callId: string,
+    params: Record<string, unknown>,
+    ctx: ExecutorContext,
+    require: NodeRequire,
+  ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+  return await executeFn("api-run", params, ctx, executorRequire);
+}

@@ -769,15 +769,22 @@ export async function startEnsoServer(opts: {
       const toolId = req.query.tool as string;
       if (!toolId) { res.status(400).json({ error: "Missing tool parameter" }); return; }
 
-      const { getGeneratedToolExecutor } = await import("./native-tools/registry.js");
-      const executor = getGeneratedToolExecutor(toolId);
-      if (!executor) {
+      const { getExecutorBody, isDynamicTool } = await import("./native-tools/registry.js");
+      if (!isDynamicTool(toolId)) {
         res.status(404).json({ error: `Tool not found: ${toolId}`, tool: toolId });
         return;
       }
 
+      const body = getExecutorBody(toolId);
+      if (!body) {
+        res.status(404).json({ error: `No executor body for: ${toolId}` });
+        return;
+      }
+
+      // Execute using the app-persistence executor runner
+      const { executeToolBody } = await import("./app-persistence.js");
       const params = req.body || {};
-      const result = await executor("api-run", params);
+      const result = await executeToolBody(body, params);
 
       // Extract data from AgentToolResult format
       if (result?.content?.[0]?.text) {
@@ -787,7 +794,7 @@ export async function startEnsoServer(opts: {
           return;
         } catch { /* fall through */ }
       }
-      res.json(result);
+      res.json(result || {});
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
