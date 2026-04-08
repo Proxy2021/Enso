@@ -161,6 +161,26 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
     ],
     synthesisHint: "software architect analyzing architecture, code quality, ecosystem positioning, and developer experience",
   },
+  article: {
+    searchQueries: (title, meta) => [
+      `"${title}" ${meta.author || ""} article`,
+      `"${title}" analysis key points`,
+      `"${title}" implications discussion`,
+      `${meta.author || ""} related articles insights`,
+    ],
+    synthesisHint: "senior journalist dissecting the article's arguments, evidence quality, broader implications, and what readers should take away",
+  },
+  place: {
+    searchQueries: (title) => [
+      `${title} travel guide best things to do`,
+      `${title} hidden gems local favorites tips`,
+      `${title} history culture significance`,
+      `${title} photography spots best views`,
+      `${title} food cuisine restaurants must try`,
+      `${title} practical travel tips transportation accommodation`,
+    ],
+    synthesisHint: "experienced travel writer creating an immersive guide with insider knowledge, cultural context, practical tips, and photography recommendations",
+  },
 };
 
 function getEntityProfile(entityType: string): EntityProfile {

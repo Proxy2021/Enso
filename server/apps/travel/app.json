@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "createdAt": 1775680000000,
+  "spec": {
+    "toolFamily": "travel",
+    "toolPrefix": "enso_travel_",
+    "description": "Places & Travel: discover destinations, save travel wishlists, generate deep AI podcasts about places, cross-reference with your photos and reading list.",
+    "signatureId": "travel_places",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Places",
+        "description": "Browse saved destinations and travel wishlists from your Cortex.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Search within saved places" },
+            "region": { "type": "string", "description": "Filter by region/country" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "add",
+        "label": "Add Place",
+        "description": "Search for a destination and add it to your travel wishlist with enriched travel information.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Place name, city, or destination to search for" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "discover",
+        "label": "Discover Destinations",
+        "description": "AI-powered destination discovery based on your interests and travel style.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "style": { "type": "string", "description": "Travel style: adventure, culture, relaxation, photography, food, history" },
+            "region": { "type": "string", "description": "Preferred region: asia, europe, americas, africa, oceania" }
+          },
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

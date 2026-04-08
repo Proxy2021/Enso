@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "createdAt": 1775680000000,
+  "spec": {
+    "toolFamily": "articles",
+    "toolPrefix": "enso_articles_",
+    "description": "News & Articles: save, browse, and deep-dive into articles and news stories. Search the web for articles, save to your Cortex with enrichment, generate AI podcasts, and cross-reference with your entire knowledge base.",
+    "signatureId": "articles_library",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Articles",
+        "description": "Browse saved articles and news stories from your Cortex.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Search within saved articles" },
+            "topic": { "type": "string", "description": "Filter by topic/tag" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "add",
+        "label": "Save Article",
+        "description": "Search for an article by title or topic and save it to your knowledge base with full content extraction.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Article title, topic, or URL to save" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "trending",
+        "label": "Trending News",
+        "description": "Find trending news articles matching your Cortex interests.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "topic": { "type": "string", "description": "Optional topic focus (default: auto from Cortex themes)" }
+          },
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

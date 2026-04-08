@@ -33,6 +33,7 @@ export type EntityType =
   | "song" | "playlist" | "artist"
   | "channel" | "video"
   | "project"
+  | "article" | "place"
   | "person" | "twitter-account"
   | "concept" | "source" | "synthesis";
 
@@ -155,6 +156,16 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
     sources: ["files"],
     cortexPrefix: "entities/",
     detailFields: ["language", "framework", "dependencies", "lastModified", "size"],
+  },
+  "article": {
+    sources: ["research", "manual"],
+    cortexPrefix: "entities/article-",
+    detailFields: ["author", "source", "publishedDate", "url", "summary", "topics"],
+  },
+  "place": {
+    sources: ["research", "manual", "photos"],
+    cortexPrefix: "entities/place-",
+    detailFields: ["country", "region", "coordinates", "description", "highlights", "bestTimeToVisit"],
   },
   "person": {
     sources: ["cortex", "manual"],

@@ -277,6 +277,75 @@ function updateEntityIndex(entityId: string, info: { title: string; cortexPath: 
   saveEntityIndex();
 }
 
+async function enrichArticle(entityId: string, info: { title: string; creator: string; cortexPath: string; fullPath: string }): Promise<boolean> {
+  // Use Brave web search to find the article and extract key info
+  try {
+    const { braveWebSearch, fetchPageContent } = await import("./researcher-tools.js");
+    const results = await braveWebSearch(`"${info.title}" article`, 3);
+    if (!results.length) return false;
+
+    let content = "";
+    let sourceUrl = results[0].url;
+    let sourceDomain = "";
+    try { sourceDomain = new URL(sourceUrl).hostname.replace("www.", ""); } catch { /* ignore */ }
+
+    // Try to fetch the article content
+    try {
+      content = await fetchPageContent(sourceUrl);
+    } catch { /* ignore */ }
+
+    const desc = content.slice(0, 1000) || results[0].description || "";
+
+    const lines = buildCortexPage(info.title, {
+      creator: info.creator || sourceDomain, type: "article",
+      description: desc,
+      extra: [
+        sourceUrl ? `- **URL**: [${sourceDomain}](${sourceUrl})` : "",
+        `- **Found via**: Web search`,
+      ].filter(Boolean),
+    });
+
+    writeFileSync(info.fullPath, lines, "utf-8");
+    updateEntityIndex(entityId, info, "", [], desc.slice(0, 200));
+    logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched article "${info.title}" from ${sourceDomain}` });
+    return true;
+  } catch { return false; }
+}
+
+async function enrichPlace(entityId: string, info: { title: string; creator: string; cortexPath: string; fullPath: string }): Promise<boolean> {
+  // Use Brave search to find travel info about the place
+  try {
+    const { braveWebSearch, fetchPageContent } = await import("./researcher-tools.js");
+    const results = await braveWebSearch(`${info.title} travel guide highlights things to do`, 5);
+    if (!results.length) return false;
+
+    // Extract content from top result
+    let content = "";
+    try { content = await fetchPageContent(results[0].url); } catch { /* ignore */ }
+    const desc = content.slice(0, 1000) || results.map(r => r.description).join(" ").slice(0, 1000);
+
+    // Try to get a cover image
+    const { braveWebSearch: imgSearch } = await import("./researcher-tools.js");
+    let coverUrl = "";
+    // Use a placeholder — Brave image search would need separate implementation
+
+    const lines = buildCortexPage(info.title, {
+      creator: info.creator || "", type: "place",
+      description: desc,
+      extra: [
+        `- **Type**: Destination`,
+        results[0]?.url ? `- **Guide**: [${info.title} travel guide](${results[0].url})` : "",
+      ].filter(Boolean),
+      categories: ["travel", "destination"],
+    });
+
+    writeFileSync(info.fullPath, lines, "utf-8");
+    updateEntityIndex(entityId, info, coverUrl, ["travel", "destination"], desc.slice(0, 200));
+    logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched place "${info.title}"` });
+    return true;
+  } catch { return false; }
+}
+
 // ─── Main Dispatcher ─────────────────────────────────────────────────────────
 
 /**
@@ -302,6 +371,10 @@ export async function enrichEntity(entityId: string): Promise<boolean> {
         return await enrichGame(entityId, info);
       case "channel":
         return await enrichChannel(entityId, info);
+      case "article":
+        return await enrichArticle(entityId, info);
+      case "place":
+        return await enrichPlace(entityId, info);
       default:
         logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `No enricher for type "${parsed.type}"` });
         return false;

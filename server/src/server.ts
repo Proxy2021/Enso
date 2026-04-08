@@ -886,6 +886,153 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Universal Content Recommendation Pipeline API ──
+  // Discovers new content of any type based on Cortex interests, generates deep podcast, sends email
+  app.post("/api/content-recommendation/daily", async (req, res) => {
+    const contentType = (req.query.type as string) || (req.body?.type as string) || "movie";
+    const reqLanguage = (req.query.language as string) || (req.body?.language as string) || undefined;
+
+    try {
+      const { discoverNewBooks, generateDeepContent, buildEntityEmailHtml } = await import("./deep-content.js");
+      const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
+      const { enrichEntity } = await import("./content-enrichment.js");
+      const { sendHtmlEmail } = await import("./email.js");
+      const { llm } = await import("./llm.js");
+      const { braveWebSearch } = await import("./researcher-tools.js");
+
+      logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Daily ${contentType} recommendation pipeline started [lang=${reqLanguage || "auto"}]` });
+
+      // Read Cortex themes
+      const { existsSync: ex, readFileSync: rf } = await import("node:fs");
+      const { join: jn } = await import("node:path");
+      const { homedir: hd } = await import("node:os");
+      let topThemes: string[] = [];
+      try {
+        const indexPath = jn(hd(), ".enso", "wiki", "_index.md");
+        if (ex(indexPath)) {
+          const idx = rf(indexPath, "utf-8");
+          const themeCounts: Record<string, number> = {};
+          for (const m of idx.matchAll(/Themes:\s*(.+)/g)) {
+            m[1].split(",").forEach(t => { const theme = t.trim().toLowerCase(); if (theme) themeCounts[theme] = (themeCounts[theme] || 0) + 1; });
+          }
+          topThemes = Object.entries(themeCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(e => e[0]);
+        }
+      } catch { /* ignore */ }
+      if (!topThemes.length) topThemes = ["technology", "science", "history", "leadership"];
+
+      // Collect existing titles to exclude
+      const existingTitles = new Set<string>();
+      try {
+        const eiPath = jn(hd(), ".enso", "data", "entity-index.json");
+        if (ex(eiPath)) {
+          const idx = JSON.parse(rf(eiPath, "utf-8"));
+          for (const entry of Object.values(idx) as Array<{ type?: string; title?: string }>) {
+            if (entry.type === contentType || entry.type === "movie" || entry.type === "tv-series") {
+              if (entry.title) existingTitles.add(entry.title.toLowerCase());
+            }
+          }
+        }
+      } catch { /* ignore */ }
+
+      // Type-specific search queries
+      const isChinese = reqLanguage === "zh";
+      const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+      const themeOffset = dayOfYear % Math.max(1, topThemes.length - 2);
+      const searchThemes = topThemes.slice(themeOffset, themeOffset + 3);
+
+      const queryTemplates: Record<string, string[]> = {
+        movie: isChinese
+          ? [`2024 2025 必看电影推荐 ${searchThemes[0]}`, `豆瓣高分电影 ${searchThemes.slice(0, 2).join(" ")}`, `值得一看的好电影 深度`]
+          : [`best movies ${searchThemes.slice(0, 2).join(" ")} 2024 2025 recommendations`, `must watch films ${searchThemes[0]} thought provoking`, `critically acclaimed movies ${searchThemes[1] || "drama"}`],
+        game: [`best games ${searchThemes[0]} 2024 2025`, `must play games ${searchThemes.slice(0, 2).join(" ")}`, `critically acclaimed games deep narrative`],
+        channel: [`best youtube channels ${searchThemes[0]} educational`, `top youtube creators ${searchThemes.slice(0, 2).join(" ")} 2024`, `underrated youtube channels ${searchThemes[1] || "science"}`],
+      };
+      const queries = queryTemplates[contentType] || queryTemplates.movie;
+
+      // Web search
+      const allResults: Array<{ title: string; description: string; url: string }> = [];
+      for (const q of queries) {
+        try { allResults.push(...await braveWebSearch(q, 5)); } catch { /* ignore */ }
+      }
+
+      if (!allResults.length) {
+        res.json({ success: false, message: `No web search results for ${contentType} recommendations` });
+        return;
+      }
+
+      // LLM picks the best recommendation
+      const existingList = [...existingTitles].slice(0, 50).join(", ");
+      const typeLabel = { movie: "movie or TV show", game: "video game", channel: "YouTube channel" }[contentType] || contentType;
+      const langRule = isChinese ? "\nCRITICAL: ALL output MUST be in Chinese (中文)." : "";
+
+      const prompt = `You are a personal ${typeLabel} curator. Your client's interests: ${topThemes.join(", ")}.${langRule}
+
+They already know these (DO NOT recommend): ${existingList || "none"}
+
+Web search results about recommended ${typeLabel}s:
+${allResults.slice(0, 10).map((r, i) => `[${i}] ${r.title}: ${r.description}`).join("\n")}
+
+Pick 1 ${typeLabel} that would be most valuable. Return JSON:
+{
+  "title": "exact title",
+  "creator": "director/developer/creator",
+  "year": "year or null",
+  "type": "${contentType === "movie" ? "movie" : contentType}",
+  "description": "2-3 sentence description",
+  "whyRecommended": "why this matches their interests"
+}
+Return ONLY JSON.`;
+
+      const raw = await llm({ prompt, tier: "utility", timeoutMs: 30000 });
+      const cleaned = raw.replace(/^```(?:json)?\s*\n?/m, "").replace(/\n?```\s*$/m, "").trim();
+      const picked = JSON.parse(cleaned) as { title: string; creator?: string; year?: string; type?: string; description?: string; whyRecommended?: string };
+
+      if (!picked.title) { res.json({ success: false, message: "LLM did not return a recommendation" }); return; }
+
+      // Skip if too similar to existing
+      if (existingTitles.has(picked.title.toLowerCase())) {
+        res.json({ success: false, message: `"${picked.title}" already in library` });
+        return;
+      }
+
+      const entityType = picked.type || contentType;
+      logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Discovered ${entityType}: "${picked.title}" by ${picked.creator}` });
+
+      // Ingest + enrich
+      const result = await ingestDiscoveredEntity({
+        title: picked.title, type: entityType, source: "research",
+        creator: picked.creator, year: picked.year, description: picked.description,
+      });
+      enrichEntity(result.entityId).catch(() => {});
+
+      // Respond immediately
+      res.json({ success: true, message: `Discovered "${picked.title}" — generating podcast + email`, entityId: result.entityId, title: picked.title, creator: picked.creator, type: entityType, whyRecommended: picked.whyRecommended });
+
+      // Generate deep content + email in background
+      try {
+        const processed = await generateDeepContent({
+          entityId: result.entityId, language: reqLanguage,
+          onProgress: (p) => { logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `${picked.title}: ${p.phase} (${p.percentComplete}%)` }); },
+        });
+
+        const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
+        const emailHtml = buildEntityEmailHtml(processed, baseUrl, reqLanguage);
+        const typeEmoji = { movie: "🎬", game: "🎮", channel: "📺" }[contentType] || "🎯";
+        await sendHtmlEmail({
+          to: "kkwong@xiaomi.com",
+          subject: `${typeEmoji} Daily ${entityType} Recommendation: ${picked.title} — ${processed.durationMinutes} min AI Podcast`,
+          html: emailHtml,
+        });
+        logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Email sent for ${entityType} "${picked.title}"` });
+      } catch (err) {
+        logError("content-recommendation", `Pipeline failed for ${picked.title}`, err);
+      }
+    } catch (err) {
+      logError("content-recommendation", `Daily ${contentType} pipeline failed`, err);
+      if (!res.headersSent) res.json({ success: false, message: String((err as Error).message) });
+    }
+  });
+
   // ── Cortex Quick-Add API (for email links and external quick-add) ──
   app.get("/api/cortex/quick-add", async (req, res) => {
     const title = decodeURIComponent((req.query.title as string) || "");
