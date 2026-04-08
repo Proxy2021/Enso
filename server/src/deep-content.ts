@@ -1021,19 +1021,39 @@ export async function discoverNewBooks(count = 1, language?: string): Promise<Di
   }
 
   // Step 4: LLM picks the best book
+  // Also collect already-processed book titles for stronger exclusion
+  const processedTitles: string[] = [];
+  try {
+    const dcDir = join(homedir(), ".enso", "data", "deep-content");
+    if (existsSync(dcDir)) {
+      for (const f of readdirSync(dcDir)) {
+        if (f.endsWith(".json")) {
+          try {
+            const meta = JSON.parse(readFileSync(join(dcDir, f), "utf-8"));
+            if (meta.title) processedTitles.push(meta.title);
+          } catch { /* ignore */ }
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
   const existingList = [...existingTitles].slice(0, 100).join(", ");
+  const processedList = processedTitles.join(", ");
   const langInstruction = isChinese ? "\n\nCRITICAL: ALL output text (title, description, whyRecommended) MUST be written in Chinese (中文). Recommend Chinese-language books." : "";
   const prompt = `You are a personal book curator. Your client's top interests are: ${topThemes.join(", ")}.${langInstruction}
 
 They already own these books (DO NOT recommend any of these): ${existingList || "none known"}
+
+They already have AI podcasts for these books (DO NOT recommend these or any variant/edition of these): ${processedList || "none"}
 
 Based on these web search results about recommended books:
 
 ${enriched.join("\n\n---\n\n")}
 
 Select ${count} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
+- Are COMPLETELY DIFFERENT from books they already own or have podcasts for — no variant editions, translations, or related titles
 - Are highly acclaimed and substantive (not pop/superficial)
-- Match their core interests but may expand their thinking in new directions
+- Match their core interests but EXPAND their thinking in new, surprising directions
 - They are unlikely to already know about (avoid obvious bestsellers they'd have)
 - Have enough depth to support a 20-30 minute podcast discussion
 
@@ -1059,11 +1079,36 @@ CRITICAL: Return ONLY valid JSON. Pick real, existing books with correct authors
 
     if (!parsed.books?.length) return [];
 
+    // Fuzzy title match helper — checks if two titles share >50% characters
+    const isSimilarTitle = (a: string, b: string): boolean => {
+      const sa = a.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+      const sb = b.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+      if (sa === sb) return true;
+      if (sa.includes(sb) || sb.includes(sa)) return true;
+      // Character overlap check
+      const setA = new Set(sa);
+      const setB = new Set(sb);
+      let overlap = 0;
+      for (const c of setA) if (setB.has(c)) overlap++;
+      return overlap / Math.max(setA.size, setB.size) > 0.7;
+    };
+
+    const allKnownTitles = [...existingTitles, ...processedTitles.map(t => t.toLowerCase())];
+
     const results: DiscoveredBook[] = [];
-    for (const book of parsed.books.slice(0, count)) {
+    for (const book of parsed.books.slice(0, count + 3)) { // request extras in case some get filtered
       if (!book.title || !book.author) continue;
-      // Skip if user already has it
+      if (results.length >= count) break;
+
+      // Skip exact match
       if (existingTitles.has(book.title.toLowerCase())) continue;
+
+      // Skip fuzzy match against all known titles
+      const isTooSimilar = allKnownTitles.some(t => isSimilarTitle(book.title, t));
+      if (isTooSimilar) {
+        logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: `Skipped "${book.title}" — too similar to existing book` });
+        continue;
+      }
 
       const slug = book.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
       const entityId = `research:book:${slug}`;
