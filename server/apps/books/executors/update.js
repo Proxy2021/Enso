@@ -70,6 +70,27 @@ if (allNewBooks.length > 0) {
   }
 }
 
+// ── Auto-enrich new books ──
+var enrichResult = { kindle: null, weread: null };
+if (allNewBooks.length > 0) {
+  ctx.log("Auto-enriching new books...");
+  try {
+    var mod = await import("../../../../server/src/user-context-tools.js");
+    if (results.kindle.newBooks.length > 0 && mod.enrichKindleMetadata) {
+      ctx.log("Enriching new Kindle books...");
+      enrichResult.kindle = await mod.enrichKindleMetadata();
+      ctx.log("Kindle enriched: " + (enrichResult.kindle ? enrichResult.kindle.enriched : 0));
+    }
+    if (results.weread.newBooks.length > 0 && mod.enrichWeReadMetadata) {
+      ctx.log("Enriching new WeRead books...");
+      enrichResult.weread = await mod.enrichWeReadMetadata();
+      ctx.log("WeRead enriched: " + (enrichResult.weread ? enrichResult.weread.enriched : 0));
+    }
+  } catch (e) {
+    ctx.log("Auto-enrichment error: " + (e.message || e));
+  }
+}
+
 var totalBefore = results.kindle.before + results.weread.before;
 var totalAfter = results.kindle.after + results.weread.after;
 ctx.log("Update complete: Kindle " + results.kindle.before + "→" + results.kindle.after + " (" + results.kindle.newBooks.length + " new), WeRead " + results.weread.before + "→" + results.weread.after + " (" + results.weread.newBooks.length + " new)");
@@ -94,4 +115,8 @@ return { content: [{ type: "text", text: JSON.stringify({
     error: results.weread.error,
   },
   cortexIngested: cortexIngested,
+  autoEnriched: {
+    kindle: enrichResult.kindle ? enrichResult.kindle.enriched : 0,
+    weread: enrichResult.weread ? enrichResult.weread.enriched : 0,
+  },
 }) }] };
