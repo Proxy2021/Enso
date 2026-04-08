@@ -834,8 +834,46 @@ export async function startEnsoServer(opts: {
 
       if (action === "deep_content" || action === "book_podcast") {
         const entityId = String(payload?.entityId ?? "");
-        res.json({ podcastStatus: "started", entityId, message: "Deep content pipeline started in background" });
-        // Could trigger background pipeline here
+        if (!entityId) { res.json({ error: "No entity ID" }); return; }
+
+        // Check cache first
+        const { getProcessedContent, generateDeepContent } = await import("./deep-content.js");
+        const cached = getProcessedContent(entityId);
+        if (cached) {
+          // Return cached podcast data
+          const { buildEntityDetailData: buildDetail } = await import("./entity-model.js");
+          const detailData = await buildDetail(entityId) || {};
+          detailData.processedBook = cached;
+          detailData.podcastAudioUrl = cached.audioUrl;
+          detailData.podcastScript = cached.script;
+          detailData.podcastDuration = cached.durationMinutes;
+          detailData.podcastStatus = "ready";
+          detailData.focusEntity = true;
+          detailData.tool = "entity_detail";
+          res.json(detailData);
+          return;
+        }
+
+        // Auto-create entity if needed
+        try {
+          const { lookupEntity: lookupEnt3 } = await import("./entity-model.js");
+          if (!lookupEnt3(entityId) && payload?.title) {
+            const { ingestDiscoveredEntity: ingestEnt } = await import("./cortex-direct-ingest.js");
+            await ingestEnt({ title: String(payload.title), type: String(payload.type || "book"), creator: payload.creator ? String(payload.creator) : undefined });
+          }
+        } catch { /* best effort */ }
+
+        // Respond immediately — pipeline runs in background
+        res.json({ podcastStatus: "processing", entityId, message: `Generating deep podcast for "${payload?.title || entityId}" — this takes 15-30 minutes. Check back soon.` });
+
+        // Fire-and-forget: generate podcast in background
+        generateDeepContent({ entityId, language: req.body?.language })
+          .then((processed) => {
+            logAction({ ts: Date.now(), type: "action", category: "cortex-action", message: `Deep content complete for ${entityId}: ${processed.durationMinutes} min` });
+          })
+          .catch((err) => {
+            logError("cortex-action", `Deep content failed for ${entityId}`, err);
+          });
         return;
       }
 
