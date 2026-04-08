@@ -211,8 +211,10 @@ export default function CortexView() {
           return;
         }
 
-        // For deep_content: merge podcast status into existing entity data (don't replace it)
+        // For deep_content: merge podcast status into existing entity data and start polling
         if ((action === "deep_content" || action === "book_podcast") && data.podcastStatus) {
+          const entityId = (payload as Record<string, unknown>)?.entityId as string;
+
           setAppStates(prev => {
             const current = prev[activeApp.family];
             const currentData = current?.data as Record<string, unknown> || {};
@@ -225,6 +227,46 @@ export default function CortexView() {
             const merged = { ...currentData, podcastStatus: data.podcastStatus, podcastStatusDetail: data.message };
             return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
           });
+
+          // Poll for progress every 15 seconds until complete
+          if (data.podcastStatus === "processing" && entityId) {
+            const pollInterval = setInterval(() => {
+              const baseUrl2 = getBackendBaseUrl();
+              fetch(`${baseUrl2}/api/cortex/action`, {
+                method: "POST",
+                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deep_content", payload: { entityId }, appFamily: activeApp.family }),
+              })
+                .then(r => r.json())
+                .then(pollData => {
+                  if (pollData.podcastStatus === "ready" || pollData.entity) {
+                    // Podcast complete — update with full data
+                    clearInterval(pollInterval);
+                    setAppStates(prev => {
+                      const current = prev[activeApp.family];
+                      const currentData = current?.data as Record<string, unknown> || {};
+                      if (pollData.entity) {
+                        const merged = { ...pollData, navStack: currentData.navStack, focusEntity: true, tool: "entity_detail" };
+                        return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                      }
+                      const merged = { ...currentData, ...pollData };
+                      return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                    });
+                  } else {
+                    // Still processing — update status message
+                    setAppStates(prev => {
+                      const current = prev[activeApp.family];
+                      const currentData = current?.data as Record<string, unknown> || {};
+                      const merged = { ...currentData, podcastStatus: pollData.podcastStatus || "processing", podcastStatusDetail: pollData.message || currentData.podcastStatusDetail };
+                      return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                    });
+                  }
+                })
+                .catch(() => {});
+            }, 15000);
+            // Auto-stop polling after 45 minutes
+            setTimeout(() => clearInterval(pollInterval), 45 * 60 * 1000);
+          }
           return;
         }
 

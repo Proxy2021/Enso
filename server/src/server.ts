@@ -763,6 +763,9 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // In-memory progress tracking for deep content generation (for Cortex tab polling)
+  const deepContentProgress = new Map<string, { phase: string; detail?: string; percentComplete?: number; startedAt: number }>();
+
   // ── Cortex Card Action API (for Cortex tab — handles view_entity, nav_back, add_to_cortex etc.) ──
   app.post("/api/cortex/action", async (req, res) => {
     try {
@@ -863,15 +866,33 @@ export async function startEnsoServer(opts: {
           }
         } catch { /* best effort */ }
 
-        // Respond immediately — pipeline runs in background
-        res.json({ podcastStatus: "processing", entityId, message: `Generating deep podcast for "${payload?.title || entityId}" — this takes 15-30 minutes. Check back soon.` });
+        // Check if already in progress
+        const existingProgress = deepContentProgress.get(entityId);
+        if (existingProgress) {
+          res.json({ podcastStatus: "processing", entityId, message: `${existingProgress.phase} ${existingProgress.percentComplete ?? ""}% — ${existingProgress.detail || "Working..."}`, phase: existingProgress.phase, percentComplete: existingProgress.percentComplete });
+          return;
+        }
 
-        // Fire-and-forget: generate podcast in background
-        generateDeepContent({ entityId, language: req.body?.language })
+        // Start tracking progress
+        deepContentProgress.set(entityId, { phase: "starting", startedAt: Date.now() });
+
+        // Respond immediately — pipeline runs in background
+        res.json({ podcastStatus: "processing", entityId, message: `Starting deep podcast generation — this takes 15-30 minutes.` });
+
+        // Fire-and-forget: generate podcast in background with progress tracking
+        generateDeepContent({
+          entityId,
+          language: req.body?.language,
+          onProgress: (p) => {
+            deepContentProgress.set(entityId, { phase: p.phase, detail: p.detail, percentComplete: p.percentComplete, startedAt: deepContentProgress.get(entityId)?.startedAt || Date.now() });
+          },
+        })
           .then((processed) => {
+            deepContentProgress.delete(entityId);
             logAction({ ts: Date.now(), type: "action", category: "cortex-action", message: `Deep content complete for ${entityId}: ${processed.durationMinutes} min` });
           })
           .catch((err) => {
+            deepContentProgress.delete(entityId);
             logError("cortex-action", `Deep content failed for ${entityId}`, err);
           });
         return;
