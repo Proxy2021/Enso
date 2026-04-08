@@ -16,7 +16,7 @@
  *   - Entity index is derived & rebuildable from caches + Cortex
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { logAction, logError } from "./action-log.js";
