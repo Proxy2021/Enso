@@ -54,18 +54,33 @@ export default function CortexView() {
 
   // Load entity index stats
   const [entityStats, setEntityStats] = useState<Record<string, number>>({});
+  const [totalEntities, setTotalEntities] = useState(0);
   useEffect(() => {
-    const url = `${getBackendBaseUrl()}/api/entities?limit=0`;
+    const url = `${getBackendBaseUrl()}/api/entities`;
     fetch(url, { headers: authHeaders() })
       .then(r => r.json())
-      .then((entities: Array<{ type: string }>) => {
-        const counts: Record<string, number> = {};
-        if (Array.isArray(entities)) {
-          for (const e of entities) {
-            counts[e.type] = (counts[e.type] || 0) + 1;
+      .then((data: { totalEntities?: number; bySource?: Record<string, number>; byType?: Record<string, number> } | Array<{ type: string }>) => {
+        if (Array.isArray(data)) {
+          // Array format — count by type
+          const counts: Record<string, number> = {};
+          for (const e of data) counts[e.type] = (counts[e.type] || 0) + 1;
+          setEntityStats(counts);
+          setTotalEntities(data.length);
+        } else if (data.bySource) {
+          // Dict format with bySource — map source names to entity types
+          const sourceToType: Record<string, string> = {
+            kindle: "book", weread: "book", steam: "game", movies_tv: "movie",
+            youtube: "channel", photos: "photo", qq_music: "song", files: "project",
+            research: "research", twitter: "twitter-account",
+          };
+          const counts: Record<string, number> = {};
+          for (const [src, count] of Object.entries(data.bySource)) {
+            const type = sourceToType[src] || src;
+            counts[type] = (counts[type] || 0) + count;
           }
+          setEntityStats(counts);
+          setTotalEntities(data.totalEntities || Object.values(data.bySource).reduce((a, b) => a + b, 0));
         }
-        setEntityStats(counts);
       })
       .catch(() => {});
   }, []);
@@ -205,7 +220,7 @@ export default function CortexView() {
       {/* Content area */}
       <div className="flex-1 overflow-y-auto">
         {activeSubTab === "overview" ? (
-          <OverviewDashboard cortexStats={cortexStats} entityStats={entityStats} onNavigate={setActiveSubTab} />
+          <OverviewDashboard cortexStats={cortexStats} entityStats={entityStats} totalEntities={totalEntities} onNavigate={setActiveSubTab} />
         ) : (
           <AppRenderer
             app={apps.find(a => a.family === activeSubTab)}
@@ -225,14 +240,16 @@ export default function CortexView() {
 function OverviewDashboard({
   cortexStats,
   entityStats,
+  totalEntities: totalEntitiesProp,
   onNavigate,
 }: {
   cortexStats: Record<string, unknown> | null;
   entityStats: Record<string, number>;
+  totalEntities: number;
   onNavigate: (tab: string) => void;
 }) {
   const stats = cortexStats as Record<string, unknown> | null;
-  const totalEntities = Object.values(entityStats).reduce((a, b) => a + b, 0);
+  const totalEntities = totalEntitiesProp || Object.values(entityStats).reduce((a, b) => a + b, 0);
 
   const contentTypes = [
     { key: "book", label: "Books", icon: "📚", tab: "books", color: "from-indigo-500/20 to-indigo-600/10 border-indigo-500/20" },
