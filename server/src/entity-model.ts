@@ -619,6 +619,38 @@ export async function buildEntityIndex(): Promise<number> {
     logError("entity-index", "Failed to cross-reference Cortex index", err);
   }
 
+  // 2.5. Scan deep-content metadata for processed entities not in any cache
+  try {
+    const dcDir = join(ENSO_HOME, "data", "deep-content");
+    if (existsSync(dcDir)) {
+      const dcFiles = readdirSync(dcDir).filter(f => f.endsWith(".json"));
+      for (const f of dcFiles) {
+        try {
+          const meta = JSON.parse(readFileSync(join(dcDir, f), "utf-8"));
+          if (!meta.entityId || entityIndex.has(meta.entityId)) continue;
+          const parts = meta.entityId.split(":");
+          if (parts.length < 3) continue;
+          const [src, typ, ...slugParts] = parts;
+          const slug = slugParts.join(":");
+          const typeDef = ENTITY_TYPES[typ];
+          const cortexPath = typeDef?.cortexPrefix ? `${typeDef.cortexPrefix}${slug}.md` : undefined;
+          entityIndex.set(meta.entityId, {
+            entityId: meta.entityId,
+            type: typ as EntityType,
+            source: src as EntitySource,
+            title: meta.title || slug,
+            slug,
+            cortexPath,
+            tags: [typ, src, "deep-processed"],
+            updatedAt: meta.processedAt || new Date().toISOString(),
+          });
+        } catch { /* skip individual files */ }
+      }
+    }
+  } catch (err) {
+    logError("entity-index", "Failed to scan deep-content for entities", err);
+  }
+
   // 3. Persist
   indexLoaded = true;
   saveEntityIndex();
