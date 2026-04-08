@@ -211,6 +211,23 @@ export default function CortexView() {
           return;
         }
 
+        // For deep_content: merge podcast status into existing entity data (don't replace it)
+        if ((action === "deep_content" || action === "book_podcast") && data.podcastStatus) {
+          setAppStates(prev => {
+            const current = prev[activeApp.family];
+            const currentData = current?.data as Record<string, unknown> || {};
+            // If server returned full entity detail (cached podcast), use it
+            if (data.entity) {
+              const merged = { ...data, navStack: currentData.navStack, focusEntity: true, tool: "entity_detail" };
+              return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+            }
+            // Otherwise merge processing status into current view
+            const merged = { ...currentData, podcastStatus: data.podcastStatus, podcastStatusDetail: data.message };
+            return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+          });
+          return;
+        }
+
         setAppStates(prev => ({ ...prev, [activeApp.family]: { data, loading: false, navStack: prev[activeApp.family]?.navStack } }));
       })
       .catch(() => {
