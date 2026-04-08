@@ -831,8 +831,17 @@ export async function startEnsoServer(opts: {
       const tools = createYouTubeTools();
       const unsubTool = tools.find((t) => t.name === "enso_youtube_unsubscribe");
       if (!unsubTool) throw new Error("YouTube unsubscribe tool not available");
-      const result = await unsubTool.execute("api-unsub", { channelIds: [channelId] });
-      const parsed = typeof result === "string" ? JSON.parse(result) : result;
+      const rawResult = await unsubTool.execute("api-unsub", { channelIds: [channelId] });
+      // Tool returns AgentToolResult: { content: [{ type: "text", text: "..." }] }
+      // Extract the JSON text from the content array
+      let parsed: Record<string, unknown>;
+      if (rawResult?.content?.[0]?.text) {
+        parsed = JSON.parse(rawResult.content[0].text);
+      } else if (typeof rawResult === "string") {
+        parsed = JSON.parse(rawResult);
+      } else {
+        parsed = rawResult as Record<string, unknown>;
+      }
       if (parsed.unsubscribed?.length > 0) {
         res.send(htmlPage(
           "Unsubscribed",
