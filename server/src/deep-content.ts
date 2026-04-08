@@ -983,9 +983,10 @@ export async function discoverNewBooks(count = 1, language?: string): Promise<Di
   if (searchThemes.length < 2) searchThemes.push(...topThemes.slice(0, 2));
 
   const queries = isChinese ? [
-    `最佳书籍 ${searchThemes.slice(0, 2).join(" ")} 2024 2025 推荐`,
-    `必读好书 ${searchThemes.slice(1, 3).join(" ")} 高分推荐`,
-    `${searchThemes[0]} 值得一读的书 豆瓣高分`,
+    `2024 2025 年度好书推荐 豆瓣高分 必读`,
+    `${searchThemes.slice(0, 2).join(" ")} 最新好书推荐 值得一读`,
+    `${searchThemes[0]} 书单推荐 深度好书 2024`,
+    `科技 商业 思维 新书推荐 豆瓣 2025`,
   ] : [
     `best books ${searchThemes.slice(0, 2).join(" ")} 2024 2025 recommendations`,
     `must read books ${searchThemes.slice(1, 3).join(" and ")} highly rated`,
@@ -1050,7 +1051,7 @@ Based on these web search results about recommended books:
 
 ${enriched.join("\n\n---\n\n")}
 
-Select ${count} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
+Select ${Math.max(count + 2, 3)} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
 - Are COMPLETELY DIFFERENT from books they already own or have podcasts for — no variant editions, translations, or related titles
 - Are highly acclaimed and substantive (not pop/superficial)
 - Match their core interests but EXPAND their thinking in new, surprising directions
