@@ -819,42 +819,60 @@ export async function startEnsoServer(opts: {
   });
 
   // ── Daily Book Recommendation Pipeline API ──
-  // Finds the best unprocessed book, generates deep podcast, sends email
+  // Discovers a new book based on Cortex interests, generates deep podcast, sends email
   app.post("/api/book-recommendation/daily", async (req, res) => {
     try {
-      const { recommendUnprocessedEntities, generateDeepContent, getProcessedContent, buildEntityEmailHtml } = await import("./deep-content.js");
+      const { discoverNewBooks, generateDeepContent, buildEntityEmailHtml } = await import("./deep-content.js");
+      const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
       const { sendHtmlEmail } = await import("./email.js");
 
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: "Daily book recommendation pipeline started" });
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: "Daily book discovery pipeline started" });
 
-      // Step 1: Find the best unprocessed book
-      const recommendations = await recommendUnprocessedEntities(1);
-      if (!recommendations.length) {
-        res.json({ success: false, message: "No unprocessed books available — all books have been deep-processed!" });
+      // Step 1: Discover a new book via web search + LLM
+      const discoveries = await discoverNewBooks(1);
+      if (!discoveries.length) {
+        res.json({ success: false, message: "Could not discover a new book recommendation today — try again tomorrow" });
         return;
       }
-      const rec = recommendations[0];
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Selected: ${rec.title} (${rec.entityId}) — ${rec.reason}` });
+      const book = discoveries[0];
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Discovered: "${book.title}" by ${book.author} — ${book.whyRecommended}` });
 
-      // Send immediate response so the caller doesn't timeout (pipeline takes 15-30 min)
-      res.json({ success: true, message: `Processing "${rec.title}" — podcast + email will be sent when ready`, entityId: rec.entityId, title: rec.title, reason: rec.reason });
+      // Step 2: Create entity in Cortex (so deep content pipeline can resolve it)
+      await ingestDiscoveredEntity({
+        title: book.title,
+        type: "book",
+        source: "research",
+        creator: book.author,
+        year: book.year,
+        description: book.description,
+      });
 
-      // Step 2: Generate deep content (runs in background)
+      // Send immediate response (pipeline takes 15-30 min)
+      res.json({
+        success: true,
+        message: `Discovered "${book.title}" by ${book.author} — generating podcast + email`,
+        entityId: book.entityId,
+        title: book.title,
+        author: book.author,
+        whyRecommended: book.whyRecommended,
+      });
+
+      // Step 3: Generate deep content (runs in background)
       const processed = await generateDeepContent({
-        entityId: rec.entityId,
+        entityId: book.entityId,
         onProgress: (p) => {
-          logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${rec.title}: ${p.phase} (${p.percentComplete}%)` });
+          logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${book.title}: ${p.phase} (${p.percentComplete}%)` });
         },
       });
 
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${rec.title} — ${processed.durationMinutes} min` });
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${book.title} — ${processed.durationMinutes} min` });
 
-      // Step 3: Build and send email
+      // Step 4: Build and send email with podcast + Add to Cortex button
       const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
       const emailHtml = buildEntityEmailHtml(processed, baseUrl);
       const emailResult = await sendHtmlEmail({
         to: "kkwong@xiaomi.com",
-        subject: `📚 Daily Book Recommendation: ${rec.title} — ${processed.durationMinutes} min AI Podcast Ready`,
+        subject: `📚 New Book Discovery: ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
         html: emailHtml,
       });
 

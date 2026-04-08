@@ -879,11 +879,194 @@ export async function processEntityBatch(params: {
 
 // ─── Email Sharing ───────────────────────────────────────────────────────────
 
-// ─── Book Recommendations (for scheduled tasks) ────────────────────────────
+// ─── Book Discovery (for scheduled tasks) ────────────────────────────────────
+
+interface DiscoveredBook {
+  title: string;
+  author: string;
+  year?: string;
+  description: string;
+  whyRecommended: string;
+  entityId: string;
+}
 
 /**
- * Select N unprocessed books that best match the user's Cortex interests.
- * Uses tag overlap between books and Cortex theme distribution.
+ * Discover NEW books the user hasn't read — based on Cortex interests + web search + LLM.
+ *
+ * Pipeline:
+ *   1. Read top Cortex themes and existing books (to exclude)
+ *   2. Web search for book recommendations matching interests
+ *   3. LLM selects the best book the user doesn't already have
+ *   4. Returns structured recommendation with entityId ready for deep processing
+ */
+export async function discoverNewBooks(count = 1): Promise<DiscoveredBook[]> {
+  // Step 1: Read Cortex themes
+  let topThemes: string[] = [];
+  try {
+    const indexPath = join(homedir(), ".enso", "wiki", "_index.md");
+    if (existsSync(indexPath)) {
+      const idx = readFileSync(indexPath, "utf-8");
+      const themeMatches = idx.matchAll(/Themes:\s*(.+)/g);
+      const themeCounts: Record<string, number> = {};
+      for (const m of themeMatches) {
+        m[1].split(",").forEach(t => {
+          const theme = t.trim().toLowerCase();
+          if (theme) themeCounts[theme] = (themeCounts[theme] || 0) + 1;
+        });
+      }
+      topThemes = Object.entries(themeCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(e => e[0]);
+    }
+  } catch { /* ignore */ }
+
+  if (!topThemes.length) {
+    topThemes = ["technology", "leadership", "innovation", "business strategy"];
+  }
+
+  // Step 2: Collect existing book titles to exclude
+  const existingTitles = new Set<string>();
+  try {
+    const kindlePath = join(homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json");
+    if (existsSync(kindlePath)) {
+      const kindle = JSON.parse(readFileSync(kindlePath, "utf-8"));
+      for (const b of kindle.books || []) {
+        if (b.title) existingTitles.add(b.title.toLowerCase());
+      }
+    }
+  } catch { /* ignore */ }
+  // Also exclude already-discovered books
+  try {
+    const eiPath = join(homedir(), ".enso", "data", "entity-index.json");
+    if (existsSync(eiPath)) {
+      const idx = JSON.parse(readFileSync(eiPath, "utf-8"));
+      for (const entry of Object.values(idx) as Array<{ source?: string; type?: string; title?: string }>) {
+        if (entry.source === "research" && entry.type === "book" && entry.title) {
+          existingTitles.add(entry.title.toLowerCase());
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  // Also exclude already-processed books
+  const processedIds = new Set(listProcessedContent());
+
+  logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: `Discovering books for themes: ${topThemes.slice(0, 5).join(", ")}. Excluding ${existingTitles.size} known books.` });
+
+  // Step 3: Web search for book recommendations
+  // Pick 3-4 themes to search (rotate daily for variety)
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+  const themeOffset = dayOfYear % Math.max(1, topThemes.length - 3);
+  const searchThemes = topThemes.slice(themeOffset, themeOffset + 4);
+  if (searchThemes.length < 2) searchThemes.push(...topThemes.slice(0, 2));
+
+  const queries = [
+    `best books ${searchThemes.slice(0, 2).join(" ")} 2024 2025 recommendations`,
+    `must read books ${searchThemes.slice(1, 3).join(" and ")} highly rated`,
+    `new important books ${searchThemes[0]} thought-provoking`,
+  ];
+
+  const allResults: Array<{ title: string; description: string; url: string }> = [];
+  for (const q of queries) {
+    try {
+      const results = await braveWebSearch(q, 5);
+      allResults.push(...results);
+    } catch { /* ignore individual failures */ }
+  }
+
+  if (!allResults.length) {
+    logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: "Web search returned no results" });
+    return [];
+  }
+
+  // Fetch content from top results for richer context
+  const enriched: string[] = [];
+  for (const r of allResults.slice(0, 8)) {
+    try {
+      const content = await fetchPageContent(r.url);
+      if (content && content.length > 100) {
+        enriched.push(`[${r.title}]\n${content.slice(0, 1500)}`);
+      } else {
+        enriched.push(`[${r.title}] ${r.description}`);
+      }
+    } catch {
+      enriched.push(`[${r.title}] ${r.description}`);
+    }
+  }
+
+  // Step 4: LLM picks the best book
+  const existingList = [...existingTitles].slice(0, 100).join(", ");
+  const prompt = `You are a personal book curator. Your client's top interests are: ${topThemes.join(", ")}.
+
+They already own these books (DO NOT recommend any of these): ${existingList || "none known"}
+
+Based on these web search results about recommended books:
+
+${enriched.join("\n\n---\n\n")}
+
+Select ${count} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
+- Are highly acclaimed and substantive (not pop/superficial)
+- Match their core interests but may expand their thinking in new directions
+- They are unlikely to already know about (avoid obvious bestsellers they'd have)
+- Have enough depth to support a 20-30 minute podcast discussion
+
+Return valid JSON (no markdown fences):
+{
+  "books": [
+    {
+      "title": "exact book title",
+      "author": "author name",
+      "year": "publication year or null",
+      "description": "2-3 sentence description of the book's key ideas",
+      "whyRecommended": "1-2 sentences on why this book specifically matches their interests and what new perspective it offers"
+    }
+  ]
+}
+
+CRITICAL: Return ONLY valid JSON. Pick real, existing books with correct authors.`;
+
+  try {
+    const raw = await llm({ prompt, tier: "utility", timeoutMs: 30000 });
+    const cleaned = raw.replace(/^```(?:json)?\s*\n?/m, "").replace(/\n?```\s*$/m, "").trim();
+    const parsed = JSON.parse(cleaned) as { books: Array<{ title: string; author: string; year?: string; description: string; whyRecommended: string }> };
+
+    if (!parsed.books?.length) return [];
+
+    const results: DiscoveredBook[] = [];
+    for (const book of parsed.books.slice(0, count)) {
+      if (!book.title || !book.author) continue;
+      // Skip if user already has it
+      if (existingTitles.has(book.title.toLowerCase())) continue;
+
+      const slug = book.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+      const entityId = `research:book:${slug}`;
+
+      // Skip if already processed
+      if (processedIds.has(entityId)) continue;
+
+      results.push({
+        title: book.title,
+        author: book.author,
+        year: book.year || undefined,
+        description: book.description,
+        whyRecommended: book.whyRecommended,
+        entityId,
+      });
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: `Discovered ${results.length} new books: ${results.map(b => b.title).join(", ")}` });
+    return results;
+  } catch (err) {
+    logError("book-discovery", "LLM book selection failed", err);
+    return [];
+  }
+}
+
+// ─── Legacy Book Recommendations (from existing library) ─────────────────────
+
+/**
+ * Select N unprocessed books from the existing Kindle library that best match
+ * the user's Cortex interests. Uses tag overlap with Cortex theme distribution.
  */
 export async function recommendUnprocessedEntities(count = 3): Promise<Array<{ entityId: string; title: string; reason: string }>> {
   const { getEntitiesBySource } = await import("./entity-model.js");
@@ -964,6 +1147,13 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   parts.push(`<div style="background:#7c3aed;color:white;padding:16px;border-radius:8px;margin-bottom:16px;text-align:center;">`);
   parts.push(`<p style="margin:0 0 8px;font-size:16px;font-weight:600;">🎙️ Listen to the AI Podcast (${processed.durationMinutes} min)</p>`);
   parts.push(`<a href="${escapeHtml(podcastUrl)}" style="display:inline-block;background:white;color:#7c3aed;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">▶ Play / Download Podcast</a>`);
+  parts.push(`</div>`);
+
+  // Add to Cortex CTA (for discovered books)
+  const quickAddUrl = `${baseUrl}/api/cortex/quick-add?title=${encodeURIComponent(processed.title)}&type=book&creator=${encodeURIComponent(processed.author)}`;
+  parts.push(`<div style="background:#059669;color:white;padding:12px 16px;border-radius:8px;margin-bottom:16px;text-align:center;">`);
+  parts.push(`<p style="margin:0 0 6px;font-size:13px;">Like this recommendation? Save it to your knowledge base.</p>`);
+  parts.push(`<a href="${escapeHtml(quickAddUrl)}" style="display:inline-block;background:white;color:#059669;padding:8px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">📥 Add to My Cortex</a>`);
   parts.push(`</div>`);
 
   // Core Thesis
