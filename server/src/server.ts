@@ -946,6 +946,12 @@ export async function startEnsoServer(opts: {
           : [`best movies ${searchThemes.slice(0, 2).join(" ")} 2024 2025 recommendations`, `must watch films ${searchThemes[0]} thought provoking`, `critically acclaimed movies ${searchThemes[1] || "drama"}`],
         game: [`best games ${searchThemes[0]} 2024 2025`, `must play games ${searchThemes.slice(0, 2).join(" ")}`, `critically acclaimed games deep narrative`],
         channel: [`best youtube channels ${searchThemes[0]} educational`, `top youtube creators ${searchThemes.slice(0, 2).join(" ")} 2024`, `underrated youtube channels ${searchThemes[1] || "science"}`],
+        article: isChinese
+          ? [`${searchThemes[0]} 最新深度文章 2025 2026`, `${searchThemes.slice(0, 2).join(" ")} 重磅分析`, `科技商业 深度报道 值得一读`]
+          : [`best ${searchThemes[0]} articles 2025 2026 in-depth`, `${searchThemes.slice(0, 2).join(" ")} analysis longread`, `thought provoking ${searchThemes[1] || "technology"} article must read`],
+        place: isChinese
+          ? [`${searchThemes[0]} 旅行目的地推荐 小众`, `值得一去的地方 文化 摄影`, `深度旅行 独特体验 2025`]
+          : [`hidden gem travel destinations ${searchThemes[0]}`, `best places to visit ${searchThemes.slice(0, 2).join(" ")} culture photography`, `unique travel experiences off the beaten path 2025`],
       };
       const queries = queryTemplates[contentType] || queryTemplates.movie;
 
