@@ -724,10 +724,10 @@ export async function startEnsoServer(opts: {
   });
 
   // ── App Templates API (for Cortex tab — renders app UIs directly) ──
-  app.get("/api/apps/templates", (_req, res) => {
+  app.get("/api/apps/templates", async (_req, res) => {
     try {
-      const { loadAllApps } = require("./app-persistence.js") as { loadAllApps: () => Array<{ spec: { toolFamily: string; toolPrefix: string; description?: string; signatureId?: string; tools: Array<{ suffix: string; isPrimary?: boolean; parameters?: unknown }> }; templateJSX?: string }> };
-      const allApps = loadAllApps();
+      const { loadAllApps } = await import("./app-persistence.js");
+      const allApps = loadAllApps() as Array<{ spec: { toolFamily: string; toolPrefix: string; description?: string; signatureId?: string; tools: Array<{ suffix: string; isPrimary?: boolean; parameters?: unknown }> }; templateJSX?: string }>;
 
       // Content apps to surface in the Cortex tab
       const cortexApps: Record<string, { label: string; icon: string; order: number }> = {
