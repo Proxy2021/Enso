@@ -205,7 +205,8 @@ function ensureDirs(): void {
 }
 
 function slugFromEntityId(entityId: string): string {
-  return entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80);
+  // Preserve Unicode characters (Chinese, Japanese, etc.) in filenames
+  return entityId.replace(/[^\p{L}\p{N}-]/gu, "_").slice(0, 120);
 }
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
@@ -213,19 +214,23 @@ function slugFromEntityId(entityId: string): string {
 export function getProcessedContent(entityId: string): ProcessedContent | null {
   ensureDirs();
   const slug = slugFromEntityId(entityId);
+  // Also try the old ASCII-only slug for backward compatibility
+  const oldSlug = entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80);
 
   // Search in both new (deep-content/) and old (kindle/podcasts/) directories
   const OLD_KINDLE_DIR = join(homedir(), ".enso", "data", "kindle", "podcasts");
   const searchDirs = [CONTENT_DIR, OLD_KINDLE_DIR];
 
   for (const dir of searchDirs) {
-    // Try exact match first
-    const exactPath = join(dir, `${slug}.json`);
-    try {
-      if (existsSync(exactPath)) {
-        return JSON.parse(readFileSync(exactPath, "utf-8")) as ProcessedContent;
-      }
-    } catch { /* continue */ }
+    // Try exact match with new Unicode slug first
+    for (const trySlug of [slug, oldSlug]) {
+      const exactPath = join(dir, `${trySlug}.json`);
+      try {
+        if (existsSync(exactPath)) {
+          return JSON.parse(readFileSync(exactPath, "utf-8")) as ProcessedContent;
+        }
+      } catch { /* continue */ }
+    }
 
     // Try prefix match (handles different slug truncation lengths)
     try {
