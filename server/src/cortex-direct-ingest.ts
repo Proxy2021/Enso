@@ -13,7 +13,7 @@ import { homedir } from "os";
 import { DATA_SOURCES, readCache, type DirectIngestPage } from "./data-source-registry.js";
 import { logAction, logError } from "./action-log.js";
 import {
-  slugify, buildEntityId, entityCortexPath, ENTITY_TYPES,
+  slugify, buildEntityId, entityCortexPath, parseEntityId, ENTITY_TYPES,
   upsertEntityIndex, saveEntityIndex, lookupEntity,
   type EntityType, type EntitySource,
 } from "./entity-model.js";
@@ -266,4 +266,100 @@ export async function ingestDiscoveredEntity(opts: {
   });
 
   return { entityId, cortexPath, created: true };
+}
+
+// ─── Book Enrichment via Google Books API ────────────────────────────────────
+
+/**
+ * Enrich a discovered/manually-added book with metadata from Google Books API.
+ * Updates the Cortex wiki page and entity index with rich metadata:
+ * description, rating, categories, pageCount, publisher, publishedDate, ISBN, cover.
+ *
+ * Fire-and-forget safe — call after ingestDiscoveredEntity() for books.
+ */
+export async function enrichDiscoveredBook(entityId: string): Promise<boolean> {
+  try {
+    const parsed = parseEntityId(entityId);
+    if (!parsed || parsed.type !== "book") return false;
+
+    const cortexPath = entityCortexPath(entityId);
+    if (!cortexPath) return false;
+    const fullPath = join(CORTEX_DIR, cortexPath);
+    if (!existsSync(fullPath)) return false;
+
+    const content = readFileSync(fullPath, "utf-8");
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    const title = titleMatch ? titleMatch[1].trim() : parsed.slug;
+    const authorMatch = content.match(/\*\*(?:By\s+)?(.+?)\*\*/);
+    const author = authorMatch ? authorMatch[1].replace(/^By\s+/, "").trim() : "";
+
+    // Search Google Books API (free, no key)
+    const query = author
+      ? `intitle:${encodeURIComponent(title)}+inauthor:${encodeURIComponent(author)}`
+      : encodeURIComponent(title + " book");
+
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return false;
+
+    const data = await res.json() as {
+      items?: Array<{ volumeInfo?: Record<string, unknown> }>;
+    };
+    if (!data.items?.length) return false;
+
+    const vol = data.items[0].volumeInfo as {
+      title?: string; authors?: string[]; description?: string; publisher?: string;
+      publishedDate?: string; pageCount?: number; categories?: string[];
+      averageRating?: number; ratingsCount?: number; language?: string;
+      imageLinks?: { thumbnail?: string }; industryIdentifiers?: Array<{ type: string; identifier: string }>;
+    } | undefined;
+    if (!vol) return false;
+
+    const enrichedAuthor = author || (vol.authors?.join(", ") ?? "Unknown");
+    const isbn = vol.industryIdentifiers?.find(id => id.type === "ISBN_13")?.identifier
+      || vol.industryIdentifiers?.find(id => id.type === "ISBN_10")?.identifier || "";
+    const coverUrl = vol.imageLinks?.thumbnail?.replace("http://", "https://") || "";
+    const desc = vol.description?.replace(/<[^>]+>/g, "").slice(0, 1000) || "";
+
+    // Rebuild enriched page
+    const lines: string[] = [`# ${title}\n`];
+    lines.push(`By **${enrichedAuthor}**.${vol.publisher ? ` Published by ${vol.publisher}` : ""}${vol.publishedDate ? `, ${vol.publishedDate}` : ""}.${vol.pageCount ? ` ${vol.pageCount} pages.` : ""}\n`);
+    if (vol.averageRating) lines.push(`⭐ ${vol.averageRating}${vol.ratingsCount ? ` (${vol.ratingsCount.toLocaleString()} ratings)` : ""}${vol.categories?.length ? ` · ${vol.categories.join(", ")}` : ""}\n`);
+    if (desc) { lines.push("## Overview\n"); lines.push(desc + "\n"); }
+    lines.push("## Details");
+    lines.push(`- **Author**: ${enrichedAuthor}`);
+    lines.push(`- **Source**: Discovered`);
+    if (vol.publisher) lines.push(`- **Publisher**: ${vol.publisher}`);
+    if (vol.publishedDate) lines.push(`- **Published**: ${vol.publishedDate}`);
+    if (vol.pageCount) lines.push(`- **Pages**: ${vol.pageCount}`);
+    if (vol.language) lines.push(`- **Language**: ${vol.language}`);
+    if (isbn) lines.push(`- **ISBN**: ${isbn}`);
+    if (coverUrl) lines.push(`- **Cover**: ![cover](${coverUrl})`);
+    if (vol.categories?.length) { lines.push("\n## Categories"); for (const c of vol.categories) lines.push(`- ${c}`); }
+    lines.push(`\n*Enriched: ${new Date().toISOString().split("T")[0]}*`);
+
+    writeFileSync(fullPath, lines.join("\n"), "utf-8");
+
+    // Update index
+    const page: DirectIngestPage = {
+      path: cortexPath, title, content: lines.join("\n"),
+      summary: desc.slice(0, 200) || `${title} by ${enrichedAuthor}`,
+      tags: ["book", parsed.source, "enriched", ...(vol.categories || []).map(c => c.toLowerCase())],
+      entityId,
+    };
+    updateIndexEntry(page);
+
+    upsertEntityIndex({
+      entityId, type: "book" as EntityType, source: parsed.source as EntitySource,
+      title, slug: parsed.slug, imageUrl: coverUrl, cortexPath,
+      tags: page.tags, updatedAt: new Date().toISOString(),
+    });
+    saveEntityIndex();
+
+    logAction({ ts: Date.now(), type: "action", category: "book-enrich",
+      message: `Enriched "${title}": ${vol.pageCount || "?"} pages, rating ${vol.averageRating || "?"}, ${vol.categories?.join(", ") || "no categories"}` });
+    return true;
+  } catch (err) {
+    logError("book-enrich", `Failed to enrich ${entityId}`, err);
+    return false;
+  }
 }

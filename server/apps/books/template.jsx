@@ -5,6 +5,7 @@ function GeneratedUI({ data, onAction }) {
   var isSearch = tool === "enso_books_search" || tool === "enso_kindle_search";
   var isScan = tool === "enso_books_scan_kindle" || tool === "enso_books_scan_weread" || tool === "enso_kindle_scan" || tool === "enso_context_scan_weread";
   var isEnrich = tool === "enso_books_enrich" || tool === "enso_kindle_enrich";
+  var isAddResults = tool === "enso_books_add";
   var isEntityDetail = tool === "entity_detail" || !!d.focusEntity;
 
   // Hooks MUST be at top level — never inside conditionals
@@ -12,6 +13,7 @@ function GeneratedUI({ data, onAction }) {
   var [sortBy, setSortBy] = React.useState(d.sortBy || "publicationDate");
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [activeTab, setActiveTab] = React.useState(d.tab || "all");
+  var [addBookInput, setAddBookInput] = React.useState("");
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
   var navStack = d.navStack || [];
@@ -284,6 +286,58 @@ function GeneratedUI({ data, onAction }) {
     );
   }
 
+  // ── Add Book search results ──
+  if (isAddResults) {
+    var addResults = Array.isArray(d.results) ? d.results : [];
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {breadcrumb}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <span style={{ fontSize: "20px", marginRight: "8px" }}>🔍</span>
+            <span style={{ fontWeight: 600 }}>Add Book</span>
+            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>
+              {addResults.length > 0 ? addResults.length + " results for \"" + d.query + "\"" : "No results found"}
+            </span>
+          </div>
+          <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>← Library</Button>
+        </div>
+        {d.error && <UICard style={{ borderColor: "#ef444444" }}><div style={{ color: "#ef4444", fontSize: "13px" }}>{d.error}</div></UICard>}
+        {addResults.map(function(r, i) {
+          return (
+            <UICard key={i} style={{ padding: "12px" }}>
+              <div style={{ display: "flex", gap: "12px" }}>
+                {r.coverUrl && (
+                  <img src={r.coverUrl} alt={r.title} style={{ width: "60px", height: "90px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>{r.title}{r.subtitle ? ": " + r.subtitle : ""}</div>
+                  <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{r.author}{r.publishedDate ? " · " + r.publishedDate : ""}{r.publisher ? " · " + r.publisher : ""}</div>
+                  {r.rating > 0 && (
+                    <div style={{ fontSize: "11px", color: "#f59e0b", marginTop: "3px" }}>
+                      {"⭐ " + r.rating}{r.ratingsCount ? " (" + r.ratingsCount + " ratings)" : ""}{r.pageCount ? " · " + r.pageCount + " pages" : ""}
+                    </div>
+                  )}
+                  {r.categories && r.categories.length > 0 && (
+                    <div style={{ display: "flex", gap: "3px", flexWrap: "wrap", marginTop: "3px" }}>
+                      {r.categories.slice(0, 3).map(function(c) { return <Badge key={c} variant="secondary" style={{ fontSize: "9px", padding: "1px 5px" }}>{c}</Badge>; })}
+                    </div>
+                  )}
+                  {r.description && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: 1.4 }}>{r.description.slice(0, 200)}{r.description.length > 200 ? "..." : ""}</div>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0, justifyContent: "center" }}>
+                  <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() {
+                    onAction("add_to_cortex", { title: r.title, type: "book", creator: r.author, year: r.publishedDate, description: r.description, imageUrl: r.coverUrl });
+                  }}>📥 Add to Library</Button>
+                </div>
+              </div>
+            </UICard>
+          );
+        })}
+      </div>
+    );
+  }
+
   // ── Search results ──
   if (isSearch) {
     var results = d.results || [];
@@ -374,6 +428,7 @@ function GeneratedUI({ data, onAction }) {
             <Button variant="outline" size="sm" onClick={function() { onAction("scan_kindle", {}); }}>📱 Kindle</Button>
             <Button variant="outline" size="sm" onClick={function() { onAction("scan_weread", {}); }}>📖 WeRead</Button>
             <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>✨ Enrich</Button>
+            <Button variant="default" size="sm" onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>➕ Add Book</Button>
           </div>
         </div>
 
@@ -395,10 +450,22 @@ function GeneratedUI({ data, onAction }) {
           })}
         </div>
 
+        {/* Add Book search bar */}
+        <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
+          <Input
+            placeholder="Add a new book — search by title, author, or ISBN..."
+            value={addBookInput}
+            onChange={function(e) { setAddBookInput(e.target.value); }}
+            onKeyDown={function(e) { if (e.key === "Enter" && addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}
+            style={{ flex: 1, fontSize: "12px" }}
+          />
+          <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>🔍 Search & Add</Button>
+        </div>
+
         {/* Search bar + Sort */}
         <div style={{ display: "flex", gap: "8px" }}>
           <Input
-            placeholder="Search by title, author, or topic..."
+            placeholder="Filter library by title, author, or topic..."
             value={searchInput}
             onChange={function(e) { setSearchInput(e.target.value); }}
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy, page: 1, tab: activeTab }); }}

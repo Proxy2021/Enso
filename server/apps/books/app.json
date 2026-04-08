@@ -91,6 +91,22 @@
         }
       },
       {
+        "suffix": "add",
+        "label": "Add Book",
+        "description": "Search for a book by title, author, or ISBN and add it to your library with full metadata enrichment from Google Books.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Book title, author name, or ISBN to search for"
+            }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
         "suffix": "enrich",
         "label": "Enrich Kindle Metadata",
         "description": "Fetch rich metadata (descriptions, ratings, categories, page counts) from Amazon product pages for Kindle books.",

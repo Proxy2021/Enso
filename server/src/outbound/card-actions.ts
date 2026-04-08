@@ -1083,6 +1083,13 @@ export async function handlePluginCardAction(params: {
         url: p.url ? String(p.url) : undefined,
       });
 
+      // Auto-enrich books with Google Books metadata (fire-and-forget)
+      if (type === "book" && result.created) {
+        import("../cortex-direct-ingest.js").then(mod => {
+          if (mod.enrichDiscoveredBook) mod.enrichDiscoveredBook(result.entityId).catch(() => {});
+        }).catch(() => {});
+      }
+
       // Track added entities in card data so template can show checkmarks
       const currentData = ctx.currentData as Record<string, unknown>;
       const added = Array.isArray(currentData._addedToCortex) ? [...currentData._addedToCortex as string[]] : [];
