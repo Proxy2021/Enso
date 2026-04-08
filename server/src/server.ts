@@ -904,12 +904,10 @@ export async function startEnsoServer(opts: {
         description: req.query.description ? decodeURIComponent(req.query.description as string) : undefined,
       });
       if (result.created) {
-        // Auto-enrich books with Google Books metadata (fire-and-forget)
-        if (type === "book") {
-          import("./cortex-direct-ingest.js").then(mod => {
-            if (mod.enrichDiscoveredBook) mod.enrichDiscoveredBook(result.entityId).catch(() => {});
-          }).catch(() => {});
-        }
+        // Auto-enrich with type-appropriate API metadata (fire-and-forget)
+        import("./content-enrichment.js").then(mod => {
+          mod.enrichEntity(result.entityId).catch(() => {});
+        }).catch(() => {});
         res.send(htmlPage("Added to Cortex", `"${title}" has been added to your Knowledge Cortex as a ${type}. Metadata enrichment is running in the background.`, "success"));
       } else {
         res.send(htmlPage("Already in Cortex", `"${title}" already exists in your Knowledge Cortex.`, "success"));

@@ -86,6 +86,19 @@
         }
       },
       {
+        "suffix": "add",
+        "label": "Add Channel",
+        "description": "Search for a YouTube channel by name and add it to your Cortex with metadata.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Channel name to search for" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
         "suffix": "analytics",
         "description": "Subscription analytics: category distribution, channel health, engagement insights",
         "parameters": {

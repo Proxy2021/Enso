@@ -946,6 +946,36 @@ export async function handlePluginCardAction(params: {
         } catch { /* deep-content not available, skip */ }
       }
 
+      // Add cross-type related entities via Cortex keyword search (zero LLM, fast)
+      if (detailData) {
+        try {
+          const { findRelatedContent } = await import("../cortex-synthesis.js");
+          const entityTitle = (detailData.entity as Record<string, unknown>)?.title as string || "";
+          if (entityTitle) {
+            const related = await findRelatedContent(entityTitle);
+            const crossType: Array<Record<string, unknown>> = [];
+            const entityType = (detailData.entity as Record<string, unknown>)?.type as string || "";
+            for (const [source, hits] of Object.entries(related.relatedContent?.bySource || {})) {
+              for (const hit of (hits as Array<{ title: string; entityId?: string; type?: string; reason?: string }>).slice(0, 3)) {
+                // Skip same-type entities
+                if (hit.type === entityType) continue;
+                crossType.push({ title: hit.title, entityId: hit.entityId, type: hit.type || source, reason: hit.reason });
+              }
+            }
+            // Also add from cortex pages
+            for (const page of (related.relatedContent?.cortexPages || []).slice(0, 5)) {
+              const p = page as { title: string; entityId?: string; type?: string };
+              if (p.type !== entityType) {
+                crossType.push({ title: p.title, entityId: p.entityId, type: p.type || "cortex" });
+              }
+            }
+            if (crossType.length > 0) {
+              detailData.crossTypeEntities = crossType.slice(0, 8);
+            }
+          }
+        } catch { /* cortex synthesis not available */ }
+      }
+
       if (!detailData) {
         sendOperation("error", "Entity not found");
         client.send({
@@ -1083,10 +1113,10 @@ export async function handlePluginCardAction(params: {
         url: p.url ? String(p.url) : undefined,
       });
 
-      // Auto-enrich books with Google Books metadata (fire-and-forget)
-      if (type === "book" && result.created) {
-        import("../cortex-direct-ingest.js").then(mod => {
-          if (mod.enrichDiscoveredBook) mod.enrichDiscoveredBook(result.entityId).catch(() => {});
+      // Auto-enrich with type-appropriate API metadata (fire-and-forget)
+      if (result.created) {
+        import("../content-enrichment.js").then(mod => {
+          mod.enrichEntity(result.entityId).catch(() => {});
         }).catch(() => {});
       }
 
