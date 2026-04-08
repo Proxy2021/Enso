@@ -723,6 +723,76 @@ export async function startEnsoServer(opts: {
     } catch { res.json([]); }
   });
 
+  // ── App Templates API (for Cortex tab — renders app UIs directly) ──
+  app.get("/api/apps/templates", (_req, res) => {
+    try {
+      const { loadAllApps } = require("./app-persistence.js") as { loadAllApps: () => Array<{ spec: { toolFamily: string; toolPrefix: string; description?: string; signatureId?: string; tools: Array<{ suffix: string; isPrimary?: boolean; parameters?: unknown }> }; templateJSX?: string }> };
+      const allApps = loadAllApps();
+
+      // Content apps to surface in the Cortex tab
+      const cortexApps: Record<string, { label: string; icon: string; order: number }> = {
+        books: { label: "Books", icon: "📚", order: 1 },
+        movies_tv: { label: "Movies", icon: "🎬", order: 2 },
+        steam: { label: "Games", icon: "🎮", order: 3 },
+        youtube_manager: { label: "YouTube", icon: "📺", order: 4 },
+        articles: { label: "Articles", icon: "📰", order: 5 },
+        travel: { label: "Travel", icon: "🌍", order: 6 },
+        cortex: { label: "Knowledge", icon: "🧠", order: 7 },
+      };
+
+      const result = allApps
+        .filter(a => cortexApps[a.spec.toolFamily])
+        .map(a => {
+          const meta = cortexApps[a.spec.toolFamily];
+          const primaryTool = a.spec.tools.find(t => t.isPrimary) || a.spec.tools[0];
+          return {
+            family: a.spec.toolFamily,
+            label: meta.label,
+            icon: meta.icon,
+            order: meta.order,
+            templateJSX: a.templateJSX || "",
+            primaryTool: `${a.spec.toolPrefix}${primaryTool.suffix}`,
+            primaryParams: {},
+          };
+        })
+        .sort((a, b) => a.order - b.order);
+
+      res.json({ apps: result });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── App Tool Runner API (for Cortex tab — runs app tools directly) ──
+  app.post("/api/apps/run", async (req, res) => {
+    try {
+      const toolId = req.query.tool as string;
+      if (!toolId) { res.status(400).json({ error: "Missing tool parameter" }); return; }
+
+      const { getGeneratedToolExecutor } = await import("./native-tools/registry.js");
+      const executor = getGeneratedToolExecutor(toolId);
+      if (!executor) {
+        res.status(404).json({ error: `Tool not found: ${toolId}`, tool: toolId });
+        return;
+      }
+
+      const params = req.body || {};
+      const result = await executor("api-run", params);
+
+      // Extract data from AgentToolResult format
+      if (result?.content?.[0]?.text) {
+        try {
+          const parsed = JSON.parse(result.content[0].text);
+          res.json(parsed);
+          return;
+        } catch { /* fall through */ }
+      }
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── Podcast Streaming API (for email sharing) ──
   app.get("/api/podcast/stream/:slug", (req, res) => {
     const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");

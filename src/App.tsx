@@ -10,6 +10,7 @@ import DataSourceOnboarding from "./components/DataSourceOnboarding";
 import { DesktopTabRail, MobileTabBar, TabHeader } from "./components/TabNavigation";
 import MobileConversationList from "./components/MobileConversationList";
 import TasksView from "./components/TasksView";
+import CortexView from "./components/CortexView";
 import EvolveView from "./components/EvolveView";
 import ProjectsView from "./components/ProjectsView";
 import SettingsView from "./components/SettingsView";
@@ -216,6 +217,10 @@ function TabContent() {
         </div>
       </>
     );
+  }
+
+  if (activeTab === "cortex") {
+    return <CortexView />;
   }
 
   if (activeTab === "tasks") {

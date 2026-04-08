@@ -4,7 +4,7 @@ import { useT } from "../lib/i18n";
 import SettingsPanel from "./SettingsPanel";
 import DebugReporter from "./DebugReporter";
 
-type TabId = "chat" | "tasks" | "evolve" | "projects" | "me";
+type TabId = "chat" | "cortex" | "tasks" | "evolve" | "projects" | "me";
 
 /** Controls-only header bar for tabs that need action buttons. Desktop only.
  *  No title — the active tab in the rail already labels the view. */
@@ -79,8 +79,22 @@ function MeIcon({ active }: { active: boolean }) {
   );
 }
 
+function CortexIcon({ active }: { active: boolean }) {
+  return (
+    <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? 0 : 1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a6 6 0 0 0-6 6c0 1.5.5 2.8 1.4 3.8A6 6 0 0 0 6 16c0 2.2 1.2 4.2 3 5.2" />
+      <path d="M12 2a6 6 0 0 1 6 6c0 1.5-.5 2.8-1.4 3.8A6 6 0 0 1 18 16c0 2.2-1.2 4.2-3 5.2" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M12 10V6" /><path d="M12 14v4" />
+      <path d="M10.5 11L7 9" /><path d="M13.5 13L17 15" />
+      <path d="M13.5 11L17 9" /><path d="M10.5 13L7 15" />
+    </svg>
+  );
+}
+
 const TABS: Array<{ id: TabId; labelKey: string; Icon: typeof ChatIcon }> = [
   { id: "chat", labelKey: "tab.chat", Icon: ChatIcon },
+  { id: "cortex", labelKey: "tab.cortex", Icon: CortexIcon },
   { id: "tasks", labelKey: "tab.tasks", Icon: TasksIcon },
   { id: "evolve", labelKey: "tab.evolve", Icon: EvolveIcon },
   { id: "projects", labelKey: "tab.projects", Icon: ProjectsIcon },
