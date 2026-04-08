@@ -366,24 +366,28 @@ function GeneratedUI({ data, onAction }) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {breadcrumb}
-        {/* Processed Books Banner */}
+        {/* Processed Books Banner — cover thumbnails */}
         {(d.processedBooks || []).length > 0 && (
-          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ fontSize: "16px" }}>🎙️</span>
-                <span style={{ fontSize: "13px", fontWeight: 600, color: "#c4b5fd" }}>Deep Podcasts Ready</span>
-                <Badge variant="secondary">{(d.processedBooks || []).length} books</Badge>
-              </div>
+          <UICard style={{ padding: "10px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "14px" }}>🎙️</span>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#c4b5fd" }}>Deep Podcasts</span>
+              <Badge variant="secondary" style={{ fontSize: "10px" }}>{(d.processedBooks || []).length}</Badge>
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
               {(d.processedBooks || []).map(function(pb) {
                 return (
-                  <div key={pb.entityId} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#1e1b4b", padding: "6px 10px", borderRadius: "8px", cursor: "pointer" }}
-                    onClick={function() { onAction("view_entity", { entityId: pb.entityId }); }}>
-                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0" }}>{pb.title}</span>
-                    <Badge variant="secondary" style={{ fontSize: "9px" }}>{pb.durationMinutes} min</Badge>
-                    <span style={{ fontSize: "9px", color: "#64748b" }}>{pb.chapters} ch · {pb.insights} insights</span>
+                  <div key={pb.entityId} style={{ position: "relative", flexShrink: 0, cursor: "pointer", borderRadius: "6px", overflow: "hidden", width: "52px", height: "76px", background: "#1e1b4b" }}
+                    onClick={function() { onAction("view_entity", { entityId: pb.entityId }); }}
+                    title={pb.title + " — " + pb.durationMinutes + " min"}>
+                    {pb.coverUrl ? (
+                      <img src={pb.coverUrl} alt={pb.title} style={{ width: "52px", height: "76px", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: "52px", height: "76px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", color: "#94a3b8", textAlign: "center", padding: "4px", lineHeight: 1.2 }}>{pb.title.slice(0, 20)}</div>
+                    )}
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.8))", padding: "2px 3px", textAlign: "center" }}>
+                      <span style={{ fontSize: "8px", color: "#c4b5fd", fontWeight: 600 }}>{pb.durationMinutes}m</span>
+                    </div>
                   </div>
                 );
               })}

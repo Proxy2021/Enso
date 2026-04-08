@@ -131,10 +131,26 @@ try {
             processedSlugs.add(slug);
             try {
               var meta = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8"));
+              // Find cover URL from entity index or book caches
+              var pbCover = "";
+              try {
+                var eiPath2 = path.join(os.homedir(), ".enso", "data", "entity-index.json");
+                if (fs.existsSync(eiPath2)) {
+                  var idx2 = JSON.parse(fs.readFileSync(eiPath2, "utf-8"));
+                  if (idx2[meta.entityId] && idx2[meta.entityId].imageUrl) pbCover = idx2[meta.entityId].imageUrl;
+                }
+              } catch(eIdx) {}
+              if (!pbCover) {
+                // Try finding from Kindle/WeRead cache
+                var allCacheBooks = kindleBooks.concat(wereadBooks);
+                var matchBook = allCacheBooks.find(function(cb) { return cb.title === meta.title; });
+                if (matchBook && matchBook.coverUrl) pbCover = matchBook.coverUrl;
+              }
               processedBooks.push({
                 entityId: meta.entityId,
                 title: meta.title,
                 author: meta.author,
+                coverUrl: pbCover,
                 durationMinutes: meta.durationMinutes,
                 processedAt: meta.processedAt,
                 source: meta.entityId ? meta.entityId.split(":")[0] : "kindle",
