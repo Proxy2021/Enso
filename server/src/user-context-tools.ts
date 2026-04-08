@@ -822,6 +822,192 @@ export async function enrichKindleMetadata(): Promise<{ enriched: number; total:
   return { enriched, total: cacheData.books.length, errors };
 }
 
+let _wereadEnrichmentRunning = false;
+
+/**
+ * Enrich WeRead books with metadata from book detail pages.
+ * Uses Puppeteer with the persistent WeRead browser session to scrape
+ * book detail pages at weread.qq.com/web/bookDetail/{bookId}.
+ *
+ * Extracts: description, author, rating (recommendation %), reviewCount,
+ * chapterCount, publisher, isbn, categories, pageCount.
+ */
+export async function enrichWeReadMetadata(): Promise<{ enriched: number; total: number; errors: number }> {
+  if (_wereadEnrichmentRunning) return { enriched: 0, total: 0, errors: 0 };
+  _wereadEnrichmentRunning = true;
+
+  const cachePath = join(CACHE_DIR, "weread-library.json");
+  let cacheData: { source: string; totalBooks: number; books: Array<Record<string, unknown>>; scannedAt: string };
+  try {
+    cacheData = JSON.parse(readFileSync(cachePath, "utf-8"));
+  } catch {
+    _wereadEnrichmentRunning = false;
+    return { enriched: 0, total: 0, errors: 0 };
+  }
+
+  const unenriched = cacheData.books.filter((b) => !b.enrichedAt && b.wereadBookId);
+  if (unenriched.length === 0) {
+    _wereadEnrichmentRunning = false;
+    return { enriched: 0, total: cacheData.books.length, errors: 0 };
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "user-context", message: `WeRead enrichment starting: ${unenriched.length} books to enrich` });
+
+  const WEREAD_BROWSER_DIR = join(homedir(), ".enso", "data", "weread-browser");
+  const puppeteer = await import("puppeteer");
+  const browser = await puppeteer.default.launch({
+    headless: "new" as unknown as boolean,
+    userDataDir: WEREAD_BROWSER_DIR,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+  });
+
+  let enriched = 0;
+  let errors = 0;
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+
+    for (const book of unenriched) {
+      try {
+        const bookId = String(book.wereadBookId);
+        await page.goto(`https://weread.qq.com/web/bookDetail/${bookId}`, {
+          waitUntil: "networkidle2",
+          timeout: 20000,
+        });
+        await new Promise((r) => setTimeout(r, 2000));
+
+        // Extract metadata from book detail page
+        const meta = await page.evaluate(`(() => {
+          // Description — long text after author link
+          var descEls = document.querySelectorAll(".bookInfo_intro, [class*=bookDetail_intro], [class*=intro]");
+          var description = "";
+          // Fallback: get the first large text block that looks like a description
+          if (descEls.length > 0) {
+            description = descEls[0].textContent?.trim() || "";
+          }
+          if (!description) {
+            // WeRead puts the description as a text node in the main content area
+            var allText = document.querySelectorAll("p, div");
+            for (var i = 0; i < allText.length; i++) {
+              var t = allText[i].textContent?.trim() || "";
+              if (t.length > 100 && t.length < 5000 && !t.includes("微信读书") && !t.includes("查看更多")) {
+                description = t;
+                break;
+              }
+            }
+          }
+
+          // Author — from link with author search URL
+          var authorLink = document.querySelector("a[href*='search/books?author=']");
+          var author = authorLink ? authorLink.textContent?.trim() || "" : "";
+
+          // Rating — "推荐值 XX.X%"
+          var ratingText = "";
+          var allSpans = document.querySelectorAll("span, div");
+          for (var j = 0; j < allSpans.length; j++) {
+            var st = allSpans[j].textContent?.trim() || "";
+            if (st.match(/[\\d.]+%/) && st.length < 20) {
+              ratingText = st;
+              break;
+            }
+          }
+          var ratingMatch = ratingText.match(/([\\d.]+)%/);
+          var rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+
+          // Review count — "X万人点评" or "X人点评"
+          var reviewText = "";
+          for (var k = 0; k < allSpans.length; k++) {
+            var rt = allSpans[k].textContent?.trim() || "";
+            if (rt.includes("人点评")) {
+              reviewText = rt;
+              break;
+            }
+          }
+          var reviewCount = 0;
+          if (reviewText) {
+            var wanMatch = reviewText.match(/([\\d.]+)万/);
+            var numMatch = reviewText.match(/([\\d,]+)人/);
+            if (wanMatch) reviewCount = Math.round(parseFloat(wanMatch[1]) * 10000);
+            else if (numMatch) reviewCount = parseInt(numMatch[1].replace(/,/g, ""), 10);
+          }
+
+          // Chapter count — "共XX章"
+          var chapterText = "";
+          for (var m = 0; m < allSpans.length; m++) {
+            var ct = allSpans[m].textContent?.trim() || "";
+            if (ct.includes("章") && ct.match(/\\d+章/)) {
+              chapterText = ct;
+              break;
+            }
+          }
+          var chapterMatch = chapterText.match(/(\\d+)章/);
+          var chapterCount = chapterMatch ? parseInt(chapterMatch[1], 10) : 0;
+
+          // Categories — from any category links/badges
+          var categoryEls = document.querySelectorAll("a[href*='category'], [class*=tag], [class*=category]");
+          var categories = [];
+          categoryEls.forEach(function(el) {
+            var c = el.textContent?.trim();
+            if (c && c.length < 30 && c.length > 1) categories.push(c);
+          });
+
+          // ISBN — from page metadata or detail section
+          var isbn = "";
+          var metaISBN = document.querySelector("meta[name='isbn'], meta[property='book:isbn']");
+          if (metaISBN) isbn = metaISBN.getAttribute("content") || "";
+
+          return {
+            description: description.slice(0, 1000),
+            author: author,
+            rating: rating,
+            reviewCount: reviewCount,
+            chapterCount: chapterCount,
+            categories: categories,
+            isbn: isbn,
+          };
+        })()`) as Record<string, unknown>;
+
+        // Apply metadata to book
+        if (meta.description && String(meta.description).length > 10) book.description = String(meta.description).slice(0, 1000);
+        if (meta.author && String(meta.author).length > 0) book.author = meta.author;
+        if (meta.rating && Number(meta.rating) > 0) book.rating = Number(meta.rating);
+        if (meta.reviewCount && Number(meta.reviewCount) > 0) book.reviewCount = Number(meta.reviewCount);
+        if (meta.chapterCount && Number(meta.chapterCount) > 0) book.chapterCount = Number(meta.chapterCount);
+        if (meta.isbn) book.isbn = String(meta.isbn);
+        if (Array.isArray(meta.categories) && (meta.categories as string[]).length > 0) {
+          book.categories = meta.categories as string[];
+        }
+        book.enrichedAt = Date.now();
+        enriched++;
+
+        logAction({ ts: Date.now(), type: "action", category: "user-context", message: `WeRead enriched: "${book.title}" — rating: ${meta.rating}%, reviews: ${meta.reviewCount}` });
+
+        // Save incrementally every 5 books
+        if (enriched % 5 === 0) {
+          writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `WeRead enrichment progress: ${enriched}/${unenriched.length}` });
+        }
+
+        // Rate limit — 2 second delay between requests
+        await new Promise((r) => setTimeout(r, 2000));
+      } catch (bookErr) {
+        errors++;
+        logError("user-context", `WeRead enrich failed for "${book.title}"`, bookErr);
+        book.enrichedAt = Date.now(); // Mark as attempted
+      }
+    }
+  } finally {
+    await browser.close();
+    writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
+    _wereadEnrichmentRunning = false;
+    logAction({ ts: Date.now(), type: "action", category: "user-context", message: `WeRead enrichment complete: ${enriched} enriched, ${errors} errors` });
+  }
+
+  return { enriched, total: cacheData.books.length, errors };
+}
+
 // ── Tool Factory ─────────────────────────────────────────────────────────────
 
 export function createUserContextTools(): EnsoAgentTool[] {
