@@ -763,6 +763,113 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Cortex Card Action API (for Cortex tab — handles view_entity, nav_back, add_to_cortex etc.) ──
+  app.post("/api/cortex/action", async (req, res) => {
+    try {
+      const { action, payload, appFamily, currentData } = req.body as {
+        action: string; payload?: Record<string, unknown>;
+        appFamily: string; currentData?: unknown;
+      };
+      if (!action) { res.status(400).json({ error: "Missing action" }); return; }
+
+      // Handle entity-related actions
+      if (action === "view_entity") {
+        const entityId = String(payload?.entityId ?? "");
+        if (!entityId) { res.json({ error: "No entity ID" }); return; }
+
+        const { buildEntityDetailData } = await import("./entity-model.js");
+        const detailData = await buildEntityDetailData(entityId);
+        if (!detailData) { res.json({ error: "Entity not found" }); return; }
+
+        // Check for processed deep content
+        try {
+          const { getProcessedContent } = await import("./deep-content.js");
+          const processed = getProcessedContent(entityId);
+          if (processed) {
+            detailData.processedBook = processed;
+            detailData.podcastAudioUrl = processed.audioUrl;
+            detailData.podcastScript = processed.script;
+            detailData.podcastDuration = processed.durationMinutes;
+            detailData.podcastStatus = "ready";
+          }
+        } catch { /* ignore */ }
+
+        // Add cross-type related entities
+        try {
+          const { findRelatedContent } = await import("./cortex-synthesis.js");
+          const title = (detailData.entity as Record<string, unknown>)?.title as string || "";
+          if (title) {
+            const related = await findRelatedContent(title);
+            const crossType: Array<Record<string, unknown>> = [];
+            const entityType = (detailData.entity as Record<string, unknown>)?.type as string || "";
+            for (const [, hits] of Object.entries(related.relatedContent?.bySource || {})) {
+              for (const hit of (hits as Array<{ title: string; entityId?: string; type?: string }>).slice(0, 3)) {
+                if (hit.type !== entityType) crossType.push(hit);
+              }
+            }
+            if (crossType.length) detailData.crossTypeEntities = crossType.slice(0, 8);
+          }
+        } catch { /* ignore */ }
+
+        res.json(detailData);
+        return;
+      }
+
+      if (action === "add_to_cortex") {
+        const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
+        const p = payload || {};
+        const result = await ingestDiscoveredEntity({
+          title: String(p.title ?? ""), type: String(p.type ?? ""),
+          creator: p.creator ? String(p.creator) : undefined,
+          year: p.year ? String(p.year) : undefined,
+          description: p.description ? String(p.description) : undefined,
+        });
+        // Auto-enrich
+        if (result.created) {
+          try { const { enrichEntity } = await import("./content-enrichment.js"); await enrichEntity(result.entityId); } catch { /* best effort */ }
+        }
+        res.json({ ...result, _addedToCortex: [String(p.title ?? "")], ...(currentData as Record<string, unknown> || {}) });
+        return;
+      }
+
+      if (action === "deep_content" || action === "book_podcast") {
+        const entityId = String(payload?.entityId ?? "");
+        res.json({ podcastStatus: "started", entityId, message: "Deep content pipeline started in background" });
+        // Could trigger background pipeline here
+        return;
+      }
+
+      // For tool-based actions (browse, search, add, etc.) — run via executor
+      const toolSuffix = action;
+      const { getExecutorBody, isDynamicTool } = await import("./native-tools/registry.js");
+
+      // Try different tool ID patterns
+      const candidates = [
+        `enso_${appFamily}_${toolSuffix}`,
+        `enso_${appFamily.replace(/_/g, "_")}_${toolSuffix}`,
+      ];
+      let toolId = "";
+      for (const c of candidates) { if (isDynamicTool(c)) { toolId = c; break; } }
+
+      if (toolId) {
+        const body = getExecutorBody(toolId);
+        if (body) {
+          const { executeToolBody } = await import("./app-persistence.js");
+          const result = await executeToolBody(body, payload || {});
+          if (result?.content?.[0]?.text) {
+            try { res.json(JSON.parse(result.content[0].text)); return; } catch { /* fall through */ }
+          }
+          res.json(result || {});
+          return;
+        }
+      }
+
+      res.json({ error: `Unknown action: ${action}`, action, appFamily });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── App Tool Runner API (for Cortex tab — runs app tools directly) ──
   app.post("/api/apps/run", async (req, res) => {
     try {

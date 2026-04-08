@@ -15,10 +15,16 @@ interface CortexApp {
   primaryParams: Record<string, unknown>;
 }
 
+interface NavEntry {
+  data: unknown;
+  title: string;
+}
+
 interface AppState {
   data: unknown;
   loading: boolean;
   error?: string;
+  navStack?: NavEntry[];
 }
 
 const STORAGE_KEY = "enso_cortex_subtab";
@@ -109,33 +115,7 @@ export default function CortexView() {
       });
   }, []);
 
-  // Virtual card IDs for each app (used to route WS responses back)
-  const cortexCardIds = useMemo(() => {
-    const ids: Record<string, string> = {};
-    for (const app of apps) {
-      ids[app.family] = `cortex-${app.family}`;
-    }
-    return ids;
-  }, [apps]);
-
-  // Register virtual cards in the store and listen for updates
-  const cards = useChatStore((s) => s.cards);
-  const sendCardAction = useChatStore((s) => s.sendCardAction);
-
-  // Sync card data back to app states
-  useEffect(() => {
-    for (const app of apps) {
-      const cardId = cortexCardIds[app.family];
-      const card = cardId ? cards[cardId] : undefined;
-      if (card?.data && card.status !== "streaming") {
-        setAppStates(prev => {
-          const current = prev[app.family];
-          if (current?.data === card.data) return prev; // No change
-          return { ...prev, [app.family]: { data: card.data, loading: false } };
-        });
-      }
-    }
-  }, [cards, apps, cortexCardIds]);
+  // No virtual cards needed — actions go through REST /api/cortex/action
 
   // Load data when switching to an app sub-tab (via REST for initial load)
   useEffect(() => {
@@ -146,34 +126,7 @@ export default function CortexView() {
     }
   }, [activeSubTab, apps, appStates, loadAppData]);
 
-  // When initial data loads, register a virtual card in the store
-  useEffect(() => {
-    for (const app of apps) {
-      const state = appStates[app.family];
-      if (state?.data && !cards[cortexCardIds[app.family]]) {
-        // Register virtual card so sendCardAction can find it
-        useChatStore.setState((s) => ({
-          cards: {
-            ...s.cards,
-            [cortexCardIds[app.family]]: {
-              id: cortexCardIds[app.family],
-              runId: `cortex-run-${app.family}`,
-              type: "dynamic-ui" as const,
-              role: "assistant" as const,
-              status: "complete" as const,
-              display: "expanded" as const,
-              data: state.data,
-              generatedUI: apps.find(a => a.family === app.family)?.templateJSX,
-              toolMeta: { toolId: app.primaryTool, params: {} },
-              timestamp: Date.now(),
-              updatedAt: Date.now(),
-              createdAt: Date.now(),
-            },
-          },
-        }));
-      }
-    }
-  }, [appStates, apps, cards, cortexCardIds]);
+  // No virtual card registration needed — REST-based action handling
 
   // Compile templates
   const compiledTemplates = useMemo(() => {
@@ -186,11 +139,10 @@ export default function CortexView() {
     return result;
   }, [apps]);
 
-  // Action handler — uses the existing card action system via WS
+  // Action handler — routes through /api/cortex/action REST endpoint
   const handleAction = useCallback((action: string, payload?: unknown) => {
     const activeApp = apps.find(a => a.family === activeSubTab);
     if (!activeApp) return;
-    const cardId = cortexCardIds[activeApp.family];
 
     // Client-side only actions
     if (action === "open_url" && payload && typeof payload === "object" && "url" in payload) {
@@ -202,30 +154,69 @@ export default function CortexView() {
       return;
     }
 
-    // If virtual card exists, use the store's sendCardAction (same WS pipeline as chat cards)
-    if (cards[cardId]) {
-      sendCardAction(cardId, action, payload);
+    // Nav back — pop from local nav stack
+    if (action === "nav_back") {
+      setAppStates(prev => {
+        const state = prev[activeApp.family];
+        if (!state?.navStack?.length) return prev;
+        const stack = [...state.navStack];
+        const prevEntry = stack.pop()!;
+        return { ...prev, [activeApp.family]: { data: prevEntry.data, loading: false, navStack: stack } };
+      });
       return;
     }
 
-    // Fallback: direct REST call for initial actions before card is registered
-    const toolId = `${activeApp.primaryTool.replace(/_[^_]+$/, "")}_${action}`;
     setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: true } }));
 
     const baseUrl = getBackendBaseUrl();
-    fetch(`${baseUrl}/api/apps/run?tool=${encodeURIComponent(toolId)}`, {
+    fetch(`${baseUrl}/api/cortex/action`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify(payload || {}),
+      body: JSON.stringify({
+        action,
+        payload: payload || {},
+        appFamily: activeApp.family,
+        currentData: appStates[activeApp.family]?.data,
+      }),
     })
       .then(r => r.json())
       .then(data => {
-        setAppStates(prev => ({ ...prev, [activeApp.family]: { data, loading: false } }));
+        if (data.error) {
+          setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
+          return;
+        }
+
+        // For view_entity: push current state onto nav stack
+        if (action === "view_entity") {
+          setAppStates(prev => {
+            const current = prev[activeApp.family];
+            const navStack = [...(current?.navStack || [])];
+            if (current?.data) {
+              navStack.push({ data: current.data, title: (current.data as Record<string, unknown>)?.tool as string || "Back" });
+            }
+            // Merge nav stack info into the detail data
+            const detailData = { ...data, navStack: navStack.map((e: { title: string }) => ({ title: e.title })), focusEntity: true, tool: "entity_detail" };
+            return { ...prev, [activeApp.family]: { data: detailData, loading: false, navStack } };
+          });
+          return;
+        }
+
+        // For add_to_cortex: merge _addedToCortex into current data
+        if (action === "add_to_cortex" && data._addedToCortex) {
+          setAppStates(prev => {
+            const current = prev[activeApp.family];
+            const merged = { ...(current?.data as Record<string, unknown> || {}), _addedToCortex: data._addedToCortex };
+            return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+          });
+          return;
+        }
+
+        setAppStates(prev => ({ ...prev, [activeApp.family]: { data, loading: false, navStack: prev[activeApp.family]?.navStack } }));
       })
       .catch(() => {
         setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
       });
-  }, [apps, activeSubTab, cortexCardIds, cards, sendCardAction]);
+  }, [apps, activeSubTab, appStates]);
 
   const handleSendMessage = useCallback((_text: string) => {
     // Messages from Cortex view go through action system
