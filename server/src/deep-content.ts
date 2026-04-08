@@ -335,9 +335,11 @@ export async function researchEntity(params: {
   metadata?: Record<string, unknown>;
   cortexContent?: string;
   relatedEntityTitles?: string[];
+  language?: string;
   onProgress?: (progress: DeepContentProgress) => void;
 }): Promise<EntityResearchResult> {
   const { title, author, categories, cortexContent, relatedEntityTitles, onProgress } = params;
+  const lang = params.language || "English";
   onProgress?.({ phase: "researching", detail: "Searching the web for content..." });
 
   // Generate targeted search queries from entity profile
@@ -390,7 +392,9 @@ export async function researchEntity(params: {
     ? `\nExisting knowledge about this content:\n${cortexContent.slice(0, 2000)}`
     : "";
 
-  const synthesisPrompt = `You are a ${profile.synthesisHint} creating an exhaustive deep-dive into "${title}" by ${author}. Your goal is to capture the FULL essence of this content — every major idea, argument, and insight.
+  const langRule = lang !== "English" ? `\n\nCRITICAL LANGUAGE RULE: ALL output text MUST be written in ${lang}. All chapter summaries, insights, thesis, perspectives, author background — EVERYTHING must be in ${lang}. Do NOT write in English.` : "";
+
+  const synthesisPrompt = `You are a ${profile.synthesisHint} creating an exhaustive deep-dive into "${title}" by ${author}. Your goal is to capture the FULL essence of this content — every major idea, argument, and insight.${langRule}
 ${userContext}${cortexContext}
 
 SOURCES:
@@ -466,6 +470,7 @@ export async function generatePodcastOutline(
   title: string,
   author: string,
   research: EntityResearchResult,
+  language?: string,
 ): Promise<PodcastOutline> {
   // Determine target duration based on research depth
   // Real conversational speech ≈ 150 words/min ≈ 900 chars/min for dialogue text
@@ -507,7 +512,7 @@ Rules:
 - Include chapter/theme breakdowns as middle sections
 - Include a critical perspectives section
 - End with takeaways and relevance to the listener
-- Each section should feel like a natural podcast segment
+- Each section should feel like a natural podcast segment${language && language !== "English" ? `\n- CRITICAL: Write ALL section titles, purposes, and key points in ${language}. Do NOT use English.` : ""}
 - Respond ONLY with JSON`;
 
   const result = await llm({ prompt: outlinePrompt, tier: "utility", timeoutMs: 30_000 });
@@ -540,6 +545,7 @@ async function generateSectionScript(params: {
   previousEnding?: string;
   sectionIndex: number;
   totalSections: number;
+  language?: string;
 }): Promise<string> {
   const { title, author, section, research, previousEnding, sectionIndex, totalSections } = params;
 
@@ -582,7 +588,7 @@ Rules:
 - ${sectionIndex === 0 ? "Start with a compelling hook — why should someone care about this book? What problem does it solve?" : "Transition naturally from the previous section"}
 - ${sectionIndex === totalSections - 1 ? "End with powerful takeaways: what should listeners DO differently after learning this? Give a warm sign-off." : "End with a natural transition that makes the listener eager for the next topic"}
 - Keep it genuinely conversational — real reactions, "that reminds me of...", "wait, so you're saying...", follow-up questions
-- IMPORTANT: Write at LEAST ${targetChars} characters. This section should feel substantive, not rushed.
+- IMPORTANT: Write at LEAST ${targetChars} characters. This section should feel substantive, not rushed.${params.language && params.language !== "English" ? `\n- CRITICAL LANGUAGE RULE: Write the ENTIRE dialogue in ${params.language}. Both hosts speak fluent ${params.language}. Do NOT use English for any dialogue.` : ""}
 - Output ONLY the dialogue script`;
 
   const script = await llm({ prompt, tier: "pro", timeoutMs: 90_000, maxOutputTokens: 8192 });
@@ -594,6 +600,7 @@ export async function generateFullScript(
   author: string,
   outline: PodcastOutline,
   research: EntityResearchResult,
+  language?: string,
   onProgress?: (sectionIndex: number, totalSections: number) => void,
 ): Promise<{ fullScript: string; sectionScripts: string[] }> {
   const total = outline.sections.length;
@@ -626,6 +633,7 @@ export async function generateFullScript(
           previousEnding,
           sectionIndex: i,
           totalSections: total,
+          language,
         }).then(script => {
           sectionScripts[i] = script;
           completed++;
@@ -712,9 +720,20 @@ export async function renderLongformAudio(
 
 export async function generateDeepContent(params: {
   entityId: EntityId;
+  language?: string;
   onProgress?: (progress: DeepContentProgress) => void;
 }): Promise<ProcessedContent> {
-  const { entityId, onProgress } = params;
+  const { entityId, language, onProgress } = params;
+  // Resolve language: explicit param > detect from title > "English"
+  const resolveLanguage = (title: string): string => {
+    if (language === "zh") return "Chinese";
+    if (language === "en") return "English";
+    if (language && language !== "en" && language !== "zh") return language;
+    // Auto-detect from title characters
+    const nonLatin = (title.match(/[^\u0000-\u007F]/g) ?? []).length;
+    if (nonLatin / Math.max(title.length, 1) > 0.3) return "Chinese";
+    return "English";
+  };
 
   // Check cache first
   const cached = getProcessedContent(entityId);
@@ -751,25 +770,27 @@ export async function generateDeepContent(params: {
     .map(e => e.title)
     .slice(0, 5);
 
-  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Starting pipeline for "${title}" by ${author}` });
+  const contentLanguage = resolveLanguage(title);
+  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Starting pipeline for "${title}" by ${author} [lang=${contentLanguage}]` });
 
   // Phase 1: Research
   onProgress?.({ phase: "researching", detail: "Searching the web...", percentComplete: 5 });
   const research = await researchEntity({
     entityId, title, author, description, categories,
     cortexContent, relatedEntityTitles: relatedTitles,
+    language: contentLanguage,
     onProgress,
   });
 
   // Phase 2: Outline
   onProgress?.({ phase: "generating_outline", detail: "Planning podcast structure...", percentComplete: 25 });
-  const outline = await generatePodcastOutline(title, author, research);
+  const outline = await generatePodcastOutline(title, author, research, contentLanguage);
 
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Outline: ${outline.sections.length} sections, ~${outline.estimatedMinutes} min for "${title}"` });
 
   // Phase 3: Script
   const { fullScript, sectionScripts } = await generateFullScript(
-    title, author, outline, research,
+    title, author, outline, research, contentLanguage,
     (sectionIdx, total) => {
       const pct = 30 + Math.round((sectionIdx / total) * 30);
       onProgress?.({
@@ -899,7 +920,8 @@ interface DiscoveredBook {
  *   3. LLM selects the best book the user doesn't already have
  *   4. Returns structured recommendation with entityId ready for deep processing
  */
-export async function discoverNewBooks(count = 1): Promise<DiscoveredBook[]> {
+export async function discoverNewBooks(count = 1, language?: string): Promise<DiscoveredBook[]> {
+  const isChinese = language === "zh" || language === "Chinese";
   // Step 1: Read Cortex themes
   let topThemes: string[] = [];
   try {
@@ -960,7 +982,11 @@ export async function discoverNewBooks(count = 1): Promise<DiscoveredBook[]> {
   const searchThemes = topThemes.slice(themeOffset, themeOffset + 4);
   if (searchThemes.length < 2) searchThemes.push(...topThemes.slice(0, 2));
 
-  const queries = [
+  const queries = isChinese ? [
+    `最佳书籍 ${searchThemes.slice(0, 2).join(" ")} 2024 2025 推荐`,
+    `必读好书 ${searchThemes.slice(1, 3).join(" ")} 高分推荐`,
+    `${searchThemes[0]} 值得一读的书 豆瓣高分`,
+  ] : [
     `best books ${searchThemes.slice(0, 2).join(" ")} 2024 2025 recommendations`,
     `must read books ${searchThemes.slice(1, 3).join(" and ")} highly rated`,
     `new important books ${searchThemes[0]} thought-provoking`,
@@ -996,7 +1022,8 @@ export async function discoverNewBooks(count = 1): Promise<DiscoveredBook[]> {
 
   // Step 4: LLM picks the best book
   const existingList = [...existingTitles].slice(0, 100).join(", ");
-  const prompt = `You are a personal book curator. Your client's top interests are: ${topThemes.join(", ")}.
+  const langInstruction = isChinese ? "\n\nCRITICAL: ALL output text (title, description, whyRecommended) MUST be written in Chinese (中文). Recommend Chinese-language books." : "";
+  const prompt = `You are a personal book curator. Your client's top interests are: ${topThemes.join(", ")}.${langInstruction}
 
 They already own these books (DO NOT recommend any of these): ${existingList || "none known"}
 
@@ -1130,7 +1157,23 @@ function escapeHtml(s: string): string {
 /**
  * Build a rich HTML email for a processed book with summary + podcast link.
  */
-export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: string): string {
+export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: string, language?: string): string {
+  // Detect language from title if not provided
+  const nonLatin = (processed.title.match(/[^\u0000-\u007F]/g) ?? []).length;
+  const isChinese = language === "zh" || language === "Chinese" || (nonLatin / Math.max(processed.title.length, 1) > 0.3);
+  const L = {
+    listenPodcast: isChinese ? "🎙️ 聆听AI播客" : "🎙️ Listen to the AI Podcast",
+    playDownload: isChinese ? "▶ 播放 / 下载播客" : "▶ Play / Download Podcast",
+    addToCortex: isChinese ? "📥 添加到知识库" : "📥 Add to My Cortex",
+    addToCortexDesc: isChinese ? "喜欢这个推荐？保存到你的知识库。" : "Like this recommendation? Save it to your knowledge base.",
+    coreThesis: isChinese ? "💡 核心论点" : "💡 Core Thesis",
+    keyInsights: isChinese ? "🔑 核心洞见" : "🔑 Key Insights",
+    chapterOverview: isChinese ? "📑 章节概览" : "📑 Chapter Overview",
+    perspectives: isChinese ? "⚖️ 不同视角" : "⚖️ Different Perspectives",
+    generatedBy: isChinese ? "由 Enso 智能生成" : "Generated by Enso Book Intelligence",
+    by: isChinese ? "著" : "by",
+    min: isChinese ? "分钟" : "min",
+  };
   const slug = slugFromEntityId(processed.entityId);
   const podcastUrl = `${baseUrl}/api/podcast/stream/${slug}`;
   const r = processed.research;
@@ -1140,31 +1183,31 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
 
   // Header
   parts.push(`<h1 style="color:#1e40af;font-size:22px;margin-bottom:4px;">${escapeHtml(processed.title)}</h1>`);
-  parts.push(`<p style="font-size:14px;color:#6b7280;margin-top:0;">by ${escapeHtml(processed.author)}</p>`);
+  parts.push(`<p style="font-size:14px;color:#6b7280;margin-top:0;">${L.by} ${escapeHtml(processed.author)}</p>`);
   parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />`);
 
   // Podcast CTA
   parts.push(`<div style="background:#7c3aed;color:white;padding:16px;border-radius:8px;margin-bottom:16px;text-align:center;">`);
-  parts.push(`<p style="margin:0 0 8px;font-size:16px;font-weight:600;">🎙️ Listen to the AI Podcast (${processed.durationMinutes} min)</p>`);
-  parts.push(`<a href="${escapeHtml(podcastUrl)}" style="display:inline-block;background:white;color:#7c3aed;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">▶ Play / Download Podcast</a>`);
+  parts.push(`<p style="margin:0 0 8px;font-size:16px;font-weight:600;">${L.listenPodcast} (${processed.durationMinutes} ${L.min})</p>`);
+  parts.push(`<a href="${escapeHtml(podcastUrl)}" style="display:inline-block;background:white;color:#7c3aed;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">${L.playDownload}</a>`);
   parts.push(`</div>`);
 
   // Add to Cortex CTA (for discovered books)
   const quickAddUrl = `${baseUrl}/api/cortex/quick-add?title=${encodeURIComponent(processed.title)}&type=book&creator=${encodeURIComponent(processed.author)}`;
   parts.push(`<div style="background:#059669;color:white;padding:12px 16px;border-radius:8px;margin-bottom:16px;text-align:center;">`);
-  parts.push(`<p style="margin:0 0 6px;font-size:13px;">Like this recommendation? Save it to your knowledge base.</p>`);
-  parts.push(`<a href="${escapeHtml(quickAddUrl)}" style="display:inline-block;background:white;color:#059669;padding:8px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">📥 Add to My Cortex</a>`);
+  parts.push(`<p style="margin:0 0 6px;font-size:13px;">${L.addToCortexDesc}</p>`);
+  parts.push(`<a href="${escapeHtml(quickAddUrl)}" style="display:inline-block;background:white;color:#059669;padding:8px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">${L.addToCortex}</a>`);
   parts.push(`</div>`);
 
   // Core Thesis
   if (r.coreThesis) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">💡 Core Thesis</h2>`);
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.coreThesis}</h2>`);
     parts.push(`<p style="font-size:14px;line-height:1.6;color:#374151;">${escapeHtml(r.coreThesis)}</p>`);
   }
 
   // Key Insights
   if (r.keyInsights.length > 0) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">🔑 Key Insights</h2>`);
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.keyInsights}</h2>`);
     parts.push(`<ul style="padding-left:20px;">`);
     for (const ins of r.keyInsights.slice(0, 8)) {
       parts.push(`<li style="font-size:13px;line-height:1.5;margin-bottom:6px;color:#374151;">${escapeHtml(ins.insight)}`);
@@ -1176,7 +1219,7 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
 
   // Chapter Summaries
   if (r.chapterSummaries.length > 0) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">📑 Chapter Overview</h2>`);
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.chapterOverview}</h2>`);
     for (const ch of r.chapterSummaries.slice(0, 12)) {
       parts.push(`<p style="margin-bottom:8px;"><strong style="color:#1e40af;font-size:13px;">${escapeHtml(ch.chapter)}</strong><br/>`);
       parts.push(`<span style="font-size:12px;color:#374151;line-height:1.5;">${escapeHtml(ch.summary)}</span></p>`);
@@ -1185,7 +1228,7 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
 
   // Critical Perspectives
   if (r.criticalPerspectives.length > 0) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">⚖️ Different Perspectives</h2>`);
+    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.perspectives}</h2>`);
     parts.push(`<ul style="padding-left:20px;">`);
     for (const cp of r.criticalPerspectives) {
       parts.push(`<li style="font-size:12px;line-height:1.5;margin-bottom:4px;color:#92400e;">${escapeHtml(cp)}</li>`);
@@ -1195,7 +1238,7 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
 
   // Footer
   parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />`);
-  parts.push(`<p style="font-size:11px;color:#9ca3af;text-align:center;">Generated by Enso Book Intelligence • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
+  parts.push(`<p style="font-size:11px;color:#9ca3af;text-align:center;">${L.generatedBy} • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
   parts.push(`</div>`);
 
   return parts.join("\n");

@@ -1169,6 +1169,7 @@ export async function handlePluginCardAction(params: {
 
     generateBookPodcast({
       entityId,
+      language: client.language,
       onProgress: (progress) => {
         // Stream progress as delta messages
         const detailData = structuredClone(ctx.currentData) as Record<string, unknown>;

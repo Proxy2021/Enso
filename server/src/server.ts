@@ -826,10 +826,12 @@ export async function startEnsoServer(opts: {
       const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
       const { sendHtmlEmail } = await import("./email.js");
 
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: "Daily book discovery pipeline started" });
+      // Determine language from request or default
+      const reqLanguage = (req.query.language as string) || (req.body?.language as string) || undefined;
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Daily book discovery pipeline started [lang=${reqLanguage || "auto"}]` });
 
       // Step 1: Discover a new book via web search + LLM
-      const discoveries = await discoverNewBooks(1);
+      const discoveries = await discoverNewBooks(1, reqLanguage);
       if (!discoveries.length) {
         res.json({ success: false, message: "Could not discover a new book recommendation today — try again tomorrow" });
         return;
@@ -860,6 +862,7 @@ export async function startEnsoServer(opts: {
       // Step 3: Generate deep content (runs in background)
       const processed = await generateDeepContent({
         entityId: book.entityId,
+        language: reqLanguage,
         onProgress: (p) => {
           logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${book.title}: ${p.phase} (${p.percentComplete}%)` });
         },
@@ -869,7 +872,7 @@ export async function startEnsoServer(opts: {
 
       // Step 4: Build and send email with podcast + Add to Cortex button
       const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
-      const emailHtml = buildEntityEmailHtml(processed, baseUrl);
+      const emailHtml = buildEntityEmailHtml(processed, baseUrl, reqLanguage);
       const emailResult = await sendHtmlEmail({
         to: "kkwong@xiaomi.com",
         subject: `📚 New Book Discovery: ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
