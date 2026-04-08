@@ -884,6 +884,30 @@ export async function generateDeepContent(params: {
 
   // Persist
   saveProcessedContent(processed);
+
+  // Ensure entity is in the index (content recommendation pipeline may have missed it)
+  try {
+    const { lookupEntity, upsertEntityIndex, saveEntityIndex, parseEntityId } = await import("./entity-model.js");
+    if (!lookupEntity(entityId)) {
+      const parsed = parseEntityId(entityId);
+      if (parsed) {
+        const { entityCortexPath } = await import("./entity-model.js");
+        upsertEntityIndex({
+          entityId,
+          type: parsed.type as never,
+          source: parsed.source as never,
+          title,
+          slug: parsed.slug,
+          cortexPath: entityCortexPath(entityId),
+          tags: [parsed.type, parsed.source, "deep-processed"],
+          updatedAt: new Date().toISOString(),
+        });
+        saveEntityIndex();
+        logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Auto-registered entity in index: ${entityId}` });
+      }
+    }
+  } catch { /* best effort */ }
+
   onProgress?.({ phase: "complete", percentComplete: 100 });
 
   return processed;
