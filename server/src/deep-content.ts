@@ -1241,7 +1241,7 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
     min: isChinese ? "分钟" : "min",
   };
   const slug = slugFromEntityId(processed.entityId);
-  const podcastUrl = `${baseUrl}/api/podcast/stream/${slug}`;
+  const podcastUrl = `${baseUrl}/api/podcast/play/${slug}`;
   const r = processed.research;
 
   // Resolve enriched metadata for proper author/creator and cover image

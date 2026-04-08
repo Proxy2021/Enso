@@ -1060,13 +1060,51 @@ Return ONLY JSON.`;
         description: req.query.description ? decodeURIComponent(req.query.description as string) : undefined,
       });
       if (result.created) {
-        // Auto-enrich with type-appropriate API metadata (fire-and-forget)
-        import("./content-enrichment.js").then(mod => {
-          mod.enrichEntity(result.entityId).catch(() => {});
-        }).catch(() => {});
-        res.send(htmlPage("Added to Cortex", `"${title}" has been added to your Knowledge Cortex as a ${type}. Metadata enrichment is running in the background.`, "success"));
+        // Auto-enrich with type-appropriate API metadata (await for rich page)
+        try { const { enrichEntity } = await import("./content-enrichment.js"); await enrichEntity(result.entityId); } catch { /* best effort */ }
+
+        // Read enriched data for rich display
+        let coverUrl = "", desc = "";
+        try {
+          const idxPath = join(homedir(), ".enso", "data", "entity-index.json");
+          const idx = JSON.parse(readFileSync(idxPath, "utf-8"));
+          const entity = idx[result.entityId];
+          if (entity?.imageUrl) coverUrl = entity.imageUrl;
+          // Read description from Cortex page
+          const pagePath = join(homedir(), ".enso", "wiki", result.cortexPath);
+          if (existsSync(pagePath)) {
+            const content = readFileSync(pagePath, "utf-8");
+            const descMatch = content.match(/## Overview\n\n([\s\S]*?)(?=\n## )/);
+            if (descMatch) desc = descMatch[1].trim().slice(0, 300);
+          }
+        } catch { /* ignore */ }
+
+        const typeEmoji: Record<string, string> = { book: "📚", movie: "🎬", "tv-series": "📺", game: "🎮", channel: "📺", article: "📰", place: "🌍" };
+        const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        let body = `<div style="text-align:center;padding:20px">`;
+        body += `<div style="font-size:48px;margin-bottom:12px">✅</div>`;
+        body += `<h1 style="font-size:22px;color:#10b981;margin-bottom:4px">Added to Cortex</h1>`;
+        body += `</div>`;
+        body += `<div class="card" style="display:flex;gap:16px;align-items:start">`;
+        if (coverUrl) body += `<img src="${esc(coverUrl)}" style="width:100px;border-radius:6px;flex-shrink:0" />`;
+        body += `<div style="flex:1;min-width:0">`;
+        body += `<div class="badge" style="background:#312e81;color:#c4b5fd;margin-bottom:6px">${typeEmoji[type] || "🎯"} ${type}</div>`;
+        body += `<h2 style="font-size:18px;margin:4px 0;color:#e2e8f0">${esc(title)}</h2>`;
+        if (creator) body += `<p style="color:#94a3b8;font-size:13px;margin:2px 0">by ${esc(decodeURIComponent(creator))}</p>`;
+        if (desc) body += `<p style="color:#64748b;font-size:12px;margin-top:8px;line-height:1.5">${esc(desc)}</p>`;
+        body += `</div></div>`;
+        body += `<div style="text-align:center;margin-top:20px">`;
+        body += `<p style="color:#6b7280;font-size:13px;margin-bottom:12px">Entity enriched and saved to your Knowledge Cortex.</p>`;
+        body += `</div>`;
+        body += `<div class="footer">Enso AI</div>`;
+        res.send(htmlShell(`Added: ${title}`, body));
       } else {
-        res.send(htmlPage("Already in Cortex", `"${title}" already exists in your Knowledge Cortex.`, "success"));
+        let body = `<div style="text-align:center;padding:40px">`;
+        body += `<div style="font-size:48px;margin-bottom:12px">ℹ️</div>`;
+        body += `<h1 style="font-size:22px;color:#3b82f6">Already in Cortex</h1>`;
+        body += `<p style="color:#94a3b8;font-size:14px;margin-top:8px">"${title}" already exists in your Knowledge Cortex.</p>`;
+        body += `</div>`;
+        res.send(htmlShell(`${title} — Already in Cortex`, body));
       }
     } catch (err) {
       res.status(500).send(htmlPage("Error", `Failed to add "${title}": ${err instanceof Error ? err.message : String(err)}`, "error"));
@@ -1097,16 +1135,20 @@ Return ONLY JSON.`;
       } else {
         parsed = rawResult as Record<string, unknown>;
       }
-      if (parsed.unsubscribed?.length > 0) {
-        res.send(htmlPage(
-          "Unsubscribed",
-          `Successfully unsubscribed from <strong>${channelName || parsed.unsubscribed[0]}</strong>. This channel will no longer appear in your daily picks.`,
-          "success",
-        ));
+      if ((parsed.unsubscribed as string[])?.length > 0) {
+        const name = channelName || (parsed.unsubscribed as string[])[0];
+        let body = `<div style="text-align:center;padding:40px 20px">`;
+        body += `<div style="font-size:48px;margin-bottom:12px">✅</div>`;
+        body += `<h1 style="font-size:22px;color:#10b981">Unsubscribed</h1>`;
+        body += `<p style="color:#94a3b8;font-size:14px;margin:12px 0">Successfully unsubscribed from <strong style="color:#e2e8f0">${name}</strong>.</p>`;
+        body += `<p style="color:#6b7280;font-size:13px">This channel will no longer appear in your daily picks.</p>`;
+        body += `</div>`;
+        body += `<div class="footer">Enso AI</div>`;
+        res.send(htmlShell(`Unsubscribed: ${name}`, body));
       } else {
         res.send(htmlPage(
           "Could not unsubscribe",
-          parsed.errors?.join(", ") || "Channel not found in your subscriptions.",
+          (parsed.errors as string[])?.join(", ") || "Channel not found in your subscriptions.",
           "error",
         ));
       }
@@ -1115,18 +1157,135 @@ Return ONLY JSON.`;
     }
   });
 
+  /** Base HTML shell for rich landing pages */
+  function htmlShell(title: string, bodyHtml: string): string {
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title} — Enso AI</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0f0f23;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+.container{max-width:640px;margin:0 auto;padding:24px}
+.card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:20px;margin-bottom:16px}
+.btn{display:inline-block;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;cursor:pointer;border:none;transition:opacity 0.2s}
+.btn:hover{opacity:0.85}
+.btn-primary{background:#7c3aed;color:white}
+.btn-success{background:#059669;color:white}
+.btn-outline{background:transparent;color:#94a3b8;border:1px solid #374151}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+h1{margin:0 0 8px}h2{margin:16px 0 8px;font-size:16px;color:#a78bfa}
+audio{width:100%;margin:12px 0;border-radius:8px}
+.meta{font-size:13px;color:#94a3b8;line-height:1.6}
+.cover{max-width:240px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
+.insight{background:#1e1b4b;border-left:3px solid #7c3aed;padding:8px 12px;margin:6px 0;border-radius:0 6px 6px 0;font-size:13px}
+.chapter{padding:6px 0;border-bottom:1px solid #1e1e3a;font-size:13px}
+.footer{text-align:center;font-size:11px;color:#475569;margin-top:32px;padding-top:16px;border-top:1px solid #1e1e3a}
+</style></head><body><div class="container">${bodyHtml}</div></body></html>`;
+  }
+
   function htmlPage(title: string, message: string, type: "success" | "error"): string {
     const color = type === "success" ? "#10b981" : "#ef4444";
-    const icon = type === "success" ? "&#x2714;" : "&#x2718;";
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} — Enso</title></head>
-<body style="margin:0;background:#0f0f23;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh">
-<div style="text-align:center;padding:40px">
-<div style="font-size:48px;color:${color};margin-bottom:16px">${icon}</div>
-<h1 style="font-size:24px;margin:0 0 12px;color:${color}">${title}</h1>
-<p style="font-size:14px;color:#94a3b8;max-width:400px;line-height:1.5">${message}</p>
-<p style="font-size:12px;color:#475569;margin-top:24px">You can close this tab.</p>
-</div></body></html>`;
+    const icon = type === "success" ? "✅" : "❌";
+    return htmlShell(title, `
+<div style="text-align:center;padding:60px 20px">
+<div style="font-size:48px;margin-bottom:16px">${icon}</div>
+<h1 style="font-size:24px;color:${color}">${title}</h1>
+<p style="font-size:14px;color:#94a3b8;max-width:400px;margin:12px auto;line-height:1.5">${message}</p>
+</div>`);
   }
+
+  // ── Rich Podcast Player Page ──
+  app.get("/api/podcast/play/:slug", (req, res) => {
+    try {
+      const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
+      const metaPath = join(homedir(), ".enso", "data", "deep-content", `${slug}.json`);
+      if (!existsSync(metaPath)) { res.status(404).send(htmlPage("Not Found", "Podcast not found.", "error")); return; }
+
+      const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+      const r = meta.research || {};
+      const streamUrl = `/api/podcast/stream/${slug}`;
+
+      // Resolve cover image from entity index
+      let coverUrl = "";
+      let entityType = "book";
+      try {
+        const idxPath = join(homedir(), ".enso", "data", "entity-index.json");
+        if (existsSync(idxPath)) {
+          const idx = JSON.parse(readFileSync(idxPath, "utf-8"));
+          const entity = idx[meta.entityId];
+          if (entity?.imageUrl) coverUrl = entity.imageUrl;
+          if (entity?.type) entityType = entity.type;
+        }
+      } catch { /* ignore */ }
+
+      const typeEmoji: Record<string, string> = { book: "📚", movie: "🎬", "tv-series": "📺", game: "🎮", channel: "📺", article: "📰", place: "🌍" };
+      const typeLabel: Record<string, string> = { book: "Book", movie: "Film", "tv-series": "TV Series", game: "Game", channel: "Channel", article: "Article", place: "Destination" };
+      const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+      let body = "";
+
+      // Header with cover
+      body += `<div style="text-align:center;margin-bottom:20px">`;
+      if (coverUrl) body += `<img src="${esc(coverUrl)}" alt="${esc(meta.title)}" class="cover" style="margin-bottom:16px" />`;
+      body += `<div class="badge" style="background:#312e81;color:#c4b5fd;margin-bottom:8px">${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}</div>`;
+      body += `<h1 style="font-size:24px;color:#e2e8f0">${esc(meta.title)}</h1>`;
+      if (meta.author && meta.author !== "Unknown") body += `<p style="color:#94a3b8;font-size:14px;margin:4px 0">by ${esc(meta.author)}</p>`;
+      body += `<p style="color:#6b7280;font-size:13px">${meta.durationMinutes} min · ${r.chapterSummaries?.length || 0} chapters · ${r.keyInsights?.length || 0} insights</p>`;
+      body += `</div>`;
+
+      // Audio player
+      body += `<div class="card" style="text-align:center">`;
+      body += `<p style="color:#a78bfa;font-weight:600;margin:0 0 8px">🎙️ AI Podcast</p>`;
+      body += `<audio controls preload="metadata" src="${streamUrl}" style="width:100%"></audio>`;
+      body += `<p style="font-size:11px;color:#475569;margin:8px 0 0">Streaming from Enso · ${meta.durationMinutes} min</p>`;
+      body += `</div>`;
+
+      // Core Thesis
+      if (r.coreThesis) {
+        body += `<div class="card"><h2>💡 Core Thesis</h2><p class="meta">${esc(r.coreThesis)}</p></div>`;
+      }
+
+      // Key Insights
+      if (r.keyInsights?.length > 0) {
+        body += `<div class="card"><h2>🔑 Key Insights</h2>`;
+        for (const ins of r.keyInsights.slice(0, 10)) {
+          body += `<div class="insight">${esc(ins.insight)}`;
+          if (ins.example) body += `<br><span style="color:#6b7280;font-style:italic;font-size:12px">${esc(ins.example)}</span>`;
+          body += `</div>`;
+        }
+        body += `</div>`;
+      }
+
+      // Chapter Overview
+      if (r.chapterSummaries?.length > 0) {
+        body += `<div class="card"><h2>📑 Chapters</h2>`;
+        for (const ch of r.chapterSummaries.slice(0, 15)) {
+          body += `<div class="chapter"><strong style="color:#c4b5fd">${esc(ch.chapter)}</strong><br><span style="color:#94a3b8">${esc(ch.summary)}</span></div>`;
+        }
+        body += `</div>`;
+      }
+
+      // Critical Perspectives
+      if (r.criticalPerspectives?.length > 0) {
+        body += `<div class="card"><h2>⚖️ Different Perspectives</h2>`;
+        for (const cp of r.criticalPerspectives) {
+          body += `<p class="meta" style="padding:4px 0;border-bottom:1px solid #1e1e3a">• ${esc(cp)}</p>`;
+        }
+        body += `</div>`;
+      }
+
+      // Actions
+      const quickAddUrl = `/api/cortex/quick-add?title=${encodeURIComponent(meta.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(meta.author || "")}`;
+      body += `<div style="text-align:center;margin:24px 0">`;
+      body += `<a href="${streamUrl}" download="${slug}.wav" class="btn btn-primary" style="margin:4px">⬇ Download Podcast</a> `;
+      body += `<a href="${quickAddUrl}" class="btn btn-success" style="margin:4px">📥 Add to Cortex</a>`;
+      body += `</div>`;
+
+      body += `<div class="footer">Generated by Enso AI · ${new Date(meta.processedAt).toLocaleDateString()}</div>`;
+
+      res.send(htmlShell(`${meta.title} — AI Podcast`, body));
+    } catch (err) {
+      res.status(500).send(htmlPage("Error", `Failed to load podcast: ${err instanceof Error ? err.message : String(err)}`, "error"));
+    }
+  });
 
   // ── Cortex Stats API ──
   let _cortexStatsCache: { data: unknown; ts: number } | null = null;
