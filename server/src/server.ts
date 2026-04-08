@@ -818,6 +818,53 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Daily Book Recommendation Pipeline API ──
+  // Finds the best unprocessed book, generates deep podcast, sends email
+  app.post("/api/book-recommendation/daily", async (req, res) => {
+    try {
+      const { recommendUnprocessedEntities, generateDeepContent, getProcessedContent, buildEntityEmailHtml } = await import("./deep-content.js");
+      const { sendHtmlEmail } = await import("./email.js");
+
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: "Daily book recommendation pipeline started" });
+
+      // Step 1: Find the best unprocessed book
+      const recommendations = await recommendUnprocessedEntities(1);
+      if (!recommendations.length) {
+        res.json({ success: false, message: "No unprocessed books available — all books have been deep-processed!" });
+        return;
+      }
+      const rec = recommendations[0];
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Selected: ${rec.title} (${rec.entityId}) — ${rec.reason}` });
+
+      // Send immediate response so the caller doesn't timeout (pipeline takes 15-30 min)
+      res.json({ success: true, message: `Processing "${rec.title}" — podcast + email will be sent when ready`, entityId: rec.entityId, title: rec.title, reason: rec.reason });
+
+      // Step 2: Generate deep content (runs in background)
+      const processed = await generateDeepContent({
+        entityId: rec.entityId,
+        onProgress: (p) => {
+          logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${rec.title}: ${p.phase} (${p.percentComplete}%)` });
+        },
+      });
+
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${rec.title} — ${processed.durationMinutes} min` });
+
+      // Step 3: Build and send email
+      const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
+      const emailHtml = buildEntityEmailHtml(processed, baseUrl);
+      const emailResult = await sendHtmlEmail({
+        to: "kkwong@xiaomi.com",
+        subject: `📚 Daily Book Recommendation: ${rec.title} — ${processed.durationMinutes} min AI Podcast Ready`,
+        html: emailHtml,
+      });
+
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Email sent: ${emailResult.success ? "✅" : "❌"} ${emailResult.message}` });
+    } catch (err) {
+      logError("book-recommendation", "Daily pipeline failed", err);
+      // Response already sent if we got past step 1
+    }
+  });
+
   // ── Cortex Quick-Add API (for email links and external quick-add) ──
   app.get("/api/cortex/quick-add", async (req, res) => {
     const title = decodeURIComponent((req.query.title as string) || "");

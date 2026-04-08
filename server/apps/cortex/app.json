@@ -177,6 +177,26 @@
         "requiredDataKeys": ["tool"]
       },
       {
+        "suffix": "daily_book_recommendation",
+        "description": "Daily scheduled task: finds the best unprocessed book matching your Cortex interests, generates a deep AI podcast, and emails it to you with a streaming link",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_cortex_daily_book_recommendation",
+          "success": true,
+          "selectedBook": "Sapiens",
+          "totalBooks": 473,
+          "processedCount": 5,
+          "remainingBooks": 468
+        },
+        "requiredDataKeys": ["tool"]
+      },
+      {
         "suffix": "browse_sources",
         "label": "Browse Data Sources",
         "description": "Browse all imported data sources — Kindle books, bookmarks, projects, email, browser history. Each item links to its wiki page for full actions.",
