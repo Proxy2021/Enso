@@ -1404,7 +1404,7 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
         }
         if (bookMeta.isbn) metaItems.push(`ISBN: ${bookMeta.isbn}`);
       }
-    } catch { /* ignore */ }
+    }
 
     // Official description from cache
     if (bookMeta?.description) {
