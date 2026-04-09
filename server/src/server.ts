@@ -1005,7 +1005,7 @@ export async function startEnsoServer(opts: {
 
   // ── Podcast Streaming API (for email sharing) ──
   app.get("/api/podcast/stream/:slug", (req, res) => {
-    const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
+    const slug = decodeURIComponent(req.params.slug).replace(/[^\p{L}\p{N}_-]/gu, "");
     const audioPath = join(homedir(), ".enso", "data", "deep-content", "audio", `${slug}.wav`);
     if (!existsSync(audioPath)) {
       res.status(404).json({ error: "Podcast not found" });
@@ -1022,7 +1022,7 @@ export async function startEnsoServer(opts: {
   // Podcast metadata API (for email link previews)
   app.get("/api/podcast/info/:slug", async (req, res) => {
     try {
-      const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
+      const slug = decodeURIComponent(req.params.slug).replace(/[^\p{L}\p{N}_-]/gu, "");
       const metaPath = join(homedir(), ".enso", "data", "deep-content", `${slug}.json`);
       if (!existsSync(metaPath)) {
         res.status(404).json({ error: "Podcast not found" });
@@ -1370,7 +1370,7 @@ Return ONLY JSON.`;
         body += `<div style="flex:1;min-width:0">`;
         body += `<div class="badge" style="background:#312e81;color:#c4b5fd;margin-bottom:6px">${typeEmoji[type] || "🎯"} ${type}</div>`;
         body += `<h2 style="font-size:18px;margin:4px 0;color:#e2e8f0">${esc(title)}</h2>`;
-        if (creator) body += `<p style="color:#94a3b8;font-size:13px;margin:2px 0">by ${esc(decodeURIComponent(creator))}</p>`;
+        if (req.query.creator) body += `<p style="color:#94a3b8;font-size:13px;margin:2px 0">by ${esc(decodeURIComponent(req.query.creator as string))}</p>`;
         if (desc) body += `<p style="color:#64748b;font-size:12px;margin-top:8px;line-height:1.5">${esc(desc)}</p>`;
         body += `</div></div>`;
         body += `<div style="text-align:center;margin-top:20px">`;
@@ -1475,7 +1475,7 @@ audio{width:100%;margin:12px 0;border-radius:8px}
   // ── Rich Podcast Player Page ──
   app.get("/api/podcast/play/:slug", (req, res) => {
     try {
-      const slug = req.params.slug.replace(/[^a-zA-Z0-9_-]/g, "");
+      const slug = decodeURIComponent(req.params.slug).replace(/[^\p{L}\p{N}_-]/gu, "");
       const metaPath = join(homedir(), ".enso", "data", "deep-content", `${slug}.json`);
       if (!existsSync(metaPath)) { res.status(404).send(htmlPage("Not Found", "Podcast not found.", "error")); return; }
 
