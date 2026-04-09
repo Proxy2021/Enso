@@ -1100,6 +1100,37 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Cortex Enrichment API — backfill semantic tags + cross-references ──
+  app.post("/api/cortex-enrich", async (req, res) => {
+    try {
+      const { enrichNewEntities, crossReferenceNewEntities } = await import("./cortex-enrichment.js");
+      const { getEntityIndex } = await import("./entity-model.js");
+      const index = getEntityIndex();
+
+      // Collect entities that need enrichment (no semanticTags yet)
+      const entityIds: string[] = [];
+      for (const [id, entry] of index) {
+        if (!entry.semanticTags?.length) entityIds.push(id);
+      }
+      const limit = parseInt(req.query.limit as string) || entityIds.length;
+      const batch = entityIds.slice(0, limit);
+
+      logAction({ ts: Date.now(), type: "action", category: "cortex-enrichment", message: `Backfill enrichment: ${batch.length} of ${entityIds.length} entities` });
+
+      const tagResult = await enrichNewEntities(batch);
+      const xrefResult = await crossReferenceNewEntities(batch);
+
+      res.json({
+        totalUnenriched: entityIds.length,
+        processed: batch.length,
+        enriched: tagResult.enriched,
+        crossRefsCreated: xrefResult.refsCreated,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── Daily Book Recommendation Pipeline API ──
   // Discovers a new book based on Cortex interests, generates deep podcast, sends email
   app.post("/api/book-recommendation/daily", async (req, res) => {

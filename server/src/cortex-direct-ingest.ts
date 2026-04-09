@@ -79,13 +79,14 @@ function updateIndexEntry(page: DirectIngestPage): void {
 export async function directIngestFromSources(options?: {
   forceUpdate?: boolean;
   sourceIds?: string[];
-}): Promise<{ created: number; updated: number; sources: string[] }> {
+}): Promise<{ created: number; updated: number; sources: string[]; createdEntityIds: string[] }> {
   ensureCortexDir();
 
   const existingPaths = readExistingPaths();
   let created = 0;
   let updated = 0;
   const sourcesProcessed: string[] = [];
+  const createdEntityIds: string[] = [];
 
   // Read consent
   let consent: Record<string, boolean> = {};
@@ -135,6 +136,7 @@ export async function directIngestFromSources(options?: {
       } else {
         appendToIndex(page);
         created++;
+        if (page.entityId) createdEntityIds.push(page.entityId);
       }
     }
 
@@ -150,7 +152,7 @@ export async function directIngestFromSources(options?: {
     writeFileSync(LOG_PATH, (existsSync(LOG_PATH) ? readFileSync(LOG_PATH, "utf-8") : "# Cortex Log\n") + logEntry);
   }
 
-  return { created, updated, sources: sourcesProcessed };
+  return { created, updated, sources: sourcesProcessed, createdEntityIds };
 }
 
 // ─── Discovered Entity Ingest ────────────────────────────────────────────────

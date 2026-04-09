@@ -38,17 +38,21 @@ for (var li = 0; li < linkMatches.length; li++) {
   outgoingLinks.push({ name: linkName, slug: linkSlug, path: found ? found.path : null, exists: !!found });
 }
 
-// Find related pages (shared tags)
+// Find related pages (shared tags, excluding source-identifier tags)
 var related = [];
-if (tags.length > 0) {
+var SOURCE_TAGS = { kindle: 1, weread: 1, steam: 1, youtube: 1, movies_tv: 1, photos: 1, "qq_music": 1, "qq-music": 1, twitter: 1, project: 1, "social-media": 1 };
+var contentTags = tags.filter(function(t) { return !SOURCE_TAGS[t]; });
+if (contentTags.length > 0) {
   for (var ri = 0; ri < allEntries.length; ri++) {
     if (allEntries[ri].path === pagePath) continue;
-    var shared = (allEntries[ri].tags || []).filter(function(t) { return tags.indexOf(t) >= 0; });
+    var entryTags = (allEntries[ri].tags || []).filter(function(t) { return !SOURCE_TAGS[t]; });
+    var shared = entryTags.filter(function(t) { return contentTags.indexOf(t) >= 0; });
     if (shared.length > 0) {
-      related.push({ path: allEntries[ri].path, title: allEntries[ri].title, sharedTags: shared });
+      var crossSource = (allEntries[ri].source || "") !== (thisEntry ? thisEntry.source || "" : "");
+      related.push({ path: allEntries[ri].path, title: allEntries[ri].title, sharedTags: shared, crossSource: crossSource, score: shared.length + (crossSource ? 0.5 : 0) });
     }
   }
-  related.sort(function(a, b) { return b.sharedTags.length - a.sharedTags.length; });
+  related.sort(function(a, b) { return b.score - a.score; });
   related = related.slice(0, 10);
 }
 

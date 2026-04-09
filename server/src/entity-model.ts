@@ -270,6 +270,10 @@ export interface EntityIndexEntry extends EntityRef {
   parentId?: EntityId;
   tags?: string[];
   updatedAt?: string;
+  /** LLM-derived universal semantic tags for cross-source relationships (e.g., "coming-of-age", "dystopia") */
+  semanticTags?: string[];
+  /** Explicit cross-source relationships discovered by LLM during ingest */
+  crossReferences?: Array<{ entityId: EntityId; reason: string }>;
 }
 
 let entityIndex: Map<EntityId, EntityIndexEntry> = new Map();
@@ -961,26 +965,75 @@ export async function buildEntityDetailData(entityId: EntityId): Promise<Record<
     }
   }
 
-  // Find related entities (by tag overlap)
-  const relatedEntities: EntityRef[] = [];
-  if (entity.tags.length > 0) {
-    const tagSet = new Set(entity.tags);
-    let count = 0;
+  // Find related entities — 3-tier: cross-references > semantic tags > tag overlap
+  const relatedEntities: Array<EntityRef & { reason?: string }> = [];
+  const relatedReasons: Record<string, string> = {};
+  const seenIds = new Set<string>();
+
+  // Source-identifier tags to exclude from overlap computation
+  const SOURCE_TAGS = new Set(["kindle", "weread", "steam", "youtube", "movies_tv", "photos", "qq_music", "twitter", "project", "qq-music", "social-media"]);
+
+  // Tier 1: Pre-computed cross-references (from LLM enrichment)
+  const indexEntry = entityIndex.get(entityId);
+  if (indexEntry?.crossReferences?.length) {
+    for (const xref of indexEntry.crossReferences) {
+      if (seenIds.has(xref.entityId)) continue;
+      const target = entityIndex.get(xref.entityId);
+      if (!target) continue;
+      seenIds.add(xref.entityId);
+      relatedEntities.push({
+        entityId: target.entityId, type: target.type, source: target.source,
+        title: target.title, slug: target.slug, imageUrl: target.imageUrl,
+        reason: xref.reason,
+      });
+      relatedReasons[target.entityId] = xref.reason;
+    }
+  }
+
+  // Tier 2+3: Semantic tag + regular tag overlap (combined, scored)
+  if (relatedEntities.length < 10) {
+    const entitySemanticTags = new Set(indexEntry?.semanticTags || []);
+    const entityContentTags = new Set((entity.tags || []).filter(t => !SOURCE_TAGS.has(t)));
+
+    const candidates: Array<{ entry: EntityIndexEntry; score: number; crossSource: boolean }> = [];
     for (const entry of entityIndex.values()) {
-      if (entry.entityId === entityId) continue;
-      if (count >= 10) break;
-      const overlap = entry.tags?.filter(t => tagSet.has(t)).length ?? 0;
-      if (overlap >= 2) {
-        relatedEntities.push({
-          entityId: entry.entityId,
-          type: entry.type,
-          source: entry.source,
-          title: entry.title,
-          slug: entry.slug,
-          imageUrl: entry.imageUrl,
-        });
-        count++;
+      if (entry.entityId === entityId || seenIds.has(entry.entityId)) continue;
+
+      const entryContentTags = (entry.tags || []).filter(t => !SOURCE_TAGS.has(t));
+      const entrySemanticTags = entry.semanticTags || [];
+
+      // Semantic tag overlap (Tier 2) — worth more
+      let semanticOverlap = 0;
+      for (const st of entrySemanticTags) {
+        if (entitySemanticTags.has(st)) semanticOverlap++;
       }
+
+      // Regular tag overlap (Tier 3) — exclude source tags
+      let tagOverlap = 0;
+      for (const t of entryContentTags) {
+        if (entityContentTags.has(t)) tagOverlap++;
+      }
+
+      const crossSource = entry.source !== entity.source;
+      // Score: semantic tags worth 3x, regular tags worth 1x, cross-source bonus +0.5
+      const score = semanticOverlap * 3 + tagOverlap + (crossSource ? 0.5 : 0);
+
+      // Threshold: ≥1 content/semantic tag overlap required
+      if (semanticOverlap >= 1 || tagOverlap >= 1) {
+        candidates.push({ entry, score, crossSource });
+      }
+    }
+
+    // Sort: highest score first, prefer cross-source diversity
+    candidates.sort((a, b) => b.score - a.score);
+
+    const remaining = 10 - relatedEntities.length;
+    for (const c of candidates.slice(0, remaining)) {
+      seenIds.add(c.entry.entityId);
+      relatedEntities.push({
+        entityId: c.entry.entityId, type: c.entry.type, source: c.entry.source,
+        title: c.entry.title, slug: c.entry.slug, imageUrl: c.entry.imageUrl,
+      });
     }
   }
 
@@ -1022,6 +1075,7 @@ export async function buildEntityDetailData(entityId: EntityId): Promise<Record<
     backlinks,
     metadata: entity.metadata,
     relatedEntities,
+    relatedReasons,
     childEntities: entity.children ?? [],
     navigationDepth: 1,
   };

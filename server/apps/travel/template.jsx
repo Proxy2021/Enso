@@ -25,6 +25,7 @@ function GeneratedUI({ data, onAction }) {
     var fields = d.detailFields || [];
     var cortexContent = d.cortexContent;
     var related = d.relatedEntities || [];
+    var relatedReasons = d.relatedReasons || {};
     var processed = d.processedBook;
     var research = processed ? processed.research : null;
     var podcastAudioUrl = d.podcastAudioUrl;
@@ -118,11 +119,30 @@ function GeneratedUI({ data, onAction }) {
         {cortexContent && !research && (
           <UICard style={{ padding: "14px" }}><h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 6px" }}>📄 Knowledge</h3><div style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{cortexContent.slice(0, 1000)}</div></UICard>
         )}
-        {related.length > 0 && (
-          <UICard style={{ padding: "14px" }}><h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>🔗 Related</h3>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{related.map(function(r) { return <Button key={r.entityId} variant="outline" size="sm" style={{ fontSize: "10px" }} onClick={function() { onAction("view_entity", { entityId: r.entityId }); }}>{r.title}</Button>; })}</div>
-          </UICard>
-        )}
+        {related.length > 0 && (function() {
+          var sourceIcons = { kindle: "📚", weread: "📚", steam: "🎮", movies_tv: "🎬", youtube: "📺", photos: "📷", qq_music: "🎵", twitter: "🐦", files: "💻", cortex: "🧠", research: "🔬", manual: "📝" };
+          var sourceLabels = { kindle: "kindle", weread: "weread", steam: "steam", movies_tv: "movie", youtube: "youtube", photos: "photo", qq_music: "music", twitter: "twitter", files: "project" };
+          return (
+            <UICard style={{ padding: "14px" }}>
+              <h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>🔗 Related</h3>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {related.map(function(r) {
+                  var icon = sourceIcons[r.source] || "📄";
+                  var reason = relatedReasons[r.entityId] || r.reason;
+                  var label = sourceLabels[r.source] || r.source;
+                  var btn = React.createElement(Button, {
+                    key: r.entityId, variant: "outline", size: "sm",
+                    style: { fontSize: "10px" },
+                    onClick: function() { onAction("view_entity", { entityId: r.entityId }); }
+                  }, icon + " " + r.title + " (" + label + ")");
+                  return reason
+                    ? React.createElement(EnsoUI.Tooltip, { key: r.entityId, content: reason }, btn)
+                    : btn;
+                })}
+              </div>
+            </UICard>
+          );
+        })()}
       </div>
     );
   }

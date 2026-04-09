@@ -119,16 +119,39 @@ export async function runPostScanPipeline(
   }
 
   // Step 4: Direct ingest — create per-item cortex pages (no LLM cost)
+  let createdEntityIds: string[] = [];
   try {
     const { directIngestFromSources } = await import("./cortex-direct-ingest.js");
     const directResult = await directIngestFromSources({ sourceIds: result.changedSources });
     result.cortexPagesCreated += directResult.created;
     result.cortexPagesUpdated += directResult.updated;
+    createdEntityIds = directResult.createdEntityIds || [];
     if (directResult.created > 0 || directResult.updated > 0) {
       logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Direct ingest: ${directResult.created} pages created, ${directResult.updated} updated` });
     }
   } catch (err) {
     logError("data-pipeline", "Direct ingest failed", err);
+  }
+
+  // Step 5: Cortex enrichment — LLM semantic tagging + cross-source references
+  if (createdEntityIds.length > 0) {
+    try {
+      const { enrichNewEntities, crossReferenceNewEntities } = await import("./cortex-enrichment.js");
+
+      // Level 2: Semantic tagging (Gemini Flash — cheap)
+      const tagResult = await enrichNewEntities(createdEntityIds);
+      if (tagResult.enriched > 0) {
+        logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Semantic enrichment: ${tagResult.enriched} entities tagged` });
+      }
+
+      // Level 3: Cross-source references (Gemini Flash — semantic connections)
+      const xrefResult = await crossReferenceNewEntities(createdEntityIds);
+      if (xrefResult.refsCreated > 0) {
+        logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Cross-references: ${xrefResult.refsCreated} relationships discovered` });
+      }
+    } catch (err) {
+      logError("data-pipeline", "Cortex enrichment failed (non-fatal)", err);
+    }
   }
 
   logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Pipeline complete: ${result.ingestedSources.length} ingested, ${result.cortexPagesCreated} pages created, ${result.cortexPagesUpdated} pages updated` });

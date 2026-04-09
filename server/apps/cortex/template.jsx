@@ -255,13 +255,16 @@ export default function GeneratedUI({ data, onAction }) {
                 )}
               </div>
 
-              {/* Related pages */}
+              {/* Related pages — cross-source aware */}
               {(data?.related || []).length > 0 && (
-                <UICard accent="green" header="Related Pages">
+                <UICard accent="green" header={React.createElement("span", null, "🔗 Related (", (data?.related || []).length, ")")}>
                   <div className="flex flex-wrap gap-1.5">
                     {(data?.related || []).map(function(r, i) {
+                      var sourceIcons = { kindle: "📚", weread: "📚", steam: "🎮", movies_tv: "🎬", youtube: "📺", photos: "📷", "qq-music": "🎵", twitter: "🐦", project: "💻" };
+                      var pathSource = (r.path || "").match(/entities\//) ? "entity" : "";
+                      var icon = r.crossSource ? (sourceIcons[r.title.split(" ")[0]] || "🔗") : "";
                       return (
-                        <Button key={i} variant="ghost" className="text-xs" onClick={function() { onAction("read", { path: r.path }); }}>
+                        <Button key={i} variant="ghost" className={"text-xs" + (r.crossSource ? " border border-purple-500/30" : "")} onClick={function() { onAction("read", { path: r.path }); }}>
                           {r.title} <span className="text-gray-500 ml-1">({(r.sharedTags || []).join(", ")})</span>
                         </Button>
                       );

@@ -64,6 +64,7 @@ server/                       # Enso server (the backend)
     ├── cortex-tools.ts       # Cortex wiki engine (ingest, search, read, lint, cross-reference)
     ├── cortex-synthesis.ts   # Cross-source synthesis engine (LLM-first intelligence)
     ├── cortex-direct-ingest.ts # Per-item Cortex page creation (zero-LLM)
+    ├── cortex-enrichment.ts  # Post-ingest LLM semantic tagging + cross-source references
     ├── card-to-cortex.ts     # Auto-persist app cards as Cortex wiki pages
     ├── data-source-registry.ts # Centralized DATA_SOURCES descriptors
     ├── data-source-pipeline.ts # Post-scan auto-ingest to Cortex
@@ -353,6 +354,8 @@ Cortex is the ONLY brain — all knowledge, memory, profile, and data source con
 - **Storage**: `~/.enso/wiki/` with `_index.md` (machine-parseable catalog), `_log.md` (operation log), and subdirs `entities/`, `concepts/`, `sources/`, `synthesis/`.
 - **Protected pages**: `synthesis/user-profile.md` (user identity, role, interests — rebuilt from data source scans), `synthesis/conversation-memory.md` (persistent memory across conversations). These are the primary context sources for agent prompts.
 - **Data source content**: Each data source scan creates per-item wiki pages (e.g., `entities/kindle-<title>.md`, `entities/project-<name>.md`) via the direct ingest pipeline — zero LLM cost per item.
+- **Cross-source enrichment** (`server/src/cortex-enrichment.ts`): Post-ingest LLM pipeline that runs at scan time (not runtime). Two phases: (1) `enrichNewEntities()` adds 3-5 universal semantic tags per entity via Gemini Flash (e.g., "coming-of-age", "dystopia", "survival" — themes that transcend source boundaries), (2) `crossReferenceNewEntities()` discovers explicit cross-source relationships by sending new entities + full inventory to LLM. Both stored on `EntityIndexEntry` (`semanticTags`, `crossReferences`). Backfill via `POST /api/cortex-enrich`.
+- **3-tier related items** (`entity-model.ts`): Entity detail pages find related items using: (1) pre-computed cross-references with LLM-generated reasons, (2) semantic tag overlap (LLM-derived universal tags), (3) regular tag overlap with source-identifier exclusion. Source tags (`kindle`, `steam`, `youtube`, etc.) are excluded from overlap to prevent same-source bias.
 - **LLM ingest**: Rich content (research results, manual knowledge) goes through the full LLM ingest pipeline for AI-organized entity/concept/synthesis pages.
 - **Context injection**: `getWikiContextSummary()` injected into `buildEnsoContext()` so the agent knows accumulated knowledge.
 - **Auto-persist app cards**: `card-to-cortex.ts` automatically persists significant app card results (research, analysis) as Cortex wiki pages.
@@ -363,7 +366,7 @@ Cortex is the ONLY brain — all knowledge, memory, profile, and data source con
 - **Research integration** (`researcher-tools.ts`): Every research result includes `cortexSynthesis` — auto cross-references topic against personal library with LLM narrative.
 - **Morning briefing** (`daily_discovery.js`): 9-section daily email: executive summary, findings, On This Day (photo memories), Fresh Videos (YouTube), Library stats, Project Pulse, Knowledge Growth, From Your Brain (cross-source synthesis), Blind Spots.
 - **Active intelligence** (`proactive-engine.ts`): 5 cross-app suggestion types: trending convergence (YouTube), knowledge gaps, cross-source connections, photo memories, stale project alerts.
-- Key files: `cortex-tools.ts` (engine), `cortex-synthesis.ts` (LLM synthesis), `cortex-direct-ingest.ts` (per-item pages), `card-to-cortex.ts` (auto-persist), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection), `proactive-engine.ts` (active intelligence)
+- Key files: `cortex-tools.ts` (engine), `cortex-synthesis.ts` (LLM synthesis), `cortex-direct-ingest.ts` (per-item pages), `cortex-enrichment.ts` (semantic tags + cross-refs), `card-to-cortex.ts` (auto-persist), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection), `proactive-engine.ts` (active intelligence)
 
 ### Deep Research Pipeline
 
