@@ -1014,7 +1014,9 @@ export async function startEnsoServer(opts: {
     const stat = statSync(audioPath);
     res.setHeader("Content-Type", "audio/wav");
     res.setHeader("Content-Length", stat.size);
-    res.setHeader("Content-Disposition", `inline; filename="${slug}.wav"`);
+    // Use RFC 5987 encoding for non-ASCII filenames
+    const safeFilename = slug.replace(/[^\x20-\x7E]/g, "_");
+    res.setHeader("Content-Disposition", `inline; filename="${safeFilename}.wav"; filename*=UTF-8''${encodeURIComponent(slug)}.wav`);
     res.setHeader("Cache-Control", "public, max-age=86400");
     createReadStream(audioPath).pipe(res);
   });
