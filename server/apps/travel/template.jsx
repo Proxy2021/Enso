@@ -9,6 +9,7 @@ function GeneratedUI({ data, onAction }) {
   var [searchInput, setSearchInput] = React.useState("");
   var [addInput, setAddInput] = React.useState("");
   var [showTranscript, setShowTranscript] = React.useState(false);
+  var [playingVideo, setPlayingVideo] = React.useState(null);
 
   // ── Breadcrumb ──
   var navStack = d.navStack || [];
@@ -27,9 +28,6 @@ function GeneratedUI({ data, onAction }) {
     var related = d.relatedEntities || [];
     var relatedReasons = d.relatedReasons || {};
     var recommendedVideos = d.recommendedVideos || [];
-    var _pvState = React.useState(null);
-    var playingVideo = _pvState[0];
-    var setPlayingVideo = _pvState[1];
     var processed = d.processedBook;
     var research = processed ? processed.research : null;
     var podcastAudioUrl = d.podcastAudioUrl;

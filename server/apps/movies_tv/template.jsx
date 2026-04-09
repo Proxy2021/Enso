@@ -14,6 +14,7 @@ function GeneratedUI({ data, onAction }) {
   var [activeCategory, setActiveCategory] = React.useState("all");
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [addInput, setAddInput] = React.useState("");
+  var [playingVideo, setPlayingVideo] = React.useState(null);
   var isAddResults = tool === "enso_movies_tv_add";
 
   // ── Breadcrumb navigation bar ──
@@ -44,9 +45,6 @@ function GeneratedUI({ data, onAction }) {
     var related = d.relatedEntities || [];
     var relatedReasons = d.relatedReasons || {};
     var recommendedVideos = d.recommendedVideos || [];
-    var _pvState = React.useState(null);
-    var playingVideo = _pvState[0];
-    var setPlayingVideo = _pvState[1];
     var processed = d.processedBook;
     var research = processed ? processed.research : null;
     var podcastStatus = d.podcastStatus;

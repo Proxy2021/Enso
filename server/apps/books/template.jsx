@@ -13,6 +13,7 @@ function GeneratedUI({ data, onAction }) {
   var [sortBy, setSortBy] = React.useState(d.sortBy || "publicationDate");
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [activeTab, setActiveTab] = React.useState(d.tab || "all");
+  var [playingVideo, setPlayingVideo] = React.useState(null);
   var [addBookInput, setAddBookInput] = React.useState("");
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
@@ -42,9 +43,6 @@ function GeneratedUI({ data, onAction }) {
     var related = d.relatedEntities || [];
     var relatedReasons = d.relatedReasons || {};
     var recommendedVideos = d.recommendedVideos || [];
-    var _pvState = React.useState(null);
-    var playingVideo = _pvState[0];
-    var setPlayingVideo = _pvState[1];
     var processed = d.processedBook;
     var research = processed ? processed.research : null;
     var podcastStatus = d.podcastStatus;
