@@ -202,12 +202,29 @@ function readCategory(id: string): unknown | null {
 
     case "deepContent": {
       const dcDir = join(ENSO_HOME, "data", "deep-content");
+      const audioDir = join(dcDir, "audio");
       if (!existsSync(dcDir)) return null;
       const result: Record<string, unknown> = {};
+      // JSON metadata
       for (const file of readdirSync(dcDir)) {
         if (!file.endsWith(".json")) continue;
         const data = readJsonFile(join(dcDir, file));
         if (data) result[file] = data;
+      }
+      // Audio files as base64 (when _includeAudio flag is set via export handler)
+      if ((globalThis as any).__ensoExportIncludeAudio && existsSync(audioDir)) {
+        const audioFiles: Record<string, string> = {};
+        for (const file of readdirSync(audioDir)) {
+          if (!file.endsWith(".wav")) continue;
+          const filePath = join(audioDir, file);
+          try {
+            const audioData = readFileSync(filePath);
+            audioFiles[file] = audioData.toString("base64");
+          } catch { /* skip files that can't be read */ }
+        }
+        if (Object.keys(audioFiles).length > 0) {
+          result["_audio"] = audioFiles;
+        }
       }
       return Object.keys(result).length > 0 ? result : null;
     }
@@ -285,6 +302,8 @@ function estimateSize(data: unknown): number {
 
 export async function handleExport(req: Request, res: Response): Promise<void> {
   const dryRun = req.query.dryRun === "true";
+  const includeAudio = req.query.includeAudio === "true";
+  (globalThis as any).__ensoExportIncludeAudio = includeAudio;
   const requestedCategories = req.query.categories
     ? (req.query.categories as string).split(",").map((s) => s.trim())
     : CATEGORIES.map((c) => c.id);
@@ -335,6 +354,8 @@ export async function handleExport(req: Request, res: Response): Promise<void> {
   const dateStr = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Content-Disposition", `attachment; filename="enso-export-${dateStr}.json"`);
+  // Clean up global flag
+  delete (globalThis as any).__ensoExportIncludeAudio;
   res.json(bundle);
 }
 
@@ -681,9 +702,25 @@ function importCortex(data: Record<string, Record<string, string>>, mergeMode: "
 
 function importDeepContent(data: Record<string, unknown>, mergeMode: "skip" | "replace"): ImportSummary {
   const dcDir = join(ENSO_HOME, "data", "deep-content");
+  const audioDir = join(dcDir, "audio");
   mkdirSync(dcDir, { recursive: true });
+  mkdirSync(audioDir, { recursive: true });
   let imported = 0, skipped = 0;
+
   for (const [filename, content] of Object.entries(data)) {
+    // Handle audio files (base64-encoded WAV)
+    if (filename === "_audio" && typeof content === "object" && content !== null) {
+      for (const [audioFile, base64Data] of Object.entries(content as Record<string, string>)) {
+        if (!audioFile.endsWith(".wav")) continue;
+        const audioPath = join(audioDir, audioFile);
+        if (mergeMode === "skip" && existsSync(audioPath)) { skipped++; continue; }
+        writeFileSync(audioPath, Buffer.from(base64Data, "base64"));
+        imported++;
+      }
+      continue;
+    }
+
+    // Handle JSON metadata
     if (!filename.endsWith(".json")) continue;
     const filePath = join(dcDir, filename);
     if (mergeMode === "skip" && existsSync(filePath)) { skipped++; continue; }

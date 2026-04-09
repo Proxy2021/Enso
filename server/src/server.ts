@@ -1992,7 +1992,7 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     handleExport(req, res);
   });
 
-  app.post("/api/settings/import", express.json({ limit: "50mb" }), async (req, res) => {
+  app.post("/api/settings/import", express.json({ limit: "5gb" }), async (req, res) => {
     const { handleImport } = await import("./settings-transfer.js");
     handleImport(req, res);
   });
