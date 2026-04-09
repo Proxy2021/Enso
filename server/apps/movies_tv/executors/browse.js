@@ -72,11 +72,31 @@ var p = params || {};
     }
   } catch(e) {}
 
+  // Check for deep-processed movies/TV (podcasts)
+  var processedItems = [];
+  try {
+    var dcDir = path.join(os.homedir(), ".enso", "data", "deep-content");
+    if (fs.existsSync(dcDir)) {
+      fs.readdirSync(dcDir).forEach(function(f) {
+        if (f.endsWith(".json") && (f.startsWith("movies_tv_") || f.startsWith("research_movie") || f.startsWith("research_tv"))) {
+          try {
+            var meta = JSON.parse(fs.readFileSync(path.join(dcDir, f), "utf-8"));
+            var eiPath2 = path.join(os.homedir(), ".enso", "data", "entity-index.json");
+            var coverUrl = "";
+            if (fs.existsSync(eiPath2)) { try { var idx2 = JSON.parse(fs.readFileSync(eiPath2, "utf-8")); if (idx2[meta.entityId]?.imageUrl) coverUrl = idx2[meta.entityId].imageUrl; } catch(e3) {} }
+            processedItems.push({ entityId: meta.entityId, title: meta.title, author: meta.author, coverUrl: coverUrl, durationMinutes: meta.durationMinutes });
+          } catch(e2) {}
+        }
+      });
+    }
+  } catch(e) {}
+
   return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_movies_tv_browse",
     items: items.slice(0, 200),
     totalItems: cached.items.length,
     filteredCount: items.length,
+    processedItems: processedItems,
     recommendations: recommendations,
     categories: catCounts,
     genres: Object.keys(genreSet).sort(),

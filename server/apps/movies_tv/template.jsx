@@ -13,6 +13,8 @@ function GeneratedUI({ data, onAction }) {
   var [sortBy, setSortBy] = React.useState("title");
   var [activeCategory, setActiveCategory] = React.useState("all");
   var [showTranscript, setShowTranscript] = React.useState(false);
+  var [addInput, setAddInput] = React.useState("");
+  var isAddResults = tool === "enso_movies_tv_add";
 
   // ── Breadcrumb navigation bar ──
   var navStack = d.navStack || [];
@@ -69,11 +71,41 @@ function GeneratedUI({ data, onAction }) {
                 }
                 return null;
               })()}
-              <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap", alignItems: "center" }}>
                 <Badge variant="default">{entity.type}</Badge>
                 <Badge variant="secondary">{entity.source}</Badge>
-                {entity.cortexPath && <Badge variant="secondary">In Cortex</Badge>}
-                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>Podcast Ready</Badge>}
+                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ {podcastDuration ? podcastDuration + " min" : "Podcast Ready"}</Badge>}
+              </div>
+              {/* Action buttons */}
+              <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+                {d.contentAccess && d.contentAccess.mediaUrl && (
+                  <Button size="sm" style={{ background: "#2563eb", color: "white" }}
+                    onClick={function() { onAction("open_url", { url: d.contentAccess.mediaUrl }); }}
+                  >▶️ Play</Button>
+                )}
+                {d.contentAccess && d.contentAccess.externalUrl && (
+                  <Button size="sm" style={{ background: "#059669", color: "white" }}
+                    onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
+                  >{d.contentAccess.externalLabel || "IMDB"}</Button>
+                )}
+                {d.contentAccess && d.contentAccess.launchUrl && (
+                  <Button size="sm" style={{ background: "#059669", color: "white" }}
+                    onClick={function() { window.open(d.contentAccess.launchUrl); }}
+                  >{d.contentAccess.icon || "🎮"} {d.contentAccess.label || "Launch"}</Button>
+                )}
+                {!podcastAudioUrl && !podcastStatus && (
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+                    onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+                  >🎙️ Generate Podcast</Button>
+                )}
+                {podcastAudioUrl && (
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+                    onClick={function() {
+                      var email = prompt("Send report + podcast to:", "kkwong@xiaomi.com");
+                      if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
+                    }}
+                  >📧 Email Podcast</Button>
+                )}
               </div>
               {entity.summary && (
                 <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.5 }}>
@@ -235,38 +267,43 @@ function GeneratedUI({ data, onAction }) {
           </UICard>
         )}
 
-        {/* Actions */}
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          {!podcastAudioUrl && !podcastStatus && (
-            <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
-              onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
-            >Deep Podcast</Button>
-          )}
-          {/* Content access buttons */}
-          {d.contentAccess && d.contentAccess.mediaUrl && (
-            <Button size="sm" style={{ background: "#2563eb", color: "white" }}
-              onClick={function() { onAction("open_url", { url: d.contentAccess.mediaUrl }); }}
-            >▶️ Play</Button>
-          )}
-          {d.contentAccess && d.contentAccess.externalUrl && (
-            <Button variant="outline" size="sm"
-              onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
-            >{d.contentAccess.externalLabel || "IMDB"}</Button>
-          )}
-          {d.contentAccess && d.contentAccess.launchUrl && (
-            <Button size="sm" style={{ background: "#059669", color: "white" }}
-              onClick={function() { window.open(d.contentAccess.launchUrl); }}
-            >{d.contentAccess.icon || "🎮"} {d.contentAccess.label || "Launch"}</Button>
-          )}
-          {podcastAudioUrl && (
-            <Button variant="outline" size="sm"
-              onClick={function() {
-                var email = prompt("Send film report + podcast to:");
-                if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
-              }}
-            >Email Summary + Podcast</Button>
-          )}
+      </div>
+    );
+  }
+
+  // ── Add Movie/TV results ──
+  if (isAddResults) {
+    var addResults = Array.isArray(d.results) ? d.results : [];
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {breadcrumb}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <span style={{ fontSize: "20px", marginRight: "8px" }}>🔍</span>
+            <span style={{ fontWeight: 600 }}>Add Movie / TV</span>
+            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>{addResults.length} results for "{d.query}"</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>← Library</Button>
         </div>
+        {addResults.map(function(r, i) {
+          return (
+            <UICard key={i} style={{ padding: "12px" }}>
+              <div style={{ display: "flex", gap: "12px" }}>
+                {r.posterUrl && <img src={r.posterUrl} alt={r.title} style={{ width: "60px", height: "90px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>{r.title}{r.year ? " (" + r.year + ")" : ""}</div>
+                  <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{r.type === "tv-series" ? "TV Series" : "Movie"}{r.rating ? " · ⭐ " + r.rating.toFixed(1) : ""}{r.voteCount ? " (" + r.voteCount + ")" : ""}</div>
+                  {r.overview && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: 1.4 }}>{r.overview.slice(0, 200)}{r.overview.length > 200 ? "..." : ""}</div>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0, justifyContent: "center" }}>
+                  <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() {
+                    onAction("add_to_cortex", { title: r.title, type: r.type || "movie", year: r.year, description: r.overview });
+                  }}>📥 Add</Button>
+                </div>
+              </div>
+            </UICard>
+          );
+        })}
       </div>
     );
   }
@@ -369,6 +406,35 @@ function GeneratedUI({ data, onAction }) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {/* Research Discoveries */}
+        {/* Processed Podcasts Banner */}
+        {(d.processedItems || []).length > 0 && (
+          <UICard style={{ padding: "10px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "14px" }}>🎙️</span>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "#c4b5fd" }}>Deep Podcasts</span>
+              <Badge variant="secondary" style={{ fontSize: "10px" }}>{(d.processedItems || []).length}</Badge>
+            </div>
+            <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
+              {(d.processedItems || []).map(function(pi) {
+                return (
+                  <div key={pi.entityId} style={{ position: "relative", flexShrink: 0, cursor: "pointer", borderRadius: "6px", overflow: "hidden", width: "52px", height: "76px", background: "#1e1b4b" }}
+                    onClick={function() { onAction("view_entity", { entityId: pi.entityId }); }}
+                    title={pi.title + " — " + pi.durationMinutes + " min"}>
+                    {pi.coverUrl ? (
+                      <img src={pi.coverUrl} alt={pi.title} style={{ width: "52px", height: "76px", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: "52px", height: "76px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", color: "#94a3b8", textAlign: "center", padding: "4px", lineHeight: 1.2 }}>{pi.title.slice(0, 20)}</div>
+                    )}
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.8))", padding: "2px 3px", textAlign: "center" }}>
+                      <span style={{ fontSize: "8px", color: "#c4b5fd", fontWeight: 600 }}>{pi.durationMinutes}m</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
         {(d.recommendations || []).length > 0 && (
           <UICard style={{ padding: "12px", borderColor: "#059669" + "44" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
@@ -402,14 +468,9 @@ function GeneratedUI({ data, onAction }) {
             </span>
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
-            <Button variant="outline" size="sm" onClick={function() { onAction("scan", {}); }}>
-              <RefreshCw size={12} style={{ marginRight: "4px" }} /> Scan
-            </Button>
-            <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>
-              <Star size={12} style={{ marginRight: "4px" }} /> Enrich
-            </Button>
-            <Button variant="outline" size="sm" onClick={function() { onAction("update", {}); }}>
-              <RefreshCw size={12} style={{ marginRight: "4px" }} /> Update
+            <Button variant="outline" size="sm" onClick={function() { onAction("scan", {}); }}>Scan</Button>
+            <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>Enrich</Button>
+            <Button variant="default" size="sm" onClick={function() { if (addInput.trim()) onAction("add", { query: addInput.trim() }); }}>➕ Add Movie</Button>
             </Button>
           </div>
         </div>
@@ -424,11 +485,21 @@ function GeneratedUI({ data, onAction }) {
           </div>
         )}
 
+        {/* Add Movie search bar */}
+        <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
+          <Input placeholder="Add a movie or TV show — search by title..." value={addInput}
+            onChange={function(e) { setAddInput(e.target.value); }}
+            onKeyDown={function(e) { if (e.key === "Enter" && addInput.trim()) onAction("add", { query: addInput.trim() }); }}
+            style={{ flex: 1, fontSize: "12px" }} />
+          <Button variant="default" size="sm" style={{ fontSize: "11px" }}
+            onClick={function() { if (addInput.trim()) onAction("add", { query: addInput.trim() }); }}>🔍 Search & Add</Button>
+        </div>
+
         {/* Search + Sort */}
         <div style={{ display: "flex", gap: "8px" }}>
           <div style={{ flex: 1, position: "relative" }}>
             <Input
-              placeholder="Search by title, genre, cast..."
+              placeholder="Filter by title, genre, cast..."
               value={searchInput}
               onChange={function(e) { setSearchInput(e.target.value); }}
               onKeyDown={function(e) {
