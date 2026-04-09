@@ -1,6 +1,6 @@
 # Enso — A self-hosted AI platform with a Knowledge Cortex that compounds with every interaction
 
-> 99 tools, 16+ apps, 7 data sources, and a unified brain that learns from your books, browsing, projects, and conversations.
+> 99 tools, 16+ apps, 7 data sources, AI-inferred focus areas, and a unified brain that learns from your books, browsing, projects, and conversations.
 
 ![Enso Screenshot](https://img.shields.io/badge/status-active-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Desktop%20%7C%20Android%20%7C%20PWA-orange)
 
@@ -59,6 +59,7 @@ Type `/evolve` and an AI team — project leader, architect, engineers, QA, mark
 | Capability | Description |
 |---|---|
 | 🧠 Knowledge Cortex | The ONLY brain — 680+ interlinked wiki pages auto-populated from 7 data sources, treemap graph, web discovery, AI digest, daily intelligence briefing with email delivery |
+| 🎯 Focus Areas | AI-inferred goals from your Cortex data — concrete outcomes you're working toward. Progressive refinement through evidence + conversation. Deeper intention analysis reveals the WHY behind each goal and suggests adjacent pursuits |
 | 🔍 Research Engine | 48+ source analysis with structured boards, AI podcast, contradiction detection, deep research escalation via Claude Code |
 | 💻 Claude Code | `/code` — live terminal coding with model selection (Opus/Sonnet/Haiku), extended thinking |
 | ⚡ Orchestrator | Multi-agent teams with DAG-based task decomposition for complex goals |

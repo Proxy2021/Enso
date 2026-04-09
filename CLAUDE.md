@@ -102,13 +102,15 @@ shared/types.ts               # Protocol types shared between frontend and serve
 
 ## Key Concepts
 
-### 5-Tab Universal Navigation
+### 7-Tab Universal Navigation
 
-The app uses a **universal 5-tab navigation** that renders as a left rail on desktop and a bottom bar on mobile. Both platforms share the same tab state (`activeTab` in Zustand) and content views.
+The app uses a **universal 7-tab navigation** that renders as a left rail on desktop and a bottom bar on mobile. Both platforms share the same tab state (`activeTab` in Zustand) and content views.
 
 | Tab | Purpose | Key Components |
 |-----|---------|---------------|
 | **Chat** | Conversations with Enso | ConversationSidebar + CardTimeline + ChatInput + PinnedSidebar |
+| **Cortex** | Knowledge browser — wiki pages, graph, discovery | CortexView (dashboard, reader, graph, search) |
+| **Focus** | AI-inferred goals with deeper intention analysis | FocusView (list → detail with Overview/Activity/Plan tabs) |
 | **Tasks** | Command center for active/completed/recoverable sessions | TasksView (polls `/api/sessions`) |
 | **Evolve** | Self-evolution hub — evolve everything | EvolveView (quick actions, app ecosystem, sprint/discovery history) |
 | **Projects** | External codebase management | ProjectsView (project list, import, detail with team/personas/sprints) |
@@ -118,7 +120,7 @@ The app uses a **universal 5-tab navigation** that renders as a left rail on des
 - **Mobile**: `MobileTabBar` (bottom bar, hides when inside a chat conversation)
 - **State**: `activeTab` (which tab is shown), `chatViewOpen` (whether a conversation is open on mobile)
 - **No desktop header**: All header functions (search, settings, apps menu, connection) are absorbed into their respective tabs
-- Key files: `src/components/TabNavigation.tsx`, `src/components/TasksView.tsx`, `src/components/EvolveView.tsx`, `src/components/ProjectsView.tsx`, `src/components/SettingsView.tsx`, `src/App.tsx`
+- Key files: `src/components/TabNavigation.tsx`, `src/components/FocusView.tsx`, `src/components/TasksView.tsx`, `src/components/EvolveView.tsx`, `src/components/ProjectsView.tsx`, `src/components/SettingsView.tsx`, `src/App.tsx`
 
 ### WebSocket Protocol
 
@@ -367,6 +369,20 @@ Cortex is the ONLY brain — all knowledge, memory, profile, and data source con
 - **Morning briefing** (`daily_discovery.js`): 9-section daily email: executive summary, findings, On This Day (photo memories), Fresh Videos (YouTube), Library stats, Project Pulse, Knowledge Growth, From Your Brain (cross-source synthesis), Blind Spots.
 - **Active intelligence** (`proactive-engine.ts`): 5 cross-app suggestion types: trending convergence (YouTube), knowledge gaps, cross-source connections, photo memories, stale project alerts.
 - Key files: `cortex-tools.ts` (engine), `cortex-synthesis.ts` (LLM synthesis), `cortex-direct-ingest.ts` (per-item pages), `cortex-enrichment.ts` (semantic tags + cross-refs), `card-to-cortex.ts` (auto-persist), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection), `proactive-engine.ts` (active intelligence)
+
+### Focus Areas (AI-Inferred Goals)
+
+Focus Areas is a synchronization mechanism between the user and AI. The system analyzes Cortex data to infer concrete, outcome-oriented goals the user is working toward, then organizes all assistance around those goals.
+
+- **Inference** (`server/src/focus-areas.ts`): `inferFocusAreas()` sends full data inventory + semantic tag clusters to LLM, which produces 4-7 focus areas with evidence, intent, deeper motivation, and adjacent pursuits. Outcome-oriented (not category labels): "Develop AlphaRank into a Market-Beating Quant Tool", not "Quantitative Finance".
+- **Progressive refinement**: Each focus has clarity level (emerging → developing → clear). Refines through passive evidence accumulation AND active conversation. `refineFocusFromConversation()` extracts goal/intent/deeper-motivation signals from chat.
+- **Deeper intention**: Each focus has a `deeperIntent` (the personal WHY — e.g., "financial independence through data-driven investing") and `adjacentPursuits` (unexplored directions aligned with the deeper motivation).
+- **Agent context**: `getFocusContextForAgent()` injects active focus areas into every agent prompt. When a message maps to a focus area, the agent gets clarity-appropriate instructions (emerging → ask clarifying questions, clear → provide execution help).
+- **Cortex-native**: Goals stored as wiki pages at `~/.enso/wiki/focuses/<goal-slug>.md` with intent, deeper motivation, evidence, and refinement history. Cross-referenceable with all Cortex entities.
+- **REST API**: `GET /api/focus-areas`, `POST /api/focus-areas/infer`, `PATCH /api/focus-areas/:id`, `POST /api/focus-areas/:id/plan` (generates orchestration goal)
+- **UI**: Focus tab (3rd position) with list → detail navigation. Detail has Overview (editable fields, deeper motivation, adjacent pursuits), Activity (matching entities), Plan (orchestration-powered action planning).
+- **Proactive**: Focus-aware suggestions in proactive engine — quiet areas get nudges, emerging areas get clarifying questions, growing areas get reinforcement.
+- Key files: `focus-areas.ts` (engine), `src/components/FocusView.tsx` (UI), `memory-bridge.ts` + `standalone-agent.ts` (context injection), `proactive-engine.ts` (suggestions)
 
 ### Deep Research Pipeline
 
