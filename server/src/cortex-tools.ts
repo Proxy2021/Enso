@@ -1151,7 +1151,7 @@ export function createCortexTools(): EnsoAgentTool[] {
     {
       name: "enso_cross_reference",
       label: "Cross-Reference",
-      description: "Search ALL data sources (Kindle books, YouTube channels, movies, Steam games, photos, projects, bookmarks, music, Twitter) for content related to a topic. Returns matches from every source plus an AI-synthesized insight connecting them. Use this to discover how a topic connects across the user's entire digital life.",
+      description: "Cross-source intelligence: search ALL data sources (Kindle books, YouTube channels, movies, Steam games, photos, projects, bookmarks, music, Twitter) for content related to a topic. With synthesize=true (default), uses LLM to discover deep semantic connections and generate a narrative linking items across sources. Use this for: 'what connects my interests in X and Y?', 'synthesize what I know about Z', 'how does topic X appear across my library?', or any cross-source analysis.",
       parameters: {
         type: "object",
         properties: {
@@ -1230,6 +1230,39 @@ export function createCortexTools(): EnsoAgentTool[] {
               }),
             }],
           };
+        }
+      },
+    },
+
+    // ── Thematic Map (Deep Cross-Source Synthesis) ──
+    {
+      name: "enso_cortex_thematic_map",
+      label: "Thematic Map",
+      description: "Generate a deep thematic map of the user's entire knowledge base. Identifies 5-8 major life themes that span multiple data sources (books, movies, games, YouTube, projects, photos), reveals cross-source connections, and surfaces meta-patterns. Use when the user asks: 'what are my main interests?', 'map my knowledge', 'what patterns do you see across my library?', 'what drives me?'. LLM-powered analysis (~5s).",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => {
+        try {
+          const { generateThematicMap } = await import("./cortex-synthesis.js");
+          const map = await generateThematicMap();
+          if (!map) {
+            return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_cortex_thematic_map", error: "Not enough data to generate thematic map" }) }] };
+          }
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                tool: "enso_cortex_thematic_map",
+                thematicMap: map,
+              }),
+            }],
+          };
+        } catch (err) {
+          return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_cortex_thematic_map", error: err instanceof Error ? err.message : String(err) }) }] };
         }
       },
     },

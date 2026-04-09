@@ -67,6 +67,14 @@ interface CortexStats {
   recentPages: Array<{ path: string; title: string; summary: string; updated: string }>;
 }
 
+interface CortexPulse {
+  totalEntities: number;
+  enriched: { withSemanticTags: number; withCrossRefs: number; withVideos: number };
+  topConnection: { from: string; to: string; reason: string } | null;
+  recentActivity: string[];
+  topSemanticTags: Array<{ tag: string; count: number }>;
+}
+
 // ── Main component ──
 
 export default function WelcomeCard() {
@@ -359,6 +367,7 @@ function ScheduledTaskRow({ task, disabled, onTrigger, t }: { task: ScheduledTas
 
 function KnowledgePulse({ disabled }: { disabled: boolean }) {
   const [stats, setStats] = useState<CortexStats | null>(null);
+  const [pulse, setPulse] = useState<CortexPulse | null>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const { t } = useT();
 
@@ -370,6 +379,13 @@ function KnowledgePulse({ disabled }: { disabled: boolean }) {
     })
       .then((r) => r.json())
       .then((data) => setStats(data as CortexStats))
+      .catch(() => {});
+    fetch(`${getBackendBaseUrl()}${API.CORTEX_PULSE}`, {
+      headers: authHeaders(),
+      signal: ctrl.signal,
+    })
+      .then((r) => r.json())
+      .then((data) => setPulse(data as CortexPulse))
       .catch(() => {});
     return () => ctrl.abort();
   }, []);
@@ -403,6 +419,51 @@ function KnowledgePulse({ disabled }: { disabled: boolean }) {
             </>
           )}
         </div>
+
+        {/* Enrichment progress bars */}
+        {pulse && pulse.totalEntities > 0 && (
+          <div className="mb-2.5">
+            <p className="text-[10px] text-gray-500 mb-1.5">Cortex Intelligence</p>
+            <div className="grid grid-cols-3 gap-2">
+              <EnrichmentBar label="Tagged" value={pulse.enriched.withSemanticTags} total={pulse.totalEntities} color="violet" />
+              <EnrichmentBar label="Linked" value={pulse.enriched.withCrossRefs} total={pulse.totalEntities} color="blue" />
+              <EnrichmentBar label="Videos" value={pulse.enriched.withVideos} total={pulse.totalEntities} color="emerald" />
+            </div>
+          </div>
+        )}
+
+        {/* Top connection highlight */}
+        {pulse?.topConnection && (
+          <div className="mb-2.5 p-2 rounded-md bg-violet-500/5 border border-violet-500/15">
+            <p className="text-[10px] text-gray-500 mb-1">Top Connection</p>
+            <p className="text-[11px] text-violet-300">
+              <span className="font-medium">{pulse.topConnection.from}</span>
+              <span className="text-gray-500 mx-1">&harr;</span>
+              <span className="font-medium">{pulse.topConnection.to}</span>
+            </p>
+            <p className="text-[10px] text-gray-500 mt-0.5 italic">{pulse.topConnection.reason}</p>
+          </div>
+        )}
+
+        {/* Top semantic tags */}
+        {pulse?.topSemanticTags && pulse.topSemanticTags.length > 0 && (
+          <div className="mb-2.5">
+            <p className="text-[10px] text-gray-500 mb-1.5">Top Themes</p>
+            <div className="flex flex-wrap gap-1">
+              {pulse.topSemanticTags.slice(0, 8).map((t) => (
+                <button
+                  key={t.tag}
+                  onClick={() => { if (!disabled) sendMessage(`Cross-reference "${t.tag}" across all my data sources`); }}
+                  disabled={disabled}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800/60 border border-gray-700/40 text-gray-400 hover:text-violet-300 hover:border-violet-500/30 transition-colors"
+                >
+                  {t.tag} <span className="text-gray-600">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Recent updates */}
         {stats.recentPages.length > 0 && (
           <>
@@ -422,6 +483,27 @@ function KnowledgePulse({ disabled }: { disabled: boolean }) {
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Mini progress bar for enrichment stats */
+function EnrichmentBar({ label, value, total, color }: { label: string; value: number; total: number; color: string }) {
+  const pct = Math.round((value / total) * 100);
+  const colorMap: Record<string, string> = {
+    violet: "bg-violet-500",
+    blue: "bg-blue-500",
+    emerald: "bg-emerald-500",
+  };
+  return (
+    <div>
+      <div className="flex justify-between text-[10px] text-gray-500 mb-0.5">
+        <span>{label}</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-1 rounded-full bg-gray-800 overflow-hidden">
+        <div className={`h-full rounded-full ${colorMap[color] ?? "bg-violet-500"} transition-all`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

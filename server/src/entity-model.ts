@@ -585,6 +585,26 @@ const EXTRACTORS: Record<string, (cached: unknown) => EntityIndexEntry[]> = {
  */
 export async function buildEntityIndex(): Promise<number> {
   const startTime = Date.now();
+
+  // Ensure we load the persisted index first so enrichment data is preserved
+  if (!indexLoaded) loadEntityIndex();
+
+  // Preserve enrichment data from existing entries before clearing
+  const enrichmentData = new Map<string, {
+    semanticTags?: string[];
+    crossReferences?: Array<{ entityId: string; reason: string }>;
+    recommendedVideos?: Array<{ videoId: string; title: string; channelTitle: string; thumbnailUrl: string; viewCount?: string; duration?: string }>;
+  }>();
+  for (const [id, entry] of entityIndex) {
+    if (entry.semanticTags?.length || entry.crossReferences?.length || (entry as any).recommendedVideos?.length) {
+      enrichmentData.set(id, {
+        semanticTags: entry.semanticTags,
+        crossReferences: entry.crossReferences,
+        recommendedVideos: (entry as any).recommendedVideos,
+      });
+    }
+  }
+
   entityIndex.clear();
 
   // 1. Extract entities from all data source caches
@@ -594,6 +614,13 @@ export async function buildEntityIndex(): Promise<number> {
       if (!cached) continue;
       const entries = extractor(cached);
       for (const entry of entries) {
+        // Restore enrichment data if previously enriched
+        const enriched = enrichmentData.get(entry.entityId);
+        if (enriched) {
+          if (enriched.semanticTags) entry.semanticTags = enriched.semanticTags;
+          if (enriched.crossReferences) entry.crossReferences = enriched.crossReferences;
+          if (enriched.recommendedVideos) (entry as any).recommendedVideos = enriched.recommendedVideos;
+        }
         entityIndex.set(entry.entityId, entry);
       }
     } catch (err) {

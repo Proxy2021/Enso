@@ -553,6 +553,19 @@ export function pruneStaleJournals(): void {
 let cachedContext: { text: string; timestamp: number } | null = null;
 const CACHE_TTL = 60_000; // 60 seconds
 
+/** Topic hint — set before agent dispatch so buildEnsoContext can inject relevant entities */
+let _topicHint: string | null = null;
+
+/**
+ * Set the current user message as a topic hint for Cortex-aware context injection.
+ * Invalidates the context cache so the next buildEnsoContext() call includes
+ * topic-relevant entities from the user's knowledge base.
+ */
+export function setTopicHint(message: string): void {
+  _topicHint = message;
+  cachedContext = null; // force rebuild with topic context
+}
+
 /** Invalidate the context cache so the next prompt picks up new memory. */
 export function invalidateContextCache(): void {
   cachedContext = null;
@@ -589,6 +602,47 @@ export async function buildEnsoContext(): Promise<string> {
     const cortex = getCortexContextSummary(2000);
     if (cortex) sections.push(cortex);
   } catch { /* cortex not available */ }
+
+  // 3.5 Topic-relevant Cortex entities (injected per-message via setTopicHint)
+  if (_topicHint && _topicHint.length > 3) {
+    try {
+      const { findRelatedContent } = await import("./cortex-synthesis.js");
+      const { getEntityIndex } = await import("./entity-model.js");
+      const related = findRelatedContent(_topicHint, 3);
+      const topicHintConsumed = _topicHint;
+      _topicHint = null; // consume once
+
+      if (related.totalMatches > 0) {
+        const entityIndex = getEntityIndex();
+        const lines: string[] = [];
+        // Include top hits from data sources
+        const topHits = related.hits.slice(0, 8);
+        for (const hit of topHits) {
+          let extra = "";
+          // Enrich with entity index data (semantic tags, cross-refs)
+          for (const [, entry] of entityIndex) {
+            if (entry.title === hit.title && entry.source === hit.source) {
+              if (entry.semanticTags?.length) extra += ` themes:[${entry.semanticTags.join(",")}]`;
+              if (entry.crossReferences?.length) extra += ` cross-refs:${entry.crossReferences.length}`;
+              break;
+            }
+          }
+          lines.push(`- "${hit.title}" [${hit.source}]${extra}`);
+        }
+        // Include matching Cortex wiki pages
+        for (const page of related.cortexPages.slice(0, 3)) {
+          lines.push(`- wiki: "${page.title}" [${page.path}]`);
+        }
+        if (lines.length > 0) {
+          sections.push(`<topic_relevant_knowledge>\nThe user is asking about "${topicHintConsumed.slice(0, 80)}". Related items in their personal knowledge base:\n${lines.join("\n")}\nLeverage this knowledge — reference what the user already knows. Use enso_cortex_synthesize(topic) for deep cross-source analysis.\n</topic_relevant_knowledge>`);
+        }
+      } else {
+        _topicHint = null;
+      }
+    } catch {
+      _topicHint = null;
+    }
+  }
 
   // 4. Data source inventory — compact summary of what the user has across all sources
   try {
@@ -630,6 +684,55 @@ export async function buildEnsoContext(): Promise<string> {
   const text = `<enso_context>\n${sections.join("\n\n")}\n</enso_context>`;
   cachedContext = { text, timestamp: Date.now() };
   return text;
+}
+
+/**
+ * Get topic-relevant Cortex context for standalone agent mode.
+ * Reads and consumes the topic hint set by setTopicHint().
+ * Returns a formatted context block or empty string.
+ */
+export async function getTopicRelevantCortex(): Promise<string> {
+  if (!_topicHint || _topicHint.length <= 3) {
+    _topicHint = null;
+    return "";
+  }
+
+  try {
+    const { findRelatedContent } = await import("./cortex-synthesis.js");
+    const { getEntityIndex } = await import("./entity-model.js");
+
+    const topicText = _topicHint;
+    _topicHint = null; // consume
+
+    const related = findRelatedContent(topicText, 3);
+    if (related.totalMatches === 0) return "";
+
+    const entityIndex = getEntityIndex();
+    const lines: string[] = [];
+
+    const topHits = related.hits.slice(0, 8);
+    for (const hit of topHits) {
+      let extra = "";
+      for (const [, entry] of entityIndex) {
+        if (entry.title === hit.title && entry.source === hit.source) {
+          if (entry.semanticTags?.length) extra += ` themes:[${entry.semanticTags.join(",")}]`;
+          if (entry.crossReferences?.length) extra += ` cross-refs:${entry.crossReferences.length}`;
+          break;
+        }
+      }
+      lines.push(`- "${hit.title}" [${hit.source}]${extra}`);
+    }
+    for (const page of related.cortexPages.slice(0, 3)) {
+      lines.push(`- wiki: "${page.title}" [${page.path}]`);
+    }
+
+    if (lines.length === 0) return "";
+
+    return `\n\n## Topic-Relevant Knowledge\nThe user is asking about "${topicText.slice(0, 80)}". Related items in their knowledge base:\n${lines.join("\n")}\nLeverage this — reference what the user already knows. Use enso_cortex_synthesize(topic) for deep cross-source analysis.`;
+  } catch {
+    _topicHint = null;
+    return "";
+  }
 }
 
 /** List available Enso apps. */

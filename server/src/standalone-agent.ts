@@ -15,6 +15,7 @@ import { deliverEnsoReply } from "./outbound.js";
 import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { logAction, logError } from "./action-log.js";
 import { setLastUserMessage } from "./researcher-tools.js";
+import { setTopicHint } from "./memory-bridge.js";
 import { GEMINI_MODEL_FAST } from "./ui-generator.js";
 import { llm } from "./llm.js";
 import { getAllLocalTools, executeLocalTool, getAllLocalToolNames } from "./tool-registry-local.js";
@@ -242,8 +243,16 @@ async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
   try {
     const { getCortexContextSummary } = await import("./cortex-tools.js");
     const cortex = getCortexContextSummary(1500);
-    if (cortex) cortexBlock = `\n\n## Knowledge Cortex\nYour persistent knowledge base with interlinked pages about the user's interests, projects, and expertise. Organized by themes spanning multiple data sources (books, movies, games, photos, YouTube, projects). Use enso_wiki_search with source/theme filters for targeted retrieval:\n${cortex}`;
+    if (cortex) cortexBlock = `\n\n## Knowledge Cortex\nYour persistent knowledge base with interlinked pages about the user's interests, projects, and expertise. Organized by themes spanning multiple data sources (books, movies, games, photos, YouTube, projects). Use enso_wiki_search with source/theme filters for targeted retrieval. Use enso_cortex_synthesize(topic) for deep cross-source semantic analysis:\n${cortex}`;
   } catch { /* cortex not available — skip */ }
+
+  // Inject topic-relevant Cortex entities based on the current user message
+  let topicBlock = "";
+  try {
+    const { getTopicRelevantCortex } = await import("./memory-bridge.js");
+    const topicCtx = await getTopicRelevantCortex();
+    if (topicCtx) topicBlock = topicCtx;
+  } catch { /* topic context not available — skip */ }
 
   // Check if memory tools are available
   const hasMemoryTools = tools.some((t) => t.name === "enso_memory_search");
@@ -271,7 +280,7 @@ This is a NEW, independent conversation. You have NO memory of any prior convers
 
 ## Available Tools
 ${toolDescriptions}
-${profileBlock}${cortexBlock}${briefingBlock}${memoryRecallBlock}
+${profileBlock}${cortexBlock}${topicBlock}${briefingBlock}${memoryRecallBlock}
 
 ## MANDATORY Tool Use Rules
 These rules override all other instructions. Violating them produces WRONG answers.
@@ -556,6 +565,8 @@ export async function handleStandaloneInbound(params: {
 
   logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Chat [conv=${conversationId.slice(0, 20)}]: ${rawBody.slice(0, 100)}`, cardId: stableCardId });
   setLastUserMessage(rawBody);
+  // Inject topic-relevant Cortex entities into agent context for this message
+  setTopicHint(rawBody);
 
   // Send immediate processing indicator so the user sees feedback right away
   client.send({

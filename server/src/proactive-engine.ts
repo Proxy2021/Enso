@@ -23,6 +23,7 @@ let _lintCortex: (() => { brokenLinks: Array<{ page: string; link: string }>; st
 let _readCache: ((f: string) => unknown) | null = null;
 let _getUningestedSources: (() => string[]) | null = null;
 let _getStaleIngestSources: (() => string[]) | null = null;
+let _getEntityIndex: (() => ReadonlyMap<string, { title: string; source: string; type: string; semanticTags?: string[]; crossReferences?: Array<{ entityId: string; reason: string }>; recommendedVideos?: unknown[] }>) | null = null;
 
 async function ensureModules(): Promise<void> {
   if (!_readIndex) {
@@ -44,6 +45,12 @@ async function ensureModules(): Promise<void> {
       _getUningestedSources = pipe.getUningestedSources;
       _getStaleIngestSources = pipe.getStaleIngestSources;
     } catch { /* pipeline not available */ }
+  }
+  if (!_getEntityIndex) {
+    try {
+      const em = await import("./entity-model.js");
+      _getEntityIndex = em.getEntityIndex;
+    } catch { /* entity-model not available */ }
   }
 }
 
@@ -1059,6 +1066,89 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
         if (suggestions.length > 8) break;
       }
     }
+
+    // Enrichment-aware suggestions using entity index data
+    try {
+      if (!_getEntityIndex) throw new Error("not loaded");
+      const entityIndex = _getEntityIndex();
+      if (entityIndex.size > 0) {
+        let withTags = 0, withCrossRefs = 0, withVideos = 0;
+        let maxCrossRefs = 0;
+        let mostConnectedEntity: { title: string; source: string; count: number } | null = null;
+        const tagClusters: Record<string, { count: number; sources: Set<string> }> = {};
+
+        for (const [, entry] of entityIndex) {
+          if (entry.semanticTags?.length) withTags++;
+          if (entry.crossReferences?.length) {
+            withCrossRefs++;
+            if (entry.crossReferences.length > maxCrossRefs) {
+              maxCrossRefs = entry.crossReferences.length;
+              mostConnectedEntity = { title: entry.title, source: entry.source, count: entry.crossReferences.length };
+            }
+          }
+          if ((entry as any).recommendedVideos?.length) withVideos++;
+
+          // Track semantic tag clusters across sources
+          for (const tag of entry.semanticTags || []) {
+            if (!tagClusters[tag]) tagClusters[tag] = { count: 0, sources: new Set() };
+            tagClusters[tag].count++;
+            tagClusters[tag].sources.add(entry.source);
+          }
+        }
+
+        const total = entityIndex.size;
+        const unenrichedTags = total - withTags;
+        const unenrichedRefs = total - withCrossRefs;
+
+        // Enrichment gap: many entities lack semantic tags
+        if (unenrichedTags > 100) {
+          suggestions.push({
+            id: "enrichment-semantic-tags", pillar: "knowledge", priority: "medium", score: 0.7,
+            title: `${unenrichedTags} entities need semantic tagging`,
+            description: `${withTags}/${total} entities have universal theme tags. Run enrichment to unlock cross-source discovery for the remaining ${unenrichedTags}.`,
+            icon: "Tags", action: { type: "send_message", message: "Run cortex enrichment to add semantic tags to all entities" },
+            requiredConsent: [], createdAt: Date.now(),
+          });
+        }
+
+        // Enrichment gap: many entities lack cross-references
+        if (unenrichedRefs > 100) {
+          suggestions.push({
+            id: "enrichment-cross-refs", pillar: "knowledge", priority: "medium", score: 0.7,
+            title: `${unenrichedRefs} entities await cross-source linking`,
+            description: `${withCrossRefs}/${total} entities have cross-source connections. Enrich the rest to discover hidden relationships across your library.`,
+            icon: "Link", action: { type: "send_message", message: "Run cortex enrichment to discover cross-source connections" },
+            requiredConsent: [], createdAt: Date.now(),
+          });
+        }
+
+        // Most connected entity highlight
+        if (mostConnectedEntity && mostConnectedEntity.count >= 3) {
+          suggestions.push({
+            id: "enrichment-most-connected", pillar: "knowledge", priority: "low", score: 0.6,
+            title: `Most connected: "${mostConnectedEntity.title}"`,
+            description: `"${mostConnectedEntity.title}" (${mostConnectedEntity.source}) connects to ${mostConnectedEntity.count} items across your library. Explore these connections?`,
+            icon: "Network", action: { type: "send_message", message: `Cross-reference "${mostConnectedEntity.title}" across all my data sources` },
+            requiredConsent: [], createdAt: Date.now(),
+          });
+        }
+
+        // Cross-source semantic tag cluster
+        const crossSourceTags = Object.entries(tagClusters)
+          .filter(([, data]) => data.sources.size >= 3 && data.count >= 5)
+          .sort((a, b) => b[1].count - a[1].count);
+        if (crossSourceTags.length > 0) {
+          const [tag, data] = crossSourceTags[0];
+          suggestions.push({
+            id: `enrichment-cluster-${tag}`, pillar: "knowledge", priority: "medium", score: 0.75,
+            title: `Theme "${tag}" spans ${data.sources.size} sources`,
+            description: `${data.count} items across ${[...data.sources].join(", ")} share the "${tag}" theme. Synthesize them into a unified view?`,
+            icon: "Sparkles", action: { type: "send_message", message: `Synthesize everything in my library tagged with "${tag}"` },
+            requiredConsent: [], createdAt: Date.now(),
+          });
+        }
+      }
+    } catch { /* entity model not available */ }
 
     // Data sources scanned but not yet ingested into Cortex
     try {

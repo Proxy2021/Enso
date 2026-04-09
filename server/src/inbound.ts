@@ -9,6 +9,7 @@ import { randomUUID } from "crypto";
 import { extname } from "path";
 import { logAction, logError } from "./action-log.js";
 import { setLastUserMessage } from "./researcher-tools.js";
+import { setTopicHint } from "./memory-bridge.js";
 
 const CHANNEL_ID = "enso" as const;
 
@@ -152,6 +153,8 @@ export async function handleEnsoInbound(params: {
 
   // Store original user message so researcher can detect language even when agent translates the topic
   setLastUserMessage(rawBody);
+  // Inject topic-relevant Cortex entities into agent context for this message
+  setTopicHint(rawBody);
 
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,

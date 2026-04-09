@@ -1687,6 +1687,82 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     }
   });
 
+  // ── Cortex Pulse — enrichment stats + insights for WelcomeCard ──
+  app.get("/api/cortex-pulse", async (_req, res) => {
+    try {
+      const { getEntityIndex } = await import("./entity-model.js");
+      const entityIndex = getEntityIndex();
+
+      let withSemanticTags = 0, withCrossRefs = 0, withVideos = 0;
+      let maxCrossRefs = 0;
+      let topConnectionFrom: { title: string; source: string } | null = null;
+      let topConnectionTo: { entityId: string; reason: string } | null = null;
+      const tagCounts: Record<string, number> = {};
+
+      for (const [, entry] of entityIndex) {
+        if (entry.semanticTags?.length) {
+          withSemanticTags++;
+          for (const tag of entry.semanticTags) {
+            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+          }
+        }
+        if (entry.crossReferences?.length) {
+          withCrossRefs++;
+          if (entry.crossReferences.length > maxCrossRefs) {
+            maxCrossRefs = entry.crossReferences.length;
+            topConnectionFrom = { title: entry.title, source: entry.source };
+            topConnectionTo = entry.crossReferences[0];
+          }
+        }
+        if ((entry as any).recommendedVideos?.length) withVideos++;
+      }
+
+      const totalEntities = entityIndex.size;
+      const topSemanticTags = Object.entries(tagCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([tag, count]) => ({ tag, count }));
+
+      // Build top connection info
+      let topConnection: { from: string; to: string; reason: string } | null = null;
+      if (topConnectionFrom && topConnectionTo) {
+        const toEntry = entityIndex.get(topConnectionTo.entityId as any);
+        topConnection = {
+          from: topConnectionFrom.title,
+          to: toEntry?.title ?? topConnectionTo.entityId,
+          reason: topConnectionTo.reason,
+        };
+      }
+
+      // Recent enrichment activity from action log
+      let recentActivity: string[] = [];
+      try {
+        const { getRecentLog } = await import("./action-log.js");
+        const logs = getRecentLog(20, "action");
+        recentActivity = logs
+          .filter(l => l.category === "cortex-enrichment")
+          .slice(0, 3)
+          .map(l => l.message);
+      } catch { /* action log not available */ }
+
+      res.json({
+        totalEntities,
+        enriched: { withSemanticTags, withCrossRefs, withVideos },
+        topConnection,
+        recentActivity,
+        topSemanticTags,
+      });
+    } catch (err) {
+      res.json({
+        totalEntities: 0,
+        enriched: { withSemanticTags: 0, withCrossRefs: 0, withVideos: 0 },
+        topConnection: null,
+        recentActivity: [],
+        topSemanticTags: [],
+      });
+    }
+  });
+
   // ── Projects API ──
   app.get("/api/projects", async (_req, res) => {
     const { listProjects } = await import("./project-manager.js");

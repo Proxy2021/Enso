@@ -27,6 +27,7 @@ export const API = {
   WS_DEBUG: "/api/ws-debug",
   CARD_STATE: (cardId: string) => `/api/card/${cardId}/state`,
   CORTEX_STATS: "/api/cortex-stats",
+  CORTEX_PULSE: "/api/cortex-pulse",
 } as const;
 
 // ── localStorage Keys ──
