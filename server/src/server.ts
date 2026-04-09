@@ -1554,10 +1554,36 @@ audio{width:100%;margin:12px 0;border-radius:8px}
         body += `</div>`;
       }
 
+      // Resolve content URL (Read on Kindle/WeRead)
+      let contentUrl = "";
+      let contentLabel = "📖 Read";
+      try {
+        const entitySource = meta.entityId?.split(":")[0] || "";
+        if (entitySource === "kindle") {
+          const kindlePath = join(homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json");
+          if (existsSync(kindlePath)) {
+            const kc = JSON.parse(readFileSync(kindlePath, "utf-8"));
+            const book = kc.books?.find((b: Record<string, unknown>) => b.title === meta.title);
+            if (book?.readerUrl) { contentUrl = String(book.readerUrl); contentLabel = "📖 Read on Kindle"; }
+          }
+        } else if (entitySource === "weread") {
+          const wereadPath = join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json");
+          if (existsSync(wereadPath)) {
+            const wc = JSON.parse(readFileSync(wereadPath, "utf-8"));
+            const book = wc.books?.find((b: Record<string, unknown>) => b.title === meta.title);
+            const eid = book?.encodeId || book?.wereadBookId;
+            if (eid) { contentUrl = `https://weread.qq.com/web/reader/${eid}`; contentLabel = "📖 Read on WeRead"; }
+          }
+        }
+      } catch { /* ignore */ }
+
       // Actions
       const quickAddUrl = `/api/cortex/quick-add?title=${encodeURIComponent(meta.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(meta.author || "")}`;
       body += `<div style="text-align:center;margin:24px 0">`;
       body += `<a href="${streamUrl}" download="${slug}.wav" class="btn btn-primary" style="margin:4px">⬇ Download Podcast</a> `;
+      if (contentUrl) {
+        body += `<a href="${contentUrl}" target="_blank" class="btn" style="margin:4px;background:#2563eb;color:white">${contentLabel}</a> `;
+      }
       body += `<a href="${quickAddUrl}" class="btn btn-success" style="margin:4px">📥 Add to Cortex</a>`;
       body += `</div>`;
 
