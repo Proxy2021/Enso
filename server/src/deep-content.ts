@@ -1311,77 +1311,84 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   const typeEmoji: Record<string, string> = { book: "📚", movie: "🎬", "tv-series": "📺", documentary: "🎬", game: "🎮", channel: "📺", article: "📰", place: "🌍" };
   const typeLabel: Record<string, string> = { book: isChinese ? "书籍" : "Book", movie: isChinese ? "电影" : "Film", "tv-series": isChinese ? "剧集" : "TV Series", game: isChinese ? "游戏" : "Game", channel: isChinese ? "频道" : "Channel", article: isChinese ? "文章" : "Article", place: isChinese ? "旅行目的地" : "Destination" };
 
-  const parts: string[] = [];
-  parts.push(`<div style="font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;background:#f8fafc;padding:24px;border-radius:12px;">`);
+  const quickAddUrl = `${baseUrl}/api/cortex/quick-add?title=${encodeURIComponent(processed.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(author || "")}`;
+  const esc = escapeHtml;
 
-  // Header with cover image
+  // Dark-themed email matching the landing page design
+  const parts: string[] = [];
+  parts.push(`<div style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:0 auto;color:#e2e8f0;background:#0f0f23;padding:24px;border-radius:12px;">`);
+
+  // Cover image
   if (coverImageUrl) {
     parts.push(`<div style="text-align:center;margin-bottom:16px;">`);
-    parts.push(`<img src="${escapeHtml(coverImageUrl)}" alt="${escapeHtml(processed.title)}" style="max-width:280px;max-height:400px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);" />`);
+    parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" style="max-width:240px;max-height:360px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.4);" />`);
     parts.push(`</div>`);
   }
 
   // Type badge + Title + Author
-  parts.push(`<div style="margin-bottom:4px;"><span style="display:inline-block;background:#e0e7ff;color:#3730a3;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;">${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}</span></div>`);
-  parts.push(`<h1 style="color:#1e40af;font-size:22px;margin:4px 0;">${escapeHtml(processed.title)}</h1>`);
+  parts.push(`<div style="text-align:center;margin-bottom:16px;">`);
+  parts.push(`<div style="margin-bottom:6px;"><span style="display:inline-block;background:#312e81;color:#c4b5fd;font-size:11px;font-weight:600;padding:3px 10px;border-radius:12px;">${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}</span></div>`);
+  parts.push(`<h1 style="color:#e2e8f0;font-size:22px;margin:4px 0;">${esc(processed.title)}</h1>`);
   if (author && author !== "Unknown") {
-    parts.push(`<p style="font-size:14px;color:#6b7280;margin-top:0;">${L.by} ${escapeHtml(author)}</p>`);
+    parts.push(`<p style="font-size:14px;color:#94a3b8;margin:4px 0;">${L.by} ${esc(author)}</p>`);
   }
-  parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />`);
-
-  // Podcast CTA
-  parts.push(`<div style="background:#7c3aed;color:white;padding:16px;border-radius:8px;margin-bottom:16px;text-align:center;">`);
-  parts.push(`<p style="margin:0 0 8px;font-size:16px;font-weight:600;">${L.listenPodcast} (${processed.durationMinutes} ${L.min})</p>`);
-  parts.push(`<a href="${escapeHtml(podcastUrl)}" style="display:inline-block;background:white;color:#7c3aed;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">${L.playDownload}</a>`);
+  parts.push(`<p style="font-size:12px;color:#6b7280;">${processed.durationMinutes} ${L.min} · ${r.chapterSummaries?.length || 0} chapters · ${r.keyInsights?.length || 0} insights</p>`);
   parts.push(`</div>`);
 
-  // Add to Cortex CTA
-  const quickAddUrl = `${baseUrl}/api/cortex/quick-add?title=${encodeURIComponent(processed.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(author || "")}`;
-  parts.push(`<div style="background:#059669;color:white;padding:12px 16px;border-radius:8px;margin-bottom:16px;text-align:center;">`);
-  parts.push(`<p style="margin:0 0 6px;font-size:13px;">${L.addToCortexDesc}</p>`);
-  parts.push(`<a href="${escapeHtml(quickAddUrl)}" style="display:inline-block;background:white;color:#059669;padding:8px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">${L.addToCortex}</a>`);
+  // Action buttons row
+  parts.push(`<div style="text-align:center;margin-bottom:20px;">`);
+  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;margin:4px;">${L.playDownload}</a>`);
+  parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin:4px;">${L.addToCortex}</a>`);
   parts.push(`</div>`);
 
   // Core Thesis
   if (r.coreThesis) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.coreThesis}</h2>`);
-    parts.push(`<p style="font-size:14px;line-height:1.6;color:#374151;">${escapeHtml(r.coreThesis)}</p>`);
+    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
+    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 8px;">${L.coreThesis}</h2>`);
+    parts.push(`<p style="font-size:13px;line-height:1.6;color:#cbd5e1;margin:0;">${esc(r.coreThesis)}</p>`);
+    parts.push(`</div>`);
   }
 
   // Key Insights
   if (r.keyInsights.length > 0) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.keyInsights}</h2>`);
-    parts.push(`<ul style="padding-left:20px;">`);
+    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
+    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 10px;">${L.keyInsights}</h2>`);
     for (const ins of r.keyInsights.slice(0, 8)) {
-      parts.push(`<li style="font-size:13px;line-height:1.5;margin-bottom:6px;color:#374151;">${escapeHtml(ins.insight)}`);
-      if (ins.example) parts.push(`<br/><span style="color:#6b7280;font-style:italic;font-size:12px;">${escapeHtml(ins.example)}</span>`);
-      parts.push(`</li>`);
+      parts.push(`<div style="border-left:3px solid #7c3aed;padding:6px 12px;margin:6px 0;background:#1e1b4b;border-radius:0 6px 6px 0;">`);
+      parts.push(`<p style="font-size:13px;color:#e2e8f0;margin:0;line-height:1.5;">${esc(ins.insight)}</p>`);
+      if (ins.example) parts.push(`<p style="font-size:11px;color:#94a3b8;font-style:italic;margin:4px 0 0;">${esc(ins.example)}</p>`);
+      parts.push(`</div>`);
     }
-    parts.push(`</ul>`);
+    parts.push(`</div>`);
   }
 
   // Chapter Summaries
   if (r.chapterSummaries.length > 0) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.chapterOverview}</h2>`);
+    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
+    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 10px;">${L.chapterOverview}</h2>`);
     for (const ch of r.chapterSummaries.slice(0, 12)) {
-      parts.push(`<p style="margin-bottom:8px;"><strong style="color:#1e40af;font-size:13px;">${escapeHtml(ch.chapter)}</strong><br/>`);
-      parts.push(`<span style="font-size:12px;color:#374151;line-height:1.5;">${escapeHtml(ch.summary)}</span></p>`);
+      parts.push(`<div style="padding:6px 0;border-bottom:1px solid #1e1e3a;">`);
+      parts.push(`<p style="margin:0;"><strong style="color:#c4b5fd;font-size:13px;">${esc(ch.chapter)}</strong></p>`);
+      parts.push(`<p style="font-size:12px;color:#94a3b8;margin:3px 0 0;line-height:1.5;">${esc(ch.summary)}</p>`);
+      parts.push(`</div>`);
     }
+    parts.push(`</div>`);
   }
 
   // Critical Perspectives
   if (r.criticalPerspectives.length > 0) {
-    parts.push(`<h2 style="color:#1e40af;font-size:16px;margin-bottom:8px;">${L.perspectives}</h2>`);
-    parts.push(`<ul style="padding-left:20px;">`);
+    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
+    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 10px;">${L.perspectives}</h2>`);
     for (const cp of r.criticalPerspectives) {
-      parts.push(`<li style="font-size:12px;line-height:1.5;margin-bottom:4px;color:#92400e;">${escapeHtml(cp)}</li>`);
+      parts.push(`<p style="font-size:12px;line-height:1.5;color:#cbd5e1;margin:0;padding:4px 0;border-bottom:1px solid #1e1e3a;">• ${esc(cp)}</p>`);
     }
-    parts.push(`</ul>`);
+    parts.push(`</div>`);
   }
 
   // Footer
-  parts.push(`<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />`);
-  parts.push(`<p style="font-size:11px;color:#9ca3af;text-align:center;">${L.generatedBy} • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
+  parts.push(`<div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid #1e1e3a;">`);
+  parts.push(`<p style="font-size:11px;color:#475569;margin:0;">${L.generatedBy} • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
+  parts.push(`</div>`);
   parts.push(`</div>`);
 
   return parts.join("\n");
