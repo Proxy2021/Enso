@@ -77,6 +77,7 @@ function readTextFile(path: string): string | null {
   } catch { return null; }
 }
 
+let _includeAudio = false;
 function readCategory(id: string): unknown | null {
   switch (id) {
     case "apiKeys":
@@ -212,7 +213,7 @@ function readCategory(id: string): unknown | null {
         if (data) result[file] = data;
       }
       // Audio files as base64 (when _includeAudio flag is set via export handler)
-      if ((globalThis as any).__ensoExportIncludeAudio && existsSync(audioDir)) {
+      if (_includeAudio && existsSync(audioDir)) {
         const audioFiles: Record<string, string> = {};
         for (const file of readdirSync(audioDir)) {
           if (!file.endsWith(".wav")) continue;
@@ -302,8 +303,7 @@ function estimateSize(data: unknown): number {
 
 export async function handleExport(req: Request, res: Response): Promise<void> {
   const dryRun = req.query.dryRun === "true";
-  const includeAudio = req.query.includeAudio === "true";
-  (globalThis as any).__ensoExportIncludeAudio = includeAudio;
+  _includeAudio = req.query.includeAudio === "true";
   const requestedCategories = req.query.categories
     ? (req.query.categories as string).split(",").map((s) => s.trim())
     : CATEGORIES.map((c) => c.id);
@@ -354,8 +354,7 @@ export async function handleExport(req: Request, res: Response): Promise<void> {
   const dateStr = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Content-Disposition", `attachment; filename="enso-export-${dateStr}.json"`);
-  // Clean up global flag
-  delete (globalThis as any).__ensoExportIncludeAudio;
+  _includeAudio = false;
   res.json(bundle);
 }
 
