@@ -252,14 +252,6 @@ function GeneratedUI({ data, onAction }) {
               onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
             >{d.contentAccess.externalLabel || "Steam Store"}</Button>
           )}
-          <Button variant="outline" size="sm"
-            onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\" game review and guide" }); }}
-          ><Search size={12} style={{ marginRight: "4px" }} />Research</Button>
-          {entity.cortexPath && (
-            <Button variant="outline" size="sm"
-              onClick={function() { onAction("send_message", { message: "/wiki read " + entity.cortexPath }); }}
-            >View in Cortex</Button>
-          )}
           {podcastAudioUrl && (
             <Button variant="outline" size="sm"
               onClick={function() {

@@ -258,14 +258,6 @@ function GeneratedUI({ data, onAction }) {
               onClick={function() { window.open(d.contentAccess.launchUrl); }}
             >{d.contentAccess.icon || "🎮"} {d.contentAccess.label || "Launch"}</Button>
           )}
-          <Button variant="outline" size="sm"
-            onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\" " + (entity.year || "") + " movie review" }); }}
-          ><Search size={12} style={{ marginRight: "4px" }} />Research</Button>
-          {entity.cortexPath && (
-            <Button variant="outline" size="sm"
-              onClick={function() { onAction("send_message", { message: "/wiki read " + entity.cortexPath }); }}
-            >View in Cortex</Button>
-          )}
           {podcastAudioUrl && (
             <Button variant="outline" size="sm"
               onClick={function() {

@@ -680,6 +680,9 @@ function findInCache(source: string, type: string, slug: string): Record<string,
   if (source === "kindle" && Array.isArray(data.books)) {
     return (data.books as Array<Record<string, unknown>>).find(b => typeof b.title === "string" && matchBySlug(b.title)) ?? null;
   }
+  if (source === "weread" && Array.isArray(data.books)) {
+    return (data.books as Array<Record<string, unknown>>).find(b => typeof b.title === "string" && matchBySlug(b.title)) ?? null;
+  }
   if (source === "steam" && Array.isArray(data.games)) {
     return (data.games as Array<Record<string, unknown>>).find(g => typeof g.name === "string" && matchBySlug(g.name)) ?? null;
   }

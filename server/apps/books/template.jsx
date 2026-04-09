@@ -256,19 +256,6 @@ function GeneratedUI({ data, onAction }) {
               onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
             >{d.contentAccess.icon || "📖"} {d.contentAccess.label || "Open"}</Button>
           )}
-          {d.contentAccess && d.contentAccess.mediaUrl && (
-            <Button size="sm" style={{ background: "#2563eb", color: "white" }}
-              onClick={function() { onAction("open_url", { url: d.contentAccess.mediaUrl }); }}
-            >▶️ Stream</Button>
-          )}
-          <Button variant="outline" size="sm"
-            onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\"" }); }}
-          >🔍 Research</Button>
-          {entity.cortexPath && (
-            <Button variant="outline" size="sm"
-              onClick={function() { onAction("send_message", { message: "/wiki read " + entity.cortexPath }); }}
-            >📄 View in Cortex</Button>
-          )}
           {podcastAudioUrl && (
             <Button variant="outline" size="sm"
               onClick={function() {
