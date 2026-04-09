@@ -37,6 +37,8 @@ export interface FocusArea {
   adjacentPursuits?: string[];
   /** Concrete next actions (filled at "clear") */
   nextSteps?: string[];
+  /** Dedicated conversation ID for this focus area */
+  conversationId?: string;
 
   confidence: number;
   evidence: string[];
@@ -581,6 +583,14 @@ export function updateFocusArea(focusId: string, updates: Partial<FocusArea>): F
   if (updates.nextSteps) {
     area.nextSteps = updates.nextSteps;
     changes.push(`next steps updated`);
+  }
+  if (updates.deeperIntent) {
+    changes.push(`deeper intent updated`);
+    area.deeperIntent = updates.deeperIntent;
+  }
+  // conversationId is a silent update — no refinement log needed
+  if (updates.conversationId && updates.conversationId !== area.conversationId) {
+    area.conversationId = updates.conversationId;
   }
 
   if (changes.length > 0) {

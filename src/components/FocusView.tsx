@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { getClientId } from "../lib/ws-client";
 import { TabHeader, MobileViewHeader } from "./TabNavigation";
 import { API } from "../lib/constants";
 
@@ -17,6 +18,7 @@ interface FocusArea {
   deeperIntent?: string;
   adjacentPursuits?: string[];
   nextSteps?: string[];
+  conversationId?: string;
   confidence: number;
   evidence: string[];
   semanticTags: string[];
@@ -58,6 +60,9 @@ export default function FocusView() {
   const { t } = useT();
   const sendMessage = useChatStore((s) => s.sendMessage);
   const setActiveTab = useChatStore((s) => s.setActiveTab);
+  const selectConversation = useChatStore((s) => s.selectConversation);
+  const startNewChat = useChatStore((s) => s.startNewChat);
+  const conversationsList = useChatStore((s) => s.conversationsList);
 
   const [view, setView] = useState<View>("list");
   const [focusState, setFocusState] = useState<FocusState | null>(null);
@@ -98,6 +103,59 @@ export default function FocusView() {
       setFocusState(data as FocusState);
     } catch { /* ignore */ }
     setInferring(false);
+  };
+
+  /**
+   * Open a dedicated chat conversation for a focus area.
+   * If the focus already has a conversationId, switch to it.
+   * Otherwise, create a new conversation titled after the focus and save the ID.
+   */
+  const chatAboutFocus = async (area: FocusArea, initialMessage?: string) => {
+    // If focus area already has a conversation, switch to it
+    if (area.conversationId) {
+      // Verify conversation still exists
+      const exists = conversationsList.some(c => c.id === area.conversationId);
+      if (exists) {
+        selectConversation(area.conversationId);
+        setActiveTab("chat");
+        if (initialMessage) {
+          // Small delay to let conversation load before sending
+          setTimeout(() => sendMessage(initialMessage), 300);
+        }
+        return;
+      }
+    }
+
+    // Create a new conversation for this focus area
+    try {
+      const clientId = getClientId();
+      const res = await fetch(`${getBackendBaseUrl()}${API.CONVERSATIONS}`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, title: area.title }),
+      });
+      if (!res.ok) return;
+      const created = (await res.json()) as { id: string };
+
+      // Save conversation ID on the focus area
+      handleUpdate(area.id, { conversationId: created.id } as any);
+
+      // Update local state
+      setFocusState(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          areas: prev.areas.map(a => a.id === area.id ? { ...a, conversationId: created.id } : a),
+        };
+      });
+
+      await useChatStore.getState().refreshConversationsList();
+      selectConversation(created.id);
+      setActiveTab("chat");
+      if (initialMessage) {
+        setTimeout(() => sendMessage(initialMessage), 300);
+      }
+    } catch { /* ignore */ }
   };
 
   const handleUpdate = async (id: string, updates: Partial<FocusArea>) => {
@@ -149,10 +207,8 @@ export default function FocusView() {
   };
 
   const launchPlanOrchestration = () => {
-    if (!planGoal) return;
-    // Switch to chat and send orchestration
-    setActiveTab("chat");
-    sendMessage(planGoal);
+    if (!planGoal || !selected) return;
+    chatAboutFocus(selected, planGoal);
     setPlanGoal(null);
   };
 
@@ -331,7 +387,7 @@ export default function FocusView() {
               </button>
             ))}
             <div className="flex-1" />
-            <button onClick={() => { setActiveTab("chat"); sendMessage(`Help me make progress on: ${selected.title}`); }}
+            <button onClick={() => chatAboutFocus(selected, `Help me make progress on: ${selected.title}`)}
               className="text-[11px] px-3 py-1 rounded bg-violet-600/60 text-violet-100 hover:bg-violet-500/60">
               Chat about this
             </button>
@@ -391,7 +447,7 @@ export default function FocusView() {
                   <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Adjacent Pursuits — expand your horizon</label>
                   <div className="space-y-1.5">
                     {selected.adjacentPursuits.map((pursuit, i) => (
-                      <button key={i} onClick={() => { setActiveTab("chat"); sendMessage(`Research: ${pursuit}`); }}
+                      <button key={i} onClick={() => chatAboutFocus(selected, `Research: ${pursuit}`)}
                         className="w-full text-left text-xs text-amber-300/80 px-3 py-2 rounded bg-amber-900/10 border border-amber-500/15 hover:border-amber-500/30 hover:bg-amber-900/20 transition-colors">
                         {"\u2728"} {pursuit}
                       </button>
@@ -431,7 +487,7 @@ export default function FocusView() {
                   <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Suggested Actions</label>
                   <div className="space-y-1.5">
                     {selected.suggestedActions.map((action, i) => (
-                      <button key={i} onClick={() => { setActiveTab("chat"); sendMessage(action); }}
+                      <button key={i} onClick={() => chatAboutFocus(selected, action)}
                         className="w-full text-left text-xs text-gray-300 px-3 py-2 rounded bg-gray-800/40 border border-gray-700/30 hover:border-violet-500/30 hover:text-violet-300 transition-colors">
                         {action}
                       </button>
