@@ -257,6 +257,11 @@ export async function recommendVideosForEntities(entityIds: string[]): Promise<{
     if (entry.recommendedVideos?.length) continue;
     // Skip YouTube channels/videos themselves
     if (entry.source === "youtube") continue;
+    // Skip unmatched movies/TV (raw video files without IMDB/TMDB genre data)
+    if (entry.source === "movies_tv") {
+      const genres = (entry.tags || []).filter(t => t !== "movie" && t !== "tv-series" && t !== "documentary" && t !== "video");
+      if (genres.length === 0) continue; // no genre tags = not enriched via TMDB
+    }
 
     try {
       const query = entry.title;

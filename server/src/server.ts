@@ -1135,9 +1135,18 @@ export async function startEnsoServer(opts: {
 
       // Level 4: YouTube video recommendations (separate pass — uses entities needing videos)
       const { recommendVideosForEntities } = await import("./cortex-enrichment.js");
+      const videoType = req.query.videoType as string | undefined;
       const needVideos: string[] = [];
       for (const [id, entry] of index) {
-        if (!entry.recommendedVideos?.length && entry.source !== "youtube") needVideos.push(id);
+        if (!entry.recommendedVideos?.length && entry.source !== "youtube") {
+          // Skip unmatched movies (raw files without TMDB genre data)
+          if (entry.source === "movies_tv") {
+            const genres = (entry.tags || []).filter(t => t !== "movie" && t !== "tv-series" && t !== "documentary" && t !== "video");
+            if (genres.length === 0) continue;
+          }
+          if (videoType && entry.type !== videoType) continue;
+          needVideos.push(id);
+        }
       }
       const videoLimit = Math.min(parseInt(req.query.videoLimit as string) || 100, needVideos.length);
       const videoResult = await recommendVideosForEntities(needVideos.slice(0, videoLimit));
