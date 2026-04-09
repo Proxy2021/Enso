@@ -19,6 +19,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { logAction, logError } from "./action-log.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -841,6 +842,42 @@ export async function resolveEntity(entityId: EntityId): Promise<Entity | null> 
  *  - externalUrl: for content that opens in a new browser tab
  *  - launchUrl: for protocol handlers (steam://, kindle://)
  */
+/**
+ * Encode a WeRead numeric bookId into the URL slug used by weread.qq.com.
+ * Algorithm reverse-engineered from WeRead's frontend JS.
+ */
+export function encodeWereadBookId(bookId: string): string {
+  const md5 = createHash("md5").update(bookId).digest("hex");
+  let result = md5.slice(0, 3);
+
+  if (/^\d+$/.test(bookId)) {
+    result += "3";
+    result += "2" + md5.slice(-2);
+    const chunks: string[] = [];
+    for (let i = 0; i < bookId.length; i += 9) {
+      chunks.push(parseInt(bookId.slice(i, Math.min(i + 9, bookId.length)), 10).toString(16));
+    }
+    for (let j = 0; j < chunks.length; j++) {
+      let n = chunks[j].length.toString(16);
+      if (n.length === 1) n = "0" + n;
+      result += n + chunks[j];
+      if (j < chunks.length - 1) result += "g";
+    }
+  } else {
+    result += "4";
+    result += "2" + md5.slice(-2);
+    let hex = "";
+    for (let i = 0; i < bookId.length; i++) hex += bookId.charCodeAt(i).toString(16);
+    let n = hex.length.toString(16);
+    if (n.length === 1) n = "0" + n;
+    result += n + hex;
+  }
+
+  if (result.length < 20) result += md5.slice(0, 20 - result.length);
+  result += createHash("md5").update(result).digest("hex").slice(0, 3);
+  return result;
+}
+
 function resolveContentAccess(entity: Entity): Record<string, unknown> {
   const m = entity.metadata;
   const type = entity.type;
@@ -856,9 +893,8 @@ function resolveContentAccess(entity: Entity): Record<string, unknown> {
       result.label = "Read on Kindle";
       result.icon = "📖";
     } else if (source === "weread" && m.wereadBookId) {
-      const encodeId = m.encodeId || m.wereadBookId;
       result.primaryAction = "open_web";
-      result.externalUrl = `https://weread.qq.com/web/reader/${encodeId}`;
+      result.externalUrl = `https://weread.qq.com/web/bookDetail/${encodeWereadBookId(String(m.wereadBookId))}`;
       result.label = "Read on WeRead";
       result.icon = "📖";
     } else if (m.isbn) {

@@ -1361,12 +1361,14 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
     if (entitySource === "kindle" && cachedBook.readerUrl) {
       contentUrl = String(cachedBook.readerUrl);
       contentLabel = isChinese ? "📖 在Kindle阅读" : "📖 Read on Kindle";
-    } else if (entitySource === "weread") {
-      const encodeId = cachedBook.encodeId || cachedBook.wereadBookId;
-      if (encodeId) {
-        contentUrl = `https://weread.qq.com/web/reader/${encodeId}`;
-        contentLabel = isChinese ? "📖 在微信读书阅读" : "📖 Read on WeRead";
+    } else if (entitySource === "weread" && cachedBook.wereadBookId) {
+      try {
+        const { encodeWereadBookId } = require("./entity-model.js") as { encodeWereadBookId: (id: string) => string };
+        contentUrl = `https://weread.qq.com/web/bookDetail/${encodeWereadBookId(String(cachedBook.wereadBookId))}`;
+      } catch {
+        contentUrl = `https://weread.qq.com/web/bookDetail/${cachedBook.wereadBookId}`;
       }
+      contentLabel = isChinese ? "📖 在微信读书阅读" : "📖 Read on WeRead";
     }
   }
 
