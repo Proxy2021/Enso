@@ -1763,6 +1763,58 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     }
   });
 
+  // ── Focus Areas API ──
+  app.get("/api/focus-areas", async (_req, res) => {
+    try {
+      const { loadFocusState } = await import("./focus-areas.js");
+      const state = loadFocusState();
+      res.json(state || { areas: [], lastInferredAt: "", lastRefreshedAt: "", version: 0 });
+    } catch (err) {
+      res.json({ areas: [], lastInferredAt: "", lastRefreshedAt: "", version: 0 });
+    }
+  });
+
+  app.post("/api/focus-areas/infer", async (_req, res) => {
+    try {
+      const { inferFocusAreas } = await import("./focus-areas.js");
+      const state = await inferFocusAreas();
+      res.json(state);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Inference failed" });
+    }
+  });
+
+  app.post("/api/focus-areas/refresh", async (_req, res) => {
+    try {
+      const { refreshFocusProgress } = await import("./focus-areas.js");
+      const state = await refreshFocusProgress();
+      res.json(state || { areas: [] });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Refresh failed" });
+    }
+  });
+
+  app.patch("/api/focus-areas/:id", async (req, res) => {
+    try {
+      const { updateFocusArea } = await import("./focus-areas.js");
+      const area = updateFocusArea(req.params.id, req.body);
+      if (!area) { res.status(404).json({ error: "Focus area not found" }); return; }
+      res.json(area);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Update failed" });
+    }
+  });
+
+  app.post("/api/focus-areas", async (req, res) => {
+    try {
+      const { addFocusArea } = await import("./focus-areas.js");
+      const area = addFocusArea(req.body);
+      res.json(area);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Create failed" });
+    }
+  });
+
   // ── Projects API ──
   app.get("/api/projects", async (_req, res) => {
     const { listProjects } = await import("./project-manager.js");

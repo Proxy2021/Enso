@@ -644,6 +644,13 @@ export async function buildEnsoContext(): Promise<string> {
     }
   }
 
+  // 3.7 Focus areas — user's active priorities
+  try {
+    const { getFocusContextForAgent } = await import("./focus-areas.js");
+    const focusCtx = getFocusContextForAgent(_topicHint ?? undefined);
+    if (focusCtx) sections.push(focusCtx);
+  } catch { /* focus areas not available */ }
+
   // 4. Data source inventory — compact summary of what the user has across all sources
   try {
     const { readCache } = await import("./data-source-registry.js");

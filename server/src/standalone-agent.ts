@@ -255,6 +255,14 @@ async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
   } catch { /* topic context not available — skip */ }
 
   // Check if memory tools are available
+  // Inject focus areas
+  let focusBlock = "";
+  try {
+    const { getFocusContextForAgent } = await import("./focus-areas.js");
+    const focusCtx = getFocusContextForAgent();
+    if (focusCtx) focusBlock = `\n\n${focusCtx}`;
+  } catch { /* focus areas not available — skip */ }
+
   const hasMemoryTools = tools.some((t) => t.name === "enso_memory_search");
   const memoryRecallBlock = hasMemoryTools ? `
 
@@ -280,7 +288,7 @@ This is a NEW, independent conversation. You have NO memory of any prior convers
 
 ## Available Tools
 ${toolDescriptions}
-${profileBlock}${cortexBlock}${topicBlock}${briefingBlock}${memoryRecallBlock}
+${profileBlock}${cortexBlock}${topicBlock}${focusBlock}${briefingBlock}${memoryRecallBlock}
 
 ## MANDATORY Tool Use Rules
 These rules override all other instructions. Violating them produces WRONG answers.

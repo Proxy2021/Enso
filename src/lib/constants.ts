@@ -28,6 +28,8 @@ export const API = {
   CARD_STATE: (cardId: string) => `/api/card/${cardId}/state`,
   CORTEX_STATS: "/api/cortex-stats",
   CORTEX_PULSE: "/api/cortex-pulse",
+  FOCUS_AREAS: "/api/focus-areas",
+  FOCUS_AREAS_INFER: "/api/focus-areas/infer",
 } as const;
 
 // ── localStorage Keys ──

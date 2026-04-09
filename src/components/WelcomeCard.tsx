@@ -144,6 +144,9 @@ export default function WelcomeCard() {
         </div>
       )}
 
+      {/* B2: Focus Areas */}
+      <FocusAreasPanel disabled={disabled} />
+
       {/* C: Proactive suggestions */}
       {topSuggestions.length > 0 && (
         <div className="w-full max-w-lg mb-5">
@@ -504,6 +507,154 @@ function EnrichmentBar({ label, value, total, color }: { label: string; value: n
       </div>
       <div className="h-1 rounded-full bg-gray-800 overflow-hidden">
         <div className={`h-full rounded-full ${colorMap[color] ?? "bg-violet-500"} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Focus Areas Panel ──
+
+interface FocusAreaData {
+  id: string;
+  title: string;
+  description: string;
+  status: "active" | "paused" | "completed" | "emerging";
+  clarity: "emerging" | "developing" | "clear";
+  intent?: string;
+  confidence: number;
+  progress: { trend: "growing" | "steady" | "quiet"; recentActivity: string[] };
+  suggestedActions: string[];
+}
+
+function FocusAreasPanel({ disabled }: { disabled: boolean }) {
+  const [areas, setAreas] = useState<FocusAreaData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}`, {
+      headers: authHeaders(),
+      signal: ctrl.signal,
+    })
+      .then((r) => r.json())
+      .then((data: { areas?: FocusAreaData[] }) => {
+        if (data?.areas?.length) setAreas(data.areas);
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+
+  const handleInfer = async () => {
+    setLoading(true);
+    try {
+      const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS_INFER}`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+      });
+      const data = await resp.json();
+      if (data?.areas?.length) setAreas(data.areas);
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  // Show "Discover" button if no focus areas yet
+  if (areas.length === 0) {
+    return (
+      <div className="w-full max-w-lg mb-5">
+        <div className="rounded-lg border border-gray-700/40 bg-gray-900/40 px-4 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-400">Your Focus Areas</p>
+          </div>
+          <p className="text-[11px] text-gray-500 mb-3">
+            Enso can analyze your Cortex to identify what you're actively focused on — projects, skills, hobbies, habits — so every conversation is more relevant.
+          </p>
+          <button
+            onClick={handleInfer}
+            disabled={disabled || loading}
+            className="text-xs px-3 py-1.5 rounded-md bg-violet-600/80 text-white hover:bg-violet-500/80 transition-colors disabled:opacity-50"
+          >
+            {loading ? "Analyzing your Cortex..." : "Discover My Focus Areas"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const trendIcon = (trend: string) => {
+    if (trend === "growing") return "\u25B2";
+    if (trend === "steady") return "\u25CF";
+    return "\u25CB";
+  };
+
+  const trendColor = (trend: string) => {
+    if (trend === "growing") return "text-emerald-400";
+    if (trend === "steady") return "text-blue-400";
+    return "text-gray-500";
+  };
+
+  const clarityLabel = (c: string) => {
+    if (c === "clear") return "clear";
+    if (c === "developing") return "developing";
+    return "emerging";
+  };
+
+  return (
+    <div className="w-full max-w-lg mb-5">
+      <div className="flex items-center justify-between mb-2 px-1">
+        <p className="text-xs text-gray-400">Your Focus Areas</p>
+        <button
+          onClick={handleInfer}
+          disabled={disabled || loading}
+          className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors disabled:opacity-50"
+        >
+          {loading ? "..." : "Update"}
+        </button>
+      </div>
+      <div className="space-y-1.5">
+        {areas.filter(a => a.status !== "completed" && a.status !== "paused").map((area) => (
+          <button
+            key={area.id}
+            onClick={() => { if (!disabled) sendMessage(`Help me make progress on: ${area.title}`); }}
+            disabled={disabled}
+            className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/40 px-3 py-2.5 hover:border-gray-600/60 hover:bg-gray-800/40 transition-all disabled:opacity-50 group"
+          >
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-xs font-medium text-gray-200">{area.title}</span>
+              <span className={`text-[10px] ${trendColor(area.progress.trend)}`}>
+                {trendIcon(area.progress.trend)} {area.progress.trend}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 line-clamp-1">
+              {area.intent || area.description}
+            </p>
+            {area.status === "emerging" && (
+              <p className="text-[10px] text-amber-500/70 mt-1 italic">
+                {area.suggestedActions[0] || "New interest detected"}
+              </p>
+            )}
+            {area.progress.trend === "quiet" && area.status !== "emerging" && (
+              <p className="text-[10px] text-gray-600 mt-1">
+                Haven't seen activity recently
+              </p>
+            )}
+            {area.progress.recentActivity.length > 0 && area.progress.trend !== "quiet" && (
+              <p className="text-[10px] text-gray-600 mt-1 truncate">
+                Recent: {area.progress.recentActivity[0]}
+              </p>
+            )}
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`text-[9px] px-1.5 py-0.5 rounded ${
+                area.clarity === "clear" ? "bg-emerald-900/30 text-emerald-400" :
+                area.clarity === "developing" ? "bg-blue-900/30 text-blue-400" :
+                "bg-amber-900/30 text-amber-400"
+              }`}>{clarityLabel(area.clarity)}</span>
+              {area.confidence < 0.6 && (
+                <span className="text-[9px] text-gray-600">low confidence</span>
+              )}
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );

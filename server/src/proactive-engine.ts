@@ -1178,6 +1178,71 @@ function generateCortexSuggestions(profile: UserContextProfile): ProactiveSugges
   return suggestions;
 }
 
+/** Focus Area suggestions — nudges based on user's inferred focus areas */
+function generateFocusAreaSuggestions(): ProactiveSuggestion[] {
+  const suggestions: ProactiveSuggestion[] = [];
+  try {
+    const focusPath = join(homedir(), ".enso", "data", "focus-areas.json");
+    if (!existsSync(focusPath)) return suggestions;
+    const state = JSON.parse(readFileSync(focusPath, "utf-8"));
+    const areas = state?.areas as Array<{
+      id: string; title: string; description: string; status: string;
+      clarity: string; progress: { trend: string; recentActivity: string[] };
+      suggestedActions: string[];
+    }>;
+    if (!areas?.length) return suggestions;
+
+    for (const area of areas) {
+      if (area.status === "completed" || area.status === "paused") continue;
+
+      // Quiet focus area — gentle nudge
+      if (area.progress.trend === "quiet" && area.status === "active") {
+        suggestions.push({
+          id: `focus-quiet-${area.id}`, pillar: "knowledge", priority: "medium", score: 0.75,
+          title: `${area.title}: getting quiet`,
+          description: `Your "${area.title}" focus hasn't had recent activity. ${area.suggestedActions[0] || "Maybe pick it up today?"}`,
+          icon: "Target", action: { type: "send_message", message: `Help me make progress on: ${area.title}` },
+          requiredConsent: [], createdAt: Date.now(),
+        });
+      }
+
+      // Emerging area — clarifying question
+      if (area.status === "emerging" && area.clarity === "emerging") {
+        suggestions.push({
+          id: `focus-emerging-${area.id}`, pillar: "knowledge", priority: "low", score: 0.65,
+          title: `Emerging interest: ${area.title}`,
+          description: area.suggestedActions[0] || `I'm noticing activity around "${area.title}" — is this becoming a focus for you?`,
+          icon: "Sparkles", action: { type: "send_message", message: `Tell me more about my interest in ${area.title}` },
+          requiredConsent: [], createdAt: Date.now(),
+        });
+      }
+
+      // Growing focus — positive reinforcement
+      if (area.progress.trend === "growing" && area.status === "active") {
+        suggestions.push({
+          id: `focus-growing-${area.id}`, pillar: "knowledge", priority: "low", score: 0.55,
+          title: `${area.title}: good momentum`,
+          description: `Your "${area.title}" focus is growing. ${area.progress.recentActivity[0] ? `Recent: ${area.progress.recentActivity[0]}` : "Keep it up!"}`,
+          icon: "TrendingUp", action: { type: "send_message", message: `What should I do next for: ${area.title}` },
+          requiredConsent: [], createdAt: Date.now(),
+        });
+      }
+    }
+
+    // If no focus areas inferred yet but entity index is rich, suggest inference
+    if (areas.length === 0) {
+      suggestions.push({
+        id: "focus-discover", pillar: "knowledge", priority: "medium", score: 0.7,
+        title: "Discover your focus areas",
+        description: "Enso can analyze your Cortex to identify what you're actively focused on, so every conversation is more relevant.",
+        icon: "Target", action: { type: "send_message", message: "Discover my focus areas" },
+        requiredConsent: [], createdAt: Date.now(),
+      });
+    }
+  } catch { /* focus-areas not available */ }
+  return suggestions;
+}
+
 /**
  * Cross-App Intelligence — LLM-powered suggestions that find patterns
  * across data sources. Detects convergences, connections, and gaps
@@ -1367,6 +1432,7 @@ export async function generateSuggestions(forceRefresh: boolean = false): Promis
     ...runAmbientTasks(profile),
     ...generateCortexSuggestions(profile),
     ...generateCrossAppIntelligence(profile),
+    ...generateFocusAreaSuggestions(),
   ];
 
   // Record suggestion count for analytics
