@@ -18,10 +18,10 @@ import { logAction, logError } from "./action-log.js";
 
 // ── Constants ──
 
-/** Max entities per LLM call to stay within context limits */
-const SEMANTIC_TAG_BATCH_SIZE = 100;
-const CROSS_REF_BATCH_SIZE = 60;
-const INVENTORY_MAX_ENTRIES = 500;
+/** Max entities per LLM call to stay within output token limits */
+const SEMANTIC_TAG_BATCH_SIZE = 30;
+const CROSS_REF_BATCH_SIZE = 15;
+const INVENTORY_MAX_ENTRIES = 200;
 
 // ── Level 2: Semantic Tagging ──
 
@@ -79,7 +79,7 @@ Return ONLY the JSON array, no markdown fences.`;
         tier: "fast",
         responseMimeType: "application/json",
         temperature: 0.3,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       });
 
       const parsed = JSON.parse(response) as Array<{ entityId: string; semanticTags: string[] }>;
@@ -176,10 +176,11 @@ Only include meaningful connections, not forced ones. If no good cross-source ma
     try {
       const response = await llm({
         prompt,
-        tier: "fast",
+        tier: "utility",
         responseMimeType: "application/json",
         temperature: 0.3,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
+        timeoutMs: 120_000,
       });
 
       const refs = JSON.parse(response) as Array<{ from: string; to: string; reason: string }>;

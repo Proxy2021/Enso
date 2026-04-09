@@ -1107,10 +1107,23 @@ export async function startEnsoServer(opts: {
       const { getEntityIndex } = await import("./entity-model.js");
       const index = getEntityIndex();
 
-      // Collect entities that need enrichment (no semanticTags yet)
-      const entityIds: string[] = [];
+      // Collect entities that need enrichment (no semanticTags yet), interleaved by source
+      const bySource = new Map<string, string[]>();
       for (const [id, entry] of index) {
-        if (!entry.semanticTags?.length) entityIds.push(id);
+        if (!entry.semanticTags?.length) {
+          const src = entry.source || "unknown";
+          if (!bySource.has(src)) bySource.set(src, []);
+          bySource.get(src)!.push(id);
+        }
+      }
+      // Interleave: take one from each source in round-robin for diverse batches
+      const entityIds: string[] = [];
+      const sources = [...bySource.values()];
+      const maxLen = Math.max(...sources.map(s => s.length), 0);
+      for (let i = 0; i < maxLen; i++) {
+        for (const arr of sources) {
+          if (i < arr.length) entityIds.push(arr[i]);
+        }
       }
       const limit = parseInt(req.query.limit as string) || entityIds.length;
       const batch = entityIds.slice(0, limit);
