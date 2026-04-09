@@ -1314,41 +1314,6 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   const quickAddUrl = `${baseUrl}/api/cortex/quick-add?title=${encodeURIComponent(processed.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(author || "")}`;
   const esc = escapeHtml;
 
-  // Clean light-themed email matching the in-app entity detail layout
-  const parts: string[] = [];
-  parts.push(`<div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#1f2937;background:#ffffff;padding:0;">`);
-
-  // Header card — cover on left, metadata on right (like the app)
-  parts.push(`<div style="padding:20px 24px;background:#f8fafc;border-bottom:1px solid #e5e7eb;">`);
-  parts.push(`<table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>`);
-  // Cover image
-  if (coverImageUrl) {
-    parts.push(`<td width="100" valign="top" style="padding-right:16px;">`);
-    parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" width="90" style="border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.1);" />`);
-    parts.push(`</td>`);
-  }
-  // Title + author + badges
-  parts.push(`<td valign="top">`);
-  parts.push(`<h1 style="color:#1f2937;font-size:20px;margin:0 0 4px;line-height:1.3;">${esc(processed.title)}</h1>`);
-  if (author && author !== "Unknown") {
-    parts.push(`<p style="font-size:14px;color:#6b7280;margin:0 0 8px;">${esc(author)}</p>`);
-  }
-  parts.push(`<span style="display:inline-block;background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-right:4px;">${entityType}</span>`);
-  parts.push(`<span style="display:inline-block;background:#f0fdf4;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-right:4px;">${(processed.entityId.split(":")[0])}</span>`);
-  if (processed.durationMinutes) {
-    parts.push(`<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">🎙️ ${processed.durationMinutes} ${L.min}</span>`);
-  }
-  parts.push(`</td></tr></table>`);
-
-  // Action buttons
-  parts.push(`<div style="margin-top:12px;">`);
-  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:8px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:3px 4px 3px 0;">${L.playDownload}</a>`);
-  if (contentUrl) {
-    parts.push(`<a href="${esc(contentUrl)}" style="display:inline-block;background:#2563eb;color:white;padding:8px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:3px 4px 3px 0;">${contentLabel}</a>`);
-  }
-  parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:8px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:3px 0;">${L.addToCortex}</a>`);
-  parts.push(`</div>`);
-  parts.push(`</div>`); // end header card
   // Resolve content access URL (Read on Kindle/WeRead, IMDB, Steam, etc.)
   let contentUrl = "";
   let contentLabel = "";
@@ -1374,11 +1339,37 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
     }
   } catch { /* ignore */ }
 
-  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin:4px;">${L.playDownload}</a> `);
-  if (contentUrl) {
-    parts.push(`<a href="${esc(contentUrl)}" style="display:inline-block;background:#2563eb;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:4px;">${contentLabel}</a> `);
+  // Clean light-themed email matching the in-app entity detail layout
+  const parts: string[] = [];
+  parts.push(`<div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#1f2937;background:#ffffff;padding:0;">`);
+
+  // Header card — cover on left, metadata on right (like the app)
+  parts.push(`<div style="padding:20px 24px;background:#f8fafc;border-bottom:1px solid #e5e7eb;">`);
+  parts.push(`<table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>`);
+  if (coverImageUrl) {
+    parts.push(`<td width="100" valign="top" style="padding-right:16px;">`);
+    parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" width="90" style="border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.1);" />`);
+    parts.push(`</td>`);
   }
-  parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:4px;">${L.addToCortex}</a>`);
+  parts.push(`<td valign="top">`);
+  parts.push(`<h1 style="color:#1f2937;font-size:20px;margin:0 0 4px;line-height:1.3;">${esc(processed.title)}</h1>`);
+  if (author && author !== "Unknown") {
+    parts.push(`<p style="font-size:14px;color:#6b7280;margin:0 0 8px;">${esc(author)}</p>`);
+  }
+  parts.push(`<span style="display:inline-block;background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-right:4px;">${entityType}</span>`);
+  parts.push(`<span style="display:inline-block;background:#f0fdf4;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-right:4px;">${processed.entityId.split(":")[0]}</span>`);
+  if (processed.durationMinutes) {
+    parts.push(`<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">🎙️ ${processed.durationMinutes} ${L.min}</span>`);
+  }
+  // Action buttons
+  parts.push(`<div style="margin-top:10px;">`);
+  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:7px 16px;border-radius:5px;text-decoration:none;font-weight:600;font-size:12px;margin:2px 3px 2px 0;">${L.playDownload}</a>`);
+  if (contentUrl) {
+    parts.push(`<a href="${esc(contentUrl)}" style="display:inline-block;background:#2563eb;color:white;padding:7px 16px;border-radius:5px;text-decoration:none;font-weight:600;font-size:12px;margin:2px 3px 2px 0;">${contentLabel}</a>`);
+  }
+  parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:7px 16px;border-radius:5px;text-decoration:none;font-weight:600;font-size:12px;margin:2px 0;">${L.addToCortex}</a>`);
+  parts.push(`</div>`);
+  parts.push(`</td></tr></table>`);
   parts.push(`</div>`);
 
   // Metadata section — rating, pages, publisher, categories
