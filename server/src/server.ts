@@ -1636,8 +1636,15 @@ audio{width:100%;margin:12px 0;border-radius:8px}
           if (existsSync(wereadPath)) {
             const wc = JSON.parse(readFileSync(wereadPath, "utf-8"));
             const book = wc.books?.find((b: Record<string, unknown>) => b.title === meta.title);
-            const eid = book?.encodeId || book?.wereadBookId;
-            if (eid) { contentUrl = `https://weread.qq.com/web/reader/${eid}`; contentLabel = "📖 Read on WeRead"; }
+            if (book?.wereadBookId) {
+              try {
+                const { encodeWereadBookId } = await import("./entity-model.js");
+                contentUrl = `https://weread.qq.com/web/bookDetail/${encodeWereadBookId(String(book.wereadBookId))}`;
+              } catch {
+                contentUrl = `https://weread.qq.com/web/bookDetail/${book.wereadBookId}`;
+              }
+              contentLabel = "📖 Read on WeRead";
+            }
           }
         }
       } catch { /* ignore */ }
@@ -1812,6 +1819,17 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       res.json(area);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Create failed" });
+    }
+  });
+
+  app.post("/api/focus-areas/:id/gaps", async (req, res) => {
+    try {
+      const { analyzeFocusGaps } = await import("./focus-areas.js");
+      const result = await analyzeFocusGaps(req.params.id);
+      if (!result) { res.status(404).json({ error: "Focus area not found or analysis failed" }); return; }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Gap analysis failed" });
     }
   });
 

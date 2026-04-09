@@ -44,6 +44,14 @@ interface ActivityData {
   total: number;
 }
 
+interface GapAnalysis {
+  currentState: string;
+  gaps: Array<{ area: string; description: string; severity: "critical" | "significant" | "minor"; category: string }>;
+  bottlenecks: Array<{ description: string; impact: string }>;
+  solutions: Array<{ gap: string; solution: string; ensoAction: string; effort: string }>;
+  nextPriority: string;
+}
+
 type View = "list" | "detail";
 type DetailTab = "overview" | "activity" | "plan";
 
@@ -76,6 +84,8 @@ export default function FocusView() {
   const [addDesc, setAddDesc] = useState("");
   const [addIntent, setAddIntent] = useState("");
   const [planGoal, setPlanGoal] = useState<string | null>(null);
+  const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis | null>(null);
+  const [analyzingGaps, setAnalyzingGaps] = useState(false);
 
   // Editing state
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -204,6 +214,18 @@ export default function FocusView() {
       const resp = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}/activity`, { headers: authHeaders() });
       setActivity(await resp.json());
     } catch { setActivity(null); }
+  };
+
+  const handleGapAnalysis = async (id: string) => {
+    setAnalyzingGaps(true);
+    try {
+      const resp = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}/gaps`, {
+        method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" },
+      });
+      const data = await resp.json();
+      if (data?.gaps) setGapAnalysis(data);
+    } catch { /* ignore */ }
+    setAnalyzingGaps(false);
   };
 
   const handlePlan = async (id: string) => {
@@ -564,32 +586,134 @@ export default function FocusView() {
           )}
 
           {detailTab === "plan" && (
-            <div>
-              {planGoal ? (
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-4">
-                    <p className="text-xs text-gray-400 mb-2">Orchestration goal prepared:</p>
-                    <p className="text-sm text-gray-200 whitespace-pre-wrap max-h-60 overflow-y-auto">{planGoal.slice(0, 500)}...</p>
-                  </div>
-                  <button onClick={launchPlanOrchestration}
-                    className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500">
-                    Launch Plan Orchestration
+            <div className="space-y-6">
+              {/* Gap Analysis */}
+              {!gapAnalysis ? (
+                <div className="rounded-lg border border-gray-700/40 bg-gray-900/30 p-5">
+                  <h3 className="text-sm font-medium text-gray-200 mb-2">Gap & Bottleneck Analysis</h3>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Enso will analyze what's between your current state and your goal — identifying knowledge gaps,
+                    skill gaps, missing resources, and bottlenecks — then suggest solutions using Enso's capabilities.
+                  </p>
+                  <button onClick={() => handleGapAnalysis(selected.id)} disabled={analyzingGaps}
+                    className="text-sm px-4 py-2 rounded-lg bg-amber-600/80 text-white hover:bg-amber-500/80 disabled:opacity-50">
+                    {analyzingGaps ? "Analyzing gaps..." : "Analyze Gaps & Bottlenecks"}
                   </button>
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <div className="text-3xl mb-3">{"\uD83D\uDCCB"}</div>
-                  <h3 className="text-sm font-medium text-gray-200 mb-2">Create an Action Plan</h3>
-                  <p className="text-xs text-gray-500 mb-4 max-w-sm mx-auto">
-                    Enso will analyze this focus area and create a practical plan — identifying knowledge gaps,
-                    concrete next steps, and which Enso capabilities can help you make progress.
-                  </p>
-                  <button onClick={() => handlePlan(selected.id)}
-                    className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500">
-                    Create a Plan
-                  </button>
+                <div className="space-y-4">
+                  {/* Current State */}
+                  <div className="rounded-lg border border-gray-700/40 bg-gray-900/30 p-4">
+                    <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Current State</label>
+                    <p className="text-sm text-gray-300">{gapAnalysis.currentState}</p>
+                  </div>
+
+                  {/* Next Priority */}
+                  <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-4">
+                    <label className="text-[10px] uppercase tracking-wider text-violet-400/70 mb-1 block">Next Priority</label>
+                    <p className="text-sm text-violet-200 font-medium">{gapAnalysis.nextPriority}</p>
+                  </div>
+
+                  {/* Gaps */}
+                  {gapAnalysis.gaps.length > 0 && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-2 block">Gaps ({gapAnalysis.gaps.length})</label>
+                      <div className="space-y-2">
+                        {gapAnalysis.gaps.map((gap, i) => (
+                          <div key={i} className="rounded-lg border border-gray-700/30 bg-gray-900/20 p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                                gap.severity === "critical" ? "bg-red-900/30 text-red-400" :
+                                gap.severity === "significant" ? "bg-amber-900/30 text-amber-400" :
+                                "bg-gray-800/50 text-gray-500"
+                              }`}>{gap.severity}</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/50 text-gray-500">{gap.category}</span>
+                              <span className="text-xs font-medium text-gray-200">{gap.area}</span>
+                            </div>
+                            <p className="text-[11px] text-gray-400">{gap.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bottlenecks */}
+                  {gapAnalysis.bottlenecks.length > 0 && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-2 block">Bottlenecks</label>
+                      <div className="space-y-2">
+                        {gapAnalysis.bottlenecks.map((bn, i) => (
+                          <div key={i} className="rounded-lg border border-red-500/20 bg-red-950/10 p-3">
+                            <p className="text-xs text-gray-200 mb-1">{bn.description}</p>
+                            <p className="text-[11px] text-red-400/70 italic">Impact: {bn.impact}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Solutions */}
+                  {gapAnalysis.solutions.length > 0 && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-2 block">Solutions</label>
+                      <div className="space-y-1.5">
+                        {gapAnalysis.solutions.map((sol, i) => {
+                          const actionIcons: Record<string, string> = {
+                            research: "\uD83D\uDD0D", scheduled_task: "\u23F0", build_app: "\uD83D\uDCBB",
+                            cortex_search: "\uD83E\uDDE0", evolution: "\uD83E\uDDEC", chat: "\uD83D\uDCAC",
+                          };
+                          return (
+                            <button key={i} onClick={() => chatAboutFocus(selected, sol.solution)}
+                              className="w-full text-left rounded-lg border border-gray-700/30 bg-gray-900/20 p-3 hover:border-emerald-500/30 hover:bg-emerald-950/10 transition-colors">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span>{actionIcons[sol.ensoAction] || "\u2022"}</span>
+                                <span className="text-xs text-gray-200">{sol.solution}</span>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded ml-auto shrink-0 ${
+                                  sol.effort === "quick" ? "bg-emerald-900/30 text-emerald-400" :
+                                  sol.effort === "medium" ? "bg-blue-900/30 text-blue-400" :
+                                  "bg-amber-900/30 text-amber-400"
+                                }`}>{sol.effort}</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500">Addresses: {sol.gap}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <button onClick={() => { setGapAnalysis(null); handleGapAnalysis(selected.id); }}
+                    className="text-xs text-gray-500 hover:text-gray-300">Re-analyze</button>
                 </div>
               )}
+
+              {/* Divider */}
+              <div className="border-t border-gray-800/40 pt-4">
+                {/* Orchestration Plan */}
+                {planGoal ? (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-4">
+                      <p className="text-xs text-gray-400 mb-2">Orchestration goal prepared:</p>
+                      <p className="text-sm text-gray-200 whitespace-pre-wrap max-h-40 overflow-y-auto">{planGoal.slice(0, 500)}...</p>
+                    </div>
+                    <button onClick={launchPlanOrchestration}
+                      className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500">
+                      Launch Plan Orchestration
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-200 mb-2">Full Action Plan</h3>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Launch an AI orchestration to create a comprehensive, step-by-step plan.
+                    </p>
+                    <button onClick={() => handlePlan(selected.id)}
+                      className="text-sm px-4 py-2 rounded-lg bg-violet-600/80 text-white hover:bg-violet-500/80">
+                      Create Full Plan
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

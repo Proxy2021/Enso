@@ -811,6 +811,129 @@ export function getFocusContextForAgent(userMessage?: string): string {
   return block;
 }
 
+// ── Gap Analysis ──
+
+export interface FocusGapAnalysis {
+  currentState: string;
+  gaps: Array<{
+    area: string;
+    description: string;
+    severity: "critical" | "significant" | "minor";
+    category: "knowledge" | "skill" | "resource" | "connection" | "time" | "clarity";
+  }>;
+  bottlenecks: Array<{
+    description: string;
+    impact: string;
+  }>;
+  solutions: Array<{
+    gap: string;
+    solution: string;
+    ensoAction: string;  // what Enso can do: "research", "scheduled task", "build app", "cortex search"
+    effort: "quick" | "medium" | "significant";
+  }>;
+  nextPriority: string;
+}
+
+/**
+ * Analyze gaps and bottlenecks for a focus area.
+ * Compares what the user HAS (evidence, entities, skills) against
+ * what they NEED to achieve their goal, and suggests solutions
+ * using Enso's capabilities.
+ */
+export async function analyzeFocusGaps(focusId: string): Promise<FocusGapAnalysis | null> {
+  const state = loadFocusState();
+  if (!state) return null;
+
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return null;
+
+  try {
+    const { llm } = await import("./llm.js");
+    const { buildDataInventory } = await import("./cortex-synthesis.js");
+
+    const inventory = buildDataInventory(3000);
+    const evidenceStr = area.evidence.map(e => `- ${e}`).join("\n");
+
+    const prompt = `You are analyzing a person's progress toward a goal to identify GAPS and BOTTLENECKS — what's missing or blocking progress.
+
+## Focus Area
+- **Goal**: "${area.title}"
+- **Description**: "${area.description}"
+- **Intent**: "${area.intent || "(not defined)"}"
+- **Deeper motivation**: "${area.deeperIntent || "(not explored)"}"
+- **Current clarity**: ${area.clarity}
+- **Activity trend**: ${area.progress.trend}
+
+## What They Currently Have (Evidence)
+${evidenceStr || "(no evidence collected)"}
+
+## Their Full Data Inventory
+${inventory}
+
+## Available Enso Capabilities
+The user has an AI platform (Enso) that can:
+- **Research**: Deep web research on any topic with 48+ sources
+- **Cortex**: Personal knowledge wiki with cross-source connections
+- **Scheduled tasks**: Automated recurring tasks (daily research, monitoring)
+- **App building**: Custom apps built by Claude Code
+- **Evolution**: AI team sprints for improving projects
+- **Data sources**: Kindle, YouTube, Steam, Movies, Photos, Browser history, Projects
+
+## Task
+Analyze the gap between their CURRENT STATE and their GOAL. Return JSON:
+
+{
+  "currentState": "1-2 sentence summary of where they are right now",
+  "gaps": [
+    {
+      "area": "short label (e.g., 'Backtesting Framework')",
+      "description": "what's missing and why it matters",
+      "severity": "critical|significant|minor",
+      "category": "knowledge|skill|resource|connection|time|clarity"
+    }
+  ],
+  "bottlenecks": [
+    {
+      "description": "what's blocking progress right now",
+      "impact": "what happens if this isn't resolved"
+    }
+  ],
+  "solutions": [
+    {
+      "gap": "which gap this solves",
+      "solution": "concrete action to take",
+      "ensoAction": "research|scheduled_task|build_app|cortex_search|evolution|chat",
+      "effort": "quick|medium|significant"
+    }
+  ],
+  "nextPriority": "the single most important thing to do next (1 sentence)"
+}
+
+Be specific. Reference their actual data. Identify 3-6 gaps, 1-3 bottlenecks, and suggest solutions that leverage Enso's capabilities. The gaps should reveal things they haven't thought about.`;
+
+    const response = await llm({
+      prompt,
+      tier: "utility",
+      maxOutputTokens: 3000,
+      responseMimeType: "application/json",
+      temperature: 0.3,
+      timeoutMs: 60_000,
+    });
+
+    const result = JSON.parse(response) as FocusGapAnalysis;
+
+    logAction({
+      ts: Date.now(), type: "action", category: "focus-areas",
+      message: `Gap analysis for "${area.title}": ${result.gaps?.length || 0} gaps, ${result.bottlenecks?.length || 0} bottlenecks`,
+    });
+
+    return result;
+  } catch (err) {
+    logError("focus-areas", `Gap analysis failed for "${area.title}"`, err);
+    return null;
+  }
+}
+
 // ── Plan Generation for Orchestration ──
 
 /**
