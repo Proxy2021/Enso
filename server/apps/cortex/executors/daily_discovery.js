@@ -10,6 +10,16 @@ try {
   else serverBaseUrl = "http://localhost:3001";
 } catch(e) {}
 
+// Decode HTML numeric entities (&#128161; → 💡) that LLMs sometimes generate
+function decodeHtmlEntities(str) {
+  if (!str) return str;
+  return str.replace(/&#(\d+);/g, function(match, dec) {
+    try { return String.fromCodePoint(parseInt(dec, 10)); } catch(e) { return match; }
+  }).replace(/&#x([0-9a-fA-F]+);/g, function(match, hex) {
+    try { return String.fromCodePoint(parseInt(hex, 16)); } catch(e) { return match; }
+  });
+}
+
 ctx.log("Cortex Daily Discovery v2 starting...");
 
 // ── Step 1: Read Cortex state — understand what the user knows ──
@@ -106,6 +116,7 @@ if (allFindings.length > 0) {
       "- Group into 2-4 sections by category\n" +
       "- The analysis must reference their EXISTING Cortex knowledge — show how new info connects to what they already know\n" +
       "- Action items must be specific and actionable, not generic\n" +
+      "- Use plain text only — do NOT use HTML entities like &#128161; or &#128301;. Use UTF-8 emoji directly if needed.\n" +
       "- Return ONLY valid JSON, no markdown fences";
 
     var aiResult = await ctx.ask(analysisPrompt, { maxTokens: 2000 });
@@ -113,6 +124,27 @@ if (allFindings.length > 0) {
       try {
         var cleaned = aiResult.text.replace(/^```(?:json)?\s*\n?/m, "").replace(/\n?```\s*$/m, "").trim();
         analysisResult = JSON.parse(cleaned);
+        // Decode HTML entities the LLM may have injected
+        if (analysisResult.executiveSummary) analysisResult.executiveSummary = decodeHtmlEntities(analysisResult.executiveSummary);
+        if (analysisResult.weeklyTheme) analysisResult.weeklyTheme = decodeHtmlEntities(analysisResult.weeklyTheme);
+        if (Array.isArray(analysisResult.blindSpots)) {
+          analysisResult.blindSpots = analysisResult.blindSpots.map(function(s) { return decodeHtmlEntities(s); });
+        }
+        if (Array.isArray(analysisResult.sections)) {
+          for (var ds = 0; ds < analysisResult.sections.length; ds++) {
+            var sect2 = analysisResult.sections[ds];
+            if (sect2.categoryLabel) sect2.categoryLabel = decodeHtmlEntities(sect2.categoryLabel);
+            if (Array.isArray(sect2.items)) {
+              for (var di = 0; di < sect2.items.length; di++) {
+                var dItem = sect2.items[di];
+                if (dItem.headline) dItem.headline = decodeHtmlEntities(dItem.headline);
+                if (dItem.analysis) dItem.analysis = decodeHtmlEntities(dItem.analysis);
+                if (dItem.impactReason) dItem.impactReason = decodeHtmlEntities(dItem.impactReason);
+                if (dItem.actionItem) dItem.actionItem = decodeHtmlEntities(dItem.actionItem);
+              }
+            }
+          }
+        }
       } catch(e) {
         ctx.log("Failed to parse analysis: " + e.message);
       }
@@ -194,10 +226,19 @@ try {
   var ytCache = null;
   try { ytCache = JSON.parse(fs.readFileSync(ytCachePath, "utf-8")); } catch(e) {}
   if (ytCache && ytCache.feed) {
-    var oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     for (var fi = 0; fi < Math.min(ytCache.feed.length, 20); fi++) {
       var video = ytCache.feed[fi];
-      briefingData.freshVideos.push({ title: video.title, channel: video.channelTitle || "", publishedAt: video.publishedAt || "" });
+      var videoId = video.videoId || (video.videoUrl || "").split("v=")[1] || "";
+      briefingData.freshVideos.push({
+        title: video.title,
+        channel: video.channelTitle || "",
+        publishedAt: video.publishedAt || "",
+        thumbnailUrl: video.thumbnailUrl || (videoId ? "https://i.ytimg.com/vi/" + videoId + "/mqdefault.jpg" : ""),
+        videoUrl: video.videoUrl || (videoId ? "https://www.youtube.com/watch?v=" + videoId : ""),
+        viewCount: video.viewCount || "",
+        duration: video.duration || "",
+        description: (video.description || "").slice(0, 120)
+      });
     }
   }
 } catch(e) { ctx.log("Fresh Videos failed: " + (e.message || e)); }
@@ -418,16 +459,77 @@ if (briefingData.onThisDay.length > 0) {
   emailBody += "</div>";
 }
 
-// ── Fresh from Your Channels — YouTube ──
+// ── Fresh from Your Channels — YouTube (mobile-friendly card grid) ──
 if (briefingData.freshVideos.length > 0) {
-  emailBody += "<div style='margin:24px 0;padding:16px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;'>";
-  emailBody += "<h3 style='margin:0 0 10px;font-size:14px;color:#dc2626;'>📺 Fresh from Your Channels</h3>";
-  for (var fvi = 0; fvi < Math.min(briefingData.freshVideos.length, 8); fvi++) {
-    var vid = briefingData.freshVideos[fvi];
-    emailBody += "<p style='margin:4px 0;font-size:13px;color:#991b1b;'>• <strong>" + vid.title + "</strong>" + (vid.channel ? " — " + vid.channel : "") + "</p>";
+  emailBody += "<div style='margin:24px 0;padding:16px 16px 8px;background:linear-gradient(135deg,#1a1025,#1e1b3a);border-radius:12px;border:1px solid #3b2d5c;'>";
+  emailBody += "<h3 style='margin:0 0 4px;font-size:18px;color:#e879f9;text-align:center;'>Your Daily YouTube Picks</h3>";
+  var todayStr = new Date().toISOString().slice(0, 10);
+  emailBody += "<p style='margin:0 0 14px;font-size:12px;color:#9ca3af;text-align:center;'>" + todayStr + " \u2014 Fresh from your subscriptions</p>";
+
+  // 2-column grid using table for email compatibility
+  emailBody += "<table cellpadding='0' cellspacing='0' border='0' width='100%' style='border-collapse:separate;border-spacing:8px;'>";
+  var maxVids = Math.min(briefingData.freshVideos.length, 8);
+  for (var fvi = 0; fvi < maxVids; fvi += 2) {
+    emailBody += "<tr>";
+    for (var col = 0; col < 2; col++) {
+      var vidIdx = fvi + col;
+      if (vidIdx < maxVids) {
+        var vid = briefingData.freshVideos[vidIdx];
+        var viewStr = "";
+        if (vid.viewCount) {
+          var vc = parseInt(vid.viewCount);
+          if (vc >= 1000000) viewStr = (vc / 1000000).toFixed(1) + "M views";
+          else if (vc >= 1000) viewStr = Math.round(vc / 1000) + "K views";
+          else viewStr = vc + " views";
+        }
+        var timeStr = "";
+        if (vid.publishedAt) {
+          var pubDate = vid.publishedAt.slice(0, 10);
+          timeStr = pubDate;
+        }
+        var metaParts = [];
+        if (viewStr) metaParts.push(viewStr);
+        if (vid.duration) metaParts.push(vid.duration);
+        if (timeStr) metaParts.push(timeStr);
+
+        emailBody += "<td width='50%' valign='top' style='padding:0;'>";
+        emailBody += "<div style='background:#0f0d1a;border-radius:10px;overflow:hidden;border:1px solid #2d2640;'>";
+        // Thumbnail with link
+        if (vid.thumbnailUrl && vid.videoUrl) {
+          emailBody += "<a href='" + vid.videoUrl + "' style='display:block;'>";
+          emailBody += "<img src='" + vid.thumbnailUrl + "' alt='' width='100%' style='display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;' />";
+          emailBody += "</a>";
+        }
+        emailBody += "<div style='padding:8px 10px 10px;'>";
+        // Title
+        if (vid.videoUrl) {
+          emailBody += "<a href='" + vid.videoUrl + "' style='display:block;font-size:13px;font-weight:600;color:#e2e8f0;text-decoration:none;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;'>" + vid.title + "</a>";
+        } else {
+          emailBody += "<p style='margin:0;font-size:13px;font-weight:600;color:#e2e8f0;line-height:1.3;'>" + vid.title + "</p>";
+        }
+        // Channel name
+        if (vid.channel) {
+          emailBody += "<p style='margin:4px 0 0;font-size:11px;color:#e879f9;font-weight:500;'>" + vid.channel + "</p>";
+        }
+        // Meta line
+        if (metaParts.length > 0) {
+          emailBody += "<p style='margin:3px 0 0;font-size:10px;color:#6b7280;'>" + metaParts.join(" \u00B7 ") + "</p>";
+        }
+        // Description snippet
+        if (vid.description) {
+          emailBody += "<p style='margin:4px 0 0;font-size:10px;color:#4b5563;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;'>" + vid.description + "</p>";
+        }
+        emailBody += "</div></div></td>";
+      } else {
+        emailBody += "<td width='50%'></td>";
+      }
+    }
+    emailBody += "</tr>";
   }
-  if (briefingData.freshVideos.length > 8) {
-    emailBody += "<p style='margin:4px 0;font-size:11px;color:#b91c1c;'>+" + (briefingData.freshVideos.length - 8) + " more videos</p>";
+  emailBody += "</table>";
+
+  if (briefingData.freshVideos.length > maxVids) {
+    emailBody += "<p style='margin:8px 0 4px;font-size:11px;color:#9ca3af;text-align:center;'>+" + (briefingData.freshVideos.length - maxVids) + " more videos from your subscriptions</p>";
   }
   emailBody += "</div>";
 }

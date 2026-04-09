@@ -789,6 +789,152 @@ export async function resolveEntity(entityId: EntityId): Promise<Entity | null> 
  * Build the data payload for an entity detail card.
  * Includes: entity metadata, Cortex wiki content, related entities.
  */
+/**
+ * Resolve how to open/view the real content for an entity.
+ * Returns a unified content access descriptor with:
+ *  - primaryAction: what the main "Open" button does
+ *  - mediaUrl: for local files that can be streamed via /media/
+ *  - embedUrl: for content that can be embedded (YouTube, etc.)
+ *  - externalUrl: for content that opens in a new browser tab
+ *  - launchUrl: for protocol handlers (steam://, kindle://)
+ */
+function resolveContentAccess(entity: Entity): Record<string, unknown> {
+  const m = entity.metadata;
+  const type = entity.type;
+  const source = entity.source;
+
+  const result: Record<string, unknown> = { type };
+
+  // ── Books ──
+  if (type === "book") {
+    if (source === "kindle" && m.readerUrl) {
+      result.primaryAction = "open_web";
+      result.externalUrl = String(m.readerUrl);
+      result.label = "Read on Kindle";
+      result.icon = "📖";
+    } else if (source === "weread" && m.wereadBookId) {
+      const encodeId = m.encodeId || m.wereadBookId;
+      result.primaryAction = "open_web";
+      result.externalUrl = `https://weread.qq.com/web/reader/${encodeId}`;
+      result.label = "Read on WeRead";
+      result.icon = "📖";
+    } else if (m.isbn) {
+      result.primaryAction = "open_web";
+      result.externalUrl = `https://www.google.com/search?q=${encodeURIComponent(entity.title + " " + (m.author || ""))}+book`;
+      result.label = "Search Online";
+      result.icon = "🔍";
+    }
+  }
+
+  // ── Movies / TV ──
+  if (type === "movie" || type === "tv-series" || type === "documentary") {
+    if (m.filePath) {
+      result.primaryAction = "stream_media";
+      result.mediaUrl = `/media/${encodeURIComponent(String(m.filePath))}`;
+      result.mediaType = "video";
+      result.label = "Play";
+      result.icon = "▶️";
+      result.filePath = String(m.filePath);
+    }
+    if (m.imdbId) {
+      result.externalUrl = `https://www.imdb.com/title/${m.imdbId}`;
+      result.externalLabel = "IMDB";
+    } else {
+      result.externalUrl = `https://www.google.com/search?q=${encodeURIComponent(entity.title)}+watch+online`;
+      result.externalLabel = "Find Online";
+    }
+  }
+
+  // ── Games ──
+  if (type === "game") {
+    if (m.appId) {
+      result.primaryAction = "launch_protocol";
+      result.launchUrl = `steam://run/${m.appId}`;
+      result.label = "Launch in Steam";
+      result.icon = "🎮";
+      result.externalUrl = `https://store.steampowered.com/app/${m.appId}`;
+      result.externalLabel = "Steam Store";
+    }
+  }
+
+  // ── YouTube ──
+  if (type === "channel") {
+    if (m.channelId) {
+      result.primaryAction = "open_web";
+      result.externalUrl = `https://www.youtube.com/channel/${m.channelId}`;
+      result.label = "Open Channel";
+      result.icon = "📺";
+    } else {
+      result.primaryAction = "open_web";
+      result.externalUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(entity.title)}`;
+      result.label = "Find on YouTube";
+      result.icon = "🔍";
+    }
+  }
+  if (type === "video") {
+    if (m.videoId) {
+      result.primaryAction = "embed";
+      result.embedUrl = `https://www.youtube.com/embed/${m.videoId}`;
+      result.embedType = "iframe";
+      result.externalUrl = `https://www.youtube.com/watch?v=${m.videoId}`;
+      result.label = "Watch";
+      result.icon = "▶️";
+    }
+  }
+
+  // ── Articles ──
+  if (type === "article") {
+    if (m.url || entity.externalUrl) {
+      result.primaryAction = "open_web";
+      result.externalUrl = String(m.url || entity.externalUrl);
+      result.label = "Read Article";
+      result.icon = "📰";
+    }
+  }
+
+  // ── Places ──
+  if (type === "place") {
+    result.primaryAction = "open_web";
+    result.externalUrl = m.url
+      ? String(m.url)
+      : `https://www.google.com/maps/search/${encodeURIComponent(entity.title)}`;
+    result.label = "View on Map";
+    result.icon = "🗺️";
+  }
+
+  // ── Music ──
+  if (type === "song" || type === "artist") {
+    if (m.filePath) {
+      result.primaryAction = "stream_media";
+      result.mediaUrl = `/media/${encodeURIComponent(String(m.filePath))}`;
+      result.mediaType = "audio";
+      result.label = "Play";
+      result.icon = "🎵";
+    }
+  }
+
+  // ── Photos ──
+  if (type === "photo" || type === "album") {
+    if (m.filePath) {
+      result.primaryAction = "stream_media";
+      result.mediaUrl = `/media/${encodeURIComponent(String(m.filePath))}`;
+      result.mediaType = "image";
+      result.label = "View";
+      result.icon = "🖼️";
+    }
+  }
+
+  // Default fallback
+  if (!result.primaryAction && entity.externalUrl) {
+    result.primaryAction = "open_web";
+    result.externalUrl = entity.externalUrl;
+    result.label = "Open";
+    result.icon = "🔗";
+  }
+
+  return result;
+}
+
 export async function buildEntityDetailData(entityId: EntityId): Promise<Record<string, unknown> | null> {
   const entity = await resolveEntity(entityId);
   if (!entity) return null;
@@ -845,6 +991,9 @@ export async function buildEntityDetailData(entityId: EntityId): Promise<Record<
     }
   }
 
+  // Resolve content access — how to open/view the real content
+  const contentAccess = resolveContentAccess(entity);
+
   return {
     tool: `entity_detail`,
     focusEntity: entityId,
@@ -859,6 +1008,7 @@ export async function buildEntityDetailData(entityId: EntityId): Promise<Record<
       cortexPath: entity.cortexPath,
       externalUrl: entity.externalUrl,
     },
+    contentAccess,
     detailFields,
     cortexContent,
     backlinks,

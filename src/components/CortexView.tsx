@@ -183,6 +183,15 @@ export default function CortexView() {
       .then(data => {
         if (data.error) {
           setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
+          alert(data.error);
+          return;
+        }
+
+        // For email share: just show feedback, no state change needed
+        if (action === "entity_share_email" || action === "book_share_email") {
+          setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
+          if (data.success) alert(data.message || "Email sent!");
+          else alert(data.message || "Email failed");
           return;
         }
 

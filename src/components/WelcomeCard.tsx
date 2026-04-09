@@ -376,8 +376,9 @@ function KnowledgePulse({ disabled }: { disabled: boolean }) {
 
   if (!stats || stats.totalPages === 0) return null;
 
-  const entities = stats.categories["entities"] ?? 0;
-  const concepts = stats.categories["concepts"] ?? 0;
+  const categories = stats.categories ?? {};
+  const entities = categories["entities"] ?? 0;
+  const concepts = categories["concepts"] ?? 0;
 
   return (
     <div className="w-full max-w-lg mb-5">

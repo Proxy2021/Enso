@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { hostname } from "node:os";
 import type { EnsoRuntime } from "../local-types.js";
 import type { ConnectedClient } from "../server.js";
 import { getActiveAccount } from "../server.js";
@@ -1350,8 +1351,9 @@ export async function handlePluginCardAction(params: {
         return;
       }
 
-      // Determine base URL for podcast streaming links
-      const tunnelUrl = process.env.ENSO_TUNNEL_URL || `http://localhost:${process.env.PORT || 3001}`;
+      // Determine base URL for podcast streaming links — prefer tunnel URL for email accessibility
+      const machineName = process.env.ENSO_MACHINE_NAME || hostname();
+      const tunnelUrl = process.env.ENSO_TUNNEL_URL || `https://${machineName}.enso.net`;
       const html = buildBookEmailHtml(processed, tunnelUrl);
 
       sendOperation("processing", "Sending email...");

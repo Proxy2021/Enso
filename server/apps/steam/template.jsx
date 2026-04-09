@@ -51,7 +51,7 @@ function GeneratedUI({ data, onAction }) {
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {breadcrumb}
 
-        {/* Entity header */}
+        {/* Entity header with inline metadata */}
         <UICard style={{ padding: "16px" }}>
           <div style={{ display: "flex", gap: "16px" }}>
             {entity.imageUrl && (
@@ -60,6 +60,14 @@ function GeneratedUI({ data, onAction }) {
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: "18px", fontWeight: 700, lineHeight: 1.3 }}>{entity.title}</div>
+              {(function() {
+                var devField = fields.find(function(f) { return f.key === "developer" || f.key === "creator"; });
+                if (devField) {
+                  var val = Array.isArray(devField.value) ? devField.value.join(", ") : String(devField.value);
+                  return <div style={{ fontSize: "14px", color: "#94a3b8", marginTop: "4px" }}>{val}</div>;
+                }
+                return null;
+              })()}
               <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
                 <Badge variant="default">{entity.type}</Badge>
                 <Badge variant="secondary">{entity.source}</Badge>
@@ -73,6 +81,25 @@ function GeneratedUI({ data, onAction }) {
               )}
             </div>
           </div>
+
+          {/* Metadata fields inline below header */}
+          {fields.length > 0 && (
+            <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #1e293b" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: "12px" }}>
+                {fields.filter(function(f) {
+                  return f.key !== "developer" && f.key !== "creator" && f.key !== "description";
+                }).map(function(f) {
+                  var val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
+                  return (
+                    <div key={f.key} style={{ display: "flex", gap: "4px" }}>
+                      <span style={{ color: "#64748b" }}>{f.label}:</span>
+                      <span style={{ color: "#cbd5e1" }}>{val}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </UICard>
 
         {/* Podcast Player */}
@@ -179,21 +206,7 @@ function GeneratedUI({ data, onAction }) {
           </div>
         )}
 
-        {/* Detail fields */}
-        {fields.length > 0 && (
-          <UICard style={{ padding: "12px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Details</div>
-            <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "4px 12px", fontSize: "12px" }}>
-              {fields.map(function(f) {
-                var val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
-                return [
-                  <div key={f.key + "-label"} style={{ color: "#64748b", fontWeight: 500 }}>{f.label}</div>,
-                  <div key={f.key + "-value"} style={{ color: "#e2e8f0" }}>{val}</div>
-                ];
-              })}
-            </div>
-          </UICard>
-        )}
+        {/* Detail fields already shown in header card above */}
 
         {/* Cortex wiki content */}
         {cortexContent && !research && (
@@ -228,14 +241,20 @@ function GeneratedUI({ data, onAction }) {
               onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
             >Deep Podcast</Button>
           )}
+          {/* Content access buttons */}
+          {d.contentAccess && d.contentAccess.launchUrl && (
+            <Button size="sm" style={{ background: "#059669", color: "white" }}
+              onClick={function() { window.open(d.contentAccess.launchUrl); }}
+            >{d.contentAccess.icon || "🎮"} {d.contentAccess.label || "Launch"}</Button>
+          )}
+          {d.contentAccess && d.contentAccess.externalUrl && (
+            <Button variant="outline" size="sm"
+              onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
+            >{d.contentAccess.externalLabel || "Steam Store"}</Button>
+          )}
           <Button variant="outline" size="sm"
             onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\" game review and guide" }); }}
           ><Search size={12} style={{ marginRight: "4px" }} />Research</Button>
-          {entity.externalUrl && (
-            <Button variant="outline" size="sm"
-              onClick={function() { window.open(entity.externalUrl, "_blank"); }}
-            ><ExternalLink size={12} style={{ marginRight: "4px" }} />Open External</Button>
-          )}
           {entity.cortexPath && (
             <Button variant="outline" size="sm"
               onClick={function() { onAction("send_message", { message: "/wiki read " + entity.cortexPath }); }}

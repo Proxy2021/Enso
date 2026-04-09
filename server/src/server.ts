@@ -898,6 +898,42 @@ export async function startEnsoServer(opts: {
         return;
       }
 
+      // ── Entity Share Email: send book/entity report + podcast via email ──
+      if (action === "entity_share_email" || action === "book_share_email") {
+        const p = payload || {};
+        const recipient = String(p.recipient ?? "").trim();
+        const entityId = String(p.entityId ?? "").trim();
+        if (!recipient) { res.json({ error: "Recipient email required" }); return; }
+        if (!entityId) { res.json({ error: "No entity ID" }); return; }
+
+        try {
+          const { getProcessedContent, buildEntityEmailHtml } = await import("./deep-content.js");
+          const processed = getProcessedContent(entityId);
+          if (!processed) {
+            res.json({ error: "Book not yet processed. Generate the podcast first." });
+            return;
+          }
+
+          const tunnelUrl = process.env.ENSO_TUNNEL_URL || `https://${req.hostname === "localhost" ? `localhost:${process.env.PORT || 3001}` : req.hostname}`;
+          const html = buildEntityEmailHtml(processed, tunnelUrl);
+
+          const { sendHtmlEmail } = await import("./email.js");
+          const result = await sendHtmlEmail({
+            to: recipient,
+            subject: `📚 ${processed.title} — Book Intelligence Report + Podcast`,
+            html,
+            textFallback: `${processed.title} by ${processed.author}\n\n${processed.research.coreThesis}`,
+          });
+
+          logAction({ ts: Date.now(), type: "action", category: "action:book-email", message: `Book email sent for "${processed.title}" to ${recipient}` });
+          res.json({ success: result.success, message: result.message });
+        } catch (err) {
+          logError("action:book-email", "Email failed", err);
+          res.json({ error: `Email failed: ${err instanceof Error ? err.message : String(err)}` });
+        }
+        return;
+      }
+
       // For tool-based actions (browse, search, add, etc.) — run via executor
       const toolSuffix = action;
       const { getExecutorBody, isDynamicTool } = await import("./native-tools/registry.js");
