@@ -32,6 +32,10 @@ interface ExportBundle {
   skills?: Record<string, string>;
   projects?: Record<string, unknown>;
   cortex?: Record<string, Record<string, string>>;
+  deepContent?: Record<string, unknown>;
+  dataSources?: Record<string, unknown>;
+  entityIndex?: Record<string, unknown>;
+  orchestrations?: Record<string, Record<string, string>>;
 }
 
 interface CategoryInfo {
@@ -51,6 +55,10 @@ const CATEGORIES: CategoryInfo[] = [
   { id: "skills", label: "Skills", description: "User-created skill definitions", sensitive: false },
   { id: "projects", label: "Projects", description: "Project definitions (team, personas, vision)", sensitive: false },
   { id: "cortex", label: "Knowledge Cortex", description: "AI-maintained knowledge base (entities, concepts, sources, synthesis)", sensitive: false },
+  { id: "deepContent", label: "Deep Content", description: "AI podcast metadata, research, scripts (audio files exported separately)", sensitive: false },
+  { id: "dataSources", label: "Data Source Caches", description: "Kindle, WeRead, Steam, YouTube, Movies, Photos, QQ Music library caches", sensitive: false },
+  { id: "entityIndex", label: "Entity Index", description: "Cross-source entity registry with types, sources, and cortex paths", sensitive: false },
+  { id: "orchestrations", label: "Orchestrations & Discoveries", description: "Sprint outputs, persona reports, discovery artifacts", sensitive: false },
 ];
 
 // ── Readers ──
@@ -189,6 +197,77 @@ function readCategory(id: string): unknown | null {
         if (Object.keys(files).length > 0) result[subdir] = files;
       }
 
+      return Object.keys(result).length > 0 ? result : null;
+    }
+
+    case "deepContent": {
+      const dcDir = join(ENSO_HOME, "data", "deep-content");
+      if (!existsSync(dcDir)) return null;
+      const result: Record<string, unknown> = {};
+      for (const file of readdirSync(dcDir)) {
+        if (!file.endsWith(".json")) continue;
+        const data = readJsonFile(join(dcDir, file));
+        if (data) result[file] = data;
+      }
+      return Object.keys(result).length > 0 ? result : null;
+    }
+
+    case "dataSources": {
+      const cacheDir = join(ENSO_HOME, "data", "user-context", "cache");
+      if (!existsSync(cacheDir)) return null;
+      const result: Record<string, unknown> = {};
+      for (const file of readdirSync(cacheDir)) {
+        if (!file.endsWith(".json")) continue;
+        const data = readJsonFile(join(cacheDir, file));
+        if (data) result[file] = data;
+      }
+      // Also include consent
+      const consentData = readJsonFile(join(ENSO_HOME, "data", "user-context", "consent.json"));
+      if (consentData) result["_consent.json"] = consentData;
+      const scanLog = readJsonFile(join(ENSO_HOME, "data", "user-context", "scan-log.json"));
+      if (scanLog) result["_scan-log.json"] = scanLog;
+      return Object.keys(result).length > 0 ? result : null;
+    }
+
+    case "entityIndex":
+      return readJsonFile(join(ENSO_HOME, "data", "entity-index.json"));
+
+    case "orchestrations": {
+      const result: Record<string, Record<string, string>> = {};
+      // Orchestration outputs
+      const orchDir = join(ENSO_HOME, "orchestrations");
+      if (existsSync(orchDir)) {
+        for (const orchId of readdirSync(orchDir)) {
+          const orchPath = join(orchDir, orchId);
+          if (!statSync(orchPath).isDirectory()) continue;
+          const files: Record<string, string> = {};
+          // Read outputs directory
+          const outputsDir = join(orchPath, "outputs");
+          if (existsSync(outputsDir)) {
+            for (const f of readdirSync(outputsDir)) {
+              const content = readTextFile(join(outputsDir, f));
+              if (content) files[`outputs/${f}`] = content;
+            }
+          }
+          if (Object.keys(files).length > 0) result[orchId] = files;
+        }
+      }
+      // Discoveries
+      const discDir = join(ENSO_HOME, "discoveries");
+      if (existsSync(discDir)) {
+        for (const dId of readdirSync(discDir)) {
+          const dPath = join(discDir, dId);
+          if (!statSync(dPath).isDirectory()) continue;
+          const files: Record<string, string> = {};
+          for (const f of readdirSync(dPath)) {
+            if (f.endsWith(".md") || f.endsWith(".json") || f.endsWith(".jsx")) {
+              const content = readTextFile(join(dPath, f));
+              if (content) files[f] = content;
+            }
+          }
+          if (Object.keys(files).length > 0) result[`discovery-${dId}`] = files;
+        }
+      }
       return Object.keys(result).length > 0 ? result : null;
     }
 
@@ -339,6 +418,14 @@ function importCategory(id: string, data: unknown, mergeMode: "skip" | "replace"
       return importProjects(data as Record<string, unknown>, mergeMode);
     case "cortex":
       return importCortex(data as Record<string, Record<string, string>>, mergeMode);
+    case "deepContent":
+      return importDeepContent(data as Record<string, unknown>, mergeMode);
+    case "dataSources":
+      return importDataSources(data as Record<string, unknown>, mergeMode);
+    case "entityIndex":
+      return importEntityIndex(data as Record<string, unknown>, mergeMode);
+    case "orchestrations":
+      return importOrchestrations(data as Record<string, Record<string, string>>, mergeMode);
     default:
       return { imported: 0, skipped: 0, details: "Unknown category" };
   }
@@ -587,5 +674,76 @@ function importCortex(data: Record<string, Record<string, string>>, mergeMode: "
     }
   }
 
+  return { imported, skipped };
+}
+
+// ─── New Category Importers ────────────────────────────────────────────────
+
+function importDeepContent(data: Record<string, unknown>, mergeMode: "skip" | "replace"): ImportSummary {
+  const dcDir = join(ENSO_HOME, "data", "deep-content");
+  mkdirSync(dcDir, { recursive: true });
+  let imported = 0, skipped = 0;
+  for (const [filename, content] of Object.entries(data)) {
+    if (!filename.endsWith(".json")) continue;
+    const filePath = join(dcDir, filename);
+    if (mergeMode === "skip" && existsSync(filePath)) { skipped++; continue; }
+    writeFileSync(filePath, JSON.stringify(content, null, 2), "utf-8");
+    imported++;
+  }
+  return { imported, skipped };
+}
+
+function importDataSources(data: Record<string, unknown>, mergeMode: "skip" | "replace"): ImportSummary {
+  const cacheDir = join(ENSO_HOME, "data", "user-context", "cache");
+  const ctxDir = join(ENSO_HOME, "data", "user-context");
+  mkdirSync(cacheDir, { recursive: true });
+  let imported = 0, skipped = 0;
+  for (const [filename, content] of Object.entries(data)) {
+    if (!filename.endsWith(".json")) continue;
+    const targetDir = filename.startsWith("_") ? ctxDir : cacheDir;
+    const targetFile = filename.startsWith("_") ? filename.slice(1) : filename;
+    const filePath = join(targetDir, targetFile);
+    if (mergeMode === "skip" && existsSync(filePath)) { skipped++; continue; }
+    writeFileSync(filePath, JSON.stringify(content, null, 2), "utf-8");
+    imported++;
+  }
+  return { imported, skipped };
+}
+
+function importEntityIndex(data: Record<string, unknown>, mergeMode: "skip" | "replace"): ImportSummary {
+  const file = join(ENSO_HOME, "data", "entity-index.json");
+  mkdirSync(join(ENSO_HOME, "data"), { recursive: true });
+  if (mergeMode === "replace" || !existsSync(file)) {
+    writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+    return { imported: Object.keys(data).length, skipped: 0 };
+  }
+  const existing = (readJsonFile(file) as Record<string, unknown>) || {};
+  let imported = 0, skipped = 0;
+  for (const [entityId, entry] of Object.entries(data)) {
+    if (existing[entityId]) { skipped++; continue; }
+    existing[entityId] = entry;
+    imported++;
+  }
+  writeFileSync(file, JSON.stringify(existing, null, 2), "utf-8");
+  return { imported, skipped };
+}
+
+function importOrchestrations(data: Record<string, Record<string, string>>, mergeMode: "skip" | "replace"): ImportSummary {
+  let imported = 0, skipped = 0;
+  for (const [dirName, files] of Object.entries(data)) {
+    const isDiscovery = dirName.startsWith("discovery-");
+    const baseDir = isDiscovery
+      ? join(ENSO_HOME, "discoveries", dirName.replace("discovery-", ""))
+      : join(ENSO_HOME, "orchestrations", dirName);
+    if (mergeMode === "skip" && existsSync(baseDir)) { skipped++; continue; }
+    mkdirSync(baseDir, { recursive: true });
+    for (const [filename, content] of Object.entries(files)) {
+      const filePath = join(baseDir, filename);
+      const fileDir = join(filePath, "..");
+      mkdirSync(fileDir, { recursive: true });
+      writeFileSync(filePath, content, "utf-8");
+    }
+    imported++;
+  }
   return { imported, skipped };
 }
