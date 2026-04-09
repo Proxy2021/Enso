@@ -1333,7 +1333,35 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   if (coverImageUrl) {
     parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" style="max-width:180px;max-height:270px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.12);margin-bottom:16px;" /><br/>`);
   }
-  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin:4px;">${L.playDownload}</a> `);
+  // Resolve content access URL (Read on Kindle/WeRead, IMDB, Steam, etc.)
+  let contentUrl = "";
+  let contentLabel = "";
+  try {
+    const { resolveEntity: resEnt } = require("./entity-model.js") as { resolveEntity: (id: string) => Promise<{ metadata: Record<string, unknown>; source: string; type: string }> };
+    // Sync lookup from metadata
+    const { parseEntityId: parseEid } = require("./entity-model.js") as { parseEntityId: (id: string) => { source: string; type: string } | null };
+    const parsedEid = parseEid(processed.entityId);
+    if (parsedEid?.source === "kindle") {
+      // Try to find readerUrl from Kindle cache
+      try {
+        const kindleCache = JSON.parse(readFileSync(join(homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json"), "utf-8"));
+        const book = kindleCache.books?.find((b: Record<string, unknown>) => b.title === processed.title);
+        if (book?.readerUrl) { contentUrl = String(book.readerUrl); contentLabel = isChinese ? "📖 在Kindle阅读" : "📖 Read on Kindle"; }
+      } catch { /* ignore */ }
+    } else if (parsedEid?.source === "weread") {
+      try {
+        const wereadCache = JSON.parse(readFileSync(join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json"), "utf-8"));
+        const book = wereadCache.books?.find((b: Record<string, unknown>) => b.title === processed.title);
+        const encodeId = book?.encodeId || book?.wereadBookId;
+        if (encodeId) { contentUrl = `https://weread.qq.com/web/reader/${encodeId}`; contentLabel = isChinese ? "📖 在微信读书阅读" : "📖 Read on WeRead"; }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+
+  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin:4px;">${L.playDownload}</a> `);
+  if (contentUrl) {
+    parts.push(`<a href="${esc(contentUrl)}" style="display:inline-block;background:#2563eb;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:4px;">${contentLabel}</a> `);
+  }
   parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:4px;">${L.addToCortex}</a>`);
   parts.push(`</div>`);
 
