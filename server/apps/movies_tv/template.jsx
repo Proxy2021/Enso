@@ -471,7 +471,6 @@ function GeneratedUI({ data, onAction }) {
             <Button variant="outline" size="sm" onClick={function() { onAction("scan", {}); }}>Scan</Button>
             <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>Enrich</Button>
             <Button variant="default" size="sm" onClick={function() { if (addInput.trim()) onAction("add", { query: addInput.trim() }); }}>➕ Add Movie</Button>
-            </Button>
           </div>
         </div>
 
