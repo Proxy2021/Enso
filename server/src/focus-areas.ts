@@ -102,21 +102,68 @@ function saveFocusState(state: FocusState): void {
 
 function writeFocusToCortex(state: FocusState): void {
   try {
-    const dir = dirname(CORTEX_FOCUS_PATH);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    // Write summary page
+    const synthDir = dirname(CORTEX_FOCUS_PATH);
+    if (!existsSync(synthDir)) mkdirSync(synthDir, { recursive: true });
 
-    const lines = [`# Focus Areas`, ``, `Last updated: ${new Date().toISOString()}`, ``];
+    const summaryLines = [`# Focus Areas`, ``, `Last updated: ${new Date().toISOString()}`, ``];
     for (const area of state.areas) {
       const statusIcon = area.status === "emerging" ? "~" : area.status === "active" ? "●" : "○";
-      lines.push(`## ${statusIcon} ${area.title}`);
-      lines.push(area.description);
-      if (area.intent) lines.push(`**Intent:** ${area.intent}`);
-      lines.push(`**Clarity:** ${area.clarity} | **Trend:** ${area.progress.trend}`);
-      if (area.evidence.length) lines.push(`**Evidence:** ${area.evidence.slice(0, 3).join("; ")}`);
-      if (area.nextSteps?.length) lines.push(`**Next:** ${area.nextSteps.join(", ")}`);
-      lines.push(``);
+      summaryLines.push(`## ${statusIcon} ${area.title}`);
+      summaryLines.push(area.description);
+      if (area.intent) summaryLines.push(`**Intent:** ${area.intent}`);
+      summaryLines.push(`**Clarity:** ${area.clarity} | **Trend:** ${area.progress.trend}`);
+      summaryLines.push(`See: [[focuses/${area.id}]]`);
+      summaryLines.push(``);
     }
-    writeFileSync(CORTEX_FOCUS_PATH, lines.join("\n"), "utf-8");
+    writeFileSync(CORTEX_FOCUS_PATH, summaryLines.join("\n"), "utf-8");
+
+    // Write per-goal pages in focuses/ directory
+    const focusDir = join(ENSO_HOME, "wiki", "focuses");
+    if (!existsSync(focusDir)) mkdirSync(focusDir, { recursive: true });
+
+    for (const area of state.areas) {
+      const pagePath = join(focusDir, `${area.id}.md`);
+      const lines = [
+        `# ${area.title}`,
+        ``,
+        area.description,
+        ``,
+        `## Status`,
+        `- **Status:** ${area.status}`,
+        `- **Clarity:** ${area.clarity}`,
+        `- **Confidence:** ${Math.round(area.confidence * 100)}%`,
+        `- **Trend:** ${area.progress.trend}`,
+        `- **Last active:** ${area.progress.lastActiveAt}`,
+        ``,
+      ];
+      if (area.intent) {
+        lines.push(`## Intent`, ``, area.intent, ``);
+      }
+      if (area.nextSteps?.length) {
+        lines.push(`## Next Steps`, ``);
+        for (const step of area.nextSteps) lines.push(`- ${step}`);
+        lines.push(``);
+      }
+      lines.push(`## Evidence`, ``);
+      for (const ev of area.evidence) lines.push(`- ${ev}`);
+      lines.push(``);
+      if (area.semanticTags.length) {
+        lines.push(`## Related Themes`, ``, `Tags: ${area.semanticTags.join(", ")}`, ``);
+      }
+      if (area.refinements.length) {
+        lines.push(`## Refinement History`, ``);
+        for (const r of area.refinements.slice(-5)) {
+          lines.push(`- ${r.date.slice(0, 10)} [${r.source}]: ${r.change}`);
+        }
+        lines.push(``);
+      }
+      if (area.suggestedActions.length) {
+        lines.push(`## Suggested Actions`, ``);
+        for (const a of area.suggestedActions) lines.push(`- ${a}`);
+      }
+      writeFileSync(pagePath, lines.join("\n"), "utf-8");
+    }
   } catch { /* best effort */ }
 }
 
@@ -163,11 +210,17 @@ export async function inferFocusAreas(): Promise<FocusState> {
     ? `\n\nPreviously identified focus areas (maintain continuity, update rather than replace):\n${existing.areas.map(a => `- ${a.title}: ${a.description} [${a.clarity}, ${a.progress.trend}]`).join("\n")}`
     : "";
 
-  const prompt = `You are analyzing someone's complete digital footprint to identify their ACTIVE FOCUS AREAS — practical things they're investing time and attention in right now.
+  const prompt = `You are analyzing someone's complete digital footprint to identify their ACTIVE FOCUS AREAS — concrete goals and outcomes they're working toward.
 
-Focus areas are diverse and personal. Examples: "Ship a coding project", "Get better at photography", "Learn Mandarin", "Exercise more consistently", "Build investment knowledge", "Explore Korean cinema", "Develop a side business".
+CRITICAL: Focus areas must be OUTCOME-ORIENTED, not vague categories.
+- BAD: "Full-Stack Development" (too vague — a skill category, not a goal)
+- GOOD: "Develop Enso into a truly useful personal AI assistant" (specific project + outcome)
+- BAD: "Quantitative Finance" (passive interest label)
+- GOOD: "Build AlphaRank into a quant tool that consistently outperforms S&P 500" (specific project + measurable outcome)
+- BAD: "Photography" (vague hobby)
+- GOOD: "Develop a documentary street photography practice" (specific style + intent)
 
-They are NOT passive interests — they are areas where the person is ACTIVELY doing something.
+Each focus area should answer: "What is this person trying to ACHIEVE?" — not just "What category are they interested in?"
 
 ## User Profile
 ${profile || "(not available)"}
@@ -180,19 +233,21 @@ ${topClusters || "(not yet enriched)"}
 ${existingContext}
 
 ## Task
-Identify 4-7 focus areas from this data. For each:
+Identify 4-7 concrete focus areas from this data. For each:
 
-1. **id**: kebab-case slug (e.g., "photography-practice")
-2. **title**: 2-5 word label (e.g., "Photography Practice")
-3. **description**: One sentence describing what they're doing in this area
+1. **id**: kebab-case slug (e.g., "build-alpharank-quant-tool")
+2. **title**: Concrete outcome statement (e.g., "Build AlphaRank into a Market-Beating Quant Tool")
+3. **description**: One sentence describing the GOAL — what success looks like
 4. **status**: "active" (clear ongoing activity) or "emerging" (growing but not yet crystallized)
-5. **clarity**: "emerging" (vague interest), "developing" (direction clear), or "clear" (specific goal visible)
-6. **intent**: What they might be trying to achieve (your best inference)
+5. **clarity**: "emerging" (intent unclear), "developing" (direction clear, specifics forming), or "clear" (concrete goal visible)
+6. **intent**: The specific outcome they're working toward
 7. **confidence**: 0-1 how confident you are this is a real focus
-8. **evidence**: 3-5 specific data points from the inventory (titles, project names, channels)
+8. **evidence**: 3-5 specific data points from the inventory (actual titles, project names, channel names)
 9. **semanticTags**: 2-4 relevant theme tags
 10. **trend**: "growing" (increasing activity), "steady" (consistent), or "quiet" (declining/paused)
-11. **suggestedActions**: 2-3 concrete next steps. For "emerging" areas, these should be CLARIFYING QUESTIONS to help the user articulate what they want.
+11. **suggestedActions**: 2-3 concrete next steps. For "emerging" areas, these should be CLARIFYING QUESTIONS to help articulate the goal.
+
+When a project exists (like Enso, AlphaRank), make the focus about that PROJECT's goal, not the generic skill category.
 
 Sort by confidence (highest first). Be specific — reference actual titles.
 
@@ -583,4 +638,90 @@ export function getFocusContextForAgent(userMessage?: string): string {
 
   block += `\n</focus_areas>`;
   return block;
+}
+
+// ── Plan Generation for Orchestration ──
+
+/**
+ * Generate an orchestration goal prompt for a focus area.
+ * Returns a string the client can use with orchestration.start.
+ */
+export function generateFocusPlan(focusId: string): { goal: string; focusTitle: string } | null {
+  const state = loadFocusState();
+  if (!state) return null;
+
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return null;
+
+  const evidenceStr = area.evidence.slice(0, 5).map(e => `- ${e}`).join("\n");
+  const tagsStr = area.semanticTags.join(", ");
+
+  const goal = `Analyze my focus area "${area.title}" and create a practical, actionable plan to make meaningful progress.
+
+## Focus Area Details
+- **Title**: ${area.title}
+- **Description**: ${area.description}
+- **Intent**: ${area.intent || "(still forming — help me clarify this)"}
+- **Current clarity**: ${area.clarity}
+- **Activity trend**: ${area.progress.trend}
+- **Related themes**: ${tagsStr}
+
+## Evidence (what I've been doing)
+${evidenceStr}
+
+## What I Need
+1. **Gap analysis**: What knowledge, skills, or resources am I missing to advance this goal?
+2. **Action plan**: 3-5 concrete next steps I can take THIS WEEK
+3. **Enso capabilities**: What Enso tools (research, Cortex, apps, scheduled tasks) can help?
+4. **Milestones**: If my intent is clear enough, propose 3-4 milestones toward the goal
+5. **Research needs**: What should I research to fill knowledge gaps?
+
+Be specific and actionable. Reference my actual data (projects, books, channels) when relevant.`;
+
+  return { goal, focusTitle: area.title };
+}
+
+// ── Focus Area Activity Detail ──
+
+/**
+ * Get detailed activity data for a focus area — entities matching its tags.
+ */
+export function getFocusAreaActivity(focusId: string): {
+  entities: Array<{ title: string; source: string; type: string; updatedAt: string }>;
+  total: number;
+} | null {
+  const state = loadFocusState();
+  if (!state) return null;
+
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return null;
+
+  try {
+    // Dynamic import would be async, but getEntityIndex is sync after first load
+    // Use require pattern for sync access
+    const entityModel = require("./entity-model.js") as typeof import("./entity-model.js");
+    const entityIndex = entityModel.getEntityIndex();
+
+    const matching: Array<{ title: string; source: string; type: string; updatedAt: string }> = [];
+    const areaTags = new Set(area.semanticTags);
+
+    for (const [, entry] of entityIndex) {
+      const entryTags = new Set(entry.semanticTags || []);
+      const overlap = [...areaTags].filter(t => entryTags.has(t));
+      if (overlap.length >= 1) {
+        matching.push({
+          title: entry.title,
+          source: entry.source,
+          type: entry.type,
+          updatedAt: entry.updatedAt || "",
+        });
+      }
+    }
+
+    matching.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+    return { entities: matching.slice(0, 30), total: matching.length };
+  } catch {
+    return { entities: [], total: 0 };
+  }
 }

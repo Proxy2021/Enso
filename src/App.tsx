@@ -11,6 +11,7 @@ import { DesktopTabRail, MobileTabBar, TabHeader } from "./components/TabNavigat
 import MobileConversationList from "./components/MobileConversationList";
 import TasksView from "./components/TasksView";
 import CortexView from "./components/CortexView";
+import FocusView from "./components/FocusView";
 import EvolveView from "./components/EvolveView";
 import ProjectsView from "./components/ProjectsView";
 import SettingsView from "./components/SettingsView";
@@ -221,6 +222,10 @@ function TabContent() {
 
   if (activeTab === "cortex") {
     return <CortexView />;
+  }
+
+  if (activeTab === "focus") {
+    return <FocusView />;
   }
 
   if (activeTab === "tasks") {

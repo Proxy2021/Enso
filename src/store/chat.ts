@@ -173,7 +173,7 @@ interface CardStore {
   deployStatus: "idle" | "deploying" | "done" | null;
 
   // Tab navigation (universal — desktop rail + mobile bottom bar)
-  activeTab: "chat" | "cortex" | "tasks" | "evolve" | "projects" | "me";
+  activeTab: "chat" | "cortex" | "focus" | "tasks" | "evolve" | "projects" | "me";
   chatViewOpen: boolean;
 
   // Actions
@@ -239,7 +239,7 @@ interface CardStore {
   triggerDeploy: () => void;
   setCardSearchQuery: (query: string) => void;
   setCardSearchVisible: (visible: boolean) => void;
-  setActiveTab: (tab: "chat" | "cortex" | "tasks" | "evolve" | "projects" | "me") => void;
+  setActiveTab: (tab: "chat" | "cortex" | "focus" | "tasks" | "evolve" | "projects" | "me") => void;
   setChatViewOpen: (open: boolean) => void;
   // Scheduled task actions
   fetchScheduledTasks: () => void;

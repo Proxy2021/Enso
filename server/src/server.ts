@@ -1815,6 +1815,28 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     }
   });
 
+  app.post("/api/focus-areas/:id/plan", async (req, res) => {
+    try {
+      const { generateFocusPlan } = await import("./focus-areas.js");
+      const result = generateFocusPlan(req.params.id);
+      if (!result) { res.status(404).json({ error: "Focus area not found" }); return; }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Plan generation failed" });
+    }
+  });
+
+  app.get("/api/focus-areas/:id/activity", async (req, res) => {
+    try {
+      const { getFocusAreaActivity } = await import("./focus-areas.js");
+      const result = getFocusAreaActivity(req.params.id);
+      if (!result) { res.status(404).json({ error: "Focus area not found" }); return; }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Activity fetch failed" });
+    }
+  });
+
   // ── Projects API ──
   app.get("/api/projects", async (_req, res) => {
     const { listProjects } = await import("./project-manager.js");

@@ -4,7 +4,7 @@ import { useT } from "../lib/i18n";
 import SettingsPanel from "./SettingsPanel";
 import DebugReporter from "./DebugReporter";
 
-type TabId = "chat" | "cortex" | "tasks" | "evolve" | "projects" | "me";
+type TabId = "chat" | "cortex" | "focus" | "tasks" | "evolve" | "projects" | "me";
 
 /** Controls-only header bar for tabs that need action buttons. Desktop only.
  *  No title — the active tab in the rail already labels the view. */
@@ -92,9 +92,20 @@ function CortexIcon({ active }: { active: boolean }) {
   );
 }
 
+function FocusIcon({ active }: { active: boolean }) {
+  return (
+    <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" fill={active ? "currentColor" : "none"} />
+    </svg>
+  );
+}
+
 const TABS: Array<{ id: TabId; labelKey: string; Icon: typeof ChatIcon }> = [
   { id: "chat", labelKey: "tab.chat", Icon: ChatIcon },
   { id: "cortex", labelKey: "tab.cortex", Icon: CortexIcon },
+  { id: "focus", labelKey: "tab.focus", Icon: FocusIcon },
   { id: "tasks", labelKey: "tab.tasks", Icon: TasksIcon },
   { id: "evolve", labelKey: "tab.evolve", Icon: EvolveIcon },
   { id: "projects", labelKey: "tab.projects", Icon: ProjectsIcon },
