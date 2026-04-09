@@ -181,9 +181,6 @@ function GeneratedUI({ data, onAction }) {
               onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
             >{d.contentAccess.externalLabel || "Find Online"}</Button>
           )}
-          <Button variant="outline" size="sm"
-            onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\" " + (movieYear || "") + " " + (isTV ? "TV series" : "movie") + " analysis" }); }}
-          ><Search size={12} style={{ marginRight: "4px" }} /> Research</Button>
           {!podcastAudioUrl && !podcastStatus && (
             <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
               onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
@@ -741,17 +738,20 @@ function MediaCard({ item, onAction }) {
   var categoryIcon = item.category === "tv" ? Tv : Film;
   var CatIcon = categoryIcon;
 
+  var handleCardClick = function() {
+    if (item.entityId) onAction("view_entity", { entityId: item.entityId });
+  };
+
   return (
-    <UICard style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ display: "flex", gap: "0" }}>
+    <div style={{ borderRadius: "8px", border: "1px solid rgba(100,116,139,0.3)", background: "#1f2937", overflow: "hidden" }}>
+      <div style={{ display: "flex", gap: "0", cursor: item.entityId ? "pointer" : "default" }}
+        onClick={handleCardClick}>
         {/* Poster */}
         {item.posterPath ? (
           <img
             src={item.posterPath}
             alt={item.title}
-            style={{ width: "90px", minHeight: "135px", objectFit: "cover", flexShrink: 0,
-              cursor: item.entityId ? "pointer" : "default" }}
-            onClick={function() { if (item.entityId) onAction("view_entity", { entityId: item.entityId }); }}
+            style={{ width: "90px", minHeight: "135px", objectFit: "cover", flexShrink: 0 }}
           />
         ) : (
           <div style={{
@@ -765,9 +765,7 @@ function MediaCard({ item, onAction }) {
         {/* Info */}
         <div style={{ flex: 1, padding: "10px", minWidth: 0 }}>
           {/* Title */}
-          <div style={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3,
-            cursor: item.entityId ? "pointer" : "default", color: item.entityId ? "#c4b5fd" : "inherit" }}
-            onClick={function() { if (item.entityId) onAction("view_entity", { entityId: item.entityId }); }}
+          <div style={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3, color: item.entityId ? "#c4b5fd" : "inherit" }}
           >{item.isProcessed && <span style={{ marginRight: "4px" }} title="Deep podcast available">🎙️</span>}{item.title}</div>
 
           {/* Year + Runtime + Category */}
@@ -829,49 +827,36 @@ function MediaCard({ item, onAction }) {
             </div>
           )}
 
-          {/* Overview (expandable) */}
+          {/* Overview */}
           {item.overview && (
             <div
-              onClick={function() { setExpanded(!expanded); }}
               style={{
-                fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: 1.4, cursor: "pointer",
-                ...(expanded ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" })
+                fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: 1.4,
+                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden"
               }}
             >{item.overview}</div>
           )}
         </div>
       </div>
 
-      {/* Actions */}
-      <div style={{ display: "flex", gap: "5px", padding: "6px 10px 8px", flexWrap: "wrap", borderTop: "1px solid #27272a" }}>
-        {item.entityId && (
-          <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
-            onClick={function() { onAction("view_entity", { entityId: item.entityId }); }}
-          >View</Button>
-        )}
-        {item.hasWikiPage && (
-          <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
-            onClick={function() {
-              var prefix = item.category === "tv" ? "tv-" : "movie-";
-              var slug = item.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60);
-              onAction("send_message", { message: "/wiki read entities/" + prefix + slug });
-            }}
-          >Wiki</Button>
-        )}
-        <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
-          onClick={function() { onAction("send_message", { message: "/research \"" + item.title + "\" " + (item.year || "") + " movie review" }); }}
-        ><Search size={10} style={{ marginRight: "3px" }} /> Research</Button>
+      {/* Actions — stopPropagation so buttons don't trigger card click */}
+      <div style={{ display: "flex", gap: "5px", padding: "6px 10px 8px", flexWrap: "wrap", borderTop: "1px solid #27272a" }}
+        onClick={function(e) { e.stopPropagation(); }}>
+        {item.isProcessed ? (
+          <Button variant="outline" size="sm" style={{ fontSize: "10px", borderColor: "#7c3aed44", color: "#c4b5fd" }}
+            onClick={function() { if (item.entityId) onAction("view_entity", { entityId: item.entityId }); }}
+          >🎙️ Podcast</Button>
+        ) : item.entityId ? (
+          <Button variant="outline" size="sm" style={{ fontSize: "10px", borderColor: "#7c3aed44", color: "#c4b5fd" }}
+            onClick={function() { onAction("deep_content", { entityId: item.entityId, title: item.title, type: item.category === "tv" ? "tv-series" : "movie" }); }}
+          >🎙️ Deep Process</Button>
+        ) : null}
         {item.imdbId && (
           <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
             onClick={function() { window.open("https://www.imdb.com/title/" + item.imdbId, "_blank"); }}
           ><ExternalLink size={10} style={{ marginRight: "3px" }} /> IMDB</Button>
         )}
-        {!item.hasWikiPage && (
-          <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
-            onClick={function() { onAction("add_to_cortex", { title: item.title, type: item.category === "tv" ? "tv-series" : "movie", year: item.year, description: item.overview }); }}
-          >+ Cortex</Button>
-        )}
       </div>
-    </UICard>
+    </div>
   );
 }

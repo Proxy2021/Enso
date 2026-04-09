@@ -83,6 +83,25 @@ function GeneratedUI({ data, onAction }) {
               {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
             </div>
             <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}><source src={podcastAudioUrl} type="audio/wav" /></audio>
+            {processed && processed.script && (
+              <div style={{ marginTop: "8px" }}>
+                <button onClick={function() { setShowTranscript(!showTranscript); }}
+                  style={{ background: "none", border: "none", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: 0 }}>
+                  {showTranscript ? "Hide transcript ▲" : "Show transcript ▼"}
+                </button>
+                {showTranscript && (
+                  <div style={{ marginTop: "6px", maxHeight: "300px", overflow: "auto", fontSize: "11px", lineHeight: 1.6 }}>
+                    {processed.script.split("\n").map(function(line, i) {
+                      var hostA = line.match(/^Host A:\s*(.*)/);
+                      var hostB = line.match(/^Host B:\s*(.*)/);
+                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>Host A:</span> {hostA[1]}</div>;
+                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>Host B:</span> {hostB[1]}</div>;
+                      return line.trim() ? <div key={i} style={{ color: "#64748b" }}>{line}</div> : null;
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </UICard>
         )}
         {podcastStatus && podcastStatus !== "ready" && (
@@ -107,6 +126,27 @@ function GeneratedUI({ data, onAction }) {
                 <p style={{ fontSize: "13px", color: "#e2e8f0", margin: 0, lineHeight: 1.5 }}>{ins.insight}</p>
                 {ins.example && <p style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic", margin: "4px 0 0" }}>{ins.example}</p>}
               </div>;
+            })}
+          </UICard>
+        )}
+        {research && research.chapterSummaries && research.chapterSummaries.length > 0 && (
+          <UICard style={{ padding: "14px" }}>
+            <h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>📑 Section Summaries</h3>
+            {research.chapterSummaries.map(function(ch, i) {
+              return (
+                <div key={i} style={{ marginBottom: "8px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#93c5fd" }}>{ch.chapter}</div>
+                  <div style={{ fontSize: "11px", color: "#cbd5e1", lineHeight: 1.5, marginTop: "2px" }}>{ch.summary}</div>
+                </div>
+              );
+            })}
+          </UICard>
+        )}
+        {research && research.criticalPerspectives && research.criticalPerspectives.length > 0 && (
+          <UICard style={{ padding: "14px" }}>
+            <h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>⚖️ Critical Perspectives</h3>
+            {research.criticalPerspectives.map(function(cp, i) {
+              return <div key={i} style={{ fontSize: "12px", color: "#fbbf24", marginBottom: "4px", lineHeight: 1.5 }}>• {cp}</div>;
             })}
           </UICard>
         )}

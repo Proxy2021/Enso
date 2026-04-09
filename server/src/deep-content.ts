@@ -221,32 +221,48 @@ export function getProcessedContent(entityId: string): ProcessedContent | null {
   const OLD_KINDLE_DIR = join(homedir(), ".enso", "data", "kindle", "podcasts");
   const searchDirs = [CONTENT_DIR, OLD_KINDLE_DIR];
 
+  let result: ProcessedContent | null = null;
+
   for (const dir of searchDirs) {
+    if (result) break;
     // Try exact match with new Unicode slug first
     for (const trySlug of [slug, oldSlug]) {
       const exactPath = join(dir, `${trySlug}.json`);
       try {
         if (existsSync(exactPath)) {
-          return JSON.parse(readFileSync(exactPath, "utf-8")) as ProcessedContent;
+          result = JSON.parse(readFileSync(exactPath, "utf-8")) as ProcessedContent;
+          break;
         }
       } catch { /* continue */ }
     }
 
     // Try prefix match (handles different slug truncation lengths)
-    try {
-      if (existsSync(dir)) {
-        const files = readdirSync(dir);
-        // Slug prefix: first 40 chars should be enough to match uniquely
-        const prefix = slug.slice(0, 40);
-        const match = files.find(f => f.startsWith(prefix) && f.endsWith(".json"));
-        if (match) {
-          return JSON.parse(readFileSync(join(dir, match), "utf-8")) as ProcessedContent;
+    if (!result) {
+      try {
+        if (existsSync(dir)) {
+          const files = readdirSync(dir);
+          const prefix = slug.slice(0, 40);
+          const match = files.find(f => f.startsWith(prefix) && f.endsWith(".json"));
+          if (match) {
+            result = JSON.parse(readFileSync(join(dir, match), "utf-8")) as ProcessedContent;
+          }
         }
-      }
-    } catch { /* continue */ }
+      } catch { /* continue */ }
+    }
   }
 
-  return null;
+  if (!result) return null;
+
+  // Recompute audioUrl from actual file on disk (fixes stale base64 paths from older slug functions)
+  const audioPath = join(AUDIO_DIR, `${slug}.wav`);
+  if (existsSync(audioPath)) {
+    try {
+      const { toMediaUrl } = require("./server.js") as { toMediaUrl: (p: string) => string };
+      result.audioUrl = toMediaUrl(audioPath);
+    } catch { /* keep existing audioUrl */ }
+  }
+
+  return result;
 }
 
 export function isContentProcessed(entityId: string): boolean {
@@ -1245,8 +1261,8 @@ export async function recommendUnprocessedEntities(count = 3): Promise<Array<{ e
   }));
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function escapeHtml(s: unknown): string {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /**
@@ -1462,11 +1478,13 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   }
 
   // Critical Perspectives
-  if (r.criticalPerspectives.length > 0) {
+  if (Array.isArray(r.criticalPerspectives) && r.criticalPerspectives.length > 0) {
     parts.push(`<h2 style="color:#6d28d9;font-size:14px;margin:20px 0 10px;font-weight:700;">${L.perspectives}</h2>`);
     parts.push(`<div style="background:#fffbeb;border-radius:8px;padding:12px 16px;border:1px solid #fde68a;">`);
     for (const cp of r.criticalPerspectives.slice(0, 3)) {
-      parts.push(`<p style="font-size:13px;line-height:1.6;color:#92400e;margin:0 0 8px;">⚖️ ${esc(cp.slice(0, 200))}${cp.length > 200 ? "..." : ""}</p>`);
+      const cpText = typeof cp === "string" ? cp : typeof cp === "object" && cp !== null ? (cp as Record<string, unknown>).text || (cp as Record<string, unknown>).perspective || JSON.stringify(cp) : String(cp);
+      const cpStr = String(cpText);
+      parts.push(`<p style="font-size:13px;line-height:1.6;color:#92400e;margin:0 0 8px;">⚖️ ${esc(cpStr.slice(0, 200))}${cpStr.length > 200 ? "..." : ""}</p>`);
     }
     parts.push(`</div>`);
   }

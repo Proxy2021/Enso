@@ -832,12 +832,15 @@ function resolveContentAccess(entity: Entity): Record<string, unknown> {
   // ── Movies / TV ──
   if (type === "movie" || type === "tv-series" || type === "documentary") {
     if (m.filePath) {
+      const fp = String(m.filePath);
+      const encodedPath = Buffer.from(fp, "utf-8").toString("base64url");
+      const ext = fp.match(/\.\w+$/)?.[0]?.toLowerCase() || "";
       result.primaryAction = "stream_media";
-      result.mediaUrl = `/media/${encodeURIComponent(String(m.filePath))}`;
+      result.mediaUrl = `/media/${encodedPath}${ext ? `?ext=${ext}` : ""}`;
       result.mediaType = "video";
       result.label = "Play";
       result.icon = "▶️";
-      result.filePath = String(m.filePath);
+      result.filePath = fp;
     }
     if (m.imdbId) {
       result.externalUrl = `https://www.imdb.com/title/${m.imdbId}`;
@@ -908,8 +911,9 @@ function resolveContentAccess(entity: Entity): Record<string, unknown> {
   // ── Music ──
   if (type === "song" || type === "artist") {
     if (m.filePath) {
+      const fp2 = String(m.filePath);
       result.primaryAction = "stream_media";
-      result.mediaUrl = `/media/${encodeURIComponent(String(m.filePath))}`;
+      result.mediaUrl = `/media/${Buffer.from(fp2, "utf-8").toString("base64url")}${fp2.match(/\.\w+$/)?.[0] ? `?ext=${fp2.match(/\.\w+$/)?.[0].toLowerCase()}` : ""}`;
       result.mediaType = "audio";
       result.label = "Play";
       result.icon = "🎵";
@@ -919,8 +923,9 @@ function resolveContentAccess(entity: Entity): Record<string, unknown> {
   // ── Photos ──
   if (type === "photo" || type === "album") {
     if (m.filePath) {
+      const fp3 = String(m.filePath);
       result.primaryAction = "stream_media";
-      result.mediaUrl = `/media/${encodeURIComponent(String(m.filePath))}`;
+      result.mediaUrl = `/media/${Buffer.from(fp3, "utf-8").toString("base64url")}${fp3.match(/\.\w+$/)?.[0] ? `?ext=${fp3.match(/\.\w+$/)?.[0].toLowerCase()}` : ""}`;
       result.mediaType = "image";
       result.label = "View";
       result.icon = "🖼️";

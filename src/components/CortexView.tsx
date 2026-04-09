@@ -176,7 +176,11 @@ export default function CortexView() {
         action,
         payload: payload || {},
         appFamily: activeApp.family,
-        currentData: appStates[activeApp.family]?.data,
+        // Only send currentData for tool actions (browse, search, etc.)
+        // Skip for entity actions to avoid 413 payload-too-large with large browse data
+        ...(!["view_entity", "deep_content", "book_podcast", "add_to_cortex", "entity_share_email", "book_share_email"].includes(action)
+          ? { currentData: appStates[activeApp.family]?.data }
+          : {}),
       }),
     })
       .then(r => r.json())

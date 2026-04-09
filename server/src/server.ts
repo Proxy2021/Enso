@@ -1362,7 +1362,7 @@ Return ONLY JSON.`;
         } catch { /* ignore */ }
 
         const typeEmoji: Record<string, string> = { book: "📚", movie: "🎬", "tv-series": "📺", game: "🎮", channel: "📺", article: "📰", place: "🌍" };
-        const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         let body = `<div style="text-align:center;padding:20px">`;
         body += `<div style="font-size:48px;margin-bottom:12px">✅</div>`;
         body += `<h1 style="font-size:22px;color:#10b981;margin-bottom:4px">Added to Cortex</h1>`;
@@ -1500,7 +1500,7 @@ audio{width:100%;margin:12px 0;border-radius:8px}
 
       const typeEmoji: Record<string, string> = { book: "📚", movie: "🎬", "tv-series": "📺", game: "🎮", channel: "📺", article: "📰", place: "🌍" };
       const typeLabel: Record<string, string> = { book: "Book", movie: "Film", "tv-series": "TV Series", game: "Game", channel: "Channel", article: "Article", place: "Destination" };
-      const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
       let body = "";
 
@@ -1546,10 +1546,11 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       }
 
       // Critical Perspectives
-      if (r.criticalPerspectives?.length > 0) {
+      if (Array.isArray(r.criticalPerspectives) && r.criticalPerspectives.length > 0) {
         body += `<div class="card"><h2>⚖️ Different Perspectives</h2>`;
         for (const cp of r.criticalPerspectives) {
-          body += `<p class="meta" style="padding:4px 0;border-bottom:1px solid #1e1e3a">• ${esc(cp)}</p>`;
+          const cpText = typeof cp === "string" ? cp : (cp as Record<string, unknown>)?.text || (cp as Record<string, unknown>)?.perspective || String(cp);
+          body += `<p class="meta" style="padding:4px 0;border-bottom:1px solid #1e1e3a">• ${esc(cpText)}</p>`;
         }
         body += `</div>`;
       }

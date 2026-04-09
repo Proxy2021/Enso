@@ -91,6 +91,13 @@ var p = params || {};
     }
   } catch(e) {}
 
+  // Mark items that have been deep-processed
+  var processedEntityIds = {};
+  processedItems.forEach(function(pi) { processedEntityIds[pi.entityId] = true; });
+  items = items.map(function(m) {
+    return Object.assign({}, m, { isProcessed: !!processedEntityIds[m.entityId] });
+  });
+
   return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_movies_tv_browse",
     items: items.slice(0, 200),
