@@ -1015,6 +1015,7 @@ export async function buildEntityDetailData(entityId: EntityId): Promise<Record<
     detailFields,
     cortexContent,
     backlinks,
+    metadata: entity.metadata,
     relatedEntities,
     childEntities: entity.children ?? [],
     navigationDepth: 1,

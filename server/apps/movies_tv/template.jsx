@@ -35,10 +35,11 @@ function GeneratedUI({ data, onAction }) {
     </div>
   ) : null;
 
-  // ── Entity Detail View ──
+  // ── Entity Detail View (Movie-specific rich layout) ──
   if (isEntityDetail && d.entity) {
     var entity = d.entity;
     var fields = d.detailFields || [];
+    var meta = d.metadata || {};
     var cortexContent = d.cortexContent;
     var related = d.relatedEntities || [];
     var processed = d.processedBook;
@@ -50,90 +51,243 @@ function GeneratedUI({ data, onAction }) {
     var podcastDetail = d.podcastStatusDetail;
     var podcastPercent = d.podcastPercent || 0;
 
+    // Extract movie-specific data from metadata
+    var movieCast = meta.cast || [];
+    var movieDirectors = meta.directors || [];
+    var movieGenres = meta.genres || [];
+    var movieRating = meta.rating || 0;
+    var movieVoteCount = meta.voteCount || 0;
+    var movieRuntime = meta.runtime || 0;
+    var movieYear = meta.year || "";
+    var movieOverview = meta.overview || entity.summary || "";
+    var movieTagline = meta.tagline || "";
+    var movieImdbId = meta.imdbId || "";
+    var movieSeasons = meta.numberOfSeasons || 0;
+    var movieStatus = meta.status || "";
+    var movieLang = meta.originalLanguage || "";
+    var movieReleaseDate = meta.releaseDate || "";
+    var movieBackdrop = meta.backdropPath || "";
+    var moviePoster = entity.imageUrl || meta.posterPath || "";
+    var movieCategory = meta.category || entity.type || "movie";
+    var isTV = movieCategory === "tv" || entity.type === "tv-series";
+
+    // Rating color
+    var ratingColor = "#64748b";
+    if (movieRating >= 8) ratingColor = "#22c55e";
+    else if (movieRating >= 7) ratingColor = "#84cc16";
+    else if (movieRating >= 6) ratingColor = "#eab308";
+    else if (movieRating >= 5) ratingColor = "#f97316";
+    else if (movieRating > 0) ratingColor = "#ef4444";
+
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {breadcrumb}
 
-        {/* Entity header with inline metadata */}
-        <UICard style={{ padding: "16px" }}>
-          <div style={{ display: "flex", gap: "16px" }}>
-            {entity.imageUrl && (
-              <img src={entity.imageUrl} alt={entity.title}
-                style={{ width: "90px", height: "135px", objectFit: "cover", borderRadius: "6px", flexShrink: 0 }} />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "18px", fontWeight: 700, lineHeight: 1.3 }}>{entity.title}</div>
-              {(function() {
-                var creatorField = fields.find(function(f) { return f.key === "director" || f.key === "cast" || f.key === "author" || f.key === "creator"; });
-                if (creatorField) {
-                  var val = Array.isArray(creatorField.value) ? creatorField.value.slice(0, 3).join(", ") : String(creatorField.value);
-                  return <div style={{ fontSize: "14px", color: "#94a3b8", marginTop: "4px" }}>{val}</div>;
-                }
-                return null;
-              })()}
-              <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap", alignItems: "center" }}>
-                <Badge variant="default">{entity.type}</Badge>
-                <Badge variant="secondary">{entity.source}</Badge>
-                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ {podcastDuration ? podcastDuration + " min" : "Podcast Ready"}</Badge>}
+        {/* ── Hero Section with backdrop ── */}
+        <UICard style={{ padding: 0, overflow: "hidden", position: "relative" }}>
+          {/* Backdrop image */}
+          {movieBackdrop && (
+            <div style={{ position: "relative", width: "100%", height: "200px", overflow: "hidden" }}>
+              <img src={movieBackdrop} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: "brightness(0.4)" }} />
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, #0f172a 0%, transparent 60%)" }} />
+            </div>
+          )}
+
+          {/* Main info overlay */}
+          <div style={{ padding: "16px", marginTop: movieBackdrop ? "-80px" : 0, position: "relative", zIndex: 1 }}>
+            <div style={{ display: "flex", gap: "16px" }}>
+              {/* Poster */}
+              {moviePoster ? (
+                <img src={moviePoster} alt={entity.title}
+                  style={{ width: "120px", height: "180px", objectFit: "cover", borderRadius: "8px", flexShrink: 0, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", border: "2px solid #27272a" }} />
+              ) : (
+                <div style={{ width: "120px", height: "180px", flexShrink: 0, borderRadius: "8px", background: "#1e1e2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Film size={36} style={{ color: "#4a4a5a" }} />
+                </div>
+              )}
+
+              {/* Title + meta */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "22px", fontWeight: 700, lineHeight: 1.2, color: "#f1f5f9" }}>{entity.title}</div>
+
+                {movieTagline && (
+                  <div style={{ fontSize: "13px", color: "#a78bfa", fontStyle: "italic", marginTop: "4px" }}>{movieTagline}</div>
+                )}
+
+                {/* Quick stats row */}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px", flexWrap: "wrap", fontSize: "13px", color: "#94a3b8" }}>
+                  {movieYear && <span style={{ fontWeight: 600, color: "#cbd5e1" }}>{movieYear}</span>}
+                  {movieRuntime > 0 && (
+                    <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                      <Clock size={12} /> {Math.floor(movieRuntime / 60) > 0 ? Math.floor(movieRuntime / 60) + "h " : ""}{movieRuntime % 60}m
+                    </span>
+                  )}
+                  {isTV && movieSeasons > 0 && <span>{movieSeasons} season{movieSeasons > 1 ? "s" : ""}</span>}
+                  {movieLang && <span style={{ textTransform: "uppercase" }}>{movieLang}</span>}
+                  {movieStatus && <Badge variant="secondary" style={{ fontSize: "10px" }}>{movieStatus}</Badge>}
+                </div>
+
+                {/* Rating */}
+                {movieRating > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <Star size={18} style={{ color: ratingColor, fill: ratingColor }} />
+                      <span style={{ fontSize: "20px", fontWeight: 700, color: ratingColor }}>{movieRating.toFixed(1)}</span>
+                    </div>
+                    <span style={{ fontSize: "12px", color: "#64748b" }}>/ 10</span>
+                    {movieVoteCount > 0 && (
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>
+                        ({movieVoteCount > 1000 ? (movieVoteCount / 1000).toFixed(1) + "k" : movieVoteCount} votes)
+                      </span>
+                    )}
+                    {/* Simple star bar */}
+                    <div style={{ display: "flex", gap: "2px", marginLeft: "4px" }}>
+                      {[1,2,3,4,5].map(function(n) {
+                        var filled = movieRating >= n * 2;
+                        var half = !filled && movieRating >= n * 2 - 1;
+                        return <Star key={n} size={12} style={{ color: filled || half ? ratingColor : "#334155", fill: filled ? ratingColor : "none" }} />;
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Genre pills */}
+                {movieGenres.length > 0 && (
+                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "10px" }}>
+                    {movieGenres.map(function(g) {
+                      return <Badge key={g} variant="secondary" style={{ fontSize: "11px", padding: "2px 8px" }}>{g}</Badge>;
+                    })}
+                  </div>
+                )}
               </div>
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
-                {d.contentAccess && d.contentAccess.mediaUrl && (
-                  <Button size="sm" style={{ background: "#2563eb", color: "white" }}
-                    onClick={function() { onAction("open_url", { url: d.contentAccess.mediaUrl }); }}
-                  >▶️ Play</Button>
-                )}
-                {d.contentAccess && d.contentAccess.externalUrl && (
-                  <Button size="sm" style={{ background: "#059669", color: "white" }}
-                    onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
-                  >{d.contentAccess.externalLabel || "IMDB"}</Button>
-                )}
-                {d.contentAccess && d.contentAccess.launchUrl && (
-                  <Button size="sm" style={{ background: "#059669", color: "white" }}
-                    onClick={function() { window.open(d.contentAccess.launchUrl); }}
-                  >{d.contentAccess.icon || "🎮"} {d.contentAccess.label || "Launch"}</Button>
-                )}
-                {!podcastAudioUrl && !podcastStatus && (
-                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
-                    onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
-                  >🎙️ Generate Podcast</Button>
-                )}
-                {podcastAudioUrl && (
-                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
-                    onClick={function() {
-                      var email = prompt("Send report + podcast to:", "kkwong@xiaomi.com");
-                      if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
-                    }}
-                  >📧 Email Podcast</Button>
-                )}
-              </div>
-              {entity.summary && (
-                <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.5 }}>
-                  {entity.summary.length > 300 ? entity.summary.slice(0, 300) + "..." : entity.summary}
+            </div>
+          </div>
+        </UICard>
+
+        {/* ── Action Buttons ── */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {d.contentAccess && d.contentAccess.mediaUrl && (
+            <Button size="sm" style={{ background: "#2563eb", color: "white" }}
+              onClick={function() { onAction("open_url", { url: d.contentAccess.mediaUrl }); }}
+            >▶️ Play</Button>
+          )}
+          {movieImdbId && (
+            <Button size="sm" style={{ background: "#f5c518", color: "#000" }}
+              onClick={function() { window.open("https://www.imdb.com/title/" + movieImdbId, "_blank"); }}
+            >IMDb</Button>
+          )}
+          {!movieImdbId && d.contentAccess && d.contentAccess.externalUrl && (
+            <Button size="sm" style={{ background: "#059669", color: "white" }}
+              onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
+            >{d.contentAccess.externalLabel || "Find Online"}</Button>
+          )}
+          <Button variant="outline" size="sm"
+            onClick={function() { onAction("send_message", { message: "/research \"" + entity.title + "\" " + (movieYear || "") + " " + (isTV ? "TV series" : "movie") + " analysis" }); }}
+          ><Search size={12} style={{ marginRight: "4px" }} /> Research</Button>
+          {!podcastAudioUrl && !podcastStatus && (
+            <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+              onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+            >🎙️ Generate Podcast</Button>
+          )}
+          {podcastAudioUrl && (
+            <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+              onClick={function() {
+                var email = prompt("Send report + podcast to:", "kkwong@xiaomi.com");
+                if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
+              }}
+            >📧 Email Podcast</Button>
+          )}
+        </div>
+
+        {/* ── Overview ── */}
+        {movieOverview && (
+          <UICard style={{ padding: "14px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "6px", color: "#94a3b8" }}>Overview</div>
+            <div style={{ fontSize: "13px", color: "#e2e8f0", lineHeight: 1.7 }}>{movieOverview}</div>
+          </UICard>
+        )}
+
+        {/* ── Directors ── */}
+        {movieDirectors.length > 0 && (
+          <UICard style={{ padding: "14px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>
+              {isTV ? "Created By" : "Directed By"}
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {movieDirectors.map(function(dir) {
+                return (
+                  <div key={dir} style={{ display: "flex", alignItems: "center", gap: "8px", background: "#1e293b", borderRadius: "8px", padding: "8px 14px" }}>
+                    <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#334155", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: "14px", color: "#94a3b8" }}>{dir.charAt(0)}</span>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>{dir}</div>
+                      <div style={{ fontSize: "10px", color: "#64748b" }}>Director</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* ── Cast ── */}
+        {movieCast.length > 0 && (
+          <UICard style={{ padding: "14px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Cast</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "8px" }}>
+              {movieCast.map(function(actor, i) {
+                return (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "#1e293b", borderRadius: "8px", padding: "8px 10px" }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#334155", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span style={{ fontSize: "14px", color: "#a78bfa" }}>{actor.charAt(0)}</span>
+                    </div>
+                    <div style={{ fontSize: "12px", fontWeight: 500, color: "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{actor}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* ── Details Grid ── */}
+        {(movieReleaseDate || movieLang || movieStatus) && (
+          <UICard style={{ padding: "14px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Details</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px" }}>
+              {movieReleaseDate && (
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>Release Date</div>
+                  <div style={{ fontSize: "13px", color: "#cbd5e1" }}>{movieReleaseDate}</div>
+                </div>
+              )}
+              {movieRuntime > 0 && (
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>Runtime</div>
+                  <div style={{ fontSize: "13px", color: "#cbd5e1" }}>{movieRuntime} minutes</div>
+                </div>
+              )}
+              {movieLang && (
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>Language</div>
+                  <div style={{ fontSize: "13px", color: "#cbd5e1", textTransform: "uppercase" }}>{movieLang}</div>
+                </div>
+              )}
+              {movieStatus && (
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>Status</div>
+                  <div style={{ fontSize: "13px", color: "#cbd5e1" }}>{movieStatus}</div>
+                </div>
+              )}
+              {isTV && movieSeasons > 0 && (
+                <div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>Seasons</div>
+                  <div style={{ fontSize: "13px", color: "#cbd5e1" }}>{movieSeasons}</div>
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Metadata fields inline below header */}
-          {fields.length > 0 && (
-            <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #1e293b" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: "12px" }}>
-                {fields.filter(function(f) {
-                  return f.key !== "director" && f.key !== "cast" && f.key !== "author" && f.key !== "creator" && f.key !== "overview";
-                }).map(function(f) {
-                  var val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
-                  return (
-                    <div key={f.key} style={{ display: "flex", gap: "4px" }}>
-                      <span style={{ color: "#64748b" }}>{f.label}:</span>
-                      <span style={{ color: "#cbd5e1" }}>{val}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </UICard>
+          </UICard>
+        )}
 
         {/* Podcast Player */}
         {podcastAudioUrl && (
@@ -215,31 +369,8 @@ function GeneratedUI({ data, onAction }) {
                 })}
               </UICard>
             )}
-            {research.chapterSummaries && research.chapterSummaries.length > 0 && (
-              <UICard style={{ padding: "12px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Section Summaries</div>
-                {research.chapterSummaries.map(function(ch, i) {
-                  return (
-                    <div key={i} style={{ marginBottom: "8px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#93c5fd" }}>{ch.chapter}</div>
-                      <div style={{ fontSize: "11px", color: "#cbd5e1", lineHeight: 1.5, marginTop: "2px" }}>{ch.summary}</div>
-                    </div>
-                  );
-                })}
-              </UICard>
-            )}
-            {research.criticalPerspectives && research.criticalPerspectives.length > 0 && (
-              <UICard style={{ padding: "12px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Critical Perspectives</div>
-                {research.criticalPerspectives.map(function(cp, i) {
-                  return <div key={i} style={{ fontSize: "12px", color: "#fbbf24", marginBottom: "4px", lineHeight: 1.5 }}>{cp}</div>;
-                })}
-              </UICard>
-            )}
           </div>
         )}
-
-        {/* Detail fields already shown in header card above */}
 
         {/* Cortex wiki content */}
         {cortexContent && !research && (
@@ -722,7 +853,7 @@ function MediaCard({ item, onAction }) {
           <Button variant="outline" size="sm" style={{ fontSize: "10px" }}
             onClick={function() {
               var prefix = item.category === "tv" ? "tv-" : "movie-";
-              var slug = item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+              var slug = item.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60);
               onAction("send_message", { message: "/wiki read entities/" + prefix + slug });
             }}
           >Wiki</Button>

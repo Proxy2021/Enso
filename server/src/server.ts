@@ -1997,6 +1997,101 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     handleImport(req, res);
   });
 
+  // ── Audio Backup Download (streaming, no JSON) ──
+  app.get("/api/settings/export-audio", async (_req, res) => {
+    const { createGzip } = await import("node:zlib");
+    const audioDir = join(homedir(), ".enso", "data", "deep-content", "audio");
+    if (!existsSync(audioDir)) {
+      res.status(404).json({ error: "No audio files found" });
+      return;
+    }
+
+    const files = readdirSync(audioDir).filter(f => f.endsWith(".wav"));
+    if (files.length === 0) {
+      res.json({ error: "No audio files", count: 0 });
+      return;
+    }
+
+    // Stream as a simple concatenated format: [4-byte name length][name][8-byte data length][data]...
+    // This is a simple binary archive format that can be parsed on import
+    const dateStr = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="enso-audio-${dateStr}.ensoarc"`);
+
+    // Write header: magic + file count
+    const header = Buffer.alloc(12);
+    header.write("ENSOARC1", 0); // magic
+    header.writeUInt32LE(files.length, 8); // file count
+    res.write(header);
+
+    for (const file of files) {
+      const filePath = join(audioDir, file);
+      const stat = statSync(filePath);
+      const nameBytes = Buffer.from(file, "utf-8");
+
+      // Write: [2-byte name length][name][8-byte file size]
+      const entryHeader = Buffer.alloc(2 + nameBytes.length + 8);
+      entryHeader.writeUInt16LE(nameBytes.length, 0);
+      nameBytes.copy(entryHeader, 2);
+      // Use two 32-bit writes for file size (BigInt not available in older Node)
+      entryHeader.writeUInt32LE(stat.size & 0xFFFFFFFF, 2 + nameBytes.length);
+      entryHeader.writeUInt32LE(Math.floor(stat.size / 0x100000000), 2 + nameBytes.length + 4);
+      res.write(entryHeader);
+
+      // Stream file data
+      const data = readFileSync(filePath);
+      res.write(data);
+    }
+
+    res.end();
+    logAction({ ts: Date.now(), type: "action", category: "settings-transfer", message: `Audio backup: ${files.length} files exported` });
+  });
+
+  // ── Audio Backup Import ──
+  app.post("/api/settings/import-audio", async (req, res) => {
+    const audioDir = join(homedir(), ".enso", "data", "deep-content", "audio");
+    mkdirSync(audioDir, { recursive: true });
+
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      try {
+        const data = Buffer.concat(chunks);
+        // Parse header
+        const magic = data.subarray(0, 8).toString();
+        if (magic !== "ENSOARC1") {
+          res.status(400).json({ error: "Invalid audio archive format" });
+          return;
+        }
+        const fileCount = data.readUInt32LE(8);
+        let offset = 12;
+        let imported = 0;
+
+        for (let i = 0; i < fileCount; i++) {
+          const nameLen = data.readUInt16LE(offset);
+          offset += 2;
+          const name = data.subarray(offset, offset + nameLen).toString("utf-8");
+          offset += nameLen;
+          const sizeLow = data.readUInt32LE(offset);
+          const sizeHigh = data.readUInt32LE(offset + 4);
+          const fileSize = sizeLow + sizeHigh * 0x100000000;
+          offset += 8;
+
+          const fileData = data.subarray(offset, offset + fileSize);
+          offset += fileSize;
+
+          writeFileSync(join(audioDir, name), fileData);
+          imported++;
+        }
+
+        logAction({ ts: Date.now(), type: "action", category: "settings-transfer", message: `Audio import: ${imported} files` });
+        res.json({ success: true, imported, fileCount });
+      } catch (err) {
+        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      }
+    });
+  });
+
   // ── YouTube OAuth API ──
 
   app.get("/api/youtube/auth", async (_req, res) => {
