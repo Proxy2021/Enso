@@ -31,6 +31,10 @@ export interface FocusArea {
 
   /** What the user wants to achieve (filled as clarity increases) */
   intent?: string;
+  /** The deeper WHY behind this focus — what drives it at a personal level */
+  deeperIntent?: string;
+  /** Adjacent pursuits the AI suggests based on the deeper intention */
+  adjacentPursuits?: string[];
   /** Concrete next actions (filled at "clear") */
   nextSteps?: string[];
 
@@ -140,6 +144,14 @@ function writeFocusToCortex(state: FocusState): void {
       if (area.intent) {
         lines.push(`## Intent`, ``, area.intent, ``);
       }
+      if (area.deeperIntent) {
+        lines.push(`## Deeper Motivation`, ``, area.deeperIntent, ``);
+      }
+      if (area.adjacentPursuits?.length) {
+        lines.push(`## Adjacent Pursuits`, ``);
+        for (const p of area.adjacentPursuits) lines.push(`- ${p}`);
+        lines.push(``);
+      }
       if (area.nextSteps?.length) {
         lines.push(`## Next Steps`, ``);
         for (const step of area.nextSteps) lines.push(`- ${step}`);
@@ -241,15 +253,17 @@ Identify 4-7 concrete focus areas from this data. For each:
 4. **status**: "active" (clear ongoing activity) or "emerging" (growing but not yet crystallized)
 5. **clarity**: "emerging" (intent unclear), "developing" (direction clear, specifics forming), or "clear" (concrete goal visible)
 6. **intent**: The specific outcome they're working toward
-7. **confidence**: 0-1 how confident you are this is a real focus
-8. **evidence**: 3-5 specific data points from the inventory (actual titles, project names, channel names)
-9. **semanticTags**: 2-4 relevant theme tags
-10. **trend**: "growing" (increasing activity), "steady" (consistent), or "quiet" (declining/paused)
-11. **suggestedActions**: 2-3 concrete next steps. For "emerging" areas, these should be CLARIFYING QUESTIONS to help articulate the goal.
+7. **deeperIntent**: The deeper WHY — what drives this person at a personal level? What need does this goal serve? Think about: financial freedom, creative expression, intellectual mastery, career advancement, personal fulfillment, family/legacy, independence, proving a thesis, building something meaningful. Be specific and insightful — go beyond the surface. Example: for AlphaRank, the deeper intent might be "Achieving financial independence through systematic, data-driven investing — removing emotional decision-making from wealth building."
+8. **adjacentPursuits**: 1-2 related areas the person HASN'T explored yet that would naturally complement this focus if the deeper intent is correct. These are suggestions for EXPANDING their horizon. Example: if deeper intent is financial independence, adjacent pursuits might be "Tax optimization strategies for systematic traders" or "Building passive income streams beyond equity markets."
+9. **confidence**: 0-1 how confident you are this is a real focus
+10. **evidence**: 3-5 specific data points from the inventory (actual titles, project names, channel names)
+11. **semanticTags**: 2-4 relevant theme tags
+12. **trend**: "growing" (increasing activity), "steady" (consistent), or "quiet" (declining/paused)
+13. **suggestedActions**: 2-3 concrete next steps. For "emerging" areas, these should be CLARIFYING QUESTIONS including WHY questions to understand the deeper motivation.
 
 When a project exists (like Enso, AlphaRank), make the focus about that PROJECT's goal, not the generic skill category.
 
-Sort by confidence (highest first). Be specific — reference actual titles.
+Sort by confidence (highest first). Be specific — reference actual titles. Be deeply insightful about the WHY.
 
 Return JSON: { "areas": [ { ... } ] }`;
 
@@ -273,6 +287,8 @@ Return JSON: { "areas": [ { ... } ] }`;
       status: (raw.status === "emerging" ? "emerging" : "active") as FocusArea["status"],
       clarity: (["emerging", "developing", "clear"].includes(String(raw.clarity)) ? raw.clarity : "emerging") as FocusArea["clarity"],
       intent: raw.intent ? String(raw.intent) : undefined,
+      deeperIntent: raw.deeperIntent ? String(raw.deeperIntent) : undefined,
+      adjacentPursuits: Array.isArray(raw.adjacentPursuits) ? raw.adjacentPursuits.map(String).slice(0, 3) : undefined,
       nextSteps: undefined,
       confidence: typeof raw.confidence === "number" ? raw.confidence : 0.5,
       evidence: Array.isArray(raw.evidence) ? raw.evidence.map(String).slice(0, 5) : [],
@@ -303,6 +319,8 @@ Return JSON: { "areas": [ { ... } ] }`;
           area.createdAt = prev.createdAt;
           if (prev.clarity === "clear" && area.clarity !== "clear") area.clarity = prev.clarity;
           if (prev.intent) area.intent = prev.intent;
+          if (prev.deeperIntent) area.deeperIntent = prev.deeperIntent;
+          if (prev.adjacentPursuits) area.adjacentPursuits = prev.adjacentPursuits;
           if (prev.nextSteps) area.nextSteps = prev.nextSteps;
           if (prev.status === "paused") area.status = "paused";
         }
@@ -458,20 +476,25 @@ export async function refineFocusFromConversation(
     const prompt = `A user has a focus area: "${area.title}" (currently: ${area.clarity}).
 Current description: "${area.description}"
 ${area.intent ? `Current intent: "${area.intent}"` : "No clear intent yet."}
+${area.deeperIntent ? `Current deeper motivation: "${area.deeperIntent}"` : "Deeper motivation not yet understood."}
 
 They just said: "${userMessage.slice(0, 500)}"
 
 Did they reveal anything that SHARPENS this focus area? Look for:
-- A specific goal or outcome they want
+- A specific goal or outcome they want (intent)
+- The deeper WHY — what personal need drives this? (financial freedom, creative expression, intellectual mastery, career growth, proving a thesis, building legacy, personal fulfillment)
 - A deadline or timeframe
 - Concrete next steps they mentioned
 - A correction to the description
+- Adjacent interests that connect to the deeper motivation
 
 Return JSON:
 {
   "hasRefinement": true/false,
   "newClarity": "emerging"|"developing"|"clear" (upgrade only, never downgrade),
   "updatedIntent": "..." or null,
+  "deeperIntent": "..." or null (the WHY — only if the user revealed personal motivation),
+  "adjacentPursuits": ["..."] or null (new pursuits suggested based on deeper intent),
   "nextSteps": ["..."] or null,
   "change": "brief description of what changed"
 }
@@ -490,6 +513,8 @@ If nothing changed, return { "hasRefinement": false }.`;
       hasRefinement: boolean;
       newClarity?: string;
       updatedIntent?: string;
+      deeperIntent?: string;
+      adjacentPursuits?: string[];
       nextSteps?: string[];
       change?: string;
     };
@@ -503,6 +528,8 @@ If nothing changed, return { "hasRefinement": false }.`;
       area.clarity = result.newClarity as FocusArea["clarity"];
     }
     if (result.updatedIntent) area.intent = result.updatedIntent;
+    if (result.deeperIntent) area.deeperIntent = result.deeperIntent;
+    if (result.adjacentPursuits?.length) area.adjacentPursuits = result.adjacentPursuits;
     if (result.nextSteps?.length) area.nextSteps = result.nextSteps;
     area.updatedAt = now;
     area.refinements.push({
@@ -621,19 +648,24 @@ export function getFocusContextForAgent(userMessage?: string): string {
   const lines = active.map(a => {
     const marker = a.status === "emerging" ? "~emerging" : `${a.progress.trend}`;
     const intentStr = a.intent ? ` → ${a.intent}` : "";
+    const deeperStr = a.deeperIntent ? ` (WHY: ${a.deeperIntent})` : "";
     const matched = matchedFocus?.id === a.id ? " ← CURRENT TOPIC" : "";
-    return `- ${a.title} [${a.clarity}, ${marker}]: ${a.description}${intentStr}${matched}`;
+    return `- ${a.title} [${a.clarity}, ${marker}]: ${a.description}${intentStr}${deeperStr}${matched}`;
   });
 
   let block = `<focus_areas>\nUser's active focus areas (what matters to them right now):\n${lines.join("\n")}`;
 
   // If current message maps to an emerging focus, suggest clarifying
   if (matchedFocus && matchedFocus.clarity === "emerging") {
-    block += `\n\nThe current topic relates to "${matchedFocus.title}" which is still EMERGING. When natural, ask a gentle clarifying question to help the user articulate what they want to achieve in this area.`;
+    block += `\n\nThe current topic relates to "${matchedFocus.title}" which is still EMERGING. Ask gentle clarifying questions — both WHAT they want to achieve AND WHY it matters to them personally. Understanding the deeper motivation helps you provide better guidance.`;
   } else if (matchedFocus && matchedFocus.clarity === "developing") {
-    block += `\n\nThe current topic relates to "${matchedFocus.title}". Help the user make concrete progress. Their intent: ${matchedFocus.intent || "(still forming)"}`;
+    const deeperCtx = matchedFocus.deeperIntent ? `\nDeeper motivation: ${matchedFocus.deeperIntent}` : "\nThe deeper WHY isn't clear yet — when natural, explore what drives this focus.";
+    const adjacentCtx = matchedFocus.adjacentPursuits?.length ? `\nAdjacent pursuits to consider: ${matchedFocus.adjacentPursuits.join("; ")}` : "";
+    block += `\n\nThe current topic relates to "${matchedFocus.title}". Help the user make concrete progress.${deeperCtx}${adjacentCtx}`;
   } else if (matchedFocus && matchedFocus.clarity === "clear") {
-    block += `\n\nThe current topic relates to "${matchedFocus.title}". Goal: ${matchedFocus.intent}. Provide focused execution help.${matchedFocus.nextSteps?.length ? ` Planned steps: ${matchedFocus.nextSteps.join(", ")}` : ""}`;
+    const deeperCtx = matchedFocus.deeperIntent ? ` Deeper drive: ${matchedFocus.deeperIntent}.` : "";
+    const adjacentCtx = matchedFocus.adjacentPursuits?.length ? ` Also consider suggesting: ${matchedFocus.adjacentPursuits.join("; ")}` : "";
+    block += `\n\nThe current topic relates to "${matchedFocus.title}". Goal: ${matchedFocus.intent}.${deeperCtx} Provide focused execution help.${matchedFocus.nextSteps?.length ? ` Planned steps: ${matchedFocus.nextSteps.join(", ")}` : ""}${adjacentCtx}`;
   }
 
   block += `\n</focus_areas>`;
@@ -662,21 +694,24 @@ export function generateFocusPlan(focusId: string): { goal: string; focusTitle: 
 - **Title**: ${area.title}
 - **Description**: ${area.description}
 - **Intent**: ${area.intent || "(still forming — help me clarify this)"}
+- **Deeper motivation**: ${area.deeperIntent || "(not yet understood — help me explore this)"}
 - **Current clarity**: ${area.clarity}
 - **Activity trend**: ${area.progress.trend}
 - **Related themes**: ${tagsStr}
 
 ## Evidence (what I've been doing)
 ${evidenceStr}
+${area.adjacentPursuits?.length ? `\n## Adjacent Pursuits (AI-suggested expansions)\n${area.adjacentPursuits.map(p => `- ${p}`).join("\n")}` : ""}
 
 ## What I Need
 1. **Gap analysis**: What knowledge, skills, or resources am I missing to advance this goal?
 2. **Action plan**: 3-5 concrete next steps I can take THIS WEEK
-3. **Enso capabilities**: What Enso tools (research, Cortex, apps, scheduled tasks) can help?
-4. **Milestones**: If my intent is clear enough, propose 3-4 milestones toward the goal
-5. **Research needs**: What should I research to fill knowledge gaps?
+3. **Deeper pursuit**: Given my deeper motivation${area.deeperIntent ? ` ("${area.deeperIntent}")` : ""}, what adjacent areas should I explore that I haven't considered?
+4. **Enso capabilities**: What Enso tools (research, Cortex, apps, scheduled tasks) can help?
+5. **Milestones**: Propose 3-4 milestones toward the goal
+6. **Research needs**: What should I research to fill knowledge gaps?
 
-Be specific and actionable. Reference my actual data (projects, books, channels) when relevant.`;
+Be specific and actionable. Reference my actual data. Consider the DEEPER motivation when suggesting directions — the surface goal may be building a tool, but the deeper drive shapes what kind of tool and how to approach it.`;
 
   return { goal, focusTitle: area.title };
 }

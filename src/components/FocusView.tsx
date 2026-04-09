@@ -14,6 +14,8 @@ interface FocusArea {
   status: "active" | "paused" | "completed" | "emerging";
   clarity: "emerging" | "developing" | "clear";
   intent?: string;
+  deeperIntent?: string;
+  adjacentPursuits?: string[];
   nextSteps?: string[];
   confidence: number;
   evidence: string[];
@@ -366,6 +368,37 @@ export default function FocusView() {
                   </p>
                 )}
               </div>
+
+              {/* Deeper Motivation */}
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Deeper Motivation — WHY</label>
+                {editingField === "deeperIntent" ? (
+                  <textarea autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
+                    onBlur={() => saveEdit("deeperIntent")}
+                    className="text-sm text-gray-200 bg-gray-900/60 border border-violet-500/50 rounded px-3 py-2 focus:outline-none w-full min-h-[60px]"
+                    placeholder="What deeper need drives this focus? (e.g., financial independence, creative expression, intellectual mastery...)" />
+                ) : (
+                  <p className="text-sm text-gray-300 cursor-pointer hover:text-violet-300 px-3 py-2 rounded bg-gray-800/20 border border-gray-800/40 hover:border-violet-500/20 transition-colors"
+                    onClick={() => { setEditingField("deeperIntent"); setEditValue(selected.deeperIntent || ""); }}>
+                    {selected.deeperIntent || <span className="text-gray-600 italic">Click to explore your deeper motivation...</span>}
+                  </p>
+                )}
+              </div>
+
+              {/* Adjacent Pursuits */}
+              {selected.adjacentPursuits && selected.adjacentPursuits.length > 0 && (
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Adjacent Pursuits — expand your horizon</label>
+                  <div className="space-y-1.5">
+                    {selected.adjacentPursuits.map((pursuit, i) => (
+                      <button key={i} onClick={() => { setActiveTab("chat"); sendMessage(`Research: ${pursuit}`); }}
+                        className="w-full text-left text-xs text-amber-300/80 px-3 py-2 rounded bg-amber-900/10 border border-amber-500/15 hover:border-amber-500/30 hover:bg-amber-900/20 transition-colors">
+                        {"\u2728"} {pursuit}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Evidence */}
               <div>
