@@ -26,6 +26,10 @@ function GeneratedUI({ data, onAction }) {
     var cortexContent = d.cortexContent;
     var related = d.relatedEntities || [];
     var relatedReasons = d.relatedReasons || {};
+    var recommendedVideos = d.recommendedVideos || [];
+    var _pvState = React.useState(null);
+    var playingVideo = _pvState[0];
+    var setPlayingVideo = _pvState[1];
     var processed = d.processedBook;
     var research = processed ? processed.research : null;
     var podcastAudioUrl = d.podcastAudioUrl;
@@ -143,6 +147,39 @@ function GeneratedUI({ data, onAction }) {
             </UICard>
           );
         })()}
+
+        {/* Recommended YouTube Videos */}
+        {recommendedVideos.length > 0 && (
+          <UICard style={{ padding: "14px" }}>
+            <h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>📺 Recommended Videos</h3>
+            {playingVideo && (
+              <div style={{ position: "relative", width: "100%", paddingBottom: "56.25%", marginBottom: "8px", borderRadius: "8px", overflow: "hidden", background: "#000" }}>
+                <iframe
+                  src={"https://www.youtube.com/embed/" + playingVideo + "?autoplay=1"}
+                  style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "8px", overflowX: "auto" }}>
+              {recommendedVideos.map(function(v) {
+                var isPlaying = playingVideo === v.videoId;
+                return (
+                  <div key={v.videoId} style={{ minWidth: "200px", maxWidth: "220px", cursor: "pointer", borderRadius: "8px", overflow: "hidden", border: isPlaying ? "2px solid #8b5cf6" : "1px solid #334155", background: "#1e293b" }}
+                    onClick={function() { setPlayingVideo(isPlaying ? null : v.videoId); }}>
+                    <img src={v.thumbnailUrl} style={{ width: "100%", height: "120px", objectFit: "cover" }} />
+                    <div style={{ padding: "6px 8px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{v.title}</div>
+                      <div style={{ fontSize: "10px", color: "#64748b", marginTop: "2px" }}>{v.channelTitle}</div>
+                      <div style={{ fontSize: "10px", color: "#475569", marginTop: "1px" }}>{v.viewCount ? Number(v.viewCount).toLocaleString() + " views" : ""}{v.duration ? " · " + v.duration : ""}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
       </div>
     );
   }

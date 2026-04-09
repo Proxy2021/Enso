@@ -224,6 +224,95 @@ function addCrossReference(entry: EntityIndexEntry, targetId: EntityId, reason: 
   });
 }
 
+// ── Level 4: YouTube Video Recommendations ──
+
+/** Max entities to process per recommendVideos call (YouTube API quota: 100 units per search) */
+const VIDEO_BATCH_SIZE = 100;
+const VIDEO_SEARCH_DELAY_MS = 200; // delay between API calls
+
+/**
+ * Search YouTube for relevant videos for each entity and store top results.
+ * No LLM cost — uses entity title directly as search query.
+ * Applies to all entity types (books, movies, games, places, articles, etc.).
+ */
+export async function recommendVideosForEntities(entityIds: string[]): Promise<{ matched: number }> {
+  if (entityIds.length === 0) return { matched: 0 };
+
+  let searchFn: typeof import("./youtube-tools.js").search;
+  try {
+    const yt = await import("./youtube-tools.js");
+    searchFn = yt.search;
+  } catch {
+    logError("cortex-enrichment", "YouTube tools not available, skipping video recommendations", null);
+    return { matched: 0 };
+  }
+
+  let matched = 0;
+  const batch = entityIds.slice(0, VIDEO_BATCH_SIZE);
+
+  for (const id of batch) {
+    const entry = lookupEntity(id);
+    if (!entry) continue;
+    // Skip entities that already have videos
+    if (entry.recommendedVideos?.length) continue;
+    // Skip YouTube channels/videos themselves
+    if (entry.source === "youtube") continue;
+
+    try {
+      const query = entry.title;
+      const results = await searchFn({ query, maxResults: 5 });
+
+      // Filter out shorts (duration < 1 minute) and pick top 3
+      const videos = results
+        .filter(v => {
+          if (!v.duration) return true;
+          // Parse duration like "5m30s", "1h2m", "45s"
+          const dur = v.duration.toLowerCase();
+          const hasHours = dur.includes("h");
+          const hasMinutes = dur.includes("m");
+          if (hasHours) return true;
+          if (hasMinutes) return true;
+          // Only seconds — it's a short, skip
+          return false;
+        })
+        .slice(0, 3)
+        .map(v => ({
+          videoId: v.videoId,
+          title: v.title,
+          channelTitle: v.channelTitle,
+          thumbnailUrl: v.thumbnailUrl,
+          viewCount: v.viewCount,
+          duration: v.duration,
+        }));
+
+      if (videos.length > 0) {
+        upsertEntityIndex({ ...entry, recommendedVideos: videos });
+        matched++;
+      }
+
+      // Respect API rate limits
+      if (VIDEO_SEARCH_DELAY_MS > 0) {
+        await new Promise(r => setTimeout(r, VIDEO_SEARCH_DELAY_MS));
+      }
+    } catch (err) {
+      // Log but continue — individual failures shouldn't stop the batch
+      logError("cortex-enrichment", `Video search failed for "${entry.title}"`, err);
+    }
+  }
+
+  if (matched > 0) {
+    saveEntityIndex();
+    logAction({
+      ts: Date.now(), type: "action", category: "cortex-enrichment",
+      message: `Video recommendations: ${matched} entities matched from ${batch.length} processed`,
+    });
+  }
+
+  return { matched };
+}
+
+// ── Helpers ──
+
 /**
  * Build a compact inventory of all entities for LLM context.
  * Format: one line per entity with entityId, title, type, source, and semantic tags.

@@ -1133,11 +1133,22 @@ export async function startEnsoServer(opts: {
       const tagResult = await enrichNewEntities(batch);
       const xrefResult = await crossReferenceNewEntities(batch);
 
+      // Level 4: YouTube video recommendations (separate pass — uses entities needing videos)
+      const { recommendVideosForEntities } = await import("./cortex-enrichment.js");
+      const needVideos: string[] = [];
+      for (const [id, entry] of index) {
+        if (!entry.recommendedVideos?.length && entry.source !== "youtube") needVideos.push(id);
+      }
+      const videoLimit = Math.min(parseInt(req.query.videoLimit as string) || 100, needVideos.length);
+      const videoResult = await recommendVideosForEntities(needVideos.slice(0, videoLimit));
+
       res.json({
         totalUnenriched: entityIds.length,
         processed: batch.length,
         enriched: tagResult.enriched,
         crossRefsCreated: xrefResult.refsCreated,
+        videosMatched: videoResult.matched,
+        videosRemaining: needVideos.length - videoLimit,
       });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

@@ -274,6 +274,15 @@ export interface EntityIndexEntry extends EntityRef {
   semanticTags?: string[];
   /** Explicit cross-source relationships discovered by LLM during ingest */
   crossReferences?: Array<{ entityId: EntityId; reason: string }>;
+  /** YouTube videos matched by title search during enrichment */
+  recommendedVideos?: Array<{
+    videoId: string;
+    title: string;
+    channelTitle: string;
+    thumbnailUrl: string;
+    viewCount?: string;
+    duration?: string;
+  }>;
 }
 
 let entityIndex: Map<EntityId, EntityIndexEntry> = new Map();
@@ -1076,6 +1085,7 @@ export async function buildEntityDetailData(entityId: EntityId): Promise<Record<
     metadata: entity.metadata,
     relatedEntities,
     relatedReasons,
+    recommendedVideos: indexEntry?.recommendedVideos ?? [],
     childEntities: entity.children ?? [],
     navigationDepth: 1,
   };

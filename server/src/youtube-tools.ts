@@ -12,7 +12,7 @@ import { logAction, logError } from "./action-log.js";
 
 // ── Helpers ──
 
-interface VideoInfo {
+export interface VideoInfo {
   videoId: string;
   title: string;
   channelTitle: string;
@@ -208,7 +208,7 @@ async function trending(params: Record<string, unknown>): Promise<VideoInfo[]> {
   }));
 }
 
-async function search(params: Record<string, unknown>): Promise<VideoInfo[]> {
+export async function search(params: Record<string, unknown>): Promise<VideoInfo[]> {
   const yt = getYouTubePublic();
   const query = String(params.query || "");
   const maxResults = Math.min(Number(params.maxResults) || 10, 50);

@@ -149,6 +149,13 @@ export async function runPostScanPipeline(
       if (xrefResult.refsCreated > 0) {
         logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Cross-references: ${xrefResult.refsCreated} relationships discovered` });
       }
+
+      // Level 4: YouTube video recommendations (no LLM — direct title search)
+      const { recommendVideosForEntities } = await import("./cortex-enrichment.js");
+      const videoResult = await recommendVideosForEntities(createdEntityIds);
+      if (videoResult.matched > 0) {
+        logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Video recommendations: ${videoResult.matched} entities matched` });
+      }
     } catch (err) {
       logError("data-pipeline", "Cortex enrichment failed (non-fatal)", err);
     }
