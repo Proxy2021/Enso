@@ -1815,6 +1815,17 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     }
   });
 
+  app.post("/api/focus-areas/:id/enrich", async (req, res) => {
+    try {
+      const { enrichFocusArea } = await import("./focus-areas.js");
+      const area = await enrichFocusArea(req.params.id);
+      if (!area) { res.status(404).json({ error: "Focus area not found" }); return; }
+      res.json(area);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Enrichment failed" });
+    }
+  });
+
   app.post("/api/focus-areas/:id/plan", async (req, res) => {
     try {
       const { generateFocusPlan } = await import("./focus-areas.js");

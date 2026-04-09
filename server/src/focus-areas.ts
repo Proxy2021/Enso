@@ -606,7 +606,7 @@ export function updateFocusArea(focusId: string, updates: Partial<FocusArea>): F
   return area;
 }
 
-/** Add a new user-created focus area */
+/** Add a new user-created focus area. Saves immediately, then enriches async via LLM + Cortex. */
 export function addFocusArea(area: { title: string; description: string; intent?: string }): FocusArea {
   let state = loadFocusState();
   if (!state) {
@@ -636,7 +636,134 @@ export function addFocusArea(area: { title: string; description: string; intent?
   state.version++;
   saveFocusState(state);
 
+  // Fire-and-forget: enrich via LLM + Cortex
+  enrichNewFocusArea(newArea.id).catch(() => {});
+
   return newArea;
+}
+
+/**
+ * Enrich a newly created focus area using LLM + Cortex data.
+ * Analyzes the user's title/description, cross-references with the full
+ * data inventory, and fills in: deeperIntent, evidence, semanticTags,
+ * adjacentPursuits, suggestedActions, and refined clarity.
+ */
+/** Re-enrich a focus area after edits. Exported for API use. */
+export async function enrichFocusArea(focusId: string): Promise<FocusArea | null> {
+  await enrichNewFocusArea(focusId);
+  const state = loadFocusState();
+  return state?.areas.find(a => a.id === focusId) ?? null;
+}
+
+async function enrichNewFocusArea(focusId: string): Promise<void> {
+  const state = loadFocusState();
+  if (!state) return;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return;
+
+  try {
+    const { llm } = await import("./llm.js");
+    const { buildDataInventory } = await import("./cortex-synthesis.js");
+    const { findRelatedContent } = await import("./cortex-synthesis.js");
+
+    // Find what the Cortex already knows about this topic
+    const related = findRelatedContent(area.title, 5);
+    const relatedHits = related.hits.slice(0, 10).map(h => `- "${h.title}" [${h.source}]`).join("\n");
+    const cortexPages = related.cortexPages.slice(0, 5).map(p => `- "${p.title}" (${p.path})`).join("\n");
+
+    // Get compact data inventory for context
+    const inventory = buildDataInventory(3000);
+
+    const prompt = `A user just defined a new focus area. Analyze it and enrich it with deeper understanding using their personal data.
+
+## User's Focus Area
+- **Title**: "${area.title}"
+- **Description**: "${area.description}"
+${area.intent ? `- **Intent**: "${area.intent}"` : ""}
+
+## Matching Items Already in Their Data
+${relatedHits || "(no direct matches found)"}
+
+## Matching Cortex Pages
+${cortexPages || "(none)"}
+
+## Their Full Data Inventory
+${inventory}
+
+## Task
+Analyze this focus area in the context of their data and return:
+
+1. **deeperIntent**: What is the deeper personal motivation behind this focus? Why does it matter to them? Infer from their data patterns. Be specific and insightful.
+2. **evidence**: 3-5 specific items from their data inventory that are relevant to this focus (actual titles, project names, book titles, channel names).
+3. **semanticTags**: 3-5 theme tags that connect this focus to their broader knowledge (e.g., "artificial-intelligence", "creative-expression").
+4. **adjacentPursuits**: 2-3 related areas they haven't explored that would complement this focus, based on their deeper motivation.
+5. **suggestedActions**: 2-3 concrete next steps to make progress on this focus. Be specific to their situation.
+6. **clarity**: "emerging" (vague), "developing" (direction clear), or "clear" (specific goal visible) — assess based on how specific their title/description is.
+7. **refinedDescription**: If the description could be more outcome-oriented, suggest a better one. Otherwise return null.
+
+Return JSON:
+{
+  "deeperIntent": "...",
+  "evidence": ["..."],
+  "semanticTags": ["..."],
+  "adjacentPursuits": ["..."],
+  "suggestedActions": ["..."],
+  "clarity": "...",
+  "refinedDescription": "..." or null
+}`;
+
+    const response = await llm({
+      prompt,
+      tier: "fast",
+      maxOutputTokens: 1500,
+      responseMimeType: "application/json",
+      temperature: 0.3,
+      timeoutMs: 30_000,
+    });
+
+    const result = JSON.parse(response) as {
+      deeperIntent?: string;
+      evidence?: string[];
+      semanticTags?: string[];
+      adjacentPursuits?: string[];
+      suggestedActions?: string[];
+      clarity?: string;
+      refinedDescription?: string;
+    };
+
+    const now = new Date().toISOString();
+    const changes: string[] = [];
+
+    if (result.deeperIntent) { area.deeperIntent = result.deeperIntent; changes.push("deeper intent inferred"); }
+    if (result.evidence?.length) { area.evidence = result.evidence; changes.push(`${result.evidence.length} evidence points found`); }
+    if (result.semanticTags?.length) { area.semanticTags = result.semanticTags; changes.push("semantic tags added"); }
+    if (result.adjacentPursuits?.length) { area.adjacentPursuits = result.adjacentPursuits; changes.push("adjacent pursuits suggested"); }
+    if (result.suggestedActions?.length) { area.suggestedActions = result.suggestedActions; }
+    if (result.clarity && ["emerging", "developing", "clear"].includes(result.clarity)) {
+      area.clarity = result.clarity as FocusArea["clarity"];
+    }
+    if (result.refinedDescription && result.refinedDescription !== area.description) {
+      area.description = result.refinedDescription;
+      changes.push("description refined");
+    }
+
+    if (changes.length > 0) {
+      area.updatedAt = now;
+      area.refinements.push({
+        date: now,
+        source: "inference",
+        change: `AI enrichment: ${changes.join(", ")}`,
+      });
+      saveFocusState(state);
+
+      logAction({
+        ts: Date.now(), type: "action", category: "focus-areas",
+        message: `Enriched new focus "${area.title}": ${changes.join(", ")}`,
+      });
+    }
+  } catch (err) {
+    logError("focus-areas", `Failed to enrich focus "${area.title}"`, err);
+  }
 }
 
 // ── Context for Agent ──
