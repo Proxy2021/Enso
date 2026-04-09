@@ -1539,7 +1539,7 @@ audio{width:100%;margin:12px 0;border-radius:8px}
   }
 
   // ── Rich Podcast Player Page ──
-  app.get("/api/podcast/play/:slug", (req, res) => {
+  app.get("/api/podcast/play/:slug", async (req, res) => {
     try {
       const slug = decodeURIComponent(req.params.slug).replace(/[^\p{L}\p{N}_-]/gu, "");
       const metaPath = join(homedir(), ".enso", "data", "deep-content", `${slug}.json`);
