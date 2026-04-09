@@ -914,7 +914,7 @@ export async function startEnsoServer(opts: {
             return;
           }
 
-          const tunnelUrl = process.env.ENSO_TUNNEL_URL || `https://${req.hostname === "localhost" ? `localhost:${process.env.PORT || 3001}` : req.hostname}`;
+          const tunnelUrl = process.env.ENSO_TUNNEL_URL || `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
           const html = buildEntityEmailHtml(processed, tunnelUrl);
 
           const { sendHtmlEmail } = await import("./email.js");
