@@ -93,6 +93,18 @@ export default function FocusView() {
 
   useEffect(() => { fetchFocusAreas(); }, [fetchFocusAreas]);
 
+  // Auto-refresh when viewing a focus area that hasn't been enriched yet (waiting for async enrichment)
+  useEffect(() => {
+    if (view !== "detail" || !selectedId || !focusState) return;
+    const area = focusState.areas.find(a => a.id === selectedId);
+    if (!area) return;
+    // If evidence is just "User-created focus area" and no deeperIntent, enrichment hasn't completed
+    const needsRefresh = area.evidence.length === 1 && area.evidence[0] === "User-created focus area" && !area.deeperIntent;
+    if (!needsRefresh) return;
+    const timer = setInterval(() => { fetchFocusAreas(); }, 5000);
+    return () => clearInterval(timer);
+  }, [view, selectedId, focusState, fetchFocusAreas]);
+
   const handleInfer = async () => {
     setInferring(true);
     try {

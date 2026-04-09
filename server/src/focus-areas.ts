@@ -636,8 +636,10 @@ export function addFocusArea(area: { title: string; description: string; intent?
   state.version++;
   saveFocusState(state);
 
-  // Fire-and-forget: enrich via LLM + Cortex
-  enrichNewFocusArea(newArea.id).catch(() => {});
+  // Fire-and-forget: enrich via LLM + Cortex (logged errors, never throws to caller)
+  enrichNewFocusArea(newArea.id).catch(err => {
+    logError("focus-areas", `Background enrichment failed for "${newArea.title}"`, err);
+  });
 
   return newArea;
 }
