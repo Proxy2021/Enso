@@ -70,11 +70,29 @@ function GeneratedUI({ data, onAction }) {
                 }
                 return null;
               })()}
-              <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap", alignItems: "center" }}>
                 <Badge variant="default">{entity.type}</Badge>
                 <Badge variant="secondary">{entity.source}</Badge>
-                {entity.cortexPath && <Badge variant="secondary">📄 In Cortex</Badge>}
-                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ Podcast Ready</Badge>}
+                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ {podcastDuration ? podcastDuration + " min" : "Podcast Ready"}</Badge>}
+                {/* Primary actions inline with badges */}
+                {d.contentAccess && d.contentAccess.externalUrl && (
+                  <Button size="sm" style={{ background: "#059669", color: "white", fontSize: "11px", padding: "3px 10px", height: "24px" }}
+                    onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
+                  >{d.contentAccess.icon || "📖"} {d.contentAccess.label || "Read"}</Button>
+                )}
+                {podcastAudioUrl && (
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white", fontSize: "11px", padding: "3px 10px", height: "24px" }}
+                    onClick={function() {
+                      var email = prompt("Send summary + podcast to:", "kkwong@xiaomi.com");
+                      if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
+                    }}
+                  >📧 Email</Button>
+                )}
+                {!podcastAudioUrl && !podcastStatus && (
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white", fontSize: "11px", padding: "3px 10px", height: "24px" }}
+                    onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+                  >🎙️ Podcast</Button>
+                )}
               </div>
               {entity.summary && (
                 <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.5 }}>
@@ -243,28 +261,6 @@ function GeneratedUI({ data, onAction }) {
           </UICard>
         )}
 
-        {/* Actions */}
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          {!podcastAudioUrl && !podcastStatus && (
-            <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
-              onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
-            >🎙️ Deep Podcast</Button>
-          )}
-          {/* Unified content access button */}
-          {d.contentAccess && d.contentAccess.externalUrl && (
-            <Button size="sm" style={{ background: "#059669", color: "white" }}
-              onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
-            >{d.contentAccess.icon || "📖"} {d.contentAccess.label || "Open"}</Button>
-          )}
-          {podcastAudioUrl && (
-            <Button variant="outline" size="sm"
-              onClick={function() {
-                var email = prompt("Send book report + podcast to:");
-                if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
-              }}
-            >📧 Email Summary + Podcast</Button>
-          )}
-        </div>
       </div>
     );
   }
