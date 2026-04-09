@@ -4,9 +4,128 @@ function GeneratedUI({ data, onAction }) {
   var isBrowse = tool === "enso_travel_browse";
   var isAdd = tool === "enso_travel_add";
   var isDiscover = tool === "enso_travel_discover";
+  var isEntityDetail = tool === "entity_detail" || !!d.focusEntity;
 
   var [searchInput, setSearchInput] = React.useState("");
   var [addInput, setAddInput] = React.useState("");
+  var [showTranscript, setShowTranscript] = React.useState(false);
+
+  // ── Breadcrumb ──
+  var navStack = d.navStack || [];
+  var breadcrumb = navStack.length > 0 ? (
+    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", fontSize: "12px" }}>
+      <Button variant="outline" size="sm" style={{ fontSize: "11px", padding: "2px 8px" }}
+        onClick={function() { onAction("nav_back", {}); }}>← Back</Button>
+    </div>
+  ) : null;
+
+  // ── Entity Detail View ──
+  if (isEntityDetail && d.entity) {
+    var entity = d.entity;
+    var fields = d.detailFields || [];
+    var cortexContent = d.cortexContent;
+    var related = d.relatedEntities || [];
+    var processed = d.processedBook;
+    var research = processed ? processed.research : null;
+    var podcastAudioUrl = d.podcastAudioUrl;
+    var podcastDuration = d.podcastDuration;
+    var podcastStatus = d.podcastStatus;
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {breadcrumb}
+        <UICard style={{ padding: "16px" }}>
+          <div style={{ display: "flex", gap: "16px" }}>
+            {entity.imageUrl && <img src={entity.imageUrl} alt={entity.title} style={{ width: "100px", height: "75px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "18px", fontWeight: 700, lineHeight: 1.3 }}>{entity.title}</div>
+              <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap", alignItems: "center" }}>
+                <Badge variant="default">🌍 {entity.type}</Badge>
+                {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ {podcastDuration ? podcastDuration + " min" : "Podcast"}</Badge>}
+              </div>
+              <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+                {d.contentAccess && d.contentAccess.externalUrl && (
+                  <Button size="sm" style={{ background: "#059669", color: "white" }}
+                    onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
+                  >{d.contentAccess.icon || "🗺️"} {d.contentAccess.label || "View on Map"}</Button>
+                )}
+                {!podcastAudioUrl && !podcastStatus && (
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+                    onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+                  >🎙️ Generate Travel Podcast</Button>
+                )}
+                {podcastAudioUrl && (
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+                    onClick={function() {
+                      var email = prompt("Send travel guide + podcast to:", "kkwong@xiaomi.com");
+                      if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
+                    }}
+                  >📧 Email Podcast</Button>
+                )}
+              </div>
+              {entity.summary && <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.5 }}>{entity.summary}</div>}
+            </div>
+          </div>
+          {fields.length > 0 && (
+            <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #1e293b", display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: "12px" }}>
+              {fields.filter(function(f) { return f.key !== "description"; }).map(function(f) {
+                return <div key={f.key} style={{ display: "flex", gap: "4px" }}><span style={{ color: "#64748b" }}>{f.label}:</span><span style={{ color: "#cbd5e1" }}>{Array.isArray(f.value) ? f.value.join(", ") : String(f.value)}</span></div>;
+              })}
+            </div>
+          )}
+        </UICard>
+        {podcastAudioUrl && (
+          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "16px" }}>🎙️</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#c4b5fd" }}>AI Travel Podcast</span>
+              {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
+            </div>
+            <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}><source src={podcastAudioUrl} type="audio/wav" /></audio>
+          </UICard>
+        )}
+        {podcastStatus && podcastStatus !== "ready" && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "16px", height: "16px", border: "2px solid #7c3aed", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <span style={{ fontSize: "13px", color: "#94a3b8" }}>{d.podcastStatusDetail || "Generating travel podcast..."}</span>
+            </div>
+          </UICard>
+        )}
+        {research && research.coreThesis && (
+          <UICard style={{ padding: "14px" }}><h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 6px" }}>💡 Overview</h3><p style={{ fontSize: "13px", color: "#cbd5e1", lineHeight: 1.6, margin: 0 }}>{research.coreThesis}</p></UICard>
+        )}
+        {research && research.keyInsights && research.keyInsights.length > 0 && (
+          <UICard style={{ padding: "14px" }}><h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>🔑 Highlights</h3>
+            {research.keyInsights.slice(0, 8).map(function(ins, i) {
+              return <div key={i} style={{ borderLeft: "3px solid #059669", padding: "6px 12px", margin: "6px 0", background: "#064e3b", borderRadius: "0 6px 6px 0" }}>
+                <p style={{ fontSize: "13px", color: "#e2e8f0", margin: 0, lineHeight: 1.5 }}>{ins.insight}</p>
+                {ins.example && <p style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic", margin: "4px 0 0" }}>{ins.example}</p>}
+              </div>;
+            })}
+          </UICard>
+        )}
+        {research && research.chapterSummaries && research.chapterSummaries.length > 0 && (
+          <UICard style={{ padding: "14px" }}><h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>📍 Areas to Explore</h3>
+            {research.chapterSummaries.slice(0, 10).map(function(ch, i) {
+              return <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid #1e293b" }}>
+                <div style={{ fontWeight: 600, fontSize: "13px", color: "#6ee7b7" }}>{ch.chapter}</div>
+                <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.5 }}>{ch.summary}</div>
+              </div>;
+            })}
+          </UICard>
+        )}
+        {cortexContent && !research && (
+          <UICard style={{ padding: "14px" }}><h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 6px" }}>📄 Knowledge</h3><div style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{cortexContent.slice(0, 1000)}</div></UICard>
+        )}
+        {related.length > 0 && (
+          <UICard style={{ padding: "14px" }}><h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 8px" }}>🔗 Related</h3>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{related.map(function(r) { return <Button key={r.entityId} variant="outline" size="sm" style={{ fontSize: "10px" }} onClick={function() { onAction("view_entity", { entityId: r.entityId }); }}>{r.title}</Button>; })}</div>
+          </UICard>
+        )}
+      </div>
+    );
+  }
 
   function PlaceCard({ place, showAdd }) {
     return (
