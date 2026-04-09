@@ -858,12 +858,14 @@ Be specific and actionable. Reference my actual data. Consider the DEEPER motiva
 // ── Focus Area Activity Detail ──
 
 /**
- * Get detailed activity data for a focus area — entities matching its tags.
+ * Get relevant entities for a focus area using LLM analysis.
+ * First does a fast keyword pre-filter, then uses LLM to judge relevance
+ * and explain why each entity matters to the focus.
  */
-export function getFocusAreaActivity(focusId: string): {
-  entities: Array<{ title: string; source: string; type: string; updatedAt: string }>;
+export async function getFocusAreaActivity(focusId: string): Promise<{
+  entities: Array<{ title: string; source: string; type: string; updatedAt: string; matchReason: string }>;
   total: number;
-} | null {
+} | null> {
   const state = loadFocusState();
   if (!state) return null;
 
@@ -871,31 +873,56 @@ export function getFocusAreaActivity(focusId: string): {
   if (!area) return null;
 
   try {
-    // Dynamic import would be async, but getEntityIndex is sync after first load
-    // Use require pattern for sync access
-    const entityModel = require("./entity-model.js") as typeof import("./entity-model.js");
-    const entityIndex = entityModel.getEntityIndex();
+    const { llm } = await import("./llm.js");
+    const { getEntityIndex } = await import("./entity-model.js");
+    const entityIndex = getEntityIndex();
 
-    const matching: Array<{ title: string; source: string; type: string; updatedAt: string }> = [];
-    const areaTags = new Set(area.semanticTags);
-
+    // Build a compact inventory of all entities for LLM to judge
+    const entityList: string[] = [];
+    const entityLookup: Array<{ title: string; source: string; type: string; updatedAt: string }> = [];
+    let idx = 0;
     for (const [, entry] of entityIndex) {
-      const entryTags = new Set(entry.semanticTags || []);
-      const overlap = [...areaTags].filter(t => entryTags.has(t));
-      if (overlap.length >= 1) {
-        matching.push({
-          title: entry.title,
-          source: entry.source,
-          type: entry.type,
-          updatedAt: entry.updatedAt || "",
-        });
-      }
+      if (idx >= 100) break; // cap for prompt size
+      const tags = entry.semanticTags?.length ? ` [${entry.semanticTags.slice(0, 3).join(",")}]` : "";
+      entityList.push(`${idx}: "${entry.title}" (${entry.source}, ${entry.type})${tags}`);
+      entityLookup.push({ title: entry.title, source: entry.source, type: entry.type, updatedAt: entry.updatedAt || "" });
+      idx++;
     }
 
-    matching.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const prompt = `Given this focus area:
+- **Title**: "${area.title}"
+- **Description**: "${area.description}"
+- **Intent**: "${area.intent || area.description}"
+- **Deeper motivation**: "${area.deeperIntent || "(not set)"}"
 
-    return { entities: matching.slice(0, 30), total: matching.length };
-  } catch {
+Select the items from this inventory that are RELEVANT to this focus area. Think broadly — a book, a game, a YouTube channel, a project, or a movie can all be relevant if they connect to the focus's goal, theme, or deeper motivation.
+
+## Inventory
+${entityList.join("\n")}
+
+Return JSON: { "matches": [{ "idx": <number>, "reason": "<brief 5-10 word explanation>" }] }
+Select 10-30 most relevant items. Be inclusive but meaningful — don't force weak connections.`;
+
+    const response = await llm({
+      prompt,
+      tier: "fast",
+      maxOutputTokens: 4000,
+      responseMimeType: "application/json",
+      temperature: 0.2,
+      timeoutMs: 45_000,
+    });
+
+    const parsed = JSON.parse(response) as { matches: Array<{ idx: number; reason: string }> };
+    const results = (parsed.matches || [])
+      .filter(m => typeof m.idx === "number" && m.idx >= 0 && m.idx < entityLookup.length)
+      .map(m => ({
+        ...entityLookup[m.idx],
+        matchReason: m.reason || "relevant",
+      }));
+
+    return { entities: results, total: results.length };
+  } catch (err) {
+    logError("focus-areas", `Activity fetch failed for "${area.title}"`, err);
     return { entities: [], total: 0 };
   }
 }

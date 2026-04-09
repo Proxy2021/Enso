@@ -1840,7 +1840,7 @@ audio{width:100%;margin:12px 0;border-radius:8px}
   app.get("/api/focus-areas/:id/activity", async (req, res) => {
     try {
       const { getFocusAreaActivity } = await import("./focus-areas.js");
-      const result = getFocusAreaActivity(req.params.id);
+      const result = await getFocusAreaActivity(req.params.id);
       if (!result) { res.status(404).json({ error: "Focus area not found" }); return; }
       res.json(result);
     } catch (err: any) {

@@ -40,7 +40,7 @@ interface FocusState {
 }
 
 interface ActivityData {
-  entities: Array<{ title: string; source: string; type: string; updatedAt: string }>;
+  entities: Array<{ title: string; source: string; type: string; updatedAt: string; matchReason?: string }>;
   total: number;
 }
 
@@ -537,18 +537,24 @@ export default function FocusView() {
 
           {detailTab === "activity" && (
             <div>
-              {!activity || activity.entities.length === 0 ? (
+              {!activity ? (
+                <p className="text-sm text-gray-500 text-center py-8">Loading activity...</p>
+              ) : activity.entities.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-8">No matching entities found in Cortex</p>
               ) : (
                 <>
-                  <p className="text-xs text-gray-500 mb-3">{activity.total} entities match this focus area's themes</p>
-                  <div className="space-y-1.5">
+                  <p className="text-xs text-gray-500 mb-3">{activity.total} related items from your Cortex</p>
+                  <div className="space-y-1">
                     {activity.entities.map((ent, i) => (
-                      <div key={i} className="flex items-center gap-3 text-xs py-1.5 px-2 rounded hover:bg-gray-800/30">
-                        <span className="shrink-0">{SOURCE_ICONS[ent.source] || "\uD83D\uDCC4"}</span>
-                        <span className="text-gray-300 flex-1 truncate">{ent.title}</span>
+                      <div key={i} className="flex items-start gap-3 text-xs py-2 px-2.5 rounded hover:bg-gray-800/30 group">
+                        <span className="shrink-0 mt-0.5">{SOURCE_ICONS[ent.source] || "\uD83D\uDCC4"}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-gray-300 block truncate">{ent.title}</span>
+                          {ent.matchReason && (
+                            <span className="text-[10px] text-gray-600 italic">{ent.matchReason}</span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-gray-600 shrink-0">{ent.source}</span>
-                        {ent.updatedAt && <span className="text-[10px] text-gray-700 shrink-0">{ent.updatedAt.slice(0, 10)}</span>}
                       </div>
                     ))}
                   </div>
