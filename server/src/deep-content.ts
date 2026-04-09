@@ -1354,36 +1354,38 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
     }
   }
 
-  // Clean light-themed email matching the in-app entity detail layout
+  // Clean, modern email layout
   const parts: string[] = [];
-  parts.push(`<div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#1f2937;background:#ffffff;padding:0;">`);
+  parts.push(`<div style="font-family:'Segoe UI',system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#1f2937;background:#ffffff;">`);
 
-  // Header card — cover on left, metadata on right (like the app)
-  parts.push(`<div style="padding:20px 24px;background:#f8fafc;border-bottom:1px solid #e5e7eb;">`);
+  // Header — cover + title + badges + buttons
+  parts.push(`<div style="padding:24px;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);border-bottom:2px solid #e0e7ff;">`);
   parts.push(`<table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>`);
   if (coverImageUrl) {
-    parts.push(`<td width="100" valign="top" style="padding-right:16px;">`);
-    parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" width="90" style="border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.1);" />`);
+    parts.push(`<td width="110" valign="top" style="padding-right:20px;">`);
+    parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" width="100" style="border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);" />`);
     parts.push(`</td>`);
   }
   parts.push(`<td valign="top">`);
-  parts.push(`<h1 style="color:#1f2937;font-size:20px;margin:0 0 4px;line-height:1.3;">${esc(processed.title)}</h1>`);
+  parts.push(`<h1 style="color:#111827;font-size:22px;margin:0 0 4px;line-height:1.3;font-weight:700;">${esc(processed.title)}</h1>`);
   if (author && author !== "Unknown") {
-    parts.push(`<p style="font-size:14px;color:#6b7280;margin:0 0 8px;">${esc(author)}</p>`);
+    parts.push(`<p style="font-size:15px;color:#4b5563;margin:0 0 10px;font-weight:400;">${esc(author)}</p>`);
   }
-  parts.push(`<span style="display:inline-block;background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-right:4px;">${entityType}</span>`);
-  parts.push(`<span style="display:inline-block;background:#f0fdf4;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-right:4px;">${processed.entityId.split(":")[0]}</span>`);
+  // Badges
+  parts.push(`<div style="margin-bottom:12px;">`);
+  parts.push(`<span style="display:inline-block;background:#eef2ff;color:#4338ca;font-size:11px;font-weight:600;padding:3px 10px;border-radius:12px;margin-right:6px;border:1px solid #c7d2fe;">${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}</span>`);
   if (processed.durationMinutes) {
-    parts.push(`<span style="display:inline-block;background:#f3e8ff;color:#7c3aed;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">🎙️ ${processed.durationMinutes} ${L.min}</span>`);
+    parts.push(`<span style="display:inline-block;background:#faf5ff;color:#7c3aed;font-size:11px;font-weight:600;padding:3px 10px;border-radius:12px;border:1px solid #e9d5ff;">🎙️ ${processed.durationMinutes} ${L.min}</span>`);
   }
-  // Action buttons
-  parts.push(`<div style="margin-top:10px;">`);
-  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:7px 16px;border-radius:5px;text-decoration:none;font-weight:600;font-size:12px;margin:2px 3px 2px 0;">${L.playDownload}</a>`);
-  if (contentUrl) {
-    parts.push(`<a href="${esc(contentUrl)}" style="display:inline-block;background:#2563eb;color:white;padding:7px 16px;border-radius:5px;text-decoration:none;font-weight:600;font-size:12px;margin:2px 3px 2px 0;">${contentLabel}</a>`);
-  }
-  parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:7px 16px;border-radius:5px;text-decoration:none;font-weight:600;font-size:12px;margin:2px 0;">${L.addToCortex}</a>`);
   parts.push(`</div>`);
+  // Action buttons — larger, rounded, with shadows
+  parts.push(`<table cellpadding="0" cellspacing="0" border="0"><tr>`);
+  parts.push(`<td style="padding-right:8px;"><a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;box-shadow:0 2px 4px rgba(124,58,237,0.3);">▶ ${isChinese ? "播放播客" : "Play Podcast"}</a></td>`);
+  if (contentUrl) {
+    parts.push(`<td style="padding-right:8px;"><a href="${esc(contentUrl)}" style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;box-shadow:0 2px 4px rgba(37,99,235,0.3);">${contentLabel}</a></td>`);
+  }
+  parts.push(`<td><a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;box-shadow:0 2px 4px rgba(5,150,105,0.3);">${L.addToCortex}</a></td>`);
+  parts.push(`</tr></table>`);
   parts.push(`</td></tr></table>`);
   parts.push(`</div>`);
 
@@ -1422,51 +1424,58 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   }
 
   // Content sections
-  parts.push(`<div style="padding:0 24px 24px;">`);
+  parts.push(`<div style="padding:4px 24px 24px;">`);
 
   // Core Thesis
   if (r.coreThesis) {
-    parts.push(`<div style="background:#f8fafc;border-left:4px solid #7c3aed;padding:14px 16px;margin-bottom:16px;border-radius:0 6px 6px 0;">`);
-    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:0 0 6px;">${L.coreThesis}</h2>`);
-    parts.push(`<p style="font-size:13px;line-height:1.6;color:#374151;margin:0;">${esc(r.coreThesis)}</p>`);
+    parts.push(`<div style="background:linear-gradient(135deg,#faf5ff 0%,#eef2ff 100%);border-left:4px solid #7c3aed;padding:16px 18px;margin:16px 0;border-radius:0 8px 8px 0;">`);
+    parts.push(`<h2 style="color:#6d28d9;font-size:14px;margin:0 0 8px;font-weight:700;">${L.coreThesis}</h2>`);
+    parts.push(`<p style="font-size:14px;line-height:1.7;color:#1f2937;margin:0;">${esc(r.coreThesis)}</p>`);
     parts.push(`</div>`);
   }
 
   // Key Insights
   if (r.keyInsights.length > 0) {
-    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:0 0 10px;">${L.keyInsights}</h2>`);
+    parts.push(`<h2 style="color:#6d28d9;font-size:14px;margin:20px 0 12px;font-weight:700;">${L.keyInsights}</h2>`);
     for (const ins of r.keyInsights.slice(0, 6)) {
-      parts.push(`<div style="border-left:3px solid #e0e7ff;padding:8px 12px;margin:0 0 8px;background:#f8fafc;border-radius:0 4px 4px 0;">`);
-      parts.push(`<p style="font-size:13px;color:#1f2937;margin:0;line-height:1.5;">${esc(ins.insight)}</p>`);
-      if (ins.example) parts.push(`<p style="font-size:11px;color:#6b7280;font-style:italic;margin:4px 0 0;">${esc(ins.example)}</p>`);
+      parts.push(`<div style="border-left:3px solid #c4b5fd;padding:10px 14px;margin:0 0 10px;background:#faf5ff;border-radius:0 6px 6px 0;">`);
+      parts.push(`<p style="font-size:14px;color:#1f2937;margin:0;line-height:1.6;font-weight:500;">${esc(ins.insight)}</p>`);
+      if (ins.example) parts.push(`<p style="font-size:12px;color:#6b7280;font-style:italic;margin:6px 0 0;line-height:1.5;">${esc(ins.example)}</p>`);
       parts.push(`</div>`);
     }
   }
 
-  // Chapter Summaries (collapsed to just titles for email brevity)
+  // Chapter Summaries
   if (r.chapterSummaries.length > 0) {
-    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:16px 0 8px;">${L.chapterOverview}</h2>`);
+    parts.push(`<h2 style="color:#6d28d9;font-size:14px;margin:20px 0 10px;font-weight:700;">${L.chapterOverview}</h2>`);
+    parts.push(`<div style="background:#f8fafc;border-radius:8px;padding:4px 16px;border:1px solid #e5e7eb;">`);
     for (const ch of r.chapterSummaries.slice(0, 8)) {
-      parts.push(`<p style="margin:0;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:12px;"><strong style="color:#374151;">${esc(ch.chapter)}</strong> <span style="color:#9ca3af;">— ${esc(ch.summary.slice(0, 80))}${ch.summary.length > 80 ? "..." : ""}</span></p>`);
+      parts.push(`<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">`);
+      parts.push(`<p style="margin:0;font-size:13px;"><strong style="color:#111827;">${esc(ch.chapter)}</strong></p>`);
+      parts.push(`<p style="margin:2px 0 0;font-size:12px;color:#6b7280;line-height:1.5;">${esc(ch.summary.slice(0, 120))}${ch.summary.length > 120 ? "..." : ""}</p>`);
+      parts.push(`</div>`);
     }
     if (r.chapterSummaries.length > 8) {
-      parts.push(`<p style="font-size:11px;color:#9ca3af;margin:4px 0;">+ ${r.chapterSummaries.length - 8} more chapters</p>`);
+      parts.push(`<p style="font-size:12px;color:#9ca3af;margin:8px 0 4px;text-align:center;">+ ${r.chapterSummaries.length - 8} more chapters</p>`);
     }
+    parts.push(`</div>`);
   }
 
-  // Critical Perspectives (brief)
+  // Critical Perspectives
   if (r.criticalPerspectives.length > 0) {
-    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:16px 0 8px;">${L.perspectives}</h2>`);
+    parts.push(`<h2 style="color:#6d28d9;font-size:14px;margin:20px 0 10px;font-weight:700;">${L.perspectives}</h2>`);
+    parts.push(`<div style="background:#fffbeb;border-radius:8px;padding:12px 16px;border:1px solid #fde68a;">`);
     for (const cp of r.criticalPerspectives.slice(0, 3)) {
-      parts.push(`<p style="font-size:12px;line-height:1.5;color:#6b7280;margin:0 0 6px;">• ${esc(cp.slice(0, 150))}${cp.length > 150 ? "..." : ""}</p>`);
+      parts.push(`<p style="font-size:13px;line-height:1.6;color:#92400e;margin:0 0 8px;">⚖️ ${esc(cp.slice(0, 200))}${cp.length > 200 ? "..." : ""}</p>`);
     }
+    parts.push(`</div>`);
   }
 
   parts.push(`</div>`); // end content
 
   // Footer
-  parts.push(`<div style="background:#f8fafc;padding:12px 24px;text-align:center;border-top:1px solid #e5e7eb;">`);
-  parts.push(`<p style="font-size:11px;color:#9ca3af;margin:0;">${L.generatedBy} • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
+  parts.push(`<div style="background:linear-gradient(135deg,#eef2ff 0%,#faf5ff 100%);padding:16px 24px;text-align:center;">`);
+  parts.push(`<p style="font-size:11px;color:#7c3aed;margin:0;font-weight:500;">${L.generatedBy} • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
   parts.push(`</div>`);
   parts.push(`</div>`);
 
