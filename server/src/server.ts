@@ -920,7 +920,8 @@ export async function startEnsoServer(opts: {
           const { sendHtmlEmail } = await import("./email.js");
           const result = await sendHtmlEmail({
             to: recipient,
-            subject: `📚 ${processed.title} — Book Intelligence Report + Podcast`,
+            from: "Enso AI <noreply@enso.ai>",
+            subject: `📚 ${processed.title} by ${processed.author} — ${processed.durationMinutes} min AI Podcast`,
             html,
             textFallback: `${processed.title} by ${processed.author}\n\n${processed.research.coreThesis}`,
           });
