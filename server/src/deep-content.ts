@@ -1273,35 +1273,59 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   const podcastUrl = `${baseUrl}/api/podcast/play/${slug}`;
   const r = processed.research;
 
-  // Resolve enriched metadata for proper author/creator and cover image
+  // Resolve enriched metadata — read directly from caches (no require() needed)
   let author = processed.author;
   let coverImageUrl = "";
   let entityType = "book";
+
+  // Parse entity ID
+  const eidParts = processed.entityId.split(":");
+  if (eidParts.length >= 3) {
+    entityType = eidParts[1];
+  }
+  const entitySource = eidParts[0] || "research";
+
+  // Read cover from entity index file
   try {
-    const { parseEntityId, lookupEntity } = require("./entity-model.js") as { parseEntityId: (id: string) => { type: string; source: string } | null; lookupEntity: (id: string) => { imageUrl?: string; tags?: string[] } | undefined };
-    const parsed = parseEntityId(processed.entityId);
-    if (parsed) entityType = parsed.type;
-    const entity = lookupEntity(processed.entityId);
-    if (entity?.imageUrl) coverImageUrl = entity.imageUrl;
+    const idxPath = join(homedir(), ".enso", "data", "entity-index.json");
+    if (existsSync(idxPath)) {
+      const idx = JSON.parse(readFileSync(idxPath, "utf-8"));
+      const entry = idx[processed.entityId];
+      if (entry?.imageUrl) coverImageUrl = entry.imageUrl;
+    }
   } catch { /* ignore */ }
 
-  // If author is "Unknown", try to extract from the Cortex page
+  // Read metadata from source cache for author resolution
+  let cachedBook: Record<string, unknown> | null = null;
+  try {
+    const cacheFile = entitySource === "kindle" ? "kindle-library.json" : entitySource === "weread" ? "weread-library.json" : "";
+    if (cacheFile) {
+      const cachePath = join(homedir(), ".enso", "data", "user-context", "cache", cacheFile);
+      if (existsSync(cachePath)) {
+        const cache = JSON.parse(readFileSync(cachePath, "utf-8"));
+        cachedBook = (cache.books || []).find((b: Record<string, unknown>) => b.title === processed.title) || null;
+        if (cachedBook) {
+          if ((author === "Unknown" || !author) && cachedBook.author) author = String(cachedBook.author);
+          if (!coverImageUrl && cachedBook.coverUrl) coverImageUrl = String(cachedBook.coverUrl);
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Fallback author from Cortex page
   if (author === "Unknown" || !author) {
     try {
-      const { entityCortexPath } = require("./entity-model.js") as { entityCortexPath: (id: string) => string | undefined };
-      const cortexPath = entityCortexPath(processed.entityId);
-      if (cortexPath) {
-        const fullPath = join(homedir(), ".enso", "wiki", cortexPath);
-        if (existsSync(fullPath)) {
-          const content = readFileSync(fullPath, "utf-8");
-          const creatorMatch = content.match(/\*\*(?:By\s+)?(.+?)\*\*/);
-          if (creatorMatch) {
-            const extracted = creatorMatch[1].replace(/^By\s+/, "").trim();
-            if (extracted && extracted !== "Unknown") author = extracted;
-          }
-          // Also try to find creator in details
-          const detailMatch = content.match(/- \*\*(?:Creator|Director|Developer|Author)\*\*: (.+)/);
-          if (detailMatch && (author === "Unknown" || !author)) author = detailMatch[1].trim();
+      const PREFIXES: Record<string, string> = { book: "entities/", game: "entities/game-", movie: "entities/movie-", "tv-series": "entities/tv-" };
+      const prefix = PREFIXES[entityType] || "entities/";
+      const slug = eidParts.slice(2).join(":");
+      const cortexPath = `${prefix}${slug}.md`;
+      const fullPath = join(homedir(), ".enso", "wiki", cortexPath);
+      if (existsSync(fullPath)) {
+        const content = readFileSync(fullPath, "utf-8");
+        const creatorMatch = content.match(/\*\*(?:By\s+)?(.+?)\*\*/);
+        if (creatorMatch) {
+          const extracted = creatorMatch[1].replace(/^By\s+/, "").trim();
+          if (extracted && extracted !== "Unknown") author = extracted;
         }
       }
     } catch { /* ignore */ }
@@ -1314,30 +1338,21 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   const quickAddUrl = `${baseUrl}/api/cortex/quick-add?title=${encodeURIComponent(processed.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(author || "")}`;
   const esc = escapeHtml;
 
-  // Resolve content access URL (Read on Kindle/WeRead, IMDB, Steam, etc.)
+  // Resolve content access URL from cached book data (already loaded above)
   let contentUrl = "";
   let contentLabel = "";
-  try {
-    const { resolveEntity: resEnt } = require("./entity-model.js") as { resolveEntity: (id: string) => Promise<{ metadata: Record<string, unknown>; source: string; type: string }> };
-    // Sync lookup from metadata
-    const { parseEntityId: parseEid } = require("./entity-model.js") as { parseEntityId: (id: string) => { source: string; type: string } | null };
-    const parsedEid = parseEid(processed.entityId);
-    if (parsedEid?.source === "kindle") {
-      // Try to find readerUrl from Kindle cache
-      try {
-        const kindleCache = JSON.parse(readFileSync(join(homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json"), "utf-8"));
-        const book = kindleCache.books?.find((b: Record<string, unknown>) => b.title === processed.title);
-        if (book?.readerUrl) { contentUrl = String(book.readerUrl); contentLabel = isChinese ? "📖 在Kindle阅读" : "📖 Read on Kindle"; }
-      } catch { /* ignore */ }
-    } else if (parsedEid?.source === "weread") {
-      try {
-        const wereadCache = JSON.parse(readFileSync(join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json"), "utf-8"));
-        const book = wereadCache.books?.find((b: Record<string, unknown>) => b.title === processed.title);
-        const encodeId = book?.encodeId || book?.wereadBookId;
-        if (encodeId) { contentUrl = `https://weread.qq.com/web/reader/${encodeId}`; contentLabel = isChinese ? "📖 在微信读书阅读" : "📖 Read on WeRead"; }
-      } catch { /* ignore */ }
+  if (cachedBook) {
+    if (entitySource === "kindle" && cachedBook.readerUrl) {
+      contentUrl = String(cachedBook.readerUrl);
+      contentLabel = isChinese ? "📖 在Kindle阅读" : "📖 Read on Kindle";
+    } else if (entitySource === "weread") {
+      const encodeId = cachedBook.encodeId || cachedBook.wereadBookId;
+      if (encodeId) {
+        contentUrl = `https://weread.qq.com/web/reader/${encodeId}`;
+        contentLabel = isChinese ? "📖 在微信读书阅读" : "📖 Read on WeRead";
+      }
     }
-  } catch { /* ignore */ }
+  }
 
   // Clean light-themed email matching the in-app entity detail layout
   const parts: string[] = [];
@@ -1375,15 +1390,8 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   // Metadata section — rating, pages, publisher, categories
   {
     const metaItems: string[] = [];
-    let bookMeta: Record<string, unknown> | null = null;
-    try {
-      const { parseEntityId: peid2 } = require("./entity-model.js") as { parseEntityId: (id: string) => { source: string } | null };
-      const src = peid2(processed.entityId)?.source;
-      if (src === "kindle") {
-        try { const c = JSON.parse(readFileSync(join(homedir(), ".enso", "data", "user-context", "cache", "kindle-library.json"), "utf-8")); bookMeta = c.books?.find((b: Record<string, unknown>) => b.title === processed.title); } catch {}
-      } else if (src === "weread") {
-        try { const c = JSON.parse(readFileSync(join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json"), "utf-8")); bookMeta = c.books?.find((b: Record<string, unknown>) => b.title === processed.title); } catch {}
-      }
+    const bookMeta = cachedBook;
+    {
       if (bookMeta) {
         if (bookMeta.rating) metaItems.push(`⭐ ${bookMeta.rating}${bookMeta.reviewCount ? ` (${Number(bookMeta.reviewCount).toLocaleString()})` : ""}`);
         if (bookMeta.pageCount) metaItems.push(`📄 ${bookMeta.pageCount} pages`);
