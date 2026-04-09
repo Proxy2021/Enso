@@ -1314,80 +1314,75 @@ export function buildEntityEmailHtml(processed: ProcessedContent, baseUrl: strin
   const quickAddUrl = `${baseUrl}/api/cortex/quick-add?title=${encodeURIComponent(processed.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(author || "")}`;
   const esc = escapeHtml;
 
-  // Dark-themed email matching the landing page design
+  // Clean light-themed email (works reliably across all email clients)
   const parts: string[] = [];
-  parts.push(`<div style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:0 auto;color:#e2e8f0;background:#0f0f23;padding:24px;border-radius:12px;">`);
+  parts.push(`<div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;color:#1f2937;background:#ffffff;padding:0;">`);
 
-  // Cover image
-  if (coverImageUrl) {
-    parts.push(`<div style="text-align:center;margin-bottom:16px;">`);
-    parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" style="max-width:240px;max-height:360px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.4);" />`);
-    parts.push(`</div>`);
-  }
-
-  // Type badge + Title + Author
-  parts.push(`<div style="text-align:center;margin-bottom:16px;">`);
-  parts.push(`<div style="margin-bottom:6px;"><span style="display:inline-block;background:#312e81;color:#c4b5fd;font-size:11px;font-weight:600;padding:3px 10px;border-radius:12px;">${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}</span></div>`);
-  parts.push(`<h1 style="color:#e2e8f0;font-size:22px;margin:4px 0;">${esc(processed.title)}</h1>`);
+  // Header banner
+  parts.push(`<div style="background:#7c3aed;color:white;padding:20px 24px;text-align:center;">`);
+  parts.push(`<span style="font-size:12px;opacity:0.8;">${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}</span>`);
+  parts.push(`<h1 style="color:white;font-size:20px;margin:6px 0 2px;">${esc(processed.title)}</h1>`);
   if (author && author !== "Unknown") {
-    parts.push(`<p style="font-size:14px;color:#94a3b8;margin:4px 0;">${L.by} ${esc(author)}</p>`);
+    parts.push(`<p style="font-size:13px;color:rgba(255,255,255,0.8);margin:0;">${L.by} ${esc(author)}</p>`);
   }
-  parts.push(`<p style="font-size:12px;color:#6b7280;">${processed.durationMinutes} ${L.min} · ${r.chapterSummaries?.length || 0} chapters · ${r.keyInsights?.length || 0} insights</p>`);
+  parts.push(`<p style="font-size:11px;color:rgba(255,255,255,0.6);margin:6px 0 0;">${processed.durationMinutes} ${L.min} · ${r.chapterSummaries?.length || 0} chapters · ${r.keyInsights?.length || 0} insights</p>`);
   parts.push(`</div>`);
 
-  // Action buttons row
-  parts.push(`<div style="text-align:center;margin-bottom:20px;">`);
-  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;margin:4px;">${L.playDownload}</a>`);
-  parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin:4px;">${L.addToCortex}</a>`);
+  // Cover + Actions section
+  parts.push(`<div style="padding:20px 24px;text-align:center;">`);
+  if (coverImageUrl) {
+    parts.push(`<img src="${esc(coverImageUrl)}" alt="${esc(processed.title)}" style="max-width:180px;max-height:270px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.12);margin-bottom:16px;" /><br/>`);
+  }
+  parts.push(`<a href="${esc(podcastUrl)}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;margin:4px;">${L.playDownload}</a> `);
+  parts.push(`<a href="${esc(quickAddUrl)}" style="display:inline-block;background:#059669;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin:4px;">${L.addToCortex}</a>`);
   parts.push(`</div>`);
+
+  // Content sections
+  parts.push(`<div style="padding:0 24px 24px;">`);
 
   // Core Thesis
   if (r.coreThesis) {
-    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
-    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 8px;">${L.coreThesis}</h2>`);
-    parts.push(`<p style="font-size:13px;line-height:1.6;color:#cbd5e1;margin:0;">${esc(r.coreThesis)}</p>`);
+    parts.push(`<div style="background:#f8fafc;border-left:4px solid #7c3aed;padding:14px 16px;margin-bottom:16px;border-radius:0 6px 6px 0;">`);
+    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:0 0 6px;">${L.coreThesis}</h2>`);
+    parts.push(`<p style="font-size:13px;line-height:1.6;color:#374151;margin:0;">${esc(r.coreThesis)}</p>`);
     parts.push(`</div>`);
   }
 
   // Key Insights
   if (r.keyInsights.length > 0) {
-    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
-    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 10px;">${L.keyInsights}</h2>`);
-    for (const ins of r.keyInsights.slice(0, 8)) {
-      parts.push(`<div style="border-left:3px solid #7c3aed;padding:6px 12px;margin:6px 0;background:#1e1b4b;border-radius:0 6px 6px 0;">`);
-      parts.push(`<p style="font-size:13px;color:#e2e8f0;margin:0;line-height:1.5;">${esc(ins.insight)}</p>`);
-      if (ins.example) parts.push(`<p style="font-size:11px;color:#94a3b8;font-style:italic;margin:4px 0 0;">${esc(ins.example)}</p>`);
+    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:0 0 10px;">${L.keyInsights}</h2>`);
+    for (const ins of r.keyInsights.slice(0, 6)) {
+      parts.push(`<div style="border-left:3px solid #e0e7ff;padding:8px 12px;margin:0 0 8px;background:#f8fafc;border-radius:0 4px 4px 0;">`);
+      parts.push(`<p style="font-size:13px;color:#1f2937;margin:0;line-height:1.5;">${esc(ins.insight)}</p>`);
+      if (ins.example) parts.push(`<p style="font-size:11px;color:#6b7280;font-style:italic;margin:4px 0 0;">${esc(ins.example)}</p>`);
       parts.push(`</div>`);
     }
-    parts.push(`</div>`);
   }
 
-  // Chapter Summaries
+  // Chapter Summaries (collapsed to just titles for email brevity)
   if (r.chapterSummaries.length > 0) {
-    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
-    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 10px;">${L.chapterOverview}</h2>`);
-    for (const ch of r.chapterSummaries.slice(0, 12)) {
-      parts.push(`<div style="padding:6px 0;border-bottom:1px solid #1e1e3a;">`);
-      parts.push(`<p style="margin:0;"><strong style="color:#c4b5fd;font-size:13px;">${esc(ch.chapter)}</strong></p>`);
-      parts.push(`<p style="font-size:12px;color:#94a3b8;margin:3px 0 0;line-height:1.5;">${esc(ch.summary)}</p>`);
-      parts.push(`</div>`);
+    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:16px 0 8px;">${L.chapterOverview}</h2>`);
+    for (const ch of r.chapterSummaries.slice(0, 8)) {
+      parts.push(`<p style="margin:0;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:12px;"><strong style="color:#374151;">${esc(ch.chapter)}</strong> <span style="color:#9ca3af;">— ${esc(ch.summary.slice(0, 80))}${ch.summary.length > 80 ? "..." : ""}</span></p>`);
     }
-    parts.push(`</div>`);
+    if (r.chapterSummaries.length > 8) {
+      parts.push(`<p style="font-size:11px;color:#9ca3af;margin:4px 0;">+ ${r.chapterSummaries.length - 8} more chapters</p>`);
+    }
   }
 
-  // Critical Perspectives
+  // Critical Perspectives (brief)
   if (r.criticalPerspectives.length > 0) {
-    parts.push(`<div style="background:#1a1a2e;border:1px solid #2a2a4a;border-radius:10px;padding:16px;margin-bottom:14px;">`);
-    parts.push(`<h2 style="color:#a78bfa;font-size:15px;margin:0 0 10px;">${L.perspectives}</h2>`);
-    for (const cp of r.criticalPerspectives) {
-      parts.push(`<p style="font-size:12px;line-height:1.5;color:#cbd5e1;margin:0;padding:4px 0;border-bottom:1px solid #1e1e3a;">• ${esc(cp)}</p>`);
+    parts.push(`<h2 style="color:#7c3aed;font-size:14px;margin:16px 0 8px;">${L.perspectives}</h2>`);
+    for (const cp of r.criticalPerspectives.slice(0, 3)) {
+      parts.push(`<p style="font-size:12px;line-height:1.5;color:#6b7280;margin:0 0 6px;">• ${esc(cp.slice(0, 150))}${cp.length > 150 ? "..." : ""}</p>`);
     }
-    parts.push(`</div>`);
   }
+
+  parts.push(`</div>`); // end content
 
   // Footer
-  parts.push(`<div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid #1e1e3a;">`);
-  parts.push(`<p style="font-size:11px;color:#475569;margin:0;">${L.generatedBy} • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
+  parts.push(`<div style="background:#f8fafc;padding:12px 24px;text-align:center;border-top:1px solid #e5e7eb;">`);
+  parts.push(`<p style="font-size:11px;color:#9ca3af;margin:0;">${L.generatedBy} • ${new Date(processed.processedAt).toLocaleDateString()}</p>`);
   parts.push(`</div>`);
   parts.push(`</div>`);
 

@@ -70,28 +70,30 @@ function GeneratedUI({ data, onAction }) {
                 }
                 return null;
               })()}
-              <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap", alignItems: "center" }}>
                 <Badge variant="default">{entity.type}</Badge>
                 <Badge variant="secondary">{entity.source}</Badge>
                 {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ {podcastDuration ? podcastDuration + " min" : "Podcast Ready"}</Badge>}
-                {/* Primary actions inline with badges */}
+              </div>
+              {/* Action buttons */}
+              <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
                 {d.contentAccess && d.contentAccess.externalUrl && (
-                  <Button size="sm" style={{ background: "#059669", color: "white", fontSize: "11px", padding: "3px 10px", height: "24px" }}
+                  <Button size="sm" style={{ background: "#059669", color: "white" }}
                     onClick={function() { window.open(d.contentAccess.externalUrl, "_blank"); }}
                   >{d.contentAccess.icon || "📖"} {d.contentAccess.label || "Read"}</Button>
                 )}
+                {!podcastAudioUrl && !podcastStatus && (
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
+                    onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+                  >🎙️ Generate Podcast</Button>
+                )}
                 {podcastAudioUrl && (
-                  <Button size="sm" style={{ background: "#7c3aed", color: "white", fontSize: "11px", padding: "3px 10px", height: "24px" }}
+                  <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
                     onClick={function() {
                       var email = prompt("Send summary + podcast to:", "kkwong@xiaomi.com");
                       if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
                     }}
-                  >📧 Email</Button>
-                )}
-                {!podcastAudioUrl && !podcastStatus && (
-                  <Button size="sm" style={{ background: "#7c3aed", color: "white", fontSize: "11px", padding: "3px 10px", height: "24px" }}
-                    onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
-                  >🎙️ Podcast</Button>
+                  >📧 Email Podcast</Button>
                 )}
               </div>
               {entity.summary && (
