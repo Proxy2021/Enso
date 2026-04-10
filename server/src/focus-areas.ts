@@ -129,7 +129,7 @@ function writeFocusToCortex(state: FocusState): void {
     }
     writeFileSync(CORTEX_FOCUS_PATH, summaryLines.join("\n"), "utf-8");
 
-    // Write per-goal pages in focuses/ directory
+    // Write per-goal pages — comprehensive living documents
     const focusDir = join(ENSO_HOME, "wiki", "focuses");
     if (!existsSync(focusDir)) mkdirSync(focusDir, { recursive: true });
 
@@ -141,48 +141,108 @@ function writeFocusToCortex(state: FocusState): void {
         area.description,
         ``,
         `## Status`,
-        `- **Status:** ${area.status}`,
         `- **Clarity:** ${area.clarity}`,
         `- **Confidence:** ${Math.round(area.confidence * 100)}%`,
         `- **Trend:** ${area.progress.trend}`,
         `- **Last active:** ${area.progress.lastActiveAt}`,
+        `- **Updated:** ${area.updatedAt}`,
         ``,
       ];
+
+      // Core intent & motivation
       if (area.intent) {
         lines.push(`## Intent`, ``, area.intent, ``);
       }
       if (area.deeperIntent) {
-        lines.push(`## Deeper Motivation`, ``, area.deeperIntent, ``);
+        lines.push(`## Deeper Motivation — WHY`, ``, area.deeperIntent, ``);
+      }
+
+      // Prepared briefing — the most valuable content, from orchestration-powered evaluation
+      if (area.preparedBriefing) {
+        lines.push(`## Preparation Briefing`, ``);
+        lines.push(`*Prepared: ${area.preparedAt?.slice(0, 10) || "unknown"}*`, ``);
+        lines.push(area.preparedBriefing, ``);
+      }
+
+      // Next steps & suggested actions
+      if (area.nextSteps?.length) {
+        lines.push(`## Next Steps`, ``);
+        for (const step of area.nextSteps) lines.push(`- ${step}`);
+        lines.push(``);
       }
       if (area.adjacentPursuits?.length) {
         lines.push(`## Adjacent Pursuits`, ``);
         for (const p of area.adjacentPursuits) lines.push(`- ${p}`);
         lines.push(``);
       }
-      if (area.nextSteps?.length) {
-        lines.push(`## Next Steps`, ``);
-        for (const step of area.nextSteps) lines.push(`- ${step}`);
+      if (area.suggestedActions.length) {
+        lines.push(`## Suggested Actions`, ``);
+        for (const a of area.suggestedActions) lines.push(`- ${a}`);
         lines.push(``);
       }
+
+      // Evidence grounding
       lines.push(`## Evidence`, ``);
       for (const ev of area.evidence) lines.push(`- ${ev}`);
       lines.push(``);
-      if (area.semanticTags.length) {
-        lines.push(`## Related Themes`, ``, `Tags: ${area.semanticTags.join(", ")}`, ``);
+
+      // Related entities (cross-reference links)
+      if (area.relatedEntityIds.length > 0) {
+        lines.push(`## Related Entities`, ``);
+        for (const eid of area.relatedEntityIds) lines.push(`- ${eid}`);
+        lines.push(``);
       }
+
+      // Themes
+      if (area.semanticTags.length) {
+        lines.push(`## Themes`, ``, `Tags: ${area.semanticTags.join(", ")}`, ``);
+      }
+
+      // Recent activity
+      if (area.progress.recentActivity.length > 0) {
+        lines.push(`## Recent Activity`, ``);
+        for (const act of area.progress.recentActivity) lines.push(`- ${act}`);
+        lines.push(``);
+      }
+
+      // Full refinement history (all entries, not just last 5)
       if (area.refinements.length) {
-        lines.push(`## Refinement History`, ``);
-        for (const r of area.refinements.slice(-5)) {
+        lines.push(`## Journey`, ``);
+        for (const r of area.refinements.slice().reverse()) {
           lines.push(`- ${r.date.slice(0, 10)} [${r.source}]: ${r.change}`);
         }
         lines.push(``);
       }
-      if (area.suggestedActions.length) {
-        lines.push(`## Suggested Actions`, ``);
-        for (const a of area.suggestedActions) lines.push(`- ${a}`);
-      }
+
       writeFileSync(pagePath, lines.join("\n"), "utf-8");
     }
+
+    // Register focus pages in Cortex _index.md so they're searchable
+    try {
+      const indexPath = join(ENSO_HOME, "wiki", "_index.md");
+      if (existsSync(indexPath)) {
+        var indexContent = readFileSync(indexPath, "utf-8");
+        var appendLines: string[] = [];
+
+        for (const area of state.areas) {
+          const pagePath = `focuses/${area.id}.md`;
+          if (!indexContent.includes(pagePath)) {
+            const summary = (area.intent || area.description).slice(0, 200);
+            const tagStr = area.semanticTags.length > 0 ? `. Tags: ${area.semanticTags.join(", ")}` : "";
+            appendLines.push(`## ${pagePath}`);
+            appendLines.push(`**${area.title}** — ${summary}${tagStr}.`);
+            appendLines.push(`Updated: ${area.updatedAt}`);
+            appendLines.push(`Source: focus`);
+            if (area.semanticTags.length) appendLines.push(`Themes: ${area.semanticTags.join(", ")}`);
+            appendLines.push("");
+          }
+        }
+
+        if (appendLines.length > 0) {
+          writeFileSync(indexPath, indexContent + "\n" + appendLines.join("\n"), "utf-8");
+        }
+      }
+    } catch { /* cortex index update best-effort */ }
   } catch { /* best effort */ }
 }
 
