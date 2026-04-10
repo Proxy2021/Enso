@@ -593,7 +593,7 @@ export default function FocusView() {
                 <div className="rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 space-y-3">
                   <button
                     onClick={() => {
-                      if (!showEvolveBrief && !evolveBrief) {
+                      if (!evolveBrief) {
                         // Auto-generate brief from focus data
                         const lines: string[] = [];
                         lines.push(`Focus: ${selected.title}`);
@@ -609,18 +609,17 @@ export default function FocusView() {
                         }
                         if (selected.preparedBriefing) {
                           lines.push(`\nKey findings from evaluation:`);
-                          // Extract first 500 chars of briefing as summary
                           lines.push(selected.preparedBriefing.slice(0, 500).trim());
                         }
                         setEvolveBrief(lines.join("\n"));
                       }
-                      setShowEvolveBrief(b => !b);
+                      setShowEvolveBrief(true);
                     }}
                     className="w-full text-left hover:opacity-90 transition-opacity">
                     <div className="flex items-center gap-2">
                       <span className="text-sm">{"\uD83D\uDE80"}</span>
                       <span className="text-xs font-medium text-gray-300">Evolve — Launch AI team sprint</span>
-                      <span className="text-[10px] text-gray-600 ml-auto">{showEvolveBrief ? "\u25B2" : "\u25BC"} Review Brief</span>
+                      {showEvolveBrief && <span className="text-[10px] text-gray-600 ml-auto cursor-pointer" onClick={(e) => { e.stopPropagation(); setShowEvolveBrief(false); }}>{"\u25B2"} Collapse</span>}
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1 ml-6">Full team of AI agents executes on the agreed goals from your discussion</p>
                   </button>
