@@ -589,24 +589,33 @@ export default function FocusView() {
                 {/* Step 3: Evolve — with review/edit brief */}
                 <div className="rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 space-y-3">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!evolveBrief) {
-                        // Auto-generate brief from focus data
+                        // Auto-generate brief from focus data + conversation transcript
                         const lines: string[] = [];
                         lines.push(`Focus: ${selected.title}`);
                         if (selected.intent) lines.push(`Goal: ${selected.intent}`);
                         if (selected.deeperIntent) lines.push(`Why: ${selected.deeperIntent}`);
+
+                        // Fetch conversation transcript from backend
+                        try {
+                          const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/transcript`, { headers: authHeaders() });
+                          if (resp.ok) {
+                            const { transcript } = await resp.json() as { transcript: string };
+                            if (transcript.trim()) {
+                              lines.push(`\n--- Strategic Discussion ---`);
+                              lines.push(transcript);
+                            }
+                          }
+                        } catch { /* transcript fetch failed — continue without it */ }
+
                         if (selected.nextSteps?.length) {
-                          lines.push(`\nPriorities:`);
+                          lines.push(`\n--- Priorities ---`);
                           selected.nextSteps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
                         }
-                        if (selected.suggestedActions.length > 0 && !selected.nextSteps?.length) {
-                          lines.push(`\nSuggested focus for this sprint:`);
-                          selected.suggestedActions.slice(0, 3).forEach((s, i) => lines.push(`${i + 1}. ${s}`));
-                        }
                         if (selected.preparedBriefing) {
-                          lines.push(`\nKey findings from evaluation:`);
-                          lines.push(selected.preparedBriefing.slice(0, 500).trim());
+                          lines.push(`\n--- Key findings from evaluation ---`);
+                          lines.push(selected.preparedBriefing.slice(0, 800).trim());
                         }
                         setEvolveBrief(lines.join("\n"));
                       }

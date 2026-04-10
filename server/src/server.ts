@@ -1911,6 +1911,33 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     }
   });
 
+  // Get conversation transcript for a focus area (used for Evolve sprint brief)
+  app.get("/api/focus-areas/:id/transcript", async (req, res) => {
+    try {
+      const { loadFocusState } = await import("./focus-areas.js");
+      const state = loadFocusState();
+      const area = state?.areas.find((a: { id: string }) => a.id === req.params.id);
+      if (!area?.conversationId) { res.json({ transcript: "" }); return; }
+
+      // Find the client that has this conversation
+      const { loadCardHistory } = await import("./memory-bridge.js");
+      let transcript = "";
+      for (const c of clients.values()) {
+        const records = loadCardHistory(c.id, area.conversationId, 100);
+        if (records.length > 0) {
+          transcript = records
+            .filter((r: { text?: string }) => r.text?.trim())
+            .map((r: { role: string; text?: string }) => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
+            .join("\n\n");
+          break;
+        }
+      }
+      res.json({ transcript });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to load transcript" });
+    }
+  });
+
   app.post("/api/focus-areas/:id/gaps", async (req, res) => {
     try {
       const { analyzeFocusGaps } = await import("./focus-areas.js");
