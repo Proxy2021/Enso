@@ -140,6 +140,28 @@ function GeneratedUI({ data, onAction }) {
                           html += '<p style="font-size:14px;margin:6px 0">• ' + cp + '</p>';
                         });
                       }
+                      if (podcastDuration || podcastScript) {
+                        html += '<h2 style="font-size:18px;color:#7c3aed;margin:24px 0 8px">🎙️ AI Book Podcast' + (podcastDuration ? ' (' + podcastDuration + ' min)' : '') + '</h2>';
+                        if (podcastScript) {
+                          var lines = podcastScript.split("\n");
+                          lines.forEach(function(line) {
+                            var trimmed = line.trim();
+                            if (!trimmed) return;
+                            if (trimmed.match(/^(Host|Guest|Speaker|主持人|嘉宾)/i)) {
+                              var colonIdx = trimmed.indexOf(":");
+                              if (colonIdx > 0) {
+                                var speaker = trimmed.slice(0, colonIdx);
+                                var text = trimmed.slice(colonIdx + 1).trim();
+                                html += '<p style="font-size:14px;margin:8px 0"><strong style="color:#7c3aed">' + speaker + ':</strong> ' + text + '</p>';
+                              } else {
+                                html += '<p style="font-size:14px;margin:8px 0">' + trimmed + '</p>';
+                              }
+                            } else {
+                              html += '<p style="font-size:14px;margin:8px 0;color:#333">' + trimmed + '</p>';
+                            }
+                          });
+                        }
+                      }
                       html += '<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0 12px"/>';
                       html += '<p style="font-size:12px;color:#999;text-align:center">Shared from Enso AI</p>';
                       html += '</div>';
