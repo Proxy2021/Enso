@@ -850,11 +850,28 @@ export async function analyzeFocusGaps(focusId: string): Promise<FocusGapAnalysi
   try {
     const { llm } = await import("./llm.js");
     const { buildDataInventory } = await import("./cortex-synthesis.js");
+    const { getEntityIndex } = await import("./entity-model.js");
+    const { getCortexContextSummary } = await import("./cortex-tools.js");
 
     const inventory = buildDataInventory(3000);
     const evidenceStr = area.evidence.map(e => `- ${e}`).join("\n");
 
-    const prompt = `You are analyzing a person's progress toward a goal to identify GAPS and BOTTLENECKS — what's missing or blocking progress.
+    // Build concrete stats about what Enso Cortex ALREADY has
+    const entityIndex = getEntityIndex();
+    let withTags = 0, withCrossRefs = 0, withVideos = 0;
+    const sourceCounts: Record<string, number> = {};
+    for (const [, entry] of entityIndex) {
+      sourceCounts[entry.source] = (sourceCounts[entry.source] || 0) + 1;
+      if (entry.semanticTags?.length) withTags++;
+      if (entry.crossReferences?.length) withCrossRefs++;
+      if ((entry as any).recommendedVideos?.length) withVideos++;
+    }
+    const sourceBreakdown = Object.entries(sourceCounts).map(([s, c]) => `${s}: ${c}`).join(", ");
+    const cortexSummary = getCortexContextSummary(1000);
+
+    const prompt = `You are analyzing a person's progress toward a goal to identify GAPS and BOTTLENECKS — what's ACTUALLY missing or blocking progress.
+
+CRITICAL: The user already has a powerful AI platform (Enso) with an extensive Knowledge Cortex. You MUST account for what ALREADY EXISTS before identifying gaps. Do NOT suggest building things that already exist.
 
 ## Focus Area
 - **Goal**: "${area.title}"
@@ -870,17 +887,34 @@ ${evidenceStr || "(no evidence collected)"}
 ## Their Full Data Inventory
 ${inventory}
 
-## Available Enso Capabilities
-The user has an AI platform (Enso) that can:
-- **Research**: Deep web research on any topic with 48+ sources
-- **Cortex**: Personal knowledge wiki with cross-source connections
-- **Scheduled tasks**: Automated recurring tasks (daily research, monitoring)
-- **App building**: Custom apps built by Claude Code
-- **Evolution**: AI team sprints for improving projects
-- **Data sources**: Kindle, YouTube, Steam, Movies, Photos, Browser history, Projects
+## What Enso's Cortex ALREADY Provides (DO NOT re-suggest these)
+The user's Cortex is a living knowledge system that ALREADY has:
+- **${entityIndex.size} entities** across sources: ${sourceBreakdown}
+- **${withTags} entities with semantic tags** (universal themes like "artificial-intelligence", "visual-storytelling")
+- **${withCrossRefs} entities with cross-source connections** (e.g., a book linked to a game linked to a YouTube channel)
+- **${withVideos} entities with curated YouTube videos**
+- **Cross-source synthesis**: LLM-powered connections across ALL data sources
+- **Thematic map**: Deep life-theme analysis spanning all sources
+- **Daily intelligence briefing**: Automated web research on top interests
+- **Per-entity detail pages** with related items, semantic tags, and video recommendations
+- **Focus Areas system**: AI-inferred goals with deeper motivation analysis
+${cortexSummary ? `\nCortex knowledge summary:\n${cortexSummary}` : ""}
+
+## Enso Capabilities Available as Solutions
+- **Research** (/research): Deep 48-source web research with Cortex cross-referencing
+- **Cortex ingest** (enso_wiki_ingest): Add new knowledge to the wiki
+- **Cross-reference** (enso_cross_reference): Find semantic connections across ALL sources
+- **Cortex synthesis** (enso_cortex_synthesize): Deep LLM-powered thematic analysis
+- **Scheduled tasks**: Automated daily/weekly recurring research or monitoring
+- **App building**: Custom interactive apps built by Claude Code
+- **Evolution sprints** (/evolve): AI team improves projects autonomously
+- **Data source scans**: Re-scan Kindle/YouTube/Steam/Movies for new content
+- **Cortex enrichment**: Add semantic tags + cross-references to entities
 
 ## Task
-Analyze the gap between their CURRENT STATE and their GOAL. Return JSON:
+Analyze what's ACTUALLY missing between current state and goal. Start from what already exists (Cortex entities, cross-references, synthesis). Identify gaps that the existing system doesn't cover. Solutions should specifically reference which Enso capability to use and HOW.
+
+Return JSON:
 
 {
   "currentState": "1-2 sentence summary of where they are right now",
@@ -909,7 +943,13 @@ Analyze the gap between their CURRENT STATE and their GOAL. Return JSON:
   "nextPriority": "the single most important thing to do next (1 sentence)"
 }
 
-Be specific. Reference their actual data. Identify 3-6 gaps, 1-3 bottlenecks, and suggest solutions that leverage Enso's capabilities. The gaps should reveal things they haven't thought about.`;
+IMPORTANT RULES:
+- The "currentState" MUST acknowledge what Enso Cortex already provides (entity count, cross-refs, etc.)
+- Gaps should be things the EXISTING Cortex system doesn't cover — not things it already does
+- Each solution MUST name a specific Enso tool or command (e.g., /research, enso_wiki_ingest, /evolve, scheduled task for daily X)
+- Do NOT suggest "build a knowledge graph" — they ALREADY HAVE ONE (the Cortex)
+- Do NOT suggest "create a data pipeline" — Cortex already has auto-ingest from 7 data sources
+- Focus on what's ACTUALLY missing to achieve the specific goal`;
 
     const response = await llm({
       prompt,
