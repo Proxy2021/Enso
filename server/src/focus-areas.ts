@@ -869,50 +869,39 @@ export async function analyzeFocusGaps(focusId: string): Promise<FocusGapAnalysi
     const sourceBreakdown = Object.entries(sourceCounts).map(([s, c]) => `${s}: ${c}`).join(", ");
     const cortexSummary = getCortexContextSummary(1000);
 
-    const prompt = `You are analyzing a person's progress toward a goal to identify GAPS and BOTTLENECKS — what's ACTUALLY missing or blocking progress.
+    // Find entities specifically relevant to THIS focus area
+    const { findRelatedContent } = await import("./cortex-synthesis.js");
+    const related = findRelatedContent(area.title, 5);
+    const relevantEntities = related.hits.slice(0, 15).map(h => `- "${h.title}" [${h.source}]`).join("\n");
 
-CRITICAL: The user already has a powerful AI platform (Enso) with an extensive Knowledge Cortex. You MUST account for what ALREADY EXISTS before identifying gaps. Do NOT suggest building things that already exist.
+    const prompt = `You are a focused analyst examining ONE SPECIFIC GOAL to identify what's missing and how to make progress.
 
-## Focus Area
-- **Goal**: "${area.title}"
-- **Description**: "${area.description}"
-- **Intent**: "${area.intent || "(not defined)"}"
-- **Deeper motivation**: "${area.deeperIntent || "(not explored)"}"
-- **Current clarity**: ${area.clarity}
-- **Activity trend**: ${area.progress.trend}
+## THE GOAL (analyze THIS and ONLY this)
+**"${area.title}"**
+${area.description}
+${area.intent ? `Intent: ${area.intent}` : ""}
+${area.deeperIntent ? `Deeper motivation: ${area.deeperIntent}` : ""}
+Clarity: ${area.clarity} | Trend: ${area.progress.trend}
 
-## What They Currently Have (Evidence)
-${evidenceStr || "(no evidence collected)"}
+## Evidence of Activity for THIS Goal
+${evidenceStr || "(none)"}
 
-## Their Full Data Inventory
+## Relevant Items in User's Library (specific to THIS goal)
+${relevantEntities || "(no matching items found)"}
+
+## User's Broader Data (for context only)
 ${inventory}
 
-## What Enso's Cortex ALREADY Provides (DO NOT re-suggest these)
-The user's Cortex is a living knowledge system that ALREADY has:
-- **${entityIndex.size} entities** across sources: ${sourceBreakdown}
-- **${withTags} entities with semantic tags** (universal themes like "artificial-intelligence", "visual-storytelling")
-- **${withCrossRefs} entities with cross-source connections** (e.g., a book linked to a game linked to a YouTube channel)
-- **${withVideos} entities with curated YouTube videos**
-- **Cross-source synthesis**: LLM-powered connections across ALL data sources
-- **Thematic map**: Deep life-theme analysis spanning all sources
-- **Daily intelligence briefing**: Automated web research on top interests
-- **Per-entity detail pages** with related items, semantic tags, and video recommendations
-- **Focus Areas system**: AI-inferred goals with deeper motivation analysis
-${cortexSummary ? `\nCortex knowledge summary:\n${cortexSummary}` : ""}
+## Platform Capabilities (Enso)
+The user has Enso — an AI platform with ${entityIndex.size} knowledge entities, cross-source connections, research tools, app building, scheduled tasks, and evolution sprints.
 
-## Enso Capabilities Available as Solutions
-- **Research** (/research): Deep 48-source web research with Cortex cross-referencing
-- **Cortex ingest** (enso_wiki_ingest): Add new knowledge to the wiki
-- **Cross-reference** (enso_cross_reference): Find semantic connections across ALL sources
-- **Cortex synthesis** (enso_cortex_synthesize): Deep LLM-powered thematic analysis
-- **Scheduled tasks**: Automated daily/weekly recurring research or monitoring
-- **App building**: Custom interactive apps built by Claude Code
-- **Evolution sprints** (/evolve): AI team improves projects autonomously
-- **Data source scans**: Re-scan Kindle/YouTube/Steam/Movies for new content
-- **Cortex enrichment**: Add semantic tags + cross-references to entities
-
-## Task
-Analyze what's ACTUALLY missing between current state and goal. Start from what already exists (Cortex entities, cross-references, synthesis). Identify gaps that the existing system doesn't cover. Solutions should specifically reference which Enso capability to use and HOW.
+## RULES
+1. Every gap and solution must be SPECIFICALLY about "${area.title}" — NOT about generic platform features
+2. Do NOT analyze other goals or suggest generic "knowledge graph" improvements
+3. Gaps should be practical obstacles to achieving THIS specific goal
+4. Solutions should be concrete actions: "Research best camera settings for street photography in low light" NOT "Build a classification tool"
+5. Reference the user's ACTUAL evidence when relevant
+6. Each solution must name a specific action: /research [topic], scheduled task for [what], build app for [what], /evolve for [what]
 
 Return JSON:
 
@@ -943,13 +932,8 @@ Return JSON:
   "nextPriority": "the single most important thing to do next (1 sentence)"
 }
 
-IMPORTANT RULES:
-- The "currentState" MUST acknowledge what Enso Cortex already provides (entity count, cross-refs, etc.)
-- Gaps should be things the EXISTING Cortex system doesn't cover — not things it already does
-- Each solution MUST name a specific Enso tool or command (e.g., /research, enso_wiki_ingest, /evolve, scheduled task for daily X)
-- Do NOT suggest "build a knowledge graph" — they ALREADY HAVE ONE (the Cortex)
-- Do NOT suggest "create a data pipeline" — Cortex already has auto-ingest from 7 data sources
-- Focus on what's ACTUALLY missing to achieve the specific goal`;
+Remember: EVERY gap, bottleneck, and solution must be about "${area.title}" specifically.
+For example, if the goal is about photography travel, gaps should be about photography techniques, travel planning, equipment, or creative vision — NOT about data classification or knowledge graphs.`;
 
     const response = await llm({
       prompt,
