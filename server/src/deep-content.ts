@@ -256,10 +256,8 @@ export function getProcessedContent(entityId: string): ProcessedContent | null {
   // Recompute audioUrl from actual MP3 file on disk
   const mp3Path = join(AUDIO_DIR, `${slug}.mp3`);
   if (existsSync(mp3Path)) {
-    try {
-      const { toMediaUrl } = require("./server.js") as { toMediaUrl: (p: string) => string };
-      result.audioUrl = toMediaUrl(mp3Path);
-    } catch { /* keep existing audioUrl */ }
+    const encoded = Buffer.from(mp3Path, "utf-8").toString("base64url");
+    result.audioUrl = `/media/${encoded}?ext=.mp3`;
   }
 
   return result;
