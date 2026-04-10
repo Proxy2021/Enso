@@ -510,10 +510,10 @@ function GeneratedUI({ data, onAction }) {
               <span style={{ fontSize: "12px", fontWeight: 600, color: "#c4b5fd" }}>Deep Podcasts</span>
               <Badge variant="secondary" style={{ fontSize: "10px" }}>{(d.processedBooks || []).length}</Badge>
             </div>
-            <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
               {(d.processedBooks || []).map(function(pb) {
                 return (
-                  <div key={pb.entityId} style={{ position: "relative", flexShrink: 0, cursor: "pointer", borderRadius: "6px", overflow: "hidden", width: "52px", height: "76px", background: "#1e1b4b" }}
+                  <div key={pb.entityId} style={{ position: "relative", cursor: "pointer", borderRadius: "6px", overflow: "hidden", width: "52px", height: "76px", background: "#1e1b4b" }}
                     onClick={function() { onAction("view_entity", { entityId: pb.entityId }); }}
                     title={pb.title + " — " + pb.durationMinutes + " min"}>
                     {pb.coverUrl ? (
