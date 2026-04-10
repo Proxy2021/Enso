@@ -151,19 +151,16 @@ export default function FocusView() {
    * Otherwise, create a new conversation titled after the focus and save the ID.
    */
   const chatAboutFocus = async (area: FocusArea, initialMessage?: string) => {
-    // If focus area already has a conversation, switch to it
+    // If focus area already has a conversation, switch to it directly
+    // (trust the stored conversationId — don't verify against stale local list)
     if (area.conversationId) {
-      // Verify conversation still exists
-      const exists = conversationsList.some(c => c.id === area.conversationId);
-      if (exists) {
-        selectConversation(area.conversationId);
-        setActiveTab("chat");
-        if (initialMessage) {
-          // Small delay to let conversation load before sending
-          setTimeout(() => sendMessage(initialMessage), 300);
-        }
-        return;
+      await useChatStore.getState().refreshConversationsList();
+      selectConversation(area.conversationId);
+      setActiveTab("chat");
+      if (initialMessage) {
+        setTimeout(() => sendMessage(initialMessage), 300);
       }
+      return;
     }
 
     // Create a new conversation for this focus area
