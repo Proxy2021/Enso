@@ -84,33 +84,63 @@ export interface SendWechatResult {
   message: string;
 }
 
-/** Send a text message to a specific user via customer service API. */
-export async function sendTextMessage(openId: string, content: string): Promise<SendWechatResult> {
-  const token = await getAccessToken();
+/** Split text into chunks that fit within WeChat's 2048-byte limit. */
+function splitForWechat(text: string, maxBytes = 1800): string[] {
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const line of text.split("\n")) {
+    const candidate = current ? current + "\n" + line : line;
+    if (Buffer.byteLength(candidate, "utf-8") > maxBytes) {
+      if (current) chunks.push(current);
+      // If a single line exceeds maxBytes, truncate it
+      if (Buffer.byteLength(line, "utf-8") > maxBytes) {
+        let truncated = "";
+        for (const ch of line) {
+          if (Buffer.byteLength(truncated + ch, "utf-8") > maxBytes - 3) break;
+          truncated += ch;
+        }
+        chunks.push(truncated + "...");
+      } else {
+        current = line;
+      }
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+/** Send a single text chunk via customer service API. */
+async function sendTextChunk(token: string, openId: string, content: string): Promise<{ errcode?: number; errmsg?: string }> {
   const url = `https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token=${token}`;
-
-  const body = {
-    touser: openId,
-    msgtype: "text",
-    text: { content },
-  };
-
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ touser: openId, msgtype: "text", text: { content } }),
   });
+  return (await res.json()) as { errcode?: number; errmsg?: string };
+}
 
-  const data = (await res.json()) as { errcode?: number; errmsg?: string };
+/** Send a text message to a specific user via customer service API. Auto-splits long messages. */
+export async function sendTextMessage(openId: string, content: string): Promise<SendWechatResult> {
+  const token = await getAccessToken();
+  const chunks = splitForWechat(content);
 
-  if (data.errcode && data.errcode !== 0) {
-    const msg = `WeChat send failed: ${data.errmsg} (code: ${data.errcode})`;
-    logError("wechat", msg);
-    return { success: false, message: msg };
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks.length > 1 ? `[${i + 1}/${chunks.length}]\n${chunks[i]}` : chunks[i];
+    const data = await sendTextChunk(token, openId, chunk);
+
+    if (data.errcode && data.errcode !== 0) {
+      const msg = `WeChat send failed: ${data.errmsg} (code: ${data.errcode})`;
+      logError("wechat", msg);
+      return { success: false, message: msg };
+    }
   }
 
-  logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Text message sent to ${openId}` });
-  return { success: true, message: `Message sent to ${openId}` };
+  logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Text message sent to ${openId} (${chunks.length} part${chunks.length > 1 ? "s" : ""})` });
+  return { success: true, message: `Message sent to ${openId}${chunks.length > 1 ? ` (${chunks.length} parts)` : ""}` };
 }
 
 /** Send a news (article link) message to a specific user via customer service API. */
