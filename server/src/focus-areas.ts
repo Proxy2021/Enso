@@ -810,44 +810,37 @@ The synthesizer task must dependsOn all other tasks.`,
             message: `Focus Prepare orchestration ${status} for "${area.title}" (${orchId})` });
 
           if (status === "completed") {
-            // Read the synthesizer's output as the briefing
+            // Read task results from the persisted orchestration plan
             try {
-              const { getWorkspace } = await import("./orchestration-workspace.js");
-              const workspace = getWorkspace(orchId);
-              if (workspace) {
-                const { readdirSync, readFileSync: readFile } = await import("node:fs");
-                const { join: pathJoin } = await import("node:path");
-                // Find the last task output (synthesizer)
-                var outputsDir = pathJoin(workspace.root, "outputs");
-                var outputFiles: string[] = [];
-                try { outputFiles = readdirSync(outputsDir).filter(f => f.endsWith(".md")); } catch { /* no outputs dir */ }
+              const { loadOrchestration } = await import("./orchestrator.js");
+              const plan = loadOrchestration(orchId);
+              var briefing = "";
 
-                var briefing = "";
-                // Combine all task outputs, last one (synthesizer) gets priority
-                for (var f of outputFiles) {
-                  try {
-                    var content = readFile(pathJoin(outputsDir, f), "utf-8");
-                    briefing += content + "\n\n";
-                  } catch { /* skip */ }
-                }
+              if (plan?.tasks) {
+                // Combine all task result summaries, prioritizing the last (synthesizer) task
+                var taskSummaries = plan.tasks
+                  .filter((t: { resultSummary?: string }) => t.resultSummary)
+                  .map((t: { title: string; resultSummary: string; agentRole: string }) =>
+                    `## ${t.title} (${t.agentRole})\n\n${t.resultSummary}`
+                  );
+                briefing = taskSummaries.join("\n\n---\n\n");
+              }
 
-                if (!briefing.trim()) {
-                  // Fallback: read from shared context
-                  briefing = "Orchestration completed but no output files found. Check the Evolve tab for task details.";
-                }
+              if (!briefing.trim()) {
+                briefing = "Evaluation completed but no task results found. Check the Evolve tab for details.";
+              }
 
-                // Store on focus area
-                const freshState = loadFocusState();
-                if (freshState) {
-                  const freshArea = freshState.areas.find(a => a.id === focusId);
-                  if (freshArea) {
-                    freshArea.preparedBriefing = briefing.slice(0, 15000); // Cap at 15K chars
-                    freshArea.preparedAt = new Date().toISOString();
-                    freshArea.updatedAt = freshArea.preparedAt;
-                    saveFocusState(freshState);
-                    logAction({ ts: Date.now(), type: "action", category: "focus-areas",
-                      message: `Stored briefing for "${area.title}": ${briefing.length} chars from orchestration` });
-                  }
+              // Store on focus area
+              const freshState = loadFocusState();
+              if (freshState) {
+                const freshArea = freshState.areas.find(a => a.id === focusId);
+                if (freshArea) {
+                  freshArea.preparedBriefing = briefing.slice(0, 15000); // Cap at 15K chars
+                  freshArea.preparedAt = new Date().toISOString();
+                  freshArea.updatedAt = freshArea.preparedAt;
+                  saveFocusState(freshState);
+                  logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                    message: `Stored briefing for "${area.title}": ${briefing.length} chars from orchestration` });
                 }
               }
             } catch (err) {

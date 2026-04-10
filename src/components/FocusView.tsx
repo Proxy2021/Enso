@@ -493,11 +493,11 @@ export default function FocusView() {
                 </div>
               </div>
 
-              {/* === THE WORKFLOW: Prepare → Discuss → Evolve === */}
+              {/* === THE WORKFLOW: Evaluate → Discuss → Evolve === */}
               <div className="space-y-3">
                 <label className="text-[10px] uppercase tracking-wider text-gray-600 block">Workflow</label>
 
-                {/* Step 1: Prepare */}
+                {/* Step 1: Evaluate */}
                 <button
                   disabled={preparing}
                   onClick={async () => {
@@ -550,14 +550,14 @@ export default function FocusView() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm">{preparing ? "\u23F3" : selected.preparedBriefing ? "\u2705" : "\uD83D\uDD0D"}</span>
                     <span className={`text-xs font-medium ${preparing ? "text-amber-300" : selected.preparedBriefing ? "text-emerald-300" : "text-gray-300"}`}>
-                      {preparing ? "Studying everything about this focus..." : selected.preparedBriefing ? "Prepared — AI has studied your data" : "Prepare — Deep study before discussion"}
+                      {preparing ? "Evaluating everything about this focus..." : selected.preparedBriefing ? "Evaluated — AI has studied your data" : "Evaluate — Deep study before discussion"}
                     </span>
                   </div>
                   {!preparing && !selected.preparedBriefing && (
-                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Gathers project data, sprint history, Cortex knowledge, and cross-source connections</p>
+                    <p className="text-[11px] text-gray-500 mt-1 ml-6">AI team researches, analyzes codebase, and synthesizes all knowledge about this focus</p>
                   )}
                   {selected.preparedBriefing && !preparing && (
-                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Click to re-prepare with latest data</p>
+                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Click to re-evaluate with latest data</p>
                   )}
                 </button>
 
@@ -802,7 +802,7 @@ function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNa
 
   if (loading) return <p className="text-sm text-gray-500 text-center py-8">Checking for active sessions...</p>;
 
-  const activeOrchs = sessions?.orchestrations?.filter(o => o.status === "running" || o.status === "planning") || [];
+  const activeOrchs = sessions?.orchestrations?.filter(o => o.status === "running" || o.status === "planning" || o.status === "executing") || [];
   const activeSessions = sessions?.sessions?.filter(s => s.status === "running") || [];
 
   if (activeOrchs.length === 0 && activeSessions.length === 0) {
@@ -811,7 +811,7 @@ function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNa
         <div className="text-center py-8">
           <span className="text-3xl mb-3 block">{"\uD83D\uDE80"}</span>
           <p className="text-sm text-gray-400 mb-2">No evolution sprint running</p>
-          <p className="text-xs text-gray-600 mb-4">Use the <strong>Prepare → Discuss → Evolve</strong> workflow in the Work tab to launch a sprint</p>
+          <p className="text-xs text-gray-600 mb-4">Use the <strong>Evaluate → Discuss → Evolve</strong> workflow in the Work tab to launch a sprint</p>
           <button onClick={onNavigateToChat}
             className="text-xs px-4 py-2 rounded-lg bg-violet-600/60 text-violet-100 hover:bg-violet-500/60 transition-colors">
             Open focus conversation
