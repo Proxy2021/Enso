@@ -184,6 +184,163 @@ export async function sendNewsMessage(
   return { success: true, message: `News article sent to ${openId}` };
 }
 
+// ── Article Publishing (Draft → Publish → Send) ──
+
+/**
+ * Publish a rich HTML article on the WeChat platform and send it to a user.
+ * Articles are hosted on WeChat's servers (mp.weixin.qq.com) — always accessible,
+ * rich formatting, and much larger content limits than text messages.
+ *
+ * Flow: upload thumb → create draft → publish → poll for URL → send news card
+ */
+export async function sendArticle(
+  openId: string,
+  article: { title: string; author?: string; content: string; digest?: string; coverUrl?: string },
+): Promise<SendWechatResult> {
+  const token = await getAccessToken();
+
+  // Step 1: Upload a thumb image (required for articles)
+  // Use a 1x1 transparent PNG as default if no cover
+  let thumbMediaId: string;
+  try {
+    if (article.coverUrl) {
+      // Download the cover image and upload to WeChat
+      const imgRes = await fetch(article.coverUrl);
+      if (imgRes.ok) {
+        const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+        thumbMediaId = await uploadTempMedia(token, imgBuffer, "thumb.jpg", "image");
+      } else {
+        thumbMediaId = await uploadDefaultThumb(token);
+      }
+    } else {
+      thumbMediaId = await uploadDefaultThumb(token);
+    }
+  } catch {
+    thumbMediaId = await uploadDefaultThumb(token);
+  }
+
+  // Step 2: Create a draft article
+  const draftUrl = `https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${token}`;
+  const draftBody = {
+    articles: [{
+      title: article.title,
+      author: article.author || "Enso AI",
+      digest: article.digest || article.content.replace(/<[^>]*>/g, "").slice(0, 120),
+      content: article.content,
+      thumb_media_id: thumbMediaId,
+      need_open_comment: 0,
+      only_fans_can_comment: 0,
+    }],
+  };
+
+  const draftRes = await fetch(draftUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(draftBody),
+  });
+  const draftData = (await draftRes.json()) as { media_id?: string; errcode?: number; errmsg?: string };
+
+  if (draftData.errcode || !draftData.media_id) {
+    const msg = `WeChat draft creation failed: ${draftData.errmsg} (code: ${draftData.errcode})`;
+    logError("wechat", msg);
+    return { success: false, message: msg };
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Draft created: ${draftData.media_id}` });
+
+  // Step 3: Publish the draft
+  const publishUrl = `https://api.weixin.qq.com/cgi-bin/freepublish/submit?access_token=${token}`;
+  const publishRes = await fetch(publishUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ media_id: draftData.media_id }),
+  });
+  const publishData = (await publishRes.json()) as { publish_id?: string; errcode?: number; errmsg?: string };
+
+  if (publishData.errcode || !publishData.publish_id) {
+    // If publish fails (e.g. test account doesn't support it), fall back to text message
+    logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Publish failed (${publishData.errmsg}), falling back to text` });
+    const plainText = article.content.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+    return sendTextMessage(openId, `${article.title}\n\n${plainText}`);
+  }
+
+  // Step 4: Poll for publish completion (up to 30 seconds)
+  let articleUrl = "";
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const freshToken = await getAccessToken();
+    const statusUrl = `https://api.weixin.qq.com/cgi-bin/freepublish/get?access_token=${freshToken}`;
+    const statusRes = await fetch(statusUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publish_id: publishData.publish_id }),
+    });
+    const statusData = (await statusRes.json()) as {
+      publish_status?: number;
+      article_id?: string;
+      article_detail?: { item?: Array<{ article_url?: string }> };
+      errcode?: number;
+    };
+
+    if (statusData.publish_status === 0 && statusData.article_detail?.item?.[0]?.article_url) {
+      articleUrl = statusData.article_detail.item[0].article_url;
+      break;
+    }
+    // status 1 = publishing, 2 = original failed, 3 = used someone else's content
+    if (statusData.publish_status && statusData.publish_status > 1) {
+      logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Publish rejected (status ${statusData.publish_status}), falling back to text` });
+      const plainText = article.content.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+      return sendTextMessage(openId, `${article.title}\n\n${plainText}`);
+    }
+  }
+
+  if (!articleUrl) {
+    // Timed out — fall back to text
+    logAction({ ts: Date.now(), type: "action", category: "wechat", message: "Publish timed out, falling back to text" });
+    const plainText = article.content.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+    return sendTextMessage(openId, `${article.title}\n\n${plainText}`);
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Article published: ${articleUrl}` });
+
+  // Step 5: Send article link as a news card
+  return sendNewsMessage(openId, {
+    title: article.title,
+    description: article.digest || article.content.replace(/<[^>]*>/g, "").slice(0, 120),
+    url: articleUrl,
+    picurl: article.coverUrl,
+  });
+}
+
+/** Upload a buffer as temporary media to WeChat. */
+async function uploadTempMedia(token: string, buffer: Buffer, filename: string, type: string): Promise<string> {
+  const boundary = "----EnsoWechat" + Date.now();
+  const header = `--${boundary}\r\nContent-Disposition: form-data; name="media"; filename="${filename}"\r\nContent-Type: image/jpeg\r\n\r\n`;
+  const footer = `\r\n--${boundary}--\r\n`;
+
+  const body = Buffer.concat([Buffer.from(header), buffer, Buffer.from(footer)]);
+
+  const res = await fetch(`https://api.weixin.qq.com/cgi-bin/media/upload?access_token=${token}&type=${type}`, {
+    method: "POST",
+    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+    body,
+  });
+  const data = (await res.json()) as { media_id?: string; errcode?: number; errmsg?: string };
+
+  if (!data.media_id) throw new Error(`Media upload failed: ${data.errmsg}`);
+  return data.media_id;
+}
+
+/** Upload a minimal default thumb image. */
+async function uploadDefaultThumb(token: string): Promise<string> {
+  // 1x1 white JPEG (smallest valid JPEG)
+  const minJpeg = Buffer.from(
+    "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKwA=",
+    "base64",
+  );
+  return uploadTempMedia(token, minJpeg, "thumb.jpg", "thumb");
+}
+
 // ── Mass Messaging ──
 
 /** Send a mass text message to all followers. Limited to 1/day for subscription accounts. */

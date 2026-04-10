@@ -949,11 +949,24 @@ export async function startEnsoServer(opts: {
         if (!content) { res.json({ error: "No content to share" }); return; }
 
         try {
-          const { sendTextMessage, getFollowerOpenIds } = await import("./wechat.js");
+          const { sendTextMessage, sendArticle, getFollowerOpenIds } = await import("./wechat.js");
           const followers = await getFollowerOpenIds();
           if (followers.length === 0) { res.json({ error: "No WeChat followers. Follow the test account first." }); return; }
-          const result = await sendTextMessage(followers[0], content);
-          logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Cortex share to WeChat: ${content.slice(0, 50)}` });
+
+          // If article HTML is provided, publish as a rich article; otherwise send as text
+          const articleHtml = p.articleHtml ? String(p.articleHtml) : undefined;
+          const title = p.title ? String(p.title) : undefined;
+          const coverUrl = p.coverUrl ? String(p.coverUrl) : undefined;
+          const author = p.author ? String(p.author) : undefined;
+
+          let result;
+          if (articleHtml && title) {
+            logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Publishing article to WeChat: ${title}` });
+            result = await sendArticle(followers[0], { title, author, content: articleHtml, coverUrl });
+          } else {
+            result = await sendTextMessage(followers[0], content);
+          }
+          logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Cortex share to WeChat: ${(title || content).slice(0, 50)}` });
           res.json(result);
         } catch (err) {
           logError("wechat", "Cortex share_wechat failed", err);

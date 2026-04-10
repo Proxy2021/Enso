@@ -103,17 +103,58 @@ function GeneratedUI({ data, onAction }) {
                     var msg = "\u{1F4DA} " + entity.title;
                     if (entity.author) msg += " by " + entity.author;
                     if (entity.rating) msg += "\n\u2B50 " + entity.rating;
-                    if (entity.categories) msg += "\n\u{1F4D6} " + entity.categories;
-                    if (research && research.coreThesis) {
-                      msg += "\n\n\u{1F4A1} Core Thesis\n" + research.coreThesis;
-                      if (research.keyInsights && research.keyInsights.length > 0) {
-                        msg += "\n\n\u{1F511} Key Insights";
-                        research.keyInsights.forEach(function(ins) { msg += "\n\u2022 " + ins.insight; });
+                    if (entity.categories) msg += "\n" + entity.categories;
+
+                    // Rich content → publish as WeChat article
+                    if (research) {
+                      var html = '<div style="padding:16px;font-family:-apple-system,sans-serif;color:#1a1a1a;line-height:1.8">';
+                      html += '<h1 style="font-size:22px;margin-bottom:4px">' + entity.title + '</h1>';
+                      if (entity.author) html += '<p style="color:#666;font-size:14px;margin:4px 0 16px">' + entity.author + '</p>';
+                      if (entity.rating) html += '<p style="font-size:14px;color:#d97706">⭐ ' + entity.rating + (entity.reviewCount ? ' (' + entity.reviewCount + ' reviews)' : '') + '</p>';
+                      if (entity.categories) html += '<p style="font-size:13px;color:#888;margin-bottom:20px">📖 ' + entity.categories + '</p>';
+                      if (research.coreThesis) {
+                        html += '<h2 style="font-size:18px;color:#1e40af;margin:20px 0 8px">💡 Core Thesis</h2>';
+                        html += '<p style="font-size:15px;line-height:1.8;background:#f0f7ff;padding:12px 16px;border-radius:8px;border-left:4px solid #3b82f6">' + research.coreThesis + '</p>';
                       }
-                    } else if (entity.summary) {
-                      msg += "\n\n" + entity.summary;
+                      if (research.keyInsights && research.keyInsights.length > 0) {
+                        html += '<h2 style="font-size:18px;color:#7c3aed;margin:24px 0 8px">🔑 Key Insights</h2>';
+                        research.keyInsights.forEach(function(ins) {
+                          html += '<div style="margin:12px 0;padding:10px 14px;background:#f5f3ff;border-radius:8px;border-left:4px solid #7c3aed">';
+                          html += '<p style="font-size:15px;font-weight:600;margin:0 0 4px">' + ins.insight + '</p>';
+                          if (ins.example) html += '<p style="font-size:13px;color:#666;margin:4px 0 0;font-style:italic">' + ins.example + '</p>';
+                          html += '</div>';
+                        });
+                      }
+                      if (research.chapterSummaries && research.chapterSummaries.length > 0) {
+                        html += '<h2 style="font-size:18px;color:#059669;margin:24px 0 8px">📑 Chapter Summaries</h2>';
+                        research.chapterSummaries.forEach(function(ch) {
+                          html += '<div style="margin:8px 0;padding:8px 14px;border-left:3px solid #10b981">';
+                          html += '<p style="font-size:14px;font-weight:600;margin:0">' + ch.title + '</p>';
+                          html += '<p style="font-size:13px;color:#555;margin:4px 0 0">' + ch.summary + '</p>';
+                          html += '</div>';
+                        });
+                      }
+                      if (research.criticalPerspectives && research.criticalPerspectives.length > 0) {
+                        html += '<h2 style="font-size:18px;color:#dc2626;margin:24px 0 8px">🎯 Critical Perspectives</h2>';
+                        research.criticalPerspectives.forEach(function(cp) {
+                          html += '<p style="font-size:14px;margin:6px 0">• ' + cp + '</p>';
+                        });
+                      }
+                      html += '<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0 12px"/>';
+                      html += '<p style="font-size:12px;color:#999;text-align:center">Shared from Enso AI</p>';
+                      html += '</div>';
+
+                      onAction("share_wechat", {
+                        content: msg,
+                        articleHtml: html,
+                        title: entity.title + (entity.author ? " — " + entity.author : ""),
+                        author: entity.author || "Enso AI",
+                        coverUrl: entity.imageUrl || "",
+                      });
+                    } else {
+                      if (entity.summary) msg += "\n\n" + entity.summary;
+                      onAction("share_wechat", { content: msg });
                     }
-                    onAction("share_wechat", { content: msg });
                   }}
                 >微信</Button>
               </div>

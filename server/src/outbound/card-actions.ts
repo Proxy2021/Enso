@@ -33,7 +33,7 @@ import { handleDeepResearchBuild, handleBuildAppViaClaude } from "../build-via-c
 // fs imports removed — no longer needed after deep research refactor
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import { sendHtmlEmail } from "../email.js";
-import { sendTextMessage, getFollowerOpenIds } from "../wechat.js";
+import { sendTextMessage, sendArticle, getFollowerOpenIds } from "../wechat.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts, isPathWithinRoot, validateScopedAction } from "./card-context.js";
 import {
@@ -388,8 +388,15 @@ export async function handlePluginCardAction(params: {
         return;
       }
 
-      // Send to first follower (single-user setup)
-      const result = await sendTextMessage(followers[0], content);
+      // Send to first follower — article mode if HTML provided, text otherwise
+      const articleHtml = typeof p.articleHtml === "string" ? p.articleHtml : undefined;
+      const title = typeof p.title === "string" ? p.title : undefined;
+      const coverUrl = typeof p.coverUrl === "string" ? p.coverUrl : undefined;
+      const author = typeof p.author === "string" ? p.author : undefined;
+
+      const result = (articleHtml && title)
+        ? await sendArticle(followers[0], { title, author, content: articleHtml, coverUrl })
+        : await sendTextMessage(followers[0], content);
       sendOperation("complete", result.success ? "Sent to WeChat" : "WeChat failed");
       client.send({
         id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
