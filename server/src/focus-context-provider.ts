@@ -40,6 +40,11 @@ export class FocusContextProvider implements ConversationContextProvider {
 
     var sections: string[] = [];
 
+    // Layer 0: Prepared briefing (from "Prepare" phase — comprehensive deep study)
+    if (focus.preparedBriefing) {
+      sections.push(`## Preparation Briefing (from deep study on ${focus.preparedAt?.slice(0, 10) || "unknown"})\n${focus.preparedBriefing}`);
+    }
+
     // Layer 1: Focus state (instant)
     sections.push(buildFocusStateBlock(focus));
 

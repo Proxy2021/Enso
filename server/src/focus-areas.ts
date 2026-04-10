@@ -60,6 +60,11 @@ export interface FocusArea {
   suggestedActions: string[];
   createdAt: string;
   updatedAt: string;
+
+  /** Comprehensive briefing from the "Prepare" phase — injected into focus chat context */
+  preparedBriefing?: string;
+  /** When the briefing was last prepared */
+  preparedAt?: string;
 }
 
 export interface FocusState {
@@ -594,6 +599,180 @@ If nothing changed, return { "hasRefinement": false }.`;
     }
   } catch (err) {
     logError("focus-areas", `Refinement failed for "${area.title}"`, err);
+  }
+}
+
+// ── Preparation (Deep Study) ──
+
+/**
+ * Comprehensive preparation for a focus area conversation.
+ * Gathers all available data (project, Cortex, sprints, codebase) and
+ * synthesizes a briefing via LLM. The briefing is stored on the focus area
+ * and injected into all subsequent chat turns.
+ */
+export async function prepareFocusArea(focusId: string): Promise<{ briefing: string } | null> {
+  const state = loadFocusState();
+  if (!state) return null;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return null;
+
+  logAction({ ts: Date.now(), type: "action", category: "focus-areas", message: `Preparing focus "${area.title}"...` });
+
+  // ── Gather all available data ──
+  var sections: string[] = [];
+
+  // 1. Focus area state
+  sections.push(`# Focus Area: ${area.title}
+Description: ${area.description}
+Status: ${area.status} | Clarity: ${area.clarity}
+${area.intent ? `Intent: ${area.intent}` : ""}
+${area.deeperIntent ? `Deeper motivation: ${area.deeperIntent}` : ""}
+${area.adjacentPursuits?.length ? `Adjacent pursuits: ${area.adjacentPursuits.join("; ")}` : ""}
+${area.nextSteps?.length ? `Next steps: ${area.nextSteps.join("; ")}` : ""}
+Evidence: ${area.evidence.join(", ")}
+Themes: ${area.semanticTags.join(", ")}`);
+
+  // 2. Related project data
+  var projectIds = area.relatedEntityIds
+    .filter(id => id.includes(":project:"))
+    .map(id => id.split(":").pop()!);
+
+  // Also try fuzzy matching project names from the title
+  try {
+    const { listProjects, loadProject, loadProjectBrain } = await import("./project-manager.js");
+    var allProjects = listProjects();
+    var titleWords = area.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+
+    for (var proj of allProjects) {
+      var projNameLower = proj.name.toLowerCase();
+      if (titleWords.some(w => projNameLower.includes(w)) && !projectIds.includes(proj.id)) {
+        projectIds.push(proj.id);
+      }
+    }
+
+    for (var pid of projectIds) {
+      var project = loadProject(pid);
+      if (!project) continue;
+
+      sections.push(`\n# Project: ${project.name}
+Vision: ${project.vision || "Not defined"}
+Codebase: ${project.codebasePath}
+${project.techStack ? `Tech stack: ${project.techStack}` : ""}
+Team: ${project.teamAgents.map(a => `${a.name} (${a.role})`).join(", ")}
+Personas: ${project.personas.map(p => p.name).join(", ")}`);
+
+      // Project brain (institutional memory)
+      var brain = loadProjectBrain(pid);
+      if (brain) {
+        // Take first 3000 chars of brain — it's the most important part
+        sections.push(`\n## Project Brain (Institutional Memory)\n${brain.slice(0, 3000)}`);
+      }
+
+      // Recent sprint history
+      try {
+        const { listEvolutionSprints } = await import("./evolution-archive.js");
+        var sprints = listEvolutionSprints(pid).slice(0, 5);
+        if (sprints.length > 0) {
+          sections.push(`\n## Recent Evolution Sprints (${sprints.length})`);
+          for (var sprint of sprints) {
+            var date = new Date(sprint.createdAt).toISOString().slice(0, 10);
+            sections.push(`- ${date}: ${sprint.goal} [${sprint.status}]`);
+          }
+        }
+      } catch { /* no sprint history */ }
+    }
+  } catch { /* project-manager not available */ }
+
+  // 3. Related Cortex pages
+  try {
+    const { searchIndex } = await import("./cortex-tools.js");
+    var cortexHits = searchIndex(area.semanticTags.join(" ") + " " + area.title, 15);
+    if (cortexHits.length > 0) {
+      sections.push(`\n# Related Knowledge (Cortex)\n${cortexHits.map(e =>
+        `- **${e.title}** (${e.source || "cortex"}): ${e.summary}`
+      ).join("\n")}`);
+    }
+  } catch { /* cortex not available */ }
+
+  // 4. Cross-source connections
+  try {
+    const { findRelatedContent } = await import("./cortex-synthesis.js");
+    var related = findRelatedContent(area.title, 5);
+    if (related.totalMatches > 0) {
+      var sourceLines: string[] = [];
+      for (var [src, hits] of Object.entries(related.bySource)) {
+        if (hits.length > 0) {
+          sourceLines.push(`- ${src}: ${hits.map(h => h.title).join(", ")}`);
+        }
+      }
+      if (sourceLines.length > 0) {
+        sections.push(`\n# Cross-Source Connections\n${sourceLines.join("\n")}`);
+      }
+    }
+  } catch { /* synthesis not available */ }
+
+  // 5. Codebase structure (if project has a codebase path)
+  if (projectIds.length > 0) {
+    try {
+      const { listProjects } = await import("./project-manager.js");
+      for (var pid2 of projectIds) {
+        var proj2 = listProjects().find(p => p.id === pid2);
+        if (proj2?.codebasePath) {
+          const { readdirSync, statSync } = await import("node:fs");
+          const { join: pathJoin } = await import("node:path");
+          try {
+            var entries = readdirSync(proj2.codebasePath).slice(0, 30);
+            var fileList = entries.map(e => {
+              try {
+                var s = statSync(pathJoin(proj2!.codebasePath, e));
+                return s.isDirectory() ? `${e}/` : e;
+              } catch { return e; }
+            });
+            sections.push(`\n# Codebase Structure (${proj2.name})\nRoot: ${proj2.codebasePath}\n${fileList.join("\n")}`);
+          } catch { /* can't read codebase */ }
+        }
+      }
+    } catch { /* fs not available */ }
+  }
+
+  // ── Synthesize briefing via LLM ──
+  var gathered = sections.join("\n\n");
+
+  try {
+    const { llm } = await import("./llm.js");
+    var briefing = await llm({
+      prompt: `You are preparing a comprehensive briefing for a strategic planning session about this focus area.
+
+Here is ALL the data gathered from the user's knowledge base, projects, sprint history, and codebase:
+
+${gathered}
+
+Write a comprehensive briefing that:
+1. **Current State**: Summarize where things stand — what exists, what's been built, what's working
+2. **Recent Progress**: What happened in recent sprints/activity? What was the trajectory?
+3. **Key Insights**: What patterns, failures, or breakthroughs are documented in the project brain?
+4. **Knowledge Context**: What books, research, or resources is the user drawing on for this focus?
+5. **Open Questions**: What are the most important unresolved questions or decisions?
+6. **Recommended Priorities**: Based on all evidence, what should the user focus on next?
+
+Be specific — reference actual project names, sprint results, book titles, and concrete data points. This briefing will be used as context for all future conversations about this focus area.`,
+      tier: "utility",
+      maxOutputTokens: 4000,
+    });
+
+    // Store on focus area
+    area.preparedBriefing = briefing;
+    area.preparedAt = new Date().toISOString();
+    area.updatedAt = area.preparedAt;
+    saveFocusState(state);
+
+    logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+      message: `Prepared focus "${area.title}": ${briefing.length} chars briefing` });
+
+    return { briefing };
+  } catch (err) {
+    logError("focus-areas", `Preparation failed for "${area.title}"`, err);
+    return null;
   }
 }
 

@@ -31,6 +31,8 @@ interface FocusArea {
   suggestedActions: string[];
   createdAt: string;
   updatedAt: string;
+  preparedBriefing?: string;
+  preparedAt?: string;
 }
 
 interface FocusState {
@@ -86,6 +88,8 @@ export default function FocusView() {
   const [planGoal, setPlanGoal] = useState<string | null>(null);
   const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis | null>(null);
   const [analyzingGaps, setAnalyzingGaps] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [chatReady, setChatReady] = useState(false);
 
   // Editing state
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -437,8 +441,35 @@ export default function FocusView() {
               className="text-[11px] px-3 py-1 rounded text-red-400/60 hover:text-red-300 hover:bg-red-500/10 transition-colors">
               Remove
             </button>
-            <button onClick={() => chatAboutFocus(selected, `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
-              className="text-[11px] px-3 py-1 rounded bg-violet-600/60 text-violet-100 hover:bg-violet-500/60">
+            <button
+              disabled={preparing}
+              onClick={async () => {
+                setPreparing(true);
+                setChatReady(false);
+                try {
+                  const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/prepare`, {
+                    method: "POST",
+                    headers: authHeaders(),
+                  });
+                  if (resp.ok) {
+                    // Refresh focus state to get the briefing
+                    await fetchFocusAreas();
+                    setChatReady(true);
+                    // Auto-open chat after a short highlight delay
+                    setTimeout(() => {
+                      chatAboutFocus(selected, `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`);
+                      setChatReady(false);
+                    }, 2000);
+                  }
+                } catch { /* preparation failed */ }
+                setPreparing(false);
+              }}
+              className={`text-[11px] px-3 py-1 rounded transition-all ${preparing ? "bg-amber-600/40 text-amber-200 animate-pulse" : "bg-amber-600/60 text-amber-100 hover:bg-amber-500/60"}`}>
+              {preparing ? "Preparing..." : selected.preparedBriefing ? "Re-prepare" : "Prepare"}
+            </button>
+            <button
+              onClick={() => chatAboutFocus(selected, `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
+              className={`text-[11px] px-3 py-1 rounded transition-all ${chatReady ? "bg-violet-500 text-white animate-pulse shadow-lg shadow-violet-500/50" : "bg-violet-600/60 text-violet-100 hover:bg-violet-500/60"}`}>
               Chat about this
             </button>
           </div>
@@ -569,6 +600,7 @@ export default function FocusView() {
                 <span>Confidence: {Math.round(selected.confidence * 100)}%</span>
                 <span>Created: {selected.createdAt.slice(0, 10)}</span>
                 <span>Updated: {selected.updatedAt.slice(0, 10)}</span>
+                {selected.preparedAt && <span className="text-amber-400/70">Prepared: {selected.preparedAt.slice(0, 10)}</span>}
               </div>
             </div>
           )}
