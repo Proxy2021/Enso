@@ -178,7 +178,7 @@ export default function CortexView() {
         appFamily: activeApp.family,
         // Only send currentData for tool actions (browse, search, etc.)
         // Skip for entity actions to avoid 413 payload-too-large with large browse data
-        ...(!["view_entity", "deep_content", "book_podcast", "add_to_cortex", "entity_share_email", "book_share_email"].includes(action)
+        ...(!["view_entity", "deep_content", "book_podcast", "add_to_cortex", "entity_share_email", "book_share_email", "share_wechat"].includes(action)
           ? { currentData: appStates[activeApp.family]?.data }
           : {}),
       }),
@@ -191,11 +191,11 @@ export default function CortexView() {
           return;
         }
 
-        // For email share: just show feedback, no state change needed
-        if (action === "entity_share_email" || action === "book_share_email") {
+        // For email/wechat share: just show feedback, no state change needed
+        if (action === "entity_share_email" || action === "book_share_email" || action === "share_wechat") {
           setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
-          if (data.success) alert(data.message || "Email sent!");
-          else alert(data.message || "Email failed");
+          if (data.success) alert(data.message || "Sent!");
+          else alert(data.message || data.error || "Send failed");
           return;
         }
 

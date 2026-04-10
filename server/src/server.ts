@@ -943,6 +943,25 @@ export async function startEnsoServer(opts: {
         return;
       }
 
+      if (action === "share_wechat") {
+        const p = payload || {};
+        const content = String(p.content ?? "").trim();
+        if (!content) { res.json({ error: "No content to share" }); return; }
+
+        try {
+          const { sendTextMessage, getFollowerOpenIds } = await import("./wechat.js");
+          const followers = await getFollowerOpenIds();
+          if (followers.length === 0) { res.json({ error: "No WeChat followers. Follow the test account first." }); return; }
+          const result = await sendTextMessage(followers[0], content);
+          logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Cortex share to WeChat: ${content.slice(0, 50)}` });
+          res.json(result);
+        } catch (err) {
+          logError("wechat", "Cortex share_wechat failed", err);
+          res.json({ error: `WeChat send failed: ${err instanceof Error ? err.message : String(err)}` });
+        }
+        return;
+      }
+
       // For tool-based actions (browse, search, add, etc.) — run via executor
       const toolSuffix = action;
       const { getExecutorBody, isDynamicTool } = await import("./native-tools/registry.js");
