@@ -96,6 +96,15 @@ Return ONLY the JSON array, no markdown fences.`;
 
         upsertEntityIndex({ ...entry, semanticTags: tags });
         totalEnriched++;
+
+        // Emit event for conversation context registry
+        import("./conversation-context.js").then(({ contextRegistry }) => {
+          contextRegistry.emitEvent({
+            type: "cortex.entity.created",
+            payload: { entityId: item.entityId, title: entry.title, semanticTags: tags, source: entry.source },
+            timestamp: Date.now(),
+          }).catch(() => {});
+        }).catch(() => {});
       }
 
       logAction({

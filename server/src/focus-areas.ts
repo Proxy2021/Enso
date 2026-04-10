@@ -454,6 +454,40 @@ export function mapActivityToFocus(message: string): FocusArea | null {
   return bestMatch;
 }
 
+// ── Conversation Context Registry Integration ──
+
+/** Look up which focus area owns a given conversation */
+export function getFocusAreaByConversationId(conversationId: string): FocusArea | null {
+  const state = loadFocusState();
+  if (!state?.areas.length) return null;
+  return state.areas.find(a => a.conversationId === conversationId) ?? null;
+}
+
+/**
+ * Register all focus areas that have a conversationId with the context registry.
+ * Called on server startup and when a focus area gets a new conversationId.
+ */
+export async function registerFocusProviders(): Promise<void> {
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  const { contextRegistry } = await import("./conversation-context.js");
+  const { FocusContextProvider } = await import("./focus-context-provider.js");
+
+  for (const area of state.areas) {
+    if (area.conversationId && !contextRegistry.getProvider(area.conversationId)) {
+      contextRegistry.register(area.conversationId, new FocusContextProvider(area.id));
+    }
+  }
+}
+
+/** Register a single focus area's conversation with the context registry */
+export async function registerFocusProvider(focusId: string, conversationId: string): Promise<void> {
+  const { contextRegistry } = await import("./conversation-context.js");
+  const { FocusContextProvider } = await import("./focus-context-provider.js");
+  contextRegistry.register(conversationId, new FocusContextProvider(focusId));
+}
+
 // ── Conversational Refinement ──
 
 /**
@@ -525,6 +559,7 @@ If nothing changed, return { "hasRefinement": false }.`;
 
     const now = new Date().toISOString();
     const clarityOrder = ["emerging", "developing", "clear"];
+    const oldClarity = area.clarity;
 
     if (result.newClarity && clarityOrder.indexOf(result.newClarity) > clarityOrder.indexOf(area.clarity)) {
       area.clarity = result.newClarity as FocusArea["clarity"];
@@ -546,6 +581,17 @@ If nothing changed, return { "hasRefinement": false }.`;
       ts: Date.now(), type: "action", category: "focus-areas",
       message: `Refined focus "${area.title}": ${result.change || "conversation update"}`,
     });
+
+    // Emit event for conversation context registry (proactive messages)
+    if (area.clarity !== oldClarity) {
+      import("./conversation-context.js").then(({ contextRegistry }) => {
+        contextRegistry.emitEvent({
+          type: "focus.refined",
+          payload: { focusId, clarityChanged: true, oldClarity, newClarity: area.clarity },
+          timestamp: Date.now(),
+        }).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (err) {
     logError("focus-areas", `Refinement failed for "${area.title}"`, err);
   }

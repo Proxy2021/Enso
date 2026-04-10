@@ -166,7 +166,7 @@ export default function FocusView() {
       const res = await fetch(`${getBackendBaseUrl()}${API.CONVERSATIONS}`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, title: area.title }),
+        body: JSON.stringify({ clientId, title: area.title, context: { type: "focus", sourceId: area.id, label: "Focus" } }),
       });
       if (!res.ok) return;
       const created = (await res.json()) as { id: string };
@@ -437,7 +437,7 @@ export default function FocusView() {
               className="text-[11px] px-3 py-1 rounded text-red-400/60 hover:text-red-300 hover:bg-red-500/10 transition-colors">
               Remove
             </button>
-            <button onClick={() => chatAboutFocus(selected, `Help me make progress on: ${selected.title}`)}
+            <button onClick={() => chatAboutFocus(selected, `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
               className="text-[11px] px-3 py-1 rounded bg-violet-600/60 text-violet-100 hover:bg-violet-500/60">
               Chat about this
             </button>

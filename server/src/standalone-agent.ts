@@ -218,7 +218,7 @@ function hydrateFromJournal(clientId: string, conversationId: string): number {
 
 // ── System prompt ──
 
-async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
+async function buildSystemPrompt(tools: EnsoAgentTool[], conversationId?: string, userMessage?: string): Promise<string> {
   const toolDescriptions = tools
     .map((t) => `- **${t.name}**: ${t.description}`)
     .join("\n");
@@ -254,13 +254,22 @@ async function buildSystemPrompt(tools: EnsoAgentTool[]): Promise<string> {
     if (topicCtx) topicBlock = topicCtx;
   } catch { /* topic context not available — skip */ }
 
-  // Check if memory tools are available
-  // Inject focus areas
+  // Inject focus areas — check conversation context registry first for dedicated focus conversations
   let focusBlock = "";
   try {
-    const { getFocusContextForAgent } = await import("./focus-areas.js");
-    const focusCtx = getFocusContextForAgent();
-    if (focusCtx) focusBlock = `\n\n${focusCtx}`;
+    if (conversationId) {
+      const { contextRegistry } = await import("./conversation-context.js");
+      const registryCtx = await contextRegistry.getContextForPrompt(conversationId);
+      if (registryCtx) {
+        focusBlock = `\n\n${registryCtx}`;
+      }
+    }
+    // Fallback: generic focus context for regular (non-focus) chats
+    if (!focusBlock) {
+      const { getFocusContextForAgent } = await import("./focus-areas.js");
+      const focusCtx = getFocusContextForAgent(userMessage);
+      if (focusCtx) focusBlock = `\n\n${focusCtx}`;
+    }
   } catch { /* focus areas not available — skip */ }
 
   const hasMemoryTools = tools.some((t) => t.name === "enso_memory_search");
@@ -302,7 +311,8 @@ These rules override all other instructions. Violating them produces WRONG answe
    - Rule of thumb: if the user's request can be fulfilled with a single terminal command, use enso_shell_execute. If it requires writing or modifying files, use enso_launch_task_session.
 5. **System status queries** (CPU, memory, disk, uptime) MUST call enso_system_info.
 
-If a tool exists for the task, ALWAYS call it — even if you think you know the answer. Your knowledge is outdated; tools provide real-time truth.
+For questions requiring **live/current data** (prices, news, weather, scores, "latest", schedules), ALWAYS call the appropriate tool — your knowledge may be outdated.
+For **general knowledge** questions (translations, history, science, math, definitions, game/movie names, language questions), answer directly from your training data — do NOT call a research tool. Only use a tool when you genuinely lack the knowledge or the question demands real-time information.
 
 ## Build-First Rule
 When the user asks to **create**, **build**, **make**, **generate**, or **write** something (e.g. "create a todo app", "build me a dashboard", "make a landing page"), DO NOT ask clarifying questions. Instead:
@@ -562,6 +572,14 @@ export async function handleStandaloneInbound(params: {
   const conversationId = message.conversationId ?? "default";
   const clientId = message.clientId;
 
+  // Look up if this conversation belongs to a focus area (for refinement after response)
+  let activeFocusId: string | null = null;
+  try {
+    const { contextRegistry } = await import("./conversation-context.js");
+    const provider = contextRegistry.getProvider(conversationId);
+    if (provider?.type === "focus") activeFocusId = provider.sourceId;
+  } catch { /* registry not available */ }
+
   // Hydrate from journal on cold start (server restart or first message in this conversation)
   const existingHistory = getConversationHistory(clientId, conversationId);
   if (existingHistory.length === 0 && clientId) {
@@ -632,13 +650,55 @@ export async function handleStandaloneInbound(params: {
     ...(account.geminiApiKey ? { gemini: account.geminiApiKey } : {}),
   };
 
+  // Focus area conversations: clean dialogue mode — no tool calls, no app cards.
+  // The rich focus context (state, Cortex, cross-source) is already in the system prompt.
+  if (activeFocusId && account.geminiApiKey) {
+    try {
+      // Pass empty tools list — focus conversations are pure dialogue, no tool descriptions in prompt
+      const systemPrompt = await buildSystemPrompt([], conversationId, rawBody);
+      const history = getConversationHistory(clientId, conversationId);
+      if (history.length === 0 && clientId) {
+        const hydrated = hydrateFromJournal(clientId, conversationId);
+        if (hydrated > 0) logAction({ ts: Date.now(), type: "action", category: "standalone-agent", message: `Focus chat: hydrated ${hydrated} turns` });
+      }
+      history.push({ role: "user", parts: [{ text: rawBody }] });
+
+      const answer = await llm({
+        prompt: rawBody,
+        systemPrompt,
+        tier: "utility",
+      });
+
+      history.push({ role: "model", parts: [{ text: answer }] });
+      trimHistory(history);
+
+      await deliverEnsoReply({
+        payload: { text: answer },
+        client, runId, seq: 0, account, userMessage: rawBody,
+        targetCardId, cardId: stableCardId, statusSink, conversationId,
+      });
+      // Refine focus area from conversation (fire-and-forget)
+      import("./focus-areas.js").then(({ refineFocusFromConversation }) => {
+        refineFocusFromConversation(activeFocusId!, rawBody, answer).catch(() => {});
+      }).catch(() => {});
+    } catch (err) {
+      logError("standalone-agent", "Focus chat LLM call failed", err, { cardId: stableCardId });
+      client.send({
+        id: randomUUID(), runId, sessionKey, seq: 0, state: "error",
+        text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+        timestamp: Date.now(),
+      });
+    }
+    return;
+  }
+
   // When the user selected a non-Gemini model, route through callChatLLM
   // for a simple text response (tool calling is Gemini-only).
   if (!isGeminiModel) {
     const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
     try {
       const tools = getAllLocalTools();
-      const systemPrompt = await buildSystemPrompt(tools);
+      const systemPrompt = await buildSystemPrompt(tools, conversationId, rawBody);
       const answer = await llm({
         prompt: rawBody,
         systemPrompt,
@@ -658,6 +718,12 @@ export async function handleStandaloneInbound(params: {
         statusSink,
         conversationId,
       });
+      // Refine focus area from conversation (fire-and-forget)
+      if (activeFocusId) {
+        import("./focus-areas.js").then(({ refineFocusFromConversation }) => {
+          refineFocusFromConversation(activeFocusId!, rawBody, answer).catch(() => {});
+        }).catch(() => {});
+      }
     } catch (err) {
       logError("standalone-agent", `callChatLLM failed for ${userChatModel}`, err, { cardId: stableCardId });
       client.send({
@@ -715,7 +781,7 @@ export async function handleStandaloneInbound(params: {
     }
     return selected;
   })();
-  const systemPrompt = await buildSystemPrompt(tools);
+  const systemPrompt = await buildSystemPrompt(tools, conversationId, rawBody);
   const allDeclarations = tools.map(toolToFunctionDeclaration);
   const functionDeclarations: GeminiFunctionDeclaration[] = [];
   const skippedTools: string[] = [];
@@ -745,7 +811,8 @@ export async function handleStandaloneInbound(params: {
   // When the user wants to build/create software, bypass Gemini tool selection
   // (which misroutes to media tools like Photo Studio) and go straight to Claude Code.
   const BUILD_INTENT = /\b(build|create|make|generate|develop|scaffold|bootstrap)\b.*\b(app|application|dashboard|website|page|site|tool|api|server|backend|frontend|project|service|bot|script|plugin|extension|component|module)\b/i;
-  if (BUILD_INTENT.test(rawBody)) {
+  const BUILD_EXCLUSION = /\b(make progress|help me|what should|how do|tell me|discuss|focus on|work on)\b/i;
+  if (BUILD_INTENT.test(rawBody) && !BUILD_EXCLUSION.test(rawBody)) {
     logAction({ ts: Date.now(), type: "action", category: "standalone-agent",
       message: `Build intent detected — fast-pathing to enso_launch_task_session`, cardId: stableCardId });
 
@@ -946,6 +1013,13 @@ export async function handleStandaloneInbound(params: {
       conversationId,
     });
     delivered = true;
+
+    // Refine focus area from conversation (fire-and-forget)
+    if (activeFocusId) {
+      import("./focus-areas.js").then(({ refineFocusFromConversation }) => {
+        refineFocusFromConversation(activeFocusId!, rawBody, replyText).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (err) {
     logError("standalone-agent", "Gemini agent call failed", err, { cardId: stableCardId });
 

@@ -136,11 +136,18 @@ function conversationJournalPath(clientId: string, conversationId: string): stri
   return join(clientCardsRoot(clientId), `${conversationId}.jsonl`);
 }
 
+export interface ConversationContext {
+  type: string;       // "focus", "project", "data-source", etc.
+  sourceId: string;   // focusId, projectId, etc.
+  label?: string;     // short display label, e.g. "Focus" or "Project"
+}
+
 export interface ConversationSummary {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+  context?: ConversationContext;
 }
 
 function readConversationsIndex(root: string): ConversationSummary[] {
@@ -287,7 +294,7 @@ function touchConversationUpdatedAt(clientId: string, conversationId: string): v
   }
 }
 
-export function createConversation(clientId: string, title?: string): ConversationSummary {
+export function createConversation(clientId: string, title?: string, context?: ConversationContext): ConversationSummary {
   ensureConversationLayout(clientId);
   const root = clientCardsRoot(clientId);
   const id = randomUUID();
@@ -297,11 +304,24 @@ export function createConversation(clientId: string, title?: string): Conversati
     title: (title?.trim() || "New chat").slice(0, 200),
     createdAt: now,
     updatedAt: now,
+    ...(context ? { context } : {}),
   };
   const list = readConversationsIndex(root);
   list.push(entry);
   writeConversationsIndex(root, list);
   return entry;
+}
+
+/** Update a conversation's context metadata */
+export function setConversationContext(clientId: string, conversationId: string, context: ConversationContext): boolean {
+  ensureConversationLayout(clientId);
+  const root = clientCardsRoot(clientId);
+  const list = readConversationsIndex(root);
+  const conv = list.find(c => c.id === conversationId);
+  if (!conv) return false;
+  conv.context = context;
+  writeConversationsIndex(root, list);
+  return true;
 }
 
 /** True if this thread's journal already has at least one persisted user message. */

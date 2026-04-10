@@ -180,6 +180,58 @@ export function pcmToWav(pcm: Buffer): Buffer {
   return wav;
 }
 
+// ── WAV → MP3 Conversion ──
+
+let _ffmpegPath: string | null | undefined;
+
+async function getFfmpegPath(): Promise<string | null> {
+  if (_ffmpegPath !== undefined) return _ffmpegPath;
+  try {
+    const mod = await import("ffmpeg-static");
+    _ffmpegPath = (mod.default ?? mod) as string;
+  } catch {
+    _ffmpegPath = null;
+  }
+  return _ffmpegPath;
+}
+
+/**
+ * Convert a WAV file to MP3. Returns the MP3 path on success, null on failure.
+ * Uses ffmpeg-static for reliable cross-platform support.
+ * Speech-optimized: 64kbps mono — shrinks 130 MB WAV to ~10 MB MP3.
+ */
+export async function wavToMp3(wavPath: string): Promise<string | null> {
+  const ffmpeg = await getFfmpegPath();
+  if (!ffmpeg) {
+    logAction({ ts: Date.now(), type: "action", category: "podcast", message: "ffmpeg-static not available, skipping MP3 conversion" });
+    return null;
+  }
+
+  const { existsSync } = await import("node:fs");
+  if (!existsSync(wavPath)) return null;
+
+  const mp3Path = wavPath.replace(/\.wav$/i, ".mp3");
+  if (existsSync(mp3Path)) return mp3Path;
+
+  const { execFileSync } = await import("node:child_process");
+  try {
+    execFileSync(ffmpeg, [
+      "-y", "-i", wavPath,
+      "-codec:a", "libmp3lame", "-b:a", "64k",
+      "-ar", "22050", "-ac", "1",
+      mp3Path,
+    ], { timeout: 120_000, windowsHide: true, stdio: "ignore" });
+    // Delete the WAV source — MP3 is the only format we need for speech
+    const { unlinkSync } = await import("node:fs");
+    try { unlinkSync(wavPath); } catch { /* non-critical */ }
+    logAction({ ts: Date.now(), type: "action", category: "podcast", message: `Converted WAV→MP3: ${mp3Path} (WAV deleted)` });
+    return mp3Path;
+  } catch (err) {
+    logError("podcast", `WAV→MP3 conversion failed for ${wavPath}`, err);
+    return null;
+  }
+}
+
 // ── Full Pipeline ──
 
 export async function generatePodcastAudio(params: {
@@ -216,14 +268,17 @@ export async function generatePodcastAudio(params: {
   const audioDir = join(homedir(), ".enso", "data", subdirectory, "audio");
   mkdirSync(audioDir, { recursive: true });
 
-  const filename = `${audioSlug}.wav`;
-  const filePath = join(audioDir, filename);
-  writeFileSync(filePath, wavData);
+  const wavFilename = `${audioSlug}.wav`;
+  const wavFilePath = join(audioDir, wavFilename);
+  writeFileSync(wavFilePath, wavData);
+
+  // Convert to MP3 for mobile compatibility (WAV files are 100-150 MB, MP3 ~10 MB)
+  const mp3Path = await wavToMp3(wavFilePath);
 
   const { toMediaUrl } = await import("./server.js");
-  const audioUrl = toMediaUrl(filePath);
+  const audioUrl = toMediaUrl(mp3Path ?? wavFilePath);
 
-  logAction({ ts: Date.now(), type: "action", category: "podcast", message: `podcast ready for "${content.title}" (${wavData.length} bytes)` });
+  logAction({ ts: Date.now(), type: "action", category: "podcast", message: `podcast ready for "${content.title}" (${wavData.length} bytes WAV${mp3Path ? ", MP3 converted" : ""})` });
 
   return { audioUrl, script };
 }

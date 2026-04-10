@@ -413,6 +413,30 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Open External App: open a local file with the system's default application ──
+  if (action === "open_external_app") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const filePath = String(p.path ?? "").trim();
+    if (!filePath) {
+      sendOperation("error", "No file path", "No file path provided.");
+      return;
+    }
+    try {
+      logAction({ ts: Date.now(), type: "action", category: "action", message: `Open external app: ${filePath}`, cardId });
+      const result = await executeToolDirect("enso_fs_open_external", { path: filePath });
+      if (result.success) {
+        sendOperation("complete", "Opened in external app");
+      } else {
+        sendOperation("error", "Failed to open", String(result.error ?? "Unknown error"));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logError("action", `open_external_app failed: ${msg}`, undefined, { cardId });
+      sendOperation("error", "Failed to open", msg);
+    }
+    return;
+  }
+
   // ── Fix with Code: launch Claude Code debugging session ──
   if (action === "fix_with_code") {
     const p = (payload ?? {}) as Record<string, unknown>;

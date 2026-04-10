@@ -185,7 +185,7 @@ function writeCortexPage(pagePath: string, content: string): void {
 
 // ── Search ──
 
-function searchIndex(query: string, maxResults = 10, opts?: { source?: string; theme?: string }): CortexIndexEntry[] {
+export function searchIndex(query: string, maxResults = 10, opts?: { source?: string; theme?: string }): CortexIndexEntry[] {
   let entries = readIndex();
 
   // Apply source filter

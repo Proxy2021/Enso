@@ -326,8 +326,12 @@ export async function handleWebSocketMessage(
       // If the entire processing pipeline hangs (tool-router timeout, agent
       // stall, etc.), this timer fires and delivers a fallback error so the
       // user never sees an infinite spinner.
+      // The timer resets whenever the agent sends any message to the client,
+      // so active tool-calling loops (which legitimately take >30s) won't
+      // trigger a false error as long as they keep sending progress updates.
       let silentGuardCleared = false;
-      const silentGuardTimer = setTimeout(() => {
+      let silentGuardTimer = setTimeout(fireSilentGuard, 60_000);
+      function fireSilentGuard() {
         if (!silentGuardCleared) {
           send({
             id: randomUUID(),
@@ -340,7 +344,16 @@ export async function handleWebSocketMessage(
             timestamp: Date.now(),
           });
         }
-      }, 30_000);
+      }
+      // Wrap client.send so every outgoing message resets the guard timer
+      const originalSend = client.send.bind(client);
+      client.send = (m: ServerMessage) => {
+        if (!silentGuardCleared) {
+          clearTimeout(silentGuardTimer);
+          silentGuardTimer = setTimeout(fireSilentGuard, 60_000);
+        }
+        return originalSend(m);
+      };
 
       try {
         const persistConv = (record: CardRecord) => {
@@ -594,6 +607,7 @@ export async function handleWebSocketMessage(
       } finally {
         silentGuardCleared = true;
         clearTimeout(silentGuardTimer);
+        client.send = originalSend;
       }
       break;
     }

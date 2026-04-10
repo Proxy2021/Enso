@@ -166,7 +166,7 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
   "place": {
     sources: ["research", "manual", "photos"],
     cortexPrefix: "entities/place-",
-    detailFields: ["country", "region", "coordinates", "description", "highlights", "bestTimeToVisit"],
+    detailFields: ["country", "region", "bestTimeToVisit", "currency", "language", "climate"],
   },
   "person": {
     sources: ["cortex", "manual"],
@@ -271,6 +271,8 @@ export interface EntityIndexEntry extends EntityRef {
   parentId?: EntityId;
   tags?: string[];
   updatedAt?: string;
+  /** Structured metadata stored by enrichment (used for types without a data source cache, e.g. place) */
+  metadata?: Record<string, unknown>;
   /** LLM-derived universal semantic tags for cross-source relationships (e.g., "coming-of-age", "dystopia") */
   semanticTags?: string[];
   /** Explicit cross-source relationships discovered by LLM during ingest */
@@ -596,6 +598,11 @@ export async function buildEntityIndex(): Promise<number> {
     crossReferences?: Array<{ entityId: string; reason: string }>;
     recommendedVideos?: Array<{ videoId: string; title: string; channelTitle: string; thumbnailUrl: string; viewCount?: string; duration?: string }>;
   }>();
+  // Preserve full entries for entities not backed by any data source cache
+  // (e.g., places from research/discovery, manually added entities)
+  const orphanEntries = new Map<string, EntityIndexEntry>();
+  const extractorSources = new Set(Object.keys(EXTRACTORS));
+
   for (const [id, entry] of entityIndex) {
     if (entry.semanticTags?.length || entry.crossReferences?.length || (entry as any).recommendedVideos?.length) {
       enrichmentData.set(id, {
@@ -603,6 +610,9 @@ export async function buildEntityIndex(): Promise<number> {
         crossReferences: entry.crossReferences,
         recommendedVideos: (entry as any).recommendedVideos,
       });
+    }
+    if (!extractorSources.has(entry.source)) {
+      orphanEntries.set(id, entry);
     }
   }
 
@@ -626,6 +636,13 @@ export async function buildEntityIndex(): Promise<number> {
       }
     } catch (err) {
       logError("entity-index", `Failed to extract entities from ${source}`, err);
+    }
+  }
+
+  // 1.5. Restore entities not backed by any data source cache
+  for (const [id, entry] of orphanEntries) {
+    if (!entityIndex.has(id)) {
+      entityIndex.set(id, entry);
     }
   }
 
@@ -690,6 +707,40 @@ export async function buildEntityIndex(): Promise<number> {
     }
   } catch (err) {
     logError("entity-index", "Failed to scan deep-content for entities", err);
+  }
+
+  // 2.7. Scan Cortex wiki entity pages for orphaned "place" and other non-cache-backed types
+  try {
+    const entDir = join(ENSO_HOME, "wiki", "entities");
+    if (existsSync(entDir)) {
+      const pageFiles = readdirSync(entDir).filter(f => f.startsWith("place-") && f.endsWith(".md"));
+      for (const f of pageFiles) {
+        const slug = f.replace("place-", "").replace(".md", "");
+        const candidateIds = [`research:place:${slug}`, `manual:place:${slug}`];
+        const alreadyExists = candidateIds.some(id => entityIndex.has(id));
+        if (alreadyExists) continue;
+
+        try {
+          const content = readFileSync(join(entDir, f), "utf-8");
+          const titleMatch = content.match(/^# (.+)$/m);
+          const title = titleMatch ? titleMatch[1] : slug;
+          const entityId = `research:place:${slug}`;
+          const cortexPath = `entities/${f}`;
+          entityIndex.set(entityId, {
+            entityId,
+            type: "place" as EntityType,
+            source: "research" as EntitySource,
+            title,
+            slug,
+            cortexPath,
+            tags: ["place", "research", "discovered"],
+            updatedAt: new Date().toISOString(),
+          });
+        } catch { /* skip */ }
+      }
+    }
+  } catch (err) {
+    logError("entity-index", "Failed to scan wiki entities for places", err);
   }
 
   // 3. Persist
@@ -810,6 +861,8 @@ export async function resolveEntity(entityId: EntityId): Promise<Entity | null> 
   if (!indexEntry && !cacheItem) return null;
 
   // 4. Merge into full Entity
+  // Use cache item for metadata, falling back to index entry's metadata (for types like place that have no cache)
+  const effectiveMetadata = cacheItem ?? (indexEntry?.metadata as Record<string, unknown> | undefined) ?? {};
   const entity: Entity = {
     entityId,
     type: parsed.type as EntityType,
@@ -817,11 +870,11 @@ export async function resolveEntity(entityId: EntityId): Promise<Entity | null> 
     title: indexEntry?.title ?? (cacheItem?.title || cacheItem?.name || parsed.slug) as string,
     slug: parsed.slug,
     imageUrl: indexEntry?.imageUrl ?? (cacheItem?.coverUrl || cacheItem?.posterPath || cacheItem?.thumbnailUrl) as string | undefined,
-    summary: (cacheItem?.description || cacheItem?.overview || cacheItem?.bio) as string | undefined,
+    summary: (effectiveMetadata.description || cacheItem?.overview || cacheItem?.bio) as string | undefined,
     tags: indexEntry?.tags ?? [],
     themes: [],
     cortexPath: cortexData ? cortexPath : indexEntry?.cortexPath,
-    metadata: cacheItem ?? {},
+    metadata: effectiveMetadata,
     externalUrl: (cacheItem?.readerUrl || cacheItem?.storeUrl || cacheItem?.externalUrl) as string | undefined,
     updatedAt: indexEntry?.updatedAt ?? new Date().toISOString(),
   };

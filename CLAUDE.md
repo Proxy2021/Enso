@@ -4,18 +4,31 @@
 
 ## Vision
 
-**Enso — a self-hosted AI platform with 99 tools, 16 apps, and a self-evolving knowledge system.** It discovers project opportunities, assembles AI teams to build, maintains an AI-curated knowledge base that compounds with use, self-evolves through autonomous sprints, and ships products. Every installation includes the complete source code and build pipeline — users own the factory, not just the product.
+**Enso is a deeply personal AI assistant that understands who you are, discovers what you care about, and mobilizes a full team of AI agents to help you make real progress on the goals that matter most.**
 
-**Core principles:**
-- **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline, delivering the most useful format for each answer — interactive research boards, data visualizations, photo studios, file managers, knowledge graphs — not walls of text. No LLM call needed for rendering.
-- **AI teams for any task** — Complex goals are auto-decomposed into dependency graphs and executed by parallel Claude Code-powered agents (researcher, architect, builder, coder, reviewer) with approval gates and shared context.
-- **Knowledge Cortex** — The single brain for all knowledge, memory, and profile. Every data source scan, research result, conversation memory, and user profile lives as interlinked wiki pages at `~/.enso/wiki/` (based on Karpathy's LLM Wiki pattern). `buildEnsoContext()` reads only from Cortex — no separate memory/profile stores. A daily scheduled task searches the web for top interests, ingests findings, and emails a personalized intelligence briefing.
-- **Data Source Apps** — Each data source (Kindle, YouTube, Browser, Email, Projects, System, Steam, Movies/TV, Photos, Twitter/X, QQ Music) is a self-contained Enso app with scan/browse/search tools. Post-scan, a pipeline auto-detects changes and ingests content into Cortex as per-item wiki pages. Adding a new data source = one app directory + one registry entry.
-- **Cortex Intelligence** — Cross-source synthesis engine (`cortex-synthesis.ts`) that connects data across all 12 sources. `synthesize(topic)` sends the full data inventory to an LLM which semantically finds connections (e.g., linking a Kindle book to a Steam game to a YouTube channel). `findRelatedContent(topic)` provides fast keyword pre-filtering. Feeds into: agent context (every conversation is Cortex-aware), research results ("From Your Brain" section), morning briefing (cross-source narrative), and proactive suggestions (trending convergence, knowledge gaps, cross-source connections, photo memories).
-- **Unified LLM layer** — Single `llm()` function (`server/src/llm.ts`) for all LLM calls across the platform. Tier-based model selection (fast/utility/pro), auto API key resolution, built-in retry with backoff.
+Every installation is self-hosted, open-source, and fully owned by the user — you own the factory, not just the product.
+
+### The Arc: Understand → Focus → Execute
+
+Enso follows a three-phase arc that compounds over time:
+
+**1. Understand the user deeply** — Enso scans the user's digital life across 12 data sources (Kindle library, YouTube subscriptions, browser history, email, projects, Steam games, movies/TV, photos, Twitter/X, QQ Music, system apps). Each scan ingests content into the **Knowledge Cortex** — an interlinked wiki of 2000+ pages that builds a semantic map of who the user is, what they know, and what they're drawn to. Cross-source synthesis connects a Kindle book on quantitative finance to an AlphaRank project to a YouTube channel on systematic investing. The system sees patterns the user might not.
+
+**2. Identify what matters** — From the Cortex, Enso infers **Focus Areas** — concrete, outcome-oriented goals the user is working toward. Not category labels ("Quantitative Finance") but actionable goals ("Develop AlphaRank into a Market-Beating Quant Tool"). Each focus has clarity levels (emerging → developing → clear), a deeper personal WHY, adjacent pursuits, and evidence grounded in the user's actual data. The user refines these through **strategic dialogue** — a dedicated conversation mode where the AI acts as a co-strategist, helping flesh out the problem space, define success criteria, and build a clear vision. No tool calls, no distractions — just focused thinking together.
+
+**3. Mobilize the team** — When the focus is clear, the full conversation context feeds into an `/Evolve` orchestration — a multi-agent sprint where a team of AI agents (Project Leader, Architect, Engineer, QA, and domain specialists) execute on the agreed goals. Each agent is a Claude Code session with role-specific prompts. The sprint runs autonomously: persona testing with real browser automation, team evaluation, prioritized implementation, and validation — all coordinated through a DAG execution engine with configurable parallelism.
+
+This arc repeats and compounds: each sprint produces results that feed back into the Cortex, which refines the focus areas, which inform the next strategic dialogue, which shapes the next sprint. The system gets smarter about the user with every cycle.
+
+### Core Architecture
+
+- **Knowledge Cortex** — The single brain. Every data source scan, research result, conversation memory, and user profile lives as interlinked wiki pages at `~/.enso/wiki/` (Karpathy's LLM Wiki pattern). Cross-source synthesis finds semantic connections across all 12 sources. Daily discovery searches the web for top interests and emails a personalized intelligence briefing.
+- **Conversation Context Registry** — A general-purpose framework where features (focus areas, projects, data sources) register as context providers for specific conversations. Enables context-aware system prompts, proactive messages on state changes, and event-driven triggers from external systems. Focus areas are the first consumer.
+- **Adaptive answers** — Responses flow through a deterministic tool-to-UI pipeline: interactive research boards, data visualizations, photo studios, knowledge graphs — not walls of text. No LLM call needed for rendering. Focus conversations use a clean dialogue mode — pure text, no tool calls.
+- **AI teams** — Complex goals are auto-decomposed into DAGs and executed by parallel Claude Code-powered agents with approval gates and shared context. Five agent roles: researcher, architect, builder, coder, reviewer.
+- **Unified LLM layer** — Single `llm()` function for all LLM calls. Tier-based model selection (fast/utility/pro), auto API key resolution, built-in retry with backoff.
 - **Self-evolving** — The platform includes Claude Code directly (`/code`), so it can build and modify itself from within. Every user-built app is dual-registered as both a UI experience and an agent-callable tool — the ecosystem compounds with use.
-- **User owns the factory** — Each installation is a complete codebase with build tools. During setup, Claude Code personalizes the source code based on who the user is — redesigning the UI, writing role-specific prompts, reordering tools. The resulting APK is a custom app, not a configured generic one. Future `/evolve` sprints continue modifying the same source.
-- **AI-native project management** — Each project has a team of AI agents (Project Leader, Architect, Engineer, QA, Marketing, Sales, AI Strategist) and customer personas that autonomously discover, build, and evolve projects through iterative sprints with real browser testing, code implementation, and validation cycles.
+- **User owns the factory** — Each installation is a complete codebase with build tools. During setup, Claude Code personalizes the source code based on who the user is. The resulting APK is a custom app, not a configured generic one.
 
 ## Architecture Overview
 
@@ -375,17 +388,42 @@ Cortex is the ONLY brain — all knowledge, memory, profile, and data source con
 
 ### Focus Areas (AI-Inferred Goals)
 
-Focus Areas is a synchronization mechanism between the user and AI. The system analyzes Cortex data to infer concrete, outcome-oriented goals the user is working toward, then organizes all assistance around those goals.
+Focus Areas is the bridge between understanding the user (Cortex) and taking action (Evolve). The system infers what the user cares about, then provides a dedicated strategic dialogue to refine each focus until it's ready for execution.
 
-- **Inference** (`server/src/focus-areas.ts`): `inferFocusAreas()` sends full data inventory + semantic tag clusters to LLM, which produces 4-7 focus areas with evidence, intent, deeper motivation, and adjacent pursuits. Outcome-oriented (not category labels): "Develop AlphaRank into a Market-Beating Quant Tool", not "Quantitative Finance".
-- **Progressive refinement**: Each focus has clarity level (emerging → developing → clear). Refines through passive evidence accumulation AND active conversation. `refineFocusFromConversation()` extracts goal/intent/deeper-motivation signals from chat.
-- **Deeper intention**: Each focus has a `deeperIntent` (the personal WHY — e.g., "financial independence through data-driven investing") and `adjacentPursuits` (unexplored directions aligned with the deeper motivation).
-- **Agent context**: `getFocusContextForAgent()` injects active focus areas into every agent prompt. When a message maps to a focus area, the agent gets clarity-appropriate instructions (emerging → ask clarifying questions, clear → provide execution help).
+**Three-phase lifecycle:**
+1. **Infer** — `inferFocusAreas()` analyzes the full Cortex data inventory to produce 4-7 focus areas with evidence, intent, deeper motivation, and adjacent pursuits. Outcome-oriented: "Develop AlphaRank into a Market-Beating Quant Tool", not "Quantitative Finance".
+2. **Refine through dialogue** — Each focus has a dedicated conversation (via "Chat about this" button). These conversations use **clean dialogue mode**: no tool calls, no app cards — just the AI acting as a co-strategist with rich context from 3 zero-LLM data layers (focus state, related Cortex pages, cross-source hits). The AI's behavior adapts to clarity level:
+   - **Emerging** → Discovery: explore the problem space, uncover the personal WHY
+   - **Developing** → Definition: define success criteria, break down the problem, identify priorities
+   - **Clear** → Execution planning: plan the next sprint, review progress, prep an Evolve brief
+   After each exchange, `refineFocusFromConversation()` uses LLM fast tier to detect goals, deadlines, or motivations and progressively upgrade clarity (emerging → developing → clear).
+3. **Execute via Evolve** — When the strategic dialogue has produced enough clarity, the full conversation context feeds into an `/Evolve` orchestration sprint. The AI team (Project Leader, Architect, Engineer, QA, domain specialists) executes on the agreed goals with the user's validated vision as the brief.
+
+**Architecture:**
+- **Conversation Context Registry** (`conversation-context.ts`): General-purpose framework where features register as context providers for specific conversations. `FocusContextProvider` (`focus-context-provider.ts`) is the first consumer — injects rich context, generates proactive messages (quiet focus nudges, new related content, clarity upgrades), handles events from Cortex ingest and research completion.
+- **Sidebar grouping**: Focus conversations appear under a "FOCUS AREAS" section with violet styling, visually separated from regular "CHATS". Context metadata (`ConversationContext`) persisted on each conversation.
+- **Deeper intention**: Each focus has a `deeperIntent` (the personal WHY) and `adjacentPursuits` (unexplored directions aligned with the deeper motivation).
 - **Cortex-native**: Goals stored as wiki pages at `~/.enso/wiki/focuses/<goal-slug>.md` with intent, deeper motivation, evidence, and refinement history. Cross-referenceable with all Cortex entities.
-- **REST API**: `GET /api/focus-areas`, `POST /api/focus-areas/infer`, `PATCH /api/focus-areas/:id`, `POST /api/focus-areas/:id/plan` (generates orchestration goal)
-- **UI**: Focus tab (3rd position) with list → detail navigation. Detail has Overview (editable fields, deeper motivation, adjacent pursuits), Activity (matching entities), Plan (orchestration-powered action planning).
-- **Proactive**: Focus-aware suggestions in proactive engine — quiet areas get nudges, emerging areas get clarifying questions, growing areas get reinforcement.
-- Key files: `focus-areas.ts` (engine), `src/components/FocusView.tsx` (UI), `memory-bridge.ts` + `standalone-agent.ts` (context injection), `proactive-engine.ts` (suggestions)
+- **REST API**: `GET /api/focus-areas`, `POST /api/focus-areas/infer`, `PATCH /api/focus-areas/:id`, `POST /api/focus-areas/:id/plan`
+- **UI**: Focus tab (3rd position) with list → detail → chat flow. Detail shows Overview (editable fields, deeper motivation, adjacent pursuits), Activity (matching entities), Plan (orchestration-powered action planning).
+- **Proactive**: Focus-aware suggestions in proactive engine + event-driven via Conversation Context Registry — quiet areas get nudges, new related Cortex entities trigger insights, clarity upgrades get celebrated.
+- Key files: `focus-areas.ts` (engine), `focus-context-provider.ts` (context provider), `conversation-context.ts` (registry), `standalone-agent.ts` (dialogue mode), `FocusView.tsx` (UI), `ConversationSidebar.tsx` (grouping)
+
+### Conversation Context Registry
+
+A general-purpose framework for context-aware conversations. Features register as context providers for specific conversations, enabling three capabilities:
+
+1. **Context injection** — `getContextForPrompt()` injects rich context into the agent's system prompt so it knows what the conversation is about
+2. **Proactive messages** — `getProactiveMessages()` checks for state changes (focus going quiet, new related content) and delivers unsolicited messages to the conversation
+3. **Event-driven triggers** — `onEvent()` handles external events (Cortex entity created, research completed, focus refined) and surfaces relevant insights
+
+**Implementation:** `conversation-context.ts` exports a singleton `contextRegistry`. Providers implement `ConversationContextProvider` interface. Events emitted from `cortex-enrichment.ts`, `researcher-tools.ts`, and `focus-areas.ts`. Proactive delivery loop in `server.ts` checks every 60s and delivers via `persistCard()` + WebSocket push. Dedup with 1h TTL prevents message spam.
+
+**Consumers:** `FocusContextProvider` (focus-context-provider.ts) is the first consumer. Future consumers: project conversations, data source monitoring threads.
+
+**Sidebar visual grouping:** Conversations with context metadata appear grouped by type in the sidebar — "FOCUS AREAS" (violet), "PROJECTS" (emerald), regular "CHATS" below. Each group has distinct icons and active-state colors. Context stored as `ConversationContext` on `ConversationSummary`.
+
+- Key files: `conversation-context.ts` (registry + interfaces), `focus-context-provider.ts` (focus consumer), `standalone-agent.ts` (prompt injection + dialogue mode), `server.ts` (proactive loop + event emission), `memory-bridge.ts` (ConversationContext type), `ConversationSidebar.tsx` (visual grouping)
 
 ### Deep Research Pipeline
 

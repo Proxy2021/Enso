@@ -78,12 +78,19 @@ function deriveConversationTitle(msg: string): string {
   return `${out}…`;
 }
 
+export interface ConversationContext {
+  type: string;       // "focus", "project", "data-source", etc.
+  sourceId: string;
+  label?: string;     // e.g. "Focus", "Project"
+}
+
 export interface ConversationEntry {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
   preview?: string;
+  context?: ConversationContext;
 }
 
 export interface ProjectInfo {

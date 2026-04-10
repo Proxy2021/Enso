@@ -174,6 +174,11 @@ function GeneratedUI({ data, onAction }) {
               onClick={function() { onAction("open_url", { url: d.contentAccess.mediaUrl }); }}
             >▶️ Play</Button>
           )}
+          {d.contentAccess && d.contentAccess.filePath && (
+            <Button size="sm" style={{ background: "#0f766e", color: "white" }}
+              onClick={function() { onAction("open_external_app", { path: d.contentAccess.filePath }); }}
+            >🖥️ Open in App</Button>
+          )}
           {movieImdbId && (
             <Button size="sm" style={{ background: "#f5c518", color: "#000" }}
               onClick={function() { window.open("https://www.imdb.com/title/" + movieImdbId, "_blank"); }}
@@ -308,7 +313,7 @@ function GeneratedUI({ data, onAction }) {
               {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
             </div>
             <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}>
-              <source src={podcastAudioUrl} type="audio/wav" />
+              <source src={podcastAudioUrl} type={podcastAudioUrl.indexOf(".mp3") >= 0 ? "audio/mpeg" : "audio/wav"} />
             </audio>
             {podcastScript && (
               <div style={{ marginTop: "8px" }}>

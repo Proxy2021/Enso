@@ -46,6 +46,16 @@
           },
           "additionalProperties": false
         }
+      },
+      {
+        "suffix": "enrich",
+        "label": "Enrich Places",
+        "description": "Enrich saved destinations with detailed travel information: highlights, neighborhoods, food, practical tips.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
       }
     ]
   }

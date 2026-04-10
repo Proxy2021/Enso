@@ -253,12 +253,12 @@ export function getProcessedContent(entityId: string): ProcessedContent | null {
 
   if (!result) return null;
 
-  // Recompute audioUrl from actual file on disk (fixes stale base64 paths from older slug functions)
-  const audioPath = join(AUDIO_DIR, `${slug}.wav`);
-  if (existsSync(audioPath)) {
+  // Recompute audioUrl from actual MP3 file on disk
+  const mp3Path = join(AUDIO_DIR, `${slug}.mp3`);
+  if (existsSync(mp3Path)) {
     try {
       const { toMediaUrl } = require("./server.js") as { toMediaUrl: (p: string) => string };
-      result.audioUrl = toMediaUrl(audioPath);
+      result.audioUrl = toMediaUrl(mp3Path);
     } catch { /* keep existing audioUrl */ }
   }
 
@@ -267,6 +267,36 @@ export function getProcessedContent(entityId: string): ProcessedContent | null {
 
 export function isContentProcessed(entityId: string): boolean {
   return getProcessedContent(entityId) !== null;
+}
+
+/**
+ * Background-convert all existing WAV podcasts to MP3.
+ * Called once at startup — non-blocking, logs progress.
+ */
+export async function convertExistingPodcastsToMp3(): Promise<void> {
+  ensureDirs();
+  let wavFiles: string[];
+  try {
+    wavFiles = readdirSync(AUDIO_DIR).filter(f => f.endsWith(".wav"));
+  } catch { return; }
+
+  const needConversion = wavFiles.filter(f => {
+    const mp3 = f.replace(/\.wav$/i, ".mp3");
+    return !existsSync(join(AUDIO_DIR, mp3));
+  });
+
+  if (needConversion.length === 0) return;
+
+  logAction({ ts: Date.now(), type: "system", category: "podcast", message: `Converting ${needConversion.length} WAV podcasts to MP3...` });
+
+  const { wavToMp3 } = await import("./podcast.js");
+  let converted = 0;
+  for (const f of needConversion) {
+    const result = await wavToMp3(join(AUDIO_DIR, f));
+    if (result) converted++;
+  }
+
+  logAction({ ts: Date.now(), type: "system", category: "podcast", message: `Converted ${converted}/${needConversion.length} podcasts to MP3` });
 }
 
 export function listProcessedContent(): string[] {
@@ -874,13 +904,17 @@ export async function generateDeepContent(params: {
   const audioPath = join(AUDIO_DIR, `${slug}.wav`);
   writeFileSync(audioPath, wavData);
 
+  // Convert WAV→MP3 for mobile compatibility
+  const { wavToMp3 } = await import("./podcast.js");
+  const mp3Path = await wavToMp3(audioPath);
+
   const { toMediaUrl } = await import("./server.js");
-  const audioUrl = toMediaUrl(audioPath);
+  const audioUrl = toMediaUrl(mp3Path ?? audioPath);
 
   // Estimate duration: 24000 samples/sec * 2 bytes/sample = 48000 bytes/sec
   const durationMinutes = Math.round((wavData.length - 44) / 48000 / 60 * 10) / 10;
 
-  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Podcast complete for "${title}": ${durationMinutes} min, ${wavData.length} bytes` });
+  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Podcast complete for "${title}": ${durationMinutes} min, ${wavData.length} bytes${mp3Path ? ", MP3 converted" : ""}` });
 
   // Build result
   const processed: ProcessedContent = {

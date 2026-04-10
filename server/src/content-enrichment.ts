@@ -22,7 +22,7 @@ import { logAction, logError } from "./action-log.js";
 import {
   parseEntityId, entityCortexPath, slugify,
   upsertEntityIndex, saveEntityIndex,
-  type EntityType, type EntitySource,
+  type EntityType, type EntitySource, type EntityIndexEntry,
 } from "./entity-model.js";
 import type { DirectIngestPage } from "./data-source-registry.js";
 
@@ -313,37 +313,156 @@ async function enrichArticle(entityId: string, info: { title: string; creator: s
 }
 
 async function enrichPlace(entityId: string, info: { title: string; creator: string; cortexPath: string; fullPath: string }): Promise<boolean> {
-  // Use Brave search to find travel info about the place
   try {
-    const { braveWebSearch, fetchPageContent } = await import("./researcher-tools.js");
+    const { braveWebSearch, fetchPageContent, braveImageSearch } = await import("./researcher-tools.js");
+    const { llm } = await import("./llm.js");
+
+    // Fetch travel content from multiple sources
     const results = await braveWebSearch(`${info.title} travel guide highlights things to do`, 5);
     if (!results.length) return false;
 
-    // Extract content from top result
-    let content = "";
-    try { content = await fetchPageContent(results[0].url); } catch { /* ignore */ }
-    const desc = content.slice(0, 1000) || results.map(r => r.description).join(" ").slice(0, 1000);
+    const pageTexts: string[] = [];
+    for (const r of results.slice(0, 3)) {
+      try {
+        const text = await fetchPageContent(r.url);
+        if (text) pageTexts.push(text.slice(0, 3000));
+      } catch { /* skip */ }
+    }
+    const combinedText = pageTexts.join("\n\n---\n\n") || results.map(r => r.description).join("\n");
 
-    // Try to get a cover image
-    const { braveWebSearch: imgSearch } = await import("./researcher-tools.js");
-    let coverUrl = "";
-    // Use a placeholder — Brave image search would need separate implementation
+    // Get a representative image for the destination
+    let imageUrl = "";
+    try {
+      const images = await braveImageSearch(`${info.title} city landmark travel photo`, 3);
+      if (images.length > 0) {
+        imageUrl = images[0].thumbnail || images[0].url || "";
+      }
+    } catch { /* image search is optional */ }
 
-    const lines = buildCortexPage(info.title, {
-      creator: info.creator || "", type: "place",
-      description: desc,
-      extra: [
-        `- **Type**: Destination`,
-        results[0]?.url ? `- **Guide**: [${info.title} travel guide](${results[0].url})` : "",
-      ].filter(Boolean),
-      categories: ["travel", "destination"],
-    });
+    // LLM-extract structured travel data
+    const extractionPrompt = `Extract structured travel information about "${info.title}" from the following web content. Return ONLY valid JSON with this exact schema (use empty arrays/strings if info not available):
 
-    writeFileSync(info.fullPath, lines, "utf-8");
-    updateEntityIndex(entityId, info, coverUrl, ["travel", "destination"], desc.slice(0, 200));
-    logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched place "${info.title}"` });
+{
+  "country": "string — the country this place is in",
+  "region": "string — geographic region (e.g. Southeast Asia, Northern Europe, East Africa)",
+  "description": "string — 2-3 sentence overview of this destination",
+  "bestTimeToVisit": "string — best months/seasons to visit and why",
+  "currency": "string — local currency name and code (e.g. Thai Baht (THB))",
+  "language": "string — primary language(s) spoken",
+  "climate": "string — brief climate description",
+  "highlights": [{"name": "string", "description": "string — 1-2 sentences", "category": "string — one of: culture, nature, food, nightlife, history, adventure, architecture, shopping"}],
+  "neighborhoods": [{"name": "string", "description": "string — 1-2 sentences", "vibe": "string — one word like trendy, historic, artsy, bustling, peaceful"}],
+  "foodScene": [{"dish": "string — dish or food experience name", "description": "string — 1 sentence"}],
+  "gettingAround": "string — how to get around (transit, taxis, walking, etc.)",
+  "safetyTips": "string — key safety considerations for travelers",
+  "practicalTips": ["string — useful practical tips for visitors"]
+}
+
+Aim for 6-10 highlights, 3-5 neighborhoods (if applicable, fewer for small towns), 4-6 food items, and 3-5 practical tips.
+
+Web content:
+${combinedText.slice(0, 8000)}`;
+
+    let structured: Record<string, unknown> = {};
+    try {
+      const raw = await llm({ prompt: extractionPrompt, tier: "fast", responseMimeType: "application/json", temperature: 0.2 });
+      structured = JSON.parse(raw);
+    } catch {
+      // Fallback to basic enrichment if LLM fails
+      const desc = combinedText.slice(0, 1000);
+      const lines = buildCortexPage(info.title, {
+        creator: "", type: "place", description: desc,
+        extra: [`- **Type**: Destination`], categories: ["travel", "destination"],
+      });
+      writeFileSync(info.fullPath, lines, "utf-8");
+      updateEntityIndex(entityId, info, "", ["travel", "destination"], desc.slice(0, 200));
+      logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched place "${info.title}" (basic — LLM failed)` });
+      return true;
+    }
+
+    const country = String(structured.country || "");
+    const region = String(structured.region || "");
+    const desc = String(structured.description || "");
+    const highlights = Array.isArray(structured.highlights) ? structured.highlights as Array<{ name: string; description: string; category: string }> : [];
+    const neighborhoods = Array.isArray(structured.neighborhoods) ? structured.neighborhoods as Array<{ name: string; description: string; vibe: string }> : [];
+    const foodScene = Array.isArray(structured.foodScene) ? structured.foodScene as Array<{ dish: string; description: string }> : [];
+    const practicalTips = Array.isArray(structured.practicalTips) ? structured.practicalTips as string[] : [];
+
+    // Build a rich Cortex wiki page
+    const pageLines: string[] = [`# ${info.title}\n`];
+    if (country || region) pageLines.push(`${[country, region].filter(Boolean).join(", ")}.\n`);
+    if (desc) { pageLines.push("## Overview\n", desc + "\n"); }
+    if (highlights.length) {
+      pageLines.push("## Highlights\n");
+      for (const h of highlights) pageLines.push(`- **${h.name}** (${h.category}): ${h.description}`);
+      pageLines.push("");
+    }
+    if (neighborhoods.length) {
+      pageLines.push("## Neighborhoods\n");
+      for (const n of neighborhoods) pageLines.push(`- **${n.name}** [${n.vibe}]: ${n.description}`);
+      pageLines.push("");
+    }
+    if (foodScene.length) {
+      pageLines.push("## Food & Drink\n");
+      for (const f of foodScene) pageLines.push(`- **${f.dish}**: ${f.description}`);
+      pageLines.push("");
+    }
+    pageLines.push("## Practical Info\n");
+    if (structured.bestTimeToVisit) pageLines.push(`- **Best Time to Visit**: ${structured.bestTimeToVisit}`);
+    if (structured.currency) pageLines.push(`- **Currency**: ${structured.currency}`);
+    if (structured.language) pageLines.push(`- **Language**: ${structured.language}`);
+    if (structured.climate) pageLines.push(`- **Climate**: ${structured.climate}`);
+    if (structured.gettingAround) pageLines.push(`- **Getting Around**: ${structured.gettingAround}`);
+    if (structured.safetyTips) pageLines.push(`- **Safety**: ${structured.safetyTips}`);
+    if (practicalTips.length) {
+      pageLines.push("");
+      for (const tip of practicalTips) pageLines.push(`- ${tip}`);
+    }
+    pageLines.push("");
+    if (results[0]?.url) pageLines.push(`## Sources\n- [${info.title} travel guide](${results[0].url})\n`);
+    pageLines.push(`*Enriched: ${new Date().toISOString().split("T")[0]}*`);
+
+    writeFileSync(info.fullPath, pageLines.join("\n"), "utf-8");
+
+    // Update entity index with tags, summary, and structured metadata in one pass
+    const tags = ["travel", "destination", ...(country ? [country.toLowerCase()] : []), ...(region ? [region.toLowerCase()] : [])];
+    const parsed = parseEntityId(entityId);
+    if (parsed) {
+      const page: DirectIngestPage = {
+        path: info.cortexPath, title: info.title, content: "",
+        summary: desc.slice(0, 200) || info.title,
+        tags: [parsed.type, parsed.source, "enriched", ...tags],
+        entityId,
+      };
+      updateIndexEntry(info.cortexPath, page);
+
+      upsertEntityIndex({
+        entityId, type: parsed.type as EntityType, source: parsed.source as EntitySource,
+        title: info.title, slug: parsed.slug, imageUrl, cortexPath: info.cortexPath,
+        tags: page.tags, updatedAt: new Date().toISOString(),
+        metadata: {
+          country, region, description: desc,
+          bestTimeToVisit: String(structured.bestTimeToVisit || ""),
+          currency: String(structured.currency || ""),
+          language: String(structured.language || ""),
+          climate: String(structured.climate || ""),
+          highlights, neighborhoods, foodScene,
+          gettingAround: String(structured.gettingAround || ""),
+          safetyTips: String(structured.safetyTips || ""),
+          practicalTips,
+          guideUrl: results[0]?.url || "",
+          enrichedAt: Date.now(),
+        },
+      });
+      saveEntityIndex();
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched place "${info.title}": ${country}, ${highlights.length} highlights, ${neighborhoods.length} neighborhoods` });
     return true;
-  } catch { return false; }
+  } catch (err) {
+    logError("content-enrich", `Failed to enrich place "${info.title}"`, err);
+    return false;
+  }
 }
 
 // ─── Main Dispatcher ─────────────────────────────────────────────────────────

@@ -85,7 +85,7 @@ function GeneratedUI({ data, onAction }) {
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#c4b5fd" }}>AI Podcast</span>
               {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
             </div>
-            <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}><source src={podcastAudioUrl} type="audio/wav" /></audio>
+            <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}><source src={podcastAudioUrl} type={podcastAudioUrl.indexOf(".mp3") >= 0 ? "audio/mpeg" : "audio/wav"} /></audio>
             {processed && processed.script && (
               <div style={{ marginTop: "8px" }}>
                 <button onClick={function() { setShowTranscript(!showTranscript); }}

@@ -2207,6 +2207,16 @@ Only include genuinely new information. If gap sources don't add meaningful new 
     mark("complete");
     logAction({ ts: Date.now(), type: "action", category: "researcher", message: `research complete: ${keyFindings.length} findings, ${sections.length} sections, ${sources.length} sources, ${images.length} images, ${videos.length} videos, ${books.length} books, ${movies.length} movies, ${contradictions.length} contradictions, ${gapQueries.length} gap queries` });
     logAction({ ts: Date.now(), type: "action", category: "researcher:perf", message: `PERF [${depth}] "${topic.slice(0, 50)}": total=${timings.complete}ms | classify=${(timings.classify_done ?? 0) - (timings.classify_start ?? 0)}ms | search=${(timings.search_done ?? 0) - (timings.search_start ?? 0)}ms | fetch=${(timings.fetch_done ?? 0) - (timings.fetch_start ?? 0)}ms | synthesis=${(timings.synthesis_done ?? 0) - (timings.synthesis_start ?? 0)}ms`, metadata: { timings, depth, topic } });
+
+    // Emit research completion event for conversation context providers
+    import("./conversation-context.js").then(({ contextRegistry }) => {
+      contextRegistry.emitEvent({
+        type: "research.completed",
+        payload: { topic, depth, findingsCount: keyFindings.length },
+        timestamp: Date.now(),
+      }).catch(() => {});
+    }).catch(() => {});
+
     return jsonResult(result);
   } catch (err) {
     logError("researcher", "LLM synthesis error", err, { topic, depth });

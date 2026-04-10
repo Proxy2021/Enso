@@ -1046,19 +1046,38 @@ export async function startEnsoServer(opts: {
   // ── Podcast Streaming API (for email sharing) ──
   app.get("/api/podcast/stream/:slug", (req, res) => {
     const slug = decodeURIComponent(req.params.slug).replace(/[^\p{L}\p{N}_-]/gu, "");
-    const audioPath = join(homedir(), ".enso", "data", "deep-content", "audio", `${slug}.wav`);
+    const audioDir = join(homedir(), ".enso", "data", "deep-content", "audio");
+    // Prefer MP3 (mobile-compatible, much smaller)
+    const mp3Path = join(audioDir, `${slug}.mp3`);
+    const wavPath = join(audioDir, `${slug}.wav`);
+    const audioPath = existsSync(mp3Path) ? mp3Path : wavPath;
+    const isMp3 = audioPath.endsWith(".mp3");
     if (!existsSync(audioPath)) {
       res.status(404).json({ error: "Podcast not found" });
       return;
     }
     const stat = statSync(audioPath);
-    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("Content-Type", isMp3 ? "audio/mpeg" : "audio/wav");
     res.setHeader("Content-Length", stat.size);
-    // Use RFC 5987 encoding for non-ASCII filenames
+    const ext = isMp3 ? ".mp3" : ".wav";
     const safeFilename = slug.replace(/[^\x20-\x7E]/g, "_");
-    res.setHeader("Content-Disposition", `inline; filename="${safeFilename}.wav"; filename*=UTF-8''${encodeURIComponent(slug)}.wav`);
+    res.setHeader("Content-Disposition", `inline; filename="${safeFilename}${ext}"; filename*=UTF-8''${encodeURIComponent(slug)}${ext}`);
     res.setHeader("Cache-Control", "public, max-age=86400");
-    createReadStream(audioPath).pipe(res);
+    res.setHeader("Accept-Ranges", "bytes");
+    // Support Range requests for seek/scrub on mobile
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+        "Content-Length": end - start + 1,
+      });
+      createReadStream(audioPath, { start, end }).pipe(res);
+    } else {
+      createReadStream(audioPath).pipe(res);
+    }
   });
 
   // Podcast metadata API (for email link previews)
@@ -1846,6 +1865,12 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       const { updateFocusArea } = await import("./focus-areas.js");
       const area = updateFocusArea(req.params.id, req.body);
       if (!area) { res.status(404).json({ error: "Focus area not found" }); return; }
+      // Register focus provider when a conversationId is assigned
+      if (req.body.conversationId && area.conversationId) {
+        import("./focus-areas.js").then(({ registerFocusProvider }) => {
+          registerFocusProvider(area.id, area.conversationId!).catch(() => {});
+        }).catch(() => {});
+      }
       res.json(area);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Update failed" });
@@ -2616,9 +2641,9 @@ audio{width:100%;margin:12px 0;border-radius:8px}
   });
 
   app.post("/api/conversations", express.json(), (req, res) => {
-    const { clientId, title } = req.body as { clientId?: string; title?: string };
+    const { clientId, title, context } = req.body as { clientId?: string; title?: string; context?: { type: string; sourceId: string; label?: string } };
     if (!clientId) { res.status(400).json({ error: "clientId required" }); return; }
-    const c = createConversation(clientId, title);
+    const c = createConversation(clientId, title, context);
     res.json(c);
   });
 
@@ -3088,6 +3113,11 @@ audio{width:100%;margin:12px 0;border-radius:8px}
         buildEntityIndex().catch(() => {})
       ).catch(() => {});
 
+      // Convert existing WAV podcasts to MP3 in background (mobile compatibility)
+      import("./deep-content.js").then(({ convertExistingPodcastsToMp3 }) =>
+        convertExistingPodcastsToMp3().catch(() => {})
+      ).catch(() => {});
+
       // Start scheduled task scheduler
       import("./scheduled-tasks.js").then(async ({ initScheduler }) => {
         const { executeScheduledTask, setScheduledTaskClient } = await import("./scheduled-tasks-executor.js");
@@ -3114,6 +3144,47 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       }).catch((err) => {
         runtime.error?.(`[enso] failed to start scheduler: ${err instanceof Error ? err.message : String(err)}`);
       });
+
+      // Register focus area conversation providers and start proactive delivery loop
+      import("./focus-areas.js").then(async ({ registerFocusProviders }) => {
+        await registerFocusProviders();
+        runtime.log?.("[enso] focus area conversation providers registered");
+
+        // Proactive delivery loop — check every 60s for messages to deliver
+        setInterval(async () => {
+          try {
+            const { contextRegistry } = await import("./conversation-context.js");
+            const pending = await contextRegistry.checkProactive();
+            if (pending.size === 0) return;
+
+            for (const [convId, messages] of pending) {
+              // Find a connected client that has this conversation
+              for (const c of clients.values()) {
+                for (const msg of messages) {
+                  const cardId = randomUUID();
+                  // Persist the proactive message to the conversation journal
+                  const { persistCard } = await import("./memory-bridge.js");
+                  persistCard(c.id, convId, {
+                    id: cardId, runId: cardId, type: "chat", role: "assistant",
+                    text: msg.text, timestamp: Date.now(),
+                  });
+                  // Send to client if they're connected
+                  c.send({
+                    id: cardId, runId: cardId, sessionKey: c.sessionKey,
+                    seq: 0, state: "final", text: msg.text,
+                    conversationId: convId, timestamp: Date.now(),
+                  });
+                  logAction({
+                    ts: Date.now(), type: "action", category: "conversation-context",
+                    message: `Proactive message delivered to conv=${convId.slice(0, 20)}: ${msg.text.slice(0, 60)}`,
+                  });
+                }
+                break; // Only deliver to first connected client
+              }
+            }
+          } catch { /* proactive check failed — not critical */ }
+        }, 60_000);
+      }).catch(() => {});
 
       // Start research topic monitor loop
       import("./research-monitor.js").then(({ startMonitorLoop }) => {

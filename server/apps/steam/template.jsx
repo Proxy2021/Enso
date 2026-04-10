@@ -149,7 +149,7 @@ function GeneratedUI({ data, onAction }) {
               {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
             </div>
             <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}>
-              <source src={podcastAudioUrl} type="audio/wav" />
+              <source src={podcastAudioUrl} type={podcastAudioUrl.indexOf(".mp3") >= 0 ? "audio/mpeg" : "audio/wav"} />
             </audio>
             {podcastScript && (
               <div style={{ marginTop: "8px" }}>
