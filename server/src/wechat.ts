@@ -199,24 +199,23 @@ export async function sendArticle(
 ): Promise<SendWechatResult> {
   const token = await getAccessToken();
 
-  // Step 1: Upload a thumb image (required for articles)
-  // Use a 1x1 transparent PNG as default if no cover
+  // Step 1: Upload a thumb image (required for draft articles — must be permanent material)
   let thumbMediaId: string;
   try {
     if (article.coverUrl) {
-      // Download the cover image and upload to WeChat
       const imgRes = await fetch(article.coverUrl);
       if (imgRes.ok) {
         const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
-        thumbMediaId = await uploadTempMedia(token, imgBuffer, "thumb.jpg", "image");
+        thumbMediaId = await uploadPermanentMedia(token, imgBuffer, "cover.jpg");
       } else {
-        thumbMediaId = await uploadDefaultThumb(token);
+        thumbMediaId = await getDefaultThumbMediaId(token);
       }
     } else {
-      thumbMediaId = await uploadDefaultThumb(token);
+      thumbMediaId = await getDefaultThumbMediaId(token);
     }
-  } catch {
-    thumbMediaId = await uploadDefaultThumb(token);
+  } catch (err) {
+    logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Thumb upload error: ${err instanceof Error ? err.message : err}, using default` });
+    thumbMediaId = await getDefaultThumbMediaId(token);
   }
 
   // Step 2: Create a draft article
@@ -312,33 +311,78 @@ export async function sendArticle(
   });
 }
 
-/** Upload a buffer as temporary media to WeChat. */
-async function uploadTempMedia(token: string, buffer: Buffer, filename: string, type: string): Promise<string> {
+/** Upload a buffer as permanent material to WeChat (required for draft articles). */
+async function uploadPermanentMedia(token: string, buffer: Buffer, filename: string): Promise<string> {
   const boundary = "----EnsoWechat" + Date.now();
-  const header = `--${boundary}\r\nContent-Disposition: form-data; name="media"; filename="${filename}"\r\nContent-Type: image/jpeg\r\n\r\n`;
-  const footer = `\r\n--${boundary}--\r\n`;
+  const contentType = filename.endsWith(".png") ? "image/png" : "image/jpeg";
+  const parts: Buffer[] = [];
+  parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="media"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`));
+  parts.push(buffer);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+  const body = Buffer.concat(parts);
 
-  const body = Buffer.concat([Buffer.from(header), buffer, Buffer.from(footer)]);
-
-  const res = await fetch(`https://api.weixin.qq.com/cgi-bin/media/upload?access_token=${token}&type=${type}`, {
+  const res = await fetch(`https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`, {
     method: "POST",
     headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
     body,
   });
   const data = (await res.json()) as { media_id?: string; errcode?: number; errmsg?: string };
 
-  if (!data.media_id) throw new Error(`Media upload failed: ${data.errmsg}`);
+  if (!data.media_id) throw new Error(`Material upload failed: ${data.errmsg} (code: ${data.errcode})`);
+  logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Permanent media uploaded: ${data.media_id}` });
   return data.media_id;
 }
 
-/** Upload a minimal default thumb image. */
-async function uploadDefaultThumb(token: string): Promise<string> {
-  // 1x1 white JPEG (smallest valid JPEG)
-  const minJpeg = Buffer.from(
-    "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKwA=",
+/** Cached default thumb media_id — permanent materials persist, so we only upload once. */
+let cachedDefaultThumbId: string | null = null;
+
+/** Get or create a default thumb image for articles. */
+async function getDefaultThumbMediaId(token: string): Promise<string> {
+  if (cachedDefaultThumbId) return cachedDefaultThumbId;
+
+  // Generate a 200x200 solid-color PNG (Enso purple #7c3aed)
+  // Minimal valid PNG: header + IHDR + IDAT (uncompressed) + IEND
+  const { createCanvas } = await import("canvas").catch(() => null) as { createCanvas?: (w: number, h: number) => unknown } | null;
+
+  let imgBuffer: Buffer;
+  if (createCanvas) {
+    // Use canvas if available
+    const canvas = (createCanvas as (w: number, h: number) => { toBuffer: (fmt: string) => Buffer })(200, 200);
+    const ctx2d = (canvas as unknown as { getContext: (t: string) => { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void } }).getContext("2d");
+    ctx2d.fillStyle = "#7c3aed";
+    ctx2d.fillRect(0, 0, 200, 200);
+    imgBuffer = canvas.toBuffer("image/png");
+  } else {
+    // Fallback: generate a minimal valid BMP (200x200, solid white) — simpler than PNG
+    // Actually, just download a small placeholder image from the web
+    try {
+      const placeholderRes = await fetch("https://placehold.co/200x200/7c3aed/white/png?text=Enso");
+      if (placeholderRes.ok) {
+        imgBuffer = Buffer.from(await placeholderRes.arrayBuffer());
+      } else {
+        throw new Error("Placeholder fetch failed");
+      }
+    } catch {
+      // Last resort: use a minimal valid JPEG that WeChat will accept (8x8 white)
+      imgBuffer = generateMinimalJpeg();
+    }
+  }
+
+  cachedDefaultThumbId = await uploadPermanentMedia(token, imgBuffer, "enso-thumb.png");
+  return cachedDefaultThumbId;
+}
+
+/** Generate a minimal valid JPEG (8x8 white pixels). */
+function generateMinimalJpeg(): Buffer {
+  // Minimal valid JFIF JPEG: SOI + APP0 + DQT + SOF0 + DHT + SOS + data + EOI
+  // This is a pre-built 8x8 white JPEG (valid, ~285 bytes)
+  return Buffer.from(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMCwsKCwsM" +
+    "EA0QCw0RDAwMEhMSExAaFRYXGBkaGhoeHx8f/2wBDAQMEBAUEBQkFBQkeEg0SHh4eHh4eHh4eHh4eHh4e" +
+    "Hh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAIAAgDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/" +
+    "EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKwA=",
     "base64",
   );
-  return uploadTempMedia(token, minJpeg, "thumb.jpg", "thumb");
 }
 
 // ── Mass Messaging ──
