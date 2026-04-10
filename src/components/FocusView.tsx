@@ -509,6 +509,29 @@ export default function FocusView() {
                         headers: authHeaders(),
                       });
                       if (resp.ok) {
+                        const result = await resp.json() as { briefing: string; orchestrated?: boolean };
+                        if (result.orchestrated) {
+                          // Orchestration launched — switch to Evolve tab to show progress
+                          setDetailTab("evolve" as DetailTab);
+                          setPreparing(false);
+                          // Poll for completion: check every 10s if briefing has been stored
+                          const pollInterval = setInterval(async () => {
+                            await fetchFocusAreas();
+                            const fresh = focusState?.areas.find(a => a.id === selected.id);
+                            if (fresh?.preparedBriefing && fresh.preparedAt !== selected.preparedAt) {
+                              clearInterval(pollInterval);
+                              setChatReady(true);
+                              setTimeout(() => {
+                                chatAboutFocus(selected, `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`);
+                                setChatReady(false);
+                              }, 2000);
+                            }
+                          }, 10000);
+                          // Stop polling after 10 minutes
+                          setTimeout(() => clearInterval(pollInterval), 600000);
+                          return;
+                        }
+                        // Non-orchestrated (fallback LLM) — briefing is ready immediately
                         await fetchFocusAreas();
                         setChatReady(true);
                         setTimeout(() => {

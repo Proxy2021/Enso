@@ -1901,7 +1901,9 @@ audio{width:100%;margin:12px 0;border-radius:8px}
   app.post("/api/focus-areas/:id/prepare", async (req, res) => {
     try {
       const { prepareFocusArea } = await import("./focus-areas.js");
-      const result = await prepareFocusArea(req.params.id);
+      // Find a connected client to receive orchestration progress
+      const firstClient = clients.values().next().value as ConnectedClient | undefined;
+      const result = await prepareFocusArea(req.params.id, firstClient, account);
       if (!result) { res.status(404).json({ error: "Focus area not found" }); return; }
       res.json(result);
     } catch (err: any) {

@@ -602,29 +602,15 @@ If nothing changed, return { "hasRefinement": false }.`;
   }
 }
 
-// ── Preparation (Deep Study) ──
+// ── Preparation (Deep Study via Orchestration) ──
 
-/**
- * Comprehensive preparation for a focus area conversation.
- * Gathers all available data (project, Cortex, sprints, codebase) and
- * synthesizes a briefing via LLM. The briefing is stored on the focus area
- * and injected into all subsequent chat turns.
- */
-export async function prepareFocusArea(focusId: string): Promise<{ briefing: string } | null> {
-  const state = loadFocusState();
-  if (!state) return null;
-  const area = state.areas.find(a => a.id === focusId);
-  if (!area) return null;
-
-  logAction({ ts: Date.now(), type: "action", category: "focus-areas", message: `Preparing focus "${area.title}"...` });
-
-  // ── Gather all available data ──
+/** Gather fast, zero-LLM context about a focus area for use in planning prompts */
+async function gatherFocusContext(area: FocusArea): Promise<string> {
   var sections: string[] = [];
 
-  // 1. Focus area state
   sections.push(`# Focus Area: ${area.title}
 Description: ${area.description}
-Status: ${area.status} | Clarity: ${area.clarity}
+Clarity: ${area.clarity}
 ${area.intent ? `Intent: ${area.intent}` : ""}
 ${area.deeperIntent ? `Deeper motivation: ${area.deeperIntent}` : ""}
 ${area.adjacentPursuits?.length ? `Adjacent pursuits: ${area.adjacentPursuits.join("; ")}` : ""}
@@ -632,112 +618,193 @@ ${area.nextSteps?.length ? `Next steps: ${area.nextSteps.join("; ")}` : ""}
 Evidence: ${area.evidence.join(", ")}
 Themes: ${area.semanticTags.join(", ")}`);
 
-  // 2. Related project data
+  // Related projects
   var projectIds = area.relatedEntityIds
     .filter(id => id.includes(":project:"))
     .map(id => id.split(":").pop()!);
 
-  // Also try fuzzy matching project names from the title
   try {
-    const { listProjects, loadProject, loadProjectBrain } = await import("./project-manager.js");
+    const { listProjects, loadProject } = await import("./project-manager.js");
     var allProjects = listProjects();
     var titleWords = area.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-
     for (var proj of allProjects) {
-      var projNameLower = proj.name.toLowerCase();
-      if (titleWords.some(w => projNameLower.includes(w)) && !projectIds.includes(proj.id)) {
+      if (titleWords.some(w => proj.name.toLowerCase().includes(w)) && !projectIds.includes(proj.id)) {
         projectIds.push(proj.id);
       }
     }
-
     for (var pid of projectIds) {
       var project = loadProject(pid);
-      if (!project) continue;
-
-      sections.push(`\n# Project: ${project.name}
-Vision: ${project.vision || "Not defined"}
-Codebase: ${project.codebasePath}
-${project.techStack ? `Tech stack: ${project.techStack}` : ""}
-Team: ${project.teamAgents.map(a => `${a.name} (${a.role})`).join(", ")}
-Personas: ${project.personas.map(p => p.name).join(", ")}`);
-
-      // Project brain (institutional memory)
-      var brain = loadProjectBrain(pid);
-      if (brain) {
-        // Take first 3000 chars of brain — it's the most important part
-        sections.push(`\n## Project Brain (Institutional Memory)\n${brain.slice(0, 3000)}`);
+      if (project) {
+        sections.push(`\n# Project: ${project.name}\nVision: ${project.vision || "Not defined"}\nCodebase: ${project.codebasePath}\n${project.techStack ? `Tech: ${project.techStack}` : ""}`);
       }
-
-      // Recent sprint history
-      try {
-        const { listEvolutionSprints } = await import("./evolution-archive.js");
-        var sprints = listEvolutionSprints(pid).slice(0, 5);
-        if (sprints.length > 0) {
-          sections.push(`\n## Recent Evolution Sprints (${sprints.length})`);
-          for (var sprint of sprints) {
-            var date = new Date(sprint.createdAt).toISOString().slice(0, 10);
-            sections.push(`- ${date}: ${sprint.goal} [${sprint.status}]`);
-          }
-        }
-      } catch { /* no sprint history */ }
     }
-  } catch { /* project-manager not available */ }
+  } catch { /* ignore */ }
 
-  // 3. Related Cortex pages
+  // Cortex pages
   try {
     const { searchIndex } = await import("./cortex-tools.js");
-    var cortexHits = searchIndex(area.semanticTags.join(" ") + " " + area.title, 15);
-    if (cortexHits.length > 0) {
-      sections.push(`\n# Related Knowledge (Cortex)\n${cortexHits.map(e =>
-        `- **${e.title}** (${e.source || "cortex"}): ${e.summary}`
-      ).join("\n")}`);
+    var hits = searchIndex(area.semanticTags.join(" ") + " " + area.title, 10);
+    if (hits.length > 0) {
+      sections.push(`\n# Related Knowledge (${hits.length} Cortex pages)\n${hits.map(e => `- ${e.title} (${e.source || "cortex"}): ${e.summary}`).join("\n")}`);
     }
-  } catch { /* cortex not available */ }
+  } catch { /* ignore */ }
 
-  // 4. Cross-source connections
+  // Cross-source
   try {
     const { findRelatedContent } = await import("./cortex-synthesis.js");
     var related = findRelatedContent(area.title, 5);
     if (related.totalMatches > 0) {
-      var sourceLines: string[] = [];
-      for (var [src, hits] of Object.entries(related.bySource)) {
-        if (hits.length > 0) {
-          sourceLines.push(`- ${src}: ${hits.map(h => h.title).join(", ")}`);
-        }
+      var lines: string[] = [];
+      for (var [src, srcHits] of Object.entries(related.bySource)) {
+        if (srcHits.length > 0) lines.push(`- ${src}: ${srcHits.map(h => h.title).join(", ")}`);
       }
-      if (sourceLines.length > 0) {
-        sections.push(`\n# Cross-Source Connections\n${sourceLines.join("\n")}`);
+      if (lines.length > 0) sections.push(`\n# Cross-Source Connections\n${lines.join("\n")}`);
+    }
+  } catch { /* ignore */ }
+
+  return sections.join("\n\n");
+}
+
+/**
+ * Launch an orchestration-powered deep evaluation of a focus area.
+ * Multiple AI agents work in parallel: researcher (web + Cortex), codebase analyst,
+ * knowledge synthesizer. Results are combined into a comprehensive briefing.
+ *
+ * The orchestration runs asynchronously — the UI shows progress in the Evolve tab.
+ * When complete, the briefing is stored on the focus area and the chat button flashes.
+ */
+export async function prepareFocusArea(
+  focusId: string,
+  client?: import("./server.js").ConnectedClient,
+  account?: import("./accounts.js").ResolvedEnsoAccount,
+): Promise<{ briefing: string; orchestrated: boolean } | null> {
+  const state = loadFocusState();
+  if (!state) return null;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return null;
+
+  logAction({ ts: Date.now(), type: "action", category: "focus-areas", message: `Preparing focus "${area.title}"...` });
+
+  // Gather fast context for the planning prompt
+  const focusContext = await gatherFocusContext(area);
+
+  // Find related project codebase paths
+  var codebasePaths: string[] = [];
+  try {
+    const { listProjects } = await import("./project-manager.js");
+    var titleWords = area.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    for (var proj of listProjects()) {
+      if (titleWords.some(w => proj.name.toLowerCase().includes(w)) && proj.codebasePath) {
+        codebasePaths.push(`${proj.name}: ${proj.codebasePath}`);
       }
     }
-  } catch { /* synthesis not available */ }
+  } catch { /* ignore */ }
 
-  // 5. Codebase structure (if project has a codebase path)
-  if (projectIds.length > 0) {
+  // If we have a client and account, launch a full orchestration
+  if (client && account) {
     try {
-      const { listProjects } = await import("./project-manager.js");
-      for (var pid2 of projectIds) {
-        var proj2 = listProjects().find(p => p.id === pid2);
-        if (proj2?.codebasePath) {
-          const { readdirSync, statSync } = await import("node:fs");
-          const { join: pathJoin } = await import("node:path");
-          try {
-            var entries = readdirSync(proj2.codebasePath).slice(0, 30);
-            var fileList = entries.map(e => {
-              try {
-                var s = statSync(pathJoin(proj2!.codebasePath, e));
-                return s.isDirectory() ? `${e}/` : e;
-              } catch { return e; }
-            });
-            sections.push(`\n# Codebase Structure (${proj2.name})\nRoot: ${proj2.codebasePath}\n${fileList.join("\n")}`);
-          } catch { /* can't read codebase */ }
-        }
-      }
-    } catch { /* fs not available */ }
+      const { handleOrchestration } = await import("./orchestrator.js");
+
+      await handleOrchestration({
+        userMessage: `Focus Prepare: Deep evaluation of "${area.title}"`,
+        classification: { complexity: "orchestrated", reasoning: "Focus area preparation — multi-agent deep evaluation" },
+        client,
+        account,
+        skipApproval: true,
+        maxConcurrency: 3,
+        useGeminiPlanning: true,
+        chatModel: "gemini-2.5-flash",
+        planningPromptBuilder: (_orchId, planFilePath) => `You are planning a **Focus Area Evaluation** — a deep study to prepare for strategic discussion.
+
+## Focus Area
+${focusContext}
+
+${codebasePaths.length > 0 ? `## Related Codebases\n${codebasePaths.join("\n")}` : ""}
+
+## Your Task
+Design 3-4 evaluation tasks that will produce a comprehensive understanding of this focus area. The output will be a briefing that enables an informed strategic conversation with the user.
+
+Available agent roles:
+- **researcher**: Web research, market analysis, competitive landscape, best practices, latest developments
+- **architect**: Codebase analysis, technical audit, architecture review, sprint history analysis (reads project brain + code)
+- **reviewer**: Cross-reference Cortex knowledge, identify patterns across data sources, find knowledge gaps
+
+Task design principles:
+- Each task should investigate a DIFFERENT dimension of the focus
+- Tasks should be PARALLEL (no dependencies) for speed — the synthesizer runs last
+- The final task MUST be a "reviewer" that synthesizes all findings into a structured briefing
+- Include the focus area's semantic tags, evidence, and Cortex data in task descriptions so agents have context
+${codebasePaths.length > 0 ? `- The architect task should analyze the codebase at the paths listed above` : "- No codebase paths found — skip codebase analysis, focus on research and knowledge synthesis"}
+
+Suggested structure:
+1. **External Research** (researcher): Research the latest developments, best practices, and competitive landscape relevant to "${area.title}". Search the web for 3-5 high-quality sources.
+2. ${codebasePaths.length > 0 ? `**Codebase & Sprint Analysis** (architect): Analyze the project codebase, read the project brain (institutional memory), review recent sprint results, identify technical state and gaps.` : `**Domain Deep Dive** (researcher): Research the specific domain knowledge needed for this focus — frameworks, methodologies, case studies, expert opinions.`}
+3. **Knowledge Synthesis** (reviewer): Read all upstream task results. Cross-reference with the user's Cortex knowledge (books, projects, research). Produce a comprehensive briefing with: Current State, Recent Progress, Key Insights, Knowledge Context, Open Questions, and Recommended Priorities. Be specific — reference actual data points.
+
+Write the JSON plan to: ${planFilePath}
+Format: {"tasks":[{"taskId":"...","title":"...","description":"...","agentRole":"researcher|architect|reviewer","dependsOn":[],"outputType":"research|document"}]}
+The synthesizer task must dependsOn all other tasks.`,
+
+        onComplete: async (orchId, status) => {
+          logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+            message: `Focus Prepare orchestration ${status} for "${area.title}" (${orchId})` });
+
+          if (status === "completed") {
+            // Read the synthesizer's output as the briefing
+            try {
+              const { getWorkspace } = await import("./orchestration-workspace.js");
+              const workspace = getWorkspace(orchId);
+              if (workspace) {
+                const { readdirSync, readFileSync: readFile } = await import("node:fs");
+                const { join: pathJoin } = await import("node:path");
+                // Find the last task output (synthesizer)
+                var outputsDir = pathJoin(workspace.root, "outputs");
+                var outputFiles: string[] = [];
+                try { outputFiles = readdirSync(outputsDir).filter(f => f.endsWith(".md")); } catch { /* no outputs dir */ }
+
+                var briefing = "";
+                // Combine all task outputs, last one (synthesizer) gets priority
+                for (var f of outputFiles) {
+                  try {
+                    var content = readFile(pathJoin(outputsDir, f), "utf-8");
+                    briefing += content + "\n\n";
+                  } catch { /* skip */ }
+                }
+
+                if (!briefing.trim()) {
+                  // Fallback: read from shared context
+                  briefing = "Orchestration completed but no output files found. Check the Evolve tab for task details.";
+                }
+
+                // Store on focus area
+                const freshState = loadFocusState();
+                if (freshState) {
+                  const freshArea = freshState.areas.find(a => a.id === focusId);
+                  if (freshArea) {
+                    freshArea.preparedBriefing = briefing.slice(0, 15000); // Cap at 15K chars
+                    freshArea.preparedAt = new Date().toISOString();
+                    freshArea.updatedAt = freshArea.preparedAt;
+                    saveFocusState(freshState);
+                    logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                      message: `Stored briefing for "${area.title}": ${briefing.length} chars from orchestration` });
+                  }
+                }
+              }
+            } catch (err) {
+              logError("focus-areas", `Failed to read orchestration results for "${area.title}"`, err);
+            }
+          }
+        },
+      });
+
+      return { briefing: "Orchestration launched — evaluation agents are working. Watch progress in the Evolve tab.", orchestrated: true };
+    } catch (err) {
+      logError("focus-areas", `Orchestration launch failed for "${area.title}", falling back to single LLM`, err);
+      // Fall through to single-LLM fallback below
+    }
   }
 
-  // ── Synthesize briefing via LLM ──
-  var gathered = sections.join("\n\n");
-
+  // ── Fallback: single LLM call (no client/account, or orchestration failed) ──
   try {
     const { llm } = await import("./llm.js");
     var briefing = await llm({
@@ -745,31 +812,30 @@ Personas: ${project.personas.map(p => p.name).join(", ")}`);
 
 Here is ALL the data gathered from the user's knowledge base, projects, sprint history, and codebase:
 
-${gathered}
+${focusContext}
 
-Write a comprehensive briefing that:
-1. **Current State**: Summarize where things stand — what exists, what's been built, what's working
-2. **Recent Progress**: What happened in recent sprints/activity? What was the trajectory?
-3. **Key Insights**: What patterns, failures, or breakthroughs are documented in the project brain?
-4. **Knowledge Context**: What books, research, or resources is the user drawing on for this focus?
-5. **Open Questions**: What are the most important unresolved questions or decisions?
-6. **Recommended Priorities**: Based on all evidence, what should the user focus on next?
+Write a comprehensive briefing covering:
+1. **Current State**: What exists, what's been built, what's working
+2. **Recent Progress**: What happened recently? What's the trajectory?
+3. **Key Insights**: Patterns, failures, or breakthroughs from the data
+4. **Knowledge Context**: What books, research, or resources relate to this focus?
+5. **Open Questions**: Most important unresolved questions or decisions
+6. **Recommended Priorities**: What should the user focus on next?
 
-Be specific — reference actual project names, sprint results, book titles, and concrete data points. This briefing will be used as context for all future conversations about this focus area.`,
+Be specific — reference actual project names, book titles, and concrete data points.`,
       tier: "utility",
       maxOutputTokens: 4000,
     });
 
-    // Store on focus area
     area.preparedBriefing = briefing;
     area.preparedAt = new Date().toISOString();
     area.updatedAt = area.preparedAt;
     saveFocusState(state);
 
     logAction({ ts: Date.now(), type: "action", category: "focus-areas",
-      message: `Prepared focus "${area.title}": ${briefing.length} chars briefing` });
+      message: `Prepared focus "${area.title}" (fallback LLM): ${briefing.length} chars` });
 
-    return { briefing };
+    return { briefing, orchestrated: false };
   } catch (err) {
     logError("focus-areas", `Preparation failed for "${area.title}"`, err);
     return null;
