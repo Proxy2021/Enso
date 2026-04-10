@@ -266,6 +266,7 @@ export async function sendArticle(
 
   // Step 4: Poll for publish completion (up to 30 seconds)
   let articleUrl = "";
+  let articleId = "";
   for (let i = 0; i < 10; i++) {
     await new Promise(r => setTimeout(r, 3000));
     const freshToken = await getAccessToken();
@@ -282,8 +283,9 @@ export async function sendArticle(
       errcode?: number;
     };
 
-    if (statusData.publish_status === 0 && statusData.article_detail?.item?.[0]?.article_url) {
-      articleUrl = statusData.article_detail.item[0].article_url;
+    if (statusData.publish_status === 0) {
+      articleUrl = statusData.article_detail?.item?.[0]?.article_url || "";
+      articleId = statusData.article_id || "";
       break;
     }
     // status 1 = publishing, 2 = original failed, 3 = used someone else's content
@@ -294,18 +296,43 @@ export async function sendArticle(
     }
   }
 
-  if (!articleUrl) {
+  if (!articleId && !articleUrl) {
     // Timed out — fall back to text
     logAction({ ts: Date.now(), type: "action", category: "wechat", message: "Publish timed out, falling back to text" });
     const plainText = article.content.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
     return sendTextMessage(openId, `${article.title}\n\n${plainText}`);
   }
 
-  logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Article published: ${articleUrl}` });
+  logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Article published: ${articleUrl || articleId}` });
 
-  // Step 5: Send article link as a news card
+  // Step 5: Send as inline mpnewsarticle (renders inside chat, no external link needed)
+  if (articleId) {
+    const freshToken = await getAccessToken();
+    const sendUrl = `https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token=${freshToken}`;
+    const sendRes = await fetch(sendUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ touser: openId, msgtype: "mpnewsarticle", mpnewsarticle: { article_id: articleId } }),
+    });
+    const sendData = (await sendRes.json()) as { errcode?: number; errmsg?: string };
+
+    if (sendData.errcode && sendData.errcode !== 0) {
+      // Fallback to news link if mpnewsarticle fails
+      logAction({ ts: Date.now(), type: "action", category: "wechat", message: `mpnewsarticle failed (${sendData.errmsg}), trying news link` });
+      if (articleUrl) {
+        return sendNewsMessage(openId, { title: safeTitle, description: article.digest || "", url: articleUrl, picurl: article.coverUrl });
+      }
+      const plainText = article.content.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+      return sendTextMessage(openId, `${article.title}\n\n${plainText}`);
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Article sent inline to ${openId}` });
+    return { success: true, message: `Article sent to ${openId}` };
+  }
+
+  // Fallback: send as news link
   return sendNewsMessage(openId, {
-    title: article.title,
+    title: safeTitle,
     description: article.digest || article.content.replace(/<[^>]*>/g, "").slice(0, 120),
     url: articleUrl,
     picurl: article.coverUrl,
