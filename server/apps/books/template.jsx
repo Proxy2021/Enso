@@ -343,19 +343,30 @@ function GeneratedUI({ data, onAction }) {
           return (
             <UICard style={{ padding: "12px" }}>
               <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>🔗 Related</div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "8px" }}>
                 {related.map(function(r) {
                   var icon = sourceIcons[r.source] || "📄";
                   var reason = relatedReasons[r.entityId] || r.reason;
                   var label = sourceLabels[r.source] || r.source;
-                  var btn = React.createElement(Button, {
-                    key: r.entityId, variant: "outline", size: "sm",
-                    style: { fontSize: "10px" },
-                    onClick: function() { onAction("view_entity", { entityId: r.entityId }); }
-                  }, icon + " " + r.title + " (" + label + ")");
+                  var card = (
+                    <div key={r.entityId}
+                      style={{ display: "flex", gap: "8px", alignItems: "center", padding: "6px 8px", background: "#1e293b", borderRadius: "8px", cursor: "pointer", border: "1px solid #334155", transition: "border-color 0.2s" }}
+                      onClick={function() { onAction("view_entity", { entityId: r.entityId }); }}
+                      title={reason || r.title}>
+                      {r.imageUrl ? (
+                        <img src={r.imageUrl} alt="" style={{ width: "36px", height: "52px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: "36px", height: "52px", borderRadius: "4px", flexShrink: 0, background: "#334155", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>{icon}</div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</div>
+                        <div style={{ fontSize: "9px", color: "#64748b", marginTop: "2px" }}>{icon} {label}</div>
+                      </div>
+                    </div>
+                  );
                   return reason
-                    ? React.createElement(EnsoUI.Tooltip, { key: r.entityId, content: reason }, btn)
-                    : btn;
+                    ? React.createElement(EnsoUI.Tooltip, { key: r.entityId, content: reason }, card)
+                    : card;
                 })}
               </div>
             </UICard>
