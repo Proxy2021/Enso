@@ -90,6 +90,8 @@ export default function FocusView() {
   const [analyzingGaps, setAnalyzingGaps] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [chatReady, setChatReady] = useState(false);
+  const [showEvolveBrief, setShowEvolveBrief] = useState(false);
+  const [evolveBrief, setEvolveBrief] = useState("");
 
   // Editing state
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -562,36 +564,90 @@ export default function FocusView() {
                 </button>
 
                 {/* Step 2: Discuss */}
-                <button
-                  onClick={() => chatAboutFocus(selected, selected.preparedBriefing
-                    ? `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`
-                    : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
-                  className={`w-full text-left rounded-lg border p-3 transition-all ${
-                    chatReady ? "border-violet-500 bg-violet-950/30 animate-pulse shadow-lg shadow-violet-500/20"
-                    : "border-gray-700/40 bg-gray-900/20 hover:border-violet-500/40 hover:bg-violet-950/10"
-                  }`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">{"\uD83D\uDCAC"}</span>
-                    <span className={`text-xs font-medium ${chatReady ? "text-violet-200" : "text-gray-300"}`}>
-                      {chatReady ? "Ready — Start the strategic dialogue" : "Discuss — Strategic dialogue with AI"}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 mt-1 ml-6">Flesh out the problem space, agree on priorities, build an Evolve-ready brief</p>
-                </button>
+                {(() => {
+                  const hasConversation = selected.conversationId && conversationsList.some(c => c.id === selected.conversationId);
+                  return (
+                    <button
+                      onClick={() => chatAboutFocus(selected, selected.preparedBriefing
+                        ? `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`
+                        : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
+                      className={`w-full text-left rounded-lg border p-3 transition-all ${
+                        chatReady ? "border-violet-500 bg-violet-950/30 animate-pulse shadow-lg shadow-violet-500/20"
+                        : hasConversation ? "border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/50"
+                        : "border-gray-700/40 bg-gray-900/20 hover:border-violet-500/40 hover:bg-violet-950/10"
+                      }`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{chatReady ? "\uD83D\uDCAC" : hasConversation ? "\u2705" : "\uD83D\uDCAC"}</span>
+                        <span className={`text-xs font-medium ${chatReady ? "text-violet-200" : hasConversation ? "text-emerald-300" : "text-gray-300"}`}>
+                          {chatReady ? "Ready — Start the strategic dialogue" : hasConversation ? "Discussed — Continue the dialogue" : "Discuss — Strategic dialogue with AI"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-1 ml-6">
+                        {hasConversation ? "Click to continue the conversation, or move on to Evolve when ready" : "Flesh out the problem space, agree on priorities, build an Evolve-ready brief"}
+                      </p>
+                    </button>
+                  );
+                })()}
 
-                {/* Step 3: Evolve */}
-                <button
-                  onClick={() => {
-                    // TODO: launch /evolve with focus conversation context as brief
-                    chatAboutFocus(selected, `/evolve`);
-                  }}
-                  className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 hover:border-indigo-500/40 hover:bg-indigo-950/10 transition-all">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">{"\uD83D\uDE80"}</span>
-                    <span className="text-xs font-medium text-gray-300">Evolve — Launch AI team sprint</span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 mt-1 ml-6">Full team of AI agents executes on the agreed goals from your discussion</p>
-                </button>
+                {/* Step 3: Evolve — with review/edit brief */}
+                <div className="rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 space-y-3">
+                  <button
+                    onClick={() => {
+                      if (!showEvolveBrief && !evolveBrief) {
+                        // Auto-generate brief from focus data
+                        const lines: string[] = [];
+                        lines.push(`Focus: ${selected.title}`);
+                        if (selected.intent) lines.push(`Goal: ${selected.intent}`);
+                        if (selected.deeperIntent) lines.push(`Why: ${selected.deeperIntent}`);
+                        if (selected.nextSteps?.length) {
+                          lines.push(`\nPriorities:`);
+                          selected.nextSteps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+                        }
+                        if (selected.suggestedActions.length > 0 && !selected.nextSteps?.length) {
+                          lines.push(`\nSuggested focus for this sprint:`);
+                          selected.suggestedActions.slice(0, 3).forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+                        }
+                        if (selected.preparedBriefing) {
+                          lines.push(`\nKey findings from evaluation:`);
+                          // Extract first 500 chars of briefing as summary
+                          lines.push(selected.preparedBriefing.slice(0, 500).trim());
+                        }
+                        setEvolveBrief(lines.join("\n"));
+                      }
+                      setShowEvolveBrief(b => !b);
+                    }}
+                    className="w-full text-left hover:opacity-90 transition-opacity">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{"\uD83D\uDE80"}</span>
+                      <span className="text-xs font-medium text-gray-300">Evolve — Launch AI team sprint</span>
+                      <span className="text-[10px] text-gray-600 ml-auto">{showEvolveBrief ? "\u25B2" : "\u25BC"} Review Brief</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Full team of AI agents executes on the agreed goals from your discussion</p>
+                  </button>
+
+                  {showEvolveBrief && (
+                    <div className="space-y-2 pt-2 border-t border-gray-800/40">
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 block">Sprint Brief — what the AI team will work on</label>
+                      <textarea
+                        value={evolveBrief}
+                        onChange={e => setEvolveBrief(e.target.value)}
+                        className="w-full bg-gray-950/60 border border-gray-700/50 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-violet-500/50 min-h-[120px] max-h-[300px] resize-y"
+                        placeholder="Describe what the AI team should focus on..."
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            // Launch evolve with the brief
+                            chatAboutFocus(selected, `/evolve ${evolveBrief}`);
+                          }}
+                          className="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
+                          Launch Sprint
+                        </button>
+                        <span className="text-[10px] text-gray-600">{evolveBrief.length} chars</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Next steps / suggested actions (if any) */}
