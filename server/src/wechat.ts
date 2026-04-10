@@ -220,9 +220,10 @@ export async function sendArticle(
 
   // Step 2: Create a draft article
   const draftUrl = `https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${token}`;
+  const safeTitle = article.title.length > 60 ? article.title.slice(0, 57) + "..." : article.title;
   const draftBody = {
     articles: [{
-      title: article.title,
+      title: safeTitle,
       author: article.author || "Enso AI",
       digest: article.digest || article.content.replace(/<[^>]*>/g, "").slice(0, 120),
       content: article.content,
