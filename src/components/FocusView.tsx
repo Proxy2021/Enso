@@ -55,7 +55,7 @@ interface GapAnalysis {
 }
 
 type View = "list" | "detail";
-type DetailTab = "overview" | "activity" | "plan";
+type DetailTab = "work" | "activity" | "overview" | "plan"; // "overview" and "plan" kept for backward compat (both map to "work")
 
 // ── Source icons ──
 const SOURCE_ICONS: Record<string, string> = {
@@ -422,113 +422,179 @@ export default function FocusView() {
               {selected.description}
             </p>
           )}
-          {/* Status controls */}
-          <div className="flex items-center gap-2 mt-3">
-            {(["active", "paused", "completed"] as const).map(s => (
-              <button key={s} onClick={() => handleUpdate(selected.id, { status: s })}
-                className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
-                  selected.status === s
-                    ? s === "active" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                    : s === "paused" ? "bg-yellow-500/20 border-yellow-500/40 text-yellow-300"
-                    : "bg-gray-500/20 border-gray-500/40 text-gray-300"
-                    : "border-gray-700/40 text-gray-500 hover:text-gray-300"
-                }`}>
-                {s}
-              </button>
-            ))}
+          {/* Remove button (subtle) */}
+          <div className="flex items-center mt-2">
+            <div className="flex flex-wrap gap-1.5">
+              {selected.semanticTags.map(tag => (
+                <span key={tag} className="text-[10px] px-2 py-0.5 rounded bg-gray-800/60 border border-gray-700/40 text-gray-400">{tag}</span>
+              ))}
+            </div>
             <div className="flex-1" />
             <button onClick={() => handleDelete(selected.id)}
-              className="text-[11px] px-3 py-1 rounded text-red-400/60 hover:text-red-300 hover:bg-red-500/10 transition-colors">
+              className="text-[10px] px-2 py-1 rounded text-gray-600 hover:text-red-300 hover:bg-red-500/10 transition-colors">
               Remove
-            </button>
-            <button
-              disabled={preparing}
-              onClick={async () => {
-                setPreparing(true);
-                setChatReady(false);
-                try {
-                  const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/prepare`, {
-                    method: "POST",
-                    headers: authHeaders(),
-                  });
-                  if (resp.ok) {
-                    // Refresh focus state to get the briefing
-                    await fetchFocusAreas();
-                    setChatReady(true);
-                    // Auto-open chat after a short highlight delay
-                    setTimeout(() => {
-                      chatAboutFocus(selected, `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`);
-                      setChatReady(false);
-                    }, 2000);
-                  }
-                } catch { /* preparation failed */ }
-                setPreparing(false);
-              }}
-              className={`text-[11px] px-3 py-1 rounded transition-all ${preparing ? "bg-amber-600/40 text-amber-200 animate-pulse" : "bg-amber-600/60 text-amber-100 hover:bg-amber-500/60"}`}>
-              {preparing ? "Preparing..." : selected.preparedBriefing ? "Re-prepare" : "Prepare"}
-            </button>
-            <button
-              onClick={() => chatAboutFocus(selected, `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
-              className={`text-[11px] px-3 py-1 rounded transition-all ${chatReady ? "bg-violet-500 text-white animate-pulse shadow-lg shadow-violet-500/50" : "bg-violet-600/60 text-violet-100 hover:bg-violet-500/60"}`}>
-              Chat about this
             </button>
           </div>
         </div>
 
         {/* Detail tabs */}
         <div className="flex border-b border-gray-800/60 px-5">
-          {(["overview", "activity", "plan"] as const).map(tab => (
-            <button key={tab} onClick={() => { setDetailTab(tab); if (tab === "activity" && !activity) openDetail(selected.id); }}
+          {(["work", "activity"] as const).map(tab => (
+            <button key={tab} onClick={() => { setDetailTab(tab as DetailTab); if (tab === "activity" && !activity) openDetail(selected.id); }}
               className={`px-3 py-2.5 text-xs font-medium transition-colors border-b-2 ${
-                detailTab === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
+                (detailTab === "overview" ? "work" : detailTab) === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
               }`}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "work" ? "Work" : "Activity"}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
         <div className="px-5 py-4">
-          {detailTab === "overview" && (
+          {(detailTab === "overview" || detailTab === "work") && (
             <div className="space-y-5">
-              {/* Intent */}
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Intent</label>
-                {editingField === "intent" ? (
-                  <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
-                    onBlur={() => saveEdit("intent")} onKeyDown={e => e.key === "Enter" && saveEdit("intent")}
-                    className="text-sm text-gray-200 bg-transparent border-b border-violet-500 focus:outline-none w-full" />
-                ) : (
-                  <p className="text-sm text-gray-300 cursor-pointer hover:text-violet-300"
-                    onClick={() => { setEditingField("intent"); setEditValue(selected.intent || ""); }}>
-                    {selected.intent || <span className="text-gray-600 italic">Click to define your intent...</span>}
-                  </p>
+              {/* Context bar: intent + deeper WHY (compact, editable) */}
+              <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-4 space-y-3">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Goal</label>
+                  {editingField === "intent" ? (
+                    <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
+                      onBlur={() => saveEdit("intent")} onKeyDown={e => e.key === "Enter" && saveEdit("intent")}
+                      className="text-sm text-gray-200 bg-transparent border-b border-violet-500 focus:outline-none w-full" />
+                  ) : (
+                    <p className="text-sm text-gray-300 cursor-pointer hover:text-violet-300"
+                      onClick={() => { setEditingField("intent"); setEditValue(selected.intent || ""); }}>
+                      {selected.intent || <span className="text-gray-600 italic">Click to define...</span>}
+                    </p>
+                  )}
+                </div>
+                {(selected.deeperIntent || !selected.intent) && (
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Why this matters</label>
+                    {editingField === "deeperIntent" ? (
+                      <textarea autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
+                        onBlur={() => saveEdit("deeperIntent")}
+                        className="text-xs text-gray-300 bg-gray-900/60 border border-violet-500/50 rounded px-3 py-2 focus:outline-none w-full min-h-[40px]" />
+                    ) : (
+                      <p className="text-xs text-gray-400 cursor-pointer hover:text-violet-300"
+                        onClick={() => { setEditingField("deeperIntent"); setEditValue(selected.deeperIntent || ""); }}>
+                        {selected.deeperIntent || <span className="text-gray-600 italic">Click to explore your deeper motivation...</span>}
+                      </p>
+                    )}
+                  </div>
                 )}
+                <div className="flex items-center gap-3 text-[10px] text-gray-600 pt-1 border-t border-gray-800/30">
+                  <span>{selected.clarity}</span>
+                  <span>{"\u00B7"}</span>
+                  <span>{selected.progress.trend}</span>
+                  <span>{"\u00B7"}</span>
+                  <span>{selected.evidence.length} evidence points</span>
+                  {selected.preparedAt && <><span>{"\u00B7"}</span><span className="text-amber-400/60">prepared {selected.preparedAt.slice(0, 10)}</span></>}
+                </div>
               </div>
 
-              {/* Deeper Motivation */}
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Deeper Motivation — WHY</label>
-                {editingField === "deeperIntent" ? (
-                  <textarea autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
-                    onBlur={() => saveEdit("deeperIntent")}
-                    className="text-sm text-gray-200 bg-gray-900/60 border border-violet-500/50 rounded px-3 py-2 focus:outline-none w-full min-h-[60px]"
-                    placeholder="What deeper need drives this focus? (e.g., financial independence, creative expression, intellectual mastery...)" />
-                ) : (
-                  <p className="text-sm text-gray-300 cursor-pointer hover:text-violet-300 px-3 py-2 rounded bg-gray-800/20 border border-gray-800/40 hover:border-violet-500/20 transition-colors"
-                    onClick={() => { setEditingField("deeperIntent"); setEditValue(selected.deeperIntent || ""); }}>
-                    {selected.deeperIntent || <span className="text-gray-600 italic">Click to explore your deeper motivation...</span>}
-                  </p>
-                )}
+              {/* === THE WORKFLOW: Prepare → Discuss → Evolve === */}
+              <div className="space-y-3">
+                <label className="text-[10px] uppercase tracking-wider text-gray-600 block">Workflow</label>
+
+                {/* Step 1: Prepare */}
+                <button
+                  disabled={preparing}
+                  onClick={async () => {
+                    setPreparing(true);
+                    setChatReady(false);
+                    try {
+                      const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/prepare`, {
+                        method: "POST",
+                        headers: authHeaders(),
+                      });
+                      if (resp.ok) {
+                        await fetchFocusAreas();
+                        setChatReady(true);
+                        setTimeout(() => {
+                          chatAboutFocus(selected, `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`);
+                          setChatReady(false);
+                        }, 2000);
+                      }
+                    } catch { /* preparation failed */ }
+                    setPreparing(false);
+                  }}
+                  className={`w-full text-left rounded-lg border p-3 transition-all ${
+                    preparing ? "border-amber-500/40 bg-amber-950/20 animate-pulse"
+                    : selected.preparedBriefing ? "border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/50"
+                    : "border-gray-700/40 bg-gray-900/20 hover:border-amber-500/40 hover:bg-amber-950/10"
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{preparing ? "\u23F3" : selected.preparedBriefing ? "\u2705" : "\uD83D\uDD0D"}</span>
+                    <span className={`text-xs font-medium ${preparing ? "text-amber-300" : selected.preparedBriefing ? "text-emerald-300" : "text-gray-300"}`}>
+                      {preparing ? "Studying everything about this focus..." : selected.preparedBriefing ? "Prepared — AI has studied your data" : "Prepare — Deep study before discussion"}
+                    </span>
+                  </div>
+                  {!preparing && !selected.preparedBriefing && (
+                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Gathers project data, sprint history, Cortex knowledge, and cross-source connections</p>
+                  )}
+                  {selected.preparedBriefing && !preparing && (
+                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Click to re-prepare with latest data</p>
+                  )}
+                </button>
+
+                {/* Step 2: Discuss */}
+                <button
+                  onClick={() => chatAboutFocus(selected, selected.preparedBriefing
+                    ? `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`
+                    : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
+                  className={`w-full text-left rounded-lg border p-3 transition-all ${
+                    chatReady ? "border-violet-500 bg-violet-950/30 animate-pulse shadow-lg shadow-violet-500/20"
+                    : "border-gray-700/40 bg-gray-900/20 hover:border-violet-500/40 hover:bg-violet-950/10"
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{"\uD83D\uDCAC"}</span>
+                    <span className={`text-xs font-medium ${chatReady ? "text-violet-200" : "text-gray-300"}`}>
+                      {chatReady ? "Ready — Start the strategic dialogue" : "Discuss — Strategic dialogue with AI"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1 ml-6">Flesh out the problem space, agree on priorities, build an Evolve-ready brief</p>
+                </button>
+
+                {/* Step 3: Evolve */}
+                <button
+                  onClick={() => {
+                    // TODO: launch /evolve with focus conversation context as brief
+                    chatAboutFocus(selected, `/evolve`);
+                  }}
+                  className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 hover:border-indigo-500/40 hover:bg-indigo-950/10 transition-all">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{"\uD83D\uDE80"}</span>
+                    <span className="text-xs font-medium text-gray-300">Evolve — Launch AI team sprint</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1 ml-6">Full team of AI agents executes on the agreed goals from your discussion</p>
+                </button>
               </div>
 
-              {/* Adjacent Pursuits */}
+              {/* Next steps / suggested actions (if any) */}
+              {(selected.nextSteps?.length || selected.suggestedActions.length > 0) && (
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">
+                    {selected.nextSteps?.length ? "Next Steps" : "Suggested Actions"}
+                  </label>
+                  <div className="space-y-1.5">
+                    {(selected.nextSteps || selected.suggestedActions).map((item, i) => (
+                      <button key={i} onClick={() => chatAboutFocus(selected, item)}
+                        className="w-full text-left text-xs text-gray-300 px-3 py-2 rounded bg-gray-800/40 border border-gray-700/30 hover:border-violet-500/30 hover:text-violet-300 transition-colors">
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Adjacent pursuits */}
               {selected.adjacentPursuits && selected.adjacentPursuits.length > 0 && (
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Adjacent Pursuits — expand your horizon</label>
+                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Adjacent Pursuits</label>
                   <div className="space-y-1.5">
                     {selected.adjacentPursuits.map((pursuit, i) => (
-                      <button key={i} onClick={() => chatAboutFocus(selected, `Research: ${pursuit}`)}
+                      <button key={i} onClick={() => chatAboutFocus(selected, `Let's explore: ${pursuit}`)}
                         className="w-full text-left text-xs text-amber-300/80 px-3 py-2 rounded bg-amber-900/10 border border-amber-500/15 hover:border-amber-500/30 hover:bg-amber-900/20 transition-colors">
                         {"\u2728"} {pursuit}
                       </button>
@@ -536,13 +602,39 @@ export default function FocusView() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
 
-              {/* Evidence */}
+          {detailTab === "activity" && (
+            <div className="space-y-4">
+              <p className="text-xs text-gray-500">Everything accomplished and accumulated for this focus — from sprints, research, Cortex, and conversations.</p>
+
+              {/* Quick stats */}
+              <div className="grid grid-cols-3 gap-2">
+                {selected.refinements.length > 0 && (
+                  <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-3 text-center">
+                    <span className="text-lg font-semibold text-violet-300">{selected.refinements.length}</span>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Refinements</p>
+                  </div>
+                )}
+                {activity && (
+                  <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-3 text-center">
+                    <span className="text-lg font-semibold text-blue-300">{activity.total}</span>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Related Items</p>
+                  </div>
+                )}
+                <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-3 text-center">
+                  <span className="text-lg font-semibold text-emerald-300">{selected.evidence.length}</span>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Evidence Points</p>
+                </div>
+              </div>
+
+              {/* Evidence sources */}
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Evidence</label>
+                <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Evidence & Sources</label>
                 <div className="space-y-1">
                   {selected.evidence.map((ev, i) => (
-                    <div key={i} className="text-xs text-gray-400 flex items-start gap-2">
+                    <div key={i} className="text-xs text-gray-400 flex items-start gap-2 px-2.5 py-1.5 rounded hover:bg-gray-800/30">
                       <span className="text-gray-600 shrink-0">{"\u2022"}</span>
                       <span>{ev}</span>
                     </div>
@@ -550,40 +642,33 @@ export default function FocusView() {
                 </div>
               </div>
 
-              {/* Semantic tags */}
-              {selected.semanticTags.length > 0 && (
+              {/* Related Cortex items */}
+              {activity && activity.entities.length > 0 && (
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Related Themes</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selected.semanticTags.map(tag => (
-                      <span key={tag} className="text-[10px] px-2 py-0.5 rounded bg-gray-800/60 border border-gray-700/40 text-gray-400">{tag}</span>
+                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Related Knowledge ({activity.total})</label>
+                  <div className="space-y-1 max-h-60 overflow-y-auto">
+                    {activity.entities.map((ent, i) => (
+                      <div key={i} className="flex items-start gap-3 text-xs py-1.5 px-2.5 rounded hover:bg-gray-800/30">
+                        <span className="shrink-0 mt-0.5">{SOURCE_ICONS[ent.source] || "\uD83D\uDCC4"}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-gray-300 block truncate">{ent.title}</span>
+                          {ent.matchReason && <span className="text-[10px] text-gray-600 italic">{ent.matchReason}</span>}
+                        </div>
+                        <span className="text-[10px] text-gray-600 shrink-0">{ent.source}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Suggested actions */}
-              {selected.suggestedActions.length > 0 && (
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Suggested Actions</label>
-                  <div className="space-y-1.5">
-                    {selected.suggestedActions.map((action, i) => (
-                      <button key={i} onClick={() => chatAboutFocus(selected, action)}
-                        className="w-full text-left text-xs text-gray-300 px-3 py-2 rounded bg-gray-800/40 border border-gray-700/30 hover:border-violet-500/30 hover:text-violet-300 transition-colors">
-                        {action}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Refinement history */}
+              {/* Refinement timeline */}
               {selected.refinements.length > 0 && (
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">History</label>
-                  <div className="space-y-1">
-                    {selected.refinements.slice(-5).reverse().map((r, i) => (
-                      <div key={i} className="text-[11px] text-gray-500">
+                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Journey</label>
+                  <div className="space-y-1 border-l-2 border-gray-800/60 pl-3 ml-1">
+                    {selected.refinements.slice().reverse().map((r, i) => (
+                      <div key={i} className="text-[11px] text-gray-500 relative">
+                        <span className="absolute -left-[17px] top-1.5 w-2 h-2 rounded-full bg-gray-700" />
                         <span className="text-gray-600">{r.date.slice(0, 10)}</span>
                         <span className="text-gray-700 mx-1">{"\u00B7"}</span>
                         <span className={r.source === "conversation" ? "text-blue-400/70" : r.source === "user_edit" ? "text-emerald-400/70" : "text-gray-500"}>{r.source}</span>
@@ -595,175 +680,19 @@ export default function FocusView() {
                 </div>
               )}
 
-              {/* Confidence + meta */}
-              <div className="flex items-center gap-4 text-[11px] text-gray-600 pt-2 border-t border-gray-800/40">
-                <span>Confidence: {Math.round(selected.confidence * 100)}%</span>
-                <span>Created: {selected.createdAt.slice(0, 10)}</span>
-                <span>Updated: {selected.updatedAt.slice(0, 10)}</span>
-                {selected.preparedAt && <span className="text-amber-400/70">Prepared: {selected.preparedAt.slice(0, 10)}</span>}
-              </div>
-            </div>
-          )}
-
-          {detailTab === "activity" && (
-            <div>
-              {!activity ? (
-                <p className="text-sm text-gray-500 text-center py-8">Loading activity...</p>
-              ) : activity.entities.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">No matching entities found in Cortex</p>
-              ) : (
-                <>
-                  <p className="text-xs text-gray-500 mb-3">{activity.total} related items from your Cortex</p>
-                  <div className="space-y-1">
-                    {activity.entities.map((ent, i) => (
-                      <div key={i} className="flex items-start gap-3 text-xs py-2 px-2.5 rounded hover:bg-gray-800/30 group">
-                        <span className="shrink-0 mt-0.5">{SOURCE_ICONS[ent.source] || "\uD83D\uDCC4"}</span>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-gray-300 block truncate">{ent.title}</span>
-                          {ent.matchReason && (
-                            <span className="text-[10px] text-gray-600 italic">{ent.matchReason}</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-gray-600 shrink-0">{ent.source}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {detailTab === "plan" && (
-            <div className="space-y-6">
-              {/* Gap Analysis */}
-              {!gapAnalysis ? (
-                <div className="rounded-lg border border-gray-700/40 bg-gray-900/30 p-5">
-                  <h3 className="text-sm font-medium text-gray-200 mb-2">Gap & Bottleneck Analysis</h3>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Enso will analyze what's between your current state and your goal — identifying knowledge gaps,
-                    skill gaps, missing resources, and bottlenecks — then suggest solutions using Enso's capabilities.
-                  </p>
-                  <button onClick={() => handleGapAnalysis(selected.id)} disabled={analyzingGaps}
-                    className="text-sm px-4 py-2 rounded-lg bg-amber-600/80 text-white hover:bg-amber-500/80 disabled:opacity-50">
-                    {analyzingGaps ? "Analyzing gaps..." : "Analyze Gaps & Bottlenecks"}
-                  </button>
+              {/* Ask AI for deeper analysis */}
+              <button
+                onClick={() => chatAboutFocus(selected, `Give me a comprehensive review of everything accomplished for "${selected.title}". What progress has been made, what's the trajectory, and what should we celebrate or be concerned about?`)}
+                className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 hover:border-violet-500/40 hover:bg-violet-950/10 transition-all">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{"\uD83D\uDCCA"}</span>
+                  <span className="text-xs font-medium text-gray-300">Ask AI for deeper activity analysis</span>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Current State */}
-                  <div className="rounded-lg border border-gray-700/40 bg-gray-900/30 p-4">
-                    <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Current State</label>
-                    <p className="text-sm text-gray-300">{gapAnalysis.currentState}</p>
-                  </div>
-
-                  {/* Next Priority */}
-                  <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-4">
-                    <label className="text-[10px] uppercase tracking-wider text-violet-400/70 mb-1 block">Next Priority</label>
-                    <p className="text-sm text-violet-200 font-medium">{gapAnalysis.nextPriority}</p>
-                  </div>
-
-                  {/* Gaps */}
-                  {gapAnalysis.gaps.length > 0 && (
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-2 block">Gaps ({gapAnalysis.gaps.length})</label>
-                      <div className="space-y-2">
-                        {gapAnalysis.gaps.map((gap, i) => (
-                          <div key={i} className="rounded-lg border border-gray-700/30 bg-gray-900/20 p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
-                                gap.severity === "critical" ? "bg-red-900/30 text-red-400" :
-                                gap.severity === "significant" ? "bg-amber-900/30 text-amber-400" :
-                                "bg-gray-800/50 text-gray-500"
-                              }`}>{gap.severity}</span>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/50 text-gray-500">{gap.category}</span>
-                              <span className="text-xs font-medium text-gray-200">{gap.area}</span>
-                            </div>
-                            <p className="text-[11px] text-gray-400">{gap.description}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Bottlenecks */}
-                  {gapAnalysis.bottlenecks.length > 0 && (
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-2 block">Bottlenecks</label>
-                      <div className="space-y-2">
-                        {gapAnalysis.bottlenecks.map((bn, i) => (
-                          <div key={i} className="rounded-lg border border-red-500/20 bg-red-950/10 p-3">
-                            <p className="text-xs text-gray-200 mb-1">{bn.description}</p>
-                            <p className="text-[11px] text-red-400/70 italic">Impact: {bn.impact}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Solutions */}
-                  {gapAnalysis.solutions.length > 0 && (
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-2 block">Solutions</label>
-                      <div className="space-y-1.5">
-                        {gapAnalysis.solutions.map((sol, i) => {
-                          const actionIcons: Record<string, string> = {
-                            research: "\uD83D\uDD0D", scheduled_task: "\u23F0", build_app: "\uD83D\uDCBB",
-                            cortex_search: "\uD83E\uDDE0", evolution: "\uD83E\uDDEC", chat: "\uD83D\uDCAC",
-                          };
-                          return (
-                            <button key={i} onClick={() => chatAboutFocus(selected, sol.solution)}
-                              className="w-full text-left rounded-lg border border-gray-700/30 bg-gray-900/20 p-3 hover:border-emerald-500/30 hover:bg-emerald-950/10 transition-colors">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span>{actionIcons[sol.ensoAction] || "\u2022"}</span>
-                                <span className="text-xs text-gray-200">{sol.solution}</span>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded ml-auto shrink-0 ${
-                                  sol.effort === "quick" ? "bg-emerald-900/30 text-emerald-400" :
-                                  sol.effort === "medium" ? "bg-blue-900/30 text-blue-400" :
-                                  "bg-amber-900/30 text-amber-400"
-                                }`}>{sol.effort}</span>
-                              </div>
-                              <p className="text-[10px] text-gray-500">Addresses: {sol.gap}</p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <button onClick={() => { setGapAnalysis(null); handleGapAnalysis(selected.id); }}
-                    className="text-xs text-gray-500 hover:text-gray-300">Re-analyze</button>
-                </div>
-              )}
-
-              {/* Divider */}
-              <div className="border-t border-gray-800/40 pt-4">
-                {/* Orchestration Plan */}
-                {planGoal ? (
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-4">
-                      <p className="text-xs text-gray-400 mb-2">Orchestration goal prepared:</p>
-                      <p className="text-sm text-gray-200 whitespace-pre-wrap max-h-40 overflow-y-auto">{planGoal.slice(0, 500)}...</p>
-                    </div>
-                    <button onClick={launchPlanOrchestration}
-                      className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500">
-                      Launch Plan Orchestration
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-200 mb-2">Full Action Plan</h3>
-                    <p className="text-xs text-gray-500 mb-3">
-                      Launch an AI orchestration to create a comprehensive, step-by-step plan.
-                    </p>
-                    <button onClick={() => handlePlan(selected.id)}
-                      className="text-sm px-4 py-2 rounded-lg bg-violet-600/80 text-white hover:bg-violet-500/80">
-                      Create Full Plan
-                    </button>
-                  </div>
-                )}
-              </div>
+                <p className="text-[11px] text-gray-500 mt-1 ml-6">Get an LLM-generated review of progress, patterns, and trajectory</p>
+              </button>
             </div>
           )}
+
         </div>
       </div>
     </>
