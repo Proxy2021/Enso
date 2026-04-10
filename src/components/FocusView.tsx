@@ -55,7 +55,7 @@ interface GapAnalysis {
 }
 
 type View = "list" | "detail";
-type DetailTab = "work" | "activity" | "overview" | "plan"; // "overview" and "plan" kept for backward compat (both map to "work")
+type DetailTab = "work" | "activity" | "evolve" | "overview" | "plan"; // "overview" and "plan" kept for backward compat (both map to "work")
 
 // ── Source icons ──
 const SOURCE_ICONS: Record<string, string> = {
@@ -439,12 +439,12 @@ export default function FocusView() {
 
         {/* Detail tabs */}
         <div className="flex border-b border-gray-800/60 px-5">
-          {(["work", "activity"] as const).map(tab => (
+          {(["work", "activity", "evolve"] as const).map(tab => (
             <button key={tab} onClick={() => { setDetailTab(tab as DetailTab); if (tab === "activity" && !activity) openDetail(selected.id); }}
               className={`px-3 py-2.5 text-xs font-medium transition-colors border-b-2 ${
                 (detailTab === "overview" ? "work" : detailTab) === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
               }`}>
-              {tab === "work" ? "Work" : "Activity"}
+              {tab === "work" ? "Work" : tab === "activity" ? "Activity" : "Evolve"}
             </button>
           ))}
         </div>
@@ -693,9 +693,122 @@ export default function FocusView() {
             </div>
           )}
 
+          {detailTab === "evolve" && (
+            <EvolveTab focusArea={selected} onNavigateToChat={() => {
+              if (selected.conversationId) {
+                selectConversation(selected.conversationId);
+                setActiveTab("chat");
+              }
+            }} />
+          )}
+
         </div>
       </div>
     </>
+  );
+}
+
+// ── Evolve Tab ──
+
+function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNavigateToChat: () => void }) {
+  const [sessions, setSessions] = useState<{ orchestrations: Array<{ orchestrationId: string; goal: string; status: string; taskCount: number; completedCount: number; startedAt: number }>; sessions: Array<{ runId: string; label: string; status: string; startedAt: number }> } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const resp = await fetch(`${getBackendBaseUrl()}${API.SESSIONS}`, { headers: authHeaders() });
+        if (resp.ok && !cancelled) {
+          const data = await resp.json();
+          setSessions(data);
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false);
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  if (loading) return <p className="text-sm text-gray-500 text-center py-8">Checking for active sessions...</p>;
+
+  const activeOrchs = sessions?.orchestrations?.filter(o => o.status === "running" || o.status === "planning") || [];
+  const activeSessions = sessions?.sessions?.filter(s => s.status === "running") || [];
+
+  if (activeOrchs.length === 0 && activeSessions.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center py-8">
+          <span className="text-3xl mb-3 block">{"\uD83D\uDE80"}</span>
+          <p className="text-sm text-gray-400 mb-2">No evolution sprint running</p>
+          <p className="text-xs text-gray-600 mb-4">Use the <strong>Prepare → Discuss → Evolve</strong> workflow in the Work tab to launch a sprint</p>
+          <button onClick={onNavigateToChat}
+            className="text-xs px-4 py-2 rounded-lg bg-violet-600/60 text-violet-100 hover:bg-violet-500/60 transition-colors">
+            Open focus conversation
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Active orchestrations */}
+      {activeOrchs.map(orch => {
+        const progress = orch.taskCount > 0 ? Math.round((orch.completedCount / orch.taskCount) * 100) : 0;
+        const elapsed = Math.round((Date.now() - orch.startedAt) / 60000);
+        return (
+          <div key={orch.orchestrationId} className="rounded-lg border border-indigo-500/30 bg-indigo-950/10 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm animate-pulse">{"\uD83D\uDE80"}</span>
+              <span className="text-xs font-medium text-indigo-200">Evolution Sprint</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 ml-auto">{orch.status}</span>
+            </div>
+            <p className="text-xs text-gray-300">{orch.goal.slice(0, 200)}</p>
+            {/* Progress bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-gray-500">
+                <span>{orch.completedCount}/{orch.taskCount} tasks</span>
+                <span>{elapsed}m elapsed</span>
+              </div>
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Active Claude Code sessions */}
+      {activeSessions.length > 0 && (
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Active Agents ({activeSessions.length})</label>
+          <div className="space-y-1.5">
+            {activeSessions.map(s => {
+              const elapsed = Math.round((Date.now() - s.startedAt) / 1000);
+              return (
+                <div key={s.runId} className="flex items-center gap-2 text-xs px-3 py-2 rounded bg-gray-800/40 border border-gray-700/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="text-gray-300 truncate flex-1">{s.label || "Claude Code session"}</span>
+                  <span className="text-[10px] text-gray-600 shrink-0">{elapsed}s</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Navigate to conversation */}
+      <button onClick={onNavigateToChat}
+        className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 hover:border-violet-500/40 hover:bg-violet-950/10 transition-all">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">{"\uD83D\uDCAC"}</span>
+          <span className="text-xs font-medium text-gray-300">View in conversation</span>
+        </div>
+        <p className="text-[11px] text-gray-500 mt-1 ml-6">See the full orchestration card with task graph and agent outputs</p>
+      </button>
+    </div>
   );
 }
 
