@@ -140,8 +140,13 @@ function GeneratedUI({ data, onAction }) {
                           html += '<p style="font-size:14px;margin:6px 0">• ' + cp + '</p>';
                         });
                       }
-                      if (podcastDuration || podcastScript) {
+                      if (podcastDuration || podcastScript || podcastAudioUrl) {
                         html += '<h2 style="font-size:18px;color:#7c3aed;margin:24px 0 8px">🎙️ AI Book Podcast' + (podcastDuration ? ' (' + podcastDuration + ' min)' : '') + '</h2>';
+                        if (podcastAudioUrl) {
+                          var fullAudioUrl = podcastAudioUrl.startsWith("http") ? podcastAudioUrl : "https://pc1.enso.net" + podcastAudioUrl;
+                          html += '<audio controls style="width:100%;margin:8px 0 16px" preload="none"><source src="' + fullAudioUrl + '" type="audio/wav"/>Your browser does not support audio.</audio>';
+                          html += '<p style="font-size:12px;color:#888;margin:0 0 16px">If the player doesn\'t load, <a href="' + fullAudioUrl + '" style="color:#7c3aed">tap here to listen</a></p>';
+                        }
                         if (podcastScript) {
                           var lines = podcastScript.split("\n");
                           lines.forEach(function(line) {
