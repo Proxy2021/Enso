@@ -55,7 +55,7 @@ interface GapAnalysis {
 }
 
 type View = "list" | "detail";
-type DetailTab = "work" | "activity" | "evolve" | "overview" | "plan"; // "overview" and "plan" kept for backward compat (both map to "work")
+type DetailTab = "work" | "cortex" | "evolve" | "overview" | "activity" | "plan"; // legacy names kept for backward compat
 
 // ── Source icons ──
 const SOURCE_ICONS: Record<string, string> = {
@@ -439,12 +439,12 @@ export default function FocusView() {
 
         {/* Detail tabs */}
         <div className="flex border-b border-gray-800/60 px-5">
-          {(["work", "activity", "evolve"] as const).map(tab => (
-            <button key={tab} onClick={() => { setDetailTab(tab as DetailTab); if (tab === "activity" && !activity) openDetail(selected.id); }}
+          {(["work", "cortex", "evolve"] as const).map(tab => (
+            <button key={tab} onClick={() => { setDetailTab(tab as DetailTab); if (tab === "cortex" && !activity) openDetail(selected.id); }}
               className={`px-3 py-2.5 text-xs font-medium transition-colors border-b-2 ${
-                (detailTab === "overview" ? "work" : detailTab) === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
+                (detailTab === "overview" || detailTab === "activity" ? "work" : detailTab) === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
               }`}>
-              {tab === "work" ? "Work" : tab === "activity" ? "Activity" : "Evolve"}
+              {tab === "work" ? "Work" : tab === "cortex" ? "Cortex" : "Evolve"}
             </button>
           ))}
         </div>
@@ -628,70 +628,127 @@ export default function FocusView() {
             </div>
           )}
 
-          {detailTab === "activity" && (
-            <div className="space-y-4">
-              <p className="text-xs text-gray-500">Everything accomplished and accumulated for this focus — from sprints, research, Cortex, and conversations.</p>
-
-              {/* Quick stats */}
-              <div className="grid grid-cols-3 gap-2">
-                {selected.refinements.length > 0 && (
-                  <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-3 text-center">
-                    <span className="text-lg font-semibold text-violet-300">{selected.refinements.length}</span>
-                    <p className="text-[10px] text-gray-500 mt-0.5">Refinements</p>
-                  </div>
-                )}
-                {activity && (
-                  <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-3 text-center">
-                    <span className="text-lg font-semibold text-blue-300">{activity.total}</span>
-                    <p className="text-[10px] text-gray-500 mt-0.5">Related Items</p>
-                  </div>
-                )}
-                <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-3 text-center">
-                  <span className="text-lg font-semibold text-emerald-300">{selected.evidence.length}</span>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Evidence Points</p>
-                </div>
+          {(detailTab === "cortex" || detailTab === "activity") && (
+            <div className="space-y-5">
+              {/* Stats bar */}
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="px-2 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20">{selected.evidence.length} evidence</span>
+                {activity && <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">{activity.total} related</span>}
+                <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">{selected.refinements.length} refinements</span>
+                <span className="px-2 py-1 rounded bg-gray-500/10 text-gray-400 border border-gray-700/30">{selected.semanticTags.join(", ")}</span>
               </div>
 
-              {/* Evidence sources */}
+              {/* Preparation Briefing — the centerpiece */}
+              {selected.preparedBriefing && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-950/5 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm">{"\uD83D\uDCCB"}</span>
+                    <label className="text-[10px] uppercase tracking-wider text-amber-400/70">Preparation Briefing</label>
+                    {selected.preparedAt && <span className="text-[10px] text-gray-600 ml-auto">{selected.preparedAt.slice(0, 10)}</span>}
+                  </div>
+                  <div className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto pr-2">
+                    {selected.preparedBriefing}
+                  </div>
+                </div>
+              )}
+
+              {/* Deeper Motivation */}
+              {selected.deeperIntent && (
+                <div className="rounded-lg border border-violet-500/15 bg-violet-950/5 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm">{"\uD83D\uDCA1"}</span>
+                    <label className="text-[10px] uppercase tracking-wider text-violet-400/60">Why This Matters</label>
+                  </div>
+                  <p className="text-xs text-gray-300 leading-relaxed">{selected.deeperIntent}</p>
+                </div>
+              )}
+
+              {/* Evidence — grouped by source type */}
               <div>
-                <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Evidence & Sources</label>
-                <div className="space-y-1">
-                  {selected.evidence.map((ev, i) => (
-                    <div key={i} className="text-xs text-gray-400 flex items-start gap-2 px-2.5 py-1.5 rounded hover:bg-gray-800/30">
-                      <span className="text-gray-600 shrink-0">{"\u2022"}</span>
-                      <span>{ev}</span>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm">{"\uD83D\uDCDA"}</span>
+                  <label className="text-[10px] uppercase tracking-wider text-gray-600">Evidence & Sources</label>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {selected.evidence.map((ev, i) => {
+                    const sourceMatch = ev.match(/^(Project|Reading|YouTube|Game|Movie|Photo|Email|Browser|System):\s*/i);
+                    const source = sourceMatch ? sourceMatch[1].toLowerCase() : "";
+                    const icon = SOURCE_ICONS[source === "reading" ? "kindle" : source === "game" ? "steam" : source === "movie" ? "movies_tv" : source === "youtube" ? "youtube" : source === "project" ? "projects" : source] || "\uD83D\uDCC4";
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-gray-800/30 border border-gray-800/40 hover:border-gray-700/60 transition-colors">
+                        <span className="shrink-0">{icon}</span>
+                        <span className="text-gray-300 truncate">{ev}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Related Cortex items */}
+              {/* Related Knowledge from Cortex */}
               {activity && activity.entities.length > 0 && (
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Related Knowledge ({activity.total})</label>
-                  <div className="space-y-1 max-h-60 overflow-y-auto">
-                    {activity.entities.map((ent, i) => (
-                      <div key={i} className="flex items-start gap-3 text-xs py-1.5 px-2.5 rounded hover:bg-gray-800/30">
-                        <span className="shrink-0 mt-0.5">{SOURCE_ICONS[ent.source] || "\uD83D\uDCC4"}</span>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-gray-300 block truncate">{ent.title}</span>
-                          {ent.matchReason && <span className="text-[10px] text-gray-600 italic">{ent.matchReason}</span>}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm">{"\uD83E\uDDE0"}</span>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-600">Related in Cortex ({activity.total})</label>
+                  </div>
+                  {(() => {
+                    // Group by source
+                    const groups = new Map<string, typeof activity.entities>();
+                    for (const ent of activity.entities) {
+                      if (!groups.has(ent.source)) groups.set(ent.source, []);
+                      groups.get(ent.source)!.push(ent);
+                    }
+                    return Array.from(groups.entries()).map(([src, ents]) => (
+                      <div key={src} className="mb-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-xs">{SOURCE_ICONS[src] || "\uD83D\uDCC4"}</span>
+                          <span className="text-[10px] text-gray-500 uppercase tracking-wider">{src}</span>
+                          <span className="text-[10px] text-gray-600">({ents.length})</span>
                         </div>
-                        <span className="text-[10px] text-gray-600 shrink-0">{ent.source}</span>
+                        <div className="space-y-0.5 ml-5">
+                          {ents.map((ent, i) => (
+                            <div key={i} className="text-xs text-gray-400 py-1 flex items-start gap-2">
+                              <span className="text-gray-300 truncate">{ent.title}</span>
+                              {ent.matchReason && <span className="text-[10px] text-gray-600 italic shrink-0">{ent.matchReason}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+
+              {/* Adjacent pursuits */}
+              {selected.adjacentPursuits && selected.adjacentPursuits.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm">{"\u2728"}</span>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-600">Adjacent Pursuits</label>
+                  </div>
+                  <div className="space-y-1.5">
+                    {selected.adjacentPursuits.map((pursuit, i) => (
+                      <div key={i} className="text-xs text-amber-300/70 px-3 py-2 rounded-lg bg-amber-900/10 border border-amber-500/10">
+                        {pursuit}
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Refinement timeline */}
+              {/* Journey timeline */}
               {selected.refinements.length > 0 && (
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Journey</label>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm">{"\uD83D\uDDD3\uFE0F"}</span>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-600">Journey ({selected.refinements.length} milestones)</label>
+                  </div>
                   <div className="space-y-1 border-l-2 border-gray-800/60 pl-3 ml-1">
                     {selected.refinements.slice().reverse().map((r, i) => (
                       <div key={i} className="text-[11px] text-gray-500 relative">
-                        <span className="absolute -left-[17px] top-1.5 w-2 h-2 rounded-full bg-gray-700" />
+                        <span className={`absolute -left-[17px] top-1.5 w-2 h-2 rounded-full ${
+                          r.source === "conversation" ? "bg-blue-500/60" : r.source === "user_edit" ? "bg-emerald-500/60" : "bg-gray-600"
+                        }`} />
                         <span className="text-gray-600">{r.date.slice(0, 10)}</span>
                         <span className="text-gray-700 mx-1">{"\u00B7"}</span>
                         <span className={r.source === "conversation" ? "text-blue-400/70" : r.source === "user_edit" ? "text-emerald-400/70" : "text-gray-500"}>{r.source}</span>
@@ -702,17 +759,6 @@ export default function FocusView() {
                   </div>
                 </div>
               )}
-
-              {/* Ask AI for deeper analysis */}
-              <button
-                onClick={() => chatAboutFocus(selected, `Give me a comprehensive review of everything accomplished for "${selected.title}". What progress has been made, what's the trajectory, and what should we celebrate or be concerned about?`)}
-                className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 hover:border-violet-500/40 hover:bg-violet-950/10 transition-all">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">{"\uD83D\uDCCA"}</span>
-                  <span className="text-xs font-medium text-gray-300">Ask AI for deeper activity analysis</span>
-                </div>
-                <p className="text-[11px] text-gray-500 mt-1 ml-6">Get an LLM-generated review of progress, patterns, and trajectory</p>
-              </button>
             </div>
           )}
 
