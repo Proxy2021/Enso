@@ -606,6 +606,20 @@ export function updateFocusArea(focusId: string, updates: Partial<FocusArea>): F
   return area;
 }
 
+/** Delete a focus area by ID */
+export function deleteFocusArea(focusId: string): boolean {
+  const state = loadFocusState();
+  if (!state) return false;
+  const idx = state.areas.findIndex(a => a.id === focusId);
+  if (idx === -1) return false;
+  const title = state.areas[idx].title;
+  state.areas.splice(idx, 1);
+  state.version++;
+  saveFocusState(state);
+  logAction({ ts: Date.now(), type: "action", category: "focus-areas", message: `Deleted focus area: "${title}"` });
+  return true;
+}
+
 /** Add a new user-created focus area. Saves immediately, then enriches async via LLM + Cortex. */
 export function addFocusArea(area: { title: string; description: string; intent?: string }): FocusArea {
   let state = loadFocusState();

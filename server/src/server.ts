@@ -1812,6 +1812,17 @@ audio{width:100%;margin:12px 0;border-radius:8px}
     }
   });
 
+  app.delete("/api/focus-areas/:id", async (req, res) => {
+    try {
+      const { deleteFocusArea } = await import("./focus-areas.js");
+      const ok = deleteFocusArea(req.params.id);
+      if (!ok) { res.status(404).json({ error: "Focus area not found" }); return; }
+      res.json({ deleted: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Delete failed" });
+    }
+  });
+
   app.post("/api/focus-areas", async (req, res) => {
     try {
       const { addFocusArea } = await import("./focus-areas.js");

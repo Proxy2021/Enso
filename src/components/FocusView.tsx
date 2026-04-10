@@ -115,6 +115,18 @@ export default function FocusView() {
     return () => clearInterval(timer);
   }, [view, selectedId, focusState, fetchFocusAreas]);
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Remove this focus area?")) return;
+    try {
+      await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}`, {
+        method: "DELETE", headers: authHeaders(),
+      });
+      setView("list");
+      setSelectedId(null);
+      fetchFocusAreas();
+    } catch { /* ignore */ }
+  };
+
   const handleInfer = async () => {
     setInferring(true);
     try {
@@ -421,6 +433,10 @@ export default function FocusView() {
               </button>
             ))}
             <div className="flex-1" />
+            <button onClick={() => handleDelete(selected.id)}
+              className="text-[11px] px-3 py-1 rounded text-red-400/60 hover:text-red-300 hover:bg-red-500/10 transition-colors">
+              Remove
+            </button>
             <button onClick={() => chatAboutFocus(selected, `Help me make progress on: ${selected.title}`)}
               className="text-[11px] px-3 py-1 rounded bg-violet-600/60 text-violet-100 hover:bg-violet-500/60">
               Chat about this
