@@ -305,7 +305,7 @@ var SubscriptionsView = function() {
             <input
               type="text"
               value={searchQuery}
-              onChange={function(e) { setSearchQuery(e.target.value); }}
+              onChange={function(v) { setSearchQuery(v); }}
               placeholder="Search channels..."
               className="w-full pl-9 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             />
@@ -498,7 +498,7 @@ var DiscoverView = function() {
           <input
             type="text"
             value={discoverTopic}
-            onChange={function(e) { setDiscoverTopic(e.target.value); }}
+            onChange={function(v) { setDiscoverTopic(v); }}
             onKeyDown={function(e) { if (e.key === "Enter" && discoverTopic.trim()) onAction("discover", { topic: discoverTopic }); }}
             placeholder="Search for channels by topic..."
             className="w-full pl-9 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"

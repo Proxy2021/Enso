@@ -88,7 +88,7 @@ function GeneratedUI({ data, onAction }) {
           <Input
             placeholder="Search by name, @handle, or bio..."
             value={searchInput}
-            onChange={function(e) { setSearchInput(e.target.value); }}
+            onChange={function(v) { setSearchInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy }); }}
             style={{ flex: 1 }}
           />

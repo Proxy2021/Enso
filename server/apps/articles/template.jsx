@@ -274,7 +274,7 @@ function GeneratedUI({ data, onAction }) {
         <div style={{ display: "flex", gap: "8px" }}>
           <div style={{ display: "flex", gap: "8px", flex: 1, background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
             <Input placeholder="Save article — paste URL or search by title..." value={addInput}
-              onChange={function(e) { setAddInput(e.target.value); }}
+              onChange={function(v) { setAddInput(v); }}
               onKeyDown={function(e) { if (e.key === "Enter" && addInput.trim()) onAction("add", { query: addInput.trim() }); }}
               style={{ flex: 1, fontSize: "12px" }} />
             <Button variant="default" size="sm" style={{ fontSize: "11px" }}
@@ -284,7 +284,7 @@ function GeneratedUI({ data, onAction }) {
 
         <div style={{ display: "flex", gap: "8px" }}>
           <Input placeholder="Filter saved articles..." value={searchInput}
-            onChange={function(e) { setSearchInput(e.target.value); }}
+            onChange={function(v) { setSearchInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput }); }}
             style={{ flex: 1 }} />
         </div>

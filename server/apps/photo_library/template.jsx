@@ -89,7 +89,7 @@ function GeneratedUI({ data, onAction }) {
           <Input
             placeholder="Search albums..."
             value={searchInput}
-            onChange={function(e) { setSearchInput(e.target.value); }}
+            onChange={function(v) { setSearchInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, groupBy: groupBy }); }}
             style={{ flex: 1 }}
           />
@@ -152,7 +152,7 @@ function GeneratedUI({ data, onAction }) {
                                 var msg = "\u{1F4F7} " + album.name + "\n" + album.photoCount + " photos";
                                 if (album.dateRange && album.dateRange.from) msg += "\n\u{1F4C5} " + album.dateRange.from.substring(0, 10);
                                 if (album.cameras && album.cameras.length > 0) msg += "\n\u{1F4F8} " + album.cameras.join(", ");
-                                if (album.description) msg += "\n\n" + album.description.slice(0, 150);
+                                if (album.description) msg += "\n\n" + album.description;
                                 onAction("share_wechat", { content: msg });
                               }}
                             >微信</Button>

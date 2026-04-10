@@ -722,7 +722,7 @@ export default function GeneratedUI({ data, onAction }) {
                 rows={3}
                 placeholder={"Describe your video idea in any language... e.g., 一个关于坚持的励志故事 or 'Before/after kitchen transformation'"}
                 value={svConcept}
-                onChange={function(e) { setSvConcept(e.target.value); }}
+                onChange={function(v) { setSvConcept(v); }}
               />
             </div>
 
@@ -754,7 +754,7 @@ export default function GeneratedUI({ data, onAction }) {
                 rows={4}
                 placeholder={"/Users/you/Photos/trip1.jpg\n/Users/you/Photos/trip2.jpg\n/Users/you/Photos/trip3.jpg"}
                 value={psImagePathsText}
-                onChange={function(e) { setPsImagePathsText(e.target.value); }}
+                onChange={function(v) { setPsImagePathsText(v); }}
               />
               <p className="text-xs text-gray-600">
                 {psImagePathsText.trim() ? String(psImagePathsText.trim().split("\n").filter(function(l) { return l.trim(); }).length) + " photos" : "No photos yet"}
@@ -770,7 +770,7 @@ export default function GeneratedUI({ data, onAction }) {
                 rows={2}
                 placeholder="What story do these photos tell? e.g., '我们的东京三日游' or 'Product launch event highlights' or 'Before and after home renovation'"
                 value={psConcept}
-                onChange={function(e) { setPsConcept(e.target.value); }}
+                onChange={function(v) { setPsConcept(v); }}
               />
             </div>
 
@@ -782,7 +782,7 @@ export default function GeneratedUI({ data, onAction }) {
                 rows={3}
                 placeholder={"Senso-ji temple at golden hour\nShibuya crossing at night\nRamen shop owner smiling"}
                 value={psDescriptions}
-                onChange={function(e) { setPsDescriptions(e.target.value); }}
+                onChange={function(v) { setPsDescriptions(v); }}
               />
             </div>
 
@@ -850,7 +850,7 @@ export default function GeneratedUI({ data, onAction }) {
                 rows={3}
                 placeholder="Describe your scene... e.g., close-up of hands typing on keyboard at midnight, neon city lights reflected in rain-covered window"
                 value={promptText}
-                onChange={function(e) { setPromptText(e.target.value); }}
+                onChange={function(v) { setPromptText(v); }}
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -900,7 +900,7 @@ export default function GeneratedUI({ data, onAction }) {
                 rows={5}
                 placeholder="Write your full script or story. The AI will decompose it into individual video prompts with captions and audio cues..."
                 value={promptText}
-                onChange={function(e) { setPromptText(e.target.value); }}
+                onChange={function(v) { setPromptText(v); }}
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -948,7 +948,7 @@ export default function GeneratedUI({ data, onAction }) {
                 rows={2}
                 placeholder="Describe the motion... e.g., gentle camera pan right, hair flowing in wind, clouds drift slowly"
                 value={promptText}
-                onChange={function(e) { setPromptText(e.target.value); }}
+                onChange={function(v) { setPromptText(v); }}
               />
             </div>
             <p className="text-xs text-gray-600">To animate an image, type in the chat: "animate this image [path]" or use the Enso file browser to select an image first.</p>
@@ -1109,7 +1109,7 @@ export default function GeneratedUI({ data, onAction }) {
               className="w-full bg-gray-800 border border-gray-600/60 rounded-lg text-gray-200 text-xs py-2 px-3 focus:outline-none focus:border-violet-500/50 resize-none"
               rows={4}
               value={editPromptText}
-              onChange={function(e) { setEditPromptText(e.target.value); }}
+              onChange={function(v) { setEditPromptText(v); }}
             />
           ) : (
             <p className="text-xs text-gray-300 leading-relaxed">{String(crafted)}</p>

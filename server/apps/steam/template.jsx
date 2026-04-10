@@ -107,7 +107,7 @@ function GeneratedUI({ data, onAction }) {
                   onClick={function() {
                     var msg = "\u{1F3AE} " + entity.title;
                     if (entity.categories) msg += "\n\u{1F4D6} " + entity.categories;
-                    if (entity.summary) msg += "\n\n" + entity.summary.slice(0, 300);
+                    if (entity.summary) msg += "\n\n" + entity.summary;
                     onAction("share_wechat", { content: msg });
                   }}
                 >微信</Button>
@@ -501,7 +501,7 @@ function GeneratedUI({ data, onAction }) {
         {/* Add Game search bar */}
         <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
           <Input placeholder="Add a game — search by title..." value={addInput}
-            onChange={function(e) { setAddInput(e.target.value); }}
+            onChange={function(v) { setAddInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter" && addInput.trim()) onAction("add", { query: addInput.trim() }); }}
             style={{ flex: 1, fontSize: "12px" }} />
           <Button variant="default" size="sm" style={{ fontSize: "11px" }}
@@ -513,7 +513,7 @@ function GeneratedUI({ data, onAction }) {
           <Input
             placeholder="Filter games..."
             value={searchInput}
-            onChange={function(e) { setSearchInput(e.target.value); }}
+            onChange={function(v) { setSearchInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy, genre: activeGenre }); }}
             style={{ flex: 1 }}
           />
@@ -698,7 +698,7 @@ function GameCard({ game, onAction, metacriticColor, formatLastPlayed }) {
               var msg = "\u{1F3AE} " + game.name;
               if (game.genres) msg += "\n" + game.genres;
               if (game.metacritic) msg += "\n\u{1F3C6} Metacritic: " + game.metacritic;
-              if (game.description) msg += "\n\n" + game.description.slice(0, 200);
+              if (game.description) msg += "\n\n" + game.description;
               msg += "\n\nhttps://store.steampowered.com/app/" + game.appId;
               onAction("share_wechat", { content: msg });
             }}

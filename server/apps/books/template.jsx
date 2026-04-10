@@ -104,7 +104,15 @@ function GeneratedUI({ data, onAction }) {
                     if (entity.author) msg += " by " + entity.author;
                     if (entity.rating) msg += "\n\u2B50 " + entity.rating;
                     if (entity.categories) msg += "\n\u{1F4D6} " + entity.categories;
-                    if (entity.summary) msg += "\n\n" + entity.summary.slice(0, 300);
+                    if (research && research.coreThesis) {
+                      msg += "\n\n\u{1F4A1} Core Thesis\n" + research.coreThesis;
+                      if (research.keyInsights && research.keyInsights.length > 0) {
+                        msg += "\n\n\u{1F511} Key Insights";
+                        research.keyInsights.forEach(function(ins) { msg += "\n\u2022 " + ins.insight; });
+                      }
+                    } else if (entity.summary) {
+                      msg += "\n\n" + entity.summary;
+                    }
                     onAction("share_wechat", { content: msg });
                   }}
                 >微信</Button>
@@ -519,7 +527,7 @@ function GeneratedUI({ data, onAction }) {
           <Input
             placeholder="Add a new book — search by title, author, or ISBN..."
             value={addBookInput}
-            onChange={function(e) { setAddBookInput(e.target.value); }}
+            onChange={function(v) { setAddBookInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter" && addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}
             style={{ flex: 1, fontSize: "12px" }}
           />
@@ -531,7 +539,7 @@ function GeneratedUI({ data, onAction }) {
           <Input
             placeholder="Filter library by title, author, or topic..."
             value={searchInput}
-            onChange={function(e) { setSearchInput(e.target.value); }}
+            onChange={function(v) { setSearchInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput, sortBy: sortBy, page: 1, tab: activeTab }); }}
             style={{ flex: 1 }}
           />
@@ -709,7 +717,7 @@ function BookCard({ book, onAction }) {
             var msg = "\u{1F4DA} " + book.title;
             if (book.author) msg += " by " + book.author;
             if (book.rating) msg += "\n\u2B50 " + book.rating + (book.reviewCount ? " (" + book.reviewCount + " reviews)" : "");
-            if (book.description) msg += "\n\n" + book.description.slice(0, 200);
+            if (book.description) msg += "\n\n" + book.description;
             onAction("share_wechat", { content: msg });
           }}
         >微信</Button>

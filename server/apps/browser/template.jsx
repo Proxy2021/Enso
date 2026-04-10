@@ -53,7 +53,7 @@ function GeneratedUI({ data, onAction }) {
         <Input
           placeholder={currentView === "history" ? "Search domains, searches, pages..." : "Search bookmarks..."}
           value={searchInput}
-          onChange={function(e) { setSearchInput(e.target.value); }}
+          onChange={function(v) { setSearchInput(v); }}
           onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { view: currentView, query: searchInput }); }}
         />
 

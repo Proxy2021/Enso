@@ -242,7 +242,7 @@ function GeneratedUI({ data, onAction }) {
 
         <div style={{ display: "flex", gap: "8px", background: "#0f3a2e", padding: "8px 10px", borderRadius: "8px", border: "1px solid #065f46" }}>
           <Input placeholder="Add a destination — search by city, country, or region..." value={addInput}
-            onChange={function(e) { setAddInput(e.target.value); }}
+            onChange={function(v) { setAddInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter" && addInput.trim()) onAction("add", { query: addInput.trim() }); }}
             style={{ flex: 1, fontSize: "12px" }} />
           <Button variant="default" size="sm" style={{ fontSize: "11px" }}
@@ -252,7 +252,7 @@ function GeneratedUI({ data, onAction }) {
         {places.length > 0 && (
           <div style={{ display: "flex", gap: "8px" }}>
             <Input placeholder="Filter saved destinations..." value={searchInput}
-              onChange={function(e) { setSearchInput(e.target.value); }}
+              onChange={function(v) { setSearchInput(v); }}
               onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput }); }}
               style={{ flex: 1 }} />
           </div>

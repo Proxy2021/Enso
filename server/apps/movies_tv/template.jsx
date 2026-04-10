@@ -203,7 +203,7 @@ function GeneratedUI({ data, onAction }) {
               if (entity.year) msg += " (" + entity.year + ")";
               if (entity.rating) msg += "\n\u2B50 " + entity.rating;
               if (entity.categories) msg += "\n\u{1F4D6} " + entity.categories;
-              if (entity.summary) msg += "\n\n" + entity.summary.slice(0, 300);
+              if (entity.summary) msg += "\n\n" + entity.summary;
               onAction("share_wechat", { content: msg });
             }}
           >微信</Button>
@@ -671,7 +671,7 @@ function GeneratedUI({ data, onAction }) {
         {/* Add Movie search bar */}
         <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
           <Input placeholder="Add a movie or TV show — search by title..." value={addInput}
-            onChange={function(e) { setAddInput(e.target.value); }}
+            onChange={function(v) { setAddInput(v); }}
             onKeyDown={function(e) { if (e.key === "Enter" && addInput.trim()) onAction("add", { query: addInput.trim() }); }}
             style={{ flex: 1, fontSize: "12px" }} />
           <Button variant="default" size="sm" style={{ fontSize: "11px" }}
@@ -684,7 +684,7 @@ function GeneratedUI({ data, onAction }) {
             <Input
               placeholder="Filter by title, genre, cast..."
               value={searchInput}
-              onChange={function(e) { setSearchInput(e.target.value); }}
+              onChange={function(v) { setSearchInput(v); }}
               onKeyDown={function(e) {
                 if (e.key === "Enter" && searchInput.trim()) {
                   onAction("search", { query: searchInput.trim() });
@@ -918,7 +918,7 @@ function MediaCard({ item, onAction }) {
             if (item.year) msg += " (" + item.year + ")";
             if (item.rating) msg += "\n\u2B50 " + item.rating;
             if (item.tagline) msg += "\n" + item.tagline;
-            if (item.overview) msg += "\n\n" + item.overview.slice(0, 200);
+            if (item.overview) msg += "\n\n" + item.overview;
             if (item.imdbId) msg += "\n\nhttps://www.imdb.com/title/" + item.imdbId;
             onAction("share_wechat", { content: msg });
           }}

@@ -69,7 +69,7 @@ function GeneratedUI({ data, onAction }) {
         <Input
           placeholder="Search applications..."
           value={searchInput}
-          onChange={function(e) { setSearchInput(e.target.value); }}
+          onChange={function(v) { setSearchInput(v); }}
           onKeyDown={function(e) { if (e.key === "Enter") onAction("browse", { query: searchInput }); }}
         />
 
