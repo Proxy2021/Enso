@@ -82,6 +82,9 @@ server/                       # Enso server (the backend)
     ├── claude-code.ts        # Claude Code CLI integration
     ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
     ├── *-tools.ts            # System app implementations (filesystem, workspace, media, screen, travel, meal)
+    ├── wechat.ts             # WeChat Official Account API (token mgmt, customer service msgs, mass send, followers)
+    ├── wechat-tools.ts       # WeChat tools (enso_wechat_send, enso_wechat_followers)
+    ├── wechat-webhook.ts     # WeChat webhook (server verification + message receiving + interaction tracking)
     ├── app-catalog.ts          # APP_CATALOG definitions (system + app entries)
     ├── tunnel-registry.ts    # Cloudflare tunnel provisioning for <name>.enso.net
     └── native-tools/         # App action bridge

@@ -402,6 +402,14 @@ export async function startEnsoServer(opts: {
     runtime.log?.("[enso] tunnel registry enabled (master mode)");
   }
 
+  // ── WeChat webhook (unauthenticated — WeChat server verification + message receiving) ──
+  {
+    const { wechatRoutes } = await import("./wechat-webhook.js");
+    // WeChat sends XML bodies — use raw text parser for this route
+    app.use("/api/wechat", express.text({ type: ["text/xml", "application/xml"] }), wechatRoutes);
+    runtime.log?.("[enso] WeChat webhook mounted at /api/wechat");
+  }
+
   // ── Demo assets (public — shipped showcase images for Photo Studio) ──
   const demoDir = join(pluginDir, "..", "apps", "photo_studio", "demo");
   if (existsSync(demoDir)) {

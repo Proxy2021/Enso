@@ -1,6 +1,6 @@
 # Enso — A self-hosted AI platform with a Knowledge Cortex that compounds with every interaction
 
-> 99 tools, 16+ apps, 7 data sources, AI-inferred focus areas, and a unified brain that learns from your books, browsing, projects, and conversations.
+> 101 tools, 16+ apps, 7 data sources, AI-inferred focus areas, and a unified brain that learns from your books, browsing, projects, and conversations.
 
 ![Enso Screenshot](https://img.shields.io/badge/status-active-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Desktop%20%7C%20Android%20%7C%20PWA-orange)
 
@@ -8,7 +8,7 @@
 
 Enso is a self-hosted AI platform with a Knowledge Cortex at its center. Ask a question and get a structured research dashboard, not a wall of text. Connect your data sources — Kindle library, YouTube subscriptions, browser history, email, projects — and watch the Cortex populate with hundreds of interlinked wiki pages on day one. Describe an app and watch Claude Code build it in a live terminal. Run `/evolve` and an AI team improves your entire installation autonomously.
 
-**99 tools. 16+ apps. 7 data sources. 1 brain that compounds. Yours forever.**
+**101 tools. 16+ apps. 7 data sources. 1 brain that compounds. Yours forever.**
 
 ## Why Enso?
 

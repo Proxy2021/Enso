@@ -28,6 +28,7 @@ import { createSystemTools } from "./src/system-tools.js";
 import { registerSeedanceTools, createSeedanceTools } from "./src/seedance-tools.js";
 import { createUserContextTools } from "./src/user-context-tools.js";
 import { registerEmailTools, createEmailTools } from "./src/email-tools.js";
+import { registerWechatTools, createWechatTools } from "./src/wechat-tools.js";
 import { registerYouTubeTools, createYouTubeTools } from "./src/youtube-tools.js";
 import { createCortexTools } from "./src/cortex-tools.js";
 import { registerLocalTool } from "./src/tool-registry-local.js";
@@ -54,6 +55,7 @@ function registerAllToolsLocally(): void {
     createSeedanceTools(),
     createUserContextTools(),
     createEmailTools(),
+    createWechatTools(),
     createYouTubeTools(),
     createCortexTools(),
   ];
@@ -109,6 +111,7 @@ const plugin = {
     });
     registerMediaTools(api as unknown as EnsoPluginApi);
     registerEmailTools(api as unknown as EnsoPluginApi);
+    registerWechatTools(api as unknown as EnsoPluginApi);
     registerYouTubeTools(api as unknown as EnsoPluginApi);
     registerVideoTools(api as unknown as EnsoPluginApi);
     registerSeedanceTools(api as unknown as EnsoPluginApi);

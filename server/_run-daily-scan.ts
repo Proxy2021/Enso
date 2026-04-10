@@ -12,6 +12,7 @@ import { registerLocalTool, localToolCount } from "./src/tool-registry-local.js"
 import { createUserContextTools } from "./src/user-context-tools.js";
 import { createYouTubeTools } from "./src/youtube-tools.js";
 import { createEmailTools } from "./src/email-tools.js";
+import { createWechatTools } from "./src/wechat-tools.js";
 import { createCortexTools } from "./src/cortex-tools.js";
 import { createSystemTools } from "./src/system-tools.js";
 import { createBrowserTools } from "./src/browser-tools.js";
@@ -28,6 +29,7 @@ const toolSets = [
   createSystemTools(),
   createUserContextTools(),
   createEmailTools(),
+  createWechatTools(),
   createYouTubeTools(),
   createCortexTools(),
 ];

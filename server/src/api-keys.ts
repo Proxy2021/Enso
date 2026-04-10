@@ -38,6 +38,9 @@ const SERVICE_KEYS: ServiceKeyDef[] = [
   { id: "youtubeClientSecret", envVar: "YOUTUBE_CLIENT_SECRET", label: "YouTube Client Secret", description: "Google Cloud OAuth2 Client Secret", setupUrl: "https://console.cloud.google.com/apis/credentials" },
   { id: "youtubeRefreshToken", envVar: "YOUTUBE_REFRESH_TOKEN", label: "YouTube Refresh Token", description: "Auto-generated after OAuth authorization (do not edit manually)", setupUrl: "" },
   { id: "tmdb", envVar: "TMDB_API_KEY", label: "TMDB (Movies)", description: "The Movie Database API key for movie/TV metadata enrichment", setupUrl: "https://www.themoviedb.org/settings/api" },
+  { id: "wechatAppId", envVar: "WECHAT_APP_ID", label: "WeChat App ID", description: "微信公众号 App ID (from mp.weixin.qq.com sandbox or 基本配置)", setupUrl: "https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login" },
+  { id: "wechatAppSecret", envVar: "WECHAT_APP_SECRET", label: "WeChat App Secret", description: "微信公众号 App Secret", setupUrl: "https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login" },
+  { id: "wechatToken", envVar: "WECHAT_VERIFY_TOKEN", label: "WeChat Verify Token", description: "自定义 Token for webhook verification (any string you choose)", setupUrl: "https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login" },
 ];
 
 export function getServiceKeyDefinitions(): ServiceKeyDef[] {
