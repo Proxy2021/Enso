@@ -197,6 +197,16 @@ function GeneratedUI({ data, onAction }) {
               }}
             >📧 Email Podcast</Button>
           )}
+          <Button size="sm" style={{ background: "#16a34a", color: "white" }}
+            onClick={function() {
+              var msg = (entity.type === "tv" ? "\u{1F4FA} " : "\u{1F3AC} ") + entity.title;
+              if (entity.year) msg += " (" + entity.year + ")";
+              if (entity.rating) msg += "\n\u2B50 " + entity.rating;
+              if (entity.categories) msg += "\n\u{1F4D6} " + entity.categories;
+              if (entity.summary) msg += "\n\n" + entity.summary.slice(0, 300);
+              onAction("share_wechat", { content: msg });
+            }}
+          >微信</Button>
         </div>
 
         {/* ── Overview ── */}

@@ -98,6 +98,16 @@ function GeneratedUI({ data, onAction }) {
                     }}
                   >📧 Email Podcast</Button>
                 )}
+                <Button size="sm" style={{ background: "#16a34a", color: "white" }}
+                  onClick={function() {
+                    var msg = "\u{1F4DA} " + entity.title;
+                    if (entity.author) msg += " by " + entity.author;
+                    if (entity.rating) msg += "\n\u2B50 " + entity.rating;
+                    if (entity.categories) msg += "\n\u{1F4D6} " + entity.categories;
+                    if (entity.summary) msg += "\n\n" + entity.summary.slice(0, 300);
+                    onAction("share_wechat", { content: msg });
+                  }}
+                >微信</Button>
               </div>
               {entity.summary && (
                 <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.5 }}>
