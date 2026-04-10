@@ -146,6 +146,17 @@ function GeneratedUI({ data, onAction }) {
                               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden"
                             }}>{album.description}</div>
                           )}
+                          <div style={{ marginTop: "6px" }}>
+                            <Button variant="outline" size="sm" style={{ fontSize: "10px", borderColor: "#16a34a44", color: "#4ade80" }}
+                              onClick={function() {
+                                var msg = "\u{1F4F7} " + album.name + "\n" + album.photoCount + " photos";
+                                if (album.dateRange && album.dateRange.from) msg += "\n\u{1F4C5} " + album.dateRange.from.substring(0, 10);
+                                if (album.cameras && album.cameras.length > 0) msg += "\n\u{1F4F8} " + album.cameras.join(", ");
+                                if (album.description) msg += "\n\n" + album.description.slice(0, 150);
+                                onAction("share_wechat", { content: msg });
+                              }}
+                            >微信</Button>
+                          </div>
                         </div>
                       </div>
                     </UICard>

@@ -161,6 +161,14 @@ function GeneratedUI({ data, onAction }) {
                           {track.album}
                         </div>
                       )}
+                      <Button variant="outline" size="sm" style={{ fontSize: "9px", padding: "2px 6px", borderColor: "#16a34a44", color: "#4ade80", flexShrink: 0 }}
+                        onClick={function() {
+                          var msg = "\u{1F3B5} " + track.title;
+                          if (track.artist) msg += " - " + track.artist;
+                          if (track.album) msg += "\n\u{1F4BF} " + track.album;
+                          onAction("share_wechat", { content: msg });
+                        }}
+                      >微信</Button>
                     </div>
                   );
                 })}
@@ -232,6 +240,15 @@ function GeneratedUI({ data, onAction }) {
                               {artist.tracks.join(", ")}
                             </div>
                           )}
+                          <div style={{ marginTop: "4px" }}>
+                            <Button variant="outline" size="sm" style={{ fontSize: "9px", padding: "2px 6px", borderColor: "#16a34a44", color: "#4ade80" }}
+                              onClick={function() {
+                                var msg = "\u{1F3B6} " + artist.name + "\n" + artist.trackCount + " tracks";
+                                if (artist.tracks && artist.tracks.length > 0) msg += "\n\u{1F3B5} " + artist.tracks.slice(0, 5).join(", ");
+                                onAction("share_wechat", { content: msg });
+                              }}
+                            >微信</Button>
+                          </div>
                         </div>
                       </div>
                     </UICard>

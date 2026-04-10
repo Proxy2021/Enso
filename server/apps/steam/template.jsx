@@ -685,6 +685,16 @@ function GameCard({ game, onAction, metacriticColor, formatLastPlayed }) {
               onClick={function() { onAction("send_message", { message: "Add \"" + game.name + "\" to my Knowledge Cortex" }); }}
             >+ Cortex</Button>
           )}
+          <Button variant="outline" size="sm" style={{ fontSize: "10px", borderColor: "#16a34a44", color: "#4ade80" }}
+            onClick={function() {
+              var msg = "\u{1F3AE} " + game.name;
+              if (game.genres) msg += "\n" + game.genres;
+              if (game.metacritic) msg += "\n\u{1F3C6} Metacritic: " + game.metacritic;
+              if (game.description) msg += "\n\n" + game.description.slice(0, 200);
+              msg += "\n\nhttps://store.steampowered.com/app/" + game.appId;
+              onAction("share_wechat", { content: msg });
+            }}
+          >微信</Button>
         </div>
       </div>
     </UICard>

@@ -902,6 +902,17 @@ function MediaCard({ item, onAction }) {
             onClick={function() { window.open("https://www.imdb.com/title/" + item.imdbId, "_blank"); }}
           ><ExternalLink size={10} style={{ marginRight: "3px" }} /> IMDB</Button>
         )}
+        <Button variant="outline" size="sm" style={{ fontSize: "10px", borderColor: "#16a34a44", color: "#4ade80" }}
+          onClick={function() {
+            var msg = (item.category === "tv" ? "\u{1F4FA} " : "\u{1F3AC} ") + item.title;
+            if (item.year) msg += " (" + item.year + ")";
+            if (item.rating) msg += "\n\u2B50 " + item.rating;
+            if (item.tagline) msg += "\n" + item.tagline;
+            if (item.overview) msg += "\n\n" + item.overview.slice(0, 200);
+            if (item.imdbId) msg += "\n\nhttps://www.imdb.com/title/" + item.imdbId;
+            onAction("share_wechat", { content: msg });
+          }}
+        >微信</Button>
       </div>
     </div>
   );

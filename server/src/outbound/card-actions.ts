@@ -33,6 +33,7 @@ import { handleDeepResearchBuild, handleBuildAppViaClaude } from "../build-via-c
 // fs imports removed — no longer needed after deep research refactor
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import { sendHtmlEmail } from "../email.js";
+import { sendTextMessage, getFollowerOpenIds } from "../wechat.js";
 import type { CardContext } from "./card-context.js";
 import { cardContexts, isPathWithinRoot, validateScopedAction } from "./card-context.js";
 import {
@@ -361,6 +362,46 @@ export async function handlePluginCardAction(params: {
       const msg = err instanceof Error ? err.message : String(err);
       logError("email", `share_email failed: ${msg}`, undefined, { cardId });
       sendOperation("error", "Email failed", msg);
+    }
+    return;
+  }
+
+  // ── Share WeChat: send card content via WeChat (generic, works for any card) ──
+  if (action === "share_wechat") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const content = String(p.content ?? "").trim();
+    if (!content) {
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "error", targetCardId: cardId,
+        text: "No content to share.",
+        operation: { operationId, stage: "error", label: "WeChat failed", cancellable: false },
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    try {
+      const followers = await getFollowerOpenIds();
+      if (followers.length === 0) {
+        sendOperation("error", "No followers", "No WeChat followers found. Follow the test account first.");
+        return;
+      }
+
+      // Send to first follower (single-user setup)
+      const result = await sendTextMessage(followers[0], content);
+      sendOperation("complete", result.success ? "Sent to WeChat" : "WeChat failed");
+      client.send({
+        id: randomUUID(), runId: operationId, sessionKey: client.sessionKey, seq: 0,
+        state: "complete", targetCardId: cardId,
+        data: { tool: "share_wechat", success: result.success, message: result.message },
+        generatedUI: ctx.signatureId ? getGeneratedTemplateCodeBySignature(ctx.signatureId) : undefined,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logError("wechat", `share_wechat failed: ${msg}`, undefined, { cardId });
+      sendOperation("error", "WeChat failed", msg);
     }
     return;
   }

@@ -183,6 +183,18 @@ var VideoCard = function(props) {
         {v.description && (
           <p className="text-[11px] text-gray-500 mt-2 line-clamp-3 leading-relaxed">{v.description}</p>
         )}
+        <div style={{ marginTop: "6px" }}>
+          <Button variant="outline" size="sm" style={{ fontSize: "10px", borderColor: "#16a34a44", color: "#4ade80" }}
+            onClick={function(e) {
+              e.preventDefault(); e.stopPropagation();
+              var msg = "\u{1F4FA} " + v.title;
+              if (v.channelTitle) msg += "\n" + v.channelTitle;
+              if (v.viewCount) msg += " \u00B7 " + v.viewCount + " views";
+              if (v.videoUrl) msg += "\n\n" + v.videoUrl;
+              onAction("share_wechat", { content: msg });
+            }}
+          >微信</Button>
+        </div>
       </div>
     </div>
   );

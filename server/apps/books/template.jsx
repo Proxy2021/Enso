@@ -694,6 +694,15 @@ function BookCard({ book, onAction }) {
             onClick={function() { window.open(book.readerUrl, "_blank"); }}
           >📖 Read</Button>
         )}
+        <Button variant="outline" size="sm" style={{ fontSize: "10px", borderColor: "#16a34a44", color: "#4ade80" }}
+          onClick={function() {
+            var msg = "\u{1F4DA} " + book.title;
+            if (book.author) msg += " by " + book.author;
+            if (book.rating) msg += "\n\u2B50 " + book.rating + (book.reviewCount ? " (" + book.reviewCount + " reviews)" : "");
+            if (book.description) msg += "\n\n" + book.description.slice(0, 200);
+            onAction("share_wechat", { content: msg });
+          }}
+        >微信</Button>
       </div>
     </UICard>
   );
