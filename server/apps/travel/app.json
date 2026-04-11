@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "travel",
     "toolPrefix": "enso_travel_",
-    "description": "Places & Travel: discover destinations, save travel wishlists, generate deep AI podcasts about places, cross-reference with your photos and reading list.",
+    "description": "Places & Travel: discover destinations, save travel wishlists, plan photography trips around golden hour timing, research locations with immersion checklists, plan shots by day and lighting window, and access quick photography technique references.",
     "signatureId": "travel_places",
     "tools": [
       {
@@ -54,6 +54,80 @@
         "parameters": {
           "type": "object",
           "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "golden_hour",
+        "label": "Golden Hour Calculator",
+        "description": "Calculate sunrise, sunset, golden hour, and blue hour times for any destination. Plan photography trips around optimal lighting windows. Use when the user says: 'golden hour times', 'sunrise sunset for my trip', 'plan photo trip lighting', 'when is golden hour in [city]'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "description": "Destination city name" },
+            "startDate": { "type": "string", "description": "Trip start date (YYYY-MM-DD)" },
+            "endDate": { "type": "string", "description": "Trip end date (YYYY-MM-DD)" }
+          },
+          "required": ["city"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "research_checklist",
+        "label": "Location Research Checklist",
+        "description": "Interactive location immersion research checklist for travel photographers. Covers historical research, cultural highlights, iconic spots, hidden gems, and visual character notes. Use when the user says: 'research checklist', 'prepare for trip research', 'location immersion guide'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "description": "Destination city name" },
+            "action": { "type": "string", "description": "Action: load, toggle, update_notes, reset" },
+            "itemId": { "type": "string", "description": "Checklist item ID for toggle/update actions" },
+            "notes": { "type": "string", "description": "Notes text for update_notes action" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "shot_planner",
+        "label": "Shot Planning Board",
+        "description": "Plan and organize photography shots by day and time of day. Track locations, techniques, priority, and completion. Use when the user says: 'plan my shots', 'shot list', 'photography schedule', 'what to photograph'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "description": "Destination city name" },
+            "action": { "type": "string", "description": "Action: load, add, toggle, delete, update_priority" },
+            "location": { "type": "string", "description": "Shot location name (for add)" },
+            "timeOfDay": { "type": "string", "description": "Time window: blue_hour_am, sunrise, golden_hour_am, midday, golden_hour_pm, sunset, blue_hour_pm, night" },
+            "day": { "type": "number", "description": "Trip day number (for add)" },
+            "subject": { "type": "string", "description": "Subject type: landscape, portrait, street, architecture, food, detail" },
+            "technique": { "type": "string", "description": "Technique notes" },
+            "reference": { "type": "string", "description": "Reference photographer or image" },
+            "priority": { "type": "string", "description": "Priority: must_get or nice_to_have" },
+            "notes": { "type": "string", "description": "Additional notes" },
+            "shotId": { "type": "string", "description": "Shot ID for toggle/delete/update actions" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "quick_ref",
+        "label": "Photo Quick Reference",
+        "description": "Quick reference card with scene-to-technique guides, camera settings for different lighting conditions, composition reminders, and gear checklist. Use when the user says: 'photography cheat sheet', 'camera settings for golden hour', 'composition tips', 'quick reference'.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "trip_overview",
+        "label": "Trip Planning Dashboard",
+        "description": "Dashboard showing overall trip planning progress: lighting schedule, research completion, shot planning status, and readiness score. Use when the user says: 'trip dashboard', 'planning progress', 'trip overview', 'how ready am I'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "description": "Destination city name" }
+          },
           "additionalProperties": false
         }
       }

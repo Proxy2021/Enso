@@ -6,11 +6,28 @@ function GeneratedUI({ data, onAction }) {
   var isDiscover = tool === "enso_travel_discover";
   var isEnrich = tool === "enso_travel_enrich";
   var isEntityDetail = tool === "entity_detail" || !!d.focusEntity;
+  var isGoldenHour = tool === "enso_travel_golden_hour";
+  var isChecklist = tool === "enso_travel_research_checklist";
+  var isShotPlanner = tool === "enso_travel_shot_planner";
+  var isQuickRef = tool === "enso_travel_quick_ref";
+  var isTripOverview = tool === "enso_travel_trip_overview";
 
   var [searchInput, setSearchInput] = React.useState("");
   var [addInput, setAddInput] = React.useState("");
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [playingVideo, setPlayingVideo] = React.useState(null);
+  var [selectedDay, setSelectedDay] = React.useState(0);
+  var [showAddShot, setShowAddShot] = React.useState(false);
+  var [shotLocation, setShotLocation] = React.useState("");
+  var [shotTime, setShotTime] = React.useState("golden_hour_pm");
+  var [shotSubject, setShotSubject] = React.useState("");
+  var [shotTechnique, setShotTechnique] = React.useState("");
+  var [shotReference, setShotReference] = React.useState("");
+  var [shotDay, setShotDay] = React.useState("1");
+  var [shotPriority, setShotPriority] = React.useState("must_get");
+  var [expandedCategory, setExpandedCategory] = React.useState(null);
+  var [editingNotes, setEditingNotes] = React.useState(null);
+  var [notesText, setNotesText] = React.useState("");
 
   // ── Breadcrumb ──
   var navStack = d.navStack || [];
@@ -735,6 +752,694 @@ function GeneratedUI({ data, onAction }) {
         {d.unenrichedRemaining > 0 && (
           <div style={{ fontSize: "12px", color: "#64748b" }}>{d.unenrichedRemaining} places still need enrichment.</div>
         )}
+      </div>
+    );
+  }
+
+  // ── Golden Hour Calculator ──
+  if (isGoldenHour) {
+    var ghDays = Array.isArray(d.days) ? d.days : [];
+    var schedule = Array.isArray(d.schedule) ? d.schedule : [];
+    var ghError = d.error;
+
+    if (ghError) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <UICard style={{ padding: "16px", textAlign: "center" }}>
+            <div style={{ fontSize: "14px", color: "#ef4444" }}>{ghError}</div>
+          </UICard>
+        </div>
+      );
+    }
+
+    var timeColors = {
+      "blue_hour": "#3b82f6", "sunrise": "#f97316", "golden": "#f59e0b",
+      "midday": "#fbbf24", "sunset": "#ef4444"
+    };
+
+    var currentDayData = schedule[selectedDay] || schedule[0];
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <LucideReact.Sun size={20} style={{ color: "#f59e0b" }} />
+              <span style={{ fontWeight: 700, fontSize: "18px", color: "#f1f5f9" }}>Golden Hour Planner</span>
+            </div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+              {d.city} · {d.country} · {d.latitude > 0 ? d.latitude + "°N" : Math.abs(d.latitude) + "°S"} · {d.timezone}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <Button variant="outline" size="sm" onClick={function() { onAction("trip_overview", { city: d.city }); }}>Dashboard</Button>
+            <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>Places</Button>
+          </div>
+        </div>
+
+        {/* Trip Stats */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Stat label="Trip Days" value={d.tripDays} accent="amber" />
+          <Stat label="Daylight Avg" value={(currentDayData ? currentDayData.daylightHours : 0) + "h"} accent="orange" />
+          <Stat label="Sunrise" value={ghDays[selectedDay] ? ghDays[selectedDay].sunrise : "--"} accent="rose" />
+          <Stat label="Sunset" value={ghDays[selectedDay] ? ghDays[selectedDay].sunset : "--"} accent="purple" />
+        </div>
+
+        {/* Day Selector */}
+        {schedule.length > 1 && (
+          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+            {schedule.map(function(s, i) {
+              var isActive = i === selectedDay;
+              return (
+                <div key={i}
+                  onClick={function() { setSelectedDay(i); }}
+                  style={{
+                    padding: "4px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "11px", fontWeight: 600,
+                    background: isActive ? "#f59e0b22" : "#1e293b",
+                    border: isActive ? "1px solid #f59e0b" : "1px solid #334155",
+                    color: isActive ? "#f59e0b" : "#94a3b8"
+                  }}>
+                  {s.dayOfWeek} {s.date.split("-")[2]}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Daily Schedule */}
+        {currentDayData && (
+          <UICard style={{ padding: "14px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px", color: "#e2e8f0" }}>
+              {currentDayData.dayOfWeek}, {currentDayData.date} · {currentDayData.daylightHours}h daylight
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {currentDayData.windows.map(function(w, wi) {
+                var color = timeColors[w.icon] || "#94a3b8";
+                var iconMap = {
+                  "blue_hour": React.createElement(LucideReact.Moon, { size: 14, style: { color: color } }),
+                  "sunrise": React.createElement(LucideReact.Sunrise, { size: 14, style: { color: color } }),
+                  "golden": React.createElement(LucideReact.Sun, { size: 14, style: { color: color } }),
+                  "midday": React.createElement(LucideReact.Sun, { size: 14, style: { color: "#fbbf24" } }),
+                  "sunset": React.createElement(LucideReact.Sunset, { size: 14, style: { color: color } })
+                };
+                return (
+                  <div key={wi} style={{
+                    display: "flex", alignItems: "center", gap: "10px",
+                    padding: "8px 12px", background: color + "11", borderRadius: "8px",
+                    borderLeft: "3px solid " + color
+                  }}>
+                    {iconMap[w.icon] || React.createElement(LucideReact.Clock, { size: 14, style: { color: color } })}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontWeight: 600, fontSize: "12px", color: "#e2e8f0", minWidth: "120px" }}>{w.label}</span>
+                        <span style={{ fontSize: "12px", color: color, fontFamily: "monospace" }}>{w.time}</span>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>{w.tip}</div>
+                    </div>
+                    <Button variant="ghost" size="sm" style={{ fontSize: "10px", padding: "2px 6px" }}
+                      onClick={function() { onAction("shot_planner", { city: d.city, action: "load" }); }}>+ Shot</Button>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* Quick Actions */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          <Button size="sm" style={{ background: "#22c55e", color: "white" }}
+            onClick={function() { onAction("research_checklist", { city: d.city }); }}>Research Checklist</Button>
+          <Button size="sm" style={{ background: "#8b5cf6", color: "white" }}
+            onClick={function() { onAction("shot_planner", { city: d.city }); }}>Shot Planner</Button>
+          <Button size="sm" style={{ background: "#64748b", color: "white" }}
+            onClick={function() { onAction("quick_ref", {}); }}>Photo Reference</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Research Checklist ──
+  if (isChecklist) {
+    var cats = Array.isArray(d.categories) ? d.categories : [];
+    var catStats = Array.isArray(d.categoryStats) ? d.categoryStats : [];
+
+    var catIcons = {
+      "history": React.createElement(LucideReact.Scroll, { size: 14 }),
+      "culture": React.createElement(LucideReact.Palette, { size: 14 }),
+      "iconic": React.createElement(LucideReact.Camera, { size: 14 }),
+      "hidden": React.createElement(LucideReact.Gem, { size: 14 }),
+      "visual": React.createElement(LucideReact.Eye, { size: 14 })
+    };
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <LucideReact.ClipboardCheck size={20} style={{ color: "#22c55e" }} />
+              <span style={{ fontWeight: 700, fontSize: "18px", color: "#f1f5f9" }}>Research Checklist</span>
+            </div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+              {d.city || "No city set"} · {d.checkedItems}/{d.totalItems} complete ({d.overallPercent}%)
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <Button variant="outline" size="sm" onClick={function() { onAction("trip_overview", { city: d.city }); }}>Dashboard</Button>
+            <Button variant="outline" size="sm" onClick={function() { onAction("golden_hour", { city: d.city }); }}>Golden Hour</Button>
+          </div>
+        </div>
+
+        {/* Overall Progress */}
+        <Progress value={d.checkedItems} max={d.totalItems} variant="emerald" showLabel />
+
+        {/* Category Progress */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {catStats.map(function(cs) {
+            return (
+              <div key={cs.id} onClick={function() { setExpandedCategory(expandedCategory === cs.id ? null : cs.id); }}
+                style={{
+                  padding: "6px 10px", borderRadius: "8px", cursor: "pointer", fontSize: "11px",
+                  background: expandedCategory === cs.id ? cs.color + "22" : "#1e293b",
+                  border: "1px solid " + (expandedCategory === cs.id ? cs.color : "#334155"),
+                  color: expandedCategory === cs.id ? cs.color : "#94a3b8"
+                }}>
+                {cs.label} ({cs.checked}/{cs.total})
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Category Items */}
+        {cats.map(function(cat) {
+          if (expandedCategory !== null && expandedCategory !== cat.id) return null;
+          return (
+            <UICard key={cat.id} style={{ padding: "14px", borderLeft: "3px solid " + cat.color }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                <div style={{ color: cat.color }}>{catIcons[cat.id] || null}</div>
+                <span style={{ fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>{cat.label}</span>
+                <Badge variant="secondary" style={{ fontSize: "9px" }}>
+                  {cat.items.filter(function(it) { return it.checked; }).length}/{cat.items.length}
+                </Badge>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {cat.items.map(function(item) {
+                  var isEditing = editingNotes === item.id;
+                  return (
+                    <div key={item.id} style={{
+                      padding: "8px 10px", borderRadius: "6px",
+                      background: item.checked ? "#22c55e11" : "#0f172a",
+                      border: "1px solid " + (item.checked ? "#22c55e33" : "#1e293b")
+                    }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <div onClick={function() { onAction("research_checklist", { city: d.city, action: "toggle", itemId: item.id }); }}
+                          style={{
+                            width: "18px", height: "18px", borderRadius: "4px", cursor: "pointer", flexShrink: 0, marginTop: "1px",
+                            border: "2px solid " + (item.checked ? "#22c55e" : "#475569"),
+                            background: item.checked ? "#22c55e" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                          }}>
+                          {item.checked && React.createElement(LucideReact.Check, { size: 12, style: { color: "white" } })}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{
+                            fontSize: "12px", color: item.checked ? "#22c55e" : "#e2e8f0",
+                            textDecoration: item.checked ? "line-through" : "none", lineHeight: 1.4
+                          }}>{item.text}</div>
+                          {item.tip && (
+                            <div style={{ fontSize: "10px", color: "#475569", marginTop: "2px", fontStyle: "italic" }}>{item.tip}</div>
+                          )}
+                          {item.notes && !isEditing && (
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px", padding: "4px 8px", background: "#1e293b", borderRadius: "4px" }}>
+                              {item.notes}
+                            </div>
+                          )}
+                        </div>
+                        <div onClick={function() {
+                          if (isEditing) {
+                            onAction("research_checklist", { city: d.city, action: "update_notes", itemId: item.id, notes: notesText });
+                            setEditingNotes(null);
+                          } else {
+                            setEditingNotes(item.id);
+                            setNotesText(item.notes || "");
+                          }
+                        }}
+                          style={{ cursor: "pointer", padding: "2px", color: "#64748b" }}>
+                          {React.createElement(isEditing ? LucideReact.Check : LucideReact.StickyNote, { size: 14 })}
+                        </div>
+                      </div>
+                      {isEditing && (
+                        <div style={{ marginTop: "6px", paddingLeft: "26px" }}>
+                          <Input placeholder="Add research notes..."
+                            value={notesText}
+                            onChange={function(v) { setNotesText(v); }}
+                            onKeyDown={function(e) {
+                              if (e.key === "Enter") {
+                                onAction("research_checklist", { city: d.city, action: "update_notes", itemId: item.id, notes: notesText });
+                                setEditingNotes(null);
+                              }
+                            }}
+                            style={{ fontSize: "11px" }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </UICard>
+          );
+        })}
+
+        {/* Quick Actions */}
+        <div style={{ display: "flex", gap: "6px" }}>
+          <Button size="sm" style={{ background: "#8b5cf6", color: "white" }}
+            onClick={function() { onAction("shot_planner", { city: d.city }); }}>Shot Planner</Button>
+          <Button variant="outline" size="sm"
+            onClick={function() { onAction("research_checklist", { city: d.city, action: "reset" }); }}>Reset Checklist</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Shot Planner ──
+  if (isShotPlanner) {
+    var allDays = Array.isArray(d.days) ? d.days : [];
+    var tLabels = d.timeLabels || {};
+    var timeOptions = [
+      { value: "blue_hour_am", label: "Blue Hour AM" },
+      { value: "sunrise", label: "Sunrise" },
+      { value: "golden_hour_am", label: "Golden Hour AM" },
+      { value: "midday", label: "Midday" },
+      { value: "golden_hour_pm", label: "Golden Hour PM" },
+      { value: "sunset", label: "Sunset" },
+      { value: "blue_hour_pm", label: "Blue Hour PM" },
+      { value: "night", label: "Night" }
+    ];
+    var timeColorMap = {
+      "blue_hour_am": "#3b82f6", "sunrise": "#f97316", "golden_hour_am": "#f59e0b",
+      "midday": "#fbbf24", "golden_hour_pm": "#f59e0b", "sunset": "#ef4444",
+      "blue_hour_pm": "#3b82f6", "night": "#6366f1"
+    };
+    var priorityColors = { "must_get": "#ef4444", "nice_to_have": "#64748b" };
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <LucideReact.Camera size={20} style={{ color: "#8b5cf6" }} />
+              <span style={{ fontWeight: 700, fontSize: "18px", color: "#f1f5f9" }}>Shot Planner</span>
+            </div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+              {d.city || "No city"} · {d.totalShots} shots planned
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <Button variant="default" size="sm" style={{ background: "#8b5cf6", color: "white" }}
+              onClick={function() { setShowAddShot(!showAddShot); }}>{showAddShot ? "Cancel" : "+ Add Shot"}</Button>
+            <Button variant="outline" size="sm" onClick={function() { onAction("golden_hour", { city: d.city }); }}>Golden Hour</Button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Stat label="Total Shots" value={d.totalShots} accent="purple" />
+          <Stat label="Must-Get" value={d.mustGet} accent="rose" />
+          <Stat label="Nice-to-Have" value={d.niceToHave} accent="gray" />
+          <Stat label="Completed" value={d.completed} accent="emerald" />
+        </div>
+
+        {/* Add Shot Form */}
+        {showAddShot && (
+          <UICard style={{ padding: "14px", borderColor: "#8b5cf644" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px", color: "#c4b5fd" }}>New Shot</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <Input placeholder="Location name *" value={shotLocation} onChange={function(v) { setShotLocation(v); }} style={{ fontSize: "12px" }} />
+              <div style={{ display: "flex", gap: "6px" }}>
+                <Select options={timeOptions} value={shotTime}
+                  onChange={function(v) { setShotTime(v); }}
+                  placeholder="Time of day" />
+                <Select options={[{ value: "must_get", label: "Must-Get" }, { value: "nice_to_have", label: "Nice-to-Have" }]}
+                  value={shotPriority} onChange={function(v) { setShotPriority(v); }}
+                  placeholder="Priority" />
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <Input placeholder="Day # (1, 2, ...)" value={shotDay} onChange={function(v) { setShotDay(v); }} style={{ flex: 1, fontSize: "12px" }} />
+                <Input placeholder="Subject type" value={shotSubject} onChange={function(v) { setShotSubject(v); }} style={{ flex: 1, fontSize: "12px" }} />
+              </div>
+              <Input placeholder="Technique notes" value={shotTechnique} onChange={function(v) { setShotTechnique(v); }} style={{ fontSize: "12px" }} />
+              <Input placeholder="Reference photographer / image" value={shotReference} onChange={function(v) { setShotReference(v); }} style={{ fontSize: "12px" }} />
+              <Button variant="default" size="sm" style={{ background: "#8b5cf6", color: "white" }}
+                onClick={function() {
+                  if (!shotLocation.trim()) return;
+                  onAction("shot_planner", {
+                    city: d.city, action: "add",
+                    location: shotLocation, timeOfDay: shotTime, day: parseInt(shotDay) || 1,
+                    subject: shotSubject, technique: shotTechnique, reference: shotReference, priority: shotPriority
+                  });
+                  setShotLocation(""); setShotSubject(""); setShotTechnique(""); setShotReference("");
+                  setShowAddShot(false);
+                }}>Add Shot</Button>
+            </div>
+          </UICard>
+        )}
+
+        {/* Shots by Day */}
+        {allDays.map(function(dayGroup) {
+          if (dayGroup.shots.length === 0) return null;
+          return (
+            <UICard key={dayGroup.day} style={{ padding: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <Badge variant="default" style={{ background: "#334155" }}>Day {dayGroup.day}</Badge>
+                {dayGroup.date && <span style={{ fontSize: "11px", color: "#64748b" }}>{dayGroup.date}</span>}
+                <span style={{ fontSize: "11px", color: "#475569" }}>{dayGroup.shots.length} shots</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {dayGroup.shots.map(function(shot) {
+                  var tColor = timeColorMap[shot.timeOfDay] || "#94a3b8";
+                  var pColor = priorityColors[shot.priority] || "#64748b";
+                  return (
+                    <div key={shot.id} style={{
+                      display: "flex", alignItems: "flex-start", gap: "8px",
+                      padding: "8px 10px", borderRadius: "6px",
+                      background: shot.completed ? "#22c55e11" : "#0f172a",
+                      borderLeft: "3px solid " + tColor, opacity: shot.completed ? 0.6 : 1
+                    }}>
+                      <div onClick={function() { onAction("shot_planner", { city: d.city, action: "toggle", shotId: String(shot.id) }); }}
+                        style={{
+                          width: "16px", height: "16px", borderRadius: "50%", cursor: "pointer", flexShrink: 0, marginTop: "2px",
+                          border: "2px solid " + (shot.completed ? "#22c55e" : "#475569"),
+                          background: shot.completed ? "#22c55e" : "transparent"
+                        }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 600, fontSize: "12px", color: shot.completed ? "#22c55e" : "#e2e8f0",
+                            textDecoration: shot.completed ? "line-through" : "none" }}>{shot.location}</span>
+                          <Badge variant="secondary" style={{ fontSize: "8px", color: tColor, borderColor: tColor + "44" }}>
+                            {tLabels[shot.timeOfDay] || shot.timeOfDay}
+                          </Badge>
+                          <Badge variant={shot.priority === "must_get" ? "danger" : "outline"} style={{ fontSize: "8px" }}>
+                            {shot.priority === "must_get" ? "MUST" : "NICE"}
+                          </Badge>
+                        </div>
+                        {(shot.subject || shot.technique) && (
+                          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>
+                            {shot.subject && <span>{shot.subject}</span>}
+                            {shot.subject && shot.technique && <span> · </span>}
+                            {shot.technique && <span>{shot.technique}</span>}
+                          </div>
+                        )}
+                        {shot.reference && <div style={{ fontSize: "10px", color: "#475569", marginTop: "2px" }}>Ref: {shot.reference}</div>}
+                      </div>
+                      <div onClick={function() { onAction("shot_planner", { city: d.city, action: "delete", shotId: String(shot.id) }); }}
+                        style={{ cursor: "pointer", padding: "2px", color: "#475569" }}>
+                        {React.createElement(LucideReact.X, { size: 14 })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </UICard>
+          );
+        })}
+
+        {d.totalShots === 0 && (
+          <UICard style={{ padding: "24px", textAlign: "center" }}>
+            <div style={{ fontSize: "28px", marginBottom: "8px" }}>📷</div>
+            <div style={{ fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>No shots planned yet</div>
+            <div style={{ fontSize: "12px", color: "#64748b" }}>Click "+ Add Shot" to start planning your photography schedule.</div>
+          </UICard>
+        )}
+
+        {/* Quick Actions */}
+        <div style={{ display: "flex", gap: "6px" }}>
+          <Button size="sm" style={{ background: "#22c55e", color: "white" }}
+            onClick={function() { onAction("research_checklist", { city: d.city }); }}>Research Checklist</Button>
+          <Button size="sm" style={{ background: "#64748b", color: "white" }}
+            onClick={function() { onAction("quick_ref", {}); }}>Photo Reference</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Quick Reference Card ──
+  if (isQuickRef) {
+    var scenes = Array.isArray(d.sceneGuide) ? d.sceneGuide : [];
+    var lighting = Array.isArray(d.lightingSettings) ? d.lightingSettings : [];
+    var compTips = Array.isArray(d.compositionTips) ? d.compositionTips : [];
+    var gear = Array.isArray(d.gearChecklist) ? d.gearChecklist : [];
+
+    var refTabs = [
+      { value: "scenes", label: "Scenes" },
+      { value: "lighting", label: "Settings" },
+      { value: "composition", label: "Composition" },
+      { value: "gear", label: "Gear" }
+    ];
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <LucideReact.BookOpen size={20} style={{ color: "#06b6d4" }} />
+            <span style={{ fontWeight: 700, fontSize: "18px", color: "#f1f5f9" }}>Photo Quick Reference</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>Places</Button>
+        </div>
+
+        <Tabs tabs={refTabs} defaultValue="scenes" variant="underline">
+          {function(activeTab) {
+            if (activeTab === "scenes") {
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingTop: "8px" }}>
+                  {scenes.map(function(scene, si) {
+                    return (
+                      <UICard key={si} style={{ padding: "12px" }}>
+                        <div style={{ fontWeight: 600, fontSize: "13px", color: "#f59e0b", marginBottom: "6px" }}>{scene.scene}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <div style={{ fontSize: "11px" }}>
+                            <span style={{ color: "#64748b" }}>Settings: </span>
+                            <span style={{ color: "#e2e8f0", fontFamily: "monospace" }}>{scene.settings}</span>
+                          </div>
+                          <div style={{ fontSize: "11px" }}>
+                            <span style={{ color: "#64748b" }}>Technique: </span>
+                            <span style={{ color: "#cbd5e1" }}>{scene.technique}</span>
+                          </div>
+                          <div style={{ fontSize: "11px" }}>
+                            <span style={{ color: "#64748b" }}>Composition: </span>
+                            <span style={{ color: "#94a3b8" }}>{scene.composition}</span>
+                          </div>
+                        </div>
+                      </UICard>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            if (activeTab === "lighting") {
+              return (
+                <div style={{ paddingTop: "8px" }}>
+                  <DataTable
+                    columns={[
+                      { key: "condition", label: "Condition", sortable: true },
+                      { key: "aperture", label: "Aperture" },
+                      { key: "shutter", label: "Shutter" },
+                      { key: "iso", label: "ISO" },
+                      { key: "notes", label: "Tips" }
+                    ]}
+                    data={lighting}
+                    striped
+                  />
+                </div>
+              );
+            }
+
+            if (activeTab === "composition") {
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", paddingTop: "8px" }}>
+                  {compTips.map(function(tip, ti) {
+                    return (
+                      <div key={ti} style={{
+                        display: "flex", gap: "10px", padding: "8px 12px",
+                        background: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b"
+                      }}>
+                        <div style={{
+                          width: "24px", height: "24px", borderRadius: "50%", flexShrink: 0,
+                          background: "#06b6d422", display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: "11px", fontWeight: 700, color: "#06b6d4"
+                        }}>{ti + 1}</div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: "12px", color: "#e2e8f0" }}>{tip.name}</div>
+                          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px", lineHeight: 1.4 }}>{tip.description}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            if (activeTab === "gear") {
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px", paddingTop: "8px" }}>
+                  {gear.map(function(g, gi) {
+                    return (
+                      <div key={gi} style={{
+                        display: "flex", alignItems: "center", gap: "8px",
+                        padding: "6px 10px", borderRadius: "6px",
+                        background: g.essential ? "#22c55e08" : "#0f172a",
+                        border: "1px solid " + (g.essential ? "#22c55e22" : "#1e293b")
+                      }}>
+                        <div style={{
+                          width: "6px", height: "6px", borderRadius: "50%",
+                          background: g.essential ? "#22c55e" : "#475569"
+                        }} />
+                        <span style={{ fontSize: "12px", color: "#e2e8f0" }}>{g.item}</span>
+                        {g.essential && <Badge variant="success" style={{ fontSize: "8px" }}>Essential</Badge>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            return null;
+          }}
+        </Tabs>
+      </div>
+    );
+  }
+
+  // ── Trip Overview Dashboard ──
+  if (isTripOverview) {
+    if (!d.hasTrip) {
+      return (
+        <UICard style={{ padding: "24px", textAlign: "center" }}>
+          <div style={{ fontSize: "32px", marginBottom: "8px" }}>📸</div>
+          <div style={{ fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>No Trip Planned Yet</div>
+          <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "12px" }}>{d.message || "Set up a trip with the Golden Hour Calculator to get started."}</div>
+          <Button variant="default" size="sm" style={{ background: "#f59e0b", color: "#0f172a" }}
+            onClick={function() { onAction("golden_hour", { city: "" }); }}>Plan a Trip</Button>
+        </UICard>
+      );
+    }
+
+    var trip = d.tripInfo || {};
+    var research = d.research || {};
+    var shotData = d.shots || {};
+    var catProg = Array.isArray(research.categoryProgress) ? research.categoryProgress : [];
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <LucideReact.Compass size={20} style={{ color: "#f59e0b" }} />
+              <span style={{ fontWeight: 700, fontSize: "18px", color: "#f1f5f9" }}>Trip Dashboard</span>
+            </div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+              {d.city} · Readiness: {d.readiness}%
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>Places</Button>
+        </div>
+
+        {/* Readiness Gauge */}
+        <UICard style={{ padding: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{
+              width: "60px", height: "60px", borderRadius: "50%",
+              background: "conic-gradient(" +
+                (d.readiness >= 80 ? "#22c55e" : d.readiness >= 50 ? "#f59e0b" : "#ef4444") +
+                " " + (d.readiness * 3.6) + "deg, #1e293b " + (d.readiness * 3.6) + "deg)",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}>
+              <div style={{ width: "46px", height: "46px", borderRadius: "50%", background: "#0f172a",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "16px", fontWeight: 700, color: "#f1f5f9" }}>
+                {d.readiness}%
+              </div>
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>Trip Readiness</div>
+              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                {d.readiness >= 80 ? "Well prepared! Time to pack." :
+                 d.readiness >= 50 ? "Good progress — keep researching." :
+                 "Just getting started — lots to plan!"}
+              </div>
+            </div>
+          </div>
+        </UICard>
+
+        {/* Trip Info */}
+        {trip.city && (
+          <UICard style={{ padding: "14px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Trip Details</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "8px" }}>
+              <div><div style={{ fontSize: "10px", color: "#475569" }}>Destination</div><div style={{ fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }}>{trip.city}, {trip.country}</div></div>
+              <div><div style={{ fontSize: "10px", color: "#475569" }}>Dates</div><div style={{ fontSize: "12px", color: "#cbd5e1" }}>{trip.startDate} to {trip.endDate}</div></div>
+              <div><div style={{ fontSize: "10px", color: "#475569" }}>Duration</div><div style={{ fontSize: "12px", color: "#cbd5e1" }}>{trip.totalDays} days</div></div>
+              <div><div style={{ fontSize: "10px", color: "#475569" }}>Avg Daylight</div><div style={{ fontSize: "12px", color: "#f59e0b" }}>{trip.averageDaylight}h</div></div>
+            </div>
+          </UICard>
+        )}
+
+        {/* Research Progress */}
+        <UICard style={{ padding: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <LucideReact.ClipboardCheck size={14} style={{ color: "#22c55e" }} />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#94a3b8" }}>Research</span>
+            </div>
+            <Button variant="ghost" size="sm" style={{ fontSize: "10px" }}
+              onClick={function() { onAction("research_checklist", { city: d.city }); }}>Open Checklist</Button>
+          </div>
+          <Progress value={research.done || 0} max={research.total || 1} variant="emerald" showLabel />
+          {catProg.length > 0 && (
+            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "8px" }}>
+              {catProg.map(function(cp) {
+                return (
+                  <Badge key={cp.label} variant="secondary" style={{ fontSize: "9px", borderColor: cp.color + "44", color: cp.color }}>
+                    {cp.label}: {cp.done}/{cp.total}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
+        </UICard>
+
+        {/* Shot Planning */}
+        <UICard style={{ padding: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <LucideReact.Camera size={14} style={{ color: "#8b5cf6" }} />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#94a3b8" }}>Shots Planned</span>
+            </div>
+            <Button variant="ghost" size="sm" style={{ fontSize: "10px" }}
+              onClick={function() { onAction("shot_planner", { city: d.city }); }}>Open Planner</Button>
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <Stat label="Total" value={shotData.total || 0} accent="purple" />
+            <Stat label="Must-Get" value={shotData.mustGet || 0} accent="rose" />
+            <Stat label="Done" value={shotData.completed || 0} accent="emerald" />
+          </div>
+        </UICard>
+
+        {/* Quick Navigation */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          <Button size="sm" style={{ background: "#f59e0b", color: "#0f172a" }}
+            onClick={function() { onAction("golden_hour", { city: d.city }); }}>Golden Hour</Button>
+          <Button size="sm" style={{ background: "#22c55e", color: "white" }}
+            onClick={function() { onAction("research_checklist", { city: d.city }); }}>Research</Button>
+          <Button size="sm" style={{ background: "#8b5cf6", color: "white" }}
+            onClick={function() { onAction("shot_planner", { city: d.city }); }}>Shots</Button>
+          <Button size="sm" style={{ background: "#06b6d4", color: "white" }}
+            onClick={function() { onAction("quick_ref", {}); }}>Reference</Button>
+        </div>
       </div>
     );
   }
