@@ -675,8 +675,9 @@ export default function FocusView() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => {
-                            // Launch evolve with the brief
-                            chatAboutFocus(selected, `/evolve ${evolveBrief}`);
+                            // Launch focus evolution via dedicated WS message
+                            useChatStore.getState().sendFocusEvolve(selected.id, evolveBrief);
+                            setDetailTab("evolve" as DetailTab);
                           }}
                           className="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
                           Launch Sprint

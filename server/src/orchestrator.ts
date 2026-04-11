@@ -318,6 +318,150 @@ At the END of your report, append:
 
 // ── Public API ──
 
+// ── Orchestration Context (unified, adaptive) ──
+
+export interface OrchestrationContext {
+  /** What kind of orchestration? Affects planning guidance. */
+  type: "evolution" | "focus" | "research" | "discovery" | "custom";
+  /** The goal — what the user wants to achieve */
+  goal: string;
+  /** Rich context the PL should study before planning (evaluation briefing, research) */
+  briefing?: string;
+  /** Strategic discussion transcript */
+  discussion?: string;
+  /** Project info (if software-related) */
+  project?: { name: string; codebasePath?: string; vision?: string; techStack?: string; brain?: string };
+  /** Team agents available */
+  teamAgents?: Array<{ id: string; name: string; role: string; responsibilities: string; goals: string[]; perspective: string; agentRole: string }>;
+  /** Personas for testing (software projects) */
+  personas?: Array<{ id: string; name: string; goals: string[]; testScenarios: string[] }>;
+  /** Sprint history for continuity */
+  sprintHistory?: string;
+  /** Scale: light (2-4 tasks), standard (4-8), full (8-15) */
+  scale?: "light" | "standard" | "full";
+}
+
+/** Build a context-driven planning prompt from OrchestrationContext */
+export function buildContextDrivenPlanningPrompt(ctx: OrchestrationContext, orchestrationId: string, planFilePath: string): string {
+  const scale = ctx.scale || "standard";
+  const taskRange = scale === "light" ? "2-4" : scale === "full" ? "8-15" : "4-8";
+
+  const sections: string[] = [];
+
+  sections.push(`You are the Project Leader for this sprint. You have full authority to design the task structure, choose which agents to involve, and determine what deliverables to produce.
+
+## Mission
+${ctx.goal}`);
+
+  // Context sections
+  if (ctx.briefing) {
+    sections.push(`## Evaluation Briefing\n${ctx.briefing.slice(0, 5000)}`);
+  }
+  if (ctx.discussion) {
+    sections.push(`## Strategic Discussion (user's own words)\n${ctx.discussion.slice(0, 5000)}`);
+  }
+  if (ctx.project) {
+    const p = ctx.project;
+    sections.push(`## Project\n- **${p.name}**${p.codebasePath ? ` (${p.codebasePath})` : ""}${p.techStack ? `\n- Tech: ${p.techStack}` : ""}${p.vision ? `\n- Vision: ${p.vision}` : ""}`);
+    if (p.brain) sections.push(`## Project Brain (Institutional Memory)\n${p.brain.slice(0, 4000)}`);
+  }
+  if (ctx.sprintHistory) {
+    sections.push(`## Previous Sprints\n${ctx.sprintHistory.slice(0, 2000)}`);
+  }
+
+  // Team
+  if (ctx.teamAgents?.length) {
+    sections.push(`## Available Team\n${ctx.teamAgents.map(a =>
+      `- **${a.name}** (${a.role}, ID: team-${a.id}, agentRole: ${a.agentRole}): ${a.perspective}\n  Goals: ${a.goals.join("; ")}`
+    ).join("\n")}`);
+  }
+  if (ctx.personas?.length) {
+    sections.push(`## Available Personas (for testing)\n${ctx.personas.map(p =>
+      `- **${p.name}** (ID: persona-${p.id}): Goals: ${p.goals.slice(0, 2).join("; ")}`
+    ).join("\n")}`);
+  }
+
+  // Planning guidance based on type
+  sections.push(`## Sprint Design Guidelines
+
+**Type:** ${ctx.type} | **Scale:** ${scale} (${taskRange} tasks)
+
+Available agent roles for tasks:
+- **researcher**: Deep web research, analysis, finding resources and experts
+- **architect**: Strategic planning, framework design, system architecture
+- **builder**: Create Enso apps, tools, dashboards, interactive deliverables
+- **coder**: Write/modify code, scripts, technical implementations
+- **reviewer**: Quality review, synthesis, combining outputs into coherent plans
+
+${ctx.type === "evolution" && ctx.personas?.length ? `### Software Evolution Sprint
+Design a full sprint with these phases:
+1. **Persona Testing** (parallel): Customer personas test the product via browser automation
+2. **PL Triage**: Review persona findings, decide which team agents to involve
+3. **Team Evaluation** (parallel): Selected team agents analyze from their perspective
+4. **Synthesis + Design**: Merge all findings into prioritized enhancement plan
+5. **Implementation**: Code changes based on the design
+6. **Review**: Verify implementation quality (PASS/FAIL)
+7. **Validation** (parallel): Re-test + dashboard + meta-review
+
+Core agents (always): Architect, Engineering Manager, QA Manager
+Optional agents (your choice): Marketing, Sales, AI Strategist
+
+RULES: Bugs before features. Every bug from persona testing MUST be fixed.` :
+
+ctx.type === "evolution" ? `### Project Evolution Sprint
+Design a sprint appropriate for the project scope. Without personas, focus on:
+1. **Research/Analysis** (parallel): Analyze the current state from multiple angles
+2. **Design**: Synthesize findings into an improvement plan
+3. **Implementation**: Execute the plan
+4. **Review + Report**: Verify quality and produce sprint report` :
+
+ctx.type === "focus" ? `### Focus Area Sprint
+The user has already evaluated and discussed this focus area. Design tasks that produce CONCRETE, ACTIONABLE deliverables:
+- For knowledge goals → research tasks + curated resource lists + learning plans
+- For skill goals → practice frameworks + expert analysis + milestone plans
+- For project goals → architecture + implementation + review
+- For creative goals → inspiration research + methodology frameworks + portfolio plans
+
+Do NOT include persona testing or codebase analysis unless the focus explicitly involves software.
+Each task should produce a real document or artifact the user can act on immediately.
+The last task should synthesize all outputs into a final sprint report with clear next actions.` :
+
+ctx.type === "research" ? `### Research Sprint
+Design ${taskRange} parallel research tasks covering different angles of the topic.
+Final task: synthesize all research into a comprehensive briefing.` :
+
+ctx.type === "discovery" ? `### Discovery Sprint
+Design tasks for market/opportunity analysis:
+1. Independent deal sourcing from multiple angles
+2. Competitive analysis
+3. Opportunity assessment with verdicts` :
+
+`### Custom Sprint
+Design freely based on the goal. Use your judgment on structure and team.`}
+
+## Output Format
+Write a JSON plan to: ${planFilePath}
+
+\`\`\`json
+{
+  "tasks": [
+    {
+      "taskId": "unique-id",
+      "title": "Human-readable title",
+      "description": "COMPLETE task instructions. Include the agent's name, role, goals if using a team agent. Be specific about what to research, analyze, or produce.",
+      "agentRole": "researcher|architect|builder|coder|reviewer",
+      "dependsOn": [],
+      "outputType": "research|code|app|document|decision|review"
+    }
+  ]
+}
+\`\`\`
+
+CRITICAL: Each task's description must contain COMPLETE instructions — not just a title. The agent executing the task will ONLY see the description field.`);
+
+  return sections.join("\n\n");
+}
+
 export interface OrchestrationStartParams {
   userMessage: string;
   classification: TaskClassification;
@@ -341,6 +485,9 @@ export interface OrchestrationStartParams {
   /** When set, reuse this card ID as the bootstrap card instead of generating a new one.
    *  Used by card evolution to show orchestration inline on the source card. */
   targetCardId?: string;
+  /** Unified orchestration context — when provided, builds a context-driven planning prompt
+   *  instead of using the generic or custom planningPromptBuilder. */
+  context?: OrchestrationContext;
 }
 
 // ── Fast LLM Planning (for implicit orchestration) ──
@@ -546,7 +693,9 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
 
   // ── Full Claude Code planning path ──
   const planFilePath = workspace.planPath;
-  const planningPrompt = params.planningPromptBuilder
+  const planningPrompt = params.context
+    ? buildContextDrivenPlanningPrompt(params.context, orchestrationId, planFilePath)
+    : params.planningPromptBuilder
     ? params.planningPromptBuilder(orchestrationId, planFilePath)
     : buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath);
 

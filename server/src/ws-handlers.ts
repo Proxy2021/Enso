@@ -1097,6 +1097,23 @@ export async function handleWebSocketMessage(
       }
       break;
     }
+    case "focus.evolve": {
+      runtime.log?.(`[enso] focus evolution start: focusId=${(msg as any).focusId}`);
+      try {
+        const { launchFocusEvolve } = await import("./focus-areas.js");
+        launchFocusEvolve({
+          focusId: (msg as any).focusId,
+          brief: (msg as any).brief || "",
+          client,
+          account,
+        }).catch((err) => {
+          logError("focus-evolve", "Focus evolution error", err);
+        });
+      } catch (importErr: any) {
+        logError("focus-evolve", "Failed to import focus-areas module", importErr);
+      }
+      break;
+    }
     case "discovery.start": {
       runtime.log?.(`[enso] discovery sprint start`);
       try {

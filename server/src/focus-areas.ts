@@ -895,6 +895,124 @@ Be specific — reference actual project names, book titles, and concrete data p
   }
 }
 
+// ── Focus Evolution (using unified orchestration) ──
+
+/**
+ * Launch a goal-oriented evolution sprint for a focus area.
+ * Uses the unified OrchestrationContext to drive a PL-planned sprint
+ * that adapts to the focus type (research, creative, project, etc.)
+ */
+export async function launchFocusEvolve(params: {
+  focusId: string;
+  brief: string;
+  client: import("./server.js").ConnectedClient;
+  account: import("./accounts.js").ResolvedEnsoAccount;
+}): Promise<void> {
+  const { focusId, brief, client, account } = params;
+  const state = loadFocusState();
+  if (!state) return;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return;
+
+  logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+    message: `Launching focus evolution for "${area.title}"` });
+
+  // Gather transcript
+  let discussion = "";
+  try {
+    if (area.conversationId) {
+      const { loadCardHistory } = await import("./memory-bridge.js");
+      const { readdirSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { homedir } = await import("node:os");
+      const cardsRoot = join(homedir(), ".enso", "cards");
+      let bestRecords: Array<{ text?: string; role?: string }> = [];
+      for (const cid of readdirSync(cardsRoot)) {
+        const records = loadCardHistory(cid, area.conversationId, 100);
+        if (records.length > bestRecords.length) bestRecords = records;
+      }
+      if (bestRecords.length > 0) {
+        discussion = bestRecords
+          .filter(r => r.text?.trim())
+          .map(r => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
+          .join("\n\n");
+      }
+    }
+  } catch { /* ignore */ }
+
+  const { handleOrchestration } = await import("./orchestrator.js");
+  type OCtx = import("./orchestrator.js").OrchestrationContext;
+
+  const context: OCtx = {
+    type: "focus",
+    goal: brief || `Evolve focus area: ${area.title}\n\nGoal: ${area.intent || area.description}\nWhy: ${area.deeperIntent || ""}`,
+    briefing: area.preparedBriefing,
+    discussion: discussion || undefined,
+    scale: "standard",
+  };
+
+  await handleOrchestration({
+    userMessage: `Focus Evolution: ${area.title}`,
+    classification: { complexity: "orchestrated" as const, reasoning: "Focus area evolution sprint" },
+    client,
+    account,
+    context,
+    skipApproval: true,
+    maxConcurrency: 4,
+    planningModel: "opus",
+    onComplete: async (orchId, status) => {
+      logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+        message: `Focus evolution ${status} for "${area.title}" (${orchId})` });
+
+      if (status === "completed") {
+        try {
+          // Read task results and store on focus area + Cortex
+          const { loadOrchestration } = await import("./orchestrator.js");
+          const plan = loadOrchestration(orchId);
+          if (plan?.tasks) {
+            const sprintResults = plan.tasks
+              .filter((t: { resultSummary?: string }) => t.resultSummary)
+              .map((t: { title: string; resultSummary: string; agentRole: string }) =>
+                `## ${t.title} (${t.agentRole})\n\n${t.resultSummary}`)
+              .join("\n\n---\n\n");
+
+            // Store on focus area
+            const freshState = loadFocusState();
+            if (freshState) {
+              const freshArea = freshState.areas.find(a => a.id === focusId);
+              if (freshArea) {
+                freshArea.updatedAt = new Date().toISOString();
+                freshArea.refinements.push({
+                  date: freshArea.updatedAt,
+                  source: "conversation" as const,
+                  change: `Evolution sprint completed: ${plan.tasks.length} tasks`,
+                });
+                saveFocusState(freshState);
+              }
+            }
+
+            // Persist sprint results as Cortex page
+            try {
+              const { writeFileSync, existsSync, mkdirSync } = await import("node:fs");
+              const { join: pathJoin } = await import("node:path");
+              const { homedir: home } = await import("node:os");
+              const sprintPageDir = pathJoin(home(), ".enso", "wiki", "focuses");
+              if (!existsSync(sprintPageDir)) mkdirSync(sprintPageDir, { recursive: true });
+              const sprintPagePath = pathJoin(sprintPageDir, `${focusId}-sprint-${orchId.slice(0, 8)}.md`);
+              const sprintPage = `# Sprint: ${area.title}\n\nDate: ${new Date().toISOString().slice(0, 10)}\nGoal: ${brief.slice(0, 200)}\n\n${sprintResults}`;
+              writeFileSync(sprintPagePath, sprintPage, "utf-8");
+              logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                message: `Stored sprint results as Cortex page: focuses/${focusId}-sprint-${orchId.slice(0, 8)}.md` });
+            } catch { /* best effort cortex persist */ }
+          }
+        } catch (err) {
+          logError("focus-areas", `Failed to process evolution results for "${area.title}"`, err);
+        }
+      }
+    },
+  });
+}
+
 // ── User Edits ──
 
 /** Update a focus area from user input (title, description, status, etc.) */

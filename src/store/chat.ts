@@ -188,6 +188,7 @@ interface CardStore {
   disconnect: () => void;
   sendMessage: (text: string, routing?: ToolRouting, sourceCardId?: string) => void;
   sendMessageWithMedia: (text: string, mediaFiles: File[], intent?: "image_research" | "image_search") => Promise<void>;
+  sendFocusEvolve: (focusId: string, brief: string) => void;
   sendCardAction: (cardId: string, action: string, payload?: unknown) => void;
   enhanceCard: (cardId: string) => void;
   enhanceCardWithFamily: (cardId: string, family: string) => void;
@@ -992,6 +993,14 @@ export const useChatStore = create<CardStore>((set, get) => ({
       text,
       mediaUrls: serverPaths,
     });
+  },
+
+  sendFocusEvolve: (focusId: string, brief: string) => {
+    get()._wsClient?.send({
+      type: "focus.evolve",
+      focusId,
+      brief,
+    } as any);
   },
 
   sendCardAction: (cardId: string, action: string, payload?: unknown) => {
