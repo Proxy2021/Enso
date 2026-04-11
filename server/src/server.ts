@@ -2084,12 +2084,17 @@ Only change fields where the conversation provided meaningful new information. K
 
         if (!sourceClientId) continue;
 
-        // Copy the journal file to current client
+        // Copy the journal file to current client (always use source if it's larger)
         const srcJournal = join(cardsRoot, sourceClientId, `${area.conversationId}.jsonl`);
         const dstJournal = join(clientDir, `${area.conversationId}.jsonl`);
-        if (!existsSync(dstJournal)) {
-          try { copyFileSync(srcJournal, dstJournal); } catch { /* best effort */ }
-        }
+        try {
+          const { statSync } = await import("node:fs");
+          const srcSize = statSync(srcJournal).size;
+          const dstSize = existsSync(dstJournal) ? statSync(dstJournal).size : 0;
+          if (srcSize > dstSize) {
+            copyFileSync(srcJournal, dstJournal);
+          }
+        } catch { /* best effort */ }
 
         // Find the conversation entry from source client
         let sourceConvEntry: typeof clientConvs[0] | null = null;
