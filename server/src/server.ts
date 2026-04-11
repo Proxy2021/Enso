@@ -2004,7 +2004,10 @@ Return a JSON object with revised fields. Only include fields where the conversa
 
       let result: { description?: string; intent?: string; deeperIntent?: string; nextSteps?: string[]; clarity?: string };
       try {
-        result = JSON.parse(revised);
+        // Extract JSON from response (LLM may wrap in markdown code blocks)
+        const jsonMatch = revised.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("No JSON found");
+        result = JSON.parse(jsonMatch[0]);
       } catch {
         res.json({ updated: false, reason: "LLM returned invalid JSON" });
         return;
