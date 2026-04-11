@@ -167,12 +167,23 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
 
           if (orch.aborted) return;
 
-          // Task completed — parse output file for summary
+          // Task completed — parse output file for summary + full output
           const summaryResult = readTaskSummary(task.taskId, workspace);
           const summaryText = summaryResult?.text || `Task ${task.taskId} completed`;
           task.status = "completed";
           task.resultSummary = summaryText;
           task.structuredResult = summaryResult?.structured;
+
+          // Store full output content (for focus evolution deliverables, Cortex persistence)
+          if (workspace) {
+            try {
+              const fullPath = workspace.taskOutputPath(task.taskId);
+              if (existsSync(fullPath)) {
+                (task as any).fullOutput = readFileSync(fullPath, "utf-8");
+              }
+            } catch { /* best effort */ }
+          }
+
           completedSet.add(task.taskId);
           orch.sharedContext.set(task.taskId, summaryText);
           onTaskDone(task.taskId, summaryText);

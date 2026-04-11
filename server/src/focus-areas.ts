@@ -1006,18 +1006,32 @@ export async function launchFocusEvolve(params: {
               }
             }
 
-            // Persist sprint results as Cortex page
+            // Persist sprint results as Cortex pages — one per task + summary page
             try {
-              const { writeFileSync, existsSync, mkdirSync } = await import("node:fs");
+              const { writeFileSync, existsSync: existsSync2, mkdirSync: mkdirSync2 } = await import("node:fs");
               const { join: pathJoin } = await import("node:path");
               const { homedir: home } = await import("node:os");
-              const sprintPageDir = pathJoin(home(), ".enso", "wiki", "focuses");
-              if (!existsSync(sprintPageDir)) mkdirSync(sprintPageDir, { recursive: true });
-              const sprintPagePath = pathJoin(sprintPageDir, `${focusId}-sprint-${orchId.slice(0, 8)}.md`);
-              const sprintPage = `# Sprint: ${area.title}\n\nDate: ${new Date().toISOString().slice(0, 10)}\nGoal: ${brief.slice(0, 200)}\n\n${sprintResults}`;
-              writeFileSync(sprintPagePath, sprintPage, "utf-8");
+              const sprintDir = pathJoin(home(), ".enso", "wiki", "focuses", `${focusId}-sprint-${orchId.slice(0, 8)}`);
+              if (!existsSync2(sprintDir)) mkdirSync2(sprintDir, { recursive: true });
+
+              // Write individual task pages (full output if available, otherwise summary)
+              const taskPages: string[] = [];
+              for (const t of plan.tasks) {
+                if (!t.resultSummary) continue;
+                const slug = (t as any).taskId || t.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+                const fullContent = (t as any).fullOutput || t.resultSummary;
+                const pagePath = pathJoin(sprintDir, `${slug}.md`);
+                const page = `# ${t.title}\n\n*Agent: ${(t as any).agentRole || "unknown"} | Sprint: ${new Date().toISOString().slice(0, 10)}*\n\n${fullContent}`;
+                writeFileSync(pagePath, page, "utf-8");
+                taskPages.push(`- [[focuses/${focusId}-sprint-${orchId.slice(0, 8)}/${slug}|${t.title}]]`);
+              }
+
+              // Write sprint summary page
+              const summaryPage = `# Sprint: ${area.title}\n\nDate: ${new Date().toISOString().slice(0, 10)}\nGoal: ${brief.slice(0, 300)}\nTasks: ${plan.tasks.length} completed\n\n## Deliverables\n${taskPages.join("\n")}\n\n## Task Summaries\n${sprintResults}`;
+              writeFileSync(pathJoin(sprintDir, "_index.md"), summaryPage, "utf-8");
+
               logAction({ ts: Date.now(), type: "action", category: "focus-areas",
-                message: `Stored sprint results as Cortex page: focuses/${focusId}-sprint-${orchId.slice(0, 8)}.md` });
+                message: `Stored ${taskPages.length} sprint deliverables as Cortex pages in focuses/${focusId}-sprint-${orchId.slice(0, 8)}/` });
             } catch { /* best effort cortex persist */ }
           }
         } catch (err) {
