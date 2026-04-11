@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
 import { getClientId } from "../lib/ws-client";
 import { TabHeader, MobileViewHeader } from "./TabNavigation";
 import { API } from "../lib/constants";
+const MarkdownText = lazy(() => import("./MarkdownText"));
 
 // ── Types ──
 
@@ -819,8 +820,12 @@ export default function FocusView() {
                             </div>
                           </button>
                           {isExpanded && (
-                            <div className="mt-1 rounded-lg border border-gray-700/30 bg-gray-900/30 p-4 max-h-[400px] overflow-y-auto">
-                              <pre className="text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{deliverableContent || "Loading..."}</pre>
+                            <div className="mt-1 rounded-lg border border-gray-700/30 bg-gray-900/30 p-4 max-h-[500px] overflow-y-auto">
+                              <Suspense fallback={<div className="text-xs text-gray-500">Loading...</div>}>
+                                <div className="text-sm">
+                                  <MarkdownText text={deliverableContent || "Loading..."} />
+                                </div>
+                              </Suspense>
                             </div>
                           )}
                         </div>
@@ -838,8 +843,10 @@ export default function FocusView() {
                     <label className="text-[10px] uppercase tracking-wider text-amber-400/70">Preparation Briefing</label>
                     {selected.preparedAt && <span className="text-[10px] text-gray-600 ml-auto">{selected.preparedAt.slice(0, 10)}</span>}
                   </div>
-                  <div className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto pr-2">
-                    {selected.preparedBriefing}
+                  <div className="text-sm text-gray-300 leading-relaxed max-h-80 overflow-y-auto pr-2">
+                    <Suspense fallback={<div className="text-xs text-gray-500">Loading...</div>}>
+                      <MarkdownText text={selected.preparedBriefing} />
+                    </Suspense>
                   </div>
                 </div>
               )}
