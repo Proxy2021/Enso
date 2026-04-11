@@ -771,24 +771,42 @@ export default function FocusView() {
                         project: "border-violet-500/20 bg-violet-950/10 hover:border-violet-500/40",
                         synthesis: "border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40",
                       };
-                      // Determine the cortex path for this entity
-                      const isSynthType = ["idea", "article", "app", "project", "synthesis"].includes(entityType);
-                      const cortexPath = isSynthType ? `synthesis/${slug}.md` : `entities/${slug}.md`;
                       const isExpanded = expandedDeliverable === eid;
                       return (
                         <div key={i} className="col-span-1 sm:col-span-2">
                           <button className={`rounded-lg border p-3 transition-colors cursor-pointer text-left w-full ${typeColors[entityType] || "border-gray-700/30 bg-gray-900/20"}`}
-                            onClick={() => {
+                            onClick={async () => {
                               if (isExpanded) { setExpandedDeliverable(null); return; }
                               setExpandedDeliverable(eid);
-                              // Fetch wiki page content
-                              fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
-                                method: "POST",
-                                headers: { ...authHeaders(), "Content-Type": "application/json" },
-                                body: JSON.stringify({ action: "read", payload: { path: cortexPath }, appFamily: "cortex" }),
-                              }).then(r => r.json()).then(d => {
-                                setDeliverableContent(d?.data?.content || d?.content || "No content available");
-                              }).catch(() => setDeliverableContent("Failed to load content"));
+                              setDeliverableContent("Loading...");
+                              try {
+                                // Look up entity to get the real cortexPath
+                                const entityResp = await fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
+                                  method: "POST",
+                                  headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "view_entity", payload: { entityId: eid }, appFamily: "cortex" }),
+                                });
+                                const entityData = await entityResp.json();
+                                const content = entityData?.data?.cortexContent || entityData?.cortexContent;
+                                if (content) {
+                                  setDeliverableContent(content);
+                                } else {
+                                  // Fallback: try reading common path patterns
+                                  const paths = [`synthesis/${slug}.md`, `synthesis/article-${slug}.md`, `entities/${slug}.md`];
+                                  let found = false;
+                                  for (const p of paths) {
+                                    const r = await fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
+                                      method: "POST",
+                                      headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                      body: JSON.stringify({ action: "read", payload: { path: p }, appFamily: "cortex" }),
+                                    });
+                                    const d = await r.json();
+                                    const c = d?.data?.content || d?.content;
+                                    if (c && c !== "Page not found") { setDeliverableContent(c); found = true; break; }
+                                  }
+                                  if (!found) setDeliverableContent("Content not found in Cortex");
+                                }
+                              } catch { setDeliverableContent("Failed to load content"); }
                             }}
                           >
                             <div className="flex items-start gap-2">
