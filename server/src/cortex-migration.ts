@@ -343,15 +343,15 @@ export function migrateCortexV2(): void {
       const data = JSON.parse(readFileSync(focusAreas, "utf-8"));
       let changed = false;
 
-      if (Array.isArray(data)) {
-        for (const area of data) {
-          if (Array.isArray(area.relatedEntityIds)) {
-            area.relatedEntityIds = area.relatedEntityIds.map((id: string) => {
-              const newId = rewriteEntityId(id);
-              if (newId !== id) changed = true;
-              return newId;
-            });
-          }
+      // focus-areas.json can be { areas: [...] } or a raw array
+      const areas = Array.isArray(data) ? data : (Array.isArray(data?.areas) ? data.areas : []);
+      for (const area of areas) {
+        if (Array.isArray(area.relatedEntityIds)) {
+          area.relatedEntityIds = area.relatedEntityIds.map((id: string) => {
+            const newId = rewriteEntityId(id);
+            if (newId !== id) changed = true;
+            return newId;
+          });
         }
       }
 
