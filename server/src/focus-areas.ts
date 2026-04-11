@@ -97,7 +97,7 @@ export function loadFocusState(): FocusState | null {
   return null;
 }
 
-function saveFocusState(state: FocusState): void {
+export function saveFocusState(state: FocusState): void {
   try {
     const dir = dirname(FOCUS_PATH);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
