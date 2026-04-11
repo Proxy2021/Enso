@@ -1929,15 +1929,17 @@ audio{width:100%;margin:12px 0;border-radius:8px}
 
       try {
         const clientDirs = readdirSync(cardsRoot);
+        // Find client with the MOST records for this conversation
+        let bestRecords: Array<{ text?: string; role?: string }> = [];
         for (const clientId of clientDirs) {
           const records = loadCardHistory(clientId, area.conversationId, 100);
-          if (records.length > 0) {
-            transcript = records
-              .filter((r: { text?: string }) => r.text?.trim())
-              .map((r: { role: string; text?: string }) => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
-              .join("\n\n");
-            break;
-          }
+          if (records.length > bestRecords.length) bestRecords = records;
+        }
+        if (bestRecords.length > 0) {
+          transcript = bestRecords
+            .filter((r) => r.text?.trim())
+            .map((r) => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
+            .join("\n\n");
         }
       } catch { /* cards dir doesn't exist */ }
 
@@ -1963,15 +1965,17 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       const cardsRoot = join(homedir(), ".enso", "cards");
       let transcript = "";
       try {
+        // Find the client with the MOST records for this conversation
+        let bestRecords: Array<{ text?: string; role?: string }> = [];
         for (const clientId of readdirSync(cardsRoot)) {
           const records = loadCardHistory(clientId, area.conversationId, 100);
-          if (records.length > 0) {
-            transcript = records
-              .filter((r: { text?: string; role?: string }) => r.text?.trim() && r.role === "user")
-              .map((r: { text?: string }) => r.text)
-              .join("\n");
-            break;
-          }
+          if (records.length > bestRecords.length) bestRecords = records;
+        }
+        if (bestRecords.length > 0) {
+          transcript = bestRecords
+            .filter((r) => r.text?.trim() && r.role === "user")
+            .map((r) => r.text)
+            .join("\n");
         }
       } catch { /* ignore */ }
 
