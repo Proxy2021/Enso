@@ -1977,39 +1977,38 @@ audio{width:100%;margin:12px 0;border-radius:8px}
 
       if (!transcript.trim()) { res.json({ updated: false, reason: "No user messages found" }); return; }
 
+      // Truncate transcript to avoid LLM context issues
+      const trimmedTranscript = transcript.slice(0, 3000);
+
       // Use LLM to revise focus area based on conversation
       const { llm } = await import("./llm.js");
       const revised = await llm({
-        prompt: `A user has a focus area with these current definitions:
-Title: "${area.title}"
-Description: "${area.description}"
-Intent: "${area.intent || ""}"
-Deeper motivation: "${area.deeperIntent || ""}"
-Next steps: ${JSON.stringify(area.nextSteps || [])}
+        prompt: `A user has a focus area. Revise it based on their conversation.
 
-They had this strategic discussion about the focus:
-${transcript}
+Current:
+- Title: "${area.title}"
+- Description: "${area.description}"
+- Intent: "${area.intent || "not set"}"
+- Deeper motivation: "${area.deeperIntent || "not set"}"
 
-Based on the conversation, revise the focus area to incorporate what the user revealed. Return JSON:
-{
-  "description": "revised description reflecting conversation insights",
-  "intent": "revised intent reflecting what user actually wants to achieve",
-  "deeperIntent": "revised deeper motivation if new insights emerged",
-  "nextSteps": ["concrete next steps distilled from the conversation"],
-  "clarity": "emerging" | "developing" | "clear"
-}
+User said in conversation:
+${trimmedTranscript}
 
-Only change fields where the conversation provided meaningful new information. Keep existing content if the conversation didn't address that aspect.`,
+Return a JSON object with revised fields. Only include fields where the conversation revealed new information:
+{"description":"...","intent":"...","deeperIntent":"...","nextSteps":["step1","step2"],"clarity":"emerging|developing|clear"}`,
         tier: "fast",
         maxOutputTokens: 800,
         responseMimeType: "application/json",
         temperature: 0.2,
       });
 
-      const result = JSON.parse(revised) as {
-        description?: string; intent?: string; deeperIntent?: string;
-        nextSteps?: string[]; clarity?: string;
-      };
+      let result: { description?: string; intent?: string; deeperIntent?: string; nextSteps?: string[]; clarity?: string };
+      try {
+        result = JSON.parse(revised);
+      } catch {
+        res.json({ updated: false, reason: "LLM returned invalid JSON" });
+        return;
+      }
 
       let changed = false;
       if (result.description && result.description !== area.description) { area.description = result.description; changed = true; }
