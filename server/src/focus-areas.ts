@@ -943,6 +943,21 @@ export async function launchFocusEvolve(params: {
   const { handleOrchestration } = await import("./orchestrator.js");
   type OCtx = import("./orchestrator.js").OrchestrationContext;
 
+  // Create a silent client wrapper — orchestration progress is monitored via
+  // the Evolve tab (polling /api/sessions), not via chat card delivery.
+  // Session registry and task completion still work since they don't use client.send.
+  const silentClient = {
+    ...client,
+    send: (msg: unknown) => {
+      // Only forward session/orchestration status messages, suppress cards
+      const m = msg as Record<string, unknown>;
+      if (m.orchestrationProgress || m.sessions || m.type === "settings") {
+        client.send(msg as Parameters<typeof client.send>[0]);
+      }
+      // Suppress all other messages (bootstrap cards, task progress cards)
+    },
+  };
+
   const context: OCtx = {
     type: "focus",
     goal: brief || `Evolve focus area: ${area.title}\n\nGoal: ${area.intent || area.description}\nWhy: ${area.deeperIntent || ""}`,
@@ -954,7 +969,7 @@ export async function launchFocusEvolve(params: {
   await handleOrchestration({
     userMessage: `Focus Evolution: ${area.title}`,
     classification: { complexity: "orchestrated" as const, reasoning: "Focus area evolution sprint" },
-    client,
+    client: silentClient as typeof client,
     account,
     context,
     skipApproval: true,
