@@ -235,6 +235,9 @@ export default function FocusView() {
     setSelectedId(id);
     setDetailTab("overview");
     setView("detail");
+    // Reset evolve brief state so absorption runs fresh
+    setEvolveBrief("");
+    setShowEvolveBrief(false);
     // Fetch activity data
     try {
       const resp = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}/activity`, { headers: authHeaders() });
