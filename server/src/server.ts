@@ -2004,7 +2004,6 @@ Return JSON:
 {"description":"rewritten to reflect what user actually described","intent":"rewritten to reflect the specific outcome they want","deeperIntent":"rewritten with the personal motivation they revealed","nextSteps":["concrete step from conversation","another concrete step"],"clarity":"developing or clear based on how specific they got"}`,
         tier: "fast",
         maxOutputTokens: 800,
-        responseMimeType: "application/json",
         temperature: 0.2,
       });
 
