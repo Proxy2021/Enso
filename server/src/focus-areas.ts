@@ -1112,6 +1112,19 @@ export async function launchFocusEvolve(params: {
 
                 logAction({ ts: Date.now(), type: "action", category: "focus-areas",
                   message: `Linked ${createdEntityIds.length} deliverables to focus "${area.title}"` });
+
+                // Run enrichment on sprint deliverables (semantic tags + cross-references)
+                import("./cortex-enrichment.js").then(({ enrichNewEntities, crossReferenceNewEntities }) => {
+                  enrichNewEntities(createdEntityIds)
+                    .then(() => crossReferenceNewEntities(createdEntityIds))
+                    .then(result => {
+                      if (result.refsCreated > 0) {
+                        logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                          message: `Sprint deliverable enrichment: ${result.refsCreated} cross-references created` });
+                      }
+                    })
+                    .catch(err => logError("focus-areas", "Sprint deliverable enrichment failed", err));
+                }).catch(() => {});
               }
 
               logAction({ ts: Date.now(), type: "action", category: "focus-areas",

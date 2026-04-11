@@ -1,14 +1,19 @@
 /**
  * Cortex Enrichment — LLM-powered semantic tagging and cross-reference discovery.
  *
- * Runs at INGEST TIME (after data source scans), not at runtime.
- * Two phases:
+ * Three phases at ingest time + periodic re-enrichment:
  *   1. enrichNewEntities() — Adds universal semantic tags (Gemini Flash, ~$0.002/batch)
- *   2. crossReferenceNewEntities() — Discovers cross-source relationships (Gemini Flash, ~$0.01/batch)
+ *   2. crossReferenceNewEntities() — Discovers cross-source relationships (Gemini, ~$0.01/batch)
+ *   3. recommendVideosForEntities() — YouTube video search (zero LLM)
+ *   4. reEnrichStaleEntities() — Periodic re-enrichment of under-connected entities
  *
- * Both phases operate in batch: one LLM call per ingest run, not per entity.
+ * Cross-reference discovery uses SEMANTIC-AWARE sampling: entities sharing tags with
+ * the new batch are prioritized, then diverse sampling fills remaining slots.
  */
 
+import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { llm } from "./llm.js";
 import {
   getEntityIndex, lookupEntity, upsertEntityIndex, saveEntityIndex,
@@ -21,7 +26,8 @@ import { logAction, logError } from "./action-log.js";
 /** Max entities per LLM call to stay within output token limits */
 const SEMANTIC_TAG_BATCH_SIZE = 30;
 const CROSS_REF_BATCH_SIZE = 15;
-const INVENTORY_MAX_ENTRIES = 200;
+/** Max entities in the LLM inventory for cross-reference discovery */
+const INVENTORY_MAX_ENTRIES = 500;
 
 // ── Level 2: Semantic Tagging ──
 
@@ -135,8 +141,19 @@ export async function crossReferenceNewEntities(entityIds: string[]): Promise<{ 
   const entityIndex = getEntityIndex();
   let totalRefs = 0;
 
-  // Build compact inventory of ALL existing entities (for LLM context)
-  const inventory = buildEntityInventory(entityIndex, INVENTORY_MAX_ENTRIES);
+  // Collect semantic tags from the new batch for smart sampling
+  const batchTags: string[] = [];
+  const batchIdSet = new Set(entityIds);
+  for (const id of entityIds) {
+    const entry = lookupEntity(id);
+    if (entry?.semanticTags) batchTags.push(...entry.semanticTags);
+  }
+
+  // Build semantic-aware inventory: prioritize entities sharing tags with new batch
+  const inventory = buildEntityInventory(entityIndex, INVENTORY_MAX_ENTRIES, {
+    relevantTags: batchTags,
+    excludeIds: batchIdSet,
+  });
   if (inventory.length === 0) return { refsCreated: 0 };
 
   // Process new entities in batches
@@ -325,23 +342,132 @@ export async function recommendVideosForEntities(entityIds: string[]): Promise<{
   return { matched };
 }
 
-// ── Helpers ──
+// ── Inventory Builder (semantic-aware sampling) ──
 
 /**
- * Build a compact inventory of all entities for LLM context.
- * Format: one line per entity with entityId, title, type, source, and semantic tags.
+ * Build a compact inventory of entities for LLM context.
+ * Uses SEMANTIC-AWARE SAMPLING when relevantTags are provided:
+ *   Phase 1: Include all entities sharing ≥1 semantic tag with the new batch
+ *   Phase 2: Fill remaining slots with diverse random-sampled entities
+ * This ensures the LLM sees the most relevant connections, not just the first N.
  */
-function buildEntityInventory(
+export function buildEntityInventory(
   index: ReadonlyMap<EntityId, EntityIndexEntry>,
   maxEntries: number,
+  options?: { relevantTags?: string[]; excludeIds?: Set<string> },
 ): string {
-  const lines: string[] = [];
-  let count = 0;
+  const relevantTags = new Set(options?.relevantTags || []);
+  const excludeIds = options?.excludeIds || new Set<string>();
+  const selected: EntityIndexEntry[] = [];
+  const remainder: EntityIndexEntry[] = [];
+
   for (const entry of index.values()) {
-    if (count >= maxEntries) break;
-    const stags = entry.semanticTags?.length ? ` sem:[${entry.semanticTags.join(",")}]` : "";
-    lines.push(`${entry.entityId}: "${entry.title}" [${entry.type}, ${entry.source}]${stags}`);
-    count++;
+    if (excludeIds.has(entry.entityId)) continue;
+    // Phase 1: entities with matching semantic tags
+    if (relevantTags.size > 0 && entry.semanticTags?.some(t => relevantTags.has(t))) {
+      selected.push(entry);
+    } else {
+      remainder.push(entry);
+    }
   }
-  return lines.join("\n");
+
+  // Phase 2: fill remaining slots with diverse sample
+  const remaining = maxEntries - selected.length;
+  if (remaining > 0 && remainder.length > 0) {
+    // Shuffle remainder for diversity, then take up to remaining
+    for (let i = remainder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [remainder[i], remainder[j]] = [remainder[j], remainder[i]];
+    }
+    selected.push(...remainder.slice(0, remaining));
+  }
+
+  // Trim to max
+  const final = selected.slice(0, maxEntries);
+
+  return final.map(entry => {
+    const stags = entry.semanticTags?.length ? ` sem:[${entry.semanticTags.join(",")}]` : "";
+    return `${entry.entityId}: "${entry.title}" [${entry.type}, ${entry.source}]${stags}`;
+  }).join("\n");
+}
+
+// ── Re-Enrichment Cycle ──
+
+/**
+ * Find and enrich entities that are under-connected in the knowledge graph.
+ * Targets entities missing semantic tags or with <2 cross-references.
+ * Runs in small batches to stay within rate limits.
+ */
+export async function reEnrichStaleEntities(maxEntities = 50): Promise<{ enriched: number; refsCreated: number }> {
+  const index = getEntityIndex();
+  const needsTags: string[] = [];
+  const needsRefs: string[] = [];
+
+  for (const entry of index.values()) {
+    if (!entry.semanticTags || entry.semanticTags.length === 0) {
+      needsTags.push(entry.entityId);
+    }
+    if (!entry.crossReferences || entry.crossReferences.length < 2) {
+      needsRefs.push(entry.entityId);
+    }
+  }
+
+  // Prioritize: entities with NO tags first, then those with few refs
+  const tagBatch = needsTags.slice(0, maxEntities);
+  const refBatch = needsRefs.slice(0, maxEntities);
+
+  let enriched = 0;
+  let refsCreated = 0;
+
+  if (tagBatch.length > 0) {
+    console.log(`[enso:enrichment] Re-enriching ${tagBatch.length} entities missing semantic tags`);
+    const result = await enrichNewEntities(tagBatch);
+    enriched = result.enriched;
+  }
+
+  if (refBatch.length > 0) {
+    console.log(`[enso:enrichment] Re-enriching ${refBatch.length} entities with <2 cross-references`);
+    const result = await crossReferenceNewEntities(refBatch);
+    refsCreated = result.refsCreated;
+  }
+
+  if (enriched > 0 || refsCreated > 0) {
+    logAction({
+      ts: Date.now(), type: "action", category: "cortex-enrichment",
+      message: `Re-enrichment: ${enriched} tagged, ${refsCreated} cross-refs created (from ${needsTags.length} untagged, ${needsRefs.length} under-connected)`,
+    });
+  }
+
+  // Auto-refresh thematic map if stale
+  await maybeRefreshThematicMap();
+
+  return { enriched, refsCreated };
+}
+
+// ── Thematic Map Auto-Refresh ──
+
+/**
+ * Regenerate the thematic map if it's stale (>7 days old) or missing.
+ */
+export async function maybeRefreshThematicMap(): Promise<boolean> {
+  try {
+    const mapPath = join(homedir(), ".enso", "wiki", "synthesis", "thematic-map.md");
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    const shouldRefresh = !existsSync(mapPath)
+      || (Date.now() - statSync(mapPath).mtimeMs > sevenDays);
+
+    if (!shouldRefresh) return false;
+
+    console.log("[enso:enrichment] Thematic map is stale — regenerating");
+    const { generateThematicMap } = await import("./cortex-synthesis.js");
+    await generateThematicMap();
+    logAction({
+      ts: Date.now(), type: "action", category: "cortex-enrichment",
+      message: "Thematic map auto-refreshed",
+    });
+    return true;
+  } catch (err) {
+    logError("cortex-enrichment", "Thematic map refresh failed", err);
+    return false;
+  }
 }

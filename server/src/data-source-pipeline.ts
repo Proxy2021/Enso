@@ -177,6 +177,9 @@ export async function runPostScanPipeline(
       if (videoResult.matched > 0) {
         logAction({ ts: Date.now(), type: "action", category: "data-pipeline", message: `Video recommendations: ${videoResult.matched} entities matched` });
       }
+      // Auto-refresh thematic map if stale
+      const { maybeRefreshThematicMap } = await import("./cortex-enrichment.js");
+      await maybeRefreshThematicMap();
     } catch (err) {
       logError("data-pipeline", "Cortex enrichment failed (non-fatal)", err);
     }

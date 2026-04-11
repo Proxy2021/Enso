@@ -203,6 +203,19 @@ export async function startEnsoServer(opts: {
     logError("system", "Cortex V2 migration failed (non-fatal)", err);
   }
 
+  // Background re-enrichment: tag and cross-reference under-connected entities
+  setTimeout(async () => {
+    try {
+      const { reEnrichStaleEntities } = await import("./cortex-enrichment.js");
+      const result = await reEnrichStaleEntities(50);
+      if (result.enriched > 0 || result.refsCreated > 0) {
+        console.log(`[enso] Background re-enrichment: ${result.enriched} tagged, ${result.refsCreated} cross-refs`);
+      }
+    } catch (err) {
+      logError("system", "Background re-enrichment failed (non-fatal)", err);
+    }
+  }, 30_000); // 30s after boot
+
   // Validate APP_CATALOG integrity: every non-terminal entry must have a template
   // (either a shipped app in server/apps/<appId>/ or a registered native template).
   // Catches phantom catalog entries that show up in the UI but render as raw JSON.
@@ -2056,6 +2069,59 @@ Return JSON:
           change: "Absorbed conversation insights before Evolve sprint",
         });
         saveFocusState(state!);
+
+        // Extract entity connections from conversation (non-blocking)
+        (async () => {
+          try {
+            const { getEntityIndex, lookupEntity, upsertEntityIndex, saveEntityIndex } = await import("./entity-model.js");
+            const { buildEntityInventory } = await import("./cortex-enrichment.js");
+            const inventory = buildEntityInventory(getEntityIndex(), 300);
+            if (!inventory) return;
+
+            const linksResponse = await llm({
+              prompt: `Given this conversation about the focus area "${area.title}", identify entity connections that should be cross-referenced in the knowledge graph.
+
+Conversation excerpt:
+${trimmedTranscript.slice(0, 2000)}
+
+Available entities:
+${inventory}
+
+Return JSON array of entity pairs that the conversation reveals as connected:
+[{ "from": "entityId1", "to": "entityId2", "reason": "brief explanation of connection discussed" }]
+
+Only include connections explicitly discussed or strongly implied. Return [] if none found. Return ONLY the JSON array.`,
+              tier: "fast",
+              maxOutputTokens: 500,
+              temperature: 0.2,
+            });
+
+            const links = JSON.parse(linksResponse.replace(/```json?\s*/g, "").replace(/```/g, "").trim()) as Array<{ from: string; to: string; reason: string }>;
+            let created = 0;
+            for (const link of links) {
+              if (!link.from || !link.to || !link.reason) continue;
+              const fromEntry = lookupEntity(link.from);
+              const toEntry = lookupEntity(link.to);
+              if (!fromEntry || !toEntry) continue;
+              if (fromEntry.source === toEntry.source) continue;
+              // Add bidirectional cross-reference
+              const fromRefs = fromEntry.crossReferences || [];
+              if (!fromRefs.some(r => r.entityId === link.to)) {
+                upsertEntityIndex({ ...fromEntry, crossReferences: [...fromRefs, { entityId: link.to, reason: link.reason }] });
+              }
+              const toRefs = toEntry.crossReferences || [];
+              if (!toRefs.some(r => r.entityId === link.from)) {
+                upsertEntityIndex({ ...toEntry, crossReferences: [...toRefs, { entityId: link.from, reason: link.reason }] });
+              }
+              created++;
+            }
+            if (created > 0) {
+              saveEntityIndex();
+              logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                message: `Conversation entity linking: ${created} cross-references from "${area.title}" discussion` });
+            }
+          } catch { /* best effort — don't block absorption */ }
+        })();
       }
 
       res.json({ updated: changed, area });
