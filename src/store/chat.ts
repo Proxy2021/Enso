@@ -2231,6 +2231,15 @@ export const useChatStore = create<CardStore>((set, get) => ({
         const wsClient = get()._wsClient;
         if (wsClient) {
           void (async () => {
+            // Sync focus conversations to this client before loading the list
+            try {
+              const cid = getClientId();
+              await fetch(
+                `${getBackendBaseUrl()}${API.FOCUS_AREAS}/sync-conversations`,
+                { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" },
+                  body: JSON.stringify({ clientId: cid }), signal: AbortSignal.timeout(5000) },
+              );
+            } catch { /* best effort */ }
             await get().refreshConversationsList();
             const list = get().conversationsList;
             let active = get().activeConversationId;
