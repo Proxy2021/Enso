@@ -1919,22 +1919,124 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       const area = state?.areas.find((a: { id: string }) => a.id === req.params.id);
       if (!area?.conversationId) { res.json({ transcript: "" }); return; }
 
-      // Find the client that has this conversation
+      // Search ALL client directories for this conversation (not just connected clients)
       const { loadCardHistory } = await import("./memory-bridge.js");
+      const { readdirSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { homedir } = await import("node:os");
+      const cardsRoot = join(homedir(), ".enso", "cards");
       let transcript = "";
-      for (const c of clients.values()) {
-        const records = loadCardHistory(c.id, area.conversationId, 100);
-        if (records.length > 0) {
-          transcript = records
-            .filter((r: { text?: string }) => r.text?.trim())
-            .map((r: { role: string; text?: string }) => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
-            .join("\n\n");
-          break;
+
+      try {
+        const clientDirs = readdirSync(cardsRoot);
+        for (const clientId of clientDirs) {
+          const records = loadCardHistory(clientId, area.conversationId, 100);
+          if (records.length > 0) {
+            transcript = records
+              .filter((r: { text?: string }) => r.text?.trim())
+              .map((r: { role: string; text?: string }) => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
+              .join("\n\n");
+            break;
+          }
         }
-      }
+      } catch { /* cards dir doesn't exist */ }
+
       res.json({ transcript });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to load transcript" });
+    }
+  });
+
+  // Absorb conversation insights into focus area description/intent before Evolve
+  app.post("/api/focus-areas/:id/absorb-conversation", async (req, res) => {
+    try {
+      const { loadFocusState, saveFocusState } = await import("./focus-areas.js");
+      const state = loadFocusState();
+      const area = state?.areas.find((a: { id: string }) => a.id === req.params.id);
+      if (!area?.conversationId) { res.json({ updated: false, reason: "No conversation" }); return; }
+
+      // Load transcript
+      const { loadCardHistory } = await import("./memory-bridge.js");
+      const { readdirSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { homedir } = await import("node:os");
+      const cardsRoot = join(homedir(), ".enso", "cards");
+      let transcript = "";
+      try {
+        for (const clientId of readdirSync(cardsRoot)) {
+          const records = loadCardHistory(clientId, area.conversationId, 100);
+          if (records.length > 0) {
+            transcript = records
+              .filter((r: { text?: string; role?: string }) => r.text?.trim() && r.role === "user")
+              .map((r: { text?: string }) => r.text)
+              .join("\n");
+            break;
+          }
+        }
+      } catch { /* ignore */ }
+
+      if (!transcript.trim()) { res.json({ updated: false, reason: "No user messages found" }); return; }
+
+      // Use LLM to revise focus area based on conversation
+      const { llm } = await import("./llm.js");
+      const revised = await llm({
+        prompt: `A user has a focus area with these current definitions:
+Title: "${area.title}"
+Description: "${area.description}"
+Intent: "${area.intent || ""}"
+Deeper motivation: "${area.deeperIntent || ""}"
+Next steps: ${JSON.stringify(area.nextSteps || [])}
+
+They had this strategic discussion about the focus:
+${transcript}
+
+Based on the conversation, revise the focus area to incorporate what the user revealed. Return JSON:
+{
+  "description": "revised description reflecting conversation insights",
+  "intent": "revised intent reflecting what user actually wants to achieve",
+  "deeperIntent": "revised deeper motivation if new insights emerged",
+  "nextSteps": ["concrete next steps distilled from the conversation"],
+  "clarity": "emerging" | "developing" | "clear"
+}
+
+Only change fields where the conversation provided meaningful new information. Keep existing content if the conversation didn't address that aspect.`,
+        tier: "fast",
+        maxOutputTokens: 800,
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      });
+
+      const result = JSON.parse(revised) as {
+        description?: string; intent?: string; deeperIntent?: string;
+        nextSteps?: string[]; clarity?: string;
+      };
+
+      let changed = false;
+      if (result.description && result.description !== area.description) { area.description = result.description; changed = true; }
+      if (result.intent && result.intent !== area.intent) { area.intent = result.intent; changed = true; }
+      if (result.deeperIntent && result.deeperIntent !== area.deeperIntent) { area.deeperIntent = result.deeperIntent; changed = true; }
+      if (result.nextSteps?.length) { area.nextSteps = result.nextSteps; changed = true; }
+      if (result.clarity && ["emerging", "developing", "clear"].includes(result.clarity)) {
+        const order = ["emerging", "developing", "clear"];
+        if (order.indexOf(result.clarity) >= order.indexOf(area.clarity)) {
+          area.clarity = result.clarity as typeof area.clarity;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        area.updatedAt = new Date().toISOString();
+        area.refinements.push({
+          date: area.updatedAt,
+          source: "conversation",
+          change: "Absorbed conversation insights before Evolve sprint",
+        });
+        saveFocusState(state!);
+      }
+
+      res.json({ updated: changed, area });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Absorption failed" });
     }
   });
 

@@ -591,7 +591,26 @@ export default function FocusView() {
                   <button
                     onClick={async () => {
                       if (!evolveBrief) {
-                        // Auto-generate brief from focus data + conversation transcript
+                        // First: absorb conversation insights into the focus area
+                        try {
+                          const absorbResp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/absorb-conversation`, {
+                            method: "POST", headers: authHeaders(),
+                          });
+                          if (absorbResp.ok) {
+                            const { updated, area: revisedArea } = await absorbResp.json() as { updated: boolean; area?: FocusArea };
+                            if (updated && revisedArea) {
+                              // Update local state with revised focus area
+                              setFocusState(prev => prev ? {
+                                ...prev,
+                                areas: prev.areas.map(a => a.id === selected.id ? { ...a, ...revisedArea } : a),
+                              } : prev);
+                              // Use revised data for the brief
+                              Object.assign(selected, revisedArea);
+                            }
+                          }
+                        } catch { /* absorption failed — continue with existing data */ }
+
+                        // Auto-generate brief from (now-revised) focus data + conversation transcript
                         const lines: string[] = [];
                         lines.push(`Focus: ${selected.title}`);
                         if (selected.intent) lines.push(`Goal: ${selected.intent}`);
