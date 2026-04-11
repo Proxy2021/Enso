@@ -1983,19 +1983,21 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       // Use LLM to revise focus area based on conversation
       const { llm } = await import("./llm.js");
       const revised = await llm({
-        prompt: `A user has a focus area. Revise it based on their conversation.
+        prompt: `Rewrite a user's focus area to fully incorporate what they revealed in a strategic discussion. The revised version should sound like the user wrote it themselves — specific, personal, grounded in what they actually said.
 
-Current:
+CURRENT focus area:
 - Title: "${area.title}"
 - Description: "${area.description}"
 - Intent: "${area.intent || "not set"}"
 - Deeper motivation: "${area.deeperIntent || "not set"}"
 
-User said in conversation:
+WHAT THE USER SAID (their own words):
 ${trimmedTranscript}
 
-Return a JSON object with revised fields. Only include fields where the conversation revealed new information:
-{"description":"...","intent":"...","deeperIntent":"...","nextSteps":["step1","step2"],"clarity":"emerging|developing|clear"}`,
+INSTRUCTIONS: Rewrite ALL fields to incorporate the user's specific insights. The description and intent should reflect what they actually want to do (not generic platitudes). Extract concrete next steps from what they discussed. For example, if they talked about "learning from elite photographers" or "compiling photo albums for friends", those should appear in the revised fields.
+
+Return JSON:
+{"description":"rewritten to reflect what user actually described","intent":"rewritten to reflect the specific outcome they want","deeperIntent":"rewritten with the personal motivation they revealed","nextSteps":["concrete step from conversation","another concrete step"],"clarity":"developing or clear based on how specific they got"}`,
         tier: "fast",
         maxOutputTokens: 800,
         responseMimeType: "application/json",
