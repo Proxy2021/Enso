@@ -95,6 +95,8 @@ export default function FocusView() {
   const [chatReady, setChatReady] = useState(false);
   const [showEvolveBrief, setShowEvolveBrief] = useState(false);
   const [evolveBrief, setEvolveBrief] = useState("");
+  const [expandedDeliverable, setExpandedDeliverable] = useState<string | null>(null);
+  const [deliverableContent, setDeliverableContent] = useState("");
 
   // Editing state
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -769,15 +771,40 @@ export default function FocusView() {
                         project: "border-violet-500/20 bg-violet-950/10 hover:border-violet-500/40",
                         synthesis: "border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40",
                       };
+                      // Determine the cortex path for this entity
+                      const isSynthType = ["idea", "article", "app", "project", "synthesis"].includes(entityType);
+                      const cortexPath = isSynthType ? `synthesis/${slug}.md` : `entities/${slug}.md`;
+                      const isExpanded = expandedDeliverable === eid;
                       return (
-                        <div key={i} className={`rounded-lg border p-3 transition-colors cursor-default ${typeColors[entityType] || "border-gray-700/30 bg-gray-900/20"}`}>
-                          <div className="flex items-start gap-2">
-                            <span className="text-sm shrink-0">{typeIcons[entityType] || "\uD83D\uDCC4"}</span>
-                            <div className="min-w-0">
-                              <span className="text-xs text-gray-200 block leading-snug">{title}</span>
-                              <span className="text-[10px] text-gray-500">{entityType}</span>
+                        <div key={i} className="col-span-1 sm:col-span-2">
+                          <button className={`rounded-lg border p-3 transition-colors cursor-pointer text-left w-full ${typeColors[entityType] || "border-gray-700/30 bg-gray-900/20"}`}
+                            onClick={() => {
+                              if (isExpanded) { setExpandedDeliverable(null); return; }
+                              setExpandedDeliverable(eid);
+                              // Fetch wiki page content
+                              fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
+                                method: "POST",
+                                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "read", payload: { path: cortexPath }, appFamily: "cortex" }),
+                              }).then(r => r.json()).then(d => {
+                                setDeliverableContent(d?.data?.content || d?.content || "No content available");
+                              }).catch(() => setDeliverableContent("Failed to load content"));
+                            }}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="text-sm shrink-0">{typeIcons[entityType] || "\uD83D\uDCC4"}</span>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-xs text-gray-200 block leading-snug">{title}</span>
+                                <span className="text-[10px] text-gray-500">{entityType}</span>
+                              </div>
+                              <span className="text-[10px] text-gray-500 ml-auto shrink-0">{isExpanded ? "▼" : "▶"}</span>
                             </div>
-                          </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="mt-1 rounded-lg border border-gray-700/30 bg-gray-900/30 p-4 max-h-[400px] overflow-y-auto">
+                              <pre className="text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">{deliverableContent || "Loading..."}</pre>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
