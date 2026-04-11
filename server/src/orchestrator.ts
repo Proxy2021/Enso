@@ -416,14 +416,20 @@ Design a sprint appropriate for the project scope. Without personas, focus on:
 4. **Review + Report**: Verify quality and produce sprint report` :
 
 ctx.type === "focus" ? `### Focus Area Sprint
-The user has already evaluated and discussed this focus area. Design tasks that produce CONCRETE, ACTIONABLE deliverables:
-- For knowledge goals → research tasks + curated resource lists + learning plans
-- For skill goals → practice frameworks + expert analysis + milestone plans
-- For project goals → architecture + implementation + review
-- For creative goals → inspiration research + methodology frameworks + portfolio plans
+The user has already evaluated and discussed this focus area. Design tasks that produce CONCRETE, ACTIONABLE deliverables.
+
+**Each deliverable becomes a Cortex entity** — a first-class piece of knowledge that persists and is cross-referenceable. Choose the right deliverable type for each task:
+- **article** (researcher): Study guides, curated resource lists, how-to guides, research reports
+- **concept** (architect): Methodologies, frameworks, decision models, structured plans
+- **app** (builder): Interactive Enso apps — planners, trackers, calculators, study tools (use outputType "app")
+
+For creative/lifestyle goals → inspiration research (article) + methodology frameworks (concept) + interactive tools (app)
+For knowledge goals → deep research (article) + learning plans (concept)
+For project goals → architecture (concept) + implementation (coder) + review
+
+**Builder tasks** can create full Enso apps with interactive UI. Use them when a deliverable would benefit from interactivity (trip planners, progress trackers, study tools, reference cards).
 
 Do NOT include persona testing or codebase analysis unless the focus explicitly involves software.
-Each task should produce a real document or artifact the user can act on immediately.
 The last task should synthesize all outputs into a final sprint report with clear next actions.` :
 
 ctx.type === "research" ? `### Research Sprint

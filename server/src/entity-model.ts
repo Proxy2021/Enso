@@ -36,7 +36,7 @@ export type EntityType =
   | "project"
   | "article" | "place"
   | "person" | "twitter-account"
-  | "concept" | "source" | "synthesis";
+  | "concept" | "source" | "synthesis" | "app";
 
 /** Data source identifiers */
 export type EntitySource =
@@ -192,6 +192,11 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
     sources: ["cortex"],
     cortexPrefix: "synthesis/",
     detailFields: ["themes", "scope"],
+  },
+  "app": {
+    sources: ["cortex", "files"],
+    cortexPrefix: "entities/",
+    detailFields: ["toolFamily", "toolCount", "createdAt"],
   },
 };
 

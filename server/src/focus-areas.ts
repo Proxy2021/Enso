@@ -1006,29 +1006,87 @@ export async function launchFocusEvolve(params: {
               }
             }
 
-            // Persist sprint results as Cortex pages — one per task + summary page
+            // Register each deliverable as a properly-typed Cortex entity
             try {
-              const { writeFileSync, existsSync: existsSync2, mkdirSync: mkdirSync2 } = await import("node:fs");
-              const { join: pathJoin } = await import("node:path");
-              const { homedir: home } = await import("node:os");
-              const sprintDir = pathJoin(home(), ".enso", "wiki", "focuses", `${focusId}-sprint-${orchId.slice(0, 8)}`);
-              if (!existsSync2(sprintDir)) mkdirSync2(sprintDir, { recursive: true });
+              const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
+              const { upsertEntityIndex, saveEntityIndex, lookupEntity } = await import("./entity-model.js");
+              const createdEntityIds: string[] = [];
 
-              // Write individual task pages (full output if available, otherwise summary)
-              const taskPages: string[] = [];
+              // Classify each task output into the right entity type
+              const typeMap: Record<string, string> = {
+                "researcher": "article",   // research outputs → articles
+                "architect": "concept",    // frameworks/methodologies → concepts
+                "builder": "app",          // built apps → app entities
+                "reviewer": "synthesis",   // synthesis/reports → synthesis
+                "coder": "article",        // code guides → articles
+              };
+
               for (const t of plan.tasks) {
                 if (!t.resultSummary) continue;
-                const slug = (t as any).taskId || t.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+                const agentRole = (t as any).agentRole || "researcher";
+                const entityType = typeMap[agentRole] || "article";
                 const fullContent = (t as any).fullOutput || t.resultSummary;
-                const pagePath = pathJoin(sprintDir, `${slug}.md`);
-                const page = `# ${t.title}\n\n*Agent: ${(t as any).agentRole || "unknown"} | Sprint: ${new Date().toISOString().slice(0, 10)}*\n\n${fullContent}`;
-                writeFileSync(pagePath, page, "utf-8");
-                taskPages.push(`- [[focuses/${focusId}-sprint-${orchId.slice(0, 8)}/${slug}|${t.title}]]`);
+
+                try {
+                  const result = await ingestDiscoveredEntity({
+                    title: t.title,
+                    type: entityType,
+                    source: "cortex",
+                    description: t.resultSummary.slice(0, 500),
+                  });
+
+                  if (result.created || result.entityId) {
+                    createdEntityIds.push(result.entityId);
+
+                    // Write full content to the wiki page (ingest only creates a stub)
+                    if (fullContent.length > 600 && result.cortexPath) {
+                      const { writeFileSync: writeFile2 } = await import("node:fs");
+                      const { join: pathJoin2 } = await import("node:path");
+                      const { homedir: home2 } = await import("node:os");
+                      const fullPath = pathJoin2(home2(), ".enso", "wiki", result.cortexPath);
+                      const page = `# ${t.title}\n\n*Created by Evolution Sprint — ${new Date().toISOString().slice(0, 10)}*\n*Focus: ${area.title}*\n\n${fullContent}`;
+                      writeFile2(fullPath, page, "utf-8");
+                    }
+
+                    // Add cross-reference back to focus area
+                    const entity = lookupEntity(result.entityId);
+                    if (entity) {
+                      const refs = entity.crossReferences || [];
+                      const focusRef = `cortex:synthesis:${focusId}`;
+                      if (!refs.some(r => r.entityId === focusRef)) {
+                        refs.push({ entityId: focusRef, reason: `Created during evolution sprint for "${area.title}"` });
+                        upsertEntityIndex({ ...entity, crossReferences: refs });
+                      }
+                    }
+                  }
+                  logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                    message: `Registered deliverable as ${entityType}: "${t.title}" (${result.entityId})` });
+                } catch (entityErr) {
+                  logError("focus-areas", `Failed to register entity for "${t.title}"`, entityErr);
+                }
               }
 
-              // Write sprint summary page
-              const summaryPage = `# Sprint: ${area.title}\n\nDate: ${new Date().toISOString().slice(0, 10)}\nGoal: ${brief.slice(0, 300)}\nTasks: ${plan.tasks.length} completed\n\n## Deliverables\n${taskPages.join("\n")}\n\n## Task Summaries\n${sprintResults}`;
-              writeFileSync(pathJoin(sprintDir, "_index.md"), summaryPage, "utf-8");
+              // Save entity index with all new entries
+              if (createdEntityIds.length > 0) {
+                saveEntityIndex();
+
+                // Link all created entities to the focus area
+                const freshState2 = loadFocusState();
+                if (freshState2) {
+                  const freshArea2 = freshState2.areas.find(a => a.id === focusId);
+                  if (freshArea2) {
+                    for (const eid of createdEntityIds) {
+                      if (!freshArea2.relatedEntityIds.includes(eid)) {
+                        freshArea2.relatedEntityIds.push(eid);
+                      }
+                    }
+                    saveFocusState(freshState2);
+                  }
+                }
+
+                logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                  message: `Linked ${createdEntityIds.length} deliverables to focus "${area.title}"` });
+              }
 
               logAction({ ts: Date.now(), type: "action", category: "focus-areas",
                 message: `Stored ${taskPages.length} sprint deliverables as Cortex pages in focuses/${focusId}-sprint-${orchId.slice(0, 8)}/` });
