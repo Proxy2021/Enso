@@ -65,6 +65,10 @@ export interface FocusArea {
   preparedBriefing?: string;
   /** When the briefing was last prepared */
   preparedAt?: string;
+  /** Results from the last evolution sprint — carried into next Evaluate cycle */
+  lastSprintResults?: string;
+  /** When the last sprint completed */
+  lastSprintDate?: string;
 }
 
 export interface FocusState {
@@ -678,6 +682,16 @@ ${area.nextSteps?.length ? `Next steps: ${area.nextSteps.join("; ")}` : ""}
 Evidence: ${area.evidence.join(", ")}
 Themes: ${area.semanticTags.join(", ")}`);
 
+  // Previous sprint results — essential for building on what was already done
+  if ((area as any).lastSprintResults) {
+    sections.push(`\n# Previous Sprint Results (${(area as any).lastSprintDate?.slice(0, 10) || "recent"})\nThe following was produced in the last evolution sprint. The next evaluation should build on these results, identify gaps, and determine what to focus on next.\n\n${(area as any).lastSprintResults.slice(0, 4000)}`);
+  }
+
+  // Related entities (sprint deliverables, books, etc.)
+  if (area.relatedEntityIds.length > 0) {
+    sections.push(`\n# Related Entities (${area.relatedEntityIds.length})\n${area.relatedEntityIds.map(id => `- ${id}`).join("\n")}`);
+  }
+
   // Related projects
   var projectIds = area.relatedEntityIds
     .filter(id => id.includes(":project:"))
@@ -991,7 +1005,7 @@ export async function launchFocusEvolve(params: {
                 `## ${t.title} (${t.agentRole})\n\n${t.resultSummary}`)
               .join("\n\n---\n\n");
 
-            // Store on focus area
+            // Store on focus area + reset workflow for next cycle
             const freshState = loadFocusState();
             if (freshState) {
               const freshArea = freshState.areas.find(a => a.id === focusId);
@@ -1002,6 +1016,18 @@ export async function launchFocusEvolve(params: {
                   source: "conversation" as const,
                   change: `Evolution sprint completed: ${plan.tasks.length} tasks`,
                 });
+
+                // Store sprint results for the next Evaluate cycle to reference
+                (freshArea as any).lastSprintResults = sprintResults.slice(0, 8000);
+                (freshArea as any).lastSprintDate = new Date().toISOString();
+
+                // Reset workflow for next cycle — Evaluate and Discuss start fresh
+                freshArea.preparedBriefing = undefined;
+                freshArea.preparedAt = undefined;
+                // Clear conversationId so Discuss creates a new conversation
+                // (the old conversation is preserved in the sidebar for reference)
+                freshArea.conversationId = undefined;
+
                 saveFocusState(freshState);
               }
             }

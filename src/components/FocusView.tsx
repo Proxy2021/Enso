@@ -34,6 +34,8 @@ interface FocusArea {
   preparedBriefing?: string;
   preparedAt?: string;
   relatedEntityIds?: string[];
+  lastSprintResults?: string;
+  lastSprintDate?: string;
 }
 
 interface FocusState {
