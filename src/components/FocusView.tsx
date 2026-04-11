@@ -33,6 +33,7 @@ interface FocusArea {
   updatedAt: string;
   preparedBriefing?: string;
   preparedAt?: string;
+  relatedEntityIds?: string[];
 }
 
 interface FocusState {
@@ -726,12 +727,55 @@ export default function FocusView() {
           {(detailTab === "cortex" || detailTab === "activity") && (
             <div className="space-y-5">
               {/* Stats bar */}
-              <div className="flex items-center gap-3 text-[11px]">
+              <div className="flex items-center gap-3 text-[11px] flex-wrap">
+                {selected.relatedEntityIds && selected.relatedEntityIds.length > 0 && (
+                  <span className="px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">{selected.relatedEntityIds.length} deliverables</span>
+                )}
                 <span className="px-2 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20">{selected.evidence.length} evidence</span>
                 {activity && <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">{activity.total} related</span>}
                 <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">{selected.refinements.length} refinements</span>
                 <span className="px-2 py-1 rounded bg-gray-500/10 text-gray-400 border border-gray-700/30">{selected.semanticTags.join(", ")}</span>
               </div>
+
+              {/* Sprint Deliverables — entities created by evolution sprints */}
+              {selected.relatedEntityIds && selected.relatedEntityIds.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm">{"\uD83D\uDCE6"}</span>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-600">Sprint Deliverables ({selected.relatedEntityIds.length})</label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {selected.relatedEntityIds.map((eid, i) => {
+                      // Parse entity ID: "cortex:article:elite-photographer-gallery"
+                      const parts = eid.split(":");
+                      const entityType = parts[1] || "unknown";
+                      const slug = parts.slice(2).join(":");
+                      const title = slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                      const typeIcons: Record<string, string> = {
+                        article: "\uD83D\uDCF0", concept: "\uD83D\uDCA1", app: "\uD83D\uDCBB",
+                        synthesis: "\uD83D\uDCCA", book: "\uD83D\uDCDA", place: "\u2708\uFE0F",
+                      };
+                      const typeColors: Record<string, string> = {
+                        article: "border-blue-500/20 bg-blue-950/10 hover:border-blue-500/40",
+                        concept: "border-amber-500/20 bg-amber-950/10 hover:border-amber-500/40",
+                        app: "border-indigo-500/20 bg-indigo-950/10 hover:border-indigo-500/40",
+                        synthesis: "border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40",
+                      };
+                      return (
+                        <div key={i} className={`rounded-lg border p-3 transition-colors cursor-default ${typeColors[entityType] || "border-gray-700/30 bg-gray-900/20"}`}>
+                          <div className="flex items-start gap-2">
+                            <span className="text-sm shrink-0">{typeIcons[entityType] || "\uD83D\uDCC4"}</span>
+                            <div className="min-w-0">
+                              <span className="text-xs text-gray-200 block leading-snug">{title}</span>
+                              <span className="text-[10px] text-gray-500">{entityType}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Preparation Briefing — the centerpiece */}
               {selected.preparedBriefing && (
