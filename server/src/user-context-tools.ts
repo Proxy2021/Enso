@@ -1317,16 +1317,7 @@ export function createUserContextTools(): EnsoAgentTool[] {
           updateScanLog("kindleLibrary");
           logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle library scanned: ${books.length} books (${newBooks.length} new)` });
 
-          // Auto-trigger background enrichment for unenriched books
-          const unenrichedCount = books.filter((b) => !b.enrichedAt && b.asin).length;
-          if (unenrichedCount > 0) {
-            logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Starting background Kindle enrichment for ${unenrichedCount} books...` });
-            enrichKindleMetadata().catch((err) =>
-              logError("user-context", "Background Kindle enrichment failed", err)
-            );
-          }
-
-          return jsonResult({ ...result, enrichmentStarted: unenrichedCount > 0, unenrichedCount });
+          return jsonResult(result);
         } catch (err) {
           logError("user-context", "Kindle library scan failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));

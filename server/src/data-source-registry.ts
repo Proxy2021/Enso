@@ -332,7 +332,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
       if (!cached?.books?.length) return [];
       const pages: DirectIngestPage[] = [];
       for (const b of cached.books) {
-        if (!b.title || !b.enrichedAt) continue; // only enriched books get pages
+        if (!b.title) continue;
         const slug = b.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
         if (!slug) continue;
         const ratingStr = b.rating ? `⭐ ${b.rating}${b.reviewCount ? ` (${b.reviewCount.toLocaleString()} reviews)` : ""}` : "";
@@ -520,7 +520,7 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
     },
     getDirectIngestPages: (cached: A) => {
       if (!cached?.games?.length) return [];
-      return cached.games.filter((g: A) => g.enrichedAt).map((g: A) => {
+      return cached.games.filter((g: A) => g.name).map((g: A) => {
         const slug = g.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
         if (!slug) return null;
         const lines = [`# ${g.name}\n`];
