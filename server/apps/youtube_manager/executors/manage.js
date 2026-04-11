@@ -53,6 +53,15 @@ if (!refresh) {
 var subsResult = await ctx.callTool("enso_youtube_subscriptions", { maxResults: 999, all: true });
 var allSubs = [];
 
+if (subsResult && subsResult.success === false) {
+  var errMsg = (subsResult.data && subsResult.data.error) || subsResult.error || "YouTube API call failed";
+  return { content: [{ type: "text", text: JSON.stringify({
+    tool: "enso_youtube_manager_manage",
+    channels: [],
+    error: errMsg,
+  }) }] };
+}
+
 if (subsResult && subsResult.data && subsResult.data.channels) {
   allSubs = subsResult.data.channels;
 } else if (subsResult && subsResult.rawText) {

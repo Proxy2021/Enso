@@ -2,7 +2,8 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { compileComponent } from "../lib/sandbox";
 import MarkdownText from "../components/MarkdownText";
 import MediaGallery from "../components/MediaGallery";
-import { resolveMediaUrl } from "../lib/connection";
+import { resolveMediaUrl, getActiveBackend } from "../lib/connection";
+import { useChatStore } from "../store/chat";
 import { reportError } from "../lib/error-reporter";
 import { t } from "../lib/i18n";
 import type { CardRendererProps } from "./types";
@@ -129,14 +130,18 @@ export default function DynamicUICard({ card, onAction, onDynamicUIReady }: Card
     [onAction],
   );
 
+  // Re-resolve media URLs when backend connection changes (fixes native WebView
+  // where relative /media/ paths are invalid until the backend URL is known)
+  const backendUrl = useChatStore(s => s.connectionState === "connected" ? getActiveBackend()?.url : undefined);
+
   const resolvedData = useMemo(
     () => resolveMediaUrlsInData(card.data ?? {}),
-    [card.data],
+    [card.data, backendUrl],
   );
 
   const resolvedMediaUrls = useMemo(
     () => card.mediaUrls?.map(u => resolveMediaUrl(u)) ?? [],
-    [card.mediaUrls],
+    [card.mediaUrls, backendUrl],
   );
 
   if (!result) {

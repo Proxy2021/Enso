@@ -9,7 +9,9 @@ var feed = [];
 // Fetch subscriptions (all pages)
 try {
   var subResult = await ctx.callTool("enso_youtube_subscriptions", { all: true });
-  if (subResult && subResult.channels) {
+  if (subResult && subResult.data && subResult.data.channels) {
+    subscriptions = subResult.data.channels;
+  } else if (subResult && subResult.channels) {
     subscriptions = subResult.channels;
   }
 } catch (e) { /* YouTube subscriptions not available */ }
@@ -17,7 +19,9 @@ try {
 // Fetch liked videos
 try {
   var likedResult = await ctx.callTool("enso_youtube_liked_videos", { maxResults: 50 });
-  if (likedResult && likedResult.videos) {
+  if (likedResult && likedResult.data && likedResult.data.videos) {
+    likedVideos = likedResult.data.videos;
+  } else if (likedResult && likedResult.videos) {
     likedVideos = likedResult.videos;
   }
 } catch (e) { /* YouTube liked videos not available */ }
@@ -25,7 +29,9 @@ try {
 // Fetch recent feed
 try {
   var feedResult = await ctx.callTool("enso_youtube_my_feed", { maxResults: 50 });
-  if (feedResult && feedResult.videos) {
+  if (feedResult && feedResult.data && feedResult.data.videos) {
+    feed = feedResult.data.videos;
+  } else if (feedResult && feedResult.videos) {
     feed = feedResult.videos;
   }
 } catch (e) { /* YouTube feed not available */ }
