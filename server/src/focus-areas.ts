@@ -1041,7 +1041,7 @@ export async function launchFocusEvolve(params: {
               // Classify each task output into the right entity type
               const typeMap: Record<string, string> = {
                 "researcher": "article",   // research outputs → articles
-                "architect": "concept",    // frameworks/methodologies → concepts
+                "architect": "idea",       // frameworks/methodologies/designs → ideas
                 "builder": "app",          // built apps → app entities
                 "reviewer": "synthesis",   // synthesis/reports → synthesis
                 "coder": "article",        // code guides → articles

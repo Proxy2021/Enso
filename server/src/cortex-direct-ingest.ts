@@ -23,7 +23,7 @@ const INDEX_PATH = join(CORTEX_DIR, "_index.md");
 const LOG_PATH = join(CORTEX_DIR, "_log.md");
 
 function ensureCortexDir(): void {
-  for (const sub of ["entities", "concepts", "sources", "synthesis"]) {
+  for (const sub of ["entities", "synthesis"]) {
     const dir = join(CORTEX_DIR, sub);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }

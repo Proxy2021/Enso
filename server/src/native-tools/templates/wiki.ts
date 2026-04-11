@@ -107,8 +107,8 @@ const CORTEX_TEMPLATE = `export default function GeneratedUI({ data, onAction })
   };
 
   // ── Category badges ──
-  var categoryColors = { entities: "blue", concepts: "purple", sources: "green", synthesis: "amber" };
-  var categoryIcons = { entities: "Users", concepts: "Lightbulb", sources: "FileText", synthesis: "GitMerge" };
+  var categoryColors = { entities: "blue", synthesis: "amber" };
+  var categoryIcons = { entities: "Users", synthesis: "Sparkles" };
 
   return (
     <div className="space-y-4">
@@ -154,7 +154,7 @@ const CORTEX_TEMPLATE = `export default function GeneratedUI({ data, onAction })
           <Button variant={categoryFilter === "all" ? "default" : "ghost"} onClick={function() { handleListCategory("all"); }}>
             All
           </Button>
-          {["entities", "concepts", "sources", "synthesis"].map(function(cat) {
+          {["entities", "synthesis"].map(function(cat) {
             var count = categories[cat] ?? 0;
             return (
               <Button key={cat} variant={categoryFilter === cat ? "default" : "ghost"} onClick={function() { handleListCategory(cat); }}>

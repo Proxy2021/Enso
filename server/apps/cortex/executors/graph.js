@@ -33,7 +33,7 @@ for (var i = 0; i < pagesToRead.length; i++) {
     var linkMatches = readResult.data.content.match(/\[\[([^\]]+)\]\]/g) || [];
     var seen = {};
     for (var li = 0; li < linkMatches.length; li++) {
-      var target = linkMatches[li].replace(/\[\[|\]\]/g, "").toLowerCase().replace(/\s+/g, "-").replace(/^(entities|concepts|sources|synthesis)\//, "");
+      var target = linkMatches[li].replace(/\[\[|\]\]/g, "").toLowerCase().replace(/\s+/g, "-").replace(/^(entities|synthesis)\//, "");
       if (!seen[target]) {
         edges.push({ source: slug, target: target });
         backlinkCounts[target] = (backlinkCounts[target] || 0) + 1;

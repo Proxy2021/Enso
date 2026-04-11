@@ -33,7 +33,7 @@ for (var li = 0; li < linkMatches.length; li++) {
   var linkName = linkMatches[li].replace(/\[\[|\]\]/g, "");
   if (seen[linkName]) continue;
   seen[linkName] = true;
-  var linkSlug = linkName.toLowerCase().replace(/\s+/g, "-").replace(/^(entities|concepts|sources|synthesis)\//, "");
+  var linkSlug = linkName.toLowerCase().replace(/\s+/g, "-").replace(/^(entities|synthesis)\//, "");
   var found = allEntries.find(function(e) { return e.path.replace(/.*\//, "").replace(/\.md$/, "") === linkSlug; });
   outgoingLinks.push({ name: linkName, slug: linkSlug, path: found ? found.path : null, exists: !!found });
 }

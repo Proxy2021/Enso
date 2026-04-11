@@ -447,6 +447,8 @@ export interface OrchestrationPlan {
   tasks: OrchestrationTask[];
   agents: OrchestrationAgent[];
   status: OrchestrationStatus;
+  /** Context type that spawned this orchestration — affects agent prompts */
+  contextType?: "focus" | "evolution" | "research" | "discovery" | "custom";
 }
 
 export type OrchestrationEventType =

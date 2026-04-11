@@ -19,8 +19,6 @@ var lintData = lintResult.success ? lintResult.data : {};
 var stats = {
   total: totalPages,
   entities: categories.entities || 0,
-  concepts: categories.concepts || 0,
-  sources: categories.sources || 0,
   synthesis: categories.synthesis || 0
 };
 

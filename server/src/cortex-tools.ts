@@ -8,10 +8,8 @@
  * Storage: ~/.enso/wiki/
  *   _index.md          — page catalog with summaries (machine-parseable)
  *   _log.md            — chronological operation log
- *   entities/           — people, projects, companies, tools
- *   concepts/           — topics, techniques, patterns
- *   sources/            — source summaries (reference to raw material)
- *   synthesis/          — cross-cutting analyses
+ *   entities/           — external world (books, games, movies, people, places, channels, etc.)
+ *   synthesis/          — system-created (ideas, apps, projects, articles, reports, profile, memory)
  *
  * Operations: ingest, query (search + read), lint.
  */
@@ -29,7 +27,7 @@ import { DATA_SOURCES, readCache as registryReadCache } from "./data-source-regi
 const CORTEX_DIR = join(homedir(), ".enso", "wiki");
 const INDEX_PATH = join(CORTEX_DIR, "_index.md");
 const LOG_PATH = join(CORTEX_DIR, "_log.md");
-const SUBDIRS = ["entities", "concepts", "sources", "synthesis"] as const;
+const SUBDIRS = ["entities", "synthesis"] as const;
 type CortexCategory = (typeof SUBDIRS)[number];
 
 // ── Types ──
@@ -352,10 +350,8 @@ let _ingestBusy = false;
 const INGEST_PROMPT = `You are a wiki maintainer. Given source material and the current wiki index, produce structured JSON to create or update wiki pages.
 
 RULES:
-- Extract entities (people, technologies, companies, frameworks) → entities/ pages
-- Extract concepts (patterns, theories, methodologies, techniques) → concepts/ pages
-- Create a source summary in sources/ as an immutable reference
-- If relationships between existing pages emerge, create synthesis/ pages
+- Things with external identity (people, technologies, companies, media, channels, places) → entities/ pages
+- Everything Enso produced or analyzed (insights, methodologies, frameworks, strategies, research reports, design visions, patterns, techniques, source summaries, cross-cutting analyses) → synthesis/ pages
 - Use [[entity-name]] wiki links between pages (lowercase, hyphens for spaces)
 - Page filenames: lowercase, hyphens, .md extension (e.g., entities/react.md)
 - Each page should have: # Title, a summary paragraph, then ## sections with bullet points
@@ -374,7 +370,7 @@ RESPOND WITH VALID JSON ONLY (no markdown fences):
       "tags": ["framework", "javascript", "frontend"]
     }
   ],
-  "logEntry": "Ingested article on React: created entities/react.md, updated concepts/virtual-dom.md"
+  "logEntry": "Ingested article on React: created entities/react.md, updated synthesis/virtual-dom.md"
 }`;
 
 async function runIngestPipeline(source: {
@@ -760,7 +756,7 @@ export function getCortexContextSummary(maxChars: number): string {
     if (thematicSummary.length > 400) thematicSummary = thematicSummary.slice(0, 400) + "...";
   }
 
-  const header = `Cortex: ${entries.length} pages (${byCat.entities ?? 0} entities, ${byCat.concepts ?? 0} concepts, ${byCat.sources ?? 0} sources, ${byCat.synthesis ?? 0} synthesis)`;
+  const header = `Cortex: ${entries.length} pages (${byCat.entities ?? 0} entities, ${byCat.synthesis ?? 0} synthesis)`;
   const sourceHeader = `Sources: ${sourceSummary}`;
 
   const parts = [
@@ -807,8 +803,7 @@ function inferSource(entry: CortexIndexEntry): string {
   if (entry.tags.includes("book") || entry.tags.includes("kindle")) return "kindle";
   if (entry.tags.includes("youtube") || entry.tags.includes("channel")) return "youtube";
   if (entry.tags.includes("project")) return "project";
-  if (p.startsWith("sources/")) return "research";
-  if (p.startsWith("synthesis/")) return "synthesis";
+  if (p.startsWith("synthesis/")) return "cortex";
   return "manual";
 }
 
@@ -941,7 +936,7 @@ export function createCortexTools(): EnsoAgentTool[] {
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Wiki page path (e.g. 'entities/react.md', 'concepts/dependency-injection.md')" },
+          path: { type: "string", description: "Wiki page path (e.g. 'entities/react.md', 'synthesis/dependency-injection.md')" },
         },
         required: ["path"],
         additionalProperties: false,
@@ -1045,11 +1040,11 @@ export function createCortexTools(): EnsoAgentTool[] {
     {
       name: "enso_wiki_list",
       label: "Wiki List",
-      description: "List all wiki pages, optionally filtered by category (entities, concepts, sources, synthesis). Returns page paths, titles, sizes, and modification dates.",
+      description: "List all wiki pages, optionally filtered by category (entities, synthesis). Returns page paths, titles, sizes, and modification dates.",
       parameters: {
         type: "object",
         properties: {
-          category: { type: "string", description: "Filter by category: 'entities', 'concepts', 'sources', or 'synthesis'. Omit for all." },
+          category: { type: "string", description: "Filter by category: 'entities' or 'synthesis'. Omit for all." },
         },
         required: [],
         additionalProperties: false,

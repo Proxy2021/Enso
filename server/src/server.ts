@@ -195,6 +195,14 @@ export async function startEnsoServer(opts: {
     logError("system", "app re-hydration failed (non-fatal)", err);
   }
 
+  // Run Cortex schema migration (version-gated, runs once)
+  try {
+    const { migrateCortexV2 } = await import("./cortex-migration.js");
+    migrateCortexV2();
+  } catch (err) {
+    logError("system", "Cortex V2 migration failed (non-fatal)", err);
+  }
+
   // Validate APP_CATALOG integrity: every non-terminal entry must have a template
   // (either a shipped app in server/apps/<appId>/ or a registered native template).
   // Catches phantom catalog entries that show up in the UI but render as raw JSON.

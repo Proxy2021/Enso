@@ -411,12 +411,11 @@ function OverviewDashboard({
       {stats && (
         <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
           <h2 className="text-sm font-semibold text-gray-300 mb-3">📊 Cortex Statistics</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {[
               { label: "Wiki Pages", value: stats.totalPages || stats.total || 0, icon: "📄" },
-              { label: "Entities", value: stats.entities || totalEntities, icon: "🔗" },
-              { label: "Concepts", value: stats.concepts || 0, icon: "💡" },
-              { label: "Sources", value: stats.sources || 0, icon: "📎" },
+              { label: "Entities", value: stats.entities || totalEntities, icon: "🌍" },
+              { label: "Synthesis", value: stats.synthesis || 0, icon: "✨" },
             ].map(s => (
               <div key={s.label} className="text-center">
                 <div className="text-lg">{s.icon}</div>

@@ -23,15 +23,15 @@ export default function GeneratedUI({ data, onAction }) {
   var currentView = activeView;
 
   // ── Common data ──
-  var stats = data?.stats || { total: 0, entities: 0, concepts: 0, sources: 0, synthesis: 0 };
+  var stats = data?.stats || { total: 0, entities: 0, synthesis: 0 };
   var recent = Array.isArray(data?.recent) ? data.recent : [];
   var topEntities = Array.isArray(data?.topEntities) ? data.topEntities : [];
   var gaps = Array.isArray(data?.gaps) ? data.gaps : [];
   var logEntries = Array.isArray(data?.log) ? data.log : [];
 
   // Category colors
-  var catColors = { entities: "blue", concepts: "purple", sources: "green", synthesis: "amber" };
-  var catIcons = { entities: "Users", concepts: "Lightbulb", sources: "FileText", synthesis: "GitMerge" };
+  var catColors = { entities: "blue", synthesis: "amber" };
+  var catIcons = { entities: "Users", synthesis: "Sparkles" };
 
   // ── Render markdown-like content ──
   var renderContent = function(text) {
@@ -54,7 +54,7 @@ export default function GeneratedUI({ data, onAction }) {
           parts.map(function(part, pi) {
             var lm = part.match(/^\[\[([^\]]+)\]\]$/);
             if (lm) {
-              var linkSlug = lm[1].toLowerCase().replace(/\s+/g, "-").replace(/^(entities|concepts|sources|synthesis)\//, "");
+              var linkSlug = lm[1].toLowerCase().replace(/\s+/g, "-").replace(/^(entities|synthesis)\//, "");
               return React.createElement("button", {
                 key: pi, className: "text-blue-400 hover:text-blue-300 underline mx-0.5",
                 onClick: function() { onAction("read", { path: "entities/" + linkSlug + ".md" }); }
@@ -106,11 +106,9 @@ export default function GeneratedUI({ data, onAction }) {
       {(currentView === "dashboard") && (
         <div className="space-y-4">
           {/* Stats row */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Stat label="Total Pages" value={stats.total} accent="purple" />
             <Stat label="Entities" value={stats.entities} accent="blue" />
-            <Stat label="Concepts" value={stats.concepts} accent="violet" />
-            <Stat label="Sources" value={stats.sources} accent="green" />
             <Stat label="Synthesis" value={stats.synthesis} accent="amber" />
           </div>
 
@@ -306,7 +304,7 @@ export default function GeneratedUI({ data, onAction }) {
               <ResponsiveContainer width="100%" height="100%">
                 <Treemap
                   data={(data?.nodes || []).slice(0, 60).map(function(n) {
-                    return { name: n.title, size: Math.max(n.connections + 1, 1), category: n.category, path: n.path, fill: n.category === "entities" ? "#3b82f6" : n.category === "concepts" ? "#8b5cf6" : n.category === "sources" ? "#22c55e" : "#f59e0b" };
+                    return { name: n.title, size: Math.max(n.connections + 1, 1), category: n.category, path: n.path, fill: n.category === "entities" ? "#3b82f6" : "#f59e0b" };
                   })}
                   dataKey="size"
                   nameKey="name"
@@ -332,8 +330,6 @@ export default function GeneratedUI({ data, onAction }) {
           {/* Category legend */}
           <div className="flex gap-3 text-xs text-gray-400">
             <span><span className="inline-block w-3 h-3 rounded bg-blue-500 mr-1"></span>Entities ({data?.categories?.entities || 0})</span>
-            <span><span className="inline-block w-3 h-3 rounded bg-purple-500 mr-1"></span>Concepts ({data?.categories?.concepts || 0})</span>
-            <span><span className="inline-block w-3 h-3 rounded bg-green-500 mr-1"></span>Sources ({data?.categories?.sources || 0})</span>
             <span><span className="inline-block w-3 h-3 rounded bg-amber-500 mr-1"></span>Synthesis ({data?.categories?.synthesis || 0})</span>
           </div>
         </div>
@@ -353,7 +349,7 @@ export default function GeneratedUI({ data, onAction }) {
 
           {/* Category pills */}
           <div className="flex gap-1 flex-wrap">
-            {["", "entities", "concepts", "sources", "synthesis"].map(function(cat) {
+            {["", "entities", "synthesis"].map(function(cat) {
               return (
                 <Button key={cat || "all"} variant={searchCategory === cat ? "default" : "ghost"} className="text-xs"
                   onClick={function() { setSearchCategory(cat); if (searchQuery) onAction("search", { query: searchQuery, category: cat || undefined }); }}>

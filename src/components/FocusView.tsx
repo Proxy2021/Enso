@@ -754,13 +754,15 @@ export default function FocusView() {
                       const slug = parts.slice(2).join(":");
                       const title = slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
                       const typeIcons: Record<string, string> = {
-                        article: "\uD83D\uDCF0", concept: "\uD83D\uDCA1", app: "\uD83D\uDCBB",
-                        synthesis: "\uD83D\uDCCA", book: "\uD83D\uDCDA", place: "\u2708\uFE0F",
+                        idea: "\u2728", article: "\uD83D\uDCF0", app: "\uD83D\uDCBB", project: "\uD83D\uDCC1",
+                        synthesis: "\uD83D\uDCCA", book: "\uD83D\uDCDA", game: "\uD83C\uDFAE",
+                        movie: "\uD83C\uDFAC", channel: "\uD83D\uDCFA", place: "\u2708\uFE0F",
                       };
                       const typeColors: Record<string, string> = {
+                        idea: "border-amber-500/20 bg-amber-950/10 hover:border-amber-500/40",
                         article: "border-blue-500/20 bg-blue-950/10 hover:border-blue-500/40",
-                        concept: "border-amber-500/20 bg-amber-950/10 hover:border-amber-500/40",
                         app: "border-indigo-500/20 bg-indigo-950/10 hover:border-indigo-500/40",
+                        project: "border-violet-500/20 bg-violet-950/10 hover:border-violet-500/40",
                         synthesis: "border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40",
                       };
                       return (

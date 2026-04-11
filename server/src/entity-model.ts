@@ -36,7 +36,7 @@ export type EntityType =
   | "project"
   | "article" | "place"
   | "person" | "twitter-account"
-  | "concept" | "source" | "synthesis" | "app";
+  | "idea" | "synthesis" | "app";
 
 /** Data source identifiers */
 export type EntitySource =
@@ -82,6 +82,7 @@ export interface EntityTypeDef {
   cortexPrefix: string;        // wiki path prefix (matches existing conventions)
   canContain?: EntityType[];   // child entity types
   detailFields: string[];      // metadata keys surfaced in detail view
+  appFamily?: string;          // home app that manages this type
 }
 
 /**
@@ -93,74 +94,87 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
     sources: ["kindle", "weread", "research"],
     cortexPrefix: "entities/",
     detailFields: ["author", "rating", "reviewCount", "pageCount", "publisher", "publicationDate", "categories", "description"],
+    appFamily: "kindle",
   },
   "game": {
     sources: ["steam", "research"],
     cortexPrefix: "entities/game-",
     detailFields: ["genres", "developer", "metacritic", "releaseDate", "sizeOnDisk", "lastPlayed", "description"],
+    appFamily: "steam",
   },
   "movie": {
     sources: ["movies_tv", "research"],
     cortexPrefix: "entities/movie-",
     detailFields: ["director", "cast", "rating", "voteCount", "runtime", "genres", "year", "overview"],
+    appFamily: "movies_tv",
   },
   "tv-series": {
     sources: ["movies_tv", "research"],
     cortexPrefix: "entities/tv-",
     detailFields: ["seasons", "cast", "rating", "genres", "year", "overview"],
+    appFamily: "movies_tv",
   },
   "documentary": {
     sources: ["movies_tv", "research"],
     cortexPrefix: "entities/movie-",
     detailFields: ["director", "rating", "runtime", "genres", "year", "overview"],
+    appFamily: "movies_tv",
   },
   "album": {
     sources: ["photos"],
     cortexPrefix: "entities/photo-album-",
     canContain: ["photo"],
     detailFields: ["photoCount", "dateRange", "cameras", "extensions"],
+    appFamily: "photo_library",
   },
   "photo": {
     sources: ["photos"],
     cortexPrefix: "", // no cortex page by default
     detailFields: ["camera", "date", "location", "dimensions", "filePath"],
+    appFamily: "photo_library",
   },
   "song": {
     sources: ["qq_music"],
     cortexPrefix: "", // no cortex page by default
     detailFields: ["artist", "album", "duration"],
+    appFamily: "qq_music",
   },
   "playlist": {
     sources: ["qq_music"],
     cortexPrefix: "entities/playlist-",
     canContain: ["song"],
     detailFields: ["trackCount", "creator"],
+    appFamily: "qq_music",
   },
   "artist": {
     sources: ["qq_music"],
     cortexPrefix: "entities/artist-",
     canContain: ["song"],
     detailFields: ["trackCount", "genres"],
+    appFamily: "qq_music",
   },
   "channel": {
     sources: ["youtube", "research"],
     cortexPrefix: "entities/",
     canContain: ["video"],
     detailFields: ["subscriberCount", "videoCount", "category", "description"],
+    appFamily: "youtube_manager",
   },
   "video": {
     sources: ["youtube"],
     cortexPrefix: "", // no cortex page by default
     detailFields: ["views", "duration", "publishedAt", "channelTitle"],
+    appFamily: "youtube_manager",
   },
   "project": {
     sources: ["files"],
-    cortexPrefix: "entities/",
+    cortexPrefix: "synthesis/",
     detailFields: ["language", "framework", "dependencies", "lastModified", "size"],
+    appFamily: "projects",
   },
   "article": {
     sources: ["research", "manual"],
-    cortexPrefix: "entities/article-",
+    cortexPrefix: "synthesis/",
     detailFields: ["author", "source", "publishedDate", "url", "summary", "topics"],
   },
   "place": {
@@ -177,25 +191,22 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
     sources: ["twitter"],
     cortexPrefix: "entities/twitter-",
     detailFields: ["handle", "followersCount", "bio"],
+    appFamily: "twitter",
   },
-  "concept": {
+  "idea": {
     sources: ["cortex", "research", "manual"],
-    cortexPrefix: "concepts/",
-    detailFields: ["definition", "relatedConcepts"],
-  },
-  "source": {
-    sources: ["cortex", "research"],
-    cortexPrefix: "sources/",
-    detailFields: ["sourceUrl", "dateAccessed"],
+    cortexPrefix: "synthesis/",
+    detailFields: ["origin", "status", "potential", "relatedFocusAreas", "relatedConcepts", "definition"],
   },
   "synthesis": {
-    sources: ["cortex"],
+    sources: ["cortex", "research"],
     cortexPrefix: "synthesis/",
-    detailFields: ["themes", "scope"],
+    detailFields: ["themes", "scope", "sourceUrl", "dateAccessed"],
+    appFamily: "cortex",
   },
   "app": {
     sources: ["cortex", "files"],
-    cortexPrefix: "entities/",
+    cortexPrefix: "synthesis/",
     detailFields: ["toolFamily", "toolCount", "createdAt"],
   },
 };
@@ -350,6 +361,16 @@ export function getDiscoveredEntities(type: EntityType, limit?: number): EntityI
     }
   }
   return results;
+}
+
+/** Get entity counts grouped by type */
+export function getEntityTypeStats(): Record<string, number> {
+  if (!indexLoaded) loadEntityIndex();
+  const stats: Record<string, number> = {};
+  for (const entry of entityIndex.values()) {
+    stats[entry.type] = (stats[entry.type] || 0) + 1;
+  }
+  return stats;
 }
 
 /** Load entity index from disk */

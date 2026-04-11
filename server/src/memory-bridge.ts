@@ -994,9 +994,9 @@ export function searchMemory(query: string, maxResults = 5): MemorySearchResult[
   const cortexMemory = readCortexPage(CORTEX_CONVERSATION_MEMORY);
   if (cortexMemory) files.push({ name: "cortex/conversation-memory.md", content: cortexMemory });
 
-  // Scan other Cortex pages (entities, concepts, synthesis, sources)
+  // Scan other Cortex pages (entities, synthesis)
   try {
-    const WIKI_SUBDIRS = ["entities", "concepts", "synthesis", "sources"];
+    const WIKI_SUBDIRS = ["entities", "synthesis"];
     for (const sub of WIKI_SUBDIRS) {
       const subDir = join(CORTEX_DIR, sub);
       if (!existsSync(subDir)) continue;

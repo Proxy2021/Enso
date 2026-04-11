@@ -54,7 +54,7 @@ const CATEGORIES: CategoryInfo[] = [
   { id: "apps", label: "App State", description: "Per-app persistent data (galleries, settings)", sensitive: false },
   { id: "skills", label: "Skills", description: "User-created skill definitions", sensitive: false },
   { id: "projects", label: "Projects", description: "Project definitions (team, personas, vision)", sensitive: false },
-  { id: "cortex", label: "Knowledge Cortex", description: "AI-maintained knowledge base (entities, concepts, sources, synthesis)", sensitive: false },
+  { id: "cortex", label: "Knowledge Cortex", description: "AI-maintained knowledge base (entities + synthesis)", sensitive: false },
   { id: "deepContent", label: "Deep Content", description: "AI podcast metadata, research, scripts (audio files exported separately)", sensitive: false },
   { id: "dataSources", label: "Data Source Caches", description: "Kindle, WeRead, Steam, YouTube, Movies, Photos, QQ Music library caches", sensitive: false },
   { id: "entityIndex", label: "Entity Index", description: "Cross-source entity registry with types, sources, and cortex paths", sensitive: false },
@@ -174,7 +174,7 @@ function readCategory(id: string): unknown | null {
       const cortexDir = join(ENSO_HOME, "wiki");
       if (!existsSync(cortexDir)) return null;
       const result: Record<string, Record<string, string>> = {};
-      const subdirs = ["entities", "concepts", "sources", "synthesis"];
+      const subdirs = ["entities", "synthesis"];
 
       // Root metadata files
       const indexContent = readTextFile(join(cortexDir, "_index.md"));

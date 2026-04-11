@@ -418,14 +418,14 @@ Design a sprint appropriate for the project scope. Without personas, focus on:
 ctx.type === "focus" ? `### Focus Area Sprint
 The user has already evaluated and discussed this focus area. Design tasks that produce CONCRETE, ACTIONABLE deliverables.
 
-**Each deliverable becomes a Cortex entity** — a first-class piece of knowledge that persists and is cross-referenceable. Choose the right deliverable type for each task:
+**Each deliverable becomes a Cortex entity in synthesis/** — a first-class piece of knowledge that persists and is cross-referenceable with everything in the user's world. Choose the right deliverable type:
 - **article** (researcher): Study guides, curated resource lists, how-to guides, research reports
-- **concept** (architect): Methodologies, frameworks, decision models, structured plans
+- **idea** (architect): Original frameworks, proposed methodologies, design visions, creative strategies, decision models
 - **app** (builder): Interactive Enso apps — planners, trackers, calculators, study tools (use outputType "app")
 
-For creative/lifestyle goals → inspiration research (article) + methodology frameworks (concept) + interactive tools (app)
-For knowledge goals → deep research (article) + learning plans (concept)
-For project goals → architecture (concept) + implementation (coder) + review
+For creative/lifestyle goals → inspiration research (article) + methodology ideas (idea) + interactive tools (app)
+For knowledge goals → deep research (article) + learning frameworks (idea)
+For project goals → architecture ideas (idea) + implementation (coder) + review
 
 **Builder tasks** can create full Enso apps with interactive UI. Use them when a deliverable would benefit from interactivity (trip planners, progress trackers, study tools, reference cards).
 
@@ -648,6 +648,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
         tasks: normalizeTasks(fastTasks, orchestrationId),
         agents: buildAgentRoster(fastTasks),
         status: "executing",
+        contextType: params.context?.type,
       };
 
       const orchType: OrchestrationType = params.onComplete ? "evolution" : "orchestration";
@@ -734,6 +735,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       tasks: normalizeTasks(parsedPlan.tasks || [], orchestrationId),
       agents: buildAgentRoster(parsedPlan.tasks || []),
       status: "executing",
+      contextType: params.context?.type,
     };
 
     // Store in active orchestrations
@@ -1593,6 +1595,23 @@ function buildTaskPrompt(
   parts.push(`## Your Task: ${task.title}`);
   parts.push(task.description);
   parts.push(``);
+
+  // Focus sprint: inject deliverable type awareness
+  if (plan.contextType === "focus") {
+    const deliverableTypeMap: Record<string, { type: string; guidance: string }> = {
+      researcher: { type: "article", guidance: "Your output becomes an **article** in the Cortex synthesis layer — a reusable piece of curated knowledge (study guide, resource list, research report) that cross-references with everything in the user's world. Write it as a complete, standalone document." },
+      architect: { type: "idea", guidance: "Your output becomes an **idea** in the Cortex synthesis layer — an original framework, methodology, creative strategy, or design vision. Ideas are seeds for future action: they can spawn apps, projects, or focus areas. Frame your output as a novel proposal. Give it a clear name and articulate WHY this approach is compelling." },
+      builder: { type: "app", guidance: "Your output becomes an **app** in the Cortex synthesis layer — a persistent interactive tool." },
+      coder: { type: "article", guidance: "Your output becomes an **article** in the Cortex synthesis layer — a technical guide or implementation reference." },
+      reviewer: { type: "synthesis", guidance: "Your output becomes a **synthesis** in the Cortex — a cross-cutting summary connecting findings across all sprint tasks." },
+    };
+    const deliverable = deliverableTypeMap[task.agentRole];
+    if (deliverable) {
+      parts.push(`## Deliverable Type: ${deliverable.type}`);
+      parts.push(deliverable.guidance);
+      parts.push(``);
+    }
+  }
 
   // Output instructions based on type
   if (task.outputType === "app") {
