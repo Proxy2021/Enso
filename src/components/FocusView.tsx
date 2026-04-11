@@ -107,7 +107,18 @@ export default function FocusView() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchFocusAreas(); }, [fetchFocusAreas]);
+  useEffect(() => {
+    fetchFocusAreas();
+    // Sync focus conversations to current client so they appear in sidebar
+    const clientId = getClientId();
+    if (clientId) {
+      fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/sync-conversations`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      }).then(() => useChatStore.getState().refreshConversationsList()).catch(() => {});
+    }
+  }, [fetchFocusAreas]);
 
   // Auto-refresh when viewing a focus area that hasn't been enriched yet (waiting for async enrichment)
   useEffect(() => {

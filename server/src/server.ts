@@ -2040,6 +2040,85 @@ Only change fields where the conversation provided meaningful new information. K
     }
   });
 
+  // Ensure focus area conversations are visible to the current client
+  // (copies conversation entries from whichever client created them)
+  app.post("/api/focus-areas/sync-conversations", express.json(), async (req, res) => {
+    try {
+      const { clientId } = req.body as { clientId?: string };
+      if (!clientId) { res.status(400).json({ error: "clientId required" }); return; }
+
+      const { loadFocusState } = await import("./focus-areas.js");
+      const { loadCardHistory } = await import("./memory-bridge.js");
+      const { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { homedir } = await import("node:os");
+
+      const state = loadFocusState();
+      if (!state?.areas.length) { res.json({ synced: 0 }); return; }
+
+      const cardsRoot = join(homedir(), ".enso", "cards");
+      const clientDir = join(cardsRoot, clientId);
+      if (!existsSync(clientDir)) mkdirSync(clientDir, { recursive: true });
+
+      const convIndexPath = join(clientDir, "conversations.json");
+      let clientConvs: Array<{ id: string; title: string; createdAt: number; updatedAt: number; context?: { type: string; sourceId: string; label?: string } }> = [];
+      try { clientConvs = JSON.parse(readFileSync(convIndexPath, "utf-8")); } catch { clientConvs = []; }
+
+      let synced = 0;
+      for (const area of state.areas) {
+        if (!area.conversationId) continue;
+        // Already in this client's list?
+        if (clientConvs.some(c => c.id === area.conversationId)) continue;
+
+        // Find which client has the conversation journal
+        let sourceClientId: string | null = null;
+        try {
+          for (const dir of readdirSync(cardsRoot)) {
+            const journalPath = join(cardsRoot, dir, `${area.conversationId}.jsonl`);
+            if (existsSync(journalPath)) {
+              sourceClientId = dir;
+              break;
+            }
+          }
+        } catch { continue; }
+
+        if (!sourceClientId) continue;
+
+        // Copy the journal file to current client
+        const srcJournal = join(cardsRoot, sourceClientId, `${area.conversationId}.jsonl`);
+        const dstJournal = join(clientDir, `${area.conversationId}.jsonl`);
+        if (!existsSync(dstJournal)) {
+          try { copyFileSync(srcJournal, dstJournal); } catch { /* best effort */ }
+        }
+
+        // Find the conversation entry from source client
+        let sourceConvEntry: typeof clientConvs[0] | null = null;
+        try {
+          const srcIndex = JSON.parse(readFileSync(join(cardsRoot, sourceClientId, "conversations.json"), "utf-8")) as typeof clientConvs;
+          sourceConvEntry = srcIndex.find(c => c.id === area.conversationId) ?? null;
+        } catch { /* ignore */ }
+
+        // Add to current client's conversation list
+        clientConvs.push(sourceConvEntry || {
+          id: area.conversationId!,
+          title: area.title,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          context: { type: "focus", sourceId: area.id, label: "Focus" },
+        });
+        synced++;
+      }
+
+      if (synced > 0) {
+        writeFileSync(convIndexPath, JSON.stringify(clientConvs, null, 2), "utf-8");
+      }
+
+      res.json({ synced });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Sync failed" });
+    }
+  });
+
   app.post("/api/focus-areas/:id/gaps", async (req, res) => {
     try {
       const { analyzeFocusGaps } = await import("./focus-areas.js");
