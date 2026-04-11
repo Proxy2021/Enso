@@ -2009,11 +2009,20 @@ Return JSON:
 
       let result: { description?: string; intent?: string; deeperIntent?: string; nextSteps?: string[]; clarity?: string };
       try {
-        // Extract JSON from response (LLM may wrap in markdown code blocks)
-        const jsonMatch = revised.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error("No JSON found");
-        result = JSON.parse(jsonMatch[0]);
-      } catch {
+        // Extract JSON from response — try multiple strategies
+        let jsonStr = revised.trim();
+        // Strategy 1: extract from markdown code block
+        const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (codeBlockMatch) jsonStr = codeBlockMatch[1].trim();
+        // Strategy 2: find outermost { ... }
+        const braceStart = jsonStr.indexOf("{");
+        const braceEnd = jsonStr.lastIndexOf("}");
+        if (braceStart >= 0 && braceEnd > braceStart) {
+          jsonStr = jsonStr.slice(braceStart, braceEnd + 1);
+        }
+        result = JSON.parse(jsonStr);
+      } catch (parseErr) {
+        logError("focus-areas", "absorb JSON parse failed", parseErr, { rawResponse: revised.slice(0, 500) });
         res.json({ updated: false, reason: "LLM returned invalid JSON" });
         return;
       }
