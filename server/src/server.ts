@@ -1966,22 +1966,29 @@ audio{width:100%;margin:12px 0;border-radius:8px}
           if (records.length > bestRecords.length) bestRecords = records;
         }
 
-        // Filter to only messages from the LATEST discussion round
-        // (after the last sprint or preparation, whichever is more recent)
-        const lastCycleTs = Math.max(
-          area.lastSprintDate ? new Date(area.lastSprintDate).getTime() : 0,
-          area.preparedAt ? new Date(area.preparedAt).getTime() : 0,
-        );
-        const recentRecords = lastCycleTs > 0
-          ? bestRecords.filter((r: any) => !r.timestamp || r.timestamp > lastCycleTs)
-          : bestRecords;
+        // Filter out non-discussion messages (evaluation outputs, orchestration cards)
+        const chatRecords = bestRecords.filter((r: any) => {
+          if (!r.text?.trim()) return false;
+          if (r.text.startsWith("Focus Prepare:")) return false;
+          if (r.text.startsWith("Focus Evolution:")) return false;
+          return r.role === "user" || r.role === "assistant";
+        });
 
-        // Use recent records if available, fallback to last 20 messages
-        const finalRecords = recentRecords.length > 0 ? recentRecords : bestRecords.slice(-20);
+        // Find the LATEST discussion round by detecting time gaps
+        // A gap of >1 hour between messages indicates a new round
+        let roundStart = 0;
+        for (let ri = chatRecords.length - 1; ri > 0; ri--) {
+          const curr = (chatRecords[ri] as any).timestamp || 0;
+          const prev = (chatRecords[ri - 1] as any).timestamp || 0;
+          if (curr && prev && curr - prev > 3600_000) {
+            roundStart = ri;
+            break;
+          }
+        }
+        const finalRecords = chatRecords.slice(roundStart);
 
         if (finalRecords.length > 0) {
           transcript = finalRecords
-            .filter((r) => r.text?.trim())
             .map((r) => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
             .join("\n\n");
         }
