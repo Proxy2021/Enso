@@ -1183,6 +1183,15 @@ export async function startEnsoServer(opts: {
   // ── Cortex Enrichment API — backfill semantic tags + cross-references ──
   app.post("/api/cortex-enrich", async (req, res) => {
     try {
+      // Mode: re-enrich — process under-connected entities
+      if (req.query.mode === "re-enrich") {
+        const maxEntities = parseInt(req.query.limit as string) || 200;
+        const { reEnrichStaleEntities } = await import("./cortex-enrichment.js");
+        const result = await reEnrichStaleEntities(maxEntities);
+        res.json(result);
+        return;
+      }
+
       const { enrichNewEntities, crossReferenceNewEntities } = await import("./cortex-enrichment.js");
       const { getEntityIndex } = await import("./entity-model.js");
       const index = getEntityIndex();
