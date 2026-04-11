@@ -1960,13 +1960,27 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       try {
         const clientDirs = readdirSync(cardsRoot);
         // Find client with the MOST records for this conversation
-        let bestRecords: Array<{ text?: string; role?: string }> = [];
+        let bestRecords: Array<{ text?: string; role?: string; timestamp?: number }> = [];
         for (const clientId of clientDirs) {
           const records = loadCardHistory(clientId, area.conversationId, 100);
           if (records.length > bestRecords.length) bestRecords = records;
         }
-        if (bestRecords.length > 0) {
-          transcript = bestRecords
+
+        // Filter to only messages from the LATEST discussion round
+        // (after the last sprint or preparation, whichever is more recent)
+        const lastCycleTs = Math.max(
+          area.lastSprintDate ? new Date(area.lastSprintDate).getTime() : 0,
+          area.preparedAt ? new Date(area.preparedAt).getTime() : 0,
+        );
+        const recentRecords = lastCycleTs > 0
+          ? bestRecords.filter((r: any) => !r.timestamp || r.timestamp > lastCycleTs)
+          : bestRecords;
+
+        // Use recent records if available, fallback to last 20 messages
+        const finalRecords = recentRecords.length > 0 ? recentRecords : bestRecords.slice(-20);
+
+        if (finalRecords.length > 0) {
+          transcript = finalRecords
             .filter((r) => r.text?.trim())
             .map((r) => `${r.role === "user" ? "User" : "Enso"}: ${r.text}`)
             .join("\n\n");

@@ -633,14 +633,18 @@ export default function FocusView() {
                         if (selected.intent) lines.push(`Goal: ${selected.intent}`);
                         if (selected.deeperIntent) lines.push(`Why: ${selected.deeperIntent}`);
 
-                        // Fetch conversation transcript from backend
+                        // Fetch conversation transcript from backend (truncate to recent discussion)
                         try {
                           const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/transcript`, { headers: authHeaders() });
                           if (resp.ok) {
                             const { transcript } = await resp.json() as { transcript: string };
                             if (transcript.trim()) {
+                              // Use last 4000 chars to capture the most recent discussion round
+                              const recent = transcript.length > 4000
+                                ? transcript.slice(-4000)
+                                : transcript;
                               lines.push(`\n--- Strategic Discussion ---`);
-                              lines.push(transcript);
+                              lines.push(recent);
                             }
                           }
                         } catch { /* transcript fetch failed — continue without it */ }
