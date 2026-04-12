@@ -336,9 +336,12 @@ async function unsubscribe(params: Record<string, unknown>): Promise<{ unsubscri
   if (channelIds.length > 0) {
     // Fetch all subscriptions to find matching subscription IDs
     let pageToken: string | undefined;
+    let totalScanned = 0;
     do {
       const res = await yt.subscriptions.list({ part: ["snippet"], mine: true, maxResults: 50, pageToken });
-      for (const item of res.data.items || []) {
+      const items = res.data.items || [];
+      totalScanned += items.length;
+      for (const item of items) {
         const chId = item.snippet?.resourceId?.channelId;
         if (chId && channelIds.includes(chId)) {
           idsToDelete.push({ subId: item.id || "", title: item.snippet?.title || chId });
@@ -346,6 +349,9 @@ async function unsubscribe(params: Record<string, unknown>): Promise<{ unsubscri
       }
       pageToken = res.data.nextPageToken || undefined;
     } while (pageToken);
+    if (idsToDelete.length === 0) {
+      logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Unsubscribe: channel(s) ${channelIds.join(",")} not found in ${totalScanned} subscriptions` });
+    }
   }
 
   // Add directly specified subscription IDs

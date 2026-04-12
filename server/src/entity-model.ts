@@ -93,7 +93,7 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
   "book": {
     sources: ["kindle", "weread", "research"],
     cortexPrefix: "entities/",
-    detailFields: ["author", "rating", "reviewCount", "pageCount", "publisher", "publicationDate", "categories", "description"],
+    detailFields: ["author", "rating", "reviewCount", "pageCount", "publisher", "publicationDate", "categories", "description", "subtitle"],
     appFamily: "kindle",
   },
   "game": {
@@ -974,7 +974,14 @@ function resolveContentAccess(entity: Entity): Record<string, unknown> {
     } else if (source === "weread" && m.wereadBookId) {
       result.primaryAction = "open_web";
       result.externalUrl = `https://weread.qq.com/web/bookDetail/${encodeWereadBookId(String(m.wereadBookId))}`;
-      result.label = "Read on WeRead";
+      result.label = "Read on 微信读书";
+      result.icon = "📖";
+    } else if (m.sourceUrl && typeof m.sourceUrl === "string") {
+      result.primaryAction = "open_web";
+      result.externalUrl = m.sourceUrl;
+      const srcLabels: Record<string, string> = { weread: "微信读书", kindle: "Kindle", douban: "Douban", google: "Google Books" };
+      const srcName = m.source && typeof m.source === "string" ? (srcLabels[m.source] || m.source) : "Source";
+      result.label = `Open on ${srcName}`;
       result.icon = "📖";
     } else if (m.isbn) {
       result.primaryAction = "open_web";

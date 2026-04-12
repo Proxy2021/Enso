@@ -175,9 +175,17 @@ try {
     for (var ei = 0; ei < entries.length; ei++) {
       var ent = entries[ei];
       if (ent.source === "research" && ent.type === "book") {
+        var meta = ent.metadata || {};
         recommendations.push({
           entityId: ent.entityId, title: ent.title, slug: ent.slug,
           cortexPath: ent.cortexPath, tags: ent.tags || [], updatedAt: ent.updatedAt,
+          imageUrl: ent.imageUrl || "", creator: meta.author || meta.creator || "",
+          description: meta.description || "", rating: meta.rating || 0,
+          ratingsCount: meta.reviewCount || meta.ratingsCount || 0,
+          source: meta.source || "", sourceUrl: meta.sourceUrl || "",
+          pageCount: meta.pageCount || 0, categories: meta.categories || [],
+          publisher: meta.publisher || "", subtitle: meta.subtitle || "",
+          publicationDate: meta.publicationDate || meta.year || "",
         });
       }
     }

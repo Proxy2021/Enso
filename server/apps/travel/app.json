@@ -99,6 +99,7 @@
             "location": { "type": "string", "description": "Shot location name (for add)" },
             "timeOfDay": { "type": "string", "description": "Time window: blue_hour_am, sunrise, golden_hour_am, midday, golden_hour_pm, sunset, blue_hour_pm, night" },
             "day": { "type": "number", "description": "Trip day number (for add)" },
+            "sceneType": { "type": "string", "description": "Scene archetype: ancient_temple, market_street, coastal_sunset, urban_night, mountain_vista, village_morning, grand_interior, desert_landscape, festival, waterfront_twilight, street_candid, portrait, food_culture, architecture, other" },
             "subject": { "type": "string", "description": "Subject type: landscape, portrait, street, architecture, food, detail" },
             "technique": { "type": "string", "description": "Technique notes" },
             "reference": { "type": "string", "description": "Reference photographer or image" },

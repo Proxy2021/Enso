@@ -14,6 +14,7 @@ function GeneratedUI({ data, onAction }) {
 
   var [searchInput, setSearchInput] = React.useState("");
   var [addInput, setAddInput] = React.useState("");
+  var [addedStatus, setAddedStatus] = React.useState({});
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [playingVideo, setPlayingVideo] = React.useState(null);
   var [selectedDay, setSelectedDay] = React.useState(0);
@@ -25,6 +26,7 @@ function GeneratedUI({ data, onAction }) {
   var [shotReference, setShotReference] = React.useState("");
   var [shotDay, setShotDay] = React.useState("1");
   var [shotPriority, setShotPriority] = React.useState("must_get");
+  var [shotSceneType, setShotSceneType] = React.useState("");
   var [expandedCategory, setExpandedCategory] = React.useState(null);
   var [editingNotes, setEditingNotes] = React.useState(null);
   var [notesText, setNotesText] = React.useState("");
@@ -585,10 +587,23 @@ function GeneratedUI({ data, onAction }) {
               <Button variant="ghost" size="sm" style={{ fontSize: "10px" }}
                 onClick={function() { onAction("open_url", { url: place.url }); }}>🔗 Source</Button>
             )}
-            {showAdd && (
+            {showAdd && (addedStatus[addTitle] === "added" ? (
+              <Button variant="outline" size="sm" style={{ fontSize: "10px", color: "#22c55e", borderColor: "#22c55e44", pointerEvents: "none" }}>✓ Added</Button>
+            ) : addedStatus[addTitle] === "adding" ? (
+              <Button variant="outline" size="sm" style={{ fontSize: "10px", color: "#94a3b8", pointerEvents: "none" }}>Adding...</Button>
+            ) : (
               <Button variant="default" size="sm" style={{ fontSize: "10px" }}
-                onClick={function() { onAction("add_to_cortex", { title: addTitle, type: "place", url: place.url, description: place.description }); }}>📥 Add</Button>
-            )}
+                onClick={function() {
+                  var key = addTitle;
+                  setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "adding"; return n; });
+                  try {
+                    onAction("add_to_cortex", { title: addTitle, type: "place", url: place.url, description: place.description });
+                    setTimeout(function() { setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "added"; return n; }); }, 800);
+                  } catch(e) {
+                    setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = undefined; return n; });
+                  }
+                }}>📥 Add</Button>
+            ))}
           </div>
         </div>
       </UICard>
@@ -685,8 +700,23 @@ function GeneratedUI({ data, onAction }) {
                 <div style={{ fontSize: "15px", fontWeight: 600, color: "#e2e8f0" }}>{locationName}</div>
                 <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>Quick add — saves with enriched travel data</div>
               </div>
-              <Button variant="default" size="sm" style={{ background: "#059669", color: "white" }}
-                onClick={function() { onAction("add_to_cortex", { title: locationName, type: "place", url: results[0].url, description: results[0].description }); }}>📥 Add "{locationName}"</Button>
+              {addedStatus["__loc__" + locationName] === "added" ? (
+                <Button variant="outline" size="sm" style={{ color: "#22c55e", borderColor: "#22c55e44", pointerEvents: "none" }}>✓ Added "{locationName}"</Button>
+              ) : addedStatus["__loc__" + locationName] === "adding" ? (
+                <Button variant="outline" size="sm" style={{ color: "#94a3b8", pointerEvents: "none" }}>Adding...</Button>
+              ) : (
+                <Button variant="default" size="sm" style={{ background: "#059669", color: "white" }}
+                  onClick={function() {
+                    var key = "__loc__" + locationName;
+                    setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "adding"; return n; });
+                    try {
+                      onAction("add_to_cortex", { title: locationName, type: "place", url: results[0].url, description: results[0].description });
+                      setTimeout(function() { setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "added"; return n; }); }, 800);
+                    } catch(e) {
+                      setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = undefined; return n; });
+                    }
+                  }}>📥 Add "{locationName}"</Button>
+              )}
             </div>
           </UICard>
         )}
@@ -1026,6 +1056,9 @@ function GeneratedUI({ data, onAction }) {
   if (isShotPlanner) {
     var allDays = Array.isArray(d.days) ? d.days : [];
     var tLabels = d.timeLabels || {};
+    var sceneTypeOptions = Array.isArray(d.sceneTypes) ? d.sceneTypes : [];
+    var sceneTypeLabelMap = {};
+    sceneTypeOptions.forEach(function(st) { sceneTypeLabelMap[st.value] = st.label; });
     var timeOptions = [
       { value: "blue_hour_am", label: "Blue Hour AM" },
       { value: "sunrise", label: "Sunrise" },
@@ -1040,6 +1073,13 @@ function GeneratedUI({ data, onAction }) {
       "blue_hour_am": "#3b82f6", "sunrise": "#f97316", "golden_hour_am": "#f59e0b",
       "midday": "#fbbf24", "golden_hour_pm": "#f59e0b", "sunset": "#ef4444",
       "blue_hour_pm": "#3b82f6", "night": "#6366f1"
+    };
+    var sceneColorMap = {
+      "ancient_temple": "#f59e0b", "market_street": "#ef4444", "coastal_sunset": "#f97316",
+      "urban_night": "#8b5cf6", "mountain_vista": "#22c55e", "village_morning": "#fbbf24",
+      "grand_interior": "#a78bfa", "desert_landscape": "#d97706", "festival": "#ec4899",
+      "waterfront_twilight": "#3b82f6", "street_candid": "#94a3b8", "portrait": "#06b6d4",
+      "food_culture": "#f43f5e", "architecture": "#64748b", "other": "#475569"
     };
     var priorityColors = { "must_get": "#ef4444", "nice_to_have": "#64748b" };
 
@@ -1085,6 +1125,26 @@ function GeneratedUI({ data, onAction }) {
                   value={shotPriority} onChange={function(v) { setShotPriority(v); }}
                   placeholder="Priority" />
               </div>
+              <Select options={sceneTypeOptions.length > 0 ? sceneTypeOptions : [
+                  { value: "ancient_temple", label: "Ancient Temple" },
+                  { value: "market_street", label: "Bustling Market" },
+                  { value: "coastal_sunset", label: "Coastal Sunset" },
+                  { value: "urban_night", label: "Urban Night" },
+                  { value: "mountain_vista", label: "Mountain Vista" },
+                  { value: "village_morning", label: "Village Morning" },
+                  { value: "grand_interior", label: "Grand Interior" },
+                  { value: "desert_landscape", label: "Desert / Arid" },
+                  { value: "festival", label: "Festival / Celebration" },
+                  { value: "waterfront_twilight", label: "Waterfront Twilight" },
+                  { value: "street_candid", label: "Street / Candid" },
+                  { value: "portrait", label: "Portrait" },
+                  { value: "food_culture", label: "Food & Culture" },
+                  { value: "architecture", label: "Architecture" },
+                  { value: "other", label: "Other" }
+                ]}
+                value={shotSceneType}
+                onChange={function(v) { setShotSceneType(v); }}
+                placeholder="Scene archetype (SCAF)" />
               <div style={{ display: "flex", gap: "6px" }}>
                 <Input placeholder="Day # (1, 2, ...)" value={shotDay} onChange={function(v) { setShotDay(v); }} style={{ flex: 1, fontSize: "12px" }} />
                 <Input placeholder="Subject type" value={shotSubject} onChange={function(v) { setShotSubject(v); }} style={{ flex: 1, fontSize: "12px" }} />
@@ -1096,10 +1156,11 @@ function GeneratedUI({ data, onAction }) {
                   if (!shotLocation.trim()) return;
                   onAction("shot_planner", {
                     city: d.city, action: "add",
-                    location: shotLocation, timeOfDay: shotTime, day: parseInt(shotDay) || 1,
+                    location: shotLocation, timeOfDay: shotTime, sceneType: shotSceneType,
+                    day: parseInt(shotDay) || 1,
                     subject: shotSubject, technique: shotTechnique, reference: shotReference, priority: shotPriority
                   });
-                  setShotLocation(""); setShotSubject(""); setShotTechnique(""); setShotReference("");
+                  setShotLocation(""); setShotSubject(""); setShotTechnique(""); setShotReference(""); setShotSceneType("");
                   setShowAddShot(false);
                 }}>Add Shot</Button>
             </div>
@@ -1120,6 +1181,7 @@ function GeneratedUI({ data, onAction }) {
                 {dayGroup.shots.map(function(shot) {
                   var tColor = timeColorMap[shot.timeOfDay] || "#94a3b8";
                   var pColor = priorityColors[shot.priority] || "#64748b";
+                  var sColor = sceneColorMap[shot.sceneType] || null;
                   return (
                     <div key={shot.id} style={{
                       display: "flex", alignItems: "flex-start", gap: "8px",
@@ -1140,6 +1202,11 @@ function GeneratedUI({ data, onAction }) {
                           <Badge variant="secondary" style={{ fontSize: "8px", color: tColor, borderColor: tColor + "44" }}>
                             {tLabels[shot.timeOfDay] || shot.timeOfDay}
                           </Badge>
+                          {shot.sceneType && sColor && (
+                            <Badge variant="secondary" style={{ fontSize: "8px", color: sColor, borderColor: sColor + "44" }}>
+                              {sceneTypeLabelMap[shot.sceneType] || shot.sceneType}
+                            </Badge>
+                          )}
                           <Badge variant={shot.priority === "must_get" ? "danger" : "outline"} style={{ fontSize: "8px" }}>
                             {shot.priority === "must_get" ? "MUST" : "NICE"}
                           </Badge>
@@ -1190,8 +1257,10 @@ function GeneratedUI({ data, onAction }) {
     var lighting = Array.isArray(d.lightingSettings) ? d.lightingSettings : [];
     var compTips = Array.isArray(d.compositionTips) ? d.compositionTips : [];
     var gear = Array.isArray(d.gearChecklist) ? d.gearChecklist : [];
+    var masters = Array.isArray(d.photographers) ? d.photographers : [];
 
     var refTabs = [
+      { value: "masters", label: "Masters" },
       { value: "scenes", label: "Scenes" },
       { value: "lighting", label: "Settings" },
       { value: "composition", label: "Composition" },
@@ -1209,8 +1278,54 @@ function GeneratedUI({ data, onAction }) {
           <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>Places</Button>
         </div>
 
-        <Tabs tabs={refTabs} defaultValue="scenes" variant="underline">
+        <Tabs tabs={refTabs} defaultValue="masters" variant="underline">
           {function(activeTab) {
+            if (activeTab === "masters") {
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingTop: "8px" }}>
+                  <div style={{ fontSize: "12px", color: "#64748b", padding: "0 4px", lineHeight: 1.5 }}>
+                    Study these photographers as a curriculum. Each solved a fundamental problem of travel photography through radically different methods.
+                  </div>
+                  {masters.map(function(ph, pi) {
+                    var accentColor = ph.accent || "#94a3b8";
+                    return (
+                      <UICard key={pi} style={{
+                        padding: "14px",
+                        borderLeft: "3px solid " + accentColor,
+                        background: "linear-gradient(135deg, #0f172a 0%, " + accentColor + "08 100%)"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                          <div style={{
+                            width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0,
+                            background: accentColor + "22", border: "1px solid " + accentColor + "44",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: "14px", fontWeight: 700, color: accentColor
+                          }}>{ph.name.charAt(0)}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: "13px", color: "#f1f5f9" }}>{ph.name}</div>
+                            <div style={{ fontSize: "10px", color: "#64748b" }}>{ph.era} · {ph.gear}</div>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: "12px", color: accentColor, fontWeight: 600, marginBottom: "6px", fontStyle: "italic", lineHeight: 1.4 }}>
+                          {ph.style}
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <div style={{ fontSize: "11px" }}>
+                            <span style={{ color: "#475569" }}>Best for: </span>
+                            <span style={{ color: "#cbd5e1" }}>{ph.bestFor}</span>
+                          </div>
+                          <div style={{ fontSize: "11px", padding: "6px 8px", background: "#1e293b88", borderRadius: "6px", marginTop: "2px" }}>
+                            <span style={{ color: "#f59e0b", fontWeight: 600 }}>Key technique: </span>
+                            <span style={{ color: "#e2e8f0", lineHeight: 1.5 }}>{ph.technique}</span>
+                          </div>
+                        </div>
+                      </UICard>
+                    );
+                  })}
+                </div>
+              );
+            }
+
             if (activeTab === "scenes") {
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingTop: "8px" }}>

@@ -93,7 +93,7 @@
       {
         "suffix": "add",
         "label": "Add Book",
-        "description": "Search for a book by title, author, or ISBN and add it to your library with full metadata enrichment from Google Books.",
+        "description": "Search for a book by title, author, or ISBN across 4 sources (Google Books, WeRead, Douban, Amazon Kindle) and add it to your library.",
         "parameters": {
           "type": "object",
           "properties": {

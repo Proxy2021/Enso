@@ -66,7 +66,8 @@ var p = params || {};
       for (var ri = 0; ri < entries.length; ri++) {
         var re = entries[ri];
         if (re.source === "research" && (re.type === "movie" || re.type === "tv-series" || re.type === "documentary")) {
-          recommendations.push({ entityId: re.entityId, title: re.title, slug: re.slug, type: re.type, cortexPath: re.cortexPath, tags: re.tags || [], updatedAt: re.updatedAt });
+          var meta = re.metadata || {};
+          recommendations.push({ entityId: re.entityId, title: re.title, slug: re.slug, type: re.type, cortexPath: re.cortexPath, tags: re.tags || [], updatedAt: re.updatedAt, imageUrl: re.imageUrl || "", creator: meta.creator || "", description: meta.description || "", rating: meta.rating || 0, year: meta.year || "" });
         }
       }
     }

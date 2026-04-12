@@ -27,6 +27,7 @@ if (action === "add" && p.location) {
     id: shots.nextId++,
     location: p.location || "",
     timeOfDay: p.timeOfDay || "golden_hour_pm",
+    sceneType: p.sceneType || "",
     day: parseInt(p.day) || 1,
     subject: p.subject || "",
     technique: p.technique || "",
@@ -114,6 +115,25 @@ var timeLabels = {
   "night": "Night"
 };
 
+// Scene type archetypes (from SCAF framework)
+var sceneTypes = [
+  { value: "ancient_temple", label: "Ancient Temple", icon: "temple" },
+  { value: "market_street", label: "Bustling Market", icon: "market" },
+  { value: "coastal_sunset", label: "Coastal Sunset", icon: "coast" },
+  { value: "urban_night", label: "Urban Night", icon: "night" },
+  { value: "mountain_vista", label: "Mountain Vista", icon: "mountain" },
+  { value: "village_morning", label: "Village Morning", icon: "village" },
+  { value: "grand_interior", label: "Grand Interior", icon: "interior" },
+  { value: "desert_landscape", label: "Desert / Arid", icon: "desert" },
+  { value: "festival", label: "Festival / Celebration", icon: "festival" },
+  { value: "waterfront_twilight", label: "Waterfront Twilight", icon: "water" },
+  { value: "street_candid", label: "Street / Candid", icon: "street" },
+  { value: "portrait", label: "Portrait", icon: "portrait" },
+  { value: "food_culture", label: "Food & Culture", icon: "food" },
+  { value: "architecture", label: "Architecture", icon: "arch" },
+  { value: "other", label: "Other", icon: "other" }
+];
+
 return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_travel_shot_planner",
   city: city,
@@ -123,6 +143,7 @@ return { content: [{ type: "text", text: JSON.stringify({
   completed: completed,
   totalDays: totalDays,
   timeLabels: timeLabels,
+  sceneTypes: sceneTypes,
   days: organizedDays,
   allShots: shots.items
 }) }] };

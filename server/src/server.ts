@@ -1180,6 +1180,17 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Reload entity index from disk (for after external edits) ──
+  app.post("/api/entity-index/reload", (_req, res) => {
+    try {
+      const { loadEntityIndex } = require("./entity-model.js") as typeof import("./entity-model.js");
+      loadEntityIndex();
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // ── Cortex Enrichment API — backfill semantic tags + cross-references ──
   app.post("/api/cortex-enrich", async (req, res) => {
     try {
@@ -1562,11 +1573,16 @@ Return ONLY JSON.`;
       const rawResult = await unsubTool.execute("api-unsub", { channelIds: [channelId] });
       // Tool returns AgentToolResult: { content: [{ type: "text", text: "..." }] }
       // Extract the JSON text from the content array
+      const rawText = rawResult?.content?.[0]?.text ?? (typeof rawResult === "string" ? rawResult : "");
+      // errorResult() returns "[ERROR] ..." which is not JSON — surface it directly
+      if (typeof rawText === "string" && rawText.startsWith("[ERROR]")) {
+        const errMsg = rawText.replace(/^\[ERROR]\s*/, "");
+        res.status(500).send(htmlPage("Unsubscribe Failed", errMsg, "error"));
+        return;
+      }
       let parsed: Record<string, unknown>;
-      if (rawResult?.content?.[0]?.text) {
-        parsed = JSON.parse(rawResult.content[0].text);
-      } else if (typeof rawResult === "string") {
-        parsed = JSON.parse(rawResult);
+      if (typeof rawText === "string" && rawText) {
+        parsed = JSON.parse(rawText);
       } else {
         parsed = rawResult as Record<string, unknown>;
       }
@@ -2888,6 +2904,34 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:500px"><h1 style="color:${allOk ? "#4ade80" : "#fbbf24"};font-size:48px;margin-bottom:8px">${allOk ? "&#10003;" : "&#9888;"}</h1><h2>Deploy ${allOk ? "Complete" : "Partial"}</h2><div style="text-align:left;background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">${stepsHtml}</div><p style="color:#475569;font-size:13px">Note: Server restart must be done manually or via the next scheduled restart.</p></div></body></html>`);
     } catch (err) {
       res.status(500).send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f87171">Deploy Failed</h1><p style="color:#94a3b8">${err instanceof Error ? err.message : String(err)}</p></div></body></html>`);
+    }
+  });
+
+  // Scan inbox for low-value emails, build report, send email (for scheduled tasks)
+  app.post("/api/email-cleanup/scan-and-report", async (_req, res) => {
+    try {
+      const { scanInboxForCleanup, createPendingCleanup, buildCleanupReportHtml } = await import("./email-cleanup.js");
+      const { sendHtmlEmail } = await import("./email.js");
+
+      const candidates = scanInboxForCleanup();
+      if (candidates.length === 0) {
+        res.json({ success: true, candidateCount: 0, emailCount: 0, emailSent: false, message: "No low-value emails found" });
+        return;
+      }
+
+      const pending = createPendingCleanup(candidates);
+      const html = buildCleanupReportHtml(pending, `https://${_req.headers.host || "pc1.enso.net"}`);
+      const totalEmails = candidates.reduce((s, c) => s + c.count, 0);
+
+      await sendHtmlEmail({
+        to: "kkwong@xiaomi.com",
+        subject: `Inbox Cleanup Report - ${new Date().toLocaleDateString()}`,
+        html,
+      });
+
+      res.json({ success: true, candidateCount: candidates.length, emailCount: totalEmails, emailSent: true, token: pending.token, message: `Found ${candidates.length} promo senders (${totalEmails} emails). Report sent.` });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
     }
   });
 

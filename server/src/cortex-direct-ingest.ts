@@ -172,6 +172,7 @@ export async function ingestDiscoveredEntity(opts: {
   description?: string;
   imageUrl?: string;
   url?: string;
+  metadata?: Record<string, unknown>;
 }): Promise<{ entityId: string; cortexPath: string; created: boolean }> {
   ensureCortexDir();
 
@@ -226,6 +227,14 @@ export async function ingestDiscoveredEntity(opts: {
   if (opts.creator) lines.push(`- **Creator**: ${opts.creator}`);
   if (opts.year) lines.push(`- **Year**: ${opts.year}`);
   if (opts.url) lines.push(`- **URL**: ${opts.url}`);
+  if (opts.metadata) {
+    const md = opts.metadata;
+    if (md.sourceUrl && typeof md.sourceUrl === "string") lines.push(`- **Source Link**: [${md.source || "Link"}](${md.sourceUrl})`);
+    if (md.publisher) lines.push(`- **Publisher**: ${md.publisher}`);
+    if (md.pageCount) lines.push(`- **Pages**: ${md.pageCount}`);
+    if (md.rating) lines.push(`- **Rating**: ${md.rating}`);
+    if (Array.isArray(md.categories) && md.categories.length) lines.push(`- **Categories**: ${md.categories.join(", ")}`);
+  }
   lines.push(`- **Added**: ${new Date().toISOString().split("T")[0]}`);
   lines.push("");
 
@@ -247,8 +256,8 @@ export async function ingestDiscoveredEntity(opts: {
   };
   appendToIndex(page);
 
-  // Update entity index
-  upsertEntityIndex({
+  // Update entity index (include rich metadata if provided)
+  const indexEntry: Record<string, unknown> = {
     entityId,
     type,
     source,
@@ -258,7 +267,18 @@ export async function ingestDiscoveredEntity(opts: {
     cortexPath,
     tags: page.tags,
     updatedAt: new Date().toISOString(),
-  });
+  };
+  const meta: Record<string, unknown> = opts.metadata ? { ...opts.metadata } : {};
+  if (opts.creator) meta.author = opts.creator;
+  if (opts.year) meta.publicationDate = opts.year;
+  if (opts.description) meta.description = opts.description;
+  if (opts.url) meta.sourceUrl = meta.sourceUrl || opts.url;
+  // Normalize keys to match detailFields conventions
+  if (meta.creator && !meta.author) { meta.author = meta.creator; delete meta.creator; }
+  if (meta.ratingsCount !== undefined) { meta.reviewCount = meta.ratingsCount; delete meta.ratingsCount; }
+  if (meta.year && !meta.publicationDate) { meta.publicationDate = meta.year; }
+  if (Object.keys(meta).length > 0) indexEntry.metadata = meta;
+  upsertEntityIndex(indexEntry as Parameters<typeof upsertEntityIndex>[0]);
   saveEntityIndex();
 
   // Log

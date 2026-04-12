@@ -1184,6 +1184,7 @@ export async function handlePluginCardAction(params: {
         description: p.description ? String(p.description) : undefined,
         imageUrl: p.imageUrl ? String(p.imageUrl) : undefined,
         url: p.url ? String(p.url) : undefined,
+        metadata: p.metadata && typeof p.metadata === "object" ? p.metadata as Record<string, unknown> : undefined,
       });
 
       // Auto-enrich with type-appropriate API metadata (fire-and-forget)

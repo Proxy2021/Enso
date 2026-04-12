@@ -62,7 +62,8 @@ var p = params || {};
       for (var ri = 0; ri < entries.length; ri++) {
         var re = entries[ri];
         if (re.source === "research" && re.type === "game") {
-          recommendations.push({ entityId: re.entityId, title: re.title, slug: re.slug, cortexPath: re.cortexPath, tags: re.tags || [], updatedAt: re.updatedAt });
+          var meta = re.metadata || {};
+          recommendations.push({ entityId: re.entityId, title: re.title, slug: re.slug, cortexPath: re.cortexPath, tags: re.tags || [], updatedAt: re.updatedAt, imageUrl: re.imageUrl || "", description: meta.description || "", rating: meta.rating || 0 });
         }
       }
     }

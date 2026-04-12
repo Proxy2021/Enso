@@ -220,6 +220,90 @@
         }
       },
       {
+        "suffix": "content_recommendation",
+        "description": "Trigger the content recommendation pipeline for a specific type: discovers a new item matching Cortex interests, generates a deep AI podcast, and emails it",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "description": "Content type: movie, game, place, channel, article" }
+          },
+          "required": ["type"]
+        }
+      },
+      {
+        "suffix": "data_source_update",
+        "description": "Scan all enabled data sources (browser, email, files, Kindle, YouTube, Steam, etc.) and optionally rebuild the user profile",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rebuildProfile": { "type": "boolean", "description": "Also rebuild user profile after scanning (default false)" }
+          },
+          "required": []
+        }
+      },
+      {
+        "suffix": "inbox_cleanup",
+        "description": "Scan email inbox for low-value emails (promos, newsletters), build a cleanup report, and email it with a one-click confirm button",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "suffix": "tech_news_digest",
+        "description": "Daily AI/tech news digest: web search for latest AI and tech news, LLM analysis, and sends a curated HTML email with impact ratings",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "suffix": "watch_guide",
+        "description": "Weekend watch guide: profile-driven movie/TV recommendations via web search and LLM curation, sent as a rich HTML email",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "suffix": "knowledge_growth",
+        "description": "Monthly knowledge growth report: entity stats, type breakdown, LLM-synthesized analysis of emerging themes, gaps, and recommendations",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "suffix": "cross_content_digest",
+        "description": "Weekly cross-content intelligence digest: cross-references top entities across all sources, LLM synthesis of surprising connections, thematic threads, and blind spots",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "suffix": "media_podcast_digest",
+        "description": "Weekly media podcast digest: scans existing deep content podcasts, finds unprocessed items, sends a digest email with streaming links",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      {
         "suffix": "cross_reference",
         "label": "Cross-Reference Topic",
         "description": "Search ALL data sources for content related to a topic and generate an AI-synthesized insight connecting the dots across books, movies, games, YouTube, projects, and more.",

@@ -90,6 +90,100 @@ var compositionTips = [
   { name: "Simplify", description: "When in doubt, remove distractions. Move closer or change angle to clean the frame" }
 ];
 
+// Photographer style reference cards (from Elite Photographer Study)
+var photographers = [
+  {
+    name: "Henri Cartier-Bresson",
+    era: "1908–2004",
+    style: "Geometric precision in fleeting moments — the decisive moment",
+    bestFor: "Street photography, candid human gesture within architectural geometry",
+    technique: "Zone-focus at 3m with 50mm lens. Wander for hours absorbing rhythm, then trust your reflexes.",
+    gear: "Leica rangefinder + 50mm",
+    accent: "#94a3b8"
+  },
+  {
+    name: "Steve McCurry",
+    era: "b. 1950",
+    style: "Saturated color portraiture with deep emotional connection",
+    bestFor: "Travel portraits, markets, temples — the human face as cultural window",
+    technique: "Wait until subjects forget the camera. Seek complementary color contrasts (red/green, blue/gold).",
+    gear: "Nikon + 105mm for portraits",
+    accent: "#ef4444"
+  },
+  {
+    name: "Ansel Adams",
+    era: "1902–1984",
+    style: "Technically perfect B&W landscapes with extraordinary tonal range",
+    bestFor: "Grand landscapes, dramatic weather, mountains, wilderness",
+    technique: "Pre-visualize the final image before pressing the shutter. Use the Zone System for tonal control.",
+    gear: "Large-format view camera + filters",
+    accent: "#e2e8f0"
+  },
+  {
+    name: "Fan Ho",
+    era: "1931–2016",
+    style: "Light and shadow as narrative — cinematic minimalism in urban settings",
+    bestFor: "Urban light/shadow compositions, lone figures in pools of light, Hong Kong alleys",
+    technique: "Shoot at dawn/dusk only. Let geometric shadows BE the composition. One figure, one shadow, one beam.",
+    gear: "Rolleiflex TLR",
+    accent: "#f59e0b"
+  },
+  {
+    name: "Alex Webb",
+    era: "b. 1952",
+    style: "Complex layered color compositions with multiple subjects in one frame",
+    bestFor: "Dense street scenes, markets, tropical/Caribbean environments",
+    technique: "Look for 3+ layers: foreground, midground, background. Let color collisions create visual tension.",
+    gear: "Leica + 35mm Kodachrome",
+    accent: "#8b5cf6"
+  },
+  {
+    name: "Michael Kenna",
+    era: "b. 1953",
+    style: "Patient minimalist B&W landscapes — silence made visible",
+    bestFor: "Waterfront twilight, lone trees, industrial landscapes, long exposures",
+    technique: "Spend hours at one spot. Use 1-10 minute exposures to smooth water and clouds into silk.",
+    gear: "Hasselblad + tripod + ND filters",
+    accent: "#64748b"
+  },
+  {
+    name: "Chris Burkard",
+    era: "b. 1986",
+    style: "Epic adventure landscapes with tiny human figures showing scale",
+    bestFor: "Extreme environments — arctic surf, glaciers, mountain peaks, remote coastlines",
+    technique: "Place a small human figure in a vast landscape to create awe. Embrace harsh conditions for unique light.",
+    gear: "Sony mirrorless + wide angle",
+    accent: "#06b6d4"
+  },
+  {
+    name: "Vivian Maier",
+    era: "1926–2009",
+    style: "Intimate street observation — quiet poetry of daily life",
+    bestFor: "Quiet village mornings, daily routines, self-portraits, ordinary moments elevated",
+    technique: "Use a waist-level viewfinder or shoot from the hip. Observe without being observed. Find beauty in the mundane.",
+    gear: "Rolleiflex TLR",
+    accent: "#a78bfa"
+  },
+  {
+    name: "Sebastião Salgado",
+    era: "b. 1944",
+    style: "Epic humanitarian B&W documentary with painterly light",
+    bestFor: "Human stories at grand scale — workers, migration, wilderness, social documentary",
+    technique: "Commit years to a single project. Use B&W to universalize human experience beyond culture.",
+    gear: "Leica + Canon EOS, B&W only",
+    accent: "#78716c"
+  },
+  {
+    name: "Daido Moriyama",
+    era: "b. 1938",
+    style: "Gritty, high-contrast, blurred urban expressionism — raw and confrontational",
+    bestFor: "Rain-soaked urban nights, neon cities, gritty street scenes, visual chaos",
+    technique: "Shoot from the hip. Embrace blur, grain, and harsh contrast. The imperfection IS the style.",
+    gear: "Compact camera, any camera",
+    accent: "#f43f5e"
+  }
+];
+
 // Travel photography gear checklist
 var gearChecklist = [
   { item: "Camera body + spare battery", essential: true },
@@ -111,5 +205,6 @@ return { content: [{ type: "text", text: JSON.stringify({
   sceneGuide: sceneGuide,
   lightingSettings: lightingSettings,
   compositionTips: compositionTips,
-  gearChecklist: gearChecklist
+  gearChecklist: gearChecklist,
+  photographers: photographers
 }) }] };

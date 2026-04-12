@@ -13,6 +13,7 @@ function GeneratedUI({ data, onAction }) {
   var [activeGenre, setActiveGenre] = React.useState(d.genre || "");
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [addInput, setAddInput] = React.useState("");
+  var [addedStatus, setAddedStatus] = React.useState({});
   var [playingVideo, setPlayingVideo] = React.useState(null);
   var isAddResults = tool === "enso_steam_add";
 
@@ -354,9 +355,29 @@ function GeneratedUI({ data, onAction }) {
                   <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{r.price ? "Price: $" + r.price : "Free"}{r.appId ? " · Steam ID: " + r.appId : ""}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0, justifyContent: "center" }}>
-                  <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() {
-                    onAction("add_to_cortex", { title: r.title, type: "game", description: "" });
-                  }}>📥 Add</Button>
+                  {addedStatus[i] === "added" ? (
+                    <Button variant="outline" size="sm" style={{ fontSize: "11px", color: "#22c55e", borderColor: "#22c55e44", pointerEvents: "none" }}>✓ Added</Button>
+                  ) : addedStatus[i] === "adding" ? (
+                    <Button variant="outline" size="sm" style={{ fontSize: "11px", color: "#94a3b8", pointerEvents: "none" }}>Adding...</Button>
+                  ) : addedStatus[i] === "error" ? (
+                    <Button variant="default" size="sm" style={{ fontSize: "11px", background: "#7f1d1d" }} onClick={function() {
+                      var idx = i;
+                      setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = undefined; return n; });
+                    }}>✗ Retry</Button>
+                  ) : (
+                    <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() {
+                      var idx = i;
+                      setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = "adding"; return n; });
+                      try {
+                        onAction("add_to_cortex", { title: r.title, type: "game", description: "", imageUrl: r.coverUrl, metadata: { appId: r.appId, price: r.price } });
+                        setTimeout(function() {
+                          setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = "added"; return n; });
+                        }, 800);
+                      } catch(e) {
+                        setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = "error"; return n; });
+                      }
+                    }}>📥 Add</Button>
+                  )}
                 </div>
               </div>
             </UICard>
@@ -469,18 +490,22 @@ function GeneratedUI({ data, onAction }) {
         {/* Research Discoveries */}
         {(d.recommendations || []).length > 0 && (
           <UICard style={{ padding: "12px", borderColor: "#059669" + "44" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
               <LucideReact.Search size={14} style={{ color: "#6ee7b7" }} />
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#6ee7b7" }}>Discovered via Research</span>
               <Badge variant="secondary">{(d.recommendations || []).length}</Badge>
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {(d.recommendations || []).map(function(rec) {
                 return (
-                  <div key={rec.entityId} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#064e3b", padding: "6px 10px", borderRadius: "8px", cursor: "pointer" }}
+                  <div key={rec.entityId} style={{ display: "flex", gap: "10px", background: "#064e3b33", padding: "10px", borderRadius: "8px", cursor: "pointer", border: "1px solid #05966933" }}
                     onClick={function() { onAction("view_entity", { entityId: rec.entityId }); }}>
-                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0" }}>{rec.title}</span>
-                    <Badge variant="info" style={{ fontSize: "9px" }}>recommended</Badge>
+                    {rec.imageUrl && <img src={rec.imageUrl} alt={rec.title} style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>{rec.title}</span>
+                      {rec.rating > 0 && <div style={{ fontSize: "11px", color: "#f59e0b", marginTop: "2px" }}>{"⭐ " + rec.rating.toFixed(1)}</div>}
+                      {rec.description && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{rec.description.slice(0, 200)}</div>}
+                    </div>
                   </div>
                 );
               })}

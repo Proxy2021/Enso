@@ -129,6 +129,21 @@
         }
       },
       {
+        "suffix": "daily_email",
+        "description": "Send a daily email digest of latest videos from your YouTube subscriptions with unsub links",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxResults": {
+              "type": "number",
+              "description": "Number of videos to include (default 10)"
+            }
+          },
+          "required": []
+        }
+      },
+      {
         "suffix": "scan",
         "description": "Scan YouTube data (subscriptions, liked videos, recent feed) and cache for Cortex ingestion",
         "parameters": {

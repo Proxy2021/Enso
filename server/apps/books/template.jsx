@@ -15,6 +15,7 @@ function GeneratedUI({ data, onAction }) {
   var [activeTab, setActiveTab] = React.useState(d.tab || "all");
   var [playingVideo, setPlayingVideo] = React.useState(null);
   var [addBookInput, setAddBookInput] = React.useState("");
+  var [addedStatus, setAddedStatus] = React.useState({});
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
   var navStack = d.navStack || [];
@@ -195,23 +196,32 @@ function GeneratedUI({ data, onAction }) {
           </div>
 
           {/* Metadata fields inline below header */}
-          {fields.length > 0 && (
-            <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #1e293b" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: "12px" }}>
-                {fields.filter(function(f) {
-                  return f.key !== "author" && f.key !== "director" && f.key !== "developer" && f.key !== "creator" && f.key !== "description";
-                }).map(function(f) {
-                  var val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
-                  return (
-                    <div key={f.key} style={{ display: "flex", gap: "4px" }}>
-                      <span style={{ color: "#64748b" }}>{f.label}:</span>
-                      <span style={{ color: "#cbd5e1" }}>{val}</span>
-                    </div>
-                  );
-                })}
+          {(function() {
+            var skip = { author: 1, director: 1, developer: 1, creator: 1, description: 1, subtitle: 1 };
+            var visible = fields.filter(function(f) {
+              if (skip[f.key]) return false;
+              var v = f.value;
+              if (v === undefined || v === null || v === "" || v === 0 || v === "0") return false;
+              if (Array.isArray(v) && v.length === 0) return false;
+              return true;
+            });
+            if (visible.length === 0) return null;
+            return (
+              <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #1e293b" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: "12px" }}>
+                  {visible.map(function(f) {
+                    var val = Array.isArray(f.value) ? f.value.join(", ") : String(f.value);
+                    return (
+                      <div key={f.key} style={{ display: "flex", gap: "4px" }}>
+                        <span style={{ color: "#64748b" }}>{f.label}:</span>
+                        <span style={{ color: "#cbd5e1" }}>{val}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </UICard>
 
         {/* Podcast Player (when ready) */}
@@ -327,15 +337,7 @@ function GeneratedUI({ data, onAction }) {
 
         {/* Detail fields already shown in header card above */}
 
-        {/* Cortex wiki content */}
-        {cortexContent && !research && (
-          <UICard style={{ padding: "12px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>📖 Knowledge (Cortex)</div>
-            <div style={{ fontSize: "12px", color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: "300px", overflow: "auto" }}>
-              {cortexContent.replace(/^#.*\n/gm, "").trim().slice(0, 2000)}
-            </div>
-          </UICard>
-        )}
+        {/* Cortex wiki content removed — redundant with structured metadata above */}
 
         {/* Related entities — cross-source with reasons */}
         {related.length > 0 && (function() {
@@ -437,6 +439,13 @@ function GeneratedUI({ data, onAction }) {
   // ── Add Book search results ──
   if (isAddResults) {
     var addResults = Array.isArray(d.results) ? d.results : [];
+    var sourceCounts = d.sourceCounts || {};
+    var SOURCE_STYLES = {
+      google: { label: "Google", bg: "#1d4ed8", color: "#fff" },
+      weread: { label: "微信读书", bg: "#059669", color: "#fff" },
+      douban: { label: "Douban", bg: "#d97706", color: "#fff" },
+      kindle: { label: "Kindle", bg: "#ea580c", color: "#fff" },
+    };
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {breadcrumb}
@@ -450,8 +459,34 @@ function GeneratedUI({ data, onAction }) {
           </div>
           <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>← Library</Button>
         </div>
+        {sourceCounts && (sourceCounts.google > 0 || sourceCounts.weread > 0 || sourceCounts.douban > 0 || sourceCounts.kindle > 0) && (
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            {Object.keys(SOURCE_STYLES).map(function(key) {
+              var s = SOURCE_STYLES[key];
+              var count = sourceCounts[key] || 0;
+              return (
+                <span key={key} style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: count > 0 ? s.bg : "#374151", color: count > 0 ? s.color : "#6b7280" }}>
+                  {s.label}: {count}
+                </span>
+              );
+            })}
+          </div>
+        )}
         {d.error && <UICard style={{ borderColor: "#ef444444" }}><div style={{ color: "#ef4444", fontSize: "13px" }}>{d.error}</div></UICard>}
+        {addResults.length === 0 && !d.error && (
+          <UICard style={{ padding: "16px", textAlign: "center" }}>
+            <div style={{ color: "#94a3b8", fontSize: "13px" }}>No results found across Google Books, 微信读书, Douban, and Amazon Kindle.</div>
+            <div style={{ color: "#64748b", fontSize: "11px", marginTop: "4px" }}>Try a different search term or check the spelling.</div>
+          </UICard>
+        )}
         {addResults.map(function(r, i) {
+          var srcStyle = SOURCE_STYLES[r.source] || { label: r.source || "?", bg: "#374151", color: "#9ca3af" };
+          var ratingDisplay = "";
+          if (r.rating > 0) {
+            if (r.source === "weread") ratingDisplay = r.rating + "%";
+            else if (r.source === "douban") ratingDisplay = r.rating + "/10";
+            else ratingDisplay = String(r.rating);
+          }
           return (
             <UICard key={i} style={{ padding: "12px" }}>
               <div style={{ display: "flex", gap: "12px" }}>
@@ -459,11 +494,16 @@ function GeneratedUI({ data, onAction }) {
                   <img src={r.coverUrl} alt={r.title} style={{ width: "60px", height: "90px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>{r.title}{r.subtitle ? ": " + r.subtitle : ""}</div>
-                  <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{r.author}{r.publishedDate ? " · " + r.publishedDate : ""}{r.publisher ? " · " + r.publisher : ""}</div>
-                  {r.rating > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>
+                      {r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#e2e8f0", textDecoration: "none" }}>{r.title}{r.subtitle ? ": " + r.subtitle : ""}</a> : (r.title + (r.subtitle ? ": " + r.subtitle : ""))}
+                    </span>
+                    <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "3px", background: srcStyle.bg, color: srcStyle.color, fontWeight: 600, letterSpacing: "0.3px", flexShrink: 0 }}>{srcStyle.label}</span>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{r.author}{r.publishedDate ? " · " + r.publishedDate : ""}{r.publisher ? " · " + r.publisher : ""}{r.price ? " · " + r.price : ""}</div>
+                  {ratingDisplay && (
                     <div style={{ fontSize: "11px", color: "#f59e0b", marginTop: "3px" }}>
-                      {"⭐ " + r.rating}{r.ratingsCount ? " (" + r.ratingsCount + " ratings)" : ""}{r.pageCount ? " · " + r.pageCount + " pages" : ""}
+                      {"⭐ " + ratingDisplay}{r.ratingsCount ? " (" + r.ratingsCount + " ratings)" : ""}{r.pageCount ? " · " + r.pageCount + " pages" : ""}
                     </div>
                   )}
                   {r.categories && r.categories.length > 0 && (
@@ -474,9 +514,34 @@ function GeneratedUI({ data, onAction }) {
                   {r.description && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: 1.4 }}>{r.description.slice(0, 200)}{r.description.length > 200 ? "..." : ""}</div>}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0, justifyContent: "center" }}>
-                  <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() {
-                    onAction("add_to_cortex", { title: r.title, type: "book", creator: r.author, year: r.publishedDate, description: r.description, imageUrl: r.coverUrl });
-                  }}>📥 Add to Library</Button>
+                  {addedStatus[i] === "added" ? (
+                    <Button variant="outline" size="sm" style={{ fontSize: "11px", color: "#22c55e", borderColor: "#22c55e44", pointerEvents: "none" }}>✓ Added</Button>
+                  ) : addedStatus[i] === "adding" ? (
+                    <Button variant="outline" size="sm" style={{ fontSize: "11px", color: "#94a3b8", pointerEvents: "none" }}>Adding...</Button>
+                  ) : addedStatus[i] === "error" ? (
+                    <Button variant="default" size="sm" style={{ fontSize: "11px", background: "#7f1d1d" }} onClick={function() {
+                      var idx = i;
+                      setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = undefined; return n; });
+                    }}>✗ Retry</Button>
+                  ) : (
+                    <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() {
+                      var idx = i;
+                      setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = "adding"; return n; });
+                      try {
+                        onAction("add_to_cortex", { title: r.title, type: "book", creator: r.author, year: r.publishedDate, description: r.description, imageUrl: r.coverUrl, metadata: { rating: r.rating, ratingsCount: r.ratingsCount, source: r.source, sourceUrl: r.sourceUrl, pageCount: r.pageCount, categories: r.categories, publisher: r.publisher, subtitle: r.subtitle } });
+                        setTimeout(function() {
+                          setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = "added"; return n; });
+                        }, 800);
+                      } catch(e) {
+                        setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[idx] = "error"; return n; });
+                      }
+                    }}>📥 Add to Library</Button>
+                  )}
+                  {r.sourceUrl && (
+                    <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", color: "#60a5fa", textAlign: "center", textDecoration: "none" }}>
+                      Open on {srcStyle.label} ↗
+                    </a>
+                  )}
                 </div>
               </div>
             </UICard>
@@ -510,6 +575,18 @@ function GeneratedUI({ data, onAction }) {
   if (isBrowse) {
     var books = d.books || [];
     var categories = d.categories || [];
+    var recs = (d.recommendations || []);
+    var discoveredBooks = recs.map(function(rec) {
+      return {
+        title: rec.title, author: rec.creator, coverUrl: rec.imageUrl,
+        entityId: rec.entityId, description: rec.description,
+        rating: rec.rating, reviewCount: rec.ratingsCount,
+        pageCount: rec.pageCount, publisher: rec.publisher,
+        categories: rec.categories || [], source: rec.source || "research",
+        readerUrl: rec.sourceUrl, hasWikiPage: !!rec.cortexPath,
+        wikiPath: rec.cortexPath, isDiscovered: true,
+      };
+    });
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -543,59 +620,19 @@ function GeneratedUI({ data, onAction }) {
           </UICard>
         )}
 
-        {/* Research Discoveries */}
-        {(d.recommendations || []).length > 0 && (
-          <UICard style={{ padding: "12px", borderColor: "#059669" + "44" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-              <span style={{ fontSize: "16px" }}>🔍</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#6ee7b7" }}>Discovered via Research</span>
-              <Badge variant="secondary">{(d.recommendations || []).length}</Badge>
-            </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {(d.recommendations || []).map(function(rec) {
-                return (
-                  <div key={rec.entityId} style={{ display: "flex", alignItems: "center", gap: "6px", background: "#064e3b", padding: "6px 10px", borderRadius: "8px", cursor: "pointer" }}
-                    onClick={function() { onAction("view_entity", { entityId: rec.entityId }); }}>
-                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0" }}>{rec.title}</span>
-                    <Badge variant="info" style={{ fontSize: "9px" }}>recommended</Badge>
-                  </div>
-                );
-              })}
-            </div>
-          </UICard>
-        )}
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <span style={{ fontSize: "20px", marginRight: "8px" }}>📚</span>
-            <span style={{ fontWeight: 600 }}>Books</span>
-            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>
-              {(d.kindleCount || 0) > 0 && (d.wereadCount || 0) > 0
-                ? (d.kindleCount + " Kindle + " + d.wereadCount + " WeRead")
-                : (d.filteredCount === d.totalBooks ? d.totalBooks + " books" : d.filteredCount + " of " + d.totalBooks + " books")}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: "6px" }}>
-            <Button variant="outline" size="sm" onClick={function() { onAction("scan_kindle", {}); }}>📱 Kindle</Button>
-            <Button variant="outline" size="sm" onClick={function() { onAction("scan_weread", {}); }}>📖 WeRead</Button>
-            <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>✨ Enrich</Button>
-            <Button variant="default" size="sm" onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>➕ Add Book</Button>
-          </div>
-        </div>
-
         {/* Source Tabs */}
         <div style={{ display: "flex", gap: "4px", borderBottom: "1px solid #374151", paddingBottom: "8px" }}>
           {[
-            { id: "all", label: "All", count: d.totalBooks || 0 },
+            { id: "all", label: "All", count: (d.totalBooks || 0) + discoveredBooks.length },
             { id: "kindle", label: "Kindle", count: d.kindleCount || 0 },
-            { id: "weread", label: "WeRead", count: d.wereadCount || 0 },
+            { id: "weread", label: "微信读书", count: d.wereadCount || 0 },
+            { id: "discovered", label: "Discovered", count: discoveredBooks.length },
           ].map(function(t) {
             var isActive = activeTab === t.id;
             return (
               <Button key={t.id} variant={isActive ? "default" : "ghost"} size="sm"
                 style={{ fontSize: "12px", opacity: t.count === 0 && t.id !== "all" ? 0.5 : 1 }}
-                onClick={function() { setActiveTab(t.id); onAction("browse", { tab: t.id, sortBy: sortBy, page: 1 }); }}>
+                onClick={function() { setActiveTab(t.id); if (t.id !== "discovered") onAction("browse", { tab: t.id, sortBy: sortBy, page: 1 }); }}>
                 {t.label} <Badge variant="secondary" style={{ marginLeft: "4px", fontSize: "10px" }}>{t.count}</Badge>
               </Button>
             );
@@ -614,7 +651,8 @@ function GeneratedUI({ data, onAction }) {
           <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>🔍 Search & Add</Button>
         </div>
 
-        {/* Search bar + Sort */}
+        {/* Search bar + Sort (hidden for Discovered tab) */}
+        {activeTab !== "discovered" && (
         <div style={{ display: "flex", gap: "8px" }}>
           <Input
             placeholder="Filter library by title, author, or topic..."
@@ -636,44 +674,44 @@ function GeneratedUI({ data, onAction }) {
             ]}
           />
         </div>
+        )}
 
-        {/* Category pills */}
-        {categories.length > 0 && (
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            <Badge
-              variant={!d.category ? "default" : "secondary"}
-              style={{ cursor: "pointer" }}
-              onClick={function() { onAction("browse", { sortBy: sortBy, page: 1, tab: activeTab }); }}
-            >All</Badge>
-            {categories.slice(0, 15).map(function(cat) {
-              return (
-                <Badge
-                  key={cat.name}
-                  variant={d.category === cat.name ? "default" : "secondary"}
-                  style={{ cursor: "pointer" }}
-                  onClick={function() { onAction("browse", { category: cat.name, sortBy: sortBy, page: 1, tab: activeTab }); }}
-                >{cat.name} ({cat.count})</Badge>
-              );
-            })}
+        {/* Category pills removed — low value, takes up space */}
+
+        {/* Book grid */}
+        {activeTab === "discovered" ? (
+          <div>
+            {discoveredBooks.length > 0 ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "10px" }}>
+                {discoveredBooks.map(function(book, i) {
+                  return <BookCard key={"disc-" + i} book={book} onAction={onAction} />;
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                title="No discovered books yet"
+                description="Books found via research or added through Search & Add will appear here."
+              />
+            )}
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "10px" }}>
+              {books.map(function(book, i) {
+                return <BookCard key={i} book={book} onAction={onAction} />;
+              })}
+            </div>
+            {books.length === 0 && (
+              <EmptyState
+                title="No books found"
+                description={d.category ? "No books in category \"" + d.category + "\"" : d.query ? "No books matching \"" + d.query + "\"" : "Your library is empty. Run a scan to import books."}
+              />
+            )}
           </div>
         )}
 
-        {/* Book grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "10px" }}>
-          {books.map(function(book, i) {
-            return <BookCard key={i} book={book} onAction={onAction} />;
-          })}
-        </div>
-
-        {books.length === 0 && (
-          <EmptyState
-            title="No books found"
-            description={d.category ? "No books in category \"" + d.category + "\"" : d.query ? "No books matching \"" + d.query + "\"" : "Your Kindle library is empty. Run a scan to import books."}
-          />
-        )}
-
-        {/* Pagination Controls */}
-        {(d.totalPages || 1) > 1 && (
+        {/* Pagination Controls (hidden for Discovered tab) */}
+        {activeTab !== "discovered" && (d.totalPages || 1) > 1 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "8px 0" }}>
             <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
               onClick={function() { if (d.page > 1) onAction("browse", { query: d.query, sortBy: sortBy, category: d.category, page: d.page - 1, tab: activeTab }); }}
@@ -736,7 +774,8 @@ function BookCard({ book, onAction }) {
             cursor: book.entityId ? "pointer" : "default", color: book.entityId ? "#93c5fd" : "inherit" }}
             onClick={function() { if (book.entityId) onAction("view_entity", { entityId: book.entityId }); }}
           >{book.isProcessed && <span style={{ marginRight: "4px" }} title="Deep podcast available">🎙️</span>}{book.title}
-          {book.source === "weread" && <Badge variant="info" style={{ fontSize: "8px", marginLeft: "6px", verticalAlign: "middle" }}>WeRead</Badge>}
+          {book.source === "weread" && !book.isDiscovered && <Badge variant="info" style={{ fontSize: "8px", marginLeft: "6px", verticalAlign: "middle" }}>微信读书</Badge>}
+          {book.isDiscovered && <Badge variant="default" style={{ fontSize: "8px", marginLeft: "6px", verticalAlign: "middle", background: "#059669" }}>Discovered</Badge>}
           </div>
           {book.author && <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>{book.author}{book.readingProgress > 0 ? " · " + book.readingProgress + "% read" : ""}{book.noteCount > 0 ? " · " + book.noteCount + " notes" : ""}</div>}
 

@@ -8,6 +8,7 @@ function GeneratedUI({ data, onAction }) {
 
   var [searchInput, setSearchInput] = React.useState("");
   var [addInput, setAddInput] = React.useState("");
+  var [addedStatus, setAddedStatus] = React.useState({});
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [playingVideo, setPlayingVideo] = React.useState(null);
 
@@ -247,10 +248,23 @@ function GeneratedUI({ data, onAction }) {
               <Button variant="ghost" size="sm" style={{ fontSize: "10px" }}
                 onClick={function() { onAction("open_url", { url: article.url }); }}>🔗 Open</Button>
             )}
-            {showAdd && (
+            {showAdd && (addedStatus[article.title] === "added" ? (
+              <Button variant="outline" size="sm" style={{ fontSize: "10px", color: "#22c55e", borderColor: "#22c55e44", pointerEvents: "none" }}>✓ Saved</Button>
+            ) : addedStatus[article.title] === "adding" ? (
+              <Button variant="outline" size="sm" style={{ fontSize: "10px", color: "#94a3b8", pointerEvents: "none" }}>Saving...</Button>
+            ) : (
               <Button variant="default" size="sm" style={{ fontSize: "10px" }}
-                onClick={function() { onAction("add_to_cortex", { title: article.title, type: "article", creator: article.source, url: article.url, description: article.description }); }}>📥 Save</Button>
-            )}
+                onClick={function() {
+                  var key = article.title;
+                  setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "adding"; return n; });
+                  try {
+                    onAction("add_to_cortex", { title: article.title, type: "article", creator: article.source, url: article.url, description: article.description });
+                    setTimeout(function() { setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "added"; return n; }); }, 800);
+                  } catch(e) {
+                    setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[key] = undefined; return n; });
+                  }
+                }}>📥 Save</Button>
+            ))}
           </div>
         </div>
       </UICard>
