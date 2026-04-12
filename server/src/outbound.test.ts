@@ -89,8 +89,8 @@ vi.mock("./native-tools/tool-call-store.js", () => ({
   consumeRecentToolCall: vi.fn(() => null),
 }));
 
-vi.mock("./inbound.js", () => ({
-  handleEnsoInbound: vi.fn(async () => {}),
+vi.mock("./agent-adapter.js", () => ({
+  handleInbound: vi.fn(async () => {}),
 }));
 
 vi.mock("./domain-evolution.js", () => ({
@@ -184,7 +184,7 @@ import { serverGenerateConstrainedFollowupUI, serverGenerateUI } from "./ui-gene
 import { executeToolDirect, getActionDescriptions, inferToolTemplate, isToolRegistered } from "./native-tools/registry.js";
 import { resolveEnsoAccount } from "./accounts.js";
 import { getAllClients } from "./server.js";
-import { handleEnsoInbound } from "./inbound.js";
+import { handleInbound } from "./agent-adapter.js";
 
 // ═══════════════════════════════════════════════════════
 //  deliverEnsoReply
@@ -565,9 +565,9 @@ describe("handlePluginCardAction", () => {
       runtime: mockRuntime(),
     });
 
-    // Full mode: handleEnsoInbound called WITH targetCardId
-    expect(handleEnsoInbound).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(handleEnsoInbound).mock.calls[0][0];
+    // Full mode: handleInbound called WITH targetCardId
+    expect(handleInbound).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(handleInbound).mock.calls[0][0];
     expect(call.targetCardId).toBe(cardId);
     expect(call.message.text).toContain("unknown_action");
 
@@ -599,9 +599,9 @@ describe("handlePluginCardAction", () => {
     expect(restore.data).toBeUndefined();
     expect(restore.generatedUI).toBeUndefined();
 
-    // Then handleEnsoInbound called WITHOUT targetCardId
-    expect(handleEnsoInbound).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(handleEnsoInbound).mock.calls[0][0];
+    // Then handleInbound called WITHOUT targetCardId
+    expect(handleInbound).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(handleInbound).mock.calls[0][0];
     expect(call.targetCardId).toBeUndefined();
   });
 
@@ -659,8 +659,8 @@ describe("handlePluginCardAction", () => {
       runtime: mockRuntime(),
     });
 
-    expect(handleEnsoInbound).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(handleEnsoInbound).mock.calls[0][0];
+    expect(handleInbound).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(handleInbound).mock.calls[0][0];
     expect(call.message.text).toContain("Tell me more about this");
     expect(call.targetCardId).toBe(cardId);
   });

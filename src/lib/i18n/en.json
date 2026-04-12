@@ -567,7 +567,7 @@
   "settings.backgroundTasksDesc": "Automated maintenance and monitoring",
 
   "conn.title": "Connect to Backend",
-  "conn.subtitle": "Choose an OpenClaw server to connect to",
+  "conn.subtitle": "Choose an Enso server to connect to",
   "conn.localServer": "Local Server",
   "conn.localServerDesc": "Same-origin (default dev mode)",
   "conn.namePlaceholder": "Name (optional)",

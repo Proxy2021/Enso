@@ -8,7 +8,7 @@
  * configurable via Settings > Service Keys.
  */
 
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { logAction, logError } from "./action-log.js";
 import {
   sendTextMessage,
@@ -180,12 +180,4 @@ export function createWechatTools(): EnsoAgentTool[] {
       },
     } as EnsoAgentTool,
   ];
-}
-
-// ── Registration ──
-
-export function registerWechatTools(api?: EnsoPluginApi): void {
-  for (const tool of createWechatTools()) {
-    if (api) api.registerTool(tool);
-  }
 }

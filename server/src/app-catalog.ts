@@ -55,7 +55,7 @@ export const APP_CATALOG: AppEntry[] = [
     primaryTool: "enso_clawhub_browse",
     actions: ["browse", "search", "inspect", "installed", "install", "uninstall"],
     signatureId: "clawhub_store",
-    description: "ClawHub skill store: browse, search, install and manage OpenClaw skills",
+    description: "ClawHub skill store: browse, search, install and manage Enso skills",
   },
   {
     appId: "media_gallery",

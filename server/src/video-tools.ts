@@ -300,9 +300,3 @@ export function createVideoTools(): EnsoAgentTool[] {
     } as EnsoAgentTool,
   ];
 }
-
-export function registerVideoTools(api?: { registerTool: (tool: EnsoAgentTool) => void }): void {
-  for (const tool of createVideoTools()) {
-    if (api) api.registerTool(tool);
-  }
-}

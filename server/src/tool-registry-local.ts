@@ -2,8 +2,8 @@
  * tool-registry-local.ts — Standalone in-process tool registry.
  *
  * Stores all Enso tools locally so they can be discovered and executed
- * without requiring the OpenClaw global plugin registry. This registry
- * is always populated (both standalone and OpenClaw modes).
+ * without requiring an external plugin registry. This registry
+ * is always populated.
  *
  * `getAllLocalTools()` merges system tools with dynamically registered
  * app tools (from registerAppTool) so the standalone agent can discover

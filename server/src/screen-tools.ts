@@ -1,4 +1,4 @@
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { mkdirSync, readdirSync, unlinkSync } from "fs";
 import { writeFile } from "fs/promises";
 import { join } from "path";
@@ -386,11 +386,4 @@ export function createScreenTools(): EnsoAgentTool[] {
         toolKey(params as KeyParams),
     } as EnsoAgentTool,
   ];
-}
-
-export function registerScreenTools(api?: EnsoPluginApi): void {
-  for (const tool of createScreenTools()) {
-    if (api) api.registerTool(tool);
-  }
-  logAction({ ts: Date.now(), type: "system", category: "screen", message: "Registered 5 screen control tools" });
 }

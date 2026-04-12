@@ -406,7 +406,7 @@ export async function handleWebSocketMessage(
             }
           }
         }
-        // Direct tool invocation — bypass OpenClaw pipeline entirely
+        // Direct tool invocation — bypass agent pipeline entirely
         if (msg.routing?.toolId === "claude-code" && msg.text) {
           runtime.log?.(`[enso] direct claude-code: "${msg.text.slice(0, 60)}"`);
           const runId = randomUUID();

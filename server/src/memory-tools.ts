@@ -1,7 +1,7 @@
 /**
  * memory-tools.ts — Agent-callable memory search and retrieval tools.
  *
- * Following OpenClaw's pattern: the agent actively searches and reads memory
+ * The agent actively searches and reads memory
  * when relevant, rather than blindly injecting all memory into every prompt.
  * This is more token-efficient and produces better recall.
  */

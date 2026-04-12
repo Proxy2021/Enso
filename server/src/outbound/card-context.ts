@@ -33,7 +33,7 @@ export interface CardContext {
     timestamp: number;
   }>;
   /**
-   * Present when the agent used a tool from a co-loaded OpenClaw plugin
+   * Present when the agent used a tool from a co-loaded plugin
    * to produce this card's data. Enables card actions to bypass the agent
    * and call the tool directly via the plugin registry.
    */

@@ -21,7 +21,7 @@ vi.hoisted(() => {
 import { useChatStore } from "../../src/store/chat";
 import type { Card } from "../../src/cards/types";
 
-// openclaw/plugin-sdk mock removed — no longer a dependency in standalone mode
+// plugin-sdk mock removed — no longer a dependency in standalone mode
 
 function waitForMessage(ws: WebSocket, timeoutMs = 3000): Promise<ServerMessage> {
   return new Promise((resolve, reject) => {

@@ -146,7 +146,7 @@ function saveStoreForFamily(family: string, data: Record<string, unknown>): void
 
 /**
  * Build an ExecutorContext that bridges generated app executors to real
- * OpenClaw capabilities. Each call is logged, timed, and guarded with
+ * Enso capabilities. Each call is logged, timed, and guarded with
  * a timeout + max nesting depth.
  */
 export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, apiKey?: string): ExecutorContext {
@@ -441,7 +441,7 @@ export function saveApp(app: SavedApp, basePath?: string): void {
   // Write template
   fs.writeFileSync(path.join(appDir, "template.jsx"), app.templateJSX);
 
-  // Write SKILL.md to the skills directory (auto-watched by OpenClaw)
+  // Write SKILL.md to the skills directory
   const skillDir = path.join(skillsDir(basePath), app.spec.toolFamily);
   fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(path.join(skillDir, "SKILL.md"), app.skillMd);
@@ -664,7 +664,7 @@ export function loadAndRegisterApps(basePath?: string): number {
 }
 
 /**
- * Ensure a SKILL.md file exists for a loaded app, so OpenClaw's agent can
+ * Ensure a SKILL.md file exists for a loaded app, so the agent can
  * discover and invoke its tools. Idempotent — never overwrites existing files.
  *
  * - All apps: writes to ~/.enso/skills/<family>/SKILL.md (managed skills dir)

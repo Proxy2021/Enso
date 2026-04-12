@@ -684,7 +684,7 @@ export async function handleCardEnhance(params: {
 
 /**
  * Outbound sendText/sendMedia handler for the channel plugin's outbound adapter.
- * Used when OpenClaw delivers agent responses or sends messages via `openclaw send`.
+ * Used when the agent pipeline delivers responses.
  */
 export async function deliverToEnso(ctx: {
   cfg?: unknown;

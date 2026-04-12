@@ -69,7 +69,7 @@ export function rewriteExecCommandNotFound(text: string): string {
   const cmd = missing[1];
 
   // Special-case clawhub: provide an immediate ecosystem discovery fallback
-  // using the loaded OpenClaw runtime registry instead of external CLI tools.
+  // using the loaded Enso runtime registry instead of external CLI tools.
   if (cmd.toLowerCase() === "clawhub" || /exec:\s*clawhub/i.test(text)) {
     const catalog = getRegisteredToolCatalog();
     if (catalog.length > 0) {
@@ -77,7 +77,7 @@ export function rewriteExecCommandNotFound(text: string): string {
         .slice(0, 8)
         .map((entry) => `- ${entry.pluginId} (${entry.tools.length} tools)`)
         .join("\n");
-      return `I cannot run \`clawhub\` in this environment, but I can still show the loaded OpenClaw ecosystem directly.
+      return `I cannot run \`clawhub\` in this environment, but I can still show the loaded Enso ecosystem directly.
 
 Loaded plugins right now: ${catalog.length}
 ${preview}
@@ -94,7 +94,7 @@ To explore more, ask:
 Missing command: \`${cmd}\`
 
 Try one of these next steps:
-- Ask me to list currently loaded OpenClaw plugins/tools directly (no CLI required).
+- Ask me to list currently loaded Enso plugins/tools directly (no CLI required).
 - If you expected this command to exist, install/configure it in the host environment and retry.
 - Use a plugin/tool-centric request instead of a shell command (for example: "show loaded tools" or "search loaded tools for X").`;
 }
@@ -121,7 +121,7 @@ What failed:
 What to do next:
 - Re-run with narrower checks (one tool family at a time) to avoid brittle chained probes.
 - Ask for a resilient inventory format (e.g. "check python/node/git/docker individually and summarize").
-- If you want OpenClaw ecosystem discovery, use runtime-native requests like:
+- If you want Enso ecosystem discovery, use runtime-native requests like:
   - "list all loaded plugins"
   - "search loaded tools for <keyword>"`;
   }

@@ -11,7 +11,7 @@ import { getClawHubTemplateCode, isClawHubSignature } from "./templates/clawhub.
 // Wiki native template replaced by shipped Cortex app (server/apps/cortex/)
 import { APP_CATALOG, getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
-import { getPluginApi } from "../runtime.js";
+
 import { getLocalTool, isLocalTool, getAllLocalToolNames } from "../tool-registry-local.js";
 
 // ── Types ──
@@ -61,9 +61,9 @@ export interface ToolTemplate {
  *   2. Define action mappings via registerActionMap()
  *   3. Import the file for side-effects in index.ts
  *
- * Action descriptions for UI generation are auto-generated from the OpenClaw
- * plugin registry (tool name, description, and parameter schemas). Override
- * via describeActions() only if you need custom formatting.
+ * Action descriptions for UI generation are auto-generated from registered
+ * tool metadata (name, description, and parameter schemas). Override via
+ * describeActions() only if you need custom formatting.
  */
 export interface NativeToolActionMap {
   /** Human-readable name for logging ("AlphaRank") */
@@ -92,8 +92,8 @@ export interface NativeToolActionMap {
 
   /**
    * Override auto-generated action descriptions for UI generation.
-   * By default, descriptions are auto-generated from the OpenClaw plugin
-   * registry (tool metadata). Only implement this if you need custom
+   * By default, descriptions are auto-generated from registered tool
+   * metadata. Only implement this if you need custom
    * action names or descriptions that differ from the tool definitions.
    */
   describeActions?(): string;
@@ -128,28 +128,8 @@ export function registerAppTool(tool: {
   body?: string;
   execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 }): void {
-  // 1. Internal registry — for Enso card actions and direct invocation
   generatedToolExecutors.set(tool.name, tool);
-
-  // 2. OpenClaw ecosystem bridge — register with the agent so it can discover
-  //    and call this tool on future requests. This closes the loop: every app
-  //    built by a user is immediately available to the OpenClaw agent.
-  const api = getPluginApi();
-  if (api) {
-    try {
-      api.registerTool({
-        name: tool.name,
-        label: tool.name.replace(/_/g, " ").replace(/^enso /i, "").trim(),
-        description: tool.description,
-        parameters: tool.parameters,
-        execute: tool.execute,
-      } as Parameters<typeof api.registerTool>[0]);
-    } catch (err) {
-      logError("native-tools", `Failed to register "${tool.name}" with OpenClaw ecosystem`, err);
-    }
-  }
-
-  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered app tool "${tool.name}"${api ? " (+ OpenClaw)" : ""}` });
+  logAction({ ts: Date.now(), type: "action", category: "native-tools", message: `registered app tool "${tool.name}"` });
 }
 
 // ── Auto-heal helpers ──
@@ -439,7 +419,7 @@ export function getActionMap(prefix: string): NativeToolActionMap | undefined {
  *
  * Priority:
  *   1. Manual describeActions() on a registered action map (if defined)
- *   2. Auto-generated from OpenClaw plugin registry metadata
+ *   2. Auto-generated from registered tool metadata
  */
 export function getActionDescriptions(toolName: string): string | undefined {
   // 1. Check for manual override via action map
@@ -448,8 +428,8 @@ export function getActionDescriptions(toolName: string): string | undefined {
     return map.describeActions();
   }
 
-  // 2. Auto-generate from the OpenClaw plugin registry
-  // Use the action map's prefix if available, otherwise auto-detect from plugin
+  // 2. Auto-generate from registered tool metadata
+  // Use the action map's prefix if available, otherwise auto-detect from tool name
   const prefix = map?.prefix ?? detectPrefixForTool(toolName);
   if (prefix) {
     return generateActionDescriptionsFromRegistry(prefix);
@@ -701,7 +681,7 @@ export function normalizeDataForToolTemplate(signature: ToolTemplate, data: unkn
       const plugins = Array.isArray(source.plugins) ? source.plugins : [];
       return {
         ...source,
-        title: source.title ?? "Loaded OpenClaw plugins",
+        title: source.title ?? "Loaded plugins",
         totalPlugins: source.totalPlugins ?? plugins.length,
         rows: plugins,
       };
@@ -903,26 +883,16 @@ function registerDynamicSystemTemplate(input: { prefix: string; pluginId?: strin
 }
 
 function ensureDynamicSystemTemplatesFromRegistry(): void {
-  const registry = getPluginRegistry();
-  if (!registry) return;
-  for (const entry of registry.tools) {
-    const prefix = getPluginToolPrefix(entry.pluginId).toLowerCase();
-    if (!prefix) continue;
-    registerDynamicSystemTemplate({ prefix, pluginId: entry.pluginId });
-  }
+  // No-op: dynamic system templates are registered directly via
+  // registerDynamicSystemTemplate() at startup.
 }
 
 function getAllRegisteredToolNames(): string[] {
   const names = new Set<string>();
   // Include tools from the local registry
   for (const name of getAllLocalToolNames()) names.add(name);
-  // Include tools from OpenClaw plugin registry (if available)
-  const registry = getPluginRegistry();
-  if (registry) {
-    for (const entry of registry.tools) {
-      for (const name of entry.names) names.add(name);
-    }
-  }
+  // Include dynamically generated tools
+  for (const name of generatedToolExecutors.keys()) names.add(name);
   return Array.from(names);
 }
 
@@ -1000,43 +970,41 @@ export function getPreferredToolProviderForFamily(toolFamily: string): {
 }
 
 /**
- * Detect the tool prefix for a given tool name by looking up its plugin
- * in the OpenClaw registry and computing the common prefix.
+ * Detect the tool prefix for a given tool name by extracting everything
+ * up to and including the last underscore.
  */
 function detectPrefixForTool(toolName: string): string | undefined {
-  const pluginId = getToolPluginId(toolName);
-  if (!pluginId) return undefined;
-  return getPluginToolPrefix(pluginId);
+  return extractToolPrefix(toolName);
 }
 
-// ── OpenClaw Plugin Registry Access ──
+// ── Tool Registry Access ──
 
 /**
- * Access the global OpenClaw plugin registry. Both Enso and other plugins
- * (e.g., AlphaRank) run in the same Node.js process, so the registry is
- * shared via a global Symbol.
- */
-function getPluginRegistry(): { tools: Array<{ pluginId: string; factory: (ctx: Record<string, unknown>) => unknown; names: string[]; optional: boolean; source: string }> } | null {
-  const state = (globalThis as Record<symbol, { registry?: unknown }>)[Symbol.for("openclaw.pluginRegistryState")];
-  return (state?.registry as ReturnType<typeof getPluginRegistry>) ?? null;
-}
-
-/**
- * Return the currently loaded OpenClaw tool catalog grouped by plugin.
- * Useful for "list/search plugins" UX actions without requiring shell CLIs.
+ * Return the tool catalog grouped by prefix (family).
+ * Combines dynamically generated tools and locally registered tools.
  */
 export function getRegisteredToolCatalog(): RegisteredToolCatalogEntry[] {
-  const registry = getPluginRegistry();
-  if (!registry) return [];
+  const byPrefix = new Map<string, Set<string>>();
 
-  const byPlugin = new Map<string, Set<string>>();
-  for (const entry of registry.tools) {
-    const bucket = byPlugin.get(entry.pluginId) ?? new Set<string>();
-    for (const name of entry.names) bucket.add(name);
-    byPlugin.set(entry.pluginId, bucket);
+  // Collect from generated tool executors
+  for (const name of generatedToolExecutors.keys()) {
+    const prefix = extractToolPrefix(name) ?? "enso_";
+    const familyId = prefix.replace(/_$/, "");
+    const bucket = byPrefix.get(familyId) ?? new Set<string>();
+    bucket.add(name);
+    byPrefix.set(familyId, bucket);
   }
 
-  return Array.from(byPlugin.entries())
+  // Collect from local tool registry
+  for (const name of getAllLocalToolNames()) {
+    const prefix = extractToolPrefix(name) ?? "enso_";
+    const familyId = prefix.replace(/_$/, "");
+    const bucket = byPrefix.get(familyId) ?? new Set<string>();
+    bucket.add(name);
+    byPrefix.set(familyId, bucket);
+  }
+
+  return Array.from(byPrefix.entries())
     .map(([pluginId, tools]) => ({
       pluginId,
       tools: Array.from(tools).sort(),
@@ -1045,38 +1013,42 @@ export function getRegisteredToolCatalog(): RegisteredToolCatalogEntry[] {
 }
 
 export function getRegisteredToolsDetailed(): RegisteredToolDetail[] {
-  const registry = getPluginRegistry();
-  if (!registry) return [];
   const details: RegisteredToolDetail[] = [];
   const seen = new Set<string>();
 
-  for (const entry of registry.tools) {
-    try {
-      const resolved = entry.factory({});
-      if (!resolved) continue;
-      const tools = Array.isArray(resolved) ? resolved : [resolved];
-      for (const tool of tools) {
-        const t = tool as { name?: string; description?: string; parameters?: unknown };
-        if (!t.name || seen.has(t.name)) continue;
-        seen.add(t.name);
-        details.push({
-          pluginId: entry.pluginId,
-          name: t.name,
-          description: t.description ?? "",
-          parameters: (t.parameters ?? {}) as Record<string, unknown>,
-        });
-      }
-    } catch {
-      // ignore one broken registry factory; continue with others
-    }
+  // Collect from generated tool executors
+  for (const tool of generatedToolExecutors.values()) {
+    if (seen.has(tool.name)) continue;
+    seen.add(tool.name);
+    const prefix = extractToolPrefix(tool.name) ?? "enso_";
+    details.push({
+      pluginId: prefix.replace(/_$/, ""),
+      name: tool.name,
+      description: tool.description ?? "",
+      parameters: (tool.parameters ?? {}) as Record<string, unknown>,
+    });
+  }
+
+  // Collect from local tool registry
+  for (const name of getAllLocalToolNames()) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const local = getLocalTool(name);
+    if (!local) continue;
+    const prefix = extractToolPrefix(name) ?? "enso_";
+    details.push({
+      pluginId: prefix.replace(/_$/, ""),
+      name: local.name,
+      description: (local as { description?: string }).description ?? "",
+      parameters: ((local as { parameters?: unknown }).parameters ?? {}) as Record<string, unknown>,
+    });
   }
 
   return details.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
- * Resolve a tool by name from the OpenClaw plugin registry.
- * Calls the tool's factory with an empty context to get the executable tool object.
+ * Resolve a tool by name from the local registries.
  */
 function resolveToolByName(toolName: string): { name: string; execute: (callId: string, params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text?: string }> }> } | null {
   // 1. Check dynamically generated tool executors (from Tool Factory / Build App)
@@ -1091,97 +1063,39 @@ function resolveToolByName(toolName: string): { name: string; execute: (callId: 
     return localTool as ReturnType<typeof resolveToolByName>;
   }
 
-  // 3. Check the OpenClaw plugin registry (tools from other co-loaded plugins)
-  const registry = getPluginRegistry();
-  if (registry) {
-    for (const entry of registry.tools) {
-      if (entry.names.includes(toolName)) {
-        try {
-          const resolved = entry.factory({});
-          if (!resolved) continue;
-          const tools = Array.isArray(resolved) ? resolved : [resolved];
-          const tool = tools.find((t: { name?: string }) => t?.name === toolName);
-          if (tool && typeof (tool as { execute?: unknown }).execute === "function") {
-            return tool as ReturnType<typeof resolveToolByName>;
-          }
-        } catch (err) {
-          logError("native-tools", `failed to resolve tool "${toolName}" from plugin "${entry.pluginId}"`, err);
-        }
-      }
-    }
-  }
-
   return null;
 }
 
 /**
- * Check if a tool exists in the OpenClaw plugin registry without resolving it.
+ * Check if a tool exists in the local registries without resolving it.
  * Used to validate action names that might correspond to tool names.
  */
 export function isToolRegistered(toolName: string): boolean {
   if (generatedToolExecutors.has(toolName)) return true;
   if (isLocalTool(toolName)) return true;
-  const registry = getPluginRegistry();
-  if (!registry) return false;
-  return registry.tools.some((entry) => entry.names.includes(toolName));
+  return false;
 }
 
 /**
- * Find the pluginId that owns a given tool name.
+ * Derive the family/plugin ID for a given tool name by extracting its prefix.
+ * Returns "enso" as the family for all known tools, or the prefix-derived family.
  */
 export function getToolPluginId(toolName: string): string | undefined {
-  const registry = getPluginRegistry();
-  if (!registry) return undefined;
-  const entry = registry.tools.find((e) => e.names.includes(toolName));
-  return entry?.pluginId;
+  if (!generatedToolExecutors.has(toolName) && !isLocalTool(toolName)) return undefined;
+  const prefix = extractToolPrefix(toolName);
+  return prefix ? prefix.replace(/_$/, "") : "enso";
 }
 
 /**
- * Auto-detect the common name prefix shared by all tools from the same plugin.
- * e.g. for pluginId "alpharank" with tools ["alpharank_daily", "alpharank_predict", ...]
- * returns "alpharank_".
- *
- * Falls back to `pluginId + "_"` if no common prefix can be computed.
+ * Return the tool name prefix for a given family/plugin ID.
+ * Simply appends "_" to the pluginId.
  */
 export function getPluginToolPrefix(pluginId: string): string {
-  const registry = getPluginRegistry();
-  if (!registry) return `${pluginId}_`;
-
-  // Collect all tool names from this plugin
-  const names: string[] = [];
-  for (const entry of registry.tools) {
-    if (entry.pluginId === pluginId) {
-      names.push(...entry.names);
-    }
-  }
-
-  if (names.length === 0) return `${pluginId}_`;
-  if (names.length === 1) {
-    // Single tool — use everything up to and including the last underscore
-    const lastUnderscore = names[0].lastIndexOf("_");
-    return lastUnderscore > 0 ? names[0].slice(0, lastUnderscore + 1) : `${pluginId}_`;
-  }
-
-  // Find longest common prefix
-  let prefix = names[0];
-  for (let i = 1; i < names.length; i++) {
-    while (!names[i].startsWith(prefix)) {
-      prefix = prefix.slice(0, -1);
-      if (prefix.length === 0) return `${pluginId}_`;
-    }
-  }
-
-  // Ensure prefix ends with underscore for clean action names
-  if (!prefix.endsWith("_")) {
-    const lastUnderscore = prefix.lastIndexOf("_");
-    prefix = lastUnderscore > 0 ? prefix.slice(0, lastUnderscore + 1) : `${pluginId}_`;
-  }
-
-  return prefix;
+  return `${pluginId}_`;
 }
 
 /**
- * Execute a registered OpenClaw tool directly, bypassing the agent loop.
+ * Execute a registered tool directly, bypassing the agent loop.
  * This calls the tool's execute() method — no LLM, no hooks.
  */
 export async function executeToolDirect(
@@ -1227,7 +1141,7 @@ export async function executeToolDirect(
 // ── Auto-Generated Action Descriptions ──
 
 /**
- * Resolved tool metadata from the OpenClaw plugin registry.
+ * Resolved tool metadata from local registries.
  */
 interface ResolvedToolMeta {
   name: string;
@@ -1236,40 +1150,35 @@ interface ResolvedToolMeta {
 }
 
 /**
- * Resolve all tools matching a prefix from the OpenClaw plugin registry.
+ * Resolve all tools matching a prefix from local registries.
  * Returns their name, description, and parameter schemas.
  */
 function resolveToolsByPrefix(prefix: string): ResolvedToolMeta[] {
-  const registry = getPluginRegistry();
-  if (!registry) return [];
-
   const results: ResolvedToolMeta[] = [];
   const seen = new Set<string>();
 
-  for (const entry of registry.tools) {
-    // Check if any tool name in this entry matches the prefix
-    const matchingNames = entry.names.filter((n) => n.startsWith(prefix));
-    if (matchingNames.length === 0) continue;
+  // Search generated tool executors
+  for (const tool of generatedToolExecutors.values()) {
+    if (!tool.name.startsWith(prefix) || seen.has(tool.name)) continue;
+    seen.add(tool.name);
+    results.push({
+      name: tool.name,
+      description: tool.description ?? "",
+      parameters: (tool.parameters ?? {}) as Record<string, unknown>,
+    });
+  }
 
-    try {
-      const resolved = entry.factory({});
-      if (!resolved) continue;
-
-      const tools = Array.isArray(resolved) ? resolved : [resolved];
-      for (const tool of tools) {
-        const t = tool as { name?: string; description?: string; parameters?: unknown };
-        if (!t?.name || !t.name.startsWith(prefix) || seen.has(t.name)) continue;
-        seen.add(t.name);
-
-        results.push({
-          name: t.name,
-          description: t.description ?? "",
-          parameters: (t.parameters ?? {}) as Record<string, unknown>,
-        });
-      }
-    } catch (err) {
-      logError("native-tools", `failed to resolve tools from plugin "${entry.pluginId}"`, err);
-    }
+  // Search local tool registry
+  for (const name of getAllLocalToolNames()) {
+    if (!name.startsWith(prefix) || seen.has(name)) continue;
+    seen.add(name);
+    const local = getLocalTool(name);
+    if (!local) continue;
+    results.push({
+      name: local.name,
+      description: (local as { description?: string }).description ?? "",
+      parameters: ((local as { parameters?: unknown }).parameters ?? {}) as Record<string, unknown>,
+    });
   }
 
   return results;
@@ -1309,8 +1218,8 @@ function toActionName(toolName: string, prefix: string): string {
 }
 
 /**
- * Auto-generate Gemini-friendly action descriptions from the OpenClaw plugin
- * registry. Reads tool name, description, and parameter schemas directly from
+ * Auto-generate Gemini-friendly action descriptions from registered tools.
+ * Reads tool name, description, and parameter schemas directly from
  * the registered tools — no hand-written descriptions needed.
  *
  * Returns undefined if no tools are found for the prefix.

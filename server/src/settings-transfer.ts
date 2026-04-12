@@ -36,6 +36,8 @@ interface ExportBundle {
   dataSources?: Record<string, unknown>;
   entityIndex?: Record<string, unknown>;
   orchestrations?: Record<string, Record<string, string>>;
+  focusAreas?: unknown;
+  collections?: Record<string, Record<string, { index: unknown; docs: Record<string, unknown> }>>;
 }
 
 interface CategoryInfo {
@@ -59,6 +61,8 @@ const CATEGORIES: CategoryInfo[] = [
   { id: "dataSources", label: "Data Source Caches", description: "Kindle, WeRead, Steam, YouTube, Movies, Photos, QQ Music library caches", sensitive: false },
   { id: "entityIndex", label: "Entity Index", description: "Cross-source entity registry with types, sources, and cortex paths", sensitive: false },
   { id: "orchestrations", label: "Orchestrations & Discoveries", description: "Sprint outputs, persona reports, discovery artifacts", sensitive: false },
+  { id: "focusAreas", label: "Focus Areas", description: "AI-inferred goals, motivations, and strategic dialogues", sensitive: false },
+  { id: "collections", label: "App Collections", description: "Research topics, travel places, books, and other app data collections", sensitive: false },
 ];
 
 // ── Readers ──
@@ -161,11 +165,33 @@ function readCategory(id: string): unknown | null {
     case "projects": {
       const projDir = join(ENSO_HOME, "projects");
       if (!existsSync(projDir)) return null;
-      const result: Record<string, unknown> = {};
+      const result: Record<string, { project: unknown; sprints?: Record<string, Record<string, string>> }> = {};
       for (const pDir of readdirSync(projDir)) {
-        const projFile = join(projDir, pDir, "project.json");
+        const projPath = join(projDir, pDir);
+        if (!statSync(projPath).isDirectory()) continue;
+        const projFile = join(projPath, "project.json");
         const data = readJsonFile(projFile);
-        if (data) result[pDir] = data;
+        if (!data) continue;
+        const entry: { project: unknown; sprints?: Record<string, Record<string, string>> } = { project: data };
+        // Include sprint history
+        const sprintsDir = join(projPath, "sprints");
+        if (existsSync(sprintsDir)) {
+          const sprints: Record<string, Record<string, string>> = {};
+          for (const sprintDir of readdirSync(sprintsDir)) {
+            const sprintPath = join(sprintsDir, sprintDir);
+            if (!statSync(sprintPath).isDirectory()) continue;
+            const files: Record<string, string> = {};
+            for (const f of readdirSync(sprintPath)) {
+              if (f.endsWith(".md") || f.endsWith(".json") || f.endsWith(".jsx")) {
+                const content = readTextFile(join(sprintPath, f));
+                if (content) files[f] = content;
+              }
+            }
+            if (Object.keys(files).length > 0) sprints[sprintDir] = files;
+          }
+          if (Object.keys(sprints).length > 0) entry.sprints = sprints;
+        }
+        result[pDir] = entry;
       }
       return Object.keys(result).length > 0 ? result : null;
     }
@@ -216,7 +242,7 @@ function readCategory(id: string): unknown | null {
       if (_includeAudio && existsSync(audioDir)) {
         const audioFiles: Record<string, string> = {};
         for (const file of readdirSync(audioDir)) {
-          if (!file.endsWith(".wav")) continue;
+          if (!file.endsWith(".wav") && !file.endsWith(".mp3")) continue;
           const filePath = join(audioDir, file);
           try {
             const audioData = readFileSync(filePath);
@@ -249,6 +275,41 @@ function readCategory(id: string): unknown | null {
 
     case "entityIndex":
       return readJsonFile(join(ENSO_HOME, "data", "entity-index.json"));
+
+    case "focusAreas":
+      return readJsonFile(join(ENSO_HOME, "data", "focus-areas.json"));
+
+    case "collections": {
+      const dataDir = join(ENSO_HOME, "data");
+      if (!existsSync(dataDir)) return null;
+      const result: Record<string, Record<string, { index: unknown; docs: Record<string, unknown> }>> = {};
+      // Skip known non-collection directories
+      const skipDirs = new Set(["deep-content", "user-context", "card-summaries"]);
+      for (const family of readdirSync(dataDir)) {
+        const familyPath = join(dataDir, family);
+        if (!statSync(familyPath).isDirectory() || skipDirs.has(family)) continue;
+        const collections: Record<string, { index: unknown; docs: Record<string, unknown> }> = {};
+        for (const coll of readdirSync(familyPath)) {
+          const collPath = join(familyPath, coll);
+          if (!statSync(collPath).isDirectory()) continue;
+          const indexFile = join(collPath, "index.json");
+          if (!existsSync(indexFile)) continue;
+          const index = readJsonFile(indexFile);
+          const docs: Record<string, unknown> = {};
+          const docsDir = join(collPath, "docs");
+          if (existsSync(docsDir)) {
+            for (const docFile of readdirSync(docsDir)) {
+              if (!docFile.endsWith(".json")) continue;
+              const docData = readJsonFile(join(docsDir, docFile));
+              if (docData) docs[docFile] = docData;
+            }
+          }
+          collections[coll] = { index, docs };
+        }
+        if (Object.keys(collections).length > 0) result[family] = collections;
+      }
+      return Object.keys(result).length > 0 ? result : null;
+    }
 
     case "orchestrations": {
       const result: Record<string, Record<string, string>> = {};
@@ -446,6 +507,10 @@ function importCategory(id: string, data: unknown, mergeMode: "skip" | "replace"
       return importEntityIndex(data as Record<string, unknown>, mergeMode);
     case "orchestrations":
       return importOrchestrations(data as Record<string, Record<string, string>>, mergeMode);
+    case "focusAreas":
+      return importFocusAreas(data as unknown, mergeMode);
+    case "collections":
+      return importCollections(data as Record<string, Record<string, { index: unknown; docs: Record<string, unknown> }>>, mergeMode);
     default:
       return { imported: 0, skipped: 0, details: "Unknown category" };
   }
@@ -657,12 +722,27 @@ function importProjects(data: Record<string, unknown>, mergeMode: "skip" | "repl
   const projDir = join(ENSO_HOME, "projects");
   let imported = 0, skipped = 0;
 
-  for (const [projectId, projData] of Object.entries(data)) {
+  for (const [projectId, rawEntry] of Object.entries(data)) {
     const pDir = join(projDir, projectId);
     const pFile = join(pDir, "project.json");
     if (mergeMode === "skip" && existsSync(pFile)) { skipped++; continue; }
     mkdirSync(pDir, { recursive: true });
+
+    // Handle both old format (plain object) and new format ({ project, sprints })
+    const entry = rawEntry as { project?: unknown; sprints?: Record<string, Record<string, string>> };
+    const projData = entry.project ?? rawEntry;
     writeFileSync(pFile, JSON.stringify(projData, null, 2), "utf-8");
+
+    // Import sprint history if present
+    if (entry.sprints) {
+      for (const [sprintName, files] of Object.entries(entry.sprints)) {
+        const sprintDir = join(pDir, "sprints", sprintName);
+        mkdirSync(sprintDir, { recursive: true });
+        for (const [filename, content] of Object.entries(files)) {
+          writeFileSync(join(sprintDir, filename), content, "utf-8");
+        }
+      }
+    }
     imported++;
   }
   return { imported, skipped };
@@ -710,7 +790,7 @@ function importDeepContent(data: Record<string, unknown>, mergeMode: "skip" | "r
     // Handle audio files (base64-encoded WAV)
     if (filename === "_audio" && typeof content === "object" && content !== null) {
       for (const [audioFile, base64Data] of Object.entries(content as Record<string, string>)) {
-        if (!audioFile.endsWith(".wav")) continue;
+        if (!audioFile.endsWith(".wav") && !audioFile.endsWith(".mp3")) continue;
         const audioPath = join(audioDir, audioFile);
         if (mergeMode === "skip" && existsSync(audioPath)) { skipped++; continue; }
         writeFileSync(audioPath, Buffer.from(base64Data, "base64"));
@@ -780,6 +860,64 @@ function importOrchestrations(data: Record<string, Record<string, string>>, merg
       writeFileSync(filePath, content, "utf-8");
     }
     imported++;
+  }
+  return { imported, skipped };
+}
+
+function importFocusAreas(data: unknown, mergeMode: "skip" | "replace"): ImportSummary {
+  const file = join(ENSO_HOME, "data", "focus-areas.json");
+  mkdirSync(join(ENSO_HOME, "data"), { recursive: true });
+
+  if (mergeMode === "replace" || !existsSync(file)) {
+    writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+    const count = Array.isArray(data) ? data.length : Object.keys(data as Record<string, unknown>).length;
+    return { imported: count, skipped: 0 };
+  }
+
+  // Merge by id
+  const existing = readJsonFile(file);
+  if (!Array.isArray(existing) || !Array.isArray(data)) {
+    // Non-array format — just replace
+    writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+    return { imported: 1, skipped: 0 };
+  }
+
+  const existingIds = new Set(existing.map((f: any) => f.id));
+  let imported = 0, skipped = 0;
+  for (const focus of data as any[]) {
+    if (existingIds.has(focus.id)) { skipped++; continue; }
+    existing.push(focus);
+    imported++;
+  }
+  writeFileSync(file, JSON.stringify(existing, null, 2), "utf-8");
+  return { imported, skipped };
+}
+
+function importCollections(
+  data: Record<string, Record<string, { index: unknown; docs: Record<string, unknown> }>>,
+  mergeMode: "skip" | "replace",
+): ImportSummary {
+  const dataDir = join(ENSO_HOME, "data");
+  let imported = 0, skipped = 0;
+
+  for (const [family, collections] of Object.entries(data)) {
+    for (const [collName, { index, docs }] of Object.entries(collections)) {
+      const collDir = join(dataDir, family, collName);
+      const indexFile = join(collDir, "index.json");
+      if (mergeMode === "skip" && existsSync(indexFile)) { skipped++; continue; }
+
+      mkdirSync(collDir, { recursive: true });
+      writeFileSync(indexFile, JSON.stringify(index, null, 2), "utf-8");
+
+      if (docs && Object.keys(docs).length > 0) {
+        const docsDir = join(collDir, "docs");
+        mkdirSync(docsDir, { recursive: true });
+        for (const [docFile, docData] of Object.entries(docs)) {
+          writeFileSync(join(docsDir, docFile), JSON.stringify(docData, null, 2), "utf-8");
+        }
+      }
+      imported++;
+    }
   }
   return { imported, skipped };
 }

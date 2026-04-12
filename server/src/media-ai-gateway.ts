@@ -316,9 +316,3 @@ export function createMediaProcessingTools(): EnsoAgentTool[] {
     } as EnsoAgentTool,
   ];
 }
-
-export function registerMediaProcessingTools(api?: { registerTool: (tool: EnsoAgentTool) => void }): void {
-  for (const tool of createMediaProcessingTools()) {
-    if (api) api.registerTool(tool);
-  }
-}

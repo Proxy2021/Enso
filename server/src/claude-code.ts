@@ -89,7 +89,7 @@ function extractToolDetail(name: string, partialJson: string): string | null {
 
 /**
  * Directly invoke the Claude Code CLI via the Agent SDK, streaming results
- * back to the browser client via WebSocket. Bypasses OpenClaw entirely —
+ * back to the browser client via WebSocket. Bypasses the agent pipeline —
  * no agent pipeline, no middleware, just SDK → WS.
  *
  * Emits inline markers for tool activity and cost:

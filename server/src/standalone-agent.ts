@@ -1,7 +1,7 @@
 /**
  * standalone-agent.ts — Chat agent for standalone mode.
  *
- * Replaces the OpenClaw agent pipeline (`inbound.ts`) when running without OpenClaw.
+ * Replaces the full agent pipeline when running in standalone mode.
  * Supports multi-provider LLM via callChatLLM (respecting the user's chatModel),
  * with Gemini function-calling as a fallback for tool-use scenarios.
  */

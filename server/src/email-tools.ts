@@ -9,7 +9,7 @@
  */
 
 import nodemailer from "nodemailer";
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { logAction, logError } from "./action-log.js";
 
 // ── Transporter (lazy-initialized, reused) ──
@@ -177,12 +177,4 @@ export function createEmailTools(): EnsoAgentTool[] {
       },
     } as EnsoAgentTool,
   ];
-}
-
-// ── Registration ──
-
-export function registerEmailTools(api?: EnsoPluginApi): void {
-  for (const tool of createEmailTools()) {
-    if (api) api.registerTool(tool);
-  }
 }

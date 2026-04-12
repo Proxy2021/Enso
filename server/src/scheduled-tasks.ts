@@ -4,7 +4,7 @@
  * Provides durable, file-persisted scheduled tasks that survive server restarts.
  * Tasks can execute chat prompts (via Claude Code) or run registered tools directly.
  *
- * Adapted from OpenClaw's cron service and Claude Code's cronScheduler patterns.
+ * Adapted from Claude Code's cronScheduler patterns.
  *
  * Storage: ~/.enso/scheduled-tasks/tasks.json + runs/<taskId>.jsonl
  */

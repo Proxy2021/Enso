@@ -17,7 +17,7 @@ export interface ToolCallRecord {
 
 /**
  * Chronologically ordered list of recent tool calls from co-loaded
- * OpenClaw plugins. Entries are evicted after MAX_AGE_MS.
+ * plugins. Entries are evicted after MAX_AGE_MS.
  *
  * This bridges the gap between the after_tool_call hook (which fires
  * during agent execution) and the deliver callback (which fires after).
@@ -32,9 +32,9 @@ const MAX_AGE_MS = 30_000;
 
 /**
  * Record a tool call from the after_tool_call hook.
- * Only called for tools from co-loaded OpenClaw plugins (filtered in index.ts).
+ * Only called for tools from co-loaded plugins (filtered in index.ts).
  *
- * Note: OpenClaw fires after_tool_call twice per tool execution (once awaited
+ * Note: after_tool_call may fire twice per tool execution (once awaited
  * in the tool adapter, once fire-and-forget in the event subscriber). We
  * deduplicate by checking if the most recent record has the same tool name.
  */
@@ -53,7 +53,7 @@ export function recordToolCall(record: ToolCallRecord): void {
 
 /**
  * Consume (remove and return) the most recent tool call record
- * from a co-loaded OpenClaw plugin tool. Called from deliverEnsoReply
+ * from a co-loaded plugin tool. Called from deliverEnsoReply
  * when creating a new card context.
  *
  * Returns undefined if no matching record exists.

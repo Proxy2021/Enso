@@ -12,7 +12,7 @@ UID_NUM="$(id -u)"
 chmod +x "$WATCHDOG"
 
 # Remove old labels
-for OLD_LABEL in "$LABEL" "ai.openclaw.enso-watchdog"; do
+for OLD_LABEL in "$LABEL" "ai.enso.enso-watchdog"; do
   launchctl bootout "gui/$UID_NUM/$OLD_LABEL" 2>/dev/null || true
   OLD_PLIST="$PLIST_DIR/${OLD_LABEL}.plist"
   [ -f "$OLD_PLIST" ] && rm -f "$OLD_PLIST"

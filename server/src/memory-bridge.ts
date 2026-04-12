@@ -82,7 +82,6 @@ export function resolveCardType(record: Partial<CardRecord>): string {
 
 const ENSO_HOME = join(homedir(), ".enso");
 const CARDS_DIR = join(ENSO_HOME, "cards");
-const OLD_CARDS_DIR = join(homedir(), ".openclaw", "enso-cards"); // legacy location
 
 const MAX_ENTRIES = 200;
 const KEEP_ENTRIES = 150;
@@ -94,26 +93,6 @@ function ensureCardsDir(): void {
   }
 }
 
-/**
- * Migrate card journals from ~/.openclaw/enso-cards/ to ~/.enso/cards/.
- * Call once on server startup. Safe to call multiple times (no-op if already migrated).
- */
-export function migrateCardJournals(): void {
-  try {
-    if (!existsSync(OLD_CARDS_DIR)) return;
-    ensureCardsDir();
-    for (const file of readdirSync(OLD_CARDS_DIR)) {
-      if (!file.endsWith(".jsonl")) continue;
-      const oldPath = join(OLD_CARDS_DIR, file);
-      const newPath = join(CARDS_DIR, file);
-      if (!existsSync(newPath)) {
-        writeFileSync(newPath, readFileSync(oldPath));
-      }
-    }
-  } catch {
-    // Best-effort migration
-  }
-}
 
 const CONVERSATIONS_INDEX = "conversations.json";
 /** Migrated legacy single-file journals use this thread id. */
@@ -773,7 +752,7 @@ function buildAvailableAppsSummary(): string {
   }
 }
 
-// ── Part 3: Enso Memory (local, independent of OpenClaw workspace) ──
+// ── Part 3: Enso Memory ──
 
 const MEMORY_DIR = join(homedir(), ".enso", "memory");
 const DAILY_DIR = join(MEMORY_DIR, "daily");
@@ -1206,7 +1185,7 @@ export function getRecentConversationTopics(clientId: string, conversationId: st
   return topics;
 }
 
-// ── Legacy compatibility (OpenClaw workspace hooks) ──
+// ── Legacy compatibility (workspace hooks) ──
 
 let workspaceDir: string | null = null;
 

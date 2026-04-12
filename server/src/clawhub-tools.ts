@@ -1,4 +1,4 @@
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { logAction, logError } from "./action-log.js";
@@ -409,7 +409,7 @@ async function clawHubInstall(params: InstallParams): Promise<AgentToolResult> {
     tool: "enso_clawhub_install",
     slug,
     success: true,
-    message: `Successfully installed "${slug}". The skill is now available to OpenClaw agents.`,
+    message: `Successfully installed "${slug}". The skill is now available to Enso agents.`,
     output: result.stdout,
   });
 }
@@ -446,7 +446,7 @@ export function createClawHubTools(): EnsoAgentTool[] {
     {
       name: "enso_clawhub_browse",
       label: "ClawHub Browse",
-      description: "Browse popular and trending skills on ClawHub, the OpenClaw skill marketplace. Optionally filter by category.",
+      description: "Browse popular and trending skills on ClawHub, the Enso skill marketplace. Optionally filter by category.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -491,7 +491,7 @@ export function createClawHubTools(): EnsoAgentTool[] {
     {
       name: "enso_clawhub_installed",
       label: "ClawHub Installed",
-      description: "List all currently installed OpenClaw skills.",
+      description: "List all currently installed Enso skills.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -503,7 +503,7 @@ export function createClawHubTools(): EnsoAgentTool[] {
     {
       name: "enso_clawhub_install",
       label: "ClawHub Install",
-      description: "Install a skill from ClawHub by its slug. The skill becomes available to OpenClaw agents immediately.",
+      description: "Install a skill from ClawHub by its slug. The skill becomes available to Enso agents immediately.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -531,10 +531,4 @@ export function createClawHubTools(): EnsoAgentTool[] {
         clawHubUninstall(params as UninstallParams),
     } as EnsoAgentTool,
   ];
-}
-
-export function registerClawHubTools(api?: EnsoPluginApi): void {
-  for (const tool of createClawHubTools()) {
-    if (api) api.registerTool(tool);
-  }
 }

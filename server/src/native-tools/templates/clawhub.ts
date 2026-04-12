@@ -76,7 +76,7 @@ const CLAWHUB_TEMPLATE = `export default function GeneratedUI({ data, onAction }
           )}
           {success && isInstallResult && (
             <div className="bg-gray-800 rounded-lg p-2.5 border border-gray-700 text-xs text-gray-400">
-              The skill is now available to OpenClaw agents. If the gateway was already running, a reload may be needed for the agent to pick up the new skill.
+              The skill is now available to Enso agents. A reload may be needed for the agent to pick up the new skill.
             </div>
           )}
           <Separator />
@@ -208,7 +208,7 @@ const CLAWHUB_TEMPLATE = `export default function GeneratedUI({ data, onAction }
                 ? skills.length + " skill" + (skills.length !== 1 ? "s" : "") + " installed"
                 : isSearch
                   ? (data?.totalFound ?? skills.length) + " result" + (skills.length !== 1 ? "s" : "") + " for \\u201c" + query + "\\u201d"
-                  : "Discover and install OpenClaw skills"
+                  : "Discover and install Enso skills"
               }
             </div>
           </div>

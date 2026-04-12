@@ -1,4 +1,4 @@
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "path";
 import { fileURLToPath } from "url";
@@ -917,10 +917,4 @@ export function createFilesystemTools(): EnsoAgentTool[] {
       execute: async (_callId: string, params: Record<string, unknown>) => searchContent(params as SearchContentParams),
     } as EnsoAgentTool,
   ];
-}
-
-export function registerFilesystemTools(api?: EnsoPluginApi): void {
-  for (const tool of createFilesystemTools()) {
-    if (api) api.registerTool(tool);
-  }
 }

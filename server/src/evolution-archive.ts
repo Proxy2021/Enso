@@ -2,16 +2,15 @@
  * Evolution Sprint Archive — persists evolution sprint artifacts to disk.
  *
  * Project-scoped storage: ~/.enso/projects/<projectId>/sprints/<sprintId>/
- * Legacy fallback: ~/.openclaw/enso-evolution/<sprintId>/
+ * Project-scoped storage: ~/.enso/projects/<projectId>/sprints/<sprintId>/
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, unlinkSync, statSync, rmSync } from "fs";
 import { join, basename } from "path";
 import { logAction, logError } from "./action-log.js";
-import { getEnsoPath, HOME_DIR } from "./utils/home.js";
+import { getEnsoPath } from "./utils/home.js";
 
 const PROJECTS_DIR = getEnsoPath("projects");
-const LEGACY_EVOLUTION_DIR = join(HOME_DIR, ".openclaw", "enso-evolution");
 
 // ── Types ──
 
@@ -405,24 +404,6 @@ export function listEvolutionSprints(projectId: string = "enso"): EvolutionSprin
     } catch (err) { logError("evolution-archive", "Failed to read sprints dir", err); }
   }
 
-  // Also check legacy location for the "enso" project
-  if (projectId === "enso" && existsSync(LEGACY_EVOLUTION_DIR)) {
-    try {
-      for (const dir of readdirSync(LEGACY_EVOLUTION_DIR)) {
-        const metaPath = join(LEGACY_EVOLUTION_DIR, dir, "meta.json");
-        if (existsSync(metaPath)) {
-          try {
-            const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
-            // Avoid duplicates
-            if (!sprints.some(s => s.sprintId === meta.sprintId)) {
-              sprints.push(meta);
-            }
-          } catch (err) { logError("evolution-archive", "Failed to parse sprint meta: " + metaPath, err); }
-        }
-      }
-    } catch (err) { logError("evolution-archive", "Failed to read legacy sprints dir", err); }
-  }
-
   sprints.sort((a, b) => b.completedAt - a.completedAt);
   return sprints;
 }
@@ -436,11 +417,6 @@ export function loadEvolutionSprint(sprintId: string, projectId: string = "enso"
   if (existsSync(projectPath)) {
     try { return JSON.parse(readFileSync(projectPath, "utf-8")); } catch (err) { logError("evolution-archive", "Failed to parse sprint meta: " + projectPath, err); }
   }
-  // Fallback to legacy
-  const legacyPath = join(LEGACY_EVOLUTION_DIR, sprintId, "meta.json");
-  if (existsSync(legacyPath)) {
-    try { return JSON.parse(readFileSync(legacyPath, "utf-8")); } catch (err) { logError("evolution-archive", "Failed to parse sprint meta: " + legacyPath, err); }
-  }
   return null;
 }
 
@@ -453,11 +429,6 @@ export function getEvolutionFile(sprintId: string, filename: string, projectId: 
   const projectPath = join(getSprintsDir(projectId), sprintId, safe);
   if (existsSync(projectPath)) {
     try { return readFileSync(projectPath, "utf-8"); } catch (err) { logError("evolution-archive", "Failed to read evolution file: " + projectPath, err); }
-  }
-  // Fallback to legacy
-  const legacyPath = join(LEGACY_EVOLUTION_DIR, sprintId, safe);
-  if (existsSync(legacyPath)) {
-    try { return readFileSync(legacyPath, "utf-8"); } catch (err) { logError("evolution-archive", "Failed to read evolution file: " + legacyPath, err); }
   }
   return null;
 }

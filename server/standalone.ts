@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * standalone.ts — Run Enso without OpenClaw.
+ * standalone.ts — Run Enso in standalone mode.
  *
  * Usage:
  *   npx tsx server/standalone.ts         # direct (development)
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
   // ── Start server ──
 
   console.log(`[enso:standalone] Starting Enso server on :${account.port}`);
-  console.log(`[enso:standalone] Mode: standalone (no OpenClaw)`);
+  console.log(`[enso:standalone] Mode: standalone`);
 
   if (process.env.ENSO_GUARDIAN_MANAGED === "1") {
     console.log("[enso:standalone] Running under guardian supervision");

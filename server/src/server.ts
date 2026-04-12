@@ -26,7 +26,7 @@ import type { FixEntry } from "./action-log.js";
 import {
   clearCardHistory,
   pruneStaleJournals,
-  migrateCardJournals,
+
   readEnsoMemory,
   writeEnsoUser,
   writeEnsoMemory,
@@ -2710,7 +2710,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       return;
     }
 
-    const files = readdirSync(audioDir).filter(f => f.endsWith(".wav"));
+    const files = readdirSync(audioDir).filter(f => f.endsWith(".wav") || f.endsWith(".mp3"));
     if (files.length === 0) {
       res.json({ error: "No audio files", count: 0 });
       return;
@@ -3509,8 +3509,6 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       runtime.log?.(`[enso] server listening on :${port}`);
       logAction({ ts: Date.now(), type: "system", category: "system", message: `Server started on port ${port}`, metadata: { port, hostname: hostname(), platform: platform() } });
 
-      // Migrate card journals from old ~/.openclaw/enso-cards/ to ~/.enso/cards/
-      try { migrateCardJournals(); } catch { /* best-effort */ }
 
       // Ensure default Enso project exists
       try {

@@ -1,4 +1,4 @@
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { getDocCollection, type DocMeta } from "./persistence.js";
 import { sendHtmlEmail } from "./email.js";
 import { logAction, logError } from "./action-log.js";
@@ -3037,12 +3037,6 @@ export function createResearcherTools(): EnsoAgentTool[] {
         researcherRecall(params as { query: string; maxResults?: number }),
     } as EnsoAgentTool,
   ];
-}
-
-export function registerResearcherTools(api?: EnsoPluginApi): void {
-  for (const tool of createResearcherTools()) {
-    if (api) api.registerTool(tool);
-  }
 }
 
 /**

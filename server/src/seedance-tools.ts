@@ -476,13 +476,3 @@ export function createSeedanceTools(): EnsoAgentTool[] {
     } as EnsoAgentTool,
   ];
 }
-
-// ── Registration ──
-
-export function registerSeedanceTools(api?: {
-  registerTool: (tool: EnsoAgentTool) => void;
-}): void {
-  for (const tool of createSeedanceTools()) {
-    if (api) api.registerTool(tool);
-  }
-}

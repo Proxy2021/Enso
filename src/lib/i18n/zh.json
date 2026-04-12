@@ -567,7 +567,7 @@
   "settings.backgroundTasksDesc": "自动化维护和监控",
 
   "conn.title": "连接后端",
-  "conn.subtitle": "选择要连接的 OpenClaw 服务器",
+  "conn.subtitle": "选择要连接的 Enso 服务器",
   "conn.localServer": "本地服务器",
   "conn.localServerDesc": "同源模式（默认开发模式）",
   "conn.namePlaceholder": "名称（可选）",

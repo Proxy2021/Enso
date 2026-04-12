@@ -467,7 +467,7 @@ export interface ClientMessage {
 /** Executor Context — injected into generated app executors as `ctx` */
 
 export interface ExecutorContext {
-  /** Call any registered OpenClaw tool by name. */
+  /** Call any registered tool by name. */
   callTool(toolName: string, params: Record<string, unknown>): Promise<{ success: boolean; data: unknown; error?: string }>;
 
   /** Convenience: list a directory (wraps enso_fs_list_directory). */

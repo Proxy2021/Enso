@@ -517,7 +517,7 @@ function scanFiles(
   recentFiles.sort((a, b) => b.modified - a.modified);
 
   // Deduplicate projects: remove sub-projects that are inside a parent project
-  // (e.g., openclaw/extensions/slack is inside openclaw — keep only openclaw)
+  // (e.g., project/submodule is inside project — keep only the parent)
   projects.sort((a, b) => a.path.length - b.path.length); // shortest paths first
   const topLevelProjects: DetectedProject[] = [];
   for (const proj of projects) {

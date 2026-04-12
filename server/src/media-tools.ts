@@ -1,4 +1,4 @@
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { existsSync, lstatSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync, unlinkSync } from "fs";
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve } from "path";
 import { homedir, platform } from "os";
@@ -1933,10 +1933,4 @@ export function createMediaTools(): EnsoAgentTool[] {
       execute: async (_callId: string, params: Record<string, unknown>) => styleGallery(params as StyleGalleryParams),
     } as EnsoAgentTool,
   ];
-}
-
-export function registerMediaTools(api?: EnsoPluginApi): void {
-  for (const tool of createMediaTools()) {
-    if (api) api.registerTool(tool);
-  }
 }

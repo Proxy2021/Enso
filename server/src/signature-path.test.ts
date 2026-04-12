@@ -90,7 +90,7 @@ describe("tool-driven follow-up path", () => {
   });
 
   it("auto-registers generic templates for unknown runtime tool families", () => {
-    const key = Symbol.for("openclaw.pluginRegistryState");
+    const key = Symbol.for("enso.pluginRegistryState");
     const globalRecord = globalThis as Record<symbol, unknown>;
     const previous = globalRecord[key];
     globalRecord[key] = {

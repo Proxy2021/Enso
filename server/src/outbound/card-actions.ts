@@ -856,8 +856,8 @@ export async function handlePluginCardAction(params: {
 
     const resultData = {
       title: action === "search_plugins"
-        ? `OpenClaw plugins matching "${query}"`
-        : "Loaded OpenClaw plugins",
+        ? `Enso plugins matching "${query}"`
+        : "Loaded Enso plugins",
       totalPlugins: filtered.length,
       totalTools: filtered.reduce((acc, e) => acc + e.tools.length, 0),
       query: action === "search_plugins" ? query : undefined,
@@ -878,7 +878,7 @@ export async function handlePluginCardAction(params: {
       action,
       payload,
       data: resultData,
-      assistantText: "Showing currently loaded OpenClaw plugins and tools from runtime registry.",
+      assistantText: "Showing currently loaded Enso plugins and tools from runtime registry.",
     });
     ctx.currentData = structuredClone(followup.renderData);
 
@@ -1482,7 +1482,7 @@ export async function handlePluginCardAction(params: {
   }
 
   // ── Path 2: Native tool invocation ──
-  // If the card was produced by a tool from a co-loaded OpenClaw plugin,
+  // If the card was produced by a tool from a co-loaded plugin,
   // try to handle the action by calling the tool directly via the registry.
   if (ctx.appToolHint) {
     let toolCall: { toolName: string; params: Record<string, unknown> } | null = null;
@@ -1997,7 +1997,7 @@ Requirements:
     return;
   }
 
-  // No mechanical handler matched — route through OpenClaw agent.
+  // No mechanical handler matched — route through agent pipeline.
   const p = (payload ?? {}) as Record<string, unknown>;
   let actionMessage: string;
 
@@ -2029,8 +2029,8 @@ Please respond with updated or detailed information for this action.`;
     });
   }
 
-  const { handleEnsoInbound } = await import("../inbound.js");
-  await handleEnsoInbound({
+  const { handleInbound } = await import("../agent-adapter.js");
+  await handleInbound({
     message: {
       messageId: randomUUID(),
       sessionId: client.sessionKey,

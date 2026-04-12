@@ -1,4 +1,4 @@
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync, readdirSync } from "fs";
 import { join } from "path";
 import { homedir, tmpdir } from "os";
@@ -740,10 +740,4 @@ export function createBrowserTools(): EnsoAgentTool[] {
       },
     } as EnsoAgentTool,
   ];
-}
-
-export function registerBrowserTools(api?: EnsoPluginApi): void {
-  for (const tool of createBrowserTools()) {
-    if (api) api.registerTool(tool);
-  }
 }

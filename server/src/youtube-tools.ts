@@ -6,7 +6,7 @@
  */
 
 import { google } from "googleapis";
-import type { EnsoAgentTool, EnsoPluginApi } from "./local-types.js";
+import type { EnsoAgentTool } from "./local-types.js";
 import { getAuthenticatedClient, isAuthorized } from "./youtube-auth.js";
 import { logAction, logError } from "./action-log.js";
 
@@ -607,12 +607,4 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
     } as EnsoAgentTool,
   ];
-}
-
-// ── Registration ──
-
-export function registerYouTubeTools(api?: EnsoPluginApi): void {
-  for (const tool of createYouTubeTools()) {
-    if (api) api.registerTool(tool);
-  }
 }
