@@ -388,16 +388,6 @@ function GeneratedUI({ data, onAction }) {
           </div>
         )}
 
-        {/* Cortex wiki content */}
-        {cortexContent && !research && (
-          <UICard style={{ padding: "12px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Knowledge (Cortex)</div>
-            <div style={{ fontSize: "12px", color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: "300px", overflow: "auto" }}>
-              {cortexContent.replace(/^#.*\n/gm, "").trim().slice(0, 2000)}
-            </div>
-          </UICard>
-        )}
-
         {/* Related entities — cross-source with reasons */}
         {related.length > 0 && (function() {
           var sourceIcons = { kindle: "📚", weread: "📚", steam: "🎮", movies_tv: "🎬", youtube: "📺", photos: "📷", qq_music: "🎵", twitter: "🐦", files: "💻", cortex: "🧠", research: "🔬", manual: "📝" };
@@ -685,24 +675,6 @@ function GeneratedUI({ data, onAction }) {
             </div>
           </UICard>
         )}
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Clapperboard size={22} style={{ color: "#a78bfa" }} />
-            <span style={{ fontWeight: 600, fontSize: "16px" }}>Movies & TV</span>
-            <span style={{ fontSize: "12px", color: "#64748b" }}>
-              {d.filteredCount === d.totalItems
-                ? d.totalItems + " titles"
-                : d.filteredCount + " of " + d.totalItems}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: "6px" }}>
-            <Button variant="outline" size="sm" onClick={function() { onAction("scan", {}); }}>Scan</Button>
-            <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>Enrich</Button>
-            <Button variant="default" size="sm" onClick={function() { if (addInput.trim()) onAction("add", { query: addInput.trim() }); }}>➕ Add Movie</Button>
-          </div>
-        </div>
 
         {/* Stats row */}
         {d.totalItems > 0 && (

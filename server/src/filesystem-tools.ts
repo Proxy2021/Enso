@@ -353,16 +353,11 @@ function openExternal(params: OpenExternalParams): AgentToolResult {
   if (!safe.ok) return errorResult(safe.error);
   if (!existsSync(safe.path)) return errorResult(`path does not exist: ${safe.path}`);
 
-  // Reject paths with characters that could break shell commands
-  if (/[<>|&"'`$]/.test(safe.path)) {
-    return errorResult("path contains invalid characters for external open");
-  }
-
   try {
     const plat = platform();
     if (plat === "win32") {
-      // Use execFile with cmd.exe /c start to avoid shell injection via execSync
-      execFile("cmd.exe", ["/c", "start", "", safe.path], { windowsHide: true }, () => {});
+      // cmd.exe /c start "" "path" — empty title in quotes, then quoted path for spaces/special chars
+      execFile("cmd.exe", ["/c", "start", "", `"${safe.path}"`], { windowsHide: true }, () => {});
     } else if (plat === "darwin") {
       execFile("open", [safe.path], () => {});
     } else {

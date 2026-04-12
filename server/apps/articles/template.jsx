@@ -154,12 +154,6 @@ function GeneratedUI({ data, onAction }) {
             })}
           </UICard>
         )}
-        {cortexContent && !research && (
-          <UICard style={{ padding: "14px" }}>
-            <h3 style={{ color: "#a78bfa", fontSize: "14px", margin: "0 0 6px" }}>📄 Knowledge (Cortex)</h3>
-            <div style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{cortexContent.slice(0, 1000)}</div>
-          </UICard>
-        )}
         {related.length > 0 && (function() {
           var sourceIcons = { kindle: "📚", weread: "📚", steam: "🎮", movies_tv: "🎬", youtube: "📺", photos: "📷", qq_music: "🎵", twitter: "🐦", files: "💻", cortex: "🧠", research: "🔬", manual: "📝" };
           var sourceLabels = { kindle: "kindle", weread: "weread", steam: "steam", movies_tv: "movie", youtube: "youtube", photos: "photo", qq_music: "music", twitter: "twitter", files: "project" };
@@ -276,12 +270,7 @@ function GeneratedUI({ data, onAction }) {
     var articles = Array.isArray(d.articles) ? d.articles : [];
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <span style={{ fontSize: "20px", marginRight: "8px" }}>📰</span>
-            <span style={{ fontWeight: 600 }}>News & Articles</span>
-            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>{d.totalArticles} saved</span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
           <Button variant="default" size="sm" onClick={function() { onAction("trending", {}); }}>🔥 Trending</Button>
         </div>
 

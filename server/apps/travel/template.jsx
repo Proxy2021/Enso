@@ -460,16 +460,6 @@ function GeneratedUI({ data, onAction }) {
           </div>
         )}
 
-        {/* Cortex wiki content fallback */}
-        {cortexContent && !research && !isEnriched && (
-          <UICard style={{ padding: "14px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Knowledge (Cortex)</div>
-            <div style={{ fontSize: "12px", color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: "300px", overflow: "auto" }}>
-              {cortexContent.replace(/^#.*\n/gm, "").trim().slice(0, 2000)}
-            </div>
-          </UICard>
-        )}
-
         {/* Related entities */}
         {related.length > 0 && (function() {
           var sourceIcons = { kindle: "📚", weread: "📚", steam: "🎮", movies_tv: "🎬", youtube: "📺", photos: "📷", qq_music: "🎵", twitter: "🐦", files: "💻", cortex: "🧠", research: "🔬", manual: "📝" };
@@ -617,16 +607,8 @@ function GeneratedUI({ data, onAction }) {
     var unenrichedCount = places.length - enrichedCount;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <span style={{ fontSize: "20px", marginRight: "8px" }}>🌍</span>
-            <span style={{ fontWeight: 600 }}>Places & Travel</span>
-            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>{d.totalPlaces} destinations{enrichedCount > 0 ? " · " + enrichedCount + " enriched" : ""}</span>
-          </div>
-          <div style={{ display: "flex", gap: "6px" }}>
-            {unenrichedCount > 0 && <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>✨ Enrich ({unenrichedCount})</Button>}
-            <Button variant="default" size="sm" onClick={function() { onAction("discover", {}); }}>🔍 Discover</Button>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+          <Button variant="default" size="sm" onClick={function() { onAction("discover", {}); }}>🔍 Discover</Button>
         </div>
 
         <div style={{ display: "flex", gap: "8px", background: "#0f3a2e", padding: "8px 10px", borderRadius: "8px", border: "1px solid #065f46" }}>

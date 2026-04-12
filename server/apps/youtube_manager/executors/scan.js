@@ -66,6 +66,11 @@ try {
   } catch (e2) { /* cache write failed - data still in result */ }
 }
 
+try {
+  var pipeline = await import("../../../../server/src/data-source-pipeline.js");
+  pipeline.runPostScanPipeline(["youtube"]).catch(function() {});
+} catch(e) { /* pipeline unavailable */ }
+
 return { content: [{ type: "text", text: JSON.stringify({
   tool: "enso_youtube_manager_scan",
   totalSubscriptions: subscriptions.length,

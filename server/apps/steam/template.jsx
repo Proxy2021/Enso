@@ -247,16 +247,6 @@ function GeneratedUI({ data, onAction }) {
 
         {/* Detail fields already shown in header card above */}
 
-        {/* Cortex wiki content */}
-        {cortexContent && !research && (
-          <UICard style={{ padding: "12px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Knowledge (Cortex)</div>
-            <div style={{ fontSize: "12px", color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: "300px", overflow: "auto" }}>
-              {cortexContent.replace(/^#.*\n/gm, "").trim().slice(0, 2000)}
-            </div>
-          </UICard>
-        )}
-
         {/* Related entities — cross-source with reasons */}
         {related.length > 0 && (function() {
           var sourceIcons = { kindle: "📚", weread: "📚", steam: "🎮", movies_tv: "🎬", youtube: "📺", photos: "📷", qq_music: "🎵", twitter: "🐦", files: "💻", cortex: "🧠", research: "🔬", manual: "📝" };
@@ -512,27 +502,6 @@ function GeneratedUI({ data, onAction }) {
             </div>
           </UICard>
         )}
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Gamepad2 size={22} style={{ color: "#60a5fa" }} />
-            <span style={{ fontWeight: 600, fontSize: "16px" }}>Steam Library</span>
-            <span style={{ fontSize: "12px", color: "#64748b" }}>
-              {d.filteredCount === d.totalGames
-                ? d.totalGames + " games"
-                : d.filteredCount + " of " + d.totalGames + " games"}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: "6px" }}>
-            <Button variant="outline" size="sm" onClick={function() { onAction("scan", {}); }}>Scan</Button>
-            <Button variant="outline" size="sm" onClick={function() { onAction("enrich", {}); }}>Enrich</Button>
-            <Button variant="default" size="sm" onClick={function() { if (addInput.trim()) onAction("add", { query: addInput.trim() }); }}>➕ Add Game</Button>
-            <Button variant="outline" size="sm" onClick={function() { onAction("update", {}); }}>
-              <RefreshCw size={13} style={{ marginRight: "4px" }} />Update
-            </Button>
-          </div>
-        </div>
 
         {/* Add Game search bar */}
         <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
