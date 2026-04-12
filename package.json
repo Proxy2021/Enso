@@ -1,8 +1,8 @@
 {
   "name": "enso",
   "private": true,
-  "version": "0.5.14",
-  "versionCode": 220,
+  "version": "0.5.15",
+  "versionCode": 221,
   "description": "Self-hosted AI platform with a Knowledge Cortex that compounds with every interaction — data source apps, unified LLM layer, and a brain that learns from your books, browsing, projects, and conversations",
   "type": "module",
   "scripts": {
