@@ -356,14 +356,14 @@ function GeneratedUI({ data, onAction }) {
           return (
             <UICard style={{ padding: "12px" }}>
               <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>🔗 Related</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
                 {related.map(function(r) {
                   var icon = sourceIcons[r.source] || "📄";
                   var reason = relatedReasons[r.entityId] || r.reason;
                   var label = sourceLabels[r.source] || r.source;
                   var card = (
                     <div key={r.entityId}
-                      style={{ display: "flex", gap: "8px", alignItems: "center", padding: "6px 8px", background: "#1e293b", borderRadius: "8px", cursor: "pointer", border: "1px solid #334155", transition: "border-color 0.2s" }}
+                      style={{ display: "flex", gap: "8px", alignItems: "center", padding: "6px 8px", background: "#1e293b", borderRadius: "8px", cursor: "pointer", border: "1px solid #334155", transition: "border-color 0.2s", overflow: "hidden" }}
                       onClick={function() { onAction("view_entity", { entityId: r.entityId }); }}
                       title={reason || r.title}>
                       {r.imageUrl ? (
@@ -371,8 +371,8 @@ function GeneratedUI({ data, onAction }) {
                       ) : (
                         <div style={{ width: "36px", height: "52px", borderRadius: "4px", flexShrink: 0, background: "#334155", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>{icon}</div>
                       )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</div>
+                      <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 600, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", lineHeight: "1.3" }}>{r.title}</div>
                         <div style={{ fontSize: "9px", color: "#64748b", marginTop: "2px" }}>{icon} {label}</div>
                       </div>
                     </div>
