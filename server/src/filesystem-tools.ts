@@ -349,9 +349,11 @@ function openFile(params: OpenFileParams): AgentToolResult {
 }
 
 function openExternal(params: OpenExternalParams): AgentToolResult {
-  const safe = safeResolvePath(params.path);
-  if (!safe.ok) return errorResult(safe.error);
-  if (!existsSync(safe.path)) return errorResult(`path does not exist: ${safe.path}`);
+  if (!params.path?.trim()) return errorResult("path is required");
+  if (params.path.includes("\0")) return errorResult("path contains invalid characters");
+  const resolved = resolve(params.path);
+  if (!existsSync(resolved)) return errorResult(`path does not exist: ${resolved}`);
+  const safe = { ok: true as const, path: resolved };
 
   try {
     const plat = platform();

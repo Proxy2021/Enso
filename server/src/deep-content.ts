@@ -22,7 +22,7 @@ import { readdirSync } from "node:fs";
 import { logAction, logError } from "./action-log.js";
 import { llm } from "./llm.js";
 import { renderPodcastAudio, pcmToWav } from "./podcast.js";
-import { resolveEntity, type EntityId } from "./entity-model.js";
+import { resolveEntity, lookupEntity, getEntityIndex, type EntityId } from "./entity-model.js";
 import { braveWebSearch, fetchPageContent } from "./researcher-tools.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -106,9 +106,11 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
     searchQueries: (title, meta) => [
       `"${title}" by ${meta.author || ""} chapter summary`,
       `"${title}" key themes main arguments insights`,
-      `"${title}" book review analysis`,
+      `"${title}" book review analysis in-depth`,
       `"${title}" chapter by chapter breakdown`,
       `"${title}" criticism counterarguments perspectives`,
+      `"${title}" book summary key takeaways actionable`,
+      `site:goodreads.com "${title}" review`,
       ...(meta.categories?.[0] ? [`"${title}" ${meta.categories[0]} implications`] : []),
     ],
     synthesisHint: "book analysis expert creating chapter summaries, core thesis, key insights with examples",
@@ -120,6 +122,8 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
       `"${title}" ${meta.developer || ""} game design philosophy`,
       `"${title}" metacritic community discussion`,
       `"${title}" story narrative analysis`,
+      `"${title}" game retrospective`,
+      `"${title}" game design analysis GDC`,
     ],
     synthesisHint: "game critic analyzing gameplay mechanics, story, art direction, technical performance, and player reception",
   },
@@ -130,6 +134,8 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
       `"${title}" cast performances review`,
       `"${title}" ${meta.director || ""} director vision`,
       `"${title}" cultural impact significance`,
+      `"${title}" film analysis essay`,
+      `site:letterboxd.com "${title}" review`,
     ],
     synthesisHint: "film critic analyzing plot, performances, themes, cinematography, and cultural significance",
   },
@@ -140,6 +146,7 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
       `"${title}" cast character development`,
       `"${title}" themes storytelling`,
       `"${title}" critical reception audience response`,
+      `"${title}" tv series deep dive essay`,
     ],
     synthesisHint: "TV critic analyzing story arcs, character development, production quality, and cultural impact",
   },
@@ -149,6 +156,7 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
       `"${title}" youtube best videos recommendations`,
       `${meta.category || ""} youtube content creators strategy`,
       `"${title}" subscriber community engagement`,
+      `"${title}" youtube channel why popular`,
     ],
     synthesisHint: "YouTube content analyst examining content strategy, audience engagement, production quality, and growth",
   },
@@ -158,6 +166,7 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
       `"${title}" ${(meta.technologies as string[])?.[0] || ""} analysis`,
       `"${title}" github alternatives comparison`,
       `"${title}" tutorial getting started`,
+      `"${title}" open source retrospective lessons`,
     ],
     synthesisHint: "software architect analyzing architecture, code quality, ecosystem positioning, and developer experience",
   },
@@ -167,6 +176,7 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
       `"${title}" analysis key points`,
       `"${title}" implications discussion`,
       `${meta.author || ""} related articles insights`,
+      `"${title}" response critique rebuttal`,
     ],
     synthesisHint: "senior journalist dissecting the article's arguments, evidence quality, broader implications, and what readers should take away",
   },
@@ -178,6 +188,8 @@ const ENTITY_PROFILES: Record<string, EntityProfile> = {
       `${title} photography spots best views`,
       `${title} food cuisine restaurants must try`,
       `${title} practical travel tips transportation accommodation`,
+      `site:lonelyplanet.com ${title}`,
+      `${title} local perspective insider guide`,
     ],
     synthesisHint: "experienced travel writer creating an immersive guide with insider knowledge, cultural context, practical tips, and photography recommendations",
   },
@@ -404,6 +416,7 @@ export async function researchEntity(params: {
   metadata?: Record<string, unknown>;
   cortexContent?: string;
   relatedEntityTitles?: string[];
+  userProfile?: string;
   language?: string;
   onProgress?: (progress: DeepContentProgress) => void;
 }): Promise<EntityResearchResult> {
@@ -440,13 +453,47 @@ export async function researchEntity(params: {
   const topSources = allResults.slice(0, 15);
   const contentPromises = topSources.map(async (src) => {
     const content = await fetchPageContent(src.url);
-    return { ...src, content: content.slice(0, 4000) }; // Allow longer content for books
+    return { ...src, content: content.slice(0, 6000) };
   });
   const sourcesWithContent = await Promise.all(contentPromises);
-  const richSources = sourcesWithContent.filter(s => s.content.length > 100);
 
-  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Extracted content from ${richSources.length} sources for "${title}"` });
-  onProgress?.({ phase: "researching", detail: `Synthesizing ${richSources.length} sources into analysis...` });
+  // Score sources by quality: content length, domain authority, title relevance
+  const QUALITY_DOMAINS = new Set([
+    "goodreads.com", "letterboxd.com", "arstechnica.com", "lonelyplanet.com",
+    "rogerebert.com", "theguardian.com", "nytimes.com", "newyorker.com",
+    "wired.com", "theatlantic.com", "gamedeveloper.com", "eurogamer.com",
+    "ign.com", "douban.com", "zhihu.com", "metacritic.com",
+  ]);
+  const titleWords = new Set(title.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+
+  const scoredSources = sourcesWithContent
+    .filter(s => s.content.length > 100)
+    .map(s => {
+      let score = 0;
+      // Length bonus: richer content is more useful
+      if (s.content.length > 3000) score += 3;
+      else if (s.content.length > 1500) score += 2;
+      else if (s.content.length > 500) score += 1;
+      // Domain authority bonus
+      try {
+        const domain = new URL(s.url).hostname.replace(/^www\./, "");
+        if (QUALITY_DOMAINS.has(domain)) score += 3;
+      } catch { /* ignore invalid URLs */ }
+      // Title relevance bonus
+      const srcTitle = (s.title || "").toLowerCase();
+      let relevance = 0;
+      for (const w of titleWords) { if (srcTitle.includes(w)) relevance++; }
+      if (relevance >= 2) score += 2;
+      else if (relevance >= 1) score += 1;
+      return { ...s, qualityScore: score };
+    })
+    .sort((a, b) => b.qualityScore - a.qualityScore)
+    .slice(0, 12); // Take top 12 by quality (not first 15 by search order)
+
+  const richSources = scoredSources;
+
+  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Extracted content from ${richSources.length} sources for "${title}" (top scores: ${richSources.slice(0, 3).map(s => s.qualityScore).join(",")})` });
+  onProgress?.({ phase: "researching", detail: `Synthesizing ${richSources.length} quality sources into analysis...` });
 
   // Build synthesis prompt
   const sourcesText = richSources.map((s, i) =>
@@ -454,17 +501,21 @@ export async function researchEntity(params: {
   ).join("\n\n---\n\n");
 
   const userContext = relatedEntityTitles?.length
-    ? `\nUser's related interests: ${relatedEntityTitles.join(", ")}`
+    ? `\nUser's related interests (from their personal library):\n${relatedEntityTitles.join("\n")}`
     : "";
 
   const cortexContext = cortexContent
     ? `\nExisting knowledge about this content:\n${cortexContent.slice(0, 2000)}`
     : "";
 
+  const profileContext = params.userProfile
+    ? `\nUSER PROFILE (tailor insights to this person's interests and expertise):\n${params.userProfile.slice(0, 1500)}`
+    : "";
+
   const langRule = lang !== "English" ? `\n\nCRITICAL LANGUAGE RULE: ALL output text MUST be written in ${lang}. All chapter summaries, insights, thesis, perspectives, author background — EVERYTHING must be in ${lang}. Do NOT write in English.` : "";
 
   const synthesisPrompt = `You are a ${profile.synthesisHint} creating an exhaustive deep-dive into "${title}" by ${author}. Your goal is to capture the FULL essence of this content — every major idea, argument, and insight.${langRule}
-${userContext}${cortexContext}
+${userContext}${profileContext}${cortexContext}
 
 SOURCES:
 ${sourcesText}
@@ -489,6 +540,8 @@ CRITICAL RULES:
 - Use your own knowledge of this book to supplement the sources — you likely know this book well
 - estimatedDepth: "light" ONLY if the book is truly obscure with <3 sources; most well-known books should be "moderate" or "rich"
 - Aim for maximum depth and completeness — this will be turned into a 15-30 minute podcast
+- When a USER PROFILE is provided, connect insights to the user's specific interests, projects, and expertise where relevant — make insights personally actionable
+- When related interests are provided, note meaningful cross-connections (e.g., how a book's framework applies to a game's design, or how a film's theme echoes a project's challenge)
 - Respond ONLY with the JSON object, no other text`;
 
   const synthesisResult = await llm({
@@ -832,24 +885,117 @@ export async function generateDeepContent(params: {
     } catch { /* ignore */ }
   }
 
-  // Get related entity titles from entity index
-  const { getEntitiesBySource } = await import("./entity-model.js");
-  const relatedTitles = getEntitiesBySource("kindle" as never, 10)
-    .filter(e => e.entityId !== entityId)
-    .map(e => e.title)
-    .slice(0, 5);
+  // Read user profile for personalized synthesis
+  let userProfile: string | undefined;
+  try {
+    const profilePath = join(homedir(), ".enso", "wiki", "synthesis", "user-profile.md");
+    if (existsSync(profilePath)) {
+      userProfile = readFileSync(profilePath, "utf-8");
+    }
+  } catch { /* ignore */ }
+
+  // Get related entity context from cross-references + semantic tag overlap
+  const relatedTitles: string[] = [];
+  const indexEntry = lookupEntity(entityId);
+
+  // 1. Explicit cross-references (highest quality — LLM-curated connections)
+  if (indexEntry?.crossReferences?.length) {
+    for (const xref of indexEntry.crossReferences) {
+      const related = lookupEntity(xref.entityId);
+      if (related) {
+        relatedTitles.push(`${related.title} (${related.type}, ${related.source}) — ${xref.reason}`);
+      }
+    }
+  }
+
+  // 2. Semantic tag overlap — find entities sharing themes across different sources
+  if (relatedTitles.length < 8 && indexEntry?.semanticTags?.length) {
+    const tags = new Set(indexEntry.semanticTags);
+    const allEntities = getEntityIndex();
+    for (const [id, entry] of allEntities) {
+      if (relatedTitles.length >= 8) break;
+      if (id === entityId) continue;
+      if (entry.source === indexEntry.source) continue; // cross-source only
+      const overlap = (entry.semanticTags || []).filter(t => tags.has(t));
+      if (overlap.length >= 2) {
+        relatedTitles.push(`${entry.title} (${entry.type}) — shared themes: ${overlap.join(", ")}`);
+      }
+    }
+  }
 
   const contentLanguage = resolveLanguage(title);
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Starting pipeline for "${title}" by ${author} [lang=${contentLanguage}]` });
 
   // Phase 1: Research
   onProgress?.({ phase: "researching", detail: "Searching the web...", percentComplete: 5 });
-  const research = await researchEntity({
+  let research = await researchEntity({
     entityId, title, author, description, categories,
     cortexContent, relatedEntityTitles: relatedTitles,
+    userProfile,
     language: contentLanguage,
     onProgress,
   });
+
+  // Quality gate: if research is thin, retry with broader queries
+  const researchQuality = {
+    chapters: research.chapterSummaries.length,
+    insights: research.keyInsights.length,
+    depth: research.estimatedDepth,
+    sources: research.sources.length,
+    retried: false,
+  };
+
+  if (research.chapterSummaries.length < 4 && research.keyInsights.length < 4) {
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Quality gate: thin research for "${title}" (${researchQuality.chapters} chapters, ${researchQuality.insights} insights). Retrying with broader queries...` });
+    onProgress?.({ phase: "researching", detail: "Research too thin — retrying with broader queries...", percentComplete: 15 });
+
+    // Retry with reformulated queries: use entity type + broader terms
+    const entityType = entity.type || "book";
+    const retryProfile: EntityProfile = {
+      searchQueries: () => [
+        `${title} ${author} comprehensive analysis`,
+        `${title} summary key ideas takeaways`,
+        `${title} review in-depth`,
+        `${title} ${entityType} discussion themes`,
+        `${title} why important significance`,
+      ],
+      synthesisHint: getEntityProfile(entityType).synthesisHint,
+    };
+    const retryQueries = retryProfile.searchQueries(title, { author, categories, ...entity.metadata });
+    const retryResults: Array<{ title: string; url: string; description: string }> = [];
+    const retrySearches = retryQueries.map(q => braveWebSearch(q, 8).catch(() => []));
+    const retrySearchResults = await Promise.all(retrySearches);
+    const retrySeen = new Set(research.sources.map(s => s.url));
+    for (const results of retrySearchResults) {
+      for (const r of results) {
+        if (!retrySeen.has(r.url)) { retrySeen.add(r.url); retryResults.push(r); }
+      }
+    }
+
+    if (retryResults.length > 0) {
+      // Re-run synthesis with additional sources merged in
+      research = await researchEntity({
+        entityId, title, author, description, categories,
+        cortexContent, relatedEntityTitles: relatedTitles,
+        userProfile,
+        language: contentLanguage,
+        entityType,
+        onProgress,
+      });
+      researchQuality.retried = true;
+      researchQuality.chapters = research.chapterSummaries.length;
+      researchQuality.insights = research.keyInsights.length;
+      researchQuality.depth = research.estimatedDepth;
+      researchQuality.sources = research.sources.length;
+    }
+  }
+
+  // If still thin after retry, force "light" depth so outline targets shorter duration
+  if (research.chapterSummaries.length < 3 && research.keyInsights.length < 3) {
+    research.estimatedDepth = "light";
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Research quality for "${title}": ${researchQuality.chapters} chapters, ${researchQuality.insights} insights, depth=${researchQuality.depth}, sources=${researchQuality.sources}, retried=${researchQuality.retried}` });
 
   // Phase 2: Outline
   onProgress?.({ phase: "generating_outline", detail: "Planning podcast structure...", percentComplete: 25 });

@@ -964,6 +964,19 @@ export async function startEnsoServer(opts: {
         return;
       }
 
+      if (action === "open_external_app") {
+        const filePath = String((payload || {}).path ?? "").trim();
+        if (!filePath) { res.json({ error: "No file path provided" }); return; }
+        try {
+          const { executeToolDirect } = await import("./native-tools/registry.js");
+          const result = await executeToolDirect("enso_fs_open_external", { path: filePath });
+          res.json(result.success ? { success: true, message: "Opened in external app" } : { error: String(result.error ?? "Failed to open") });
+        } catch (err) {
+          res.json({ error: `Failed to open: ${err instanceof Error ? err.message : String(err)}` });
+        }
+        return;
+      }
+
       if (action === "share_wechat") {
         const p = payload || {};
         const content = String(p.content ?? "").trim();
@@ -1181,9 +1194,9 @@ export async function startEnsoServer(opts: {
   });
 
   // ── Reload entity index from disk (for after external edits) ──
-  app.post("/api/entity-index/reload", (_req, res) => {
+  app.post("/api/entity-index/reload", async (_req, res) => {
     try {
-      const { loadEntityIndex } = require("./entity-model.js") as typeof import("./entity-model.js");
+      const { loadEntityIndex } = await import("./entity-model.js");
       loadEntityIndex();
       res.json({ ok: true });
     } catch (err) {

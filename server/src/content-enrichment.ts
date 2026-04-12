@@ -21,7 +21,7 @@ import { homedir } from "node:os";
 import { logAction, logError } from "./action-log.js";
 import {
   parseEntityId, entityCortexPath, slugify,
-  upsertEntityIndex, saveEntityIndex,
+  upsertEntityIndex, saveEntityIndex, lookupEntity,
   type EntityType, type EntitySource, type EntityIndexEntry,
 } from "./entity-model.js";
 import type { DirectIngestPage } from "./data-source-registry.js";
@@ -108,7 +108,15 @@ async function enrichBook(entityId: string, info: { title: string; creator: stri
   });
 
   writeFileSync(info.fullPath, lines, "utf-8");
-  updateEntityIndex(entityId, info, coverUrl, categories, desc);
+  updateEntityIndex(entityId, info, coverUrl, categories, desc, {
+    author: author !== "Unknown" ? author : undefined,
+    publisher: vol.publisher as string || undefined,
+    publicationDate: vol.publishedDate as string || undefined,
+    pageCount: vol.pageCount as number || undefined,
+    rating: vol.averageRating as number || undefined,
+    reviewCount: vol.ratingsCount as number || undefined,
+    subtitle: vol.subtitle as string || undefined,
+  });
   logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched book "${info.title}": ${vol.pageCount || "?"} pages, ${categories.join(", ")}` });
   return true;
 }
@@ -154,7 +162,14 @@ async function enrichMovie(entityId: string, info: { title: string; creator: str
   });
 
   writeFileSync(info.fullPath, lines, "utf-8");
-  updateEntityIndex(entityId, info, posterUrl, genres, overview);
+  updateEntityIndex(entityId, info, posterUrl, genres, overview, {
+    director: directors.join(", ") || undefined,
+    cast: cast.length ? cast : undefined,
+    rating: rating || undefined,
+    reviewCount: d.vote_count as number || undefined,
+    releaseDate: year || undefined,
+    runtime: d.runtime ? `${d.runtime} min` : undefined,
+  });
   logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched ${type} "${info.title}": ⭐${rating.toFixed(1)}, ${genres.join(", ")}` });
   return true;
 }
@@ -257,7 +272,7 @@ function buildCortexPage(title: string, opts: {
   return lines.join("\n");
 }
 
-function updateEntityIndex(entityId: string, info: { title: string; cortexPath: string }, imageUrl: string, categories: string[], description: string): void {
+function updateEntityIndex(entityId: string, info: { title: string; cortexPath: string }, imageUrl: string, categories: string[], description: string, extraMetadata?: Record<string, unknown>): void {
   const parsed = parseEntityId(entityId);
   if (!parsed) return;
 
@@ -269,10 +284,25 @@ function updateEntityIndex(entityId: string, info: { title: string; cortexPath: 
   };
   updateIndexEntry(info.cortexPath, page);
 
+  // Preserve existing metadata from initial ingest and merge enrichment data
+  const existing = lookupEntity(entityId);
+  const mergedMetadata = {
+    ...(existing?.metadata ?? {}),
+    ...(extraMetadata ?? {}),
+  };
+  if (description) mergedMetadata.description = description;
+  if (categories.length) mergedMetadata.categories = categories;
+
   upsertEntityIndex({
     entityId, type: parsed.type as EntityType, source: parsed.source as EntitySource,
-    title: info.title, slug: parsed.slug, imageUrl, cortexPath: info.cortexPath,
+    title: info.title, slug: parsed.slug,
+    imageUrl: imageUrl || existing?.imageUrl,
+    cortexPath: info.cortexPath,
     tags: page.tags, updatedAt: new Date().toISOString(),
+    metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+    semanticTags: existing?.semanticTags,
+    crossReferences: existing?.crossReferences,
+    recommendedVideos: existing?.recommendedVideos,
   });
   saveEntityIndex();
 }
@@ -436,11 +466,15 @@ ${combinedText.slice(0, 8000)}`;
       };
       updateIndexEntry(info.cortexPath, page);
 
+      const existingPlace = lookupEntity(entityId);
       upsertEntityIndex({
         entityId, type: parsed.type as EntityType, source: parsed.source as EntitySource,
-        title: info.title, slug: parsed.slug, imageUrl, cortexPath: info.cortexPath,
+        title: info.title, slug: parsed.slug,
+        imageUrl: imageUrl || existingPlace?.imageUrl,
+        cortexPath: info.cortexPath,
         tags: page.tags, updatedAt: new Date().toISOString(),
         metadata: {
+          ...(existingPlace?.metadata ?? {}),
           country, region, description: desc,
           bestTimeToVisit: String(structured.bestTimeToVisit || ""),
           currency: String(structured.currency || ""),
@@ -453,6 +487,9 @@ ${combinedText.slice(0, 8000)}`;
           guideUrl: results[0]?.url || "",
           enrichedAt: Date.now(),
         },
+        semanticTags: existingPlace?.semanticTags,
+        crossReferences: existingPlace?.crossReferences,
+        recommendedVideos: existingPlace?.recommendedVideos,
       });
       saveEntityIndex();
     }

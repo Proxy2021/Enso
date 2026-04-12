@@ -133,7 +133,10 @@ export async function sendTextMessage(openId: string, content: string): Promise<
     const data = await sendTextChunk(token, openId, chunk);
 
     if (data.errcode && data.errcode !== 0) {
-      const msg = `WeChat send failed: ${data.errmsg} (code: ${data.errcode})`;
+      const hint = data.errcode === 45015
+        ? " — You need to send a message to the Official Account first (48h session window)."
+        : "";
+      const msg = `WeChat send failed: ${data.errmsg}${hint} (code: ${data.errcode})`;
       logError("wechat", msg);
       return { success: false, message: msg };
     }
@@ -214,8 +217,14 @@ export async function sendArticle(
       thumbMediaId = await getDefaultThumbMediaId(token);
     }
   } catch (err) {
-    logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Thumb upload error: ${err instanceof Error ? err.message : err}, using default` });
-    thumbMediaId = await getDefaultThumbMediaId(token);
+    logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Thumb upload error: ${err instanceof Error ? err.message : err}, falling back to text` });
+    try {
+      thumbMediaId = await getDefaultThumbMediaId(token);
+    } catch (err2) {
+      logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Default thumb also failed: ${err2 instanceof Error ? err2.message : err2}, sending as text` });
+      const plainText = article.content.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+      return sendTextMessage(openId, `${article.title}\n\n${plainText.slice(0, 500)}`);
+    }
   }
 
   // Step 2: Create a draft article
@@ -370,7 +379,8 @@ async function getDefaultThumbMediaId(token: string): Promise<string> {
 
   // Generate a 200x200 solid-color PNG (Enso purple #7c3aed)
   // Minimal valid PNG: header + IHDR + IDAT (uncompressed) + IEND
-  const { createCanvas } = await import("canvas").catch(() => null) as { createCanvas?: (w: number, h: number) => unknown } | null;
+  const canvasMod = await import("canvas").catch(() => null) as { createCanvas?: (w: number, h: number) => unknown } | null;
+  const createCanvas = canvasMod?.createCanvas;
 
   let imgBuffer: Buffer;
   if (createCanvas) {
