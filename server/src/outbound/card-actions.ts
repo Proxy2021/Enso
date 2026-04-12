@@ -1242,9 +1242,19 @@ export async function handlePluginCardAction(params: {
     delete detailData.podcastScript;
     delete detailData.podcastDuration;
     detailData.podcastStatus = "processing";
-    detailData.podcastStatusDetail = "Regenerating podcast...";
+    detailData.podcastStatusDetail = "Regenerating podcast — researching...";
     detailData.podcastPercent = 0;
     ctx.currentData = detailData;
+
+    // Send the cleared state to the client immediately so UI switches to progress view
+    client.send({
+      id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+      state: "delta", targetCardId: cardId,
+      data: detailData,
+      generatedUI: ctx.currentGeneratedUI,
+      cardMode: cardModeFromContext(ctx),
+      timestamp: Date.now(),
+    });
 
     // Fall through to the deep_content handler below to start generation
   }
