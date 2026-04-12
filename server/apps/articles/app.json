@@ -4,19 +4,22 @@
   "spec": {
     "toolFamily": "articles",
     "toolPrefix": "enso_articles_",
-    "description": "News & Articles: save, browse, and deep-dive into articles and news stories. Search the web for articles, save to your Cortex with enrichment, generate AI podcasts, and cross-reference with your entire knowledge base.",
+    "description": "News & Articles: save, browse, and deep-dive into articles and news stories. Search the web for articles, save to your Cortex with OpenGraph enrichment, generate AI podcasts, and cross-reference with your entire knowledge base.",
     "signatureId": "articles_library",
     "tools": [
       {
         "suffix": "browse",
         "label": "Browse Articles",
-        "description": "Browse saved articles and news stories from your Cortex.",
+        "description": "Browse saved articles with images, authors, and source domains. Filter by topic, search, sort, and paginate.",
         "isPrimary": true,
         "parameters": {
           "type": "object",
           "properties": {
             "query": { "type": "string", "description": "Search within saved articles" },
-            "topic": { "type": "string", "description": "Filter by topic/tag" }
+            "topic": { "type": "string", "description": "Filter by topic/tag" },
+            "sortBy": { "type": "string", "enum": ["date", "title"], "description": "Sort order (default: date)" },
+            "page": { "type": "number", "description": "Page number (default: 1)" },
+            "pageSize": { "type": "number", "description": "Articles per page (default: 20)" }
           },
           "additionalProperties": false
         }
@@ -24,7 +27,7 @@
       {
         "suffix": "add",
         "label": "Save Article",
-        "description": "Search for an article by title or topic and save it to your knowledge base with full content extraction.",
+        "description": "Search for an article by title, topic, or URL. Fetches OpenGraph metadata (image, author, date) for rich preview before saving.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -42,6 +45,18 @@
           "type": "object",
           "properties": {
             "topic": { "type": "string", "description": "Optional topic focus (default: auto from Cortex themes)" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "enrich",
+        "label": "Enrich Articles",
+        "description": "Fetch OpenGraph metadata (images, authors, dates) for articles missing enrichment. Backfills existing articles.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "limit": { "type": "number", "description": "Max articles to enrich (default: 20)" }
           },
           "additionalProperties": false
         }

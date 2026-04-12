@@ -211,8 +211,8 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
 
     async fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string }) {
       return withTimeout(`fetch("${url}")`, async () => {
-        // Enforce HTTPS only
-        if (!url.startsWith("https://")) {
+        // Enforce HTTPS only (allow localhost for internal API calls)
+        if (!url.startsWith("https://") && !url.startsWith("http://localhost") && !url.startsWith("http://127.0.0.1")) {
           return { ok: false, status: 0, data: "Only HTTPS URLs are allowed" };
         }
 

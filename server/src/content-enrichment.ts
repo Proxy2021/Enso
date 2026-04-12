@@ -307,39 +307,126 @@ function updateEntityIndex(entityId: string, info: { title: string; cortexPath: 
   saveEntityIndex();
 }
 
+/** Parse OpenGraph / meta tags from raw HTML */
+function extractOpenGraphMeta(html: string): Record<string, string> {
+  const meta: Record<string, string> = {};
+  // og:* and article:* meta tags
+  const ogRe = /<meta\s+(?:property|name)=["'](og:|article:|twitter:)([^"']+)["']\s+content=["']([^"']*?)["']/gi;
+  let match;
+  while ((match = ogRe.exec(html)) !== null) {
+    meta[match[1] + match[2]] = match[3];
+  }
+  // Reversed order: content first
+  const ogRe2 = /<meta\s+content=["']([^"']*?)["']\s+(?:property|name)=["'](og:|article:|twitter:)([^"']+)["']/gi;
+  while ((match = ogRe2.exec(html)) !== null) {
+    const key = match[2] + match[3];
+    if (!meta[key]) meta[key] = match[1];
+  }
+  // Standard meta name/content
+  const metaRe = /<meta\s+name=["'](author|description|publish[_-]?date)["']\s+content=["']([^"']*?)["']/gi;
+  while ((match = metaRe.exec(html)) !== null) {
+    meta[`meta:${match[1]}`] = match[2];
+  }
+  return meta;
+}
+
 async function enrichArticle(entityId: string, info: { title: string; creator: string; cortexPath: string; fullPath: string }): Promise<boolean> {
-  // Use Brave web search to find the article and extract key info
   try {
     const { braveWebSearch, fetchPageContent } = await import("./researcher-tools.js");
-    const results = await braveWebSearch(`"${info.title}" article`, 3);
-    if (!results.length) return false;
 
-    let content = "";
-    let sourceUrl = results[0].url;
+    // Try to find existing URL from the wiki page
+    let sourceUrl = "";
+    try {
+      const existing = lookupEntity(entityId);
+      sourceUrl = String(existing?.metadata?.url || existing?.metadata?.sourceUrl || "");
+      if (!sourceUrl) {
+        // Parse URL from markdown
+        const pageContent = readFileSync(info.fullPath, "utf-8");
+        const urlMatch = pageContent.match(/\*\*(?:URL|Source Link)\*\*:\s*\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+        if (urlMatch) sourceUrl = urlMatch[1];
+      }
+    } catch { /* ignore */ }
+
+    // Fall back to web search if no URL
+    if (!sourceUrl) {
+      const results = await braveWebSearch(`"${info.title}" article`, 3);
+      if (results.length) sourceUrl = results[0].url;
+    }
+    if (!sourceUrl) return false;
+
     let sourceDomain = "";
     try { sourceDomain = new URL(sourceUrl).hostname.replace("www.", ""); } catch { /* ignore */ }
 
-    // Try to fetch the article content
+    // Fetch the page and extract OpenGraph metadata + article text
+    let rawHtml = "";
+    let articleText = "";
+    let ogMeta: Record<string, string> = {};
     try {
-      content = await fetchPageContent(sourceUrl);
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 15_000);
+      const resp = await globalThis.fetch(sourceUrl, {
+        signal: ac.signal,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EnsoBot/1.0)" },
+      });
+      clearTimeout(timer);
+      if (resp.ok) {
+        rawHtml = await resp.text();
+        ogMeta = extractOpenGraphMeta(rawHtml);
+      }
     } catch { /* ignore */ }
 
-    const desc = content.slice(0, 1000) || results[0].description || "";
+    // Extract article text using the existing pipeline
+    try {
+      articleText = await fetchPageContent(sourceUrl);
+    } catch { /* ignore */ }
 
+    // Build metadata from OpenGraph
+    const ogImage = ogMeta["og:image"] || ogMeta["twitter:image"] || "";
+    const ogAuthor = ogMeta["article:author"] || ogMeta["meta:author"] || ogMeta["og:author"] || info.creator || sourceDomain;
+    const ogDate = ogMeta["article:published_time"] || ogMeta["meta:publish_date"] || ogMeta["meta:publishdate"] || "";
+    const ogSiteName = ogMeta["og:site_name"] || sourceDomain;
+    const ogDesc = ogMeta["og:description"] || ogMeta["twitter:description"] || ogMeta["meta:description"] || "";
+
+    const desc = articleText.slice(0, 2000) || ogDesc || "";
+    const summary = (ogDesc || articleText.slice(0, 300)).replace(/\n+/g, " ").trim();
+
+    // Estimate read time
+    const wordCount = articleText ? articleText.split(/\s+/).length : 0;
+    const readTimeMin = wordCount > 0 ? Math.max(1, Math.round(wordCount / 200)) : 0;
+
+    // Build enriched Cortex page
     const lines = buildCortexPage(info.title, {
-      creator: info.creator || sourceDomain, type: "article",
-      description: desc,
+      creator: ogAuthor, type: "article",
+      description: desc.slice(0, 2000),
       extra: [
-        sourceUrl ? `- **URL**: [${sourceDomain}](${sourceUrl})` : "",
-        `- **Found via**: Web search`,
+        `- **URL**: [${sourceDomain}](${sourceUrl})`,
+        ogSiteName ? `- **Site**: ${ogSiteName}` : "",
+        ogDate ? `- **Published**: ${ogDate.slice(0, 10)}` : "",
+        readTimeMin ? `- **Read time**: ~${readTimeMin} min` : "",
+        `- **Found via**: ${sourceUrl ? "Direct URL" : "Web search"}`,
       ].filter(Boolean),
+      coverUrl: ogImage || undefined,
     });
 
     writeFileSync(info.fullPath, lines, "utf-8");
-    updateEntityIndex(entityId, info, "", [], desc.slice(0, 200));
-    logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched article "${info.title}" from ${sourceDomain}` });
+
+    // Update entity index with rich metadata
+    updateEntityIndex(entityId, info, ogImage, [], summary, {
+      url: sourceUrl,
+      sourceUrl,
+      author: ogAuthor,
+      siteName: ogSiteName,
+      publishedDate: ogDate ? ogDate.slice(0, 10) : undefined,
+      readTime: readTimeMin ? `${readTimeMin} min` : undefined,
+      wordCount: wordCount || undefined,
+    });
+
+    logAction({ ts: Date.now(), type: "action", category: "content-enrich", message: `Enriched article "${info.title}" from ${sourceDomain} (image: ${!!ogImage}, words: ${wordCount})` });
     return true;
-  } catch { return false; }
+  } catch (err) {
+    logError("content-enrich", `Failed to enrich article "${info.title}"`, err);
+    return false;
+  }
 }
 
 async function enrichPlace(entityId: string, info: { title: string; creator: string; cortexPath: string; fullPath: string }): Promise<boolean> {

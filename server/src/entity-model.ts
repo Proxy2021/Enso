@@ -174,8 +174,9 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
   },
   "article": {
     sources: ["research", "manual"],
-    cortexPrefix: "synthesis/",
-    detailFields: ["author", "source", "publishedDate", "url", "summary", "topics"],
+    cortexPrefix: "entities/article-",
+    detailFields: ["author", "siteName", "publishedDate", "url", "summary", "topics", "readTime"],
+    appFamily: "articles",
   },
   "place": {
     sources: ["research", "manual", "photos"],
@@ -1052,9 +1053,10 @@ function resolveContentAccess(entity: Entity): Record<string, unknown> {
 
   // ── Articles ──
   if (type === "article") {
-    if (m.url || entity.externalUrl) {
+    const articleUrl = m.url || m.sourceUrl || entity.externalUrl;
+    if (articleUrl) {
       result.primaryAction = "open_web";
-      result.externalUrl = String(m.url || entity.externalUrl);
+      result.externalUrl = String(articleUrl);
       result.label = "Read Article";
       result.icon = "📰";
     }

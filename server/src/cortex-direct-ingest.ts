@@ -272,7 +272,7 @@ export async function ingestDiscoveredEntity(opts: {
   if (opts.creator) meta.author = opts.creator;
   if (opts.year) meta.publicationDate = opts.year;
   if (opts.description) meta.description = opts.description;
-  if (opts.url) meta.sourceUrl = meta.sourceUrl || opts.url;
+  if (opts.url) { meta.sourceUrl = meta.sourceUrl || opts.url; meta.url = opts.url; }
   // Normalize keys to match detailFields conventions
   if (meta.creator && !meta.author) { meta.author = meta.creator; delete meta.creator; }
   if (meta.ratingsCount !== undefined) { meta.reviewCount = meta.ratingsCount; delete meta.ratingsCount; }
