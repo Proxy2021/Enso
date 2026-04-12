@@ -178,7 +178,7 @@ export default function CortexView() {
         appFamily: activeApp.family,
         // Only send currentData for tool actions (browse, search, etc.)
         // Skip for entity actions to avoid 413 payload-too-large with large browse data
-        ...(!["view_entity", "deep_content", "book_podcast", "add_to_cortex", "entity_share_email", "book_share_email", "share_wechat"].includes(action)
+        ...(!["view_entity", "deep_content", "book_podcast", "regenerate_podcast", "add_to_cortex", "entity_share_email", "book_share_email", "share_wechat"].includes(action)
           ? { currentData: appStates[activeApp.family]?.data }
           : {}),
       }),
@@ -224,8 +224,8 @@ export default function CortexView() {
           return;
         }
 
-        // For deep_content: merge podcast status into existing entity data and start polling
-        if ((action === "deep_content" || action === "book_podcast") && data.podcastStatus) {
+        // For deep_content / regenerate: merge podcast status into existing entity data and start polling
+        if ((action === "deep_content" || action === "book_podcast" || action === "regenerate_podcast") && data.podcastStatus) {
           const entityId = (payload as Record<string, unknown>)?.entityId as string;
 
           setAppStates(prev => {
@@ -237,7 +237,11 @@ export default function CortexView() {
               return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
             }
             // Otherwise merge processing status into current view
-            const merged = { ...currentData, podcastStatus: data.podcastStatus, podcastStatusDetail: data.message };
+            // For regenerate: clear old podcast data so UI shows progress spinner
+            const cleared = action === "regenerate_podcast"
+              ? { ...currentData, processedBook: undefined, podcastAudioUrl: undefined, podcastScript: undefined, podcastDuration: undefined, podcastPercent: 0 }
+              : currentData;
+            const merged = { ...cleared, podcastStatus: data.podcastStatus, podcastStatusDetail: data.message };
             return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
           });
 

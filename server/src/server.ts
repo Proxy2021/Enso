@@ -864,13 +864,22 @@ export async function startEnsoServer(opts: {
         return;
       }
 
-      if (action === "deep_content" || action === "book_podcast") {
+      if (action === "deep_content" || action === "book_podcast" || action === "regenerate_podcast") {
         const entityId = String(payload?.entityId ?? "");
         if (!entityId) { res.json({ error: "No entity ID" }); return; }
 
+        // For regenerate: delete cache first so it re-generates fresh
+        if (action === "regenerate_podcast") {
+          try {
+            const { deleteProcessedContent } = await import("./deep-content.js");
+            deleteProcessedContent(entityId);
+            logAction({ ts: Date.now(), type: "action", category: "cortex-action", message: `Regenerating podcast for ${entityId} (cache deleted)` });
+          } catch { /* best effort */ }
+        }
+
         // Check cache first
         const { getProcessedContent, generateDeepContent } = await import("./deep-content.js");
-        const cached = getProcessedContent(entityId);
+        const cached = action !== "regenerate_podcast" ? getProcessedContent(entityId) : null;
         if (cached) {
           // Return cached podcast data
           const { buildEntityDetailData: buildDetail } = await import("./entity-model.js");
