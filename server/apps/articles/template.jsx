@@ -85,6 +85,16 @@ function GeneratedUI({ data, onAction }) {
               <span style={{ fontSize: "16px" }}>🎙️</span>
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#c4b5fd" }}>AI Podcast</span>
               {podcastDuration && <Badge variant="secondary">{podcastDuration} min</Badge>}
+              <div style={{ marginLeft: "auto" }}>
+                <button onClick={function() {
+                  if (confirm("Regenerate this podcast? The current one will be replaced.")) {
+                    onAction("regenerate_podcast", { entityId: entity.entityId || d.focusEntity });
+                  }
+                }}
+                  style={{ background: "none", border: "1px solid #475569", borderRadius: "4px", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: "2px 8px", transition: "color 0.2s" }}
+                  title="Delete cached podcast and regenerate with latest pipeline"
+                >🔄 Regenerate</button>
+              </div>
             </div>
             <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}><source src={podcastAudioUrl} type={podcastAudioUrl.indexOf(".mp3") >= 0 ? "audio/mpeg" : "audio/wav"} /></audio>
             {processed && processed.script && (

@@ -1224,8 +1224,33 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Regenerate Podcast: delete cache and re-generate ──
+  if (action === "regenerate_podcast") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const entityId = String(p.entityId ?? "").trim();
+    if (!entityId) { sendOperation("error", "No entity ID"); return; }
+
+    // Delete cached podcast
+    const { deleteProcessedBook } = await import("../deep-content.js");
+    deleteProcessedBook(entityId);
+    logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Regenerating podcast for ${entityId} (cache cleared)` });
+
+    // Clear podcast state from card data so UI shows generation progress
+    const detailData = ctx.currentData as Record<string, unknown>;
+    delete detailData.processedBook;
+    delete detailData.podcastAudioUrl;
+    delete detailData.podcastScript;
+    delete detailData.podcastDuration;
+    detailData.podcastStatus = "processing";
+    detailData.podcastStatusDetail = "Regenerating podcast...";
+    detailData.podcastPercent = 0;
+    ctx.currentData = detailData;
+
+    // Fall through to the deep_content handler below to start generation
+  }
+
   // ── Deep Content: generate deep research + long-form podcast for any entity or rich card ──
-  if (action === "deep_content" || action === "book_podcast") {
+  if (action === "deep_content" || action === "book_podcast" || action === "regenerate_podcast") {
     const p = (payload ?? {}) as Record<string, unknown>;
     const entityId = String(p.entityId ?? "").trim();
     if (!entityId) { sendOperation("error", "No entity ID"); return; }

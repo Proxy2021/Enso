@@ -15,7 +15,7 @@
  *   3. Scheduled: weekly recommendation task
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readdirSync } from "node:fs";
@@ -322,6 +322,33 @@ export function listProcessedContent(): string[] {
       })
       .filter(Boolean) as string[];
   } catch { return []; }
+}
+
+/** Delete cached podcast for an entity so it can be regenerated. */
+export function deleteProcessedContent(entityId: string): boolean {
+  ensureDirs();
+  const slug = slugFromEntityId(entityId);
+  const oldSlug = entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80);
+  let deleted = false;
+
+  // Delete JSON metadata
+  for (const trySlug of [slug, oldSlug]) {
+    const jsonPath = join(CONTENT_DIR, `${trySlug}.json`);
+    try { if (existsSync(jsonPath)) { unlinkSync(jsonPath); deleted = true; } } catch { /* ignore */ }
+  }
+
+  // Delete audio files (mp3 + wav)
+  for (const trySlug of [slug, oldSlug]) {
+    for (const ext of [".mp3", ".wav"]) {
+      const audioPath = join(AUDIO_DIR, `${trySlug}${ext}`);
+      try { if (existsSync(audioPath)) { unlinkSync(audioPath); deleted = true; } } catch { /* ignore */ }
+    }
+  }
+
+  if (deleted) {
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Deleted cached podcast for ${entityId}` });
+  }
+  return deleted;
 }
 
 function saveProcessedContent(book: ProcessedContent): void {
@@ -1685,6 +1712,7 @@ export const researchBook = researchEntity;
 export const generateBookPodcast = generateDeepContent;
 export const processBookBatch = processEntityBatch;
 export const getProcessedBook = getProcessedContent;
+export const deleteProcessedBook = deleteProcessedContent;
 export const isBookProcessed = isContentProcessed;
 export const listProcessedBooks = listProcessedContent;
 export const buildBookEmailHtml = buildEntityEmailHtml;
