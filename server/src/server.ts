@@ -650,6 +650,10 @@ export async function startEnsoServer(opts: {
       // authenticated API calls afterward.  This header is a "forbidden header name" so
       // it cannot be forged by client-side JavaScript.
       if (req.headers["sec-fetch-mode"] === "navigate") return next();
+      // Loopback bypass — internal server-to-server calls (e.g. executor ctx.fetch to localhost)
+      // can't set Origin/Sec-Fetch-Site, so allow any request originating from the loopback interface.
+      const remoteAddr = req.socket?.remoteAddress;
+      if (remoteAddr === "127.0.0.1" || remoteAddr === "::1" || remoteAddr === "::ffff:127.0.0.1") return next();
       // Same-origin bypass (matches WebSocket auth behavior)
       // Note: browsers omit Origin header on same-origin GET requests, so also check Sec-Fetch-Site
       const origin = req.headers.origin ?? "";
