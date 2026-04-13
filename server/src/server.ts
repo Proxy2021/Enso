@@ -858,6 +858,9 @@ export async function startEnsoServer(opts: {
           creator: p.creator ? String(p.creator) : undefined,
           year: p.year ? String(p.year) : undefined,
           description: p.description ? String(p.description) : undefined,
+          imageUrl: p.imageUrl ? String(p.imageUrl) : undefined,
+          url: p.url ? String(p.url) : undefined,
+          metadata: p.metadata && typeof p.metadata === "object" ? p.metadata as Record<string, unknown> : undefined,
         });
         // Auto-enrich
         if (result.created) {

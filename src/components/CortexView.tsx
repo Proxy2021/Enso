@@ -3,7 +3,20 @@ import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { compileComponent } from "../lib/sandbox";
 import { MobileViewHeader } from "./TabNavigation";
-import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { getBackendBaseUrl, authHeaders, resolveMediaUrl, getActiveBackend } from "../lib/connection";
+
+const SERVER_PATH_PREFIXES = ["/media/", "/demo/"];
+
+function resolveMediaUrlsInData(data: unknown): unknown {
+  if (typeof data === "string" && SERVER_PATH_PREFIXES.some(p => data.startsWith(p))) return resolveMediaUrl(data);
+  if (Array.isArray(data)) return data.map(resolveMediaUrlsInData);
+  if (data && typeof data === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data as Record<string, unknown>)) result[k] = resolveMediaUrlsInData(v);
+    return result;
+  }
+  return data;
+}
 
 interface CortexApp {
   family: string;
@@ -208,7 +221,10 @@ export default function CortexView() {
             const current = prev[activeApp.family];
             const navStack = [...(current?.navStack || [])];
             if (current?.data) {
-              navStack.push({ data: current.data, title: (current.data as Record<string, unknown>)?.tool as string || "Back" });
+              const cd = current.data as Record<string, unknown>;
+              const entity = cd.entity as Record<string, unknown> | undefined;
+              const title = (entity?.title as string) || (cd.tool as string) || "Back";
+              navStack.push({ data: current.data, title });
             }
             // Merge nav stack info into the detail data
             const detailData = { ...data, navStack: navStack.map((e: { title: string }) => ({ title: e.title })), focusEntity: true, tool: "entity_detail" };
@@ -498,10 +514,16 @@ function AppRenderer({
   const Component = compiled.Component;
   if (!Component) return null;
 
+  const backendUrl = useChatStore(s => s.connectionState === "connected" ? getActiveBackend()?.url : undefined);
+  const resolvedData = useMemo(
+    () => resolveMediaUrlsInData(state?.data || {}),
+    [state?.data, backendUrl],
+  );
+
   return (
     <div className="p-3">
       <Component
-        data={state?.data || {}}
+        data={resolvedData}
         sendMessage={onSendMessage}
         onAction={onAction}
         theme="dark"

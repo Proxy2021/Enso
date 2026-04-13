@@ -191,8 +191,8 @@ export async function ingestDiscoveredEntity(opts: {
 
   // Idempotent: if page exists, just ensure entity index is updated
   if (existsSync(fullPath)) {
-    // Still ensure the entity index entry exists
-    if (!lookupEntity(entityId)) {
+    const existing = lookupEntity(entityId);
+    if (!existing) {
       upsertEntityIndex({
         entityId,
         type,
@@ -204,6 +204,19 @@ export async function ingestDiscoveredEntity(opts: {
         tags: [type, source, "discovered"],
         updatedAt: new Date().toISOString(),
       });
+      saveEntityIndex();
+    } else if (opts.imageUrl || opts.metadata) {
+      // Backfill missing imageUrl/metadata on existing entries
+      const patch: Record<string, unknown> = { entityId, type, source, title: opts.title, slug, cortexPath, updatedAt: new Date().toISOString() };
+      if (opts.imageUrl && !existing.imageUrl) patch.imageUrl = opts.imageUrl;
+      else if (opts.imageUrl) patch.imageUrl = opts.imageUrl;
+      if (opts.metadata) {
+        const merged = { ...(existing.metadata as Record<string, unknown> || {}), ...opts.metadata };
+        if (opts.creator && !merged.author) merged.author = opts.creator;
+        if (opts.description && !merged.description) merged.description = opts.description;
+        patch.metadata = merged;
+      }
+      upsertEntityIndex(patch as Parameters<typeof upsertEntityIndex>[0]);
       saveEntityIndex();
     }
     return { entityId, cortexPath, created: false };

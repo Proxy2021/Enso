@@ -1149,10 +1149,12 @@ export async function processEntityBatch(params: {
   for (let i = 0; i < entityIds.length; i++) {
     const entityId = entityIds[i];
     try {
+      let progressTitle = entityId;
       const result = await generateDeepContent({
         entityId,
         onProgress: (progress) => {
-          onBookProgress?.(i, entityIds.length, result?.title ?? entityId, progress);
+          if (progress.detail) progressTitle = progress.detail;
+          onBookProgress?.(i, entityIds.length, progressTitle, progress);
         },
       });
       processed++;
