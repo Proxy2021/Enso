@@ -2466,9 +2466,6 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       if (updates.channels && typeof updates.channels === "object") {
         Object.assign(current.channels, updates.channels);
       }
-      if (typeof updates.autoExecuteMaxEffort === "string") {
-        current.autoExecuteMaxEffort = updates.autoExecuteMaxEffort as typeof current.autoExecuteMaxEffort;
-      }
       if (typeof updates.autoEvolve === "boolean") {
         current.autoEvolve = updates.autoEvolve;
       }

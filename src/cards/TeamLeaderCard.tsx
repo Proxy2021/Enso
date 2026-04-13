@@ -33,7 +33,6 @@ interface Briefing {
 interface TLConfig {
   schedule: { morningRoutine: string; checkIn: string };
   channels: { email: boolean; wechat: boolean; inApp: boolean };
-  autoExecuteMaxEffort: string;
   autoEvolve: boolean;
 }
 
@@ -225,7 +224,7 @@ export default function TeamLeaderCard({ card }: CardRendererProps) {
           <div className="flex gap-3 mt-2 text-[10px] text-gray-500">
             <span>Morning: {config.schedule.morningRoutine}</span>
             <span>Check-in: {config.schedule.checkIn}</span>
-            <span>Auto-execute: {config.autoExecuteMaxEffort}</span>
+            <span>Auto-evolve: {config.autoEvolve ? "on" : "off"}</span>
             <span>Channels: {[config.channels.email && "email", config.channels.wechat && "wechat", config.channels.inApp && "in-app"].filter(Boolean).join(", ")}</span>
           </div>
         )}

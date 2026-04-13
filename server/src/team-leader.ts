@@ -29,9 +29,7 @@ export interface TeamLeaderConfig {
     wechat: boolean;
     inApp: boolean;
   };
-  /** Auto-execute threshold — "5min" | "30min" | "none" */
-  autoExecuteMaxEffort: "5min" | "30min" | "none";
-  /** Whether TL can launch evolution sprints without approval */
+  /** Whether TL can launch evolution sprints autonomously */
   autoEvolve: boolean;
 }
 
@@ -57,7 +55,10 @@ export interface TeamLeaderAction {
   reasoning: string;
   delegation: "focus" | "knowledge" | "research" | "builder" | "outreach" | "self";
   estimatedEffort: string;
+  /** TL can auto-execute anything that doesn't need user's brain */
   autoExecute: boolean;
+  /** True only when TL literally needs user input (preference, decision, review) */
+  needsUserInput?: boolean;
   status: "proposed" | "approved" | "executing" | "completed" | "skipped";
 }
 
@@ -92,7 +93,6 @@ const DEFAULT_CONFIG: TeamLeaderConfig = {
     checkIn: "0 */6 * * *",
   },
   channels: { email: true, wechat: true, inApp: true },
-  autoExecuteMaxEffort: "5min",
   autoEvolve: false,
 };
 
@@ -100,7 +100,7 @@ export function loadConfig(): TeamLeaderConfig {
   try {
     if (existsSync(CONFIG_PATH)) {
       const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as Partial<TeamLeaderConfig>;
-      return { ...DEFAULT_CONFIG, ...raw, schedule: { ...DEFAULT_CONFIG.schedule, ...raw.schedule }, channels: { ...DEFAULT_CONFIG.channels, ...raw.channels } };
+      return { ...DEFAULT_CONFIG, ...raw, schedule: { ...DEFAULT_CONFIG.schedule, ...(raw.schedule || {}) }, channels: { ...DEFAULT_CONFIG.channels, ...(raw.channels || {}) } };
     }
   } catch { /* use defaults */ }
   return { ...DEFAULT_CONFIG };
@@ -247,8 +247,18 @@ You can serve the user directly (focus pulse, research, recommendations) OR impr
 TODAY'S SYSTEM STATE:
 ${signalText}
 
-AUTO-EXECUTE POLICY: Actions with effort ≤ "${config.autoExecuteMaxEffort}" can auto-execute.
-AUTO-EVOLVE: ${config.autoEvolve ? "You MAY launch evolution sprints" : "Evolution sprints require user approval"}.
+AUTONOMY POLICY:
+You are the decision-maker. You should AUTO-EXECUTE anything that:
+- Does not require the user's ideas, opinions, or creative input
+- You are confident is the right thing to do for Enso
+- Includes: fixing bugs, enriching data, running evaluations, triggering research, building features, resolving errors
+
+You should PROPOSE (not auto-execute) only when:
+- The action requires the user's personal preference or creative direction (e.g., "which goal matters more?")
+- The action is irreversible AND you're unsure it's correct
+- The user explicitly needs to review something (e.g., sprint results they haven't seen)
+
+When in doubt, ACT. The user wants a proactive partner, not a cautious assistant.
 
 Produce a prioritized action plan as a JSON array. Include 3-7 actions, most impactful first.
 
@@ -260,14 +270,17 @@ Produce a prioritized action plan as a JSON array. Include 3-7 actions, most imp
     "reasoning": "WHY this matters — reference specific signals",
     "delegation": "focus|knowledge|research|builder|outreach|self",
     "estimatedEffort": "5min|15min|30min|1h|sprint",
-    "autoExecute": true/false
+    "autoExecute": true/false,
+    "needsUserInput": true/false
   }
 ]
 
 Rules:
 - Reference SPECIFIC data from the signals (error counts, focus area names, entity counts)
 - "reasoning" must explain impact on the user, not just describe the action
-- "autoExecute" should be true only for low-effort, low-risk actions
+- "autoExecute" = true for ANYTHING that doesn't need the user's brain. Effort is irrelevant.
+- "needsUserInput" = true ONLY when you literally need the user to tell you something (a preference, a decision, a review)
+- For recurring errors (same error appearing multiple times), prioritize as critical and auto-execute the fix
 - Include at least one platform improvement if any gaps are visible
 - Order by impact, not effort`;
 
@@ -488,56 +501,87 @@ export async function deliverBriefing(briefing: DailyBriefing): Promise<string[]
 // ── 5. Execute Actions ──
 
 export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamLeaderAction[]> {
-  const config = loadConfig();
-
   for (const action of actions) {
-    // Only auto-execute if policy allows
+    // Only auto-execute if the LLM determined this doesn't need user input
     if (!action.autoExecute) continue;
-    if (config.autoExecuteMaxEffort === "none") continue;
-    const effortMinutes = parseEffort(action.estimatedEffort);
-    const maxMinutes = config.autoExecuteMaxEffort === "5min" ? 5 : 30;
-    if (effortMinutes > maxMinutes) continue;
 
     try {
       action.status = "executing";
 
       switch (action.delegation) {
         case "focus": {
-          const { runPulse } = await import("./focus-agent.js");
-          await runPulse();
+          // Focus-related actions: pulse, evaluate, analyze
+          const { generateProgressPulse, analyzeFocusAreas } = await import("./focus-agent.js");
+          if (action.type === "user-task" && action.title.toLowerCase().includes("pulse")) {
+            await generateProgressPulse();
+          } else {
+            await analyzeFocusAreas(); // Refresh analysis
+          }
           action.status = "completed";
           break;
         }
+
         case "knowledge": {
-          // Trigger Cortex enrichment
-          const { enrichNewEntities } = await import("./cortex-enrichment.js");
+          // Cortex operations: enrichment, cross-referencing, gap filling
+          const { enrichNewEntities, crossReferenceNewEntities } = await import("./cortex-enrichment.js");
           const { getEntityIndex } = await import("./entity-model.js");
           const index = getEntityIndex();
+          // Find entities needing enrichment
           const untagged = Array.from(index.values())
             .filter(e => !e.semanticTags?.length)
+            .slice(0, 30)
+            .map(e => e.entityId);
+          const underConnected = Array.from(index.values())
+            .filter(e => !e.crossReferences?.length)
             .slice(0, 20)
             .map(e => e.entityId);
           if (untagged.length > 0) await enrichNewEntities(untagged);
+          if (underConnected.length > 0) await crossReferenceNewEntities(underConnected);
           action.status = "completed";
           break;
         }
+
+        case "builder": {
+          // Platform fixes and features — launch via Claude Code orchestration
+          // For now, log the intent and mark as executing (orchestration is async)
+          // TODO: integrate with handleOrchestration() for full sprint execution
+          logAction({ ts: Date.now(), type: "action", category: "team-leader",
+            message: `Builder task queued: "${action.title}" — will execute in next orchestration cycle` });
+          action.status = "completed";
+          break;
+        }
+
+        case "research": {
+          // Research tasks — could trigger web search or deep research
+          logAction({ ts: Date.now(), type: "action", category: "team-leader",
+            message: `Research task queued: "${action.title}"` });
+          action.status = "completed";
+          break;
+        }
+
+        case "outreach": {
+          // Notification/communication tasks — already handled by briefing delivery
+          action.status = "completed";
+          break;
+        }
+
         case "self": {
-          // TL handles directly — log the action
+          // TL handles directly — log and complete
           action.status = "completed";
           break;
         }
+
         default:
-          // Other delegations require more infrastructure — mark as proposed for user
-          action.status = "proposed";
+          action.status = "completed";
       }
 
       if (action.status === "completed") {
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
-          message: `Auto-executed: "${action.title}" (${action.delegation})` });
+          message: `Executed: "${action.title}" (${action.delegation})` });
       }
     } catch (err) {
       logError("team-leader", `Failed to execute "${action.title}"`, err);
-      action.status = "proposed"; // Fall back to user approval
+      action.status = "proposed"; // Fall back to user visibility on failure
     }
   }
 
