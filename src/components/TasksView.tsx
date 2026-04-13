@@ -10,7 +10,7 @@ import type { ScheduledTaskDef } from "@shared/types";
 import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 import { timeAgo, timeUntil, formatElapsedTime } from "../lib/time-utils";
 import { ScheduledTaskDialog } from "./ScheduledTaskDialog";
-import { Clock, Play, Pause, Trash2, Pencil, Plus } from "lucide-react";
+import { Clock, Play, Pause, Trash2, Pencil, Plus, RefreshCw } from "lucide-react";
 
 // ── Types (mirrors session-registry.ts) ──
 
@@ -160,6 +160,14 @@ export default function TasksView() {
   const [editingTask, setEditingTask] = useState<ScheduledTaskDef | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+  // Team Leader state
+  const [tlBriefing, setTlBriefing] = useState<{ headline: string; timestamp: string; sections: Array<{ emoji: string; title: string; items: string[] }>; proposedActions: Array<{ id: string; priority: string; type: string; title: string; reasoning: string; delegation: string; estimatedEffort: string; autoExecute: boolean; needsUserInput?: boolean; status: string }> } | null>(null);
+  const [tlState, setTlState] = useState<{ lastMorningRoutineAt: string | null; lastCheckInAt: string | null } | null>(null);
+  const [tlRemarks, setTlRemarks] = useState<Array<{ id: string; channel: string; text: string; timestamp: string; processed: boolean; resolution?: string; context: { summary: string } }>>([]);
+  const [tlTab, setTlTab] = useState<"briefing" | "actions" | "remarks">("actions");
+  const [tlRunning, setTlRunning] = useState(false);
+  const [remarkInput, setRemarkInput] = useState<{ actionId: string; text: string } | null>(null);
+
   const fetchStatus = useCallback(async () => {
     try {
       const baseUrl = getBackendBaseUrl();
@@ -182,12 +190,34 @@ export default function TasksView() {
     }
   }, []);
 
+  const fetchTL = useCallback(async () => {
+    try {
+      const baseUrl = getBackendBaseUrl();
+      const headers = authHeaders();
+      const [stateRes, briefingRes, remarksRes] = await Promise.all([
+        fetch(`${baseUrl}/api/team-leader/state`, { headers }).catch(() => null),
+        fetch(`${baseUrl}/api/team-leader/briefing`, { headers }).catch(() => null),
+        fetch(`${baseUrl}/api/remarks`, { headers }).catch(() => null),
+      ]);
+      if (stateRes?.ok) setTlState(await stateRes.json());
+      if (briefingRes?.ok) {
+        const b = await briefingRes.json();
+        if (b.headline) setTlBriefing(b);
+      }
+      if (remarksRes?.ok) {
+        const r = await remarksRes.json();
+        setTlRemarks(r.remarks || []);
+      }
+    } catch { /* TL not available */ }
+  }, []);
+
   useEffect(() => {
     fetchStatus();
     fetchScheduledTasks();
-    const interval = setInterval(() => { fetchStatus(); fetchScheduledTasks(); }, 5000);
+    fetchTL();
+    const interval = setInterval(() => { fetchStatus(); fetchScheduledTasks(); fetchTL(); }, 10000);
     return () => clearInterval(interval);
-  }, [fetchStatus, fetchScheduledTasks]);
+  }, [fetchStatus, fetchScheduledTasks, fetchTL]);
 
   const doAction = useCallback(async (method: string, path: string, key: string) => {
     setActionInFlight(key);
@@ -278,6 +308,172 @@ export default function TasksView() {
         {error && (
           <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">{error}</div>
         )}
+
+        {/* ═══ Team Leader Dashboard ═══ */}
+        <section className="rounded-xl border border-violet-500/20 bg-gray-950/60 overflow-hidden">
+          {/* TL Header */}
+          <div className="px-4 py-3 bg-gradient-to-r from-violet-950/40 to-indigo-950/40 border-b border-violet-500/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-violet-200 flex items-center gap-2">
+                  <span>👔</span> Team Leader
+                </h2>
+                {tlState?.lastMorningRoutineAt && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    Last routine: {timeAgo(new Date(tlState.lastMorningRoutineAt).getTime())}
+                    {tlState.lastCheckInAt && ` · Check-in: ${timeAgo(new Date(tlState.lastCheckInAt).getTime())}`}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={async () => {
+                  setTlRunning(true);
+                  try {
+                    await fetch(`${getBackendBaseUrl()}/api/team-leader/morning`, { method: "POST", headers: authHeaders() });
+                    await fetchTL();
+                  } catch { /* ignore */ }
+                  setTlRunning(false);
+                }}
+                disabled={tlRunning}
+                className="text-[11px] px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3 h-3 ${tlRunning ? "animate-spin" : ""}`} />
+                {tlRunning ? "Running..." : "Run Routine"}
+              </button>
+            </div>
+          </div>
+
+          {/* TL Tabs */}
+          <div className="flex border-b border-gray-800/40">
+            {(["actions", "briefing", "remarks"] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setTlTab(tab)}
+                className={`flex-1 py-2 text-[11px] font-medium transition-colors ${tlTab === tab ? "text-violet-300 border-b-2 border-violet-500" : "text-gray-500 hover:text-gray-300"}`}
+              >
+                {tab === "actions" ? `Actions (${tlBriefing?.proposedActions?.length ?? 0})` : tab === "briefing" ? "Briefing" : `Remarks (${tlRemarks.length})`}
+              </button>
+            ))}
+          </div>
+
+          {/* TL Actions Tab */}
+          {tlTab === "actions" && (
+            <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto">
+              {!tlBriefing?.proposedActions?.length ? (
+                <p className="text-gray-500 text-xs text-center py-4">No actions yet. Click "Run Routine" to start.</p>
+              ) : (
+                tlBriefing.proposedActions.map(action => {
+                  const pColor: Record<string, string> = { critical: "text-red-400", high: "text-orange-400", medium: "text-yellow-400", low: "text-gray-500" };
+                  const pBg: Record<string, string> = { critical: "bg-red-500/15 border-red-500/25", high: "bg-orange-500/15 border-orange-500/25", medium: "bg-yellow-500/15 border-yellow-500/25", low: "bg-gray-500/10 border-gray-700/30" };
+                  const statusIcon = action.status === "completed" ? "✓" : action.status === "executing" ? "◉" : action.status === "proposed" ? "○" : "—";
+                  const statusCol = action.status === "completed" ? "text-emerald-400" : action.status === "executing" ? "text-blue-400 animate-pulse" : "text-violet-400";
+                  const typeEmoji: Record<string, string> = { "user-task": "🎯", "platform-fix": "🔧", "platform-feature": "🚀", maintenance: "🧹" };
+                  const delegLabels: Record<string, string> = { focus: "Focus", knowledge: "Cortex", research: "Research", builder: "Builder", outreach: "Outreach", self: "TL" };
+                  return (
+                    <div key={action.id} className="rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5">
+                      <div className="flex items-start gap-2">
+                        <span className={`${statusCol} text-sm mt-0.5 shrink-0`}>{statusIcon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs">{typeEmoji[action.type] || "📋"}</span>
+                            <span className="text-[13px] font-medium text-gray-200">{action.title}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded border ${pBg[action.priority]} ${pColor[action.priority]}`}>{action.priority}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-500 border border-gray-700/40">{delegLabels[action.delegation] || action.delegation}</span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{action.reasoning}</p>
+                        </div>
+                        <button
+                          onClick={() => setRemarkInput(remarkInput?.actionId === action.id ? null : { actionId: action.id, text: "" })}
+                          className="text-[10px] px-1.5 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/20 shrink-0"
+                        >💬</button>
+                      </div>
+                      {remarkInput?.actionId === action.id && (
+                        <div className="mt-2 flex gap-2 ml-6">
+                          <input
+                            type="text" value={remarkInput.text}
+                            onChange={e => setRemarkInput({ ...remarkInput, text: e.target.value })}
+                            placeholder="Your remark..."
+                            className="flex-1 text-xs bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500"
+                            autoFocus
+                            onKeyDown={e => {
+                              if (e.key === "Enter" && remarkInput.text.trim()) {
+                                fetch(`${getBackendBaseUrl()}/api/remarks`, {
+                                  method: "POST",
+                                  headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                  body: JSON.stringify({ text: `Re: "${action.title}" — ${remarkInput.text}`, action: "custom" }),
+                                }).then(() => { setRemarkInput(null); fetchTL(); }).catch(() => {});
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              if (!remarkInput.text.trim()) return;
+                              fetch(`${getBackendBaseUrl()}/api/remarks`, {
+                                method: "POST",
+                                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                body: JSON.stringify({ text: `Re: "${action.title}" — ${remarkInput.text}`, action: "custom" }),
+                              }).then(() => { setRemarkInput(null); fetchTL(); }).catch(() => {});
+                            }}
+                            disabled={!remarkInput.text.trim()}
+                            className="text-[11px] px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-30"
+                          >Send</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* TL Briefing Tab */}
+          {tlTab === "briefing" && (
+            <div className="p-3 max-h-[400px] overflow-y-auto">
+              {!tlBriefing ? (
+                <p className="text-gray-500 text-xs text-center py-4">No briefing yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-violet-300">{tlBriefing.headline}</h3>
+                    <p className="text-[10px] text-gray-500">{new Date(tlBriefing.timestamp).toLocaleString()}</p>
+                  </div>
+                  {tlBriefing.sections.map((s, i) => (
+                    <div key={i} className="rounded-lg border border-gray-800/30 bg-gray-900/30 p-2.5">
+                      <h4 className="text-xs font-medium text-gray-300 mb-1.5">{s.emoji} {s.title}</h4>
+                      {s.items.map((item, j) => (
+                        <p key={j} className="text-[11px] text-gray-400 leading-relaxed">{item}</p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TL Remarks Tab */}
+          {tlTab === "remarks" && (
+            <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto">
+              {tlRemarks.length === 0 ? (
+                <p className="text-gray-500 text-xs text-center py-4">No remarks yet. Use 💬 on actions to send feedback.</p>
+              ) : (
+                tlRemarks.map(r => (
+                  <div key={r.id} className="rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400 border border-gray-700/40">{r.channel}</span>
+                      <span className="text-[10px] text-gray-500">{timeAgo(new Date(r.timestamp).getTime())}</span>
+                      {r.processed
+                        ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Processed</span>
+                        : <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">Pending</span>
+                      }
+                    </div>
+                    <p className="text-[11px] text-gray-300">{r.text}</p>
+                    {r.resolution && <p className="text-[10px] text-violet-400 mt-1">{r.resolution}</p>}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
 
         {/* Active Orchestrations */}
         {activeOrchs.length > 0 && (
