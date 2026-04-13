@@ -11,7 +11,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import { logAction, logError } from "./action-log.js";
 
@@ -954,8 +954,6 @@ function parseEffort(effort: string): number {
 }
 
 function getEnsoUrl(): string {
-  const h = homedir().toLowerCase();
-  if (h.includes("pc1")) return "https://pc1.enso.net";
-  if (h.includes("pc2")) return "https://pc2.enso.net";
-  return "http://localhost:3001";
+  const name = process.env.ENSO_MACHINE_NAME || hostname();
+  return process.env.ENSO_TUNNEL_URL || `https://${name}.enso.net`;
 }
