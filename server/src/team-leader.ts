@@ -45,6 +45,8 @@ export interface SystemSignals {
   platformHealth: { errorRate: number; failedTasks: string[]; uptimeHours: number };
   /** Pending user remarks awaiting processing */
   pendingRemarks: Array<{ id: string; channel: string; text: string; action?: string; contextSummary: string; timestamp: string }>;
+  /** Self-queued tasks from previous cycles */
+  pendingTasks: Array<{ id: string; title: string; description: string; source: string }>;
 }
 
 export interface TeamLeaderAction {
@@ -72,11 +74,28 @@ export interface DailyBriefing {
   wechatMessage: string;
 }
 
+/** Tasks the TL has queued for itself — processed on next routine */
+export interface QueuedTask {
+  id: string;
+  title: string;
+  description: string;
+  /** Where this task came from */
+  source: "self" | "user-remark" | "error-detected" | "follow-up";
+  /** When this was queued */
+  createdAt: string;
+  /** Has this been processed? */
+  processed: boolean;
+  processedAt?: string;
+  result?: string;
+}
+
 interface TeamLeaderState {
   lastMorningRoutineAt: string | null;
   lastCheckInAt: string | null;
   lastBriefing: DailyBriefing | null;
   recentActions: TeamLeaderAction[];
+  /** Tasks the TL has assigned to itself for next cycle */
+  taskQueue: QueuedTask[];
 }
 
 // ── Paths ──
@@ -119,7 +138,7 @@ function loadState(): TeamLeaderState {
   try {
     if (existsSync(STATE_PATH)) return JSON.parse(readFileSync(STATE_PATH, "utf-8")) as TeamLeaderState;
   } catch { /* fresh state */ }
-  return { lastMorningRoutineAt: null, lastCheckInAt: null, lastBriefing: null, recentActions: [] };
+  return { lastMorningRoutineAt: null, lastCheckInAt: null, lastBriefing: null, recentActions: [], taskQueue: [] };
 }
 
 function saveState(state: TeamLeaderState): void {
@@ -201,10 +220,15 @@ export async function gatherSignals(): Promise<SystemSignals> {
     }));
   } catch { /* remarks system not available */ }
 
+  // Self-queued tasks from previous cycles
+  const pendingTasks = getPendingTasks().map(t => ({
+    id: t.id, title: t.title, description: t.description, source: t.source,
+  }));
+
   return {
     recentErrors, recentActions, focusAnalyses, cortexStats, taskResults,
     platformHealth: { errorRate, failedTasks, uptimeHours: Math.round(process.uptime() / 3600) },
-    pendingRemarks,
+    pendingRemarks, pendingTasks,
   };
 }
 
@@ -238,6 +262,11 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     signals.pendingRemarks.length > 0
       ? signals.pendingRemarks.map(r => `- [${r.channel}] "${r.text}" (re: ${r.contextSummary}) — ${r.action || "custom"}`).join("\n")
       : "No pending remarks from user.",
+    "",
+    `## Self-Queued Tasks (${signals.pendingTasks.length} pending)`,
+    signals.pendingTasks.length > 0
+      ? signals.pendingTasks.map(t => `- "${t.title}": ${t.description} (source: ${t.source})`).join("\n")
+      : "No self-queued tasks.",
   ].join("\n");
 
   const prompt = `You are the Team Leader of Enso, a personal AI assistant platform.
@@ -259,6 +288,9 @@ You should PROPOSE (not auto-execute) only when:
 - The user explicitly needs to review something (e.g., sprint results they haven't seen)
 
 When in doubt, ACT. The user wants a proactive partner, not a cautious assistant.
+Do NOT defer work to "next cycle" — execute everything you can right now.
+You can also CREATE NEW TASKS for yourself if you identify follow-up work during assessment.
+You run the organization. Be decisive, be thorough, be proactive.
 
 Produce a prioritized action plan as a JSON array. Include 3-7 actions, most impactful first.
 
@@ -542,20 +574,14 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
         }
 
         case "builder": {
-          // Platform fixes and features — launch via Claude Code orchestration
-          // For now, log the intent and mark as executing (orchestration is async)
-          // TODO: integrate with handleOrchestration() for full sprint execution
-          logAction({ ts: Date.now(), type: "action", category: "team-leader",
-            message: `Builder task queued: "${action.title}" — will execute in next orchestration cycle` });
-          action.status = "completed";
+          // Launch a real Claude Code session to fix/build
+          await launchBuilderTask(action);
           break;
         }
 
         case "research": {
-          // Research tasks — could trigger web search or deep research
-          logAction({ ts: Date.now(), type: "action", category: "team-leader",
-            message: `Research task queued: "${action.title}"` });
-          action.status = "completed";
+          // Launch a Claude Code research session
+          await launchBuilderTask(action);
           break;
         }
 
@@ -586,6 +612,171 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
   }
 
   return actions;
+}
+
+// ── 5b. Launch Builder/Research Tasks via Claude Code ──
+
+/**
+ * Launch a task via Claude Code (simple) or orchestration (complex).
+ *
+ * Simple tasks (≤30min, single-agent): Direct Claude Code session
+ * Complex tasks (sprint-level, multi-agent): Full orchestration with DAG
+ */
+async function launchBuilderTask(action: TeamLeaderAction): Promise<void> {
+  const isComplex = action.estimatedEffort === "sprint" || action.estimatedEffort === "1h";
+
+  if (isComplex) {
+    // Full orchestration — multi-agent team with DAG execution
+    await launchOrchestration(action);
+  } else {
+    // Simple — single Claude Code session
+    await launchClaudeCodeSession(action);
+  }
+}
+
+/** Launch a single Claude Code session for simple tasks */
+async function launchClaudeCodeSession(action: TeamLeaderAction): Promise<void> {
+  try {
+    const { runClaudeCode } = await import("./claude-code.js");
+    const { getAllClients } = await import("./server.js");
+
+    const clients = getAllClients();
+    let client: unknown;
+    if (clients.length > 0) {
+      client = clients[0];
+    } else {
+      const noop = () => {};
+      client = {
+        id: "team-leader-builder",
+        sessionKey: "team-leader",
+        ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+        send: noop,
+        _disconnectedBuffer: [],
+        conversationId: "default",
+      };
+    }
+
+    const runId = randomUUID();
+    const prompt = `[Team Leader Task: ${action.title}]
+
+You are executing a task assigned by the Enso Team Leader.
+
+TASK: ${action.title}
+TYPE: ${action.type}
+PRIORITY: ${action.priority}
+REASONING: ${action.reasoning}
+
+The Enso codebase is at D:/Github/Enso. Execute this task now.
+Be thorough but focused. When done, summarize what you changed.`;
+
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Launching Claude Code session for: "${action.title}"` });
+
+    runClaudeCode({
+      prompt,
+      client: client as Parameters<typeof runClaudeCode>[0]["client"],
+      runId,
+      targetCardId: `tl-${action.id.slice(0, 8)}`,
+      model: "sonnet",
+      skipPersist: true,
+    }).then(() => {
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Claude Code task completed: "${action.title}"` });
+    }).catch(err => {
+      logError("team-leader", `Claude Code task failed: "${action.title}"`, err);
+    });
+
+    action.status = "executing";
+  } catch (err) {
+    logError("team-leader", `Failed to launch Claude Code for "${action.title}"`, err);
+    action.status = "proposed";
+  }
+}
+
+/** Launch a full orchestration sprint for complex multi-agent tasks */
+async function launchOrchestration(action: TeamLeaderAction): Promise<void> {
+  try {
+    const { handleOrchestration } = await import("./orchestrator.js");
+    const { getAllClients, getActiveAccount } = await import("./server.js");
+
+    const clients = getAllClients();
+    const account = getActiveAccount();
+    if (!account) {
+      logError("team-leader", `Cannot launch orchestration for "${action.title}" — no active account`);
+      action.status = "proposed";
+      return;
+    }
+
+    // Use connected client or create a headless one
+    let client: unknown;
+    if (clients.length > 0) {
+      client = clients[0];
+    } else {
+      const noop = () => {};
+      client = {
+        id: "team-leader-orchestrator",
+        sessionKey: "team-leader",
+        ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+        send: noop,
+        _disconnectedBuffer: [],
+        conversationId: "default",
+      };
+    }
+
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Launching orchestration sprint for: "${action.title}"` });
+
+    handleOrchestration({
+      userMessage: `[Team Leader] ${action.title}`,
+      classification: { complexity: "orchestrated" as const, reasoning: `Team Leader priority: ${action.reasoning}` },
+      client: client as Parameters<typeof handleOrchestration>[0]["client"],
+      account,
+      skipApproval: true,
+      maxConcurrency: 3,
+      useGeminiPlanning: true,
+      onComplete: async (orchId, status) => {
+        logAction({ ts: Date.now(), type: "action", category: "team-leader",
+          message: `Orchestration ${status} for: "${action.title}" (${orchId})` });
+      },
+    }).catch(err => {
+      logError("team-leader", `Orchestration failed for "${action.title}"`, err);
+    });
+
+    action.status = "executing";
+  } catch (err) {
+    logError("team-leader", `Failed to launch orchestration for "${action.title}"`, err);
+    action.status = "proposed";
+  }
+}
+
+// ── 5c. Self-Tasking ──
+
+/**
+ * TL queues a task for immediate or next-cycle execution.
+ * Called during assessment when TL identifies follow-up work.
+ */
+export function queueTask(task: Omit<QueuedTask, "id" | "createdAt" | "processed">): QueuedTask {
+  const state = loadState();
+  const queued: QueuedTask = {
+    ...task,
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    processed: false,
+  };
+  state.taskQueue.push(queued);
+  // Keep queue manageable
+  if (state.taskQueue.length > 100) state.taskQueue = state.taskQueue.slice(-100);
+  saveState(state);
+  logAction({ ts: Date.now(), type: "action", category: "team-leader",
+    message: `Self-tasked: "${task.title}" (source: ${task.source})` });
+  return queued;
+}
+
+/**
+ * Get pending queued tasks (for inclusion in next signal gathering).
+ */
+export function getPendingTasks(): QueuedTask[] {
+  return loadState().taskQueue.filter(t => !t.processed);
 }
 
 // ── 6. Morning Routine (full pipeline) ──
