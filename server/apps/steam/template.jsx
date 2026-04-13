@@ -99,7 +99,7 @@ function GeneratedUI({ data, onAction }) {
                 {podcastAudioUrl && (
                   <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
                     onClick={function() {
-                      var email = prompt("Send report + podcast to:", "kkwong@xiaomi.com");
+                      var email = prompt("Send report + podcast to:", "");
                       if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
                     }}
                   >📧 Email Podcast</Button>

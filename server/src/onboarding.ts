@@ -94,7 +94,7 @@ export function getDefaultScheduledTasks(): Array<{
       cron: "0 8 * * *",
       action: {
         type: "prompt" as const,
-        prompt: "Run the Cortex daily discovery: search the web for updates on my top knowledge topics, analyze findings, ingest significant results into the Cortex, and email me a briefing at kkwong@xiaomi.com.",
+        prompt: "Run the Cortex daily discovery: search the web for updates on my top knowledge topics, analyze findings, ingest significant results into the Cortex, and email me an intelligence briefing.",
       },
       enabled: true,
       recurring: true,

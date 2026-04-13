@@ -14,6 +14,7 @@ import { createYouTubeTools } from "./src/youtube-tools.js";
 import { createEmailTools } from "./src/email-tools.js";
 import { createWechatTools } from "./src/wechat-tools.js";
 import { createCortexTools } from "./src/cortex-tools.js";
+import { createPageTools } from "./src/page-tools.js";
 import { createSystemTools } from "./src/system-tools.js";
 import { createBrowserTools } from "./src/browser-tools.js";
 import { createFilesystemTools } from "./src/filesystem-tools.js";
@@ -32,6 +33,7 @@ const toolSets = [
   createWechatTools(),
   createYouTubeTools(),
   createCortexTools(),
+  createPageTools(),
 ];
 for (const tools of toolSets) {
   for (const tool of tools) {

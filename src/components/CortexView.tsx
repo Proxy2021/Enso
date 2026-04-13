@@ -183,7 +183,10 @@ export default function CortexView() {
           : {}),
       }),
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`Server error: ${r.status} ${r.statusText}`);
+        return r.json();
+      })
       .then(data => {
         if (data.error) {
           setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
@@ -289,8 +292,9 @@ export default function CortexView() {
 
         setAppStates(prev => ({ ...prev, [activeApp.family]: { data, loading: false, navStack: prev[activeApp.family]?.navStack } }));
       })
-      .catch(() => {
+      .catch((err) => {
         setAppStates(prev => ({ ...prev, [activeApp.family]: { ...prev[activeApp.family], loading: false } }));
+        alert(`Action failed: ${err instanceof Error ? err.message : String(err)}`);
       });
   }, [apps, activeSubTab, appStates]);
 

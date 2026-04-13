@@ -68,5 +68,5 @@ return { content: [{ type: "text", text: JSON.stringify({
   whyRecommended: result ? result.whyRecommended : null,
   totalPodcastsGenerated: processedCount,
   topCortexThemes: topThemes,
-  note: "The deep processing pipeline runs in the background (15-30 min). An email with the podcast + 'Add to Cortex' button will be sent to kkwong@xiaomi.com when ready."
+  note: "The deep processing pipeline runs in the background (15-30 min). An email with the podcast + 'Add to Cortex' button will be sent to your notification email when ready."
 }) }] };

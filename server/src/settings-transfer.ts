@@ -355,9 +355,81 @@ function readCategory(id: string): unknown | null {
   }
 }
 
-function estimateSize(data: unknown): number {
-  if (data === null || data === undefined) return 0;
-  return JSON.stringify(data).length;
+function dirSize(dirPath: string, extensions?: string[]): number {
+  if (!existsSync(dirPath)) return 0;
+  let total = 0;
+  for (const entry of readdirSync(dirPath)) {
+    const full = join(dirPath, entry);
+    const st = statSync(full);
+    if (st.isDirectory()) {
+      total += dirSize(full, extensions);
+    } else if (!extensions || extensions.some(ext => entry.endsWith(ext))) {
+      total += st.size;
+    }
+  }
+  return total;
+}
+
+function fileSize(filePath: string): number {
+  try { return existsSync(filePath) ? statSync(filePath).size : 0; } catch { return 0; }
+}
+
+function measureCategorySize(id: string): number {
+  switch (id) {
+    case "apiKeys":
+      return fileSize(join(ENSO_HOME, "api-keys.json"));
+    case "providers":
+      return fileSize(join(ENSO_HOME, "providers.json"));
+    case "scheduledTasks":
+      return fileSize(join(ENSO_HOME, "scheduled-tasks", "tasks.json"));
+    case "memory":
+      return fileSize(join(ENSO_HOME, "memory", "ENSO_USER.md"))
+           + fileSize(join(ENSO_HOME, "memory", "ENSO_MEMORY.md"));
+    case "conversations":
+      return dirSize(join(ENSO_HOME, "cards"), [".json", ".jsonl"]);
+    case "apps":
+      return dirSize(join(ENSO_HOME, "apps"), [".json"]);
+    case "skills":
+      return dirSize(join(ENSO_HOME, "skills"), [".md"]);
+    case "projects":
+      return dirSize(join(ENSO_HOME, "projects"), [".json", ".md", ".jsx"]);
+    case "cortex":
+      return dirSize(join(ENSO_HOME, "wiki"), [".md"]);
+    case "deepContent":
+      return dirSize(join(ENSO_HOME, "data", "deep-content"), [".json"]);
+    case "dataSources": {
+      const ctxDir = join(ENSO_HOME, "data", "user-context");
+      return dirSize(join(ctxDir, "cache"), [".json"])
+           + fileSize(join(ctxDir, "consent.json"))
+           + fileSize(join(ctxDir, "scan-log.json"));
+    }
+    case "entityIndex":
+      return fileSize(join(ENSO_HOME, "data", "entity-index.json"));
+    case "focusAreas":
+      return fileSize(join(ENSO_HOME, "data", "focus-areas.json"));
+    case "collections": {
+      const dataDir = join(ENSO_HOME, "data");
+      if (!existsSync(dataDir)) return 0;
+      const skipDirs = new Set(["deep-content", "user-context", "card-summaries"]);
+      let total = 0;
+      for (const family of readdirSync(dataDir)) {
+        const familyPath = join(dataDir, family);
+        if (!statSync(familyPath).isDirectory() || skipDirs.has(family)) continue;
+        for (const coll of readdirSync(familyPath)) {
+          const collPath = join(familyPath, coll);
+          if (!statSync(collPath).isDirectory()) continue;
+          if (!existsSync(join(collPath, "index.json"))) continue;
+          total += dirSize(collPath, [".json"]);
+        }
+      }
+      return total;
+    }
+    case "orchestrations":
+      return dirSize(join(ENSO_HOME, "orchestrations"), [".md", ".json", ".jsx"])
+           + dirSize(join(ENSO_HOME, "discoveries"), [".md", ".json", ".jsx"]);
+    default:
+      return 0;
+  }
 }
 
 // ── Export Handler ──
@@ -374,13 +446,12 @@ export async function handleExport(req: Request, res: Response): Promise<void> {
   );
 
   if (dryRun) {
-    // Return category info with sizes
     const info = CATEGORIES.map((cat) => {
-      const data = validCategories.includes(cat.id) ? readCategory(cat.id) : null;
+      const size = measureCategorySize(cat.id);
       return {
         ...cat,
-        available: data !== null,
-        sizeBytes: estimateSize(data),
+        available: size > 0,
+        sizeBytes: size,
       };
     });
     res.json({ categories: info, machine: hostname() });
@@ -461,6 +532,14 @@ export async function handleImport(req: Request, res: Response): Promise<void> {
     // Reload API keys into process.env if they were imported
     if (summary.apiKeys && summary.apiKeys.imported > 0) {
       loadApiKeys();
+    }
+
+    // Invalidate focus areas cache if they were imported
+    if (summary.focusAreas && summary.focusAreas.imported > 0) {
+      try {
+        const { clearFocusCache } = await import("./focus-areas.js");
+        clearFocusCache();
+      } catch { /* best effort */ }
     }
 
     logAction({

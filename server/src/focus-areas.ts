@@ -101,6 +101,10 @@ export function loadFocusState(): FocusState | null {
   return null;
 }
 
+export function clearFocusCache(): void {
+  _cachedState = null;
+}
+
 export function saveFocusState(state: FocusState): void {
   try {
     const dir = dirname(FOCUS_PATH);

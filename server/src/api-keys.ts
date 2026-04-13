@@ -85,6 +85,15 @@ export function loadApiKeys(): void {
     }
   }
 
+  if (keys.machineName && !process.env.ENSO_MACHINE_NAME) {
+    process.env.ENSO_MACHINE_NAME = keys.machineName;
+    loaded++;
+  }
+  if (keys.notifyEmail && !process.env.ENSO_NOTIFY_EMAIL) {
+    process.env.ENSO_NOTIFY_EMAIL = keys.notifyEmail;
+    loaded++;
+  }
+
   if (loaded > 0) {
     logAction({
       ts: Date.now(),

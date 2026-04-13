@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
 import { getBackendBaseUrl, authHeaders } from "../lib/connection";
@@ -350,10 +350,7 @@ export default function FocusView() {
               className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/30 p-4 hover:border-gray-600/60 hover:bg-gray-800/30 transition-all group">
               <div className="flex items-start justify-between mb-1">
                 <h3 className="text-sm font-medium text-gray-100 pr-2">{area.title}</h3>
-                <div className="flex items-center gap-2 shrink-0">
-                  <TrendBadge trend={area.progress.trend} />
-                  <ClarityBadge clarity={area.clarity} />
-                </div>
+                <WorkflowBadge area={area} />
               </div>
               <p className="text-xs text-gray-400 mb-2 line-clamp-2">{area.intent || area.description}</p>
               <div className="flex items-center gap-3 text-[11px] text-gray-500">
@@ -426,10 +423,7 @@ export default function FocusView() {
                 {selected.title}
               </h2>
             )}
-            <div className="flex items-center gap-2 shrink-0">
-              <TrendBadge trend={selected.progress.trend} />
-              <ClarityBadge clarity={selected.clarity} />
-            </div>
+            <WorkflowBadge area={selected} />
           </div>
           {editingField === "description" ? (
             <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
@@ -503,10 +497,6 @@ export default function FocusView() {
                   </div>
                 )}
                 <div className="flex items-center gap-3 text-[10px] text-gray-600 pt-1 border-t border-gray-800/30">
-                  <span>{selected.clarity}</span>
-                  <span>{"\u00B7"}</span>
-                  <span>{selected.progress.trend}</span>
-                  <span>{"\u00B7"}</span>
                   <span>{selected.evidence.length} evidence points</span>
                   {selected.preparedAt && <><span>{"\u00B7"}</span><span className="text-amber-400/60">prepared {selected.preparedAt.slice(0, 10)}</span></>}
                 </div>
@@ -978,33 +968,49 @@ export default function FocusView() {
 
 // ── Evolve Tab ──
 
+const ROLE_EMOJI: Record<string, string> = {
+  researcher: "\uD83D\uDD0D",
+  architect: "\uD83D\uDCD0",
+  builder: "\uD83D\uDD28",
+  coder: "\uD83D\uDCBB",
+  reviewer: "\u2705",
+};
+
 function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNavigateToChat: () => void }) {
-  const [sessions, setSessions] = useState<{ orchestrations: Array<{ orchestrationId: string; goal: string; status: string; taskCount: number; completedCount: number; startedAt: number }>; sessions: Array<{ runId: string; label: string; status: string; startedAt: number }> } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cards = useChatStore((s) => s.cards);
+  const [tick, setTick] = useState(0);
+  const [expandedTask, setExpandedTask] = useState<string | null>(null);
+  const terminalEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const resp = await fetch(`${getBackendBaseUrl()}${API.SESSIONS}`, { headers: authHeaders() });
-        if (resp.ok && !cancelled) {
-          const data = await resp.json();
-          setSessions(data);
-        }
-      } catch { /* ignore */ }
-      if (!cancelled) setLoading(false);
-    };
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const interval = setInterval(() => setTick(t => t + 1), 3000);
+    return () => clearInterval(interval);
   }, []);
 
-  if (loading) return <p className="text-sm text-gray-500 text-center py-8">Checking for active sessions...</p>;
+  // Auto-scroll terminal when expanded task updates
+  useEffect(() => {
+    if (expandedTask && terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [expandedTask, tick]);
 
-  const activeOrchs = sessions?.orchestrations?.filter(o => o.status === "running" || o.status === "planning" || o.status === "executing") || [];
-  const activeSessions = sessions?.sessions?.filter(s => s.status === "running") || [];
+  // Find the most recent orchestration card (prefer streaming, fall back to complete)
+  const allOrchCards = Object.values(cards).filter(c => c.type === "orchestration");
+  const orchCard = allOrchCards.find(c => c.status === "streaming")
+    || allOrchCards.sort((a, b) => b.updatedAt - a.updatedAt)[0];
 
-  if (activeOrchs.length === 0 && activeSessions.length === 0) {
+  const orchData = orchCard?.data as { orchestrationProgress?: { plan?: { tasks: Array<{ taskId: string; title: string; agentRole: string; status: string; resultSummary?: string }>; goal?: string; status?: string } }; orchestrationPlan?: { tasks: Array<{ taskId: string; title: string; agentRole: string; status: string; resultSummary?: string }>; goal?: string; status?: string } } | undefined;
+  const plan = orchData?.orchestrationProgress?.plan || orchData?.orchestrationPlan;
+  const tasks = plan?.tasks || [];
+  const taskTerminals = orchCard?.taskTerminals || {};
+  const completed = tasks.filter(t => t.status === "completed").length;
+  const running = tasks.filter(t => t.status === "running");
+  const failed = tasks.filter(t => t.status === "failed").length;
+  const total = tasks.length;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const elapsed = orchCard ? Math.round((Date.now() - orchCard.createdAt) / 60000) : 0;
+
+  if (!orchCard || total === 0) {
     return (
       <div className="space-y-4">
         <div className="text-center py-8">
@@ -1020,61 +1026,102 @@ function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNa
     );
   }
 
+  void tick;
+
+  const isComplete = completed === total && total > 0;
+  const isRunning = running.length > 0;
+
   return (
     <div className="space-y-4">
-      {/* Active orchestrations */}
-      {activeOrchs.map(orch => {
-        const progress = orch.taskCount > 0 ? Math.round((orch.completedCount / orch.taskCount) * 100) : 0;
-        const elapsed = Math.round((Date.now() - orch.startedAt) / 60000);
-        return (
-          <div key={orch.orchestrationId} className="rounded-lg border border-indigo-500/30 bg-indigo-950/10 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm animate-pulse">{"\uD83D\uDE80"}</span>
-              <span className="text-xs font-medium text-indigo-200">Evolution Sprint</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 ml-auto">{orch.status}</span>
-            </div>
-            <p className="text-xs text-gray-300">{orch.goal.slice(0, 200)}</p>
-            {/* Progress bar */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-gray-500">
-                <span>{orch.completedCount}/{orch.taskCount} tasks</span>
-                <span>{elapsed}m elapsed</span>
-              </div>
-              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
-              </div>
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Active Claude Code sessions */}
-      {activeSessions.length > 0 && (
-        <div>
-          <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Active Agents ({activeSessions.length})</label>
-          <div className="space-y-1.5">
-            {activeSessions.map(s => {
-              const elapsed = Math.round((Date.now() - s.startedAt) / 1000);
-              return (
-                <div key={s.runId} className="flex items-center gap-2 text-xs px-3 py-2 rounded bg-gray-800/40 border border-gray-700/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                  <span className="text-gray-300 truncate flex-1">{s.label || "Claude Code session"}</span>
-                  <span className="text-[10px] text-gray-600 shrink-0">{elapsed}s</span>
-                </div>
-              );
-            })}
-          </div>
+      {/* Sprint header + progress */}
+      <div className={`rounded-lg border p-4 space-y-3 ${
+        isComplete ? "border-emerald-500/30 bg-emerald-950/10" : "border-indigo-500/30 bg-indigo-950/10"
+      }`}>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm ${isRunning ? "animate-pulse" : ""}`}>
+            {isComplete ? "\u2705" : "\u26A1"}
+          </span>
+          <span className={`text-xs font-medium ${isComplete ? "text-emerald-200" : "text-indigo-200"}`}>
+            {isComplete ? "Evaluation Complete" : "Evaluation Sprint"}
+          </span>
+          <span className="text-[10px] text-gray-500 tabular-nums">{elapsed}m</span>
+          <span className="text-[10px] text-gray-500 ml-auto">{completed}/{total} tasks</span>
+          {failed > 0 && <span className="text-[10px] text-red-400">{failed} failed</span>}
         </div>
-      )}
+        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all duration-500 ${
+            isComplete ? "bg-emerald-500" : isRunning ? "bg-blue-500 animate-pulse" : "bg-blue-500"
+          }`} style={{ width: `${Math.max(pct, isRunning ? 3 : 0)}%` }} />
+        </div>
+      </div>
 
-      {/* Navigate to conversation */}
+      {/* Live task list with expandable terminals */}
+      <div className="space-y-0.5">
+        {tasks.map(task => {
+          const terminal = taskTerminals[task.taskId];
+          const hasTerminal = !!terminal?.text;
+          const hasSummary = !!task.resultSummary;
+          const isExpanded = expandedTask === task.taskId;
+          const canExpand = hasTerminal || hasSummary || (task.status === "running");
+
+          return (
+            <div key={task.taskId}>
+              <button
+                onClick={() => canExpand && setExpandedTask(isExpanded ? null : task.taskId)}
+                className={`w-full flex items-center gap-2 text-xs px-3 py-2 rounded transition-all text-left ${
+                  task.status === "running" ? "bg-blue-500/10 border border-blue-500/20" :
+                  task.status === "completed" ? "bg-gray-800/20 text-gray-400" :
+                  task.status === "failed" ? "bg-red-500/5 text-red-400/80" :
+                  task.status === "blocked" ? "opacity-30" :
+                  "text-gray-500"
+                } ${canExpand ? "cursor-pointer hover:bg-gray-800/40" : "cursor-default"}`}
+              >
+                <span className="w-4 text-center shrink-0">
+                  {task.status === "completed" ? <span className="text-green-400">{"\u2713"}</span> :
+                   task.status === "failed" ? <span className="text-red-400">{"\u2717"}</span> :
+                   task.status === "running" ? <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" /> :
+                   task.status === "blocked" ? <span>{"\u2298"}</span> :
+                   <span className="text-gray-600">{"\u25CB"}</span>}
+                </span>
+                <span className="shrink-0">{ROLE_EMOJI[task.agentRole] || "\uD83E\uDD16"}</span>
+                <span className="truncate flex-1">{task.title}</span>
+                {canExpand && (
+                  <span className="text-[10px] text-gray-600 shrink-0">{isExpanded ? "\u25B2" : "\u25BC"}</span>
+                )}
+              </button>
+
+              {/* Expanded terminal output */}
+              {isExpanded && hasTerminal && (
+                <div className="mx-1 mt-0.5 mb-1 rounded-lg bg-[#0d1117] border border-gray-800/60 overflow-hidden">
+                  <pre className="p-3 text-[11px] leading-relaxed text-gray-300 font-mono whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto">
+                    {terminal.text.slice(-3000)}
+                    <div ref={terminalEndRef} />
+                  </pre>
+                </div>
+              )}
+              {isExpanded && !hasTerminal && hasSummary && (
+                <div className="mx-1 mt-0.5 mb-1 rounded-lg bg-[#0d1117] border border-gray-800/60 p-3">
+                  <p className="text-[11px] text-gray-400 font-mono whitespace-pre-wrap">{task.resultSummary}</p>
+                </div>
+              )}
+              {isExpanded && !hasTerminal && !hasSummary && task.status === "running" && (
+                <div className="mx-1 mt-0.5 mb-1 rounded-lg bg-[#0d1117] border border-gray-800/60 p-3">
+                  <p className="text-[11px] text-gray-500 font-mono animate-pulse">Agent starting...</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Navigate to full view */}
       <button onClick={onNavigateToChat}
         className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 hover:border-violet-500/40 hover:bg-violet-950/10 transition-all">
         <div className="flex items-center gap-2">
           <span className="text-sm">{"\uD83D\uDCAC"}</span>
           <span className="text-xs font-medium text-gray-300">View in conversation</span>
         </div>
-        <p className="text-[11px] text-gray-500 mt-1 ml-6">See the full orchestration card with task graph and agent outputs</p>
+        <p className="text-[11px] text-gray-500 mt-1 ml-6">See full orchestration card with terminals and agent outputs</p>
       </button>
     </div>
   );
@@ -1082,28 +1129,16 @@ function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNa
 
 // ── Helper Components ──
 
-function TrendBadge({ trend }: { trend: string }) {
-  const config = {
-    growing: { icon: "\u25B2", color: "text-emerald-400", label: "growing" },
-    steady: { icon: "\u25CF", color: "text-blue-400", label: "steady" },
-    quiet: { icon: "\u25CB", color: "text-gray-500", label: "quiet" },
-  }[trend] || { icon: "\u25CF", color: "text-gray-500", label: trend };
+function WorkflowBadge({ area }: { area: FocusArea }) {
+  const phase = area.lastSprintDate
+    ? { label: "Evolved", bg: "bg-emerald-900/30 text-emerald-400" }
+    : area.conversationId
+    ? { label: "In Discussion", bg: "bg-emerald-900/30 text-emerald-400" }
+    : area.preparedBriefing
+    ? { label: "Evaluated", bg: "bg-emerald-900/30 text-emerald-400" }
+    : { label: "New", bg: "bg-gray-800/40 text-gray-500" };
 
   return (
-    <span className={`text-[10px] ${config.color}`}>
-      {config.icon} {config.label}
-    </span>
-  );
-}
-
-function ClarityBadge({ clarity }: { clarity: string }) {
-  const config = {
-    clear: { bg: "bg-emerald-900/30 text-emerald-400", label: "clear" },
-    developing: { bg: "bg-blue-900/30 text-blue-400", label: "developing" },
-    emerging: { bg: "bg-amber-900/30 text-amber-400", label: "emerging" },
-  }[clarity] || { bg: "bg-gray-900/30 text-gray-400", label: clarity };
-
-  return (
-    <span className={`text-[9px] px-1.5 py-0.5 rounded ${config.bg}`}>{config.label}</span>
+    <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${phase.bg}`}>{phase.label}</span>
   );
 }

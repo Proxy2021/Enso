@@ -337,304 +337,225 @@ if (totalItems > 0) {
   }
 }
 
-// ── Step 5: Build rich HTML email ──
+// ── Step 5: Build shareable page via enso_pages_create ──
 var emailSent = false;
-
-// Impact colors
-var impactColors = { high: "#dc2626", medium: "#d97706", low: "#059669" };
-var impactLabels = { high: "HIGH IMPACT", medium: "MEDIUM", low: "LOW" };
 var categoryIcons = { breaking: "\u26A1", strategic: "\uD83C\uDFAF", update: "\uD83D\uDD04", emerging: "\uD83C\uDF31" };
 
-var emailBody = "";
-emailBody += "<div style='max-width:680px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#1a1a2e;'>";
+var pageSections = [];
 
-// Header
-emailBody += "<div style='background:linear-gradient(135deg,#1e1b4b,#312e81);padding:32px;border-radius:12px 12px 0 0;'>";
-emailBody += "<h1 style='margin:0;color:#fff;font-size:24px;'>\uD83E\uDDE0 Cortex Daily Discovery</h1>";
-emailBody += "<p style='margin:8px 0 0;color:#a5b4fc;font-size:14px;'>" + ctx.formatDate() + " \u2014 " + topicsSearched + " topics scanned \u2022 " + totalItems + " significant findings</p>";
-emailBody += "</div>";
+// Stats bar
+pageSections.push({
+  type: "stats",
+  items: [
+    { label: "Topics Scanned", value: String(topicsSearched), icon: "\uD83D\uDD0D" },
+    { label: "Findings", value: String(totalItems), icon: "\uD83D\uDCCA" },
+    { label: "Cortex Pages", value: String(pagesCreated.length + pagesUpdated.length), icon: "\uD83D\uDCDD" }
+  ]
+});
 
 // Executive Summary
 if (analysisResult && analysisResult.executiveSummary) {
-  emailBody += "<div style='background:#eef2ff;padding:20px 24px;border-left:4px solid #6366f1;margin:0;'>";
-  emailBody += "<h2 style='margin:0 0 8px;font-size:14px;color:#4338ca;text-transform:uppercase;letter-spacing:1px;'>\uD83D\uDCCB Executive Summary</h2>";
-  emailBody += "<p style='margin:0;font-size:15px;line-height:1.6;color:#1e1b4b;'>" + analysisResult.executiveSummary + "</p>";
-  emailBody += "</div>";
+  pageSections.push({ type: "text", title: "\uD83D\uDCCB Executive Summary", content: analysisResult.executiveSummary, style: "blockquote" });
 }
 
 // Weekly Theme
 if (analysisResult && analysisResult.weeklyTheme) {
-  emailBody += "<div style='background:#faf5ff;padding:12px 24px;border-left:4px solid #a855f7;'>";
-  emailBody += "<p style='margin:0;font-size:13px;'><strong style='color:#7e22ce;'>\uD83D\uDD2E Theme:</strong> <em>" + analysisResult.weeklyTheme + "</em></p>";
-  emailBody += "</div>";
+  pageSections.push({ type: "text", title: "\uD83D\uDD2E Weekly Theme", content: analysisResult.weeklyTheme });
 }
 
-emailBody += "<div style='padding:0 24px;background:#fff;'>";
-
-// Sections with items
+// Findings sections
 for (var es = 0; es < sections.length; es++) {
   var sect = sections[es];
   var sItems = sect.items || [];
   if (sItems.length === 0) continue;
 
   var catIcon = categoryIcons[sect.category] || "\uD83D\uDCCC";
-  emailBody += "<h2 style='margin:24px 0 12px;font-size:18px;color:#1e1b4b;border-bottom:2px solid #e5e7eb;padding-bottom:8px;'>" + catIcon + " " + (sect.categoryLabel || sect.category) + "</h2>";
-
+  var findingItems = [];
   for (var ei = 0; ei < sItems.length; ei++) {
     var item = sItems[ei];
     var idx2 = (item.index || 0) - 1;
     var source2 = (idx2 >= 0 && idx2 < allFindings.length) ? allFindings[idx2] : null;
-    var impactColor = impactColors[item.impact] || "#6b7280";
-    var impactLabel = impactLabels[item.impact] || item.impact;
-
-    emailBody += "<div style='margin-bottom:20px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;'>";
-
-    // Topic + Impact badge
-    emailBody += "<div style='margin-bottom:8px;'>";
-    if (source2) emailBody += "<span style='font-size:11px;color:#6366f1;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;'>" + source2.topic + "</span> ";
-    emailBody += "<span style='display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:#fff;background:" + impactColor + ";'>" + impactLabel + "</span>";
-    emailBody += "</div>";
-
-    // Headline
-    emailBody += "<h3 style='margin:0 0 8px;font-size:16px;'>";
-    if (source2) emailBody += "<a href='" + source2.url + "' style='color:#1e40af;text-decoration:none;'>" + item.headline + "</a>";
-    else emailBody += item.headline;
-    emailBody += "</h3>";
-
-    // Analysis
-    emailBody += "<p style='margin:0 0 10px;font-size:14px;line-height:1.6;color:#374151;'>" + item.analysis + "</p>";
-
-    // Impact reason
-    if (item.impactReason) {
-      emailBody += "<p style='margin:0 0 8px;font-size:12px;color:" + impactColor + ";'><strong>Impact:</strong> " + item.impactReason + "</p>";
-    }
-
-    // Action item
-    if (item.actionItem) {
-      emailBody += "<div style='margin:8px 0;padding:8px 12px;background:#ecfdf5;border-radius:6px;border-left:3px solid #10b981;'>";
-      emailBody += "<p style='margin:0;font-size:13px;color:#065f46;'>\u2192 <strong>Action:</strong> " + item.actionItem + "</p>";
-      emailBody += "</div>";
-    }
-
-    // Connections to existing Cortex knowledge
-    if (item.connections && item.connections.length > 0) {
-      emailBody += "<p style='margin:8px 0 0;font-size:11px;color:#6b7280;'>\uD83D\uDD17 Connects to: ";
-      emailBody += item.connections.map(function(c) {
-        return "<span style='display:inline-block;padding:1px 6px;margin:1px;background:#e0e7ff;border-radius:8px;font-size:11px;color:#4338ca;'>" + c + "</span>";
-      }).join(" ");
-      emailBody += "</p>";
-    }
-
-    // Quick-add to Cortex link (for discovered entities)
-    if (item.entityTitle && item.entityType) {
-      var quickAddUrl = serverBaseUrl + "/api/cortex/quick-add?title=" + encodeURIComponent(item.entityTitle) + "&type=" + encodeURIComponent(item.entityType);
-      if (item.entityCreator) quickAddUrl += "&creator=" + encodeURIComponent(item.entityCreator);
-      emailBody += "<p style='margin:8px 0 0;'>";
-      emailBody += "<a href='" + quickAddUrl + "' style='display:inline-block;padding:4px 10px;background:#059669;color:white;border-radius:4px;text-decoration:none;font-size:11px;font-weight:600;'>\uD83D\uDCE5 Add \"" + item.entityTitle + "\" to Cortex</a>";
-      emailBody += "</p>";
-    }
-
-    emailBody += "</div>";
+    findingItems.push({
+      headline: item.headline,
+      analysis: item.analysis,
+      impact: item.impact || "low",
+      topic: source2 ? source2.topic : undefined,
+      url: source2 ? source2.url : undefined,
+      actionItem: item.actionItem,
+      connections: item.connections
+    });
   }
+  pageSections.push({ type: "findings", title: catIcon + " " + (sect.categoryLabel || sect.category), items: findingItems });
 }
 
 // Blind Spots
 if (analysisResult && analysisResult.blindSpots && analysisResult.blindSpots.length > 0) {
-  emailBody += "<div style='margin:24px 0;padding:16px;background:#fffbeb;border-radius:8px;border:1px solid #fde68a;'>";
-  emailBody += "<h3 style='margin:0 0 8px;font-size:14px;color:#92400e;'>\uD83D\uDCA1 Blind Spots \u2014 Topics Worth Tracking</h3>";
-  for (var bi = 0; bi < analysisResult.blindSpots.length; bi++) {
-    emailBody += "<p style='margin:4px 0;font-size:13px;color:#78350f;'>\u2022 " + analysisResult.blindSpots[bi] + "</p>";
-  }
-  emailBody += "</div>";
+  pageSections.push({
+    type: "list", title: "\uD83D\uDCA1 Blind Spots \u2014 Topics Worth Tracking",
+    items: analysisResult.blindSpots.map(function(bs) { return { text: bs }; })
+  });
 }
 
-// ── On This Day — photo memories ──
+// On This Day photo memories
 if (briefingData.onThisDay.length > 0) {
-  emailBody += "<div style='margin:24px 0;padding:16px;background:#fff7ed;border-radius:8px;border:1px solid #fed7aa;'>";
-  emailBody += "<h3 style='margin:0 0 10px;font-size:14px;color:#c2410c;'>📅 On This Day</h3>";
-  for (var otdi = 0; otdi < Math.min(briefingData.onThisDay.length, 5); otdi++) {
-    var memory = briefingData.onThisDay[otdi];
-    emailBody += "<p style='margin:4px 0;font-size:13px;color:#9a3412;'><strong>" + memory.yearsAgo + " year" + (memory.yearsAgo > 1 ? "s" : "") + " ago</strong> — " + memory.name + " (" + memory.photoCount + " photos)</p>";
-  }
-  emailBody += "</div>";
+  pageSections.push({
+    type: "list", title: "\uD83D\uDCC5 On This Day",
+    items: briefingData.onThisDay.slice(0, 5).map(function(m) {
+      return { text: m.yearsAgo + " year" + (m.yearsAgo > 1 ? "s" : "") + " ago \u2014 " + m.name, detail: m.photoCount + " photos" };
+    })
+  });
 }
 
-// ── Fresh from Your Channels — YouTube (mobile-friendly card grid) ──
+// Fresh YouTube videos
 if (briefingData.freshVideos.length > 0) {
-  emailBody += "<div style='margin:24px 0;padding:16px 16px 8px;background:linear-gradient(135deg,#1a1025,#1e1b3a);border-radius:12px;border:1px solid #3b2d5c;'>";
-  emailBody += "<h3 style='margin:0 0 4px;font-size:18px;color:#e879f9;text-align:center;'>Your Daily YouTube Picks</h3>";
-  var todayStr = new Date().toISOString().slice(0, 10);
-  emailBody += "<p style='margin:0 0 14px;font-size:12px;color:#9ca3af;text-align:center;'>" + todayStr + " \u2014 Fresh from your subscriptions</p>";
-
-  // 2-column grid using table for email compatibility
-  emailBody += "<table cellpadding='0' cellspacing='0' border='0' width='100%' style='border-collapse:separate;border-spacing:8px;'>";
-  var maxVids = Math.min(briefingData.freshVideos.length, 8);
-  for (var fvi = 0; fvi < maxVids; fvi += 2) {
-    emailBody += "<tr>";
-    for (var col = 0; col < 2; col++) {
-      var vidIdx = fvi + col;
-      if (vidIdx < maxVids) {
-        var vid = briefingData.freshVideos[vidIdx];
-        var viewStr = "";
-        if (vid.viewCount) {
-          var vc = parseInt(vid.viewCount);
-          if (vc >= 1000000) viewStr = (vc / 1000000).toFixed(1) + "M views";
-          else if (vc >= 1000) viewStr = Math.round(vc / 1000) + "K views";
-          else viewStr = vc + " views";
-        }
-        var timeStr = "";
-        if (vid.publishedAt) {
-          var pubDate = vid.publishedAt.slice(0, 10);
-          timeStr = pubDate;
-        }
-        var metaParts = [];
-        if (viewStr) metaParts.push(viewStr);
-        if (vid.duration) metaParts.push(vid.duration);
-        if (timeStr) metaParts.push(timeStr);
-
-        emailBody += "<td width='50%' valign='top' style='padding:0;'>";
-        emailBody += "<div style='background:#0f0d1a;border-radius:10px;overflow:hidden;border:1px solid #2d2640;'>";
-        // Thumbnail with link
-        if (vid.thumbnailUrl && vid.videoUrl) {
-          emailBody += "<a href='" + vid.videoUrl + "' style='display:block;'>";
-          emailBody += "<img src='" + vid.thumbnailUrl + "' alt='' width='100%' style='display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px 10px 0 0;' />";
-          emailBody += "</a>";
-        }
-        emailBody += "<div style='padding:8px 10px 10px;'>";
-        // Title
-        if (vid.videoUrl) {
-          emailBody += "<a href='" + vid.videoUrl + "' style='display:block;font-size:13px;font-weight:600;color:#e2e8f0;text-decoration:none;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;'>" + vid.title + "</a>";
-        } else {
-          emailBody += "<p style='margin:0;font-size:13px;font-weight:600;color:#e2e8f0;line-height:1.3;'>" + vid.title + "</p>";
-        }
-        // Channel name
-        if (vid.channel) {
-          emailBody += "<p style='margin:4px 0 0;font-size:11px;color:#e879f9;font-weight:500;'>" + vid.channel + "</p>";
-        }
-        // Meta line
-        if (metaParts.length > 0) {
-          emailBody += "<p style='margin:3px 0 0;font-size:10px;color:#6b7280;'>" + metaParts.join(" \u00B7 ") + "</p>";
-        }
-        // Description snippet
-        if (vid.description) {
-          emailBody += "<p style='margin:4px 0 0;font-size:10px;color:#4b5563;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;'>" + vid.description + "</p>";
-        }
-        emailBody += "</div></div></td>";
-      } else {
-        emailBody += "<td width='50%'></td>";
-      }
-    }
-    emailBody += "</tr>";
-  }
-  emailBody += "</table>";
-
-  if (briefingData.freshVideos.length > maxVids) {
-    emailBody += "<p style='margin:8px 0 4px;font-size:11px;color:#9ca3af;text-align:center;'>+" + (briefingData.freshVideos.length - maxVids) + " more videos from your subscriptions</p>";
-  }
-  emailBody += "</div>";
+  pageSections.push({
+    type: "video-grid", title: "\uD83D\uDCFA Your Daily YouTube Picks",
+    videos: briefingData.freshVideos.slice(0, 8).map(function(v) {
+      return { title: v.title, channel: v.channel, thumbnailUrl: v.thumbnailUrl, videoUrl: v.videoUrl, viewCount: v.viewCount, duration: v.duration, description: v.description };
+    })
+  });
 }
 
-// ── Reading Nudge — Kindle ──
+// Reading Nudge
 if (briefingData.readingNudge) {
   var rn = briefingData.readingNudge;
-  emailBody += "<div style='margin:24px 0;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;'>";
-  emailBody += "<h3 style='margin:0 0 8px;font-size:14px;color:#166534;'>📚 Your Library</h3>";
-  emailBody += "<p style='margin:4px 0;font-size:13px;color:#15803d;'>" + rn.totalBooks + " books in your Kindle library</p>";
-  if (rn.topCategories.length > 0) {
-    emailBody += "<p style='margin:4px 0;font-size:12px;color:#16a34a;'>Strongest in: " + rn.topCategories.join(", ") + "</p>";
-  }
-  emailBody += "</div>";
+  var rnText = rn.totalBooks + " books in your Kindle library";
+  if (rn.topCategories && rn.topCategories.length > 0) rnText += " \u2022 Strongest in: " + rn.topCategories.join(", ");
+  pageSections.push({ type: "text", title: "\uD83D\uDCDA Your Library", content: rnText });
 }
 
-// ── Project Pulse ──
+// Project Pulse
 if (briefingData.projectPulse && (briefingData.projectPulse.active || []).length > 0) {
   var pp = briefingData.projectPulse;
-  emailBody += "<div style='margin:24px 0;padding:16px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;'>";
-  emailBody += "<h3 style='margin:0 0 8px;font-size:14px;color:#1e40af;'>💻 Project Pulse</h3>";
-  if (pp.active.length > 0) {
-    emailBody += "<p style='margin:4px 0;font-size:12px;color:#1e3a8a;font-weight:600;'>Active this week:</p>";
-    for (var ppi = 0; ppi < pp.active.length; ppi++) {
-      emailBody += "<p style='margin:2px 0 2px 12px;font-size:13px;color:#1e40af;'>• " + pp.active[ppi].name + " <span style='color:#60a5fa;'>(" + pp.active[ppi].tech + ")</span></p>";
-    }
+  var ppItems = [];
+  for (var ppi = 0; ppi < pp.active.length; ppi++) {
+    ppItems.push({ text: pp.active[ppi].name, detail: pp.active[ppi].tech });
   }
-  if (pp.stale.length > 0) {
-    emailBody += "<p style='margin:8px 0 4px;font-size:12px;color:#6b7280;font-weight:600;'>Going stale (30+ days):</p>";
+  if (pp.stale && pp.stale.length > 0) {
     for (var psi = 0; psi < pp.stale.length; psi++) {
-      emailBody += "<p style='margin:2px 0 2px 12px;font-size:12px;color:#9ca3af;'>• " + pp.stale[psi].name + "</p>";
+      ppItems.push({ text: pp.stale[psi].name + " (stale 30+ days)" });
     }
   }
-  emailBody += "</div>";
+  pageSections.push({ type: "list", title: "\uD83D\uDCBB Project Pulse", items: ppItems });
 }
 
-// ── Knowledge Growth ──
+// Knowledge Growth
 if (briefingData.knowledgeGrowth) {
   var kg = briefingData.knowledgeGrowth;
-  emailBody += "<div style='margin:24px 0;padding:12px 16px;background:#f5f3ff;border-radius:8px;border:1px solid #ddd6fe;'>";
-  emailBody += "<p style='margin:0;font-size:13px;color:#5b21b6;'>🧠 <strong>Cortex: " + kg.totalPages + " pages</strong> — " + kg.entities + " entities, " + kg.concepts + " concepts, " + kg.sources + " sources, " + kg.synthesis + " synthesis</p>";
-  emailBody += "</div>";
+  pageSections.push({
+    type: "stats",
+    items: [
+      { label: "Total Pages", value: String(kg.totalPages), icon: "\uD83E\uDDE0" },
+      { label: "Entities", value: String(kg.entities) },
+      { label: "Concepts", value: String(kg.concepts) },
+      { label: "Sources", value: String(kg.sources) },
+      { label: "Synthesis", value: String(kg.synthesis) }
+    ]
+  });
 }
 
 // Library Connections — cross-source synthesis
 var connectionTopics = Object.keys(libraryConnections);
 if (connectionTopics.length > 0) {
-  emailBody += "<div style='margin:24px 0;padding:16px;background:#faf5ff;border-radius:8px;border:1px solid #e9d5ff;'>";
-  emailBody += "<h3 style='margin:0 0 12px;font-size:14px;color:#6b21a8;'>\uD83E\uDDE0 From Your Brain</h3>";
+  var connItems = [];
   for (var lci = 0; lci < connectionTopics.length; lci++) {
     var lcTopic = connectionTopics[lci];
     var lc = libraryConnections[lcTopic];
-    emailBody += "<div style='margin:8px 0;padding:10px;background:white;border-radius:6px;border:1px solid #f3e8ff;'>";
-    emailBody += "<p style='margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;'>" + lcTopic + "</p>";
-    if (lc.narrative) {
-      emailBody += "<p style='margin:0 0 6px;font-size:12px;color:#4c1d95;line-height:1.5;'>" + lc.narrative + "</p>";
-    }
-    if (lc.sources.length > 0) {
-      emailBody += "<p style='margin:0;font-size:11px;color:#8b5cf6;'>Across: " + lc.sources.join(", ") + " (" + lc.totalMatches + " matches)</p>";
-    }
-    emailBody += "</div>";
+    connItems.push({
+      text: lcTopic + (lc.narrative ? " \u2014 " + lc.narrative : ""),
+      detail: lc.sources.length > 0 ? "Across: " + lc.sources.join(", ") + " (" + lc.totalMatches + " matches)" : undefined
+    });
   }
-  emailBody += "</div>";
+  pageSections.push({ type: "list", title: "\uD83E\uDDE0 From Your Brain", items: connItems });
 }
 
 // Cortex Updates
 if (pagesCreated.length > 0 || pagesUpdated.length > 0) {
-  emailBody += "<div style='margin:24px 0;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;'>";
-  emailBody += "<h3 style='margin:0 0 8px;font-size:14px;color:#166534;'>\uD83D\uDCDD Cortex Auto-Updated</h3>";
-  if (pagesCreated.length > 0) emailBody += "<p style='margin:4px 0;font-size:13px;color:#15803d;'><strong>New pages:</strong> " + pagesCreated.join(", ") + "</p>";
-  if (pagesUpdated.length > 0) emailBody += "<p style='margin:4px 0;font-size:13px;color:#15803d;'><strong>Updated:</strong> " + pagesUpdated.join(", ") + "</p>";
-  emailBody += "</div>";
+  var updateItems = [];
+  if (pagesCreated.length > 0) updateItems.push({ text: "New pages: " + pagesCreated.join(", ") });
+  if (pagesUpdated.length > 0) updateItems.push({ text: "Updated: " + pagesUpdated.join(", ") });
+  pageSections.push({ type: "list", title: "\uD83D\uDCDD Cortex Auto-Updated", items: updateItems });
 }
 
 // Tracked Topics
-emailBody += "<div style='margin:24px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;'>";
-emailBody += "<p style='margin:0 0 8px;font-size:12px;color:#6b7280;font-weight:600;'>\uD83C\uDFAF TRACKED TOPICS</p>";
-emailBody += "<p style='margin:0;'>" + ranked.map(function(r) {
-  return "<span style='display:inline-block;padding:3px 10px;margin:2px;background:#e0e7ff;border-radius:12px;font-size:12px;color:#3730a3;'>" + r.title + "</span>";
-}).join("") + "</p>";
-emailBody += "</div>";
+pageSections.push({
+  type: "tags", title: "\uD83C\uDFAF Tracked Topics",
+  tags: ranked.map(function(r) { return { label: r.title, color: "#312e81" }; })
+});
 
-emailBody += "</div>"; // close padding div
-
-// Footer
-emailBody += "<div style='background:#f1f5f9;padding:16px 24px;border-radius:0 0 12px 12px;text-align:center;'>";
-emailBody += "<p style='margin:0;font-size:11px;color:#94a3b8;'>Sent by Enso Knowledge Cortex \u2022 Your AI-maintained intelligence system</p>";
-emailBody += "</div>";
-emailBody += "</div>"; // close outer container
-
-// Read recipient
-var emailTo = await ctx.store.get("discovery_email_to");
-if (!emailTo) emailTo = "kkwong@xiaomi.com";
-
+// Create the shareable page via tool
+var pageId = "discovery-" + new Date().toISOString().slice(0, 10);
+var pageResult = null;
 try {
-  var emailResult = await ctx.callTool("enso_email_send", {
-    to: emailTo,
-    subject: "\uD83E\uDDE0 Cortex Intelligence Briefing \u2014 " + ctx.formatDate(),
-    body: emailBody,
-    html: true
+  pageResult = await ctx.callTool("enso_pages_create", {
+    id: pageId,
+    title: "\uD83E\uDDE0 Cortex Daily Discovery",
+    subtitle: ctx.formatDate() + " \u2014 " + topicsSearched + " topics scanned \u2022 " + totalItems + " significant findings",
+    badge: { label: "Daily Intelligence Briefing", color: "#312e81" },
+    sections: pageSections,
+    footer: "Enso Knowledge Cortex \u2022 Your AI-maintained intelligence system",
+    meta: { description: analysisResult ? analysisResult.executiveSummary : "" }
   });
-  emailSent = emailResult.success;
-  ctx.log("Email " + (emailSent ? "sent" : "failed"));
+  if (pageResult && pageResult.data) pageResult = pageResult.data;
+  ctx.log("Shareable page created: " + (pageResult && pageResult.shortUrl ? pageResult.shortUrl : "unknown"));
 } catch(e) {
-  ctx.log("Email failed: " + (e.message || e));
+  ctx.log("Page creation failed: " + (e.message || e));
+}
+
+// Send email with link to the hosted page
+var emailTo = await ctx.store.get("discovery_email_to");
+if (!emailTo && pageResult && pageResult.notifyEmail) emailTo = pageResult.notifyEmail;
+if (!emailTo) emailTo = "";
+
+if (emailTo && pageResult && pageResult.shortUrl) {
+  var summaryPreview = analysisResult && analysisResult.executiveSummary ? analysisResult.executiveSummary.slice(0, 300) : "";
+  var emailHtml = "<div style='font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;overflow:hidden'>";
+  emailHtml += "<div style='padding:24px;text-align:center;background:linear-gradient(135deg,#1e1b4b,#312e81)'>";
+  emailHtml += "<h1 style='color:white;font-size:22px;margin:0 0 4px'>\uD83E\uDDE0 Cortex Daily Discovery</h1>";
+  emailHtml += "<p style='color:#a5b4fc;font-size:13px;margin:4px 0'>" + ctx.formatDate() + " \u2014 " + topicsSearched + " topics \u2022 " + totalItems + " findings</p>";
+  emailHtml += "</div>";
+  emailHtml += "<div style='padding:16px 24px'>";
+  if (summaryPreview) emailHtml += "<p style='color:#94a3b8;font-size:13px;line-height:1.6;margin:0 0 16px'>" + summaryPreview + (summaryPreview.length >= 300 ? "..." : "") + "</p>";
+  emailHtml += "<div style='text-align:center'>";
+  emailHtml += "<a href='" + pageResult.shortUrl + "' style='display:inline-block;background:#7c3aed;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px'>View Full Briefing \u2192</a>";
+  emailHtml += "</div></div>";
+  emailHtml += "<div style='padding:12px 24px;text-align:center;border-top:1px solid #2a2a4a'>";
+  emailHtml += "<p style='color:#475569;font-size:11px;margin:0'>Enso AI \u2022 " + ctx.formatDate() + "</p>";
+  emailHtml += "</div></div>";
+
+  try {
+    var emailResult = await ctx.callTool("enso_email_send", {
+      to: emailTo,
+      subject: "\uD83E\uDDE0 Cortex Intelligence Briefing \u2014 " + ctx.formatDate(),
+      body: emailHtml,
+      html: true
+    });
+    emailSent = emailResult.success;
+    ctx.log("Email " + (emailSent ? "sent" : "failed"));
+  } catch(e) {
+    ctx.log("Email failed: " + (e.message || e));
+  }
+} else {
+  ctx.log("Email skipped: " + (!emailTo ? "no recipient configured" : "page creation failed"));
+}
+
+// ── Step 6: Send WeChat notification ──
+var wechatSent = false;
+if (pageResult && pageResult.shortUrl) {
+  try {
+    var followers = await ctx.callTool("enso_wechat_followers", {});
+    var followerList = (followers && followers.data && followers.data.followers) || [];
+    if (followerList.length > 0) {
+      var wcResult = await ctx.callTool("enso_wechat_send", {
+        to: followerList[0].openId,
+        type: "news",
+        title: "\uD83E\uDDE0 Daily Discovery",
+        content: topicsSearched + " topics \u00B7 " + totalItems + " findings",
+        url: pageResult.shortUrl
+      });
+      wechatSent = !!(wcResult && wcResult.data && wcResult.data.success);
+    }
+  } catch(e) { ctx.log("WeChat send failed: " + (e.message || e)); }
 }
 
 return {
@@ -645,6 +566,7 @@ return {
     pagesCreated: pagesCreated,
     pagesUpdated: pagesUpdated,
     emailSent: emailSent,
+    wechatSent: wechatSent,
     topTopics: ranked.map(function(r) { return r.title; }),
     executiveSummary: analysisResult ? analysisResult.executiveSummary : "",
     blindSpots: analysisResult ? analysisResult.blindSpots : [],

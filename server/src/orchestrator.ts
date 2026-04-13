@@ -2432,132 +2432,115 @@ export function loadOrchestration(orchestrationId: string): OrchestrationPlan | 
 
 async function sendOrchestrationCompletionEmail(plan: OrchestrationPlan, status: "completed" | "failed"): Promise<void> {
   try {
-    const email = process.env.SMTP_EMAIL;
-    const password = process.env.SMTP_PASSWORD;
-    if (!email || !password) return;
-
-    const { default: nodemailer } = await import("nodemailer");
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com", port: 587, secure: false,
-      auth: { user: email, pass: password },
-    });
+    const { registerPage, getNotifyEmail } = await import("./shareable-pages.js");
+    type PageSection = import("./shareable-pages.js").PageSection;
+    const notifyTo = getNotifyEmail();
+    if (!notifyTo) return;
 
     const completed = plan.tasks.filter(t => t.status === "completed");
     const failed = plan.tasks.filter(t => t.status === "failed");
     const totalTasks = plan.tasks.length;
-
-    // Build a compact data summary for the LLM
-    const taskSummaries = plan.tasks.map(t => ({
-      title: t.title,
-      role: t.agentRole,
-      status: t.status,
-      verdict: t.structuredResult?.verdict || "",
-      summary: t.resultSummary?.slice(0, 200) || "",
-      findings: (t.structuredResult?.keyFindings || []).slice(0, 3).map(f => f.title),
-      recommendations: (t.structuredResult?.recommendations || []).slice(0, 3).map(r => r.title),
-    }));
-
-    const sprintData = JSON.stringify({
-      goal: plan.goal,
-      status,
-      completed: completed.length,
-      failed: failed.length,
-      total: totalTasks,
-      tasks: taskSummaries,
-    });
-
-    // Use the user's configured chat LLM to generate a concise summary
-    let summaryHtml = "";
-    try {
-      const { llm } = await import("./llm.js");
-      const { loadProviderKeys } = await import("./accounts.js");
-      const providerKeys = { ...loadProviderKeys(), gemini: process.env.GEMINI_API_KEY || "" };
-      // Use the default chat model (Gemini Flash as fallback)
-      const model = process.env.ENSO_CHAT_MODEL || "gemini-2.5-flash";
-
-      const prompt = `You are summarizing an AI orchestration sprint for an executive email. Be CONCISE and focus on KEY ACHIEVEMENTS and ACTIONABLE INSIGHTS.
-
-Sprint data:
-${sprintData}
-
-Write an HTML email body (NO <html>/<body> tags, just content divs) with dark theme styling (background #0f172a, cards #1e293b, text #e2e8f0, accent #f472b6). Include:
-
-1. A one-paragraph executive summary (3-4 sentences max) of what was accomplished
-2. "Key Achievements" section — 3-5 bullet points of the most important things delivered
-3. "Issues Found" section — top 3 problems discovered (if any)
-4. "Next Steps" section — 2-3 recommended follow-up actions
-5. Stats bar showing completed/failed/total
-
-Keep the ENTIRE email under 400 words. No task-by-task breakdown. No raw data dumps. Write like a CTO briefing a CEO.
-
-Use inline CSS. Use these colors: success=#4ade80, error=#f87171, accent=#f472b6, muted=#94a3b8, card-bg=#1e293b, bg=#0f172a.`;
-
-      summaryHtml = await llm({ prompt, model, providerKeys, timeoutMs: 30_000 });
-      // Strip markdown code fences if present
-      summaryHtml = summaryHtml.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
-    } catch (llmErr) {
-      logError("orchestrator", "Sprint email LLM summary failed", llmErr);
-    }
-
-    // Fallback if LLM summary failed — include task-level details
-    if (!summaryHtml) {
-      const statusColor = status === "completed" ? "#4ade80" : "#f87171";
-      const taskRows = plan.tasks.map(t => {
-        const icon = t.status === "completed" ? "✓" : t.status === "failed" ? "✗" : "○";
-        const color = t.status === "completed" ? "#4ade80" : t.status === "failed" ? "#f87171" : "#94a3b8";
-        const detail = t.resultSummary?.slice(0, 120) || t.structuredResult?.verdict || "";
-        return `<tr>
-          <td style="padding:6px 8px;color:${color};font-size:14px;width:20px;vertical-align:top">${icon}</td>
-          <td style="padding:6px 8px">
-            <div style="color:#e2e8f0;font-size:13px;font-weight:500">${t.title}</div>
-            ${detail ? `<div style="color:#94a3b8;font-size:11px;margin-top:2px">${detail}</div>` : ""}
-          </td>
-        </tr>`;
-      }).join("");
-      summaryHtml = `
-        <div style="text-align:center;margin:20px 0">
-          <span style="color:${statusColor};font-size:32px;font-weight:700">${completed.length}/${totalTasks}</span>
-          <span style="color:#94a3b8;font-size:14px;display:block">tasks completed</span>
-        </div>
-        <div style="background:#1e293b;border-radius:12px;padding:16px;margin:16px 0">
-          <div style="color:#e2e8f0;font-size:14px;line-height:1.5">${plan.goal}</div>
-        </div>
-        <div style="background:#1e293b;border-radius:12px;padding:8px;margin:16px 0">
-          <table style="width:100%;border-collapse:collapse">${taskRows}</table>
-        </div>`;
-    }
-
     const statusLabel = status === "completed" ? "Completed" : "Failed";
     const statusIcon = status === "completed" ? "✓" : "✗";
 
-    // Deploy button — only show for successful sprints
-    const deployButton = status === "completed" ? `
-    <div style="text-align:center;margin:24px 0">
-      <a href="https://pc1.enso.net/api/trigger/deploy" style="display:inline-block;background:#4ade80;color:#0f172a;padding:14px 36px;border-radius:10px;font-size:16px;font-weight:700;text-decoration:none;letter-spacing:0.5px">
-        🚀 Deploy Sprint Changes
-      </a>
-      <p style="color:#475569;font-size:11px;margin-top:8px">Builds, commits, and pushes all sprint changes to production</p>
-    </div>` : "";
+    // Build structured page sections from task data
+    const sections: PageSection[] = [];
 
-    const html = `
-<div style="background:#0f172a;padding:30px 20px;font-family:system-ui,-apple-system,sans-serif">
-  <div style="max-width:700px;margin:0 auto">
-    <h1 style="color:#f472b6;text-align:center;font-size:22px;margin-bottom:4px">${statusIcon} Sprint ${statusLabel}</h1>
-    <p style="color:#94a3b8;text-align:center;font-size:13px;margin-top:0">${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-    ${summaryHtml}
-    ${deployButton}
-    <p style="color:#334155;text-align:center;font-size:11px;margin-top:24px">Enso AI · Sprint Report</p>
-  </div>
-</div>`;
-
-    await transporter.sendMail({
-      from: `Enso AI <${email}>`,
-      to: "kkwong@xiaomi.com",
-      subject: `${statusIcon} Sprint ${statusLabel}: ${plan.goal.slice(0, 60)}`,
-      html,
+    // Stats
+    sections.push({
+      type: "stats",
+      items: [
+        { label: "Total Tasks", value: String(totalTasks), icon: "📋" },
+        { label: "Completed", value: String(completed.length), icon: "✅" },
+        ...(failed.length > 0 ? [{ label: "Failed", value: String(failed.length), icon: "❌" }] : []),
+      ],
     });
 
-    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Completion email sent for ${plan.orchestrationId}` });
+    // Goal
+    sections.push({ type: "text", title: "🎯 Sprint Goal", content: plan.goal, style: "blockquote" as const });
+
+    // Task results
+    const taskItems = plan.tasks.map(t => {
+      const sr = (t as unknown as Record<string, unknown>).structuredResult as Record<string, unknown> | undefined;
+      const icon = t.status === "completed" ? "✅" : t.status === "failed" ? "❌" : "⏳";
+      const verdict = sr?.verdict ? ` [${sr.verdict}]` : "";
+      return {
+        text: `${icon} ${t.title}${verdict}`,
+        detail: t.resultSummary?.slice(0, 200) || undefined,
+      };
+    });
+    sections.push({ type: "list", title: "📊 Task Results", items: taskItems });
+
+    // Key findings across all tasks
+    const allFindings = plan.tasks
+      .flatMap(t => {
+        const sr = (t as unknown as Record<string, unknown>).structuredResult as Record<string, unknown> | undefined;
+        return ((sr?.keyFindings || []) as Array<{ title: string; detail?: string }>).slice(0, 2);
+      })
+      .slice(0, 8);
+    if (allFindings.length > 0) {
+      sections.push({
+        type: "list", title: "🔑 Key Findings",
+        items: allFindings.map(f => ({ text: f.title, detail: f.detail })),
+      });
+    }
+
+    // Recommendations
+    const allRecs = plan.tasks
+      .flatMap(t => {
+        const sr = (t as unknown as Record<string, unknown>).structuredResult as Record<string, unknown> | undefined;
+        return ((sr?.recommendations || []) as Array<{ title: string; detail?: string }>).slice(0, 2);
+      })
+      .slice(0, 6);
+    if (allRecs.length > 0) {
+      sections.push({
+        type: "list", title: "📌 Recommendations",
+        items: allRecs.map(r => ({ text: r.title, detail: r.detail })),
+      });
+    }
+
+    // Deploy action for successful sprints
+    const baseUrl = process.env.ENSO_TUNNEL_URL || `https://${process.env.ENSO_MACHINE_NAME || "pc1"}.enso.net`;
+    const actions = status === "completed"
+      ? [{ label: "🚀 Deploy Sprint Changes", url: `${baseUrl}/api/trigger/deploy`, style: "success" as const }]
+      : [];
+
+    const pageId = `sprint-${plan.orchestrationId}`;
+    const { shortUrl } = registerPage({
+      id: pageId,
+      title: `${statusIcon} Sprint ${statusLabel}`,
+      subtitle: `${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} · ${completed.length}/${totalTasks} tasks`,
+      badge: { label: status === "completed" ? "Sprint Complete" : "Sprint Failed", color: status === "completed" ? "#059669" : "#dc2626" },
+      sections,
+      actions,
+      footer: `Enso AI · Sprint Report · ${plan.orchestrationId}`,
+      meta: { description: plan.goal.slice(0, 200) },
+    }, baseUrl);
+
+    // Send email with page link
+    const { sendHtmlEmail } = await import("./email.js");
+    const emailHtml = `<div style="font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;overflow:hidden">
+<div style="padding:24px;text-align:center;background:linear-gradient(135deg,${status === "completed" ? "#064e3b,#059669" : "#7f1d1d,#dc2626"})">
+<h1 style="color:white;font-size:22px;margin:0 0 4px">${statusIcon} Sprint ${statusLabel}</h1>
+<p style="color:rgba(255,255,255,0.8);font-size:13px;margin:4px 0">${completed.length}/${totalTasks} tasks · ${new Date().toLocaleDateString()}</p>
+</div>
+<div style="padding:16px 24px">
+<p style="color:#94a3b8;font-size:13px;line-height:1.6;margin:0 0 16px">${plan.goal.slice(0, 300)}</p>
+<div style="text-align:center">
+<a href="${shortUrl}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">View Sprint Report →</a>
+</div>
+</div>
+<div style="padding:12px 24px;text-align:center;border-top:1px solid #2a2a4a">
+<p style="color:#475569;font-size:11px;margin:0">Enso AI · ${plan.orchestrationId}</p>
+</div></div>`;
+
+    await sendHtmlEmail({
+      to: notifyTo,
+      subject: `${statusIcon} Sprint ${statusLabel}: ${plan.goal.slice(0, 60)}`,
+      html: emailHtml,
+    });
+
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Sprint page shared via email for ${plan.orchestrationId}` });
   } catch (err) {
     logError("orchestrator", "Failed to send completion email", err);
   }

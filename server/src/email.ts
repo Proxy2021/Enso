@@ -43,6 +43,10 @@ function getTransporter(): { transporter: nodemailer.Transporter; senderEmail: s
       port: 587,
       secure: false, // STARTTLS
       auth: { user: email, pass: password },
+      pool: true,
+      maxConnections: 3,
+      socketTimeout: 30_000,
+      greetingTimeout: 15_000,
     });
   }
 
@@ -59,25 +63,30 @@ export function resetEmailTransporter(): void {
  */
 export async function sendHtmlEmail(params: SendHtmlEmailParams): Promise<SendEmailResult> {
   const { to, subject, html, textFallback } = params;
+  const maxRetries = 2;
 
-  try {
-    const { transporter: t, senderEmail } = getTransporter();
-    const from = params.from ?? `Enso <${senderEmail}>`;
-    const plainText = textFallback ?? `${subject}\n\nView this email in an HTML-capable client.`;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const { transporter: t, senderEmail } = getTransporter();
+      const from = params.from ?? `Enso <${senderEmail}>`;
+      const plainText = textFallback ?? `${subject}\n\nView this email in an HTML-capable client.`;
 
-    await t.sendMail({
-      from,
-      to,
-      subject,
-      text: plainText,
-      html,
-    });
+      await t.sendMail({ from, to, subject, text: plainText, html });
 
-    logAction({ ts: Date.now(), type: "action", category: "email", message: `Email sent to ${to} via SMTP` });
-    return { success: true, message: `Email sent to ${to}` };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logError("email", `SMTP send failed: ${msg}`);
-    return { success: false, message: `Email send failed: ${msg}` };
+      logAction({ ts: Date.now(), type: "action", category: "email", message: `Email sent to ${to} via SMTP` });
+      return { success: true, message: `Email sent to ${to}` };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTransient = /socket close|ECONN|ETIMEDOUT|ECONNRESET/i.test(msg);
+      if (isTransient && attempt < maxRetries) {
+        transporter = null;
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      logError("email", `SMTP send failed: ${msg}`);
+      return { success: false, message: `Email send failed: ${msg}` };
+    }
   }
+
+  return { success: false, message: "Email send failed after retries" };
 }

@@ -94,93 +94,45 @@ function GeneratedUI({ data, onAction }) {
                 {podcastAudioUrl && (
                   <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
                     onClick={function() {
-                      var email = prompt("Send summary + podcast to:", "kkwong@xiaomi.com");
+                      var email = prompt("Send summary + podcast to:", "");
                       if (email) onAction("entity_share_email", { entityId: entity.entityId || d.focusEntity, recipient: email });
                     }}
                   >📧 Email Podcast</Button>
                 )}
                 <Button size="sm" style={{ background: "#16a34a", color: "white" }}
                   onClick={function() {
-                    var msg = "\u{1F4DA} " + entity.title;
-                    if (entity.author) msg += " by " + entity.author;
-                    if (entity.rating) msg += "\n\u2B50 " + entity.rating;
-                    if (entity.categories) msg += "\n" + entity.categories;
+                    if (processed && entity.entityId && research) {
+                      var slug = entity.entityId.replace(/[^\p{L}\p{N}-]/gu, "_").slice(0, 120);
+                      var shortHash = slug.split("").reduce(function(a, c) { return ((a << 5) - a + c.charCodeAt(0)) | 0; }, 0).toString(36).replace("-", "");
+                      var podcastUrl = "https://pc1.enso.net/p/" + shortHash;
 
-                    // Rich content → publish as WeChat article
-                    if (research) {
-                      var html = '<div style="padding:16px;font-family:-apple-system,sans-serif;color:#1a1a1a;line-height:1.8">';
-                      html += '<h1 style="font-size:22px;margin-bottom:4px">' + entity.title + '</h1>';
-                      if (entity.author) html += '<p style="color:#666;font-size:14px;margin:4px 0 16px">' + entity.author + '</p>';
-                      if (entity.rating) html += '<p style="font-size:14px;color:#d97706">⭐ ' + entity.rating + (entity.reviewCount ? ' (' + entity.reviewCount + ' reviews)' : '') + '</p>';
-                      if (entity.categories) html += '<p style="font-size:13px;color:#888;margin-bottom:20px">📖 ' + entity.categories + '</p>';
-                      if (research.coreThesis) {
-                        html += '<h2 style="font-size:18px;color:#1e40af;margin:20px 0 8px">💡 Core Thesis</h2>';
-                        html += '<p style="font-size:15px;line-height:1.8;background:#f0f7ff;padding:12px 16px;border-radius:8px;border-left:4px solid #3b82f6">' + research.coreThesis + '</p>';
-                      }
+                      var desc = "\u{1F399}\uFE0F AI Podcast \u00B7 " + (podcastDuration || "?") + " min";
+                      if (entity.author) desc += "\n" + entity.author;
+                      if (research.coreThesis) desc += "\n" + research.coreThesis.slice(0, 80);
+
+                      var summary = "\u{1F4DA} " + entity.title;
+                      if (entity.author) summary += " \u2014 " + entity.author;
+                      if (research.coreThesis) summary += "\n\n\u{1F4A1} " + research.coreThesis;
                       if (research.keyInsights && research.keyInsights.length > 0) {
-                        html += '<h2 style="font-size:18px;color:#7c3aed;margin:24px 0 8px">🔑 Key Insights</h2>';
-                        research.keyInsights.forEach(function(ins) {
-                          html += '<div style="margin:12px 0;padding:10px 14px;background:#f5f3ff;border-radius:8px;border-left:4px solid #7c3aed">';
-                          html += '<p style="font-size:15px;font-weight:600;margin:0 0 4px">' + ins.insight + '</p>';
-                          if (ins.example) html += '<p style="font-size:13px;color:#666;margin:4px 0 0;font-style:italic">' + ins.example + '</p>';
-                          html += '</div>';
+                        summary += "\n\n\u{1F511} Key Insights:";
+                        research.keyInsights.slice(0, 5).forEach(function(ins) {
+                          var text = typeof ins === "string" ? ins : (ins.insight || ins.title || String(ins));
+                          summary += "\n\u2022 " + text.slice(0, 100);
                         });
                       }
-                      if (research.chapterSummaries && research.chapterSummaries.length > 0) {
-                        html += '<h2 style="font-size:18px;color:#059669;margin:24px 0 8px">📑 Chapter Summaries</h2>';
-                        research.chapterSummaries.forEach(function(ch) {
-                          html += '<div style="margin:8px 0;padding:8px 14px;border-left:3px solid #10b981">';
-                          html += '<p style="font-size:14px;font-weight:600;margin:0">' + ch.title + '</p>';
-                          html += '<p style="font-size:13px;color:#555;margin:4px 0 0">' + ch.summary + '</p>';
-                          html += '</div>';
-                        });
-                      }
-                      if (research.criticalPerspectives && research.criticalPerspectives.length > 0) {
-                        html += '<h2 style="font-size:18px;color:#dc2626;margin:24px 0 8px">🎯 Critical Perspectives</h2>';
-                        research.criticalPerspectives.forEach(function(cp) {
-                          html += '<p style="font-size:14px;margin:6px 0">• ' + cp + '</p>';
-                        });
-                      }
-                      if (podcastDuration || podcastScript || podcastAudioUrl) {
-                        html += '<h2 style="font-size:18px;color:#7c3aed;margin:24px 0 8px">🎙️ AI Book Podcast' + (podcastDuration ? ' (' + podcastDuration + ' min)' : '') + '</h2>';
-                        if (podcastAudioUrl) {
-                          var fullAudioUrl = podcastAudioUrl.startsWith("http") ? podcastAudioUrl : "https://pc1.enso.net" + podcastAudioUrl;
-                          var emailAudioType = fullAudioUrl.indexOf(".mp3") >= 0 ? "audio/mpeg" : "audio/wav";
-                          html += '<audio controls style="width:100%;margin:8px 0 16px" preload="none"><source src="' + fullAudioUrl + '" type="' + emailAudioType + '"/>Your browser does not support audio.</audio>';
-                          html += '<p style="font-size:12px;color:#888;margin:0 0 16px">If the player doesn\'t load, <a href="' + fullAudioUrl + '" style="color:#7c3aed">tap here to listen</a></p>';
-                        }
-                        if (podcastScript) {
-                          var lines = podcastScript.split("\n");
-                          lines.forEach(function(line) {
-                            var trimmed = line.trim();
-                            if (!trimmed) return;
-                            if (trimmed.match(/^(Host|Guest|Speaker|主持人|嘉宾)/i)) {
-                              var colonIdx = trimmed.indexOf(":");
-                              if (colonIdx > 0) {
-                                var speaker = trimmed.slice(0, colonIdx);
-                                var text = trimmed.slice(colonIdx + 1).trim();
-                                html += '<p style="font-size:14px;margin:8px 0"><strong style="color:#7c3aed">' + speaker + ':</strong> ' + text + '</p>';
-                              } else {
-                                html += '<p style="font-size:14px;margin:8px 0">' + trimmed + '</p>';
-                              }
-                            } else {
-                              html += '<p style="font-size:14px;margin:8px 0;color:#333">' + trimmed + '</p>';
-                            }
-                          });
-                        }
-                      }
-                      html += '<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0 12px"/>';
-                      html += '<p style="font-size:12px;color:#999;text-align:center">Shared from Enso AI</p>';
-                      html += '</div>';
 
                       onAction("share_wechat", {
-                        content: msg,
-                        articleHtml: html,
-                        title: entity.title + (entity.author ? " — " + entity.author : ""),
-                        author: entity.author || "Enso AI",
-                        coverUrl: entity.imageUrl || "",
+                        content: summary,
+                        title: "\u{1F399}\uFE0F " + entity.title + " \u2014 AI Podcast",
+                        description: desc,
+                        linkUrl: podcastUrl,
+                        coverUrl: entity.imageUrl || undefined
                       });
                     } else {
+                      var msg = "\u{1F4DA} " + entity.title;
+                      if (entity.author) msg += " by " + entity.author;
+                      if (entity.rating) msg += "\n\u2B50 " + entity.rating;
+                      if (entity.categories) msg += "\n" + entity.categories;
                       if (entity.summary) msg += "\n\n" + entity.summary;
                       onAction("share_wechat", { content: msg });
                     }

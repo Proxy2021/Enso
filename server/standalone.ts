@@ -36,6 +36,7 @@ import { createEmailTools } from "./src/email-tools.js";
 import { createWechatTools } from "./src/wechat-tools.js";
 import { createYouTubeTools } from "./src/youtube-tools.js";
 import { createCortexTools } from "./src/cortex-tools.js";
+import { createPageTools } from "./src/page-tools.js";
 import { startSelfHealing } from "./src/self-heal.js";
 
 // ── Exit codes ──
@@ -61,6 +62,7 @@ function registerAllTools(): void {
     createWechatTools(),
     createYouTubeTools(),
     createCortexTools(),
+    createPageTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

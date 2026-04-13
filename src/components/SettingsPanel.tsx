@@ -1121,8 +1121,7 @@ function TransferSection() {
           const data = await res.json();
           const cats: CategoryInfo[] = data.categories || [];
           setCategories(cats);
-          // Default: select available sensitive + scheduledTasks + memory
-          const defaults = new Set(cats.filter((c) => c.available && (c.sensitive || c.id === "scheduledTasks" || c.id === "memory")).map((c) => c.id));
+          const defaults = new Set(cats.filter((c) => c.available).map((c) => c.id));
           setSelected(defaults);
         }
       } catch { setError(t("error.couldNotConnect")); }

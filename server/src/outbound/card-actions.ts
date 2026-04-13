@@ -1452,28 +1452,34 @@ export async function handlePluginCardAction(params: {
     }
 
     try {
-      const { getProcessedBook, buildBookEmailHtml } = await import("../deep-content.js");
+      const { getProcessedBook, buildEntityPage } = await import("../deep-content.js");
       const processed = getProcessedBook(entityId);
       if (!processed) {
         sendOperation("error", "Book not yet processed. Generate the podcast first.");
         return;
       }
 
-      // Determine base URL for podcast streaming links — prefer tunnel URL for email accessibility
-      const machineName = process.env.ENSO_MACHINE_NAME || hostname();
-      const tunnelUrl = process.env.ENSO_TUNNEL_URL || `https://${machineName}.enso.net`;
-      const html = buildBookEmailHtml(processed, tunnelUrl);
+      const { getServerBaseUrl } = await import("../shareable-pages.js");
+      const tunnelUrl = getServerBaseUrl();
+      const { shortUrl } = buildEntityPage(processed, tunnelUrl);
 
       sendOperation("processing", "Sending email...");
+      const previewHtml = `<div style="font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;padding:24px;text-align:center">
+<h1 style="font-size:22px;margin:0 0 8px">${processed.title}</h1>
+<p style="color:#94a3b8;margin:4px 0">${processed.author} · ${processed.durationMinutes} min AI Podcast</p>
+<p style="color:#94a3b8;font-size:13px;line-height:1.6;text-align:left;margin:16px 0">${(processed.research.coreThesis || "").slice(0, 300)}</p>
+<a href="${shortUrl}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin:16px 0">▶ Play Podcast & Read Insights →</a>
+<p style="color:#475569;font-size:11px;margin-top:16px">Enso AI</p></div>`;
+
       const result = await sendHtmlEmail({
         to: recipient,
-        subject: `📚 ${processed.title} — Book Intelligence Report + Podcast`,
-        html,
-        textFallback: `${processed.title} by ${processed.author}\n\n${processed.research.coreThesis}\n\nPodcast: ${tunnelUrl}/api/podcast/stream/${entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80)}`,
+        subject: `📚 ${processed.title} — AI Podcast + Insights`,
+        html: previewHtml,
+        textFallback: `${processed.title} by ${processed.author}\n\n${processed.research.coreThesis}\n\nView: ${shortUrl}`,
       });
 
       sendOperation("complete", result.success ? "Email sent" : "Email failed");
-      logAction({ ts: Date.now(), type: "action", category: "action:book-email", message: `Book email sent for "${processed.title}" to ${recipient}` });
+      logAction({ ts: Date.now(), type: "action", category: "action:book-email", message: `Entity page shared for "${processed.title}" to ${recipient}` });
     } catch (err) {
       logError("action:book-email", "Email failed", err, { cardId, entityId });
       sendOperation("error", `Email failed: ${err instanceof Error ? err.message : String(err)}`);

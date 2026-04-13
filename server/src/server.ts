@@ -13,6 +13,7 @@ import { extname, dirname, basename, join } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir, homedir, hostname, platform, arch, totalmem } from "os";
 import { spawn } from "child_process";
+import { htmlShell, htmlPage, renderPage, servePage, resolveShortId, setServerBaseUrl, type PageConfig, type PageSection } from "./shareable-pages.js";
 import type { EnsoRuntime } from "./local-types.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
@@ -260,7 +261,7 @@ export async function startEnsoServer(opts: {
   // reading the body as a Buffer.
   const jsonParser = express.json();
   app.use((req, res, next) => {
-    if (req.path === "/upload" || req.path === "/transcribe" || req.path === "/api/settings/import") return next();
+    if (req.path === "/upload" || req.path === "/transcribe" || req.path === "/api/settings/import" || req.path === "/api/cortex/action") return next();
     jsonParser(req, res, next);
   });
 
@@ -641,6 +642,8 @@ export async function startEnsoServer(opts: {
   if (accessToken) {
     app.use((req, res, next) => {
       if (req.method === "OPTIONS") return next();
+      // Public endpoints — shareable pages, podcast streams, and short links are shared externally
+      if (req.path.startsWith("/api/podcast/") || req.path.startsWith("/p/") || req.path.startsWith("/page/")) return next();
       // Browser navigation bypass — sec-fetch-mode:"navigate" is set by browsers for
       // top-level page loads (typing URL, clicking links, refresh).  These requests only
       // need the HTML shell served by the SPA fallback; actual data is fetched via
@@ -796,7 +799,7 @@ export async function startEnsoServer(opts: {
   const deepContentProgress = new Map<string, { phase: string; detail?: string; percentComplete?: number; startedAt: number }>();
 
   // ── Cortex Card Action API (for Cortex tab — handles view_entity, nav_back, add_to_cortex etc.) ──
-  app.post("/api/cortex/action", async (req, res) => {
+  app.post("/api/cortex/action", express.json({ limit: "2mb" }), async (req, res) => {
     try {
       const { action, payload, appFamily, currentData } = req.body as {
         action: string; payload?: Record<string, unknown>;
@@ -945,7 +948,7 @@ export async function startEnsoServer(opts: {
         if (!entityId) { res.json({ error: "No entity ID" }); return; }
 
         try {
-          const { getProcessedContent, buildEntityEmailHtml } = await import("./deep-content.js");
+          const { getProcessedContent, buildEntityPage } = await import("./deep-content.js");
           const processed = getProcessedContent(entityId);
           if (!processed) {
             res.json({ error: "Book not yet processed. Generate the podcast first." });
@@ -953,18 +956,26 @@ export async function startEnsoServer(opts: {
           }
 
           const tunnelUrl = process.env.ENSO_TUNNEL_URL || `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
-          const html = buildEntityEmailHtml(processed, tunnelUrl);
+          const { shortUrl } = buildEntityPage(processed, tunnelUrl);
+          const { sharePage: _sp } = await import("./shareable-pages.js");
 
           const { sendHtmlEmail } = await import("./email.js");
+          const previewHtml = `<div style="font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;overflow:hidden;padding:24px;text-align:center">
+<h1 style="font-size:22px;margin:0 0 8px">${processed.title}</h1>
+<p style="color:#94a3b8;margin:4px 0">${processed.author} · ${processed.durationMinutes} min AI Podcast</p>
+<p style="color:#94a3b8;font-size:13px;line-height:1.6;text-align:left;margin:16px 0">${(processed.research.coreThesis || "").slice(0, 300)}${(processed.research.coreThesis || "").length > 300 ? "..." : ""}</p>
+<a href="${shortUrl}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin:16px 0">▶ Play Podcast & Read Insights →</a>
+<p style="color:#475569;font-size:11px;margin-top:16px">Enso AI</p></div>`;
+
           const result = await sendHtmlEmail({
             to: recipient,
             from: "Enso AI <noreply@enso.ai>",
-            subject: `📚 ${processed.title} by ${processed.author} — ${processed.durationMinutes} min AI Podcast`,
-            html,
-            textFallback: `${processed.title} by ${processed.author}\n\n${processed.research.coreThesis}`,
+            subject: `📚 ${processed.title} — ${processed.durationMinutes} min AI Podcast`,
+            html: previewHtml,
+            textFallback: `${processed.title} by ${processed.author}\n\n${processed.research.coreThesis}\n\nPlay: ${shortUrl}`,
           });
 
-          logAction({ ts: Date.now(), type: "action", category: "action:book-email", message: `Book email sent for "${processed.title}" to ${recipient}` });
+          logAction({ ts: Date.now(), type: "action", category: "action:book-email", message: `Entity page shared via email for "${processed.title}" to ${recipient}` });
           res.json({ success: result.success, message: result.message });
         } catch (err) {
           logError("action:book-email", "Email failed", err);
@@ -992,18 +1003,25 @@ export async function startEnsoServer(opts: {
         if (!content) { res.json({ error: "No content to share" }); return; }
 
         try {
-          const { sendTextMessage, sendArticle, getFollowerOpenIds } = await import("./wechat.js");
+          const { sendTextMessage, sendNewsMessage, sendArticle, getFollowerOpenIds } = await import("./wechat.js");
           const followers = await getFollowerOpenIds();
           if (followers.length === 0) { res.json({ error: "No WeChat followers. Follow the test account first." }); return; }
 
-          // If article HTML is provided, publish as a rich article; otherwise send as text
           const articleHtml = p.articleHtml ? String(p.articleHtml) : undefined;
           const title = p.title ? String(p.title) : undefined;
           const coverUrl = p.coverUrl ? String(p.coverUrl) : undefined;
           const author = p.author ? String(p.author) : undefined;
+          const linkUrl = p.linkUrl ? String(p.linkUrl) : undefined;
+          const description = p.description ? String(p.description) : undefined;
 
           let result;
-          if (articleHtml && title) {
+          if (linkUrl && title) {
+            logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Sending news card to WeChat: ${title}` });
+            result = await sendNewsMessage(followers[0], { title, description: description || content.slice(0, 120), url: linkUrl, picurl: coverUrl });
+            if (result.success && content && content !== title) {
+              await sendTextMessage(followers[0], content);
+            }
+          } else if (articleHtml && title) {
             logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Publishing article to WeChat: ${title}` });
             result = await sendArticle(followers[0], { title, author, content: articleHtml, coverUrl });
           } else {
@@ -1290,9 +1308,10 @@ export async function startEnsoServer(opts: {
   // Discovers a new book based on Cortex interests, generates deep podcast, sends email
   app.post("/api/book-recommendation/daily", async (req, res) => {
     try {
-      const { discoverNewBooks, generateDeepContent, buildEntityEmailHtml } = await import("./deep-content.js");
+      const { discoverNewBooks, generateDeepContent, buildEntityPage } = await import("./deep-content.js");
       const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
       const { sendHtmlEmail } = await import("./email.js");
+      const { getNotifyEmail } = await import("./shareable-pages.js");
 
       // Determine language from request or default
       const reqLanguage = (req.query.language as string) || (req.body?.language as string) || undefined;
@@ -1338,17 +1357,24 @@ export async function startEnsoServer(opts: {
 
       logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${book.title} — ${processed.durationMinutes} min` });
 
-      // Step 4: Build and send email with podcast + Add to Cortex button
+      // Step 4: Build shareable page and send email with link
       const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
-      const emailHtml = buildEntityEmailHtml(processed, baseUrl, reqLanguage);
-      const emailResult = await sendHtmlEmail({
-        to: "kkwong@xiaomi.com",
-        from: "Enso AI <noreply@enso.ai>",
-        subject: `📚 ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
-        html: emailHtml,
-      });
-
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Email sent: ${emailResult.success ? "✅" : "❌"} ${emailResult.message}` });
+      const { shortUrl } = buildEntityPage(processed, baseUrl);
+      const notifyTo = getNotifyEmail();
+      if (notifyTo) {
+        const emailResult = await sendHtmlEmail({
+          to: notifyTo,
+          from: "Enso AI <noreply@enso.ai>",
+          subject: `📚 ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
+          html: `<div style="font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;padding:24px;text-align:center">
+<h1 style="font-size:22px;margin:0 0 8px">${processed.title}</h1>
+<p style="color:#94a3b8;margin:4px 0">${book.author} · ${processed.durationMinutes} min AI Podcast</p>
+<p style="color:#94a3b8;font-size:13px;margin:16px 0">${book.whyRecommended}</p>
+<a href="${shortUrl}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin:16px 0">▶ Play & Read Insights →</a>
+<p style="color:#475569;font-size:11px;margin-top:16px">Enso AI · Daily Recommendation</p></div>`,
+        });
+        logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Email sent: ${emailResult.success ? "✅" : "❌"} ${emailResult.message}` });
+      }
     } catch (err) {
       logError("book-recommendation", "Daily pipeline failed", err);
       // Response already sent if we got past step 1
@@ -1362,10 +1388,11 @@ export async function startEnsoServer(opts: {
     const reqLanguage = (req.query.language as string) || (req.body?.language as string) || undefined;
 
     try {
-      const { discoverNewBooks, generateDeepContent, buildEntityEmailHtml } = await import("./deep-content.js");
+      const { discoverNewBooks, generateDeepContent, buildEntityPage } = await import("./deep-content.js");
       const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
       const { enrichEntity } = await import("./content-enrichment.js");
       const { sendHtmlEmail } = await import("./email.js");
+      const { getNotifyEmail } = await import("./shareable-pages.js");
       const { llm } = await import("./llm.js");
       const { braveWebSearch } = await import("./researcher-tools.js");
 
@@ -1491,16 +1518,24 @@ Return ONLY JSON.`;
         });
 
         const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
-        const emailHtml = buildEntityEmailHtml(processed, baseUrl, reqLanguage);
+        const { shortUrl } = buildEntityPage(processed, baseUrl);
         const typeEmoji = { movie: "🎬", game: "🎮", channel: "📺", article: "📰", place: "🌍" }[contentType] || "🎯";
         const creatorStr = picked.creator ? ` by ${picked.creator}` : "";
-        await sendHtmlEmail({
-          to: "kkwong@xiaomi.com",
-          from: "Enso AI <noreply@enso.ai>",
-          subject: `${typeEmoji} ${picked.title}${creatorStr} — ${processed.durationMinutes} min AI Podcast`,
-          html: emailHtml,
-        });
-        logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Email sent for ${entityType} "${picked.title}"` });
+        const notifyTo = getNotifyEmail();
+        if (notifyTo) {
+          await sendHtmlEmail({
+            to: notifyTo,
+            from: "Enso AI <noreply@enso.ai>",
+            subject: `${typeEmoji} ${picked.title}${creatorStr} — ${processed.durationMinutes} min AI Podcast`,
+            html: `<div style="font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;padding:24px;text-align:center">
+<h1 style="font-size:22px;margin:0 0 8px">${processed.title}</h1>
+<p style="color:#94a3b8;margin:4px 0">${creatorStr ? creatorStr.slice(4) + " · " : ""}${processed.durationMinutes} min AI Podcast</p>
+<p style="color:#94a3b8;font-size:13px;margin:16px 0">${picked.whyRecommended || ""}</p>
+<a href="${shortUrl}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin:16px 0">▶ Play & Read Insights →</a>
+<p style="color:#475569;font-size:11px;margin-top:16px">Enso AI · Daily ${entityType} Recommendation</p></div>`,
+          });
+        }
+        logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Page shared for ${entityType} "${picked.title}"` });
       } catch (err) {
         logError("content-recommendation", `Pipeline failed for ${picked.title}`, err);
       }
@@ -1630,40 +1665,7 @@ Return ONLY JSON.`;
     }
   });
 
-  /** Base HTML shell for rich landing pages */
-  function htmlShell(title: string, bodyHtml: string): string {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} — Enso AI</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#0f0f23;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
-.container{max-width:640px;margin:0 auto;padding:24px}
-.card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:20px;margin-bottom:16px}
-.btn{display:inline-block;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;cursor:pointer;border:none;transition:opacity 0.2s}
-.btn:hover{opacity:0.85}
-.btn-primary{background:#7c3aed;color:white}
-.btn-success{background:#059669;color:white}
-.btn-outline{background:transparent;color:#94a3b8;border:1px solid #374151}
-.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
-h1{margin:0 0 8px}h2{margin:16px 0 8px;font-size:16px;color:#a78bfa}
-audio{width:100%;margin:12px 0;border-radius:8px}
-.meta{font-size:13px;color:#94a3b8;line-height:1.6}
-.cover{max-width:240px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
-.insight{background:#1e1b4b;border-left:3px solid #7c3aed;padding:8px 12px;margin:6px 0;border-radius:0 6px 6px 0;font-size:13px}
-.chapter{padding:6px 0;border-bottom:1px solid #1e1e3a;font-size:13px}
-.footer{text-align:center;font-size:11px;color:#475569;margin-top:32px;padding-top:16px;border-top:1px solid #1e1e3a}
-</style></head><body><div class="container">${bodyHtml}</div></body></html>`;
-  }
-
-  function htmlPage(title: string, message: string, type: "success" | "error"): string {
-    const color = type === "success" ? "#10b981" : "#ef4444";
-    const icon = type === "success" ? "✅" : "❌";
-    return htmlShell(title, `
-<div style="text-align:center;padding:60px 20px">
-<div style="font-size:48px;margin-bottom:16px">${icon}</div>
-<h1 style="font-size:24px;color:${color}">${title}</h1>
-<p style="font-size:14px;color:#94a3b8;max-width:400px;margin:12px auto;line-height:1.5">${message}</p>
-</div>`);
-  }
+  // htmlShell, htmlPage imported from shareable-pages.ts
 
   // ── Rich Podcast Player Page ──
   app.get("/api/podcast/play/:slug", async (req, res) => {
@@ -1676,7 +1678,7 @@ audio{width:100%;margin:12px 0;border-radius:8px}
       const r = meta.research || {};
       const streamUrl = `/api/podcast/stream/${slug}`;
 
-      // Resolve cover image from entity index
+      // Resolve cover image and entity type from index
       let coverUrl = "";
       let entityType = "book";
       try {
@@ -1691,60 +1693,6 @@ audio{width:100%;margin:12px 0;border-radius:8px}
 
       const typeEmoji: Record<string, string> = { book: "📚", movie: "🎬", "tv-series": "📺", game: "🎮", channel: "📺", article: "📰", place: "🌍" };
       const typeLabel: Record<string, string> = { book: "Book", movie: "Film", "tv-series": "TV Series", game: "Game", channel: "Channel", article: "Article", place: "Destination" };
-      const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-      let body = "";
-
-      // Header with cover
-      body += `<div style="text-align:center;margin-bottom:20px">`;
-      if (coverUrl) body += `<img src="${esc(coverUrl)}" alt="${esc(meta.title)}" class="cover" style="margin-bottom:16px" />`;
-      body += `<div class="badge" style="background:#312e81;color:#c4b5fd;margin-bottom:8px">${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}</div>`;
-      body += `<h1 style="font-size:24px;color:#e2e8f0">${esc(meta.title)}</h1>`;
-      if (meta.author && meta.author !== "Unknown") body += `<p style="color:#94a3b8;font-size:14px;margin:4px 0">by ${esc(meta.author)}</p>`;
-      body += `<p style="color:#6b7280;font-size:13px">${meta.durationMinutes} min · ${r.chapterSummaries?.length || 0} chapters · ${r.keyInsights?.length || 0} insights</p>`;
-      body += `</div>`;
-
-      // Audio player
-      body += `<div class="card" style="text-align:center">`;
-      body += `<p style="color:#a78bfa;font-weight:600;margin:0 0 8px">🎙️ AI Podcast</p>`;
-      body += `<audio controls preload="metadata" src="${streamUrl}" style="width:100%"></audio>`;
-      body += `<p style="font-size:11px;color:#475569;margin:8px 0 0">Streaming from Enso · ${meta.durationMinutes} min</p>`;
-      body += `</div>`;
-
-      // Core Thesis
-      if (r.coreThesis) {
-        body += `<div class="card"><h2>💡 Core Thesis</h2><p class="meta">${esc(r.coreThesis)}</p></div>`;
-      }
-
-      // Key Insights
-      if (r.keyInsights?.length > 0) {
-        body += `<div class="card"><h2>🔑 Key Insights</h2>`;
-        for (const ins of r.keyInsights.slice(0, 10)) {
-          body += `<div class="insight">${esc(ins.insight)}`;
-          if (ins.example) body += `<br><span style="color:#6b7280;font-style:italic;font-size:12px">${esc(ins.example)}</span>`;
-          body += `</div>`;
-        }
-        body += `</div>`;
-      }
-
-      // Chapter Overview
-      if (r.chapterSummaries?.length > 0) {
-        body += `<div class="card"><h2>📑 Chapters</h2>`;
-        for (const ch of r.chapterSummaries.slice(0, 15)) {
-          body += `<div class="chapter"><strong style="color:#c4b5fd">${esc(ch.chapter)}</strong><br><span style="color:#94a3b8">${esc(ch.summary)}</span></div>`;
-        }
-        body += `</div>`;
-      }
-
-      // Critical Perspectives
-      if (Array.isArray(r.criticalPerspectives) && r.criticalPerspectives.length > 0) {
-        body += `<div class="card"><h2>⚖️ Different Perspectives</h2>`;
-        for (const cp of r.criticalPerspectives) {
-          const cpText = typeof cp === "string" ? cp : (cp as Record<string, unknown>)?.text || (cp as Record<string, unknown>)?.perspective || String(cp);
-          body += `<p class="meta" style="padding:4px 0;border-bottom:1px solid #1e1e3a">• ${esc(cpText)}</p>`;
-        }
-        body += `</div>`;
-      }
 
       // Resolve content URL (Read on Kindle/WeRead)
       let contentUrl = "";
@@ -1776,21 +1724,111 @@ audio{width:100%;margin:12px 0;border-radius:8px}
         }
       } catch { /* ignore */ }
 
-      // Actions
-      const quickAddUrl = `/api/cortex/quick-add?title=${encodeURIComponent(meta.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(meta.author || "")}`;
-      body += `<div style="text-align:center;margin:24px 0">`;
-      body += `<a href="${streamUrl}" download="${slug}.wav" class="btn btn-primary" style="margin:4px">⬇ Download Podcast</a> `;
-      if (contentUrl) {
-        body += `<a href="${contentUrl}" target="_blank" class="btn" style="margin:4px;background:#2563eb;color:white">${contentLabel}</a> `;
+      // Build sections from research data
+      const sections: PageSection[] = [];
+
+      if (r.coreThesis) {
+        sections.push({ type: "text", title: "💡 Core Thesis", content: r.coreThesis });
       }
-      body += `<a href="${quickAddUrl}" class="btn btn-success" style="margin:4px">📥 Add to Cortex</a>`;
-      body += `</div>`;
 
-      body += `<div class="footer">Generated by Enso AI · ${new Date(meta.processedAt).toLocaleDateString()}</div>`;
+      if (r.keyInsights?.length > 0) {
+        sections.push({
+          type: "list", title: "🔑 Key Insights",
+          items: r.keyInsights.slice(0, 10).map((ins: { insight: string; example?: string }) => ({
+            text: ins.insight, detail: ins.example,
+          })),
+        });
+      }
 
-      res.send(htmlShell(`${meta.title} — AI Podcast`, body));
+      if (r.chapterSummaries?.length > 0) {
+        sections.push({
+          type: "list", title: "📑 Chapters",
+          items: r.chapterSummaries.slice(0, 15).map((ch: { chapter: string; summary: string }) => ({
+            text: ch.chapter, detail: ch.summary,
+          })),
+        });
+      }
+
+      if (Array.isArray(r.criticalPerspectives) && r.criticalPerspectives.length > 0) {
+        sections.push({
+          type: "list", title: "⚖️ Different Perspectives",
+          items: r.criticalPerspectives.map((cp: unknown) => {
+            const cpText = typeof cp === "string" ? cp : (cp as Record<string, unknown>)?.text || (cp as Record<string, unknown>)?.perspective || String(cp);
+            return { text: String(cpText) };
+          }),
+        });
+      }
+
+      // Build action buttons
+      const actions = [
+        { label: "⬇ Download Podcast", url: streamUrl, style: "primary" as const },
+      ];
+      if (contentUrl) actions.push({ label: contentLabel, url: contentUrl, style: "info" as const });
+      const quickAddUrl = `/api/cortex/quick-add?title=${encodeURIComponent(meta.title)}&type=${encodeURIComponent(entityType)}&creator=${encodeURIComponent(meta.author || "")}`;
+      actions.push({ label: "📥 Add to Cortex", url: quickAddUrl, style: "success" as const });
+
+      const subtitle = meta.author && meta.author !== "Unknown"
+        ? `by ${meta.author} · ${meta.durationMinutes} min · ${r.chapterSummaries?.length || 0} chapters · ${r.keyInsights?.length || 0} insights`
+        : `${meta.durationMinutes} min · ${r.chapterSummaries?.length || 0} chapters · ${r.keyInsights?.length || 0} insights`;
+
+      const pageConfig: PageConfig = {
+        id: `podcast-${slug}`,
+        title: meta.title,
+        subtitle,
+        coverUrl,
+        badge: { label: `${typeEmoji[entityType] || "🎯"} ${typeLabel[entityType] || entityType}` },
+        audio: { src: streamUrl, duration: `${meta.durationMinutes} min` },
+        sections,
+        actions,
+        footer: `Generated by Enso AI · ${new Date(meta.processedAt).toLocaleDateString()}`,
+        meta: { description: r.coreThesis?.slice(0, 200), image: coverUrl },
+      };
+
+      res.send(renderPage(pageConfig));
     } catch (err) {
       res.status(500).send(htmlPage("Error", `Failed to load podcast: ${err instanceof Error ? err.message : String(err)}`, "error"));
+    }
+  });
+
+  // ── Shareable Pages: /page/:id serves registered pages ──
+  app.get("/page/:id", (req, res) => {
+    const pageId = decodeURIComponent(req.params.id);
+    const html = servePage(pageId);
+    if (!html) { res.status(404).send(htmlPage("Not Found", "Page not found.", "error")); return; }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.send(html);
+  });
+
+  // ── Short Links: /p/<shortId> → shareable page or podcast redirect ──
+  app.get("/p/:shortId", (req, res) => {
+    try {
+      const sid = req.params.shortId;
+
+      // 1. Check shareable pages index first
+      const pageId = resolveShortId(sid);
+      if (pageId) {
+        res.redirect(301, `/page/${encodeURIComponent(pageId)}`);
+        return;
+      }
+
+      // 2. Fallback: legacy podcast hash lookup
+      const dcDir = join(homedir(), ".enso", "data", "deep-content");
+      if (existsSync(dcDir)) {
+        const files = readdirSync(dcDir).filter(f => f.endsWith(".json"));
+        for (const f of files) {
+          const slug = f.replace(/\.json$/, "");
+          const hash = slug.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0).toString(36).replace("-", "");
+          if (hash === sid) {
+            res.redirect(301, `/api/podcast/play/${encodeURIComponent(slug)}`);
+            return;
+          }
+        }
+      }
+
+      res.status(404).send(htmlPage("Not Found", "Page not found.", "error"));
+    } catch (err) {
+      res.status(500).send(htmlPage("Error", `Failed: ${err instanceof Error ? err.message : String(err)}`, "error"));
     }
   });
 
@@ -2945,8 +2983,11 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       const html = buildCleanupReportHtml(pending, `https://${_req.headers.host || "pc1.enso.net"}`);
       const totalEmails = candidates.reduce((s, c) => s + c.count, 0);
 
+      const { getNotifyEmail: _gne } = await import("./shareable-pages.js");
+      const cleanupTo = _gne();
+      if (!cleanupTo) { res.json({ success: false, message: "No notification email configured" }); return; }
       await sendHtmlEmail({
-        to: "kkwong@xiaomi.com",
+        to: cleanupTo,
         subject: `Inbox Cleanup Report - ${new Date().toLocaleDateString()}`,
         html,
       });
@@ -3508,6 +3549,11 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     server.listen(port, () => {
       runtime.log?.(`[enso] server listening on :${port}`);
       logAction({ ts: Date.now(), type: "system", category: "system", message: `Server started on port ${port}`, metadata: { port, hostname: hostname(), platform: platform() } });
+
+      const machName = account.machineName ?? hostname();
+      const resolvedBaseUrl = process.env.ENSO_TUNNEL_URL || `https://${machName}.enso.net`;
+      setServerBaseUrl(resolvedBaseUrl);
+      runtime.log?.(`[enso] shareable pages base URL: ${resolvedBaseUrl}`);
 
 
       // Ensure default Enso project exists
