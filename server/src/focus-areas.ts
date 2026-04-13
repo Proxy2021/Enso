@@ -20,11 +20,20 @@ import { logAction, logError } from "./action-log.js";
 
 // ── Types ──
 
+export type FocusType = "project" | "creative" | "learning" | "lifestyle" | "general";
+
 export interface FocusArea {
   id: string;
   title: string;
   description: string;
   status: "active" | "paused" | "completed" | "emerging";
+
+  /** Focus type — determines available capabilities */
+  focusType?: FocusType;
+  /** For project-type focuses: path to the codebase */
+  codebasePath?: string;
+  /** For project-type focuses: linked project ID */
+  projectId?: string;
 
   /** How well-defined is this focus? */
   clarity: "emerging" | "developing" | "clear";
@@ -1243,6 +1252,71 @@ Rules:
       }
     },
   });
+}
+
+// ── Focus Type Detection ──
+
+/**
+ * Auto-detect focus type from existing data.
+ * Checks project registry, semantic tags, and evidence.
+ */
+export async function detectFocusTypes(): Promise<number> {
+  const state = loadFocusState();
+  if (!state) return 0;
+
+  let updated = 0;
+
+  // Load projects for matching
+  let projects: Array<{ id: string; name: string; codebasePath?: string }> = [];
+  try {
+    const { listProjects } = await import("./project-manager.js");
+    projects = listProjects().map(p => ({ id: p.id, name: p.name, codebasePath: p.codebasePath }));
+  } catch { /* no projects module */ }
+
+  for (const area of state.areas) {
+    if (area.focusType) continue; // Already typed
+
+    // Check if this focus matches a project
+    const titleWords = area.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const matchedProject = projects.find(p =>
+      titleWords.some(w => p.name.toLowerCase().includes(w)) ||
+      p.name.toLowerCase().split(/\s+/).some(w => w.length > 3 && area.title.toLowerCase().includes(w))
+    );
+
+    if (matchedProject) {
+      area.focusType = "project";
+      area.projectId = matchedProject.id;
+      area.codebasePath = matchedProject.codebasePath;
+      updated++;
+      continue;
+    }
+
+    // Heuristic: detect type from semantic tags and evidence
+    const tags = area.semanticTags.join(" ").toLowerCase();
+    const desc = (area.description + " " + (area.intent || "")).toLowerCase();
+
+    if (tags.match(/coding|software|development|programming|typescript|python|app|platform/) || desc.match(/build|develop|implement|codebase|repository/)) {
+      area.focusType = "project";
+    } else if (tags.match(/photography|art|music|writing|creative|design|film/) || desc.match(/creative|artistic|photograph|compose|paint|draw/)) {
+      area.focusType = "creative";
+    } else if (tags.match(/learning|study|course|education|skill|training/) || desc.match(/learn|study|master|understand|course/)) {
+      area.focusType = "learning";
+    } else if (tags.match(/fitness|health|gaming|travel|cooking|lifestyle/) || desc.match(/habit|routine|optimize|hobby|enjoy/)) {
+      area.focusType = "lifestyle";
+    } else {
+      area.focusType = "general";
+    }
+    updated++;
+  }
+
+  if (updated > 0) {
+    saveFocusState(state);
+    clearFocusCache();
+    logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+      message: `Auto-detected types for ${updated} focus area(s)` });
+  }
+
+  return updated;
 }
 
 // ── Backfill Sprint Summaries ──

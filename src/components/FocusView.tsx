@@ -15,6 +15,9 @@ interface FocusArea {
   description: string;
   status: "active" | "paused" | "completed" | "emerging";
   clarity: "emerging" | "developing" | "clear";
+  focusType?: "project" | "creative" | "learning" | "lifestyle" | "general";
+  codebasePath?: string;
+  projectId?: string;
   intent?: string;
   deeperIntent?: string;
   adjacentPursuits?: string[];
@@ -365,11 +368,22 @@ export default function FocusView() {
             <button key={area.id} onClick={() => openDetail(area.id)}
               className="w-full text-left rounded-lg border border-gray-700/40 bg-gray-900/30 p-4 hover:border-gray-600/60 hover:bg-gray-800/30 transition-all group">
               <div className="flex items-start justify-between mb-1">
-                <h3 className="text-sm font-medium text-gray-100 pr-2">{area.title}</h3>
+                <div className="flex items-center gap-2 pr-2">
+                  <h3 className="text-sm font-medium text-gray-100">{area.title}</h3>
+                  {area.focusType && area.focusType !== "general" && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 ${
+                      area.focusType === "project" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                      area.focusType === "creative" ? "bg-pink-500/10 text-pink-400 border-pink-500/20" :
+                      area.focusType === "learning" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                      "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    }`}>{area.focusType}</span>
+                  )}
+                </div>
                 <WorkflowBadge area={area} />
               </div>
               <p className="text-xs text-gray-400 mb-2 line-clamp-2">{area.intent || area.description}</p>
               <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                {area.codebasePath && <span className="text-emerald-500/70">📁 {area.codebasePath.split("/").pop()}</span>}
                 {area.evidence.length > 0 && <span>{area.evidence.length} evidence points</span>}
                 {area.semanticTags.length > 0 && <span>{area.semanticTags.slice(0, 2).join(", ")}</span>}
                 <span>{Math.round(area.confidence * 100)}% confidence</span>

@@ -2519,6 +2519,16 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   });
 
+  app.post("/api/focus-areas/detect-types", async (_req, res) => {
+    try {
+      const { detectFocusTypes } = await import("./focus-areas.js");
+      const updated = await detectFocusTypes();
+      res.json({ updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Detection failed" });
+    }
+  });
+
   // ── Focus Utilities API ──
 
   app.post("/api/focus-areas/backfill-summaries", async (_req, res) => {
