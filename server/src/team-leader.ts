@@ -135,10 +135,14 @@ export function saveConfig(config: TeamLeaderConfig): void {
 // ── State ──
 
 function loadState(): TeamLeaderState {
+  const defaults: TeamLeaderState = { lastMorningRoutineAt: null, lastCheckInAt: null, lastBriefing: null, recentActions: [], taskQueue: [] };
   try {
-    if (existsSync(STATE_PATH)) return JSON.parse(readFileSync(STATE_PATH, "utf-8")) as TeamLeaderState;
+    if (existsSync(STATE_PATH)) {
+      const raw = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
+      return { ...defaults, ...raw };
+    }
   } catch { /* fresh state */ }
-  return { lastMorningRoutineAt: null, lastCheckInAt: null, lastBriefing: null, recentActions: [], taskQueue: [] };
+  return defaults;
 }
 
 function saveState(state: TeamLeaderState): void {
