@@ -15,6 +15,7 @@ const ProjectsCard = lazy(() => import("./ProjectsCard"));
 const SessionDashboardCard = lazy(() => import("./SessionDashboardCard"));
 const TodoListCard = lazy(() => import("./TodoListCard"));
 const DailyDigestCard = lazy(() => import("./DailyDigestCard"));
+const TeamLeaderCard = lazy(() => import("./TeamLeaderCard"));
 
 // Register built-in card types (order matters — first match wins in resolve)
 
@@ -35,6 +36,13 @@ cardRegistry.register({
   renderer: SessionDashboardCard,
   match: () => false,
 });
+
+cardRegistry.register({
+  type: "team-leader-dashboard",
+  renderer: TeamLeaderCard,
+  match: () => false,
+});
+
 
 cardRegistry.register({
   type: "projects",

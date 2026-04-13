@@ -612,6 +612,17 @@ export const useChatStore = create<CardStore>((set, get) => ({
         return;
       }
 
+      // "/dashboard" command — open Team Leader dashboard
+      if (text.trim() === "/dashboard") {
+        const id = uuidv4();
+        const now = Date.now();
+        addLocalCard({
+          id, runId: id, type: "team-leader-dashboard", role: "assistant",
+          status: "complete", display: "expanded", createdAt: now, updatedAt: now,
+        }, text.trim());
+        return;
+      }
+
       // "/sessions" command — open session dashboard
       if (text.trim() === "/sessions") {
         const id = uuidv4();

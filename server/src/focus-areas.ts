@@ -69,6 +69,8 @@ export interface FocusArea {
   lastSprintResults?: string;
   /** When the last sprint completed */
   lastSprintDate?: string;
+  /** Structured summary from the last evolution sprint — maps deliverables to pain points */
+  lastSprintSummary?: import("../../shared/types.js").SprintResultsSummary;
 }
 
 export interface FocusState {
@@ -961,18 +963,21 @@ export async function launchFocusEvolve(params: {
   const { handleOrchestration } = await import("./orchestrator.js");
   type OCtx = import("./orchestrator.js").OrchestrationContext;
 
-  // Create a silent client wrapper — orchestration progress is monitored via
-  // the Evolve tab (polling /api/sessions), not via chat card delivery.
-  // Session registry and task completion still work since they don't use client.send.
-  const silentClient = {
+  // Forward orchestration progress, task terminals, and card updates so the
+  // Focus Evolve tab can render live task status + Claude Code output.
+  // Only suppress regular chat text cards to avoid cluttering the conversation.
+  const evolveClient = {
     ...client,
     send: (msg: unknown) => {
-      // Only forward session/orchestration status messages, suppress cards
       const m = msg as Record<string, unknown>;
-      if (m.orchestrationProgress || m.sessions || m.type === "settings") {
+      if (
+        m.orchestrationProgress || m.orchestrationPlan ||
+        m.sessions || m.type === "settings" ||
+        (m.toolMeta as Record<string, unknown>)?.toolId === "claude-code" ||
+        (m.targetCardId as string)?.includes(":task:")
+      ) {
         client.send(msg as Parameters<typeof client.send>[0]);
       }
-      // Suppress all other messages (bootstrap cards, task progress cards)
     },
   };
 
@@ -987,7 +992,7 @@ export async function launchFocusEvolve(params: {
   await handleOrchestration({
     userMessage: `Focus Evolution: ${area.title}`,
     classification: { complexity: "orchestrated" as const, reasoning: "Focus area evolution sprint" },
-    client: silentClient as typeof client,
+    client: evolveClient as typeof client,
     account,
     context,
     skipApproval: true,
@@ -1041,6 +1046,7 @@ export async function launchFocusEvolve(params: {
               const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
               const { upsertEntityIndex, saveEntityIndex, lookupEntity } = await import("./entity-model.js");
               const createdEntityIds: string[] = [];
+              const taskEntityMap: Array<{ taskTitle: string; entityType: string; entityId: string; resultSummary: string }> = [];
 
               // Classify each task output into the right entity type
               const typeMap: Record<string, string> = {
@@ -1067,6 +1073,7 @@ export async function launchFocusEvolve(params: {
 
                   if (result.created || result.entityId) {
                     createdEntityIds.push(result.entityId);
+                    taskEntityMap.push({ taskTitle: t.title, entityType, entityId: result.entityId, resultSummary: t.resultSummary! });
 
                     // Write full content to the wiki page (ingest only creates a stub)
                     if (fullContent.length > 600 && result.cortexPath) {
@@ -1132,7 +1139,102 @@ export async function launchFocusEvolve(params: {
               }
 
               logAction({ ts: Date.now(), type: "action", category: "focus-areas",
-                message: `Stored ${taskPages.length} sprint deliverables as Cortex pages in focuses/${focusId}-sprint-${orchId.slice(0, 8)}/` });
+                message: `Stored sprint deliverables as Cortex entities for focus "${area.title}"` });
+
+              // Generate structured sprint summary via LLM (maps deliverables to pain points)
+              if (taskEntityMap.length > 0) {
+                try {
+                  const { llm: llmCall } = await import("./llm.js");
+                  const deliverablesList = taskEntityMap.map((d, i) =>
+                    `${i + 1}. Task: "${d.taskTitle}" | Type: ${d.entityType} | Entity ID: ${d.entityId}\n   Summary: ${d.resultSummary.slice(0, 600)}`
+                  ).join("\n\n");
+
+                  const summaryPrompt = `You are analyzing the results of a focus area evolution sprint.
+
+FOCUS AREA: "${area.title}"
+GOAL: ${area.intent || area.description}
+${area.deeperIntent ? `WHY IT MATTERS: ${area.deeperIntent}` : ""}
+
+SPRINT DELIVERABLES:
+${deliverablesList}
+
+Generate a structured JSON summary that maps each deliverable to a specific user pain point and provides clear usage instructions.
+
+Return this exact JSON structure:
+{
+  "sprintSummary": "2-3 sentence overview of what this sprint accomplished and how it moves the user toward their goal",
+  "deliverables": [
+    {
+      "taskTitle": "exact task title from above",
+      "entityType": "the entity type from above (app, article, idea, or synthesis)",
+      "entityId": "the exact entity ID from above",
+      "painPoint": "which specific pain point or need this addresses",
+      "howItHelps": "1-2 sentences on how this deliverable helps the user",
+      "quickStart": "clear, specific instruction on how to use this RIGHT NOW (e.g., 'Open the article in Cortex and review the key frameworks' or 'Run the app from your Apps menu')",
+      "actionType": "run for apps, read for articles, explore for ideas, review for synthesis"
+    }
+  ],
+  "recommendedFirstAction": {
+    "deliverableIndex": 0,
+    "reason": "why this deliverable should be used first"
+  },
+  "nextSteps": ["2-3 suggested follow-up actions to build on these results"]
+}
+
+Rules:
+- Use the EXACT taskTitle, entityType, and entityId from the deliverables list
+- actionType must match entityType: app→run, article→read, idea→explore, synthesis→review
+- quickStart must be specific and actionable, not generic
+- painPoint should reference the user's actual goal/intent
+- recommendedFirstAction.deliverableIndex is 0-based
+- nextSteps should be forward-looking, building on what was produced`;
+
+                  const summaryResponse = await llmCall({
+                    prompt: summaryPrompt,
+                    tier: "utility",
+                    maxOutputTokens: 4000,
+                    responseMimeType: "application/json",
+                    temperature: 0.3,
+                    timeoutMs: 30_000,
+                  });
+
+                  const sprintSummary = JSON.parse(summaryResponse) as import("../../shared/types.js").SprintResultsSummary;
+
+                  // Validate and store the structured summary
+                  if (sprintSummary.sprintSummary && Array.isArray(sprintSummary.deliverables)) {
+                    const freshState3 = loadFocusState();
+                    if (freshState3) {
+                      const freshArea3 = freshState3.areas.find(a => a.id === focusId);
+                      if (freshArea3) {
+                        freshArea3.lastSprintSummary = sprintSummary;
+                        saveFocusState(freshState3);
+                      }
+                    }
+
+                    logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                      message: `Generated structured sprint summary for "${area.title}": ${sprintSummary.deliverables.length} deliverables mapped to pain points` });
+
+                    // Emit sprint.completed event to conversation context registry
+                    // This triggers proactive messages in focus conversations
+                    import("./conversation-context.js").then(({ contextRegistry }) => {
+                      contextRegistry.emitEvent({
+                        type: "sprint.completed",
+                        payload: { focusId, sprintSummary, focusTitle: area.title },
+                        timestamp: Date.now(),
+                      });
+                    }).catch(() => {});
+
+                    // Deliver sprint results through all channels (email, WeChat)
+                    import("./focus-agent.js").then(({ deliverSprintResults }) => {
+                      deliverSprintResults(focusId, area.title, sprintSummary).catch(err => {
+                        logError("focus-areas", "Multi-channel sprint delivery failed", err);
+                      });
+                    }).catch(() => {});
+                  }
+                } catch (summaryErr) {
+                  logError("focus-areas", `Failed to generate structured sprint summary for "${area.title}" (falling back to raw results)`, summaryErr);
+                }
+              }
             } catch { /* best effort cortex persist */ }
           }
         } catch (err) {
@@ -1141,6 +1243,167 @@ export async function launchFocusEvolve(params: {
       }
     },
   });
+}
+
+// ── Backfill Sprint Summaries ──
+
+/**
+ * Backfill `lastSprintSummary` for focus areas that have raw sprint results
+ * but no structured summary. This enables the activation cards UI and
+ * the Focus Agent to deliver actionable sprint result notifications.
+ */
+export async function backfillSprintSummaries(): Promise<{ backfilled: number; errors: number }> {
+  const state = loadFocusState();
+  if (!state) return { backfilled: 0, errors: 0 };
+
+  const { llm: llmCall } = await import("./llm.js");
+  const { lookupEntity, getEntityIndex } = await import("./entity-model.js");
+
+  let backfilled = 0;
+  let errors = 0;
+
+  for (const area of state.areas) {
+    // Skip areas that already have a structured summary or no raw results
+    if (area.lastSprintSummary || !area.lastSprintResults) continue;
+
+    try {
+      // Reconstruct taskEntityMap from relatedEntityIds
+      const entityIndex = getEntityIndex();
+      const taskEntityMap: Array<{ taskTitle: string; entityType: string; entityId: string; resultSummary: string }> = [];
+
+      for (const eid of area.relatedEntityIds) {
+        const entity = lookupEntity(eid);
+        if (!entity) continue;
+
+        // Map entity type to sprint deliverable type
+        const typeMap: Record<string, string> = {
+          article: "article", idea: "idea", app: "app", synthesis: "synthesis",
+        };
+        const entityType = typeMap[entity.type] || "article";
+
+        taskEntityMap.push({
+          taskTitle: entity.title,
+          entityType,
+          entityId: eid,
+          resultSummary: `${entity.title} — ${entity.type} entity created during sprint`,
+        });
+      }
+
+      // Also parse task info from the raw sprint results text
+      const taskSections = area.lastSprintResults.split(/---\n\n/).filter(Boolean);
+      for (const section of taskSections) {
+        const titleMatch = section.match(/^## (.+?) \((\w+)\)/);
+        if (!titleMatch) continue;
+        const [, taskTitle, agentRole] = titleMatch;
+        const roleTypeMap: Record<string, string> = {
+          researcher: "article", architect: "idea", builder: "app", coder: "article", reviewer: "synthesis",
+        };
+
+        // Check if we already have this from entities
+        const alreadyMapped = taskEntityMap.some(t =>
+          t.taskTitle.toLowerCase().includes(taskTitle.toLowerCase().slice(0, 30)) ||
+          taskTitle.toLowerCase().includes(t.taskTitle.toLowerCase().slice(0, 30))
+        );
+
+        if (!alreadyMapped) {
+          taskEntityMap.push({
+            taskTitle,
+            entityType: roleTypeMap[agentRole] || "article",
+            entityId: `cortex:${roleTypeMap[agentRole] || "article"}:${taskTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60)}`,
+            resultSummary: section.slice(0, 600),
+          });
+        } else {
+          // Enrich existing entry with the actual result summary
+          const existing = taskEntityMap.find(t =>
+            t.taskTitle.toLowerCase().includes(taskTitle.toLowerCase().slice(0, 30)) ||
+            taskTitle.toLowerCase().includes(t.taskTitle.toLowerCase().slice(0, 30))
+          );
+          if (existing && section.length > existing.resultSummary.length) {
+            existing.resultSummary = section.slice(0, 600);
+          }
+        }
+      }
+
+      if (taskEntityMap.length === 0) {
+        logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+          message: `Backfill skip: no deliverables found for "${area.title}"` });
+        continue;
+      }
+
+      // Generate structured summary using the same prompt as the live sprint code
+      const deliverablesList = taskEntityMap.map((d, i) =>
+        `${i + 1}. Task: "${d.taskTitle}" | Type: ${d.entityType} | Entity ID: ${d.entityId}\n   Summary: ${d.resultSummary.slice(0, 600)}`
+      ).join("\n\n");
+
+      const summaryPrompt = `You are analyzing the results of a focus area evolution sprint.
+
+FOCUS AREA: "${area.title}"
+GOAL: ${area.intent || area.description}
+${area.deeperIntent ? `WHY IT MATTERS: ${area.deeperIntent}` : ""}
+
+SPRINT DELIVERABLES:
+${deliverablesList}
+
+Generate a structured JSON summary that maps each deliverable to a specific user pain point and provides clear usage instructions.
+
+Return this exact JSON structure:
+{
+  "sprintSummary": "2-3 sentence overview of what this sprint accomplished and how it moves the user toward their goal",
+  "deliverables": [
+    {
+      "taskTitle": "exact task title from above",
+      "entityType": "the entity type from above (app, article, idea, or synthesis)",
+      "entityId": "the exact entity ID from above",
+      "painPoint": "which specific pain point or need this addresses",
+      "howItHelps": "1-2 sentences on how this deliverable helps the user",
+      "quickStart": "clear, specific instruction on how to use this RIGHT NOW",
+      "actionType": "run for apps, read for articles, explore for ideas, review for synthesis"
+    }
+  ],
+  "recommendedFirstAction": {
+    "deliverableIndex": 0,
+    "reason": "why this deliverable should be used first"
+  },
+  "nextSteps": ["2-3 suggested follow-up actions to build on these results"]
+}
+
+Rules:
+- Use the EXACT taskTitle, entityType, and entityId from the deliverables list
+- actionType must match entityType: app→run, article→read, idea→explore, synthesis→review
+- quickStart must be specific and actionable, not generic
+- painPoint should reference the user's actual goal/intent
+- recommendedFirstAction.deliverableIndex is 0-based
+- nextSteps should be forward-looking, building on what was produced`;
+
+      const summaryResponse = await llmCall({
+        prompt: summaryPrompt,
+        tier: "utility",
+        maxOutputTokens: 4000,
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        timeoutMs: 30_000,
+      });
+
+      const sprintSummary = JSON.parse(summaryResponse) as import("../../shared/types.js").SprintResultsSummary;
+
+      if (sprintSummary.sprintSummary && Array.isArray(sprintSummary.deliverables)) {
+        area.lastSprintSummary = sprintSummary;
+        backfilled++;
+        logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+          message: `Backfilled sprint summary for "${area.title}": ${sprintSummary.deliverables.length} deliverables` });
+      }
+    } catch (err) {
+      errors++;
+      logError("focus-areas", `Backfill failed for "${area.title}"`, err);
+    }
+  }
+
+  if (backfilled > 0) {
+    saveFocusState(state);
+    clearFocusCache();
+  }
+
+  return { backfilled, errors };
 }
 
 // ── User Edits ──

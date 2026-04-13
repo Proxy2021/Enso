@@ -99,9 +99,12 @@ server/                       # Enso server (the backend)
     ├── claude-code.ts        # Claude Code CLI integration
     ├── shell-pty.ts          # Remote terminal PTY manager (node-pty)
     ├── *-tools.ts            # System app implementations (filesystem, workspace, media, screen, travel, meal)
+    ├── team-leader.ts        # Team Leader agent — the living organization (gather → assess → execute → brief → deliver)
+    ├── focus-agent.ts        # Focus utilities — analyzeFocusAreas, generateProgressPulse, deliverSprintResults
+    ├── remarks.ts            # Async remark system — email/WeChat/web feedback → queue → TL processes
     ├── wechat.ts             # WeChat Official Account API (token mgmt, customer service msgs, mass send, followers)
     ├── wechat-tools.ts       # WeChat tools (enso_wechat_send, enso_wechat_followers)
-    ├── wechat-webhook.ts     # WeChat webhook (server verification + message receiving + interaction tracking)
+    ├── wechat-webhook.ts     # WeChat webhook (server verification + message receiving + remark capture)
     ├── app-catalog.ts          # APP_CATALOG definitions (system + app entries)
     ├── tunnel-registry.ts    # Cloudflare tunnel provisioning for <name>.enso.net
     └── native-tools/         # App action bridge
@@ -390,31 +393,77 @@ Cortex is the ONLY brain — all knowledge, memory, profile, and data source con
 - **Active intelligence** (`proactive-engine.ts`): 5 cross-app suggestion types: trending convergence (YouTube), knowledge gaps, cross-source connections, photo memories, stale project alerts.
 - Key files: `cortex-tools.ts` (engine), `cortex-synthesis.ts` (LLM synthesis), `cortex-direct-ingest.ts` (per-item pages), `cortex-enrichment.ts` (semantic tags + cross-refs), `card-to-cortex.ts` (auto-persist), `server/apps/cortex/` (app), `memory-bridge.ts` (context injection), `proactive-engine.ts` (active intelligence)
 
+### Team Leader — The Living Organization
+
+Enso runs as a **living organization** with a single Team Leader (TL) agent that coordinates everything. Instead of 15+ independent scheduled tasks, the TL wakes up on a configurable schedule, analyzes the entire system, prioritizes actions, delegates to specialist utilities, and delivers a unified briefing.
+
+**The TL's north star:** "Make this user's life better, every single day." Whether that means delivering a focus pulse, fixing a platform bug, or building a missing feature — all items live in one prioritized queue.
+
+**Morning routine** (configurable, default 9am daily):
+1. **Gather signals** — Action log errors, focus area state, Cortex health, scheduled task results, user remarks, platform metrics. Zero LLM cost.
+2. **Assess & prioritize** — Single LLM call sees ALL signals, produces 3-7 prioritized actions with reasoning. Each action has: priority (critical→low), type (user-task/platform-fix/platform-feature/maintenance), delegation target, effort estimate.
+3. **Execute** — Auto-executes low-effort actions (≤5min by default). Proposes high-effort actions for user approval. Delegates to: focus utilities, Cortex enrichment, orchestration sprints.
+4. **Brief the user** — One unified daily briefing delivered via email + WeChat + in-app. Replaces 8+ separate notification emails. Every notification includes remark action buttons.
+5. **Process remarks** — User feedback from previous notifications is incorporated into the assessment.
+
+**Configuration** (`~/.enso/data/team-leader-config.json`):
+- `schedule.morningRoutine` — cron for full routine (default: `"0 9 * * *"`)
+- `schedule.checkIn` — cron for urgent scans (default: every 6h)
+- `channels` — email/wechat/inApp toggles
+- `autoExecuteMaxEffort` — threshold for autonomous action ("5min"/"30min"/"none")
+- `autoEvolve` — whether TL can launch evolution sprints without approval
+
+**REST API**: `GET/PATCH /api/team-leader/config`, `POST /api/team-leader/morning`, `POST /api/team-leader/checkin`, `GET /api/team-leader/briefing`, `GET /api/team-leader/state`
+
+**Dashboard** (`/dashboard` command): `TeamLeaderCard.tsx` renders three tabs — Briefing (sections with items), Actions (each with priority/reasoning/delegation + 💬 remark button), Remarks (history with resolution status).
+
+- Key files: `team-leader.ts` (core agent), `focus-agent.ts` (focus utilities), `remarks.ts` (feedback loop), `TeamLeaderCard.tsx` (dashboard)
+
+### Remark System (Async Feedback Loop)
+
+Every notification Enso sends includes **remark actions** — clickable buttons that let the user respond asynchronously without opening the app. Remarks feed back to the Team Leader for processing.
+
+**Channels:**
+- **Email**: 👍 Approve / ⏸ Defer / 💬 Reply buttons. Approve/Defer hit `GET /api/remarks/quick?nid=<id>&action=approve`. Reply opens `/r/<id>` web form.
+- **WeChat**: User replies to messages → webhook captures with notification context association.
+- **Web form**: `/r/<notificationId>` — standalone HTML page with text input, no auth required.
+- **In-app**: `POST /api/remarks` with notificationId + text.
+
+**Processing:** TL reads pending remarks in `gatherSignals()`, incorporates into LLM assessment (user remarks appear as signals alongside errors and focus state), marks as processed after the routine.
+
+**Notification context tracking:** `registerNotification()` stores context for each sent notification. `getLastWechatNotification()` associates WeChat replies with the most recent notification. Contexts auto-expire after 7 days.
+
+- Key files: `remarks.ts` (system), `wechat-webhook.ts` (WeChat capture), `server.ts` (API routes + `/r/<id>` page)
+
 ### Focus Areas (AI-Inferred Goals)
 
-Focus Areas is the bridge between understanding the user (Cortex) and taking action (Evolve). The system infers what the user cares about, then provides a dedicated strategic dialogue to refine each focus until it's ready for execution.
+Focus Areas is the bridge between understanding the user (Cortex) and taking action (Evolve). The system infers what the user cares about, and the Team Leader drives progress through the Evaluate → Discuss → Evolve cycle.
 
 **Three-phase lifecycle:**
 1. **Infer** — `inferFocusAreas()` analyzes the full Cortex data inventory to produce 4-7 focus areas with evidence, intent, deeper motivation, and adjacent pursuits. Outcome-oriented: "Develop AlphaRank into a Market-Beating Quant Tool", not "Quantitative Finance".
-2. **Refine through dialogue** — Each focus has a dedicated conversation (via "Chat about this" button). These conversations use **clean dialogue mode**: no tool calls, no app cards — just the AI acting as a co-strategist with rich context from 3 zero-LLM data layers (focus state, related Cortex pages, cross-source hits). The AI's behavior adapts to clarity level:
-   - **Emerging** → Discovery: explore the problem space, uncover the personal WHY
-   - **Developing** → Definition: define success criteria, break down the problem, identify priorities
-   - **Clear** → Execution planning: plan the next sprint, review progress, prep an Evolve brief
-   After each exchange, `refineFocusFromConversation()` uses LLM fast tier to detect goals, deadlines, or motivations and progressively upgrade clarity (emerging → developing → clear).
-3. **Execute via Evolve** — When the strategic dialogue has produced enough clarity, the full conversation context feeds into an `/Evolve` orchestration sprint. The AI team (Project Leader, Architect, Engineer, QA, domain specialists) executes on the agreed goals with the user's validated vision as the brief.
+2. **Refine through dialogue** — Each focus has a dedicated conversation. These conversations use **decision-mode**: the AI arrives with a specific recommendation, not an open-ended question. The agent presents 2-3 options with tradeoffs and states its pick. Context injection adapts to the decision point:
+   - **No evaluation** → Agent recommends running an evaluation and explains what it will study
+   - **Evaluation complete** → Agent presents action options with tradeoffs, recommends which to pursue
+   - **Sprint results available** → Agent leads with impact metrics, highlights the most useful deliverable, proposes next cycle
+   - **Stalled** → Agent diagnoses the gap, proposes a restart
+   After each exchange, `refineFocusFromConversation()` detects goals, deadlines, or motivations and progressively upgrades clarity (emerging → developing → clear).
+3. **Execute via Evolve** — The full conversation context feeds into an `/Evolve` orchestration sprint. On completion, structured `SprintResultsSummary` maps each deliverable to a pain point with quickStart actions. Results delivered proactively via email/WeChat + in-app conversation card.
+
+**Sprint deliverable activation:**
+- `lastSprintSummary` (type `SprintResultsSummary`) stores structured deliverable-to-pain-point mapping
+- `backfillSprintSummaries()` retroactively generates summaries for pre-existing sprints
+- Cortex tab shows activation cards: entity type badges, pain point, how-it-helps, quickStart action, colored Run/Read/Explore/Review buttons
+- Sprint completion emits `sprint.completed` event → proactive message in focus conversation + multi-channel delivery via `deliverSprintResults()`
 
 **Architecture:**
-- **Conversation Context Registry** (`conversation-context.ts`): General-purpose framework where features register as context providers for specific conversations. `FocusContextProvider` (`focus-context-provider.ts`) is the first consumer — injects rich context, generates proactive messages (quiet focus nudges, new related content, clarity upgrades), handles events from Cortex ingest and research completion.
-- **Sidebar grouping**: Focus conversations appear under a "FOCUS AREAS" section with violet styling, visually separated from regular "CHATS". Context metadata (`ConversationContext`) persisted on each conversation.
-- **Deeper intention**: Each focus has a `deeperIntent` (the personal WHY) and `adjacentPursuits` (unexplored directions aligned with the deeper motivation).
-- **Cortex-native**: Goals stored as wiki pages at `~/.enso/wiki/focuses/<goal-slug>.md` with intent, deeper motivation, evidence, and refinement history. Cross-referenceable with all Cortex entities.
-- **REST API**: `GET /api/focus-areas`, `POST /api/focus-areas/infer`, `PATCH /api/focus-areas/:id`, `POST /api/focus-areas/:id/plan`
-- **UI**: Focus tab (3rd position) with list → detail flow. Detail has three tabs:
-  - **Work**: Evaluate → Discuss → Evolve workflow buttons, editable goal/motivation, next steps, adjacent pursuits
-  - **Cortex**: Rich knowledge view — evaluation briefing, evidence grouped by source with icons, related Cortex entities grouped by source, adjacent pursuits, refinement journey timeline
-  - **Evolve**: Live sprint monitoring — orchestration progress bar, active agent sessions, elapsed time
-- **Proactive**: Focus-aware suggestions in proactive engine + event-driven via Conversation Context Registry — quiet areas get nudges, new related Cortex entities trigger insights, clarity upgrades get celebrated.
-- Key files: `focus-areas.ts` (engine), `focus-context-provider.ts` (context provider), `conversation-context.ts` (registry), `standalone-agent.ts` (dialogue mode), `FocusView.tsx` (UI), `ConversationSidebar.tsx` (grouping)
+- **Decision-mode context** (`focus-context-provider.ts`): Injects sprint results as context layer, behavioral instructions adapt to current decision point (not just clarity level)
+- **Focus utilities** (`focus-agent.ts`): `analyzeFocusAreas()` (zero-LLM state machine), `generateProgressPulse()` (LLM distillation), `deliverSprintResults()` (multi-channel). Called by TL, not independent.
+- **Conversation Context Registry** (`conversation-context.ts`): Event-driven — handles `sprint.completed`, `cortex.entity.created`, `research.completed`, `focus.refined`
+- **Sidebar grouping**: Focus conversations appear under "FOCUS AREAS" section with violet styling
+- **Cortex-native**: Goals stored as wiki pages at `~/.enso/wiki/focuses/<goal-slug>.md`
+- **REST API**: `GET /api/focus-areas`, `POST /api/focus-areas/infer`, `PATCH /api/focus-areas/:id`, `POST /api/focus-areas/:id/plan`, `POST /api/focus-areas/pulse`, `POST /api/focus-areas/backfill-summaries`
+- **UI**: Focus tab with list → detail. Detail tabs: Work (Evaluate→Discuss→Evolve), Cortex (sprint results + deliverable activation cards + knowledge), Evolve (live sprint monitoring)
+- Key files: `focus-areas.ts` (engine + backfill), `focus-agent.ts` (utilities), `focus-context-provider.ts` (decision-mode + events), `conversation-context.ts` (registry), `FocusView.tsx` (UI), `ConversationSidebar.tsx` (grouping)
 
 ### Conversation Context Registry
 
@@ -424,9 +473,9 @@ A general-purpose framework for context-aware conversations. Features register a
 2. **Proactive messages** — `getProactiveMessages()` checks for state changes (focus going quiet, new related content) and delivers unsolicited messages to the conversation
 3. **Event-driven triggers** — `onEvent()` handles external events (Cortex entity created, research completed, focus refined) and surfaces relevant insights
 
-**Implementation:** `conversation-context.ts` exports a singleton `contextRegistry`. Providers implement `ConversationContextProvider` interface. Events emitted from `cortex-enrichment.ts`, `researcher-tools.ts`, and `focus-areas.ts`. Proactive delivery loop in `server.ts` checks every 60s and delivers via `persistCard()` + WebSocket push. Dedup with 1h TTL prevents message spam.
+**Implementation:** `conversation-context.ts` exports a singleton `contextRegistry`. Providers implement `ConversationContextProvider` interface. Events emitted from `cortex-enrichment.ts`, `researcher-tools.ts`, and `focus-areas.ts` (including `sprint.completed`). Proactive delivery loop in `server.ts` checks every 60s and delivers via `persistCard()` + WebSocket push. Dedup with 1h TTL prevents message spam.
 
-**Consumers:** `FocusContextProvider` (focus-context-provider.ts) is the first consumer. Future consumers: project conversations, data source monitoring threads.
+**Consumers:** `FocusContextProvider` (focus-context-provider.ts) — handles sprint completion notifications, decision-mode context injection, quiet focus detection, new content alerts. Future consumers: project conversations, data source monitoring threads.
 
 **Sidebar visual grouping:** Conversations with context metadata appear grouped by type in the sidebar — "FOCUS AREAS" (violet), "PROJECTS" (emerald), regular "CHATS" below. Each group has distinct icons and active-state colors. Context stored as `ConversationContext` on `ConversationSummary`.
 

@@ -64,7 +64,7 @@ wechatRoutes.get("/", (req, res) => {
 // WeChat sends XML messages. We parse them, track the interaction,
 // and reply with a simple welcome/acknowledgment.
 
-wechatRoutes.post("/", (req, res) => {
+wechatRoutes.post("/", async (req, res) => {
   // Body may come as raw text or buffer
   let xml = "";
   if (typeof req.body === "string") {
@@ -97,7 +97,31 @@ wechatRoutes.post("/", (req, res) => {
     message: `Received ${msgType} message from ${fromUser}${content ? `: ${content.slice(0, 50)}` : ""}`,
   });
 
-  // Auto-reply with a welcome message
+  // Check if this is a remark (reply to a notification) or a fresh interaction
+  if (msgType === "text" && content.trim()) {
+    try {
+      const { submitWechatRemark } = await import("./remarks.js");
+      const remark = submitWechatRemark(fromUser, content.trim());
+      if (remark) {
+        // Reply acknowledging the remark
+        const timestamp = Math.floor(Date.now() / 1000);
+        const ackContent = `Received your remark. The Team Leader will process it shortly.`;
+        const reply = `<xml>
+<ToUserName><![CDATA[${fromUser}]]></ToUserName>
+<FromUserName><![CDATA[${toUser}]]></FromUserName>
+<CreateTime>${timestamp}</CreateTime>
+<MsgType><![CDATA[text]]></MsgType>
+<Content><![CDATA[${ackContent}]]></Content>
+</xml>`;
+        res.type("application/xml").send(reply);
+        return;
+      }
+    } catch {
+      // Remark system not available — fall through to default reply
+    }
+  }
+
+  // Default reply for non-text messages or when remark system unavailable
   const timestamp = Math.floor(Date.now() / 1000);
   const replyContent = "Enso AI connected. Your 48-hour messaging window is now active.";
 

@@ -2367,6 +2367,179 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   });
 
+  // ── Remarks API ──
+
+  // Quick action from email button (approve/dismiss/defer)
+  app.get("/api/remarks/quick", async (req, res) => {
+    try {
+      const { nid, action } = req.query as { nid?: string; action?: string };
+      if (!nid || !action) { res.status(400).send("Missing nid or action"); return; }
+      const { getNotificationContext, submitRemark } = await import("./remarks.js");
+      const context = getNotificationContext(nid);
+      if (!context) { res.send("<html><body style='background:#0f172a;color:#f1f5f9;display:flex;justify-content:center;padding:60px;font-family:sans-serif;'><div><h2>Link expired</h2><p>This notification context has expired (7 day limit).</p></div></body></html>"); return; }
+      submitRemark({ channel: "email", context, text: action, action: action as any });
+      res.send(`<html><body style='background:#0f172a;color:#f1f5f9;display:flex;justify-content:center;padding:60px;font-family:sans-serif;'><div style='text-align:center;'><h2 style='color:#10b981;'>✓ ${action === "approve" ? "Approved" : action === "defer" ? "Deferred" : "Noted"}</h2><p style='color:#9ca3af;'>Your response has been recorded. The Team Leader will process it.</p></div></body></html>`);
+    } catch (err: any) {
+      res.status(500).send("Error processing remark");
+    }
+  });
+
+  // Web form submission
+  app.post("/api/remarks/web", express.json(), async (req, res) => {
+    try {
+      const { notificationId, text } = req.body as { notificationId?: string; text?: string };
+      if (!text?.trim()) { res.status(400).json({ error: "Text required" }); return; }
+      const { getNotificationContext, submitRemark } = await import("./remarks.js");
+      const context = getNotificationContext(notificationId || "");
+      submitRemark({
+        channel: "web",
+        context: context || { type: "briefing", notificationId: notificationId || "unknown", summary: "Web form submission", sentAt: new Date().toISOString() },
+        text: text.trim(),
+        action: "custom",
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to submit remark" });
+    }
+  });
+
+  // In-app remark submission
+  app.post("/api/remarks", express.json(), async (req, res) => {
+    try {
+      const { notificationId, text, action } = req.body as { notificationId?: string; text?: string; action?: string };
+      if (!text?.trim() && !action) { res.status(400).json({ error: "Text or action required" }); return; }
+      const { getNotificationContext, submitRemark } = await import("./remarks.js");
+      const context = getNotificationContext(notificationId || "");
+      const remark = submitRemark({
+        channel: "in-app",
+        context: context || { type: "briefing", notificationId: notificationId || "unknown", summary: "In-app remark", sentAt: new Date().toISOString() },
+        text: text?.trim() || action || "",
+        action: action as any,
+      });
+      res.json({ success: true, remark });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to submit remark" });
+    }
+  });
+
+  // List remarks (for dashboard)
+  app.get("/api/remarks", async (req, res) => {
+    try {
+      const { getAllRemarks, getPendingRemarks } = await import("./remarks.js");
+      const pending = (req.query.pending === "true");
+      res.json({ remarks: pending ? getPendingRemarks() : getAllRemarks(50) });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to load remarks" });
+    }
+  });
+
+  // Remark web form page (/r/<notificationId>)
+  app.get("/r/:notificationId", async (req, res) => {
+    try {
+      const { buildRemarkPage } = await import("./remarks.js");
+      res.type("html").send(buildRemarkPage(req.params.notificationId));
+    } catch (err: any) {
+      res.status(500).send("Error loading remark form");
+    }
+  });
+
+  // ── Team Leader API ──
+
+  app.get("/api/team-leader/config", async (_req, res) => {
+    try {
+      const { loadConfig } = await import("./team-leader.js");
+      res.json(loadConfig());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to load config" });
+    }
+  });
+
+  app.patch("/api/team-leader/config", express.json(), async (req, res) => {
+    try {
+      const { loadConfig, saveConfig } = await import("./team-leader.js");
+      const current = loadConfig();
+      const updates = req.body as Record<string, unknown>;
+      // Merge updates into current config (shallow merge per section)
+      if (updates.schedule && typeof updates.schedule === "object") {
+        Object.assign(current.schedule, updates.schedule);
+      }
+      if (updates.channels && typeof updates.channels === "object") {
+        Object.assign(current.channels, updates.channels);
+      }
+      if (typeof updates.autoExecuteMaxEffort === "string") {
+        current.autoExecuteMaxEffort = updates.autoExecuteMaxEffort as typeof current.autoExecuteMaxEffort;
+      }
+      if (typeof updates.autoEvolve === "boolean") {
+        current.autoEvolve = updates.autoEvolve;
+      }
+      saveConfig(current);
+      res.json(current);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to update config" });
+    }
+  });
+
+  app.post("/api/team-leader/morning", async (_req, res) => {
+    try {
+      const { runMorningRoutine } = await import("./team-leader.js");
+      const briefing = await runMorningRoutine();
+      res.json({ success: true, headline: briefing.headline, sections: briefing.sections, actions: briefing.proposedActions.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Morning routine failed" });
+    }
+  });
+
+  app.post("/api/team-leader/checkin", async (_req, res) => {
+    try {
+      const { runCheckIn } = await import("./team-leader.js");
+      const result = await runCheckIn();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Check-in failed" });
+    }
+  });
+
+  app.get("/api/team-leader/briefing", async (_req, res) => {
+    try {
+      const { getLastBriefing } = await import("./team-leader.js");
+      const briefing = getLastBriefing();
+      res.json(briefing || { message: "No briefing yet. Run POST /api/team-leader/morning first." });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to load briefing" });
+    }
+  });
+
+  app.get("/api/team-leader/state", async (_req, res) => {
+    try {
+      const { getTeamLeaderState } = await import("./team-leader.js");
+      res.json(getTeamLeaderState());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to load state" });
+    }
+  });
+
+  // ── Focus Utilities API ──
+
+  app.post("/api/focus-areas/backfill-summaries", async (_req, res) => {
+    try {
+      const { backfillSprintSummaries } = await import("./focus-areas.js");
+      const result = await backfillSprintSummaries();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Backfill failed" });
+    }
+  });
+
+  app.post("/api/focus-areas/pulse", async (_req, res) => {
+    try {
+      const { generateProgressPulse } = await import("./focus-agent.js");
+      const pulse = await generateProgressPulse();
+      res.json({ success: true, headline: pulse.headline, items: pulse.items, analyses: pulse.analyses.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Pulse failed" });
+    }
+  });
+
   // ── Projects API ──
   app.get("/api/projects", async (_req, res) => {
     const { listProjects } = await import("./project-manager.js");
@@ -3600,6 +3773,43 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
         };
         initScheduler(executeScheduledTask, broadcastToClients);
         runtime.log?.("[enso] scheduled task scheduler started");
+
+        // Register Team Leader scheduled tasks (morning routine + check-in)
+        import("./team-leader.js").then(async ({ loadConfig }) => {
+          const { getTask, createTask } = await import("./scheduled-tasks.js");
+          const config = loadConfig();
+
+          // Morning routine — full assessment + briefing
+          if (!getTask("team-leader-morning")) {
+            createTask({
+              taskId: "team-leader-morning",
+              name: "Team Leader Morning Routine",
+              description: "Full system assessment: analyze all focus areas, Cortex health, platform state; prioritize actions; deliver unified daily briefing",
+              cron: config.schedule.morningRoutine,
+              action: { type: "tool" as const, toolId: "enso_team_leader", params: { mode: "morning" } },
+              enabled: true,
+              recurring: true,
+              notifyOnComplete: false,
+            });
+            runtime.log?.(`[enso] Team Leader morning routine registered (${config.schedule.morningRoutine})`);
+          }
+
+          // Check-in — lightweight urgent scan
+          if (!getTask("team-leader-checkin")) {
+            createTask({
+              taskId: "team-leader-checkin",
+              name: "Team Leader Check-In",
+              description: "Quick scan for urgent items: errors, failed tasks, unreviewed sprint results",
+              cron: config.schedule.checkIn,
+              action: { type: "tool" as const, toolId: "enso_team_leader", params: { mode: "checkin" } },
+              enabled: true,
+              recurring: true,
+              notifyOnComplete: false,
+            });
+            runtime.log?.(`[enso] Team Leader check-in registered (${config.schedule.checkIn})`);
+          }
+
+        }).catch(() => {});
       }).catch((err) => {
         runtime.error?.(`[enso] failed to start scheduler: ${err instanceof Error ? err.message : String(err)}`);
       });

@@ -37,6 +37,8 @@ import { createWechatTools } from "./src/wechat-tools.js";
 import { createYouTubeTools } from "./src/youtube-tools.js";
 import { createCortexTools } from "./src/cortex-tools.js";
 import { createPageTools } from "./src/page-tools.js";
+import { createFocusAgentTools } from "./src/focus-agent.js";
+import { createTeamLeaderTools } from "./src/team-leader.js";
 import { startSelfHealing } from "./src/self-heal.js";
 
 // ── Exit codes ──
@@ -63,6 +65,8 @@ function registerAllTools(): void {
     createYouTubeTools(),
     createCortexTools(),
     createPageTools(),
+    createFocusAgentTools(),
+    createTeamLeaderTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

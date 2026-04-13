@@ -261,6 +261,7 @@ export interface ClientMessage {
     | "orchestration.cancel"
     | "orchestration.message"
     | "evolution.start"
+    | "focus.evolve"
     | "discovery.start"
     | "image_research"
     | "image_search"
@@ -605,6 +606,25 @@ export interface ScheduledTaskRun {
   durationMs?: number;
   error?: string;
   resultSummary?: string;
+}
+
+// ── Sprint Results Summary ──
+
+export interface SprintDeliverableSummary {
+  taskTitle: string;
+  entityType: "app" | "article" | "idea" | "synthesis";
+  entityId: string;
+  painPoint: string;
+  howItHelps: string;
+  quickStart: string;
+  actionType: "run" | "read" | "explore" | "review";
+}
+
+export interface SprintResultsSummary {
+  sprintSummary: string;
+  deliverables: SprintDeliverableSummary[];
+  recommendedFirstAction: { deliverableIndex: number; reason: string };
+  nextSteps: string[];
 }
 
 // ── Type Guards ──

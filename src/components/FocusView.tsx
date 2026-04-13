@@ -37,6 +37,20 @@ interface FocusArea {
   relatedEntityIds?: string[];
   lastSprintResults?: string;
   lastSprintDate?: string;
+  lastSprintSummary?: {
+    sprintSummary: string;
+    deliverables: Array<{
+      taskTitle: string;
+      entityType: "app" | "article" | "idea" | "synthesis";
+      entityId: string;
+      painPoint: string;
+      howItHelps: string;
+      quickStart: string;
+      actionType: "run" | "read" | "explore" | "review";
+    }>;
+    recommendedFirstAction: { deliverableIndex: number; reason: string };
+    nextSteps: string[];
+  };
 }
 
 interface FocusState {
@@ -96,8 +110,10 @@ export default function FocusView() {
   const [chatReady, setChatReady] = useState(false);
   const [showEvolveBrief, setShowEvolveBrief] = useState(false);
   const [evolveBrief, setEvolveBrief] = useState("");
+  const [sprintLaunched, setSprintLaunched] = useState(false);
   const [expandedDeliverable, setExpandedDeliverable] = useState<string | null>(null);
   const [deliverableContent, setDeliverableContent] = useState("");
+  const [exploredDeliverables, setExploredDeliverables] = useState<Set<string>>(new Set());
 
   // Editing state
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -241,9 +257,9 @@ export default function FocusView() {
     setSelectedId(id);
     setDetailTab("overview");
     setView("detail");
-    // Reset evolve brief state so absorption runs fresh
     setEvolveBrief("");
     setShowEvolveBrief(false);
+    setSprintLaunched(false);
     // Fetch activity data
     try {
       const resp = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}/activity`, { headers: authHeaders() });
@@ -596,12 +612,22 @@ export default function FocusView() {
                   );
                 })()}
 
-                {/* Step 3: Evolve — with review/edit brief */}
+                {/* Step 3: Evolve */}
+                {selected.lastSprintDate ? (
+                  <button
+                    onClick={() => setDetailTab("evolve" as DetailTab)}
+                    className={`w-full text-left rounded-lg border p-3 transition-all border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/50`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{"\u2705"}</span>
+                      <span className="text-xs font-medium text-emerald-300">Evolved — Sprint completed {selected.lastSprintDate.slice(0, 10)}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Click to view sprint results and deliverables</p>
+                  </button>
+                ) : (
                 <div className="rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 space-y-3">
                   <button
                     onClick={async () => {
                       if (!evolveBrief) {
-                        // First: absorb conversation insights into the focus area
                         try {
                           const absorbResp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/absorb-conversation`, {
                             method: "POST", headers: authHeaders(),
@@ -609,38 +635,31 @@ export default function FocusView() {
                           if (absorbResp.ok) {
                             const { updated, area: revisedArea } = await absorbResp.json() as { updated: boolean; area?: FocusArea };
                             if (updated && revisedArea) {
-                              // Update local state with revised focus area
                               setFocusState(prev => prev ? {
                                 ...prev,
                                 areas: prev.areas.map(a => a.id === selected.id ? { ...a, ...revisedArea } : a),
                               } : prev);
-                              // Use revised data for the brief
                               Object.assign(selected, revisedArea);
                             }
                           }
-                        } catch { /* absorption failed — continue with existing data */ }
+                        } catch { /* absorption failed */ }
 
-                        // Auto-generate brief from (now-revised) focus data + conversation transcript
                         const lines: string[] = [];
                         lines.push(`Focus: ${selected.title}`);
                         if (selected.intent) lines.push(`Goal: ${selected.intent}`);
                         if (selected.deeperIntent) lines.push(`Why: ${selected.deeperIntent}`);
 
-                        // Fetch conversation transcript from backend (truncate to recent discussion)
                         try {
                           const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/transcript`, { headers: authHeaders() });
                           if (resp.ok) {
                             const { transcript } = await resp.json() as { transcript: string };
                             if (transcript.trim()) {
-                              // Use last 4000 chars to capture the most recent discussion round
-                              const recent = transcript.length > 4000
-                                ? transcript.slice(-4000)
-                                : transcript;
+                              const recent = transcript.length > 4000 ? transcript.slice(-4000) : transcript;
                               lines.push(`\n--- Strategic Discussion ---`);
                               lines.push(recent);
                             }
                           }
-                        } catch { /* transcript fetch failed — continue without it */ }
+                        } catch { /* transcript fetch failed */ }
 
                         if (selected.nextSteps?.length) {
                           lines.push(`\n--- Priorities ---`);
@@ -675,8 +694,8 @@ export default function FocusView() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => {
-                            // Launch focus evolution via dedicated WS message
                             useChatStore.getState().sendFocusEvolve(selected.id, evolveBrief);
+                            setSprintLaunched(true);
                             setDetailTab("evolve" as DetailTab);
                           }}
                           className="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
@@ -687,6 +706,7 @@ export default function FocusView() {
                     </div>
                   )}
                 </div>
+                )}
               </div>
 
               {/* Next steps / suggested actions (if any) */}
@@ -736,14 +756,38 @@ export default function FocusView() {
                 <span className="px-2 py-1 rounded bg-gray-500/10 text-gray-400 border border-gray-700/30">{selected.semanticTags.join(", ")}</span>
               </div>
 
-              {/* Sprint Deliverables — entities created by evolution sprints */}
+              {/* Sprint Results Summary Header — when structured summary exists */}
+              {selected.lastSprintSummary && (
+                <div className="rounded-lg border border-violet-500/20 bg-violet-950/10 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm">{"\uD83C\uDFAF"}</span>
+                    <label className="text-[10px] uppercase tracking-wider text-violet-400/70">Sprint Results</label>
+                    <span className="text-[10px] text-gray-500 ml-auto">
+                      {exploredDeliverables.size} of {selected.lastSprintSummary.deliverables.length} explored
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-300 leading-relaxed mb-3">{selected.lastSprintSummary.sprintSummary}</p>
+                  {selected.lastSprintSummary.nextSteps.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selected.lastSprintSummary.nextSteps.map((step, i) => (
+                        <button key={i} onClick={() => chatAboutFocus(selected, step)}
+                          className="text-[10px] px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:border-violet-500/40 hover:bg-violet-500/20 transition-colors">
+                          {step}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sprint Deliverables — activation cards (structured) or fallback (plain) */}
               {selected.relatedEntityIds && selected.relatedEntityIds.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-sm">{"\uD83D\uDCE6"}</span>
                     <label className="text-[10px] uppercase tracking-wider text-gray-600">Sprint Deliverables ({selected.relatedEntityIds.length})</label>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-2">
                     {selected.relatedEntityIds.map((eid, i) => {
                       // Parse entity ID: "cortex:article:elite-photographer-gallery"
                       const parts = eid.split(":");
@@ -755,50 +799,134 @@ export default function FocusView() {
                         synthesis: "\uD83D\uDCCA", book: "\uD83D\uDCDA", game: "\uD83C\uDFAE",
                         movie: "\uD83C\uDFAC", channel: "\uD83D\uDCFA", place: "\u2708\uFE0F",
                       };
-                      const typeColors: Record<string, string> = {
+
+                      // Try to find matching deliverable from structured summary
+                      const summaryDeliverable = selected.lastSprintSummary?.deliverables.find(d => d.entityId === eid);
+                      const isRecommended = selected.lastSprintSummary?.recommendedFirstAction.deliverableIndex ===
+                        selected.lastSprintSummary?.deliverables.findIndex(d => d.entityId === eid);
+                      const isExpanded = expandedDeliverable === eid;
+                      const isExplored = exploredDeliverables.has(eid);
+
+                      // Activation card colors by entity type
+                      const activationColors: Record<string, { border: string; bg: string; badge: string; badgeText: string; actionBtn: string }> = {
+                        app: { border: "border-blue-500/25", bg: "bg-blue-950/15", badge: "bg-blue-500/20", badgeText: "text-blue-300", actionBtn: "bg-blue-600 hover:bg-blue-500 text-white" },
+                        article: { border: "border-emerald-500/25", bg: "bg-emerald-950/15", badge: "bg-emerald-500/20", badgeText: "text-emerald-300", actionBtn: "bg-emerald-600 hover:bg-emerald-500 text-white" },
+                        idea: { border: "border-purple-500/25", bg: "bg-purple-950/15", badge: "bg-purple-500/20", badgeText: "text-purple-300", actionBtn: "bg-purple-600 hover:bg-purple-500 text-white" },
+                        synthesis: { border: "border-amber-500/25", bg: "bg-amber-950/15", badge: "bg-amber-500/20", badgeText: "text-amber-300", actionBtn: "bg-amber-600 hover:bg-amber-500 text-white" },
+                      };
+
+                      const loadContent = async () => {
+                        setExpandedDeliverable(eid);
+                        setDeliverableContent("Loading...");
+                        setExploredDeliverables(prev => new Set(prev).add(eid));
+                        try {
+                          const entityResp = await fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
+                            method: "POST",
+                            headers: { ...authHeaders(), "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "view_entity", payload: { entityId: eid }, appFamily: "cortex" }),
+                          });
+                          const entityData = await entityResp.json();
+                          const content = entityData?.data?.cortexContent || entityData?.cortexContent;
+                          if (content) {
+                            setDeliverableContent(content);
+                          } else {
+                            const paths = [`synthesis/${slug}.md`, `synthesis/article-${slug}.md`, `entities/${slug}.md`];
+                            let found = false;
+                            for (const p of paths) {
+                              const r = await fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
+                                method: "POST",
+                                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "read", payload: { path: p }, appFamily: "cortex" }),
+                              });
+                              const d = await r.json();
+                              const c = d?.data?.content || d?.content;
+                              if (c && c !== "Page not found") { setDeliverableContent(c); found = true; break; }
+                            }
+                            if (!found) setDeliverableContent("Content not found in Cortex");
+                          }
+                        } catch { setDeliverableContent("Failed to load content"); }
+                      };
+
+                      // ── Structured activation card (when summary exists for this deliverable) ──
+                      if (summaryDeliverable) {
+                        const colors = activationColors[summaryDeliverable.entityType] || activationColors.synthesis;
+                        const actionLabels: Record<string, string> = { run: "Run App", read: "Read", explore: "Explore", review: "Review" };
+                        const actionLabel = actionLabels[summaryDeliverable.actionType] || "View";
+
+                        return (
+                          <div key={i} className={`rounded-lg border ${colors.border} ${colors.bg} p-3 transition-all ${isRecommended ? "ring-1 ring-violet-400/30" : ""}`}>
+                            {/* Header row */}
+                            <div className="flex items-start gap-2 mb-2">
+                              <span className="text-base shrink-0">{typeIcons[entityType] || "\uD83D\uDCC4"}</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-medium text-gray-200 leading-snug">{title}</span>
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${colors.badge} ${colors.badgeText}`}>
+                                    {summaryDeliverable.entityType}
+                                  </span>
+                                  {isRecommended && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300">
+                                      Start Here
+                                    </span>
+                                  )}
+                                  {isExplored && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-500/20 text-gray-400">{"\u2713"}</span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-gray-400 mt-1 leading-snug">{summaryDeliverable.painPoint}</p>
+                              </div>
+                            </div>
+
+                            {/* How it helps */}
+                            <p className="text-[11px] text-gray-300 leading-relaxed mb-2 pl-7">{summaryDeliverable.howItHelps}</p>
+
+                            {/* Quick start hint + action button */}
+                            <div className="flex items-center gap-2 pl-7">
+                              <span className="text-[10px] text-gray-500 flex-1 truncate">{summaryDeliverable.quickStart}</span>
+                              {summaryDeliverable.actionType === "run" ? (
+                                <button
+                                  onClick={() => {
+                                    setExploredDeliverables(prev => new Set(prev).add(eid));
+                                    useChatStore.getState().runApp(slug);
+                                  }}
+                                  className={`text-[11px] px-3 py-1 rounded-md ${colors.actionBtn} transition-colors shrink-0`}
+                                >
+                                  {actionLabel}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => { isExpanded ? setExpandedDeliverable(null) : loadContent(); }}
+                                  className={`text-[11px] px-3 py-1 rounded-md ${colors.actionBtn} transition-colors shrink-0`}
+                                >
+                                  {isExpanded ? "Collapse" : actionLabel}
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Expanded content */}
+                            {isExpanded && (
+                              <div className="mt-2 ml-7 rounded-lg border border-gray-700/30 bg-gray-900/30 p-3 max-h-[400px] overflow-y-auto">
+                                <Suspense fallback={<div className="text-xs text-gray-500">Loading...</div>}>
+                                  <div className="text-sm"><MarkdownText text={deliverableContent || "Loading..."} /></div>
+                                </Suspense>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // ── Fallback: plain expandable card (no structured summary for this entity) ──
+                      const fallbackColors: Record<string, string> = {
                         idea: "border-amber-500/20 bg-amber-950/10 hover:border-amber-500/40",
                         article: "border-blue-500/20 bg-blue-950/10 hover:border-blue-500/40",
                         app: "border-indigo-500/20 bg-indigo-950/10 hover:border-indigo-500/40",
                         project: "border-violet-500/20 bg-violet-950/10 hover:border-violet-500/40",
                         synthesis: "border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40",
                       };
-                      const isExpanded = expandedDeliverable === eid;
                       return (
-                        <div key={i} className="col-span-1 sm:col-span-2">
-                          <button className={`rounded-lg border p-3 transition-colors cursor-pointer text-left w-full ${typeColors[entityType] || "border-gray-700/30 bg-gray-900/20"}`}
-                            onClick={async () => {
-                              if (isExpanded) { setExpandedDeliverable(null); return; }
-                              setExpandedDeliverable(eid);
-                              setDeliverableContent("Loading...");
-                              try {
-                                // Look up entity to get the real cortexPath
-                                const entityResp = await fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
-                                  method: "POST",
-                                  headers: { ...authHeaders(), "Content-Type": "application/json" },
-                                  body: JSON.stringify({ action: "view_entity", payload: { entityId: eid }, appFamily: "cortex" }),
-                                });
-                                const entityData = await entityResp.json();
-                                const content = entityData?.data?.cortexContent || entityData?.cortexContent;
-                                if (content) {
-                                  setDeliverableContent(content);
-                                } else {
-                                  // Fallback: try reading common path patterns
-                                  const paths = [`synthesis/${slug}.md`, `synthesis/article-${slug}.md`, `entities/${slug}.md`];
-                                  let found = false;
-                                  for (const p of paths) {
-                                    const r = await fetch(`${getBackendBaseUrl()}/api/cortex/action`, {
-                                      method: "POST",
-                                      headers: { ...authHeaders(), "Content-Type": "application/json" },
-                                      body: JSON.stringify({ action: "read", payload: { path: p }, appFamily: "cortex" }),
-                                    });
-                                    const d = await r.json();
-                                    const c = d?.data?.content || d?.content;
-                                    if (c && c !== "Page not found") { setDeliverableContent(c); found = true; break; }
-                                  }
-                                  if (!found) setDeliverableContent("Content not found in Cortex");
-                                }
-                              } catch { setDeliverableContent("Failed to load content"); }
-                            }}
+                        <div key={i}>
+                          <button className={`rounded-lg border p-3 transition-colors cursor-pointer text-left w-full ${fallbackColors[entityType] || "border-gray-700/30 bg-gray-900/20"}`}
+                            onClick={() => { isExpanded ? setExpandedDeliverable(null) : loadContent(); }}
                           >
                             <div className="flex items-start gap-2">
                               <span className="text-sm shrink-0">{typeIcons[entityType] || "\uD83D\uDCC4"}</span>
@@ -806,15 +934,13 @@ export default function FocusView() {
                                 <span className="text-xs text-gray-200 block leading-snug">{title}</span>
                                 <span className="text-[10px] text-gray-500">{entityType}</span>
                               </div>
-                              <span className="text-[10px] text-gray-500 ml-auto shrink-0">{isExpanded ? "▼" : "▶"}</span>
+                              <span className="text-[10px] text-gray-500 ml-auto shrink-0">{isExpanded ? "\u25BC" : "\u25B6"}</span>
                             </div>
                           </button>
                           {isExpanded && (
                             <div className="mt-1 rounded-lg border border-gray-700/30 bg-gray-900/30 p-4 max-h-[500px] overflow-y-auto">
                               <Suspense fallback={<div className="text-xs text-gray-500">Loading...</div>}>
-                                <div className="text-sm">
-                                  <MarkdownText text={deliverableContent || "Loading..."} />
-                                </div>
+                                <div className="text-sm"><MarkdownText text={deliverableContent || "Loading..."} /></div>
                               </Suspense>
                             </div>
                           )}
@@ -952,7 +1078,7 @@ export default function FocusView() {
           )}
 
           {detailTab === "evolve" && (
-            <EvolveTab focusArea={selected} onNavigateToChat={() => {
+            <EvolveTab focusArea={selected} sprintLaunched={sprintLaunched} onNavigateToChat={() => {
               if (selected.conversationId) {
                 selectConversation(selected.conversationId);
                 setActiveTab("chat");
@@ -976,7 +1102,7 @@ const ROLE_EMOJI: Record<string, string> = {
   reviewer: "\u2705",
 };
 
-function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNavigateToChat: () => void }) {
+function EvolveTab({ focusArea, sprintLaunched, onNavigateToChat }: { focusArea: FocusArea; sprintLaunched?: boolean; onNavigateToChat: () => void }) {
   const cards = useChatStore((s) => s.cards);
   const [tick, setTick] = useState(0);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
@@ -1011,6 +1137,39 @@ function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNa
   const elapsed = orchCard ? Math.round((Date.now() - orchCard.createdAt) / 60000) : 0;
 
   if (!orchCard || total === 0) {
+    if (sprintLaunched) {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-indigo-500/30 bg-indigo-950/10 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm animate-pulse">{"\u26A1"}</span>
+              <span className="text-xs font-medium text-indigo-200">Planning Sprint...</span>
+            </div>
+            <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full w-[15%] rounded-full bg-indigo-500 animate-pulse" />
+            </div>
+            <p className="text-[11px] text-gray-500">AI is analyzing your focus area and designing the task plan. This typically takes 1-2 minutes.</p>
+          </div>
+        </div>
+      );
+    }
+    if (focusArea.lastSprintResults) {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/10 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{"\u2705"}</span>
+              <span className="text-xs font-medium text-emerald-200">Last Sprint — {focusArea.lastSprintDate?.slice(0, 10)}</span>
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-800/40 bg-gray-950/30 p-4 text-xs text-gray-300 overflow-y-auto max-h-[500px]">
+            <Suspense fallback={<p className="text-gray-500">Loading...</p>}>
+              <MarkdownText text={focusArea.lastSprintResults} />
+            </Suspense>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="space-y-4">
         <div className="text-center py-8">
@@ -1030,6 +1189,8 @@ function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNa
 
   const isComplete = completed === total && total > 0;
   const isRunning = running.length > 0;
+  const goal = plan?.goal || "";
+  const isEvolution = goal.includes("Evolution") || sprintLaunched;
 
   return (
     <div className="space-y-4">
@@ -1042,7 +1203,9 @@ function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNa
             {isComplete ? "\u2705" : "\u26A1"}
           </span>
           <span className={`text-xs font-medium ${isComplete ? "text-emerald-200" : "text-indigo-200"}`}>
-            {isComplete ? "Evaluation Complete" : "Evaluation Sprint"}
+            {isComplete
+              ? (isEvolution ? "Evolution Complete" : "Evaluation Complete")
+              : (isEvolution ? "Evolution Sprint" : "Evaluation Sprint")}
           </span>
           <span className="text-[10px] text-gray-500 tabular-nums">{elapsed}m</span>
           <span className="text-[10px] text-gray-500 ml-auto">{completed}/{total} tasks</span>

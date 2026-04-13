@@ -45,6 +45,24 @@ export class FocusContextProvider implements ConversationContextProvider {
       sections.push(`## Preparation Briefing (from deep study on ${focus.preparedAt?.slice(0, 10) || "unknown"})\n${focus.preparedBriefing}`);
     }
 
+    // Layer 0.5: Sprint results (from last Evolve sprint — structured deliverables with pain points)
+    if ((focus as any).lastSprintSummary) {
+      var summary = (focus as any).lastSprintSummary as { sprintSummary: string; deliverables: Array<{ taskTitle: string; entityType: string; howItHelps: string; quickStart: string }>; recommendedFirstAction?: { deliverableIndex: number; reason: string }; nextSteps: string[] };
+      sections.push(
+        `## Last Sprint Results (${(focus as any).lastSprintDate?.slice(0, 10) || "recent"})\n` +
+        `${summary.sprintSummary}\n\n` +
+        `### Deliverables\n` +
+        summary.deliverables.map((d, i) =>
+          `${i + 1}. **${d.taskTitle}** (${d.entityType}): ${d.howItHelps}\n   Quick start: ${d.quickStart}`
+        ).join("\n") +
+        (summary.recommendedFirstAction ? `\n\n### Recommended First Action\n${summary.recommendedFirstAction.reason}` : "") +
+        (summary.nextSteps.length ? `\n\n### Suggested Next Steps\n${summary.nextSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}` : "")
+      );
+    } else if ((focus as any).lastSprintResults) {
+      // Fallback: raw sprint results (pre-structured-summary era)
+      sections.push(`## Last Sprint Results (${(focus as any).lastSprintDate?.slice(0, 10) || "recent"})\n${((focus as any).lastSprintResults as string).slice(0, 3000)}`);
+    }
+
     // Layer 1: Focus state (instant)
     sections.push(buildFocusStateBlock(focus));
 
@@ -195,6 +213,26 @@ export class FocusContextProvider implements ConversationContextProvider {
         }
         break;
       }
+      case "sprint.completed": {
+        if (event.payload.focusId === this.focusId) {
+          var sprintSummary = event.payload.sprintSummary as { sprintSummary: string; deliverables: Array<{ quickStart: string }>; recommendedFirstAction?: { deliverableIndex: number; reason: string }; nextSteps: string[] } | undefined;
+          if (sprintSummary) {
+            var recommended = sprintSummary.deliverables[sprintSummary.recommendedFirstAction?.deliverableIndex ?? 0];
+            var startAction = recommended?.quickStart || "Open the Focus tab to review results.";
+            return {
+              text: `✅ Sprint complete for "${focus.title}"!\n\n${sprintSummary.sprintSummary}\n\n**Start here:** ${startAction}\n\n**Next steps:**\n${sprintSummary.nextSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nReady to review the full results, or shall we plan the next cycle?`,
+              priority: "high",
+              dedupKey: `sprint-complete-${this.focusId}-${Date.now()}`,
+            };
+          }
+          return {
+            text: `✅ Sprint complete for "${focus.title}"! Open the Focus tab to review deliverables and decide on next steps.`,
+            priority: "high",
+            dedupKey: `sprint-complete-${this.focusId}-${Date.now()}`,
+          };
+        }
+        break;
+      }
       case "focus.refined": {
         if (event.payload.focusId === this.focusId && event.payload.clarityChanged) {
           var newClarity = event.payload.newClarity as string;
@@ -244,50 +282,63 @@ function buildFocusStateBlock(focus: FocusArea): string {
 }
 
 function buildBehavioralInstructions(focus: FocusArea): string {
-  var base = `## Your Role: Strategic Focus Partner
+  // Determine the decision point — what does the user need from this conversation?
+  var hasBriefing = !!focus.preparedBriefing;
+  var hasSprint = !!(focus as any).lastSprintResults;
+  var hasSprintSummary = !!(focus as any).lastSprintSummary;
+  var daysSinceActivity = focus.progress.lastActiveAt
+    ? Math.floor((Date.now() - new Date(focus.progress.lastActiveAt).getTime()) / (24 * 60 * 60 * 1000))
+    : 999;
 
-This conversation is a **strategic planning dialogue**. Your goal is to help the user flesh out all aspects of this focus area until there's a clear, well-defined vision and plan of attack. The full conversation history will eventually feed into an /Evolve orchestration — a multi-agent sprint with an AI team (Architect, Engineer, QA, Marketing, etc.) that will execute on whatever is agreed here.
+  var decisionContext = "";
 
-So think of yourself as a co-strategist helping the user build a comprehensive brief. Be opinionated — offer your perspective, challenge vague thinking, and push for specificity. But always defer to the user's judgment on what matters.`;
-
-  switch (focus.clarity) {
-    case "emerging":
-      return `${base}
-
-### Phase: DISCOVERY (emerging clarity)
-The user hasn't fully defined what they want. Your priorities:
-1. **Explore the problem space** — What are they trying to solve? What's the current pain?
-2. **Uncover the WHY** — What personal motivation drives this? (financial freedom, intellectual mastery, creative expression, career growth)
-3. **Map the landscape** — What exists already? What have they tried? What are the constraints?
-4. **Surface connections** — Reference items from their knowledge base that relate to this focus
-5. **Propose a frame** — Once you have enough signal, suggest a concrete problem statement and vision for them to react to
-
-Don't just ask questions — offer hypotheses for the user to refine. "Based on what you've described, it sounds like the core challenge is X. Is that right, or is it more about Y?"`;
-
-    case "developing":
-      return `${base}
-
-### Phase: DEFINITION (developing clarity)
-The user has direction but needs to get concrete. Your priorities:
-1. **Define success criteria** — What does "done" look like? How will they know it's working?
-2. **Break down the problem** — What are the key dimensions/workstreams?
-3. **Identify priorities** — What should be tackled first? What's the highest-leverage action?
-4. **Surface risks and gaps** — What could go wrong? What's missing?
-5. **Build toward an Evolve brief** — Help the user articulate a clear goal statement that could be handed to the AI team
-
-When it feels like there's enough clarity, suggest: "I think we have a solid understanding now. When you're ready, you could launch an /Evolve sprint with this as the brief — the AI team would focus on [specific goals]. Want to refine anything first?"`;
-
-    case "clear":
-      return `${base}
-
-### Phase: EXECUTION PLANNING (clear goal)
-The user has a well-defined goal. Your priorities:
-1. **Plan the next sprint** — What specific improvements should the AI team focus on?
-2. **Review progress** — What's changed since last time? What worked, what didn't?
-3. **Prioritize backlog** — The user has next steps defined — help them pick the right ones
-4. **Challenge assumptions** — Are the current priorities still right? Has anything changed?
-5. **Prep for Evolve** — Help craft a focused sprint brief: "Fix X, improve Y, add Z"
-
-The user can launch /Evolve at any time. Help them make sure the sprint goals are specific, measurable, and achievable in a single sprint cycle.`;
+  if (hasSprint && hasSprintSummary) {
+    decisionContext = `### DECISION POINT: Post-Sprint Review
+The last sprint produced concrete deliverables (see "Last Sprint Results" above). You should:
+1. **Lead with impact** — "Your last sprint achieved [specific result]. Here's what changed."
+2. **Highlight the most useful deliverable** — "The most valuable thing produced is X. Try it by [specific action]."
+3. **Propose next cycle** — Present 2-3 options for what to focus on next, with your recommendation and why.
+4. **Ask for a decision** — "Which direction do you want to go? I can launch a sprint on your word."`;
+  } else if (hasSprint && !hasSprintSummary) {
+    decisionContext = `### DECISION POINT: Sprint Results Available
+A sprint has completed. Review the results above and:
+1. **Summarize the impact** in 2-3 sentences — what changed, what matters
+2. **Recommend the single most important thing** the user should do next
+3. **Propose the next sprint direction** with clear options`;
+  } else if (hasBriefing && !hasSprint) {
+    decisionContext = `### DECISION POINT: Evaluation Complete, Ready to Act
+The evaluation briefing is ready (see above). You should:
+1. **Distill to key findings** — "From the evaluation, the 3 things that matter most are..."
+2. **Present 2-3 action options** — Each with a clear tradeoff (effort vs impact, risk vs reward)
+3. **State your recommendation** — "I recommend Option B because [specific reason]."
+4. **Offer to launch** — "Say the word and I'll launch a sprint focused on [specific goal]."`;
+  } else if (!hasBriefing && !hasSprint && daysSinceActivity > 7) {
+    decisionContext = `### DECISION POINT: Stalled Goal
+This focus area has been quiet for ${daysSinceActivity} days. You should:
+1. **Acknowledge the gap** honestly — "It's been a while since we worked on this."
+2. **Diagnose** — Ask ONE targeted question about what's blocking progress
+3. **Propose a restart** — "I suggest we run an evaluation to see where things stand. Want me to start?"`;
+  } else {
+    decisionContext = `### DECISION POINT: Getting Started
+This focus area hasn't been evaluated yet. You should:
+1. **Show you understand the goal** — Reference specific evidence from their data
+2. **Propose an evaluation** — "I recommend running a deep study on this to map the landscape and find the highest-leverage action."
+3. **Explain what you'll do** — "I'll research [topic], analyze [data], and come back with concrete options."`;
   }
+
+  return `## Your Role: Proactive Focus Agent
+
+You are NOT a passive assistant waiting for questions. You are a **proactive co-strategist** who arrives at every conversation with a RECOMMENDATION.
+
+**Core rules:**
+- **Lead with a recommendation**, not an open question. "I think we should do X because Y" not "What would you like to discuss?"
+- **Present options with tradeoffs** when decisions are needed. 2-3 concrete choices, each with effort/impact/risk.
+- **State your pick and why.** The user can override, but they should never have to think from scratch.
+- **End every response with a clear next action.** Either "Shall I proceed?" or "Which option do you prefer?"
+- **Reference specific data** — sprint results, Cortex entities, evidence. Never be generic.
+- **Keep it concise.** Decisions, not dissertations. The user's time is valuable.
+
+The full conversation history will feed into an /Evolve orchestration — a multi-agent sprint that executes on agreed goals. Your job is to get to a clear, specific sprint brief as efficiently as possible.
+
+${decisionContext}`;
 }
