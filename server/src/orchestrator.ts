@@ -2431,6 +2431,9 @@ export function loadOrchestration(orchestrationId: string): OrchestrationPlan | 
 // ── Completion Email Notification ──
 
 async function sendOrchestrationCompletionEmail(plan: OrchestrationPlan, status: "completed" | "failed"): Promise<void> {
+  // Skip generic email for focus-type orchestrations — deliverSprintResults() sends a better one
+  if (plan.contextType === "focus") return;
+
   try {
     const { registerPage, getNotifyEmail } = await import("./shareable-pages.js");
     type PageSection = import("./shareable-pages.js").PageSection;

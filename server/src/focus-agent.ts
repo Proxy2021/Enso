@@ -209,22 +209,16 @@ Rules: Use EXACT focusId/title. Be specific not generic. Order by urgency.`,
     </td></tr>`;
   }).join("\n");
 
-  let reactHtml = "";
-  try {
-    const { registerNotification, emailReactActions } = await import("./reacts.js");
-    const nId = registerNotification({ type: "pulse", summary: parsed.headline }, { isEmail: true });
-    reactHtml = emailReactActions(nId, getEnsoUrl());
-  } catch { /* non-critical */ }
-
-  const htmlSummary = `<div style="max-width:600px;margin:0 auto;background:#111827;border-radius:12px;overflow:hidden;font-family:-apple-system,sans-serif;color:#f9fafb;">
-    <div style="background:linear-gradient(135deg,#4c1d95,#7c3aed);padding:20px 24px;">
-      <h2 style="margin:0;font-size:18px;color:#fff;">Focus Pulse</h2>
-      <p style="margin:4px 0 0;font-size:14px;color:#c4b5fd;">${parsed.headline}</p>
+  const htmlSummary = `<div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+    <div style="background:linear-gradient(135deg,#4c1d95,#7c3aed);padding:24px;border-radius:12px 12px 0 0;">
+      <div style="font-size:13px;color:#c4b5fd;margin-bottom:4px;">FOCUS PULSE</div>
+      <h2 style="margin:0;font-size:20px;color:#fff;">${parsed.headline}</h2>
     </div>
-    <table style="width:100%;border-collapse:collapse;">${htmlItems}</table>
-    <div style="padding:16px 24px;">${reactHtml}</div>
-    <div style="padding:8px 24px 16px;text-align:center;border-top:1px solid #1f2937;">
-      <a href="${getEnsoUrl()}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">Open Enso →</a>
+    <div style="background:#111827;">
+      <table style="width:100%;border-collapse:collapse;">${htmlItems}</table>
+    </div>
+    <div style="background:#111827;padding:16px 24px;text-align:center;border-radius:0 0 12px 12px;border-top:1px solid #1f2937;">
+      <a href="${getEnsoUrl()}" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Open in Enso →</a>
     </div>
   </div>`;
 
@@ -252,41 +246,41 @@ export async function deliverSprintResults(
     `Next steps:`, ...summary.nextSteps.map(s => `  • ${s}`),
   ].join("\n");
 
-  // React actions
-  let reactHtml = "";
-  try {
-    const { registerNotification, emailReactActions } = await import("./reacts.js");
-    const nId = registerNotification({ type: "sprint-complete", summary: `Sprint: ${focusTitle}`, focusId }, { isEmail: true });
-    reactHtml = emailReactActions(nId, getEnsoUrl());
-  } catch { /* non-critical */ }
+  const ensoUrl = getEnsoUrl();
+  const deliverableCount = summary.deliverables.length;
+  const typeIcons: Record<string, string> = { app: "📱", article: "📄", idea: "💡", synthesis: "📊" };
+  const typeColors: Record<string, string> = { app: "#10b981", article: "#3b82f6", idea: "#f59e0b", synthesis: "#8b5cf6" };
 
-  const deliverableCards = summary.deliverables.map((d, i) => {
+  const deliverableRows = summary.deliverables.map((d, i) => {
     const isRec = i === (summary.recommendedFirstAction?.deliverableIndex ?? -1);
-    const colors: Record<string, string> = { app: "#10b981", article: "#3b82f6", idea: "#f59e0b", synthesis: "#8b5cf6" };
-    const color = colors[d.entityType] || "#6b7280";
-    return `<div style="padding:12px;border-left:3px solid ${color};background:#1f2937;border-radius:0 8px 8px 0;margin-bottom:8px;">
-      <div style="font-size:14px;font-weight:600;color:#f9fafb;">${d.taskTitle} <span style="font-size:11px;color:${color};margin-left:8px;">${d.entityType}</span>${isRec ? ' <span style="font-size:11px;color:#10b981;margin-left:8px;">⭐ START HERE</span>' : ""}</div>
-      <div style="font-size:13px;color:#9ca3af;margin-top:4px;">${d.painPoint}</div>
-      <div style="font-size:13px;color:#d1d5db;margin-top:4px;">${d.howItHelps}</div>
-      <div style="font-size:12px;color:#a78bfa;margin-top:6px;">→ ${d.quickStart}</div>
-    </div>`;
+    const icon = typeIcons[d.entityType] || "📦";
+    const color = typeColors[d.entityType] || "#6b7280";
+    return `<tr>
+      <td style="padding:10px 16px;border-bottom:1px solid #1f2937;">
+        <div style="font-size:14px;color:#f9fafb;">${icon} <strong>${d.taskTitle}</strong>${isRec ? ' <span style="color:#10b981;font-size:11px;">⭐ Start here</span>' : ""}</div>
+        <div style="font-size:13px;color:#9ca3af;margin-top:3px;">${d.howItHelps}</div>
+      </td>
+    </tr>`;
   }).join("\n");
 
-  const html = `<div style="max-width:600px;margin:0 auto;background:#111827;border-radius:12px;overflow:hidden;font-family:-apple-system,sans-serif;color:#f9fafb;">
-    <div style="background:linear-gradient(135deg,#065f46,#10b981);padding:20px 24px;">
-      <h2 style="margin:0;font-size:18px;color:#fff;">✅ Sprint Complete</h2>
-      <p style="margin:4px 0 0;font-size:14px;color:#a7f3d0;">${focusTitle}</p>
+  const nextStepsList = summary.nextSteps.map(s => `<li style="margin-bottom:4px;color:#d1d5db;font-size:13px;">${s}</li>`).join("\n");
+
+  const html = `<div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+    <div style="background:linear-gradient(135deg,#065f46,#059669);padding:24px;border-radius:12px 12px 0 0;">
+      <div style="font-size:13px;color:#a7f3d0;margin-bottom:4px;">SPRINT COMPLETE</div>
+      <h2 style="margin:0;font-size:20px;color:#fff;line-height:1.3;">${focusTitle}</h2>
     </div>
-    <div style="padding:20px 24px;">
-      <p style="font-size:14px;color:#d1d5db;line-height:1.6;margin:0 0 16px;">${summary.sprintSummary}</p>
-      <h3 style="font-size:13px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;">Deliverables</h3>
-      ${deliverableCards}
-      <h3 style="font-size:13px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin:20px 0 8px;">Next Steps</h3>
-      <ul style="margin:0;padding-left:20px;color:#d1d5db;font-size:14px;">${summary.nextSteps.map(s => `<li style="margin-bottom:4px;">${s}</li>`).join("\n")}</ul>
+    <div style="background:#111827;padding:20px 24px;">
+      <p style="font-size:14px;color:#d1d5db;line-height:1.6;margin:0 0 20px;">${summary.sprintSummary}</p>
+      <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">${deliverableCount} Deliverables</div>
+      <table style="width:100%;border-collapse:collapse;background:#0d1117;border-radius:8px;overflow:hidden;">${deliverableRows}</table>
     </div>
-    <div style="padding:16px 24px;">${reactHtml}</div>
-    <div style="padding:8px 24px 16px;text-align:center;border-top:1px solid #1f2937;">
-      <a href="${getEnsoUrl()}" style="display:inline-block;background:#10b981;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">Open in Enso →</a>
+    <div style="background:#111827;padding:0 24px 20px;">
+      <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Next Steps</div>
+      <ul style="margin:0;padding-left:20px;">${nextStepsList}</ul>
+    </div>
+    <div style="background:#111827;padding:16px 24px;text-align:center;border-radius:0 0 12px 12px;border-top:1px solid #1f2937;">
+      <a href="${ensoUrl}" style="display:inline-block;background:#10b981;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Review in Enso →</a>
     </div>
   </div>`;
 
@@ -311,6 +305,22 @@ export async function deliverSprintResults(
       break;
     }
   } catch (err) { logError("focus-agent", "WeChat sprint delivery failed", err); }
+
+  // Auto-surface deliverable cards to connected clients
+  try {
+    const { surfaceSprintDeliverables } = await import("./outbound/sprint-cards.js");
+    const { getAllClients, getActiveAccount } = await import("./server.js");
+    const account = getActiveAccount();
+    if (account) {
+      const activeClients = getAllClients();
+      for (const client of activeClients) {
+        await surfaceSprintDeliverables(summary, focusId, client, account);
+      }
+      if (activeClients.length > 0) {
+        logAction({ ts: Date.now(), type: "action", category: "focus-agent", message: `Sprint cards surfaced to ${activeClients.length} client(s) for "${focusTitle}"` });
+      }
+    }
+  } catch (err) { logError("focus-agent", "Sprint card surfacing failed (non-critical)", err); }
 }
 
 // ── Chat Tool ──
