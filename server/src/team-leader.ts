@@ -278,6 +278,21 @@ async function processExpertEvent(event: AgentEvent): Promise<void> {
     const teammates = (area.experts || []).filter(e => e.id !== expert.id)
       .map(e => `${e.name} (${e.role})`).join(", ");
 
+    // Cortex knowledge about this focus area
+    let cortexContext = "";
+    try {
+      const { findRelatedContent } = await import("./cortex-synthesis.js");
+      const related = findRelatedContent(area.title, 5);
+      if (related.hits.length > 0) {
+        cortexContext = `\nKnowledge Cortex (what we know):\n${related.hits.slice(0, 5).map(h => `- "${h.title}" [${h.source}]`).join("\n")}`;
+      }
+    } catch { /* non-critical */ }
+
+    // Previous sprint deliverables
+    const prevDeliverables = area.lastSprintSummary?.deliverables?.length
+      ? `\nPrevious sprint produced: ${area.lastSprintSummary.deliverables.map((d: { taskTitle: string }) => d.taskTitle).join(", ")}`
+      : "";
+
     const response = await llm({
       prompt: `You are ${expert.name}, ${expert.role} for focus area "${area.title}".
 Your perspective: ${expert.perspective}
@@ -286,7 +301,7 @@ ${expert.responsibilities ? `Your responsibilities: ${expert.responsibilities}` 
 ${area.intent ? `Focus goal: ${area.intent}` : ""}
 ${area.deeperIntent ? `Why it matters: ${area.deeperIntent}` : ""}
 ${teammates ? `Your teammates: ${teammates}` : ""}
-${area.codebasePath ? `Codebase: ${area.codebasePath}` : ""}
+${area.codebasePath ? `Codebase: ${area.codebasePath}` : ""}${cortexContext}${prevDeliverables}
 
 ${eventDescription}
 

@@ -126,7 +126,7 @@ The final deliverable MUST be an interactive creative experience, not a text bri
 
 const ROLE_PROMPTS: Record<AgentRole, string> = {
   researcher: `You are a Research Agent. Your job is to gather comprehensive information through web search, analysis, and synthesis.
-Be thorough — find real data, statistics, prices, reviews, and details.
+Be thorough — find real data, statistics, prices, reviews, and details. When the task calls for resource curation (books, videos, articles, courses), find ACTUAL resources with real titles, authors, URLs, and explain why each matters. Don't just synthesize — curate the best existing resources AND create original analysis.
 Write your research findings to a file so downstream agents can use them.
 
 ## Reasoning Process
@@ -155,13 +155,15 @@ Bad first paragraph: "The electric vehicle market has grown 40% year-over-year. 
 - Do NOT research topics the downstream agent doesn't need — stay focused on the task description
 
 ## Output Format
-Your report MUST include these sections IN THIS ORDER:
+For analysis/comparison tasks, use this structure:
 1. **Recommendation** (2-3 sentences: the verdict, the action to take. Include confidence: High/Medium/Low)
 2. **Key Evidence** (3-5 bullet points supporting the recommendation, each with [IMPACT: high/medium/low])
 3. **Detailed Analysis** (structured by topic — depth goes here)
 4. **Comparison Matrix** (if comparison requested — table with criteria rows, option columns)
 5. **Risks & Caveats** (what could invalidate the recommendation)
 6. **Sources** (numbered references)
+
+For resource curation tasks (finding books, videos, courses, tutorials, experts), organize by category. For each resource include: title, author/creator, URL if available, and a specific reason why it matters for this goal. Lead with your top 3 picks.
 
 At the END of your report, append a structured summary block:
 <!-- STRUCTURED_SUMMARY {"verdict":"...", "confidence":"high|medium|low", "keyFindings":[{"id":"F1","title":"...","impact":"high|medium|low"}], "ratings":{"relevance":N,"depth":N,"actionability":N}, "recommendations":[{"title":"...","priority":"P0|P1|P2","effort":"quick-win|medium|large"}]} -->`,
@@ -381,6 +383,10 @@ ${ctx.goal}`);
     ).join("\n")}`);
   }
 
+  // Cortex knowledge — what we already know about this topic
+  const cortexCtx = getCortexPlanningContext(ctx.goal);
+  if (cortexCtx) sections.push(cortexCtx);
+
   // Planning guidance based on type
   sections.push(`## Sprint Design Guidelines
 
@@ -416,19 +422,23 @@ Design a sprint appropriate for the project scope. Without personas, focus on:
 4. **Review + Report**: Verify quality and produce sprint report` :
 
 ctx.type === "focus" ? `### Focus Area Sprint
-The user has already evaluated and discussed this focus area. Design tasks that produce CONCRETE, ACTIONABLE deliverables.
+The user has already evaluated and discussed this focus area. Design tasks that produce whatever is MOST USEFUL for achieving this goal.
 
-**Each deliverable becomes a Cortex entity in synthesis/** — a first-class piece of knowledge that persists and is cross-referenceable with everything in the user's world. Choose the right deliverable type:
-- **article** (researcher): Study guides, curated resource lists, how-to guides, research reports
-- **idea** (architect): Original frameworks, proposed methodologies, design visions, creative strategies, decision models
-- **app** (builder): Interactive Enso apps — planners, trackers, calculators, study tools (use outputType "app")
+You have COMPLETE FREEDOM in what to produce. Think: "What would a world-class personal assistant with internet access prepare for someone pursuing this goal?"
 
-For creative/lifestyle goals → inspiration research (article) + methodology ideas (idea) + interactive tools (app)
-For knowledge goals → deep research (article) + learning frameworks (idea)
-For project goals → architecture ideas (idea) + implementation (coder) + review
+**Valuable deliverable examples** (not exhaustive — use your judgment):
+- Curated resource lists: real books (title, author, why it matters), YouTube videos, online courses, tutorials, articles with actual URLs
+- Original research: comparisons, analysis, recommendations with real data and prices
+- Interactive tools: Enso apps (planners, trackers, calculators, dashboards) — use agentRole "builder" with outputType "app"
+- Technique guides, frameworks, methodologies — practical and specific
+- Code implementations, architecture designs, technical blueprints (for project-type focuses)
+- Gear/product recommendations with real reviews and pricing
+- Location guides, travel plans, seasonal calendars, itineraries
+- Expert/practitioner profiles: who to study, their key works, what makes them great
 
-**Builder tasks** can create full Enso apps with interactive UI. Use them when a deliverable would benefit from interactivity (trip planners, progress trackers, study tools, reference cards).
+**KEY: Don't just synthesize — CURATE real resources.** The LLM has web search. USE IT to find actual book titles, real YouTube channels, specific tutorial URLs, named experts, and concrete examples. Then create original content only where gaps exist.
 
+Each deliverable becomes a permanent Cortex entity — cross-referenceable with everything in the user's world.
 Do NOT include persona testing or codebase analysis unless the focus explicitly involves software.
 The last task should synthesize all outputs into a final sprint report with clear next actions.` :
 
@@ -1596,21 +1606,11 @@ function buildTaskPrompt(
   parts.push(task.description);
   parts.push(``);
 
-  // Focus sprint: inject deliverable type awareness
+  // Focus sprint: open-ended deliverable guidance
   if (plan.contextType === "focus") {
-    const deliverableTypeMap: Record<string, { type: string; guidance: string }> = {
-      researcher: { type: "article", guidance: "Your output becomes an **article** in the Cortex synthesis layer — a reusable piece of curated knowledge (study guide, resource list, research report) that cross-references with everything in the user's world. Write it as a complete, standalone document." },
-      architect: { type: "idea", guidance: "Your output becomes an **idea** in the Cortex synthesis layer — an original framework, methodology, creative strategy, or design vision. Ideas are seeds for future action: they can spawn apps, projects, or focus areas. Frame your output as a novel proposal. Give it a clear name and articulate WHY this approach is compelling." },
-      builder: { type: "app", guidance: "Your output becomes an **app** in the Cortex synthesis layer — a persistent interactive tool." },
-      coder: { type: "article", guidance: "Your output becomes an **article** in the Cortex synthesis layer — a technical guide or implementation reference." },
-      reviewer: { type: "synthesis", guidance: "Your output becomes a **synthesis** in the Cortex — a cross-cutting summary connecting findings across all sprint tasks." },
-    };
-    const deliverable = deliverableTypeMap[task.agentRole];
-    if (deliverable) {
-      parts.push(`## Deliverable Type: ${deliverable.type}`);
-      parts.push(deliverable.guidance);
-      parts.push(``);
-    }
+    parts.push(`## Deliverable Guidance`);
+    parts.push(`Your output will be stored in the user's Knowledge Cortex as a permanent, cross-referenceable resource. Produce whatever format best serves the goal — curated resource lists with real URLs, original research, frameworks, guides, apps, or any combination. When referencing external resources (books, videos, articles, courses), include real titles, authors, URLs, and explain WHY each resource matters for this specific goal.`);
+    parts.push(``);
   }
 
   // Output instructions based on type

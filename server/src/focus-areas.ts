@@ -1116,19 +1116,23 @@ export async function launchFocusEvolve(params: {
               const createdEntityIds: string[] = [];
               const taskEntityMap: Array<{ taskTitle: string; entityType: string; entityId: string; resultSummary: string }> = [];
 
-              // Classify each task output into the right entity type
-              const typeMap: Record<string, string> = {
-                "researcher": "article",   // research outputs → articles
-                "architect": "idea",       // frameworks/methodologies/designs → ideas
-                "builder": "app",          // built apps → app entities
-                "reviewer": "synthesis",   // synthesis/reports → synthesis
-                "coder": "article",        // code guides → articles
+              // Classify each task output by content, not agent role
+              // The outputType from the plan gives a hint, but default to "article" for most content
+              const inferEntityType = (task: { agentRole?: string; outputType?: string; title: string; resultSummary?: string }): string => {
+                const output = task.outputType || "";
+                const title = (task.title || "").toLowerCase();
+                const summary = (task.resultSummary || "").toLowerCase().slice(0, 300);
+                if (output === "app" || title.includes("app") || title.includes("tool") || title.includes("dashboard")) return "app";
+                if (output === "code" || task.agentRole === "coder") return "article";
+                if (title.includes("framework") || title.includes("methodology") || title.includes("strategy") || title.includes("blueprint")) return "idea";
+                if (title.includes("synthesis") || title.includes("sprint report") || title.includes("summary")) return "synthesis";
+                if (summary.includes("recommend") || summary.includes("curated") || summary.includes("resource")) return "article";
+                return "article"; // sensible default for research, guides, resource lists
               };
 
               for (const t of plan.tasks) {
                 if (!t.resultSummary) continue;
-                const agentRole = (t as any).agentRole || "researcher";
-                const entityType = typeMap[agentRole] || "article";
+                const entityType = inferEntityType(t as any);
                 const fullContent = (t as any).fullOutput || t.resultSummary;
 
                 try {
