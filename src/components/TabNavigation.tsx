@@ -108,7 +108,6 @@ const TABS: Array<{ id: TabId; labelKey: string; Icon: typeof ChatIcon }> = [
   { id: "focus", labelKey: "tab.focus", Icon: FocusIcon },
   { id: "tasks", labelKey: "tab.tasks", Icon: TasksIcon },
   { id: "evolve", labelKey: "tab.evolve", Icon: EvolveIcon },
-  { id: "projects", labelKey: "tab.projects", Icon: ProjectsIcon },
   { id: "me", labelKey: "tab.me", Icon: MeIcon },
 ];
 
