@@ -395,9 +395,11 @@ Cortex is the ONLY brain — all knowledge, memory, profile, and data source con
 
 ### Team Leader — The Living Organization
 
-Enso runs as a **living organization** with a single Team Leader (TL) agent that coordinates everything. Instead of 15+ independent scheduled tasks, the TL wakes up on a configurable schedule, analyzes the entire system, prioritizes actions, delegates to specialist utilities, and delivers a unified briefing.
+> **Full operational guide:** See **[TEAM-LEADER.md](TEAM-LEADER.md)** for the complete Team Leader architecture — daily routine pipeline, autonomous focus evolution cycle, expert team management, background task tracking, auto-restart, and autonomy policy.
 
-**The TL's north star:** "Make this user's life better, every single day." Whether that means delivering a focus pulse, fixing a platform bug, or building a missing feature — all items live in one prioritized queue.
+Enso runs as a **living organization** with a single Team Leader (TL) agent that coordinates everything. The TL wakes up on a configurable schedule, surveys the entire system, staffs expert teams, drives focus evolution cycles autonomously, and only surfaces items to the user when their brain is genuinely needed.
+
+**The TL's north star:** "Make this user's life better, every single day." Whether that means delivering a focus pulse, fixing a platform bug, launching an evolution sprint, or restructuring an expert team — the TL handles it all.
 
 **Morning routine** (configurable, default 9am daily):
 1. **Gather signals** — Action log errors, focus area state, Cortex health, scheduled task results, user remarks, platform metrics. Zero LLM cost.

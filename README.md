@@ -202,6 +202,7 @@ shared/types.ts               WebSocket protocol types
 | **[SETUP.md](SETUP.md)** | One-command setup, personalization, prerequisites, troubleshooting |
 | **[PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md)** | 6 persona apps with screenshots |
 | **[CLAUDE-REFERENCE.md](CLAUDE-REFERENCE.md)** | App building API, ExecutorContext, template rules |
+| **[TEAM-LEADER.md](TEAM-LEADER.md)** | Team Leader operations: daily routine, autonomous evolution, expert management, auto-restart |
 | **[CLAUDE.md](CLAUDE.md)** | Full architecture reference for AI-assisted development |
 | **[PROJECTS.md](PROJECTS.md)** | Project import, AI team generation, evolution sprints |
 
