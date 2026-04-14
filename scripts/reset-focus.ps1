@@ -1,4 +1,4 @@
-# reset-focus.ps1 — Clean reset of all Focus Area state
+# reset-focus.ps1 -- Clean reset of all Focus Area state
 #
 # Resets focus areas to a fresh start while preserving core identity
 # (title, description, intent, evidence, experts). Clears all evaluation,
@@ -11,14 +11,14 @@
 
 param(
     [switch]$All,        # Also clean TL state, reacts, conversations, Cortex sprint pages
-    [switch]$WhatIf      # Dry run — show what would be cleaned
+    [switch]$WhatIf      # Dry run -- show what would be cleaned
 )
 
 $ensoHome = Join-Path $env:USERPROFILE ".enso"
 $action = if ($WhatIf) { "Would clean" } else { "Cleaning" }
 
 Write-Host "`n=== Enso Focus Reset ===" -ForegroundColor Cyan
-if ($WhatIf) { Write-Host "(DRY RUN — no changes will be made)`n" -ForegroundColor Yellow }
+if ($WhatIf) { Write-Host "(DRY RUN -- no changes will be made)`n" -ForegroundColor Yellow }
 
 # ── 1. Reset Focus Areas ──
 $focusPath = Join-Path $ensoHome "data/focus-areas.json"
@@ -218,7 +218,7 @@ if ($All) {
 
 # ── 5. Clean Orchestration & Sprint History ──
 if ($All) {
-    Write-Host "--- Orchestrations & Sprints ---" -ForegroundColor Cyan
+    Write-Host "--- Orchestrations and Sprints ---" -ForegroundColor Cyan
 
     # Orchestration workspaces
     $orchDir = Join-Path $ensoHome "orchestrations"
@@ -266,6 +266,16 @@ Write-Host "=== Done ===" -ForegroundColor Cyan
 if ($WhatIf) {
     Write-Host "Run without -WhatIf to apply changes." -ForegroundColor Yellow
 } else {
+    # PowerShell 5.x -Encoding UTF8 adds BOM which breaks Node.js JSON.parse
+    # Strip BOM from all JSON files we wrote
+    $ensoData = Join-Path $ensoHome "data"
+    Get-ChildItem $ensoData -Filter "*.json" -ErrorAction SilentlyContinue | ForEach-Object {
+        $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            [System.IO.File]::WriteAllBytes($_.FullName, $bytes[3..($bytes.Length-1)])
+            Write-Host "  Stripped BOM: $($_.Name)" -ForegroundColor DarkGray
+        }
+    }
     Write-Host "All focus state reset. Restart the server to pick up changes:" -ForegroundColor Green
     Write-Host "  powershell -ExecutionPolicy Bypass -File restart.ps1" -ForegroundColor Gray
 }
