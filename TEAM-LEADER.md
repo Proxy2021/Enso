@@ -82,9 +82,18 @@ The TL runs on a configurable schedule (default: full routine at 9am, check-ins 
 
 Quick scan for urgent items only: recent errors, unreviewed sprint results, failed tasks. Sends alert via email if anything needs attention. No LLM cost if everything is clear.
 
+### Event-Driven Processing (continuous)
+
+The TL doesn't wait for scheduled routines to push focus areas forward. Lifecycle events trigger immediate action:
+
+- **Evaluation completes** → TL assesses understanding via LLM → immediately queues a sprint
+- **Sprint completes** → TL assesses holistic progress toward the goal → reviews results → queues next evaluation cycle (or surfaces tasks to user)
+
+This means focus evolution runs continuously throughout the day. The morning routine handles everything else (platform bugs, staffing, Cortex health), but focus lifecycle is event-driven.
+
 ## Focus Evolution Cycle
 
-The TL drives the full evolution cycle for every focus area **autonomously**. The user is NOT a bottleneck at every step.
+The TL drives the full evolution cycle for every focus area **autonomously** and **event-driven**. The user is NOT a bottleneck at any step.
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -167,6 +176,20 @@ Users can chat directly with any expert via dedicated conversations:
 - `ExpertContextProvider` injects persona: "You ARE [name]. Respond in first person as this expert."
 - Expert has awareness of focus context, other team members, related Cortex knowledge
 - Activity tracked: each message increments conversation count, updates lastActiveAt
+
+## Focus Health Assessment
+
+Every focus area tracks two LLM-assessed metrics, updated after each TL examination:
+
+- **Understanding** (0-100%): How well the TL comprehends this goal — the user's intent, constraints, approach, and what success looks like. Jumps after evaluations, refines over cycles.
+- **Progress** (0-100%): Holistic assessment of how far the user is toward completing this goal. NOT sprint-counting — based on actual goal intent vs what's been accomplished. Assessed by looking at all deliverables, user feedback, and remaining work.
+
+Assessment triggers:
+- **After evaluation**: Understanding reassessed via LLM (typically 35-55 after first evaluation)
+- **After sprint**: Both understanding and progress reassessed holistically
+- **Morning routine**: Visible in TL signals for prioritization decisions
+
+Assessment is performed by `assessFocusUnderstanding()` and `assessFocusProgress()` — both use LLM with the full focus context and explicit honesty calibration in the prompt.
 
 ## Autonomy Policy
 

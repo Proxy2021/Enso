@@ -1136,6 +1136,139 @@ Return ONLY valid JSON: { "understanding": <number>, "notes": "<one sentence>" }
 }
 
 /**
+ * Event-driven TL processing. Called when focus lifecycle events happen
+ * (evaluation complete, sprint complete) so the TL immediately pushes
+ * the next step without waiting for the morning routine.
+ *
+ * Events:
+ * - "evaluation.completed" → queue sprint launch immediately
+ * - "sprint.completed" → review results + assess holistic progress immediately
+ */
+export async function onFocusEvent(
+  event: "evaluation.completed" | "sprint.completed",
+  focusId: string,
+): Promise<void> {
+  const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return;
+
+  if (event === "evaluation.completed") {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `[Event] Evaluation completed for "${area.title}" — queuing sprint immediately` });
+
+    // Queue the sprint as a self-task, then process it right away
+    const action: TeamLeaderAction = {
+      id: randomUUID(),
+      title: `Launch evolution sprint for "${area.title}"`,
+      description: `Evaluation complete. Launch sprint to make progress.`,
+      priority: "high",
+      type: "maintenance",
+      delegation: "focus",
+      effort: "30min",
+      autoExecute: true,
+      reasoning: "Event-driven: evaluation just completed",
+    };
+    await handleFocusEvolve(action);
+  }
+
+  if (event === "sprint.completed") {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `[Event] Sprint completed for "${area.title}" — reviewing results + assessing progress` });
+
+    // 1. Assess holistic progress toward the goal
+    await assessFocusProgress(area, updateFocusAssessment);
+
+    // 2. Review results to determine if user action is needed
+    const reviewAction: TeamLeaderAction = {
+      id: randomUUID(),
+      title: `Review results for "${area.title}"`,
+      description: `Sprint completed — reviewing deliverables to decide next step.`,
+      priority: "high",
+      type: "maintenance",
+      delegation: "focus",
+      effort: "5min",
+      autoExecute: true,
+      reasoning: "Event-driven: sprint just completed",
+    };
+    await handleFocusReviewResults(reviewAction);
+  }
+}
+
+/**
+ * LLM-driven holistic assessment of how far a focus area is toward its goal.
+ * NOT based on sprint count — based on the actual goal intent, what's been
+ * accomplished, and what remains. Called after each sprint completes.
+ */
+export async function assessFocusProgress(
+  area: { id: string; title: string; description: string; intent?: string; focusType?: string; lastSprintResults?: string; lastSprintSummary?: any; evidence?: string[]; experts?: Array<{ id: string }>; preparedBriefing?: string; assessment?: { understanding: number; progress: number } },
+  updateFn: (id: string, update: { understanding?: number; progress?: number; assessedBy: string; notes: string }) => void,
+): Promise<void> {
+  try {
+    const { llm } = await import("./llm.js");
+    const { cleanJson } = await import("./json-utils.js");
+
+    const deliverables = area.lastSprintSummary?.deliverables?.map((d: any) =>
+      `- ${d.taskTitle} [${d.entityType}]: ${d.howItHelps}`
+    ).join("\n") || "No structured deliverables";
+    const sprintSummary = area.lastSprintSummary?.sprintSummary || "Sprint completed.";
+
+    const result = await llm({
+      prompt: `You are the Team Leader assessing OVERALL PROGRESS toward a focus area goal.
+
+FOCUS: "${area.title}"
+GOAL: ${area.intent || area.description}
+TYPE: ${area.focusType || "general"}
+CURRENT UNDERSTANDING: ${area.assessment?.understanding ?? 30}%
+CURRENT PROGRESS: ${area.assessment?.progress ?? 0}%
+
+LATEST SPRINT RESULTS:
+${sprintSummary}
+
+DELIVERABLES:
+${deliverables}
+
+Assess how far the user is toward COMPLETING this goal, considering ALL factors:
+- What has been accomplished so far (across all sprints, not just this one)?
+- How much of the original goal remains?
+- Are there tangible deliverables the user can use?
+- Has the direction become clearer?
+
+PROGRESS SCALE (holistic — this is NOT sprint counting):
+- 0-10: Just getting started. Goal identified but no real work done.
+- 10-25: Foundation laid. Research done, direction chosen, first outputs produced.
+- 25-40: Early momentum. Several deliverables exist, approach is clear.
+- 40-60: Significant progress. Major components in place, user can see value.
+- 60-80: Well advanced. Most of the goal achieved, in refinement/polish phase.
+- 80-95: Near complete. Goal essentially met, only minor improvements remain.
+- 95-100: Goal fully achieved.
+
+Also re-assess understanding if the sprint revealed new insights.
+
+Return ONLY valid JSON: { "understanding": <number>, "progress": <number>, "notes": "<one sentence on overall progress>" }`,
+      tier: "utility",
+      maxOutputTokens: 200,
+      temperature: 0.3,
+      timeoutMs: 30_000,
+    });
+
+    const parsed = JSON.parse(cleanJson(result));
+    updateFn(area.id, {
+      understanding: Math.max(10, Math.min(95, parsed.understanding || area.assessment?.understanding || 30)),
+      progress: Math.max(0, Math.min(100, parsed.progress ?? area.assessment?.progress ?? 0)),
+      assessedBy: "tl-sprint-review",
+      notes: parsed.notes || "Sprint reviewed",
+    });
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Progress assessment for "${area.title}": understanding=${parsed.understanding}%, progress=${parsed.progress}% — ${parsed.notes || ""}` });
+  } catch (err) {
+    // Fallback: keep current values
+    logError("team-leader", `Progress assessment failed for "${area.title}"`, err);
+  }
+}
+
+/**
  * Launch an evolution sprint for a focus area autonomously.
  * TL drives the evolve step without user approval.
  */
@@ -1250,63 +1383,8 @@ Return JSON: { "needsUser": true/false, "reason": "why", "userTasks": ["specific
       parsed = { needsUser: true, reason: "Could not assess — surfacing to user for safety." };
     }
 
-    // LLM-driven assessment of both understanding and progress after sprint review
-    const { updateFocusAssessment } = await import("./focus-areas.js");
-    try {
-      const assessResult = await llm({
-        prompt: `You are the Team Leader assessing a focus area after reviewing sprint results.
-
-FOCUS: "${area.title}"
-INTENT: ${area.intent || "Not defined"}
-TYPE: ${area.focusType || "general"}
-CURRENT UNDERSTANDING: ${area.assessment?.understanding ?? 10}%
-CURRENT PROGRESS: ${area.assessment?.progress ?? 0}%
-
-SPRINT RESULTS:
-${summary?.sprintSummary || "Sprint completed."}
-
-DELIVERABLES (${summary?.deliverables?.length || 0}):
-${deliverables}
-
-Rate BOTH dimensions on 0-100:
-
-UNDERSTANDING (how well you know this goal):
-- Did the sprint reveal new insights about what the user actually wants?
-- Do you now better understand the approach and constraints?
-
-PROGRESS (how far toward the goal):
-- 0: Nothing done yet
-- 10-25: Initial research/planning done
-- 25-50: First tangible outputs produced
-- 50-75: Significant deliverables, clear momentum
-- 75-90: Most of the goal achieved, refinement phase
-- 90-100: Goal essentially complete
-
-Be HONEST. A single sprint typically adds 10-20 to progress. Don't inflate.
-
-Return ONLY valid JSON: { "understanding": <number>, "progress": <number>, "notes": "<one sentence>" }`,
-        tier: "utility",
-        maxOutputTokens: 200,
-        temperature: 0.3,
-        timeoutMs: 20_000,
-      });
-      const { cleanJson } = await import("./json-utils.js");
-      const assessParsed = JSON.parse(cleanJson(assessResult));
-      updateFocusAssessment(area.id, {
-        understanding: Math.max(10, Math.min(95, assessParsed.understanding || area.assessment?.understanding || 30)),
-        progress: Math.max(0, Math.min(100, assessParsed.progress || area.assessment?.progress || 5)),
-        assessedBy: "tl-sprint-review",
-        notes: assessParsed.notes || `Sprint reviewed — ${summary?.deliverables?.length || 0} deliverables`,
-      });
-    } catch {
-      // Fallback: modest bump
-      const deliverableCount = summary?.deliverables?.length ?? 0;
-      updateFocusAssessment(area.id, {
-        progress: Math.min(100, (area.assessment?.progress ?? 0) + Math.min(20, 5 + deliverableCount * 3)),
-        assessedBy: "tl-sprint-review",
-        notes: `Sprint reviewed — ${deliverableCount} deliverables (assessment call failed)`,
-      });
-    }
+    // Note: holistic progress assessment is handled by onFocusEvent("sprint.completed")
+    // which calls assessFocusProgress() — no duplicate assessment needed here.
 
     if (parsed.needsUser) {
       // Surface specific tasks to user — DON'T auto-complete this action
