@@ -1621,6 +1621,44 @@ export async function runMorningRoutine(): Promise<DailyBriefing> {
     } catch { /* best effort */ }
   }
 
+  // 4. Check if there are background tasks still running
+  const currentState = loadState();
+  const hasBackgroundTasks = (currentState.backgroundTasks || []).some(t => t.status === "running");
+
+  if (hasBackgroundTasks) {
+    // Background tasks still running — defer full briefing to completion summary.
+    // Save state now so the TL dashboard shows actions immediately.
+    currentState.lastMorningRoutineAt = new Date().toISOString();
+    currentState.recentActions = [...executedActions, ...currentState.recentActions].slice(0, 50);
+    saveState(currentState);
+
+    // Send a lightweight in-app-only notification that the routine started
+    try {
+      const { getAllClients } = await import("./server.js");
+      const { persistCard } = await import("./memory-bridge.js");
+      const clients = getAllClients();
+      if (clients.length > 0) {
+        const client = clients[0];
+        const cardId = randomUUID();
+        const inProgressText = `⏳ **TL Routine Running** — ${executedActions.filter(a => a.status === "completed").length} instant tasks done, ${(currentState.backgroundTasks || []).filter(t => t.status === "running").length} background tasks in progress. Full briefing will arrive when everything completes.`;
+        persistCard(client.id, "main", { id: cardId, runId: cardId, type: "chat", role: "assistant", text: inProgressText, timestamp: Date.now() });
+        client.send({ id: cardId, runId: cardId, sessionKey: client.sessionKey, seq: 0, state: "final" as const, text: inProgressText, conversationId: "main", timestamp: Date.now() });
+      }
+    } catch { /* best effort */ }
+
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Routine in progress: ${completed} instant, ${(currentState.backgroundTasks || []).filter(t => t.status === "running").length} background tasks running. Briefing deferred.` });
+
+    // Generate briefing but store it — don't deliver yet. Completion summary will deliver it.
+    const briefing = await generateBriefing(signals, executedActions);
+    const st2 = loadState();
+    st2.lastBriefing = briefing;
+    saveState(st2);
+
+    return briefing;
+  }
+
+  // No background tasks — deliver briefing immediately (all tasks were synchronous)
   // 4. Generate briefing
   const briefing = await generateBriefing(signals, executedActions);
 

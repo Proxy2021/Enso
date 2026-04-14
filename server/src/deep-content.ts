@@ -1274,9 +1274,9 @@ export async function discoverNewBooks(count = 1, language?: string): Promise<Di
     } catch { /* ignore individual failures */ }
   }
 
-  if (!allResults.length) {
-    logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: "Web search returned no results" });
-    return [];
+  const webSearchAvailable = allResults.length > 0;
+  if (!webSearchAvailable) {
+    logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: "Web search returned no results — falling back to LLM-only mode" });
   }
 
   // Fetch content from top results for richer context
@@ -1314,17 +1314,16 @@ export async function discoverNewBooks(count = 1, language?: string): Promise<Di
   const existingList = [...existingTitles].slice(0, 100).join(", ");
   const processedList = processedTitles.join(", ");
   const langInstruction = isChinese ? "\n\nCRITICAL: ALL output text (title, description, whyRecommended) MUST be written in Chinese (中文). Recommend Chinese-language books." : "";
+  const webContext = webSearchAvailable
+    ? `Based on these web search results about recommended books:\n\n${enriched.join("\n\n---\n\n")}\n\n`
+    : `No live web search results are available. Use your own knowledge to select high-quality books from the past decade.\n\n`;
   const prompt = `You are a personal book curator. Your client's top interests are: ${topThemes.join(", ")}.${langInstruction}
 
 They already own these books (DO NOT recommend any of these): ${existingList || "none known"}
 
 They already have AI podcasts for these books (DO NOT recommend these or any variant/edition of these): ${processedList || "none"}
 
-Based on these web search results about recommended books:
-
-${enriched.join("\n\n---\n\n")}
-
-Select ${Math.max(count + 2, 3)} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
+${webContext}Select ${Math.max(count + 2, 3)} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
 - Are COMPLETELY DIFFERENT from books they already own or have podcasts for — no variant editions, translations, or related titles
 - Are highly acclaimed and substantive (not pop/superficial)
 - Match their core interests but EXPAND their thinking in new, surprising directions
