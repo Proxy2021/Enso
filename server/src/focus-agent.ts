@@ -57,6 +57,8 @@ export interface FocusAnalysis {
     id: string; name: string; role: string; hasConversation: boolean;
     metrics?: { conversationCount: number; lastActiveAt: string | null; sprintCount: number; insightsGenerated: number; lastEvaluation?: string; lastEvaluatedAt?: string };
   }>;
+  /** TL's assessment of understanding and progress */
+  assessment?: { understanding: number; progress: number };
 }
 
 export interface ProgressPulse {
@@ -134,6 +136,7 @@ export async function analyzeFocusAreas(): Promise<FocusAnalysis[]> {
       daysSinceActivity, trend: area.progress?.trend || "steady",
       hasUnreviewedResults, hasEvaluation, hasSprint, recommendedAction, actionReason,
       experts: (area.experts || []).map(e => ({ id: e.id, name: e.name, role: e.role, hasConversation: !!e.conversationId, metrics: e.metrics })),
+      assessment: area.assessment ? { understanding: area.assessment.understanding, progress: area.assessment.progress } : undefined,
     });
   }
 

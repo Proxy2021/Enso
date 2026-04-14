@@ -280,7 +280,10 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
       } else {
         expertLine = "\n    ⚠️ No expert team — NEEDS STAFFING";
       }
-      return `- "${f.title}" [${f.focusType || "general"}] — ${f.recommendedAction}: ${f.actionReason}${f.hasUnreviewedResults ? " [UNREVIEWED RESULTS]" : ""} (${f.daysSinceActivity}d inactive)${expertLine}`;
+      // Include assessment data if available
+      const assessment = (f as Record<string, unknown>).assessment as { understanding?: number; progress?: number } | undefined;
+      const assessLine = assessment ? ` | Understanding: ${assessment.understanding}%, Progress: ${assessment.progress}%` : "";
+      return `- "${f.title}" [${f.focusType || "general"}] — ${f.recommendedAction}: ${f.actionReason}${f.hasUnreviewedResults ? " [UNREVIEWED RESULTS]" : ""} (${f.daysSinceActivity}d inactive)${assessLine}${expertLine}`;
     }),
     "",
     `## Cortex`,
@@ -1045,6 +1048,17 @@ async function handleFocusEvaluate(action: TeamLeaderAction): Promise<void> {
     const resp = await fetch(`http://localhost:3001/api/focus-areas/${area.id}/prepare`, { method: "POST" });
     if (resp.ok) {
       const result = await resp.json();
+      // Update assessment — understanding improves after evaluation
+      const { updateFocusAssessment } = await import("./focus-areas.js");
+      const prev = area.assessment?.understanding ?? Math.round((area.confidence ?? 0.5) * 100);
+      updateFocusAssessment(area.id, {
+        understanding: Math.min(95, prev + 25),
+        assessedBy: "tl-evaluate",
+        notes: result.orchestrated
+          ? `Orchestrated evaluation launched — deep study in progress`
+          : `Evaluation complete — comprehensive briefing produced`,
+      });
+
       if (result.orchestrated) {
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Orchestrated evaluation launched for "${area.title}" — will complete asynchronously` });
@@ -1174,6 +1188,19 @@ Return JSON: { "needsUser": true/false, "reason": "why", "userTasks": ["specific
       // Default to surfacing to user if parse fails
       parsed = { needsUser: true, reason: "Could not assess — surfacing to user for safety." };
     }
+
+    // Update progress assessment — sprint completion moves the needle
+    const { updateFocusAssessment } = await import("./focus-areas.js");
+    const prevProgress = area.assessment?.progress ?? 0;
+    const deliverableCount = summary?.deliverables?.length ?? 0;
+    const progressBump = Math.min(25, 5 + deliverableCount * 4); // 5-25 points per sprint
+    updateFocusAssessment(area.id, {
+      progress: Math.min(100, prevProgress + progressBump),
+      assessedBy: "tl-sprint-review",
+      notes: parsed.needsUser
+        ? `Sprint reviewed — ${deliverableCount} deliverables, user action needed: ${parsed.reason}`
+        : `Sprint reviewed — ${deliverableCount} deliverables, TL proceeding to next cycle`,
+    });
 
     if (parsed.needsUser) {
       // Surface specific tasks to user — DON'T auto-complete this action

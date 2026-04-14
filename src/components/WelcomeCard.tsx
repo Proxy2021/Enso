@@ -521,7 +521,8 @@ interface FocusAreaData {
   status: "active" | "paused" | "completed" | "emerging";
   clarity: "emerging" | "developing" | "clear";
   intent?: string;
-  confidence: number;
+  confidence?: number;
+  assessment?: { understanding: number; progress: number; assessedAt: string; assessedBy: string; notes: string };
   progress: { trend: "growing" | "steady" | "quiet"; recentActivity: string[] };
   suggestedActions: string[];
 }
@@ -649,9 +650,14 @@ function FocusAreasPanel({ disabled }: { disabled: boolean }) {
                 area.clarity === "developing" ? "bg-blue-900/30 text-blue-400" :
                 "bg-amber-900/30 text-amber-400"
               }`}>{clarityLabel(area.clarity)}</span>
-              {area.confidence < 0.6 && (
+              {area.assessment ? (
+                <span className="flex items-center gap-1.5 text-[9px]">
+                  <span className="text-blue-400/60">🧠{area.assessment.understanding}%</span>
+                  <span className="text-emerald-400/60">📈{area.assessment.progress}%</span>
+                </span>
+              ) : area.confidence !== undefined && area.confidence < 0.6 ? (
                 <span className="text-[9px] text-gray-600">low confidence</span>
-              )}
+              ) : null}
             </div>
           </button>
         ))}

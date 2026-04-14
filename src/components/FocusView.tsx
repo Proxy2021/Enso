@@ -37,7 +37,14 @@ interface FocusArea {
   adjacentPursuits?: string[];
   nextSteps?: string[];
   conversationId?: string;
-  confidence: number;
+  confidence?: number;
+  assessment?: {
+    understanding: number;
+    progress: number;
+    assessedAt: string;
+    assessedBy: string;
+    notes: string;
+  };
   evidence: string[];
   semanticTags: string[];
   progress: {
@@ -400,7 +407,24 @@ export default function FocusView() {
                 {area.codebasePath && <span className="text-emerald-500/70">📁 {area.codebasePath.split("/").pop()}</span>}
                 {area.evidence.length > 0 && <span>{area.evidence.length} evidence points</span>}
                 {area.semanticTags.length > 0 && <span>{area.semanticTags.slice(0, 2).join(", ")}</span>}
-                <span>{Math.round(area.confidence * 100)}% confidence</span>
+                {area.assessment ? (
+                  <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-1" title={`Understanding: ${area.assessment.understanding}%`}>
+                      🧠 <span className="w-12 h-1 bg-gray-700 rounded-full overflow-hidden inline-block align-middle">
+                        <span className="h-full bg-blue-400 rounded-full block" style={{ width: `${area.assessment.understanding}%` }} />
+                      </span>
+                      <span className="text-blue-400/70">{area.assessment.understanding}%</span>
+                    </span>
+                    <span className="flex items-center gap-1" title={`Progress: ${area.assessment.progress}%`}>
+                      📈 <span className="w-12 h-1 bg-gray-700 rounded-full overflow-hidden inline-block align-middle">
+                        <span className="h-full bg-emerald-400 rounded-full block" style={{ width: `${area.assessment.progress}%` }} />
+                      </span>
+                      <span className="text-emerald-400/70">{area.assessment.progress}%</span>
+                    </span>
+                  </span>
+                ) : (
+                  <span>{Math.round((area.confidence ?? 0.5) * 100)}% confidence</span>
+                )}
               </div>
               {/* Action buttons — take user directly to the final destination */}
               {(() => {
@@ -589,6 +613,25 @@ export default function FocusView() {
                       </button>
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1.5">{subtitle}</p>
+                    {/* Assessment bars */}
+                    {selected.assessment && (
+                      <div className="mt-2.5 flex items-center gap-4 text-[10px]">
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-blue-400/70 whitespace-nowrap">🧠 Understanding</span>
+                          <div className="flex-1 h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500/70 rounded-full transition-all duration-500" style={{ width: `${selected.assessment.understanding}%` }} />
+                          </div>
+                          <span className="text-blue-400/60 w-8 text-right">{selected.assessment.understanding}%</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-emerald-400/70 whitespace-nowrap">📈 Progress</span>
+                          <div className="flex-1 h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500/70 rounded-full transition-all duration-500" style={{ width: `${selected.assessment.progress}%` }} />
+                          </div>
+                          <span className="text-emerald-400/60 w-8 text-right">{selected.assessment.progress}%</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}

@@ -53,7 +53,23 @@ export interface FocusArea {
   /** Dedicated conversation ID for this focus area */
   conversationId?: string;
 
-  confidence: number;
+  /** @deprecated Use assessment instead. Kept for backward compat during migration. */
+  confidence?: number;
+
+  /** TL's assessment of this focus area — updated after each examination */
+  assessment?: {
+    /** How well the TL understands this goal (0-100). Jumps after evaluations. */
+    understanding: number;
+    /** How far the focus is toward its goal (0-100). Moves after sprints/deliverables. */
+    progress: number;
+    /** When the assessment was last updated */
+    assessedAt: string;
+    /** Who updated it — "inference" | "tl-evaluate" | "tl-sprint-review" | "tl-morning" */
+    assessedBy: string;
+    /** Brief note on the assessment */
+    notes: string;
+  };
+
   evidence: string[];
   relatedEntityIds: string[];
   semanticTags: string[];
@@ -165,7 +181,13 @@ function writeFocusToCortex(state: FocusState): void {
         ``,
         `## Status`,
         `- **Clarity:** ${area.clarity}`,
-        `- **Confidence:** ${Math.round(area.confidence * 100)}%`,
+        ...(area.assessment ? [
+          `- **Understanding:** ${area.assessment.understanding}%`,
+          `- **Progress:** ${area.assessment.progress}%`,
+          `- **Last assessed:** ${area.assessment.assessedAt} (${area.assessment.assessedBy})`,
+        ] : [
+          `- **Confidence:** ${Math.round((area.confidence ?? 0.5) * 100)}%`,
+        ]),
         `- **Trend:** ${area.progress.trend}`,
         `- **Last active:** ${area.progress.lastActiveAt}`,
         `- **Updated:** ${area.updatedAt}`,
@@ -345,7 +367,7 @@ Identify 4-7 concrete focus areas from this data. For each:
 6. **intent**: The specific outcome they're working toward
 7. **deeperIntent**: The deeper WHY — what drives this person at a personal level? What need does this goal serve? Think about: financial freedom, creative expression, intellectual mastery, career advancement, personal fulfillment, family/legacy, independence, proving a thesis, building something meaningful. Be specific and insightful — go beyond the surface. Example: for AlphaRank, the deeper intent might be "Achieving financial independence through systematic, data-driven investing — removing emotional decision-making from wealth building."
 8. **adjacentPursuits**: 1-2 related areas the person HASN'T explored yet that would naturally complement this focus if the deeper intent is correct. These are suggestions for EXPANDING their horizon. Example: if deeper intent is financial independence, adjacent pursuits might be "Tax optimization strategies for systematic traders" or "Building passive income streams beyond equity markets."
-9. **confidence**: 0-1 how confident you are this is a real focus
+9. **confidence**: 0-1 how confident you are this is a real focus (used for initial understanding assessment)
 10. **evidence**: 3-5 specific data points from the inventory (actual titles, project names, channel names)
 11. **semanticTags**: 2-4 relevant theme tags
 12. **trend**: "growing" (increasing activity), "steady" (consistent), or "quiet" (declining/paused)
@@ -381,6 +403,13 @@ Return JSON: { "areas": [ { ... } ] }`;
       adjacentPursuits: Array.isArray(raw.adjacentPursuits) ? raw.adjacentPursuits.map(String).slice(0, 3) : undefined,
       nextSteps: undefined,
       confidence: typeof raw.confidence === "number" ? raw.confidence : 0.5,
+      assessment: {
+        understanding: Math.round((typeof raw.confidence === "number" ? raw.confidence : 0.5) * 100),
+        progress: 0,
+        assessedAt: now,
+        assessedBy: "inference",
+        notes: "Initial inference from Cortex data",
+      },
       evidence: Array.isArray(raw.evidence) ? raw.evidence.map(String).slice(0, 5) : [],
       relatedEntityIds: [],
       semanticTags: Array.isArray(raw.semanticTags) ? raw.semanticTags.map(String) : [],
@@ -1666,7 +1695,14 @@ export function addFocusArea(area: { title: string; description: string; intent?
     status: "active",
     clarity: area.intent ? "developing" : "emerging",
     intent: area.intent,
-    confidence: 1.0, // user-created = max confidence
+    confidence: 1.0,
+    assessment: {
+      understanding: 80, // user-created = high understanding
+      progress: 0,
+      assessedAt: now,
+      assessedBy: "inference",
+      notes: "User-created focus area",
+    },
     evidence: ["User-created focus area"],
     relatedEntityIds: [],
     semanticTags: [],
@@ -1687,6 +1723,68 @@ export function addFocusArea(area: { title: string; description: string; intent?
   });
 
   return newArea;
+}
+
+/**
+ * Update the TL's assessment of a focus area.
+ * Called after evaluations, sprint reviews, and periodic morning assessments.
+ */
+export function updateFocusAssessment(
+  focusId: string,
+  update: { understanding?: number; progress?: number; assessedBy: string; notes: string },
+): void {
+  const state = loadFocusState();
+  if (!state) return;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return;
+
+  const now = new Date().toISOString();
+  const prev = area.assessment || {
+    understanding: Math.round((area.confidence ?? 0.5) * 100),
+    progress: 0,
+    assessedAt: area.createdAt,
+    assessedBy: "inference",
+    notes: "",
+  };
+
+  area.assessment = {
+    understanding: update.understanding !== undefined ? Math.max(0, Math.min(100, update.understanding)) : prev.understanding,
+    progress: update.progress !== undefined ? Math.max(0, Math.min(100, update.progress)) : prev.progress,
+    assessedAt: now,
+    assessedBy: update.assessedBy,
+    notes: update.notes,
+  };
+  area.updatedAt = now;
+  state.version++;
+  saveFocusState(state);
+}
+
+/**
+ * Migrate existing focus areas that have `confidence` but no `assessment`.
+ * Called on server startup.
+ */
+export function migrateFocusAssessments(): void {
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  let changed = false;
+  for (const area of state.areas) {
+    if (!area.assessment) {
+      area.assessment = {
+        understanding: Math.round((area.confidence ?? 0.5) * 100),
+        progress: area.lastSprintResults ? 15 : 0,
+        assessedAt: area.updatedAt || area.createdAt,
+        assessedBy: "inference",
+        notes: "Migrated from legacy confidence score",
+      };
+      changed = true;
+    }
+  }
+  if (changed) {
+    state.version++;
+    saveFocusState(state);
+    logAction({ ts: Date.now(), type: "action", category: "focus-areas", message: `Migrated ${state.areas.length} focus areas to assessment system` });
+  }
 }
 
 /**

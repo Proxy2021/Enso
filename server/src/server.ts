@@ -3908,6 +3908,11 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
           cleanupStaleTasksOnStartup();
         }).catch(() => {});
 
+        // Migrate focus areas to assessment system (one-time)
+        import("./focus-areas.js").then(({ migrateFocusAssessments }) => {
+          migrateFocusAssessments();
+        }).catch(() => {});
+
         // Proactive delivery loop — check every 60s for messages to deliver
         setInterval(async () => {
           try {
