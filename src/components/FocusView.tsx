@@ -638,7 +638,7 @@ export default function FocusView() {
               })()}
 
               {/* Section B: Activity Feed — agent artifacts for this focus */}
-              <ActivityFeed focusId={selected.id} />
+              <ActivityFeed focusId={selected.id} showResolved />
 
               {/* Section C: Sprint Progress */}
               {(() => {
