@@ -109,11 +109,26 @@ export default function FocusView() {
   const selectConversation = useChatStore((s) => s.selectConversation);
   const startNewChat = useChatStore((s) => s.startNewChat);
   const conversationsList = useChatStore((s) => s.conversationsList);
+  const pendingFocusNav = useChatStore((s) => s.pendingFocusNavigation);
 
   const [view, setView] = useState<View>("list");
   const [focusState, setFocusState] = useState<FocusState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+
+  // Handle pending navigation from TL dashboard or chat cards
+  useEffect(() => {
+    if (pendingFocusNav && focusState?.areas.length) {
+      const area = focusState.areas.find(a => a.id === pendingFocusNav.focusId);
+      if (area) {
+        setSelectedId(area.id);
+        setView("detail");
+        if (pendingFocusNav.tab) setDetailTab(pendingFocusNav.tab as DetailTab);
+        else setDetailTab("work");
+      }
+      useChatStore.setState({ pendingFocusNavigation: null });
+    }
+  }, [pendingFocusNav, focusState]);
   const [loading, setLoading] = useState(false);
   const [inferring, setInferring] = useState(false);
   const [activity, setActivity] = useState<ActivityData | null>(null);

@@ -182,6 +182,8 @@ interface CardStore {
   // Tab navigation (universal — desktop rail + mobile bottom bar)
   activeTab: "chat" | "cortex" | "focus" | "tasks" | "evolve" | "projects" | "me";
   chatViewOpen: boolean;
+  /** Pending focus area navigation — consumed by FocusView on mount/update */
+  pendingFocusNavigation: { focusId: string; tab?: string } | null;
 
   // Actions
   connect: () => void;
@@ -221,6 +223,7 @@ interface CardStore {
   setChatModel: (model: string) => void;
   configureProvider: (providerId: string, apiKey: string) => void;
   setLanguage: (language: "en" | "zh") => void;
+  navigateToFocus: (focusId: string, tab?: string) => void;
   setShowConnectionPicker: (show: boolean) => void;
   setShowSetupWizard: (show: boolean) => void;
   connectToBackend: (config: BackendConfig) => void;
@@ -421,8 +424,10 @@ export const useChatStore = create<CardStore>((set, get) => ({
   deployStatus: null,
   scheduledTasks: [],
 
+  pendingFocusNavigation: null,
   setActiveTab: (tab) => set({ activeTab: tab, chatViewOpen: false }),
   setChatViewOpen: (open) => set({ chatViewOpen: open }),
+  navigateToFocus: (focusId, tab) => set({ activeTab: "focus", chatViewOpen: false, pendingFocusNavigation: { focusId, tab } }),
 
   connect: () => {
     const existing = get()._wsClient;

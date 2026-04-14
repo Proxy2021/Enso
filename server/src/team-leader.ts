@@ -512,6 +512,40 @@ export async function deliverBriefing(briefing: DailyBriefing): Promise<string[]
           text: `📋 **Enso Daily** — ${briefing.headline}\n\n${briefing.textSummary}`,
           conversationId: "main", timestamp: Date.now(),
         });
+
+        // Send individual attention cards for proposed actions that need user input
+        const proposedActions = briefing.proposedActions.filter(a => a.status === "proposed" || a.needsUserInput);
+        if (proposedActions.length > 0) {
+          // Match actions to focus areas for actionable links
+          let focusAreas: Array<{ id: string; title: string }> = [];
+          try {
+            const { loadFocusState } = await import("./focus-areas.js");
+            const state = loadFocusState();
+            focusAreas = (state?.areas || []).map(a => ({ id: a.id, title: a.title }));
+          } catch { /* focus areas not available */ }
+
+          const actionLines = proposedActions.map(a => {
+            const titleLower = a.title.toLowerCase();
+            const matched = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()));
+            const focusLink = matched ? ` *(→ Focus: ${matched.title})*` : "";
+            const pEmoji = a.priority === "critical" ? "🔴" : a.priority === "high" ? "🟠" : a.priority === "medium" ? "🟡" : "⚪";
+            return `${pEmoji} **${a.title}**${focusLink}\n${a.reasoning}`;
+          }).join("\n\n");
+
+          const attentionCardId = randomUUID();
+          const attentionText = `🙋 **Needs Your Input** (${proposedActions.length} item${proposedActions.length > 1 ? "s" : ""})\n\n${actionLines}\n\n*Open the **Tasks** tab to respond, or click a focus area in the **Focus** tab to take action.*`;
+          persistCard(client.id, "main", {
+            id: attentionCardId, runId: attentionCardId, type: "chat", role: "assistant",
+            text: attentionText, timestamp: Date.now() + 1,
+          });
+          client.send({
+            id: attentionCardId, runId: attentionCardId, sessionKey: client.sessionKey,
+            seq: 0, state: "final" as const,
+            text: attentionText,
+            conversationId: "main", timestamp: Date.now() + 1,
+          });
+        }
+
         delivered.push("in-app");
       }
     } catch (err) {

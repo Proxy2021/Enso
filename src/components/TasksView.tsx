@@ -143,6 +143,7 @@ export default function TasksView() {
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const setChatViewOpen = useChatStore((s) => s.setChatViewOpen);
   const resumeOrchestration = useChatStore((s) => s.resumeOrchestration);
+  const navigateToFocus = useChatStore((s) => s.navigateToFocus);
 
   const scheduledTasks = useChatStore((s) => s.scheduledTasks);
   const fetchScheduledTasks = useChatStore((s) => s.fetchScheduledTasks);
@@ -159,6 +160,9 @@ export default function TasksView() {
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTaskDef | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Focus areas (for TL action → focus navigation)
+  const [focusAreas, setFocusAreas] = useState<Array<{ id: string; title: string }>>([]);
 
   // Team Leader state
   const [tlBriefing, setTlBriefing] = useState<{ headline: string; timestamp: string; sections: Array<{ emoji: string; title: string; items: string[] }>; proposedActions: Array<{ id: string; priority: string; type: string; title: string; reasoning: string; delegation: string; estimatedEffort: string; autoExecute: boolean; needsUserInput?: boolean; status: string }> } | null>(null);
@@ -194,10 +198,11 @@ export default function TasksView() {
     try {
       const baseUrl = getBackendBaseUrl();
       const headers = authHeaders();
-      const [stateRes, briefingRes, remarksRes] = await Promise.all([
+      const [stateRes, briefingRes, remarksRes, focusRes] = await Promise.all([
         fetch(`${baseUrl}/api/team-leader/state`, { headers }).catch(() => null),
         fetch(`${baseUrl}/api/team-leader/briefing`, { headers }).catch(() => null),
         fetch(`${baseUrl}/api/remarks`, { headers }).catch(() => null),
+        fetch(`${baseUrl}/api/focus-areas`, { headers }).catch(() => null),
       ]);
       if (stateRes?.ok) setTlState(await stateRes.json());
       if (briefingRes?.ok) {
@@ -207,6 +212,10 @@ export default function TasksView() {
       if (remarksRes?.ok) {
         const r = await remarksRes.json();
         setTlRemarks(r.remarks || []);
+      }
+      if (focusRes?.ok) {
+        const f = await focusRes.json();
+        setFocusAreas((f.areas || []).map((a: { id: string; title: string }) => ({ id: a.id, title: a.title })));
       }
     } catch { /* TL not available */ }
   }, []);
@@ -369,8 +378,16 @@ export default function TasksView() {
                   const statusCol = action.status === "completed" ? "text-emerald-400" : action.status === "executing" ? "text-blue-400 animate-pulse" : "text-violet-400";
                   const typeEmoji: Record<string, string> = { "user-task": "🎯", "platform-fix": "🔧", "platform-feature": "🚀", maintenance: "🧹" };
                   const delegLabels: Record<string, string> = { focus: "Focus", knowledge: "Cortex", research: "Research", builder: "Builder", outreach: "Outreach", self: "TL" };
+                  // Match action to a focus area for navigation
+                  const titleLower = action.title.toLowerCase();
+                  const matchedFocus = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()) || titleLower.includes(f.id));
+                  const isNavigable = !!matchedFocus && (action.needsUserInput || action.status === "proposed");
                   return (
-                    <div key={action.id} className="rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5">
+                    <div
+                      key={action.id}
+                      className={`rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5 ${isNavigable ? "cursor-pointer hover:border-violet-500/30 hover:bg-violet-500/5 transition-colors" : ""}`}
+                      onClick={isNavigable ? () => navigateToFocus(matchedFocus!.id, "work") : undefined}
+                    >
                       <div className="flex items-start gap-2">
                         <span className={`${statusCol} text-sm mt-0.5 shrink-0`}>{statusIcon}</span>
                         <div className="flex-1 min-w-0">
@@ -379,6 +396,7 @@ export default function TasksView() {
                             <span className="text-[13px] font-medium text-gray-200">{action.title}</span>
                             <span className={`text-[9px] px-1.5 py-0.5 rounded border ${pBg[action.priority]} ${pColor[action.priority]}`}>{action.priority}</span>
                             <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-500 border border-gray-700/40">{delegLabels[action.delegation] || action.delegation}</span>
+                            {isNavigable && <span className="text-[9px] text-violet-400">→ Open</span>}
                           </div>
                           <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{action.reasoning}</p>
                         </div>
