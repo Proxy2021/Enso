@@ -1247,9 +1247,24 @@ Be thorough but focused. When done, summarize what you changed.`;
       model: "sonnet",
       skipPersist: true,
     }).then(() => {
+      action.status = "completed";
+      // Persist completion to state so UI updates
+      const st = loadState();
+      const found = st.recentActions.find(a => a.id === action.id);
+      if (found) found.status = "completed";
+      if (st.lastBriefing) {
+        const ba = st.lastBriefing.proposedActions.find(a => a.id === action.id);
+        if (ba) ba.status = "completed";
+      }
+      saveState(st);
       logAction({ ts: Date.now(), type: "action", category: "team-leader",
         message: `Claude Code task completed: "${action.title}"` });
     }).catch(err => {
+      action.status = "proposed";
+      const st = loadState();
+      const found = st.recentActions.find(a => a.id === action.id);
+      if (found) found.status = "proposed";
+      saveState(st);
       logError("team-leader", `Claude Code task failed: "${action.title}"`, err);
     });
 
@@ -1296,10 +1311,24 @@ async function launchOrchestration(action: TeamLeaderAction): Promise<void> {
       maxConcurrency: 3,
       useGeminiPlanning: true,
       onComplete: async (orchId, status) => {
+        action.status = status === "completed" ? "completed" : "proposed";
+        const st = loadState();
+        const found = st.recentActions.find(a => a.id === action.id);
+        if (found) found.status = action.status;
+        if (st.lastBriefing) {
+          const ba = st.lastBriefing.proposedActions.find(a => a.id === action.id);
+          if (ba) ba.status = action.status;
+        }
+        saveState(st);
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Orchestration ${status} for: "${action.title}" (${orchId})` });
       },
     }).catch(err => {
+      action.status = "proposed";
+      const st = loadState();
+      const found = st.recentActions.find(a => a.id === action.id);
+      if (found) found.status = "proposed";
+      saveState(st);
       logError("team-leader", `Orchestration failed for "${action.title}"`, err);
     });
 
