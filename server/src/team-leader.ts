@@ -833,7 +833,7 @@ EXPERT TEAM MANAGEMENT (you own the org chart):
 - Use delegation "focus" for all expert management actions (staffing, evaluation, restructuring)
 - Title patterns the system recognizes: "Generate/Staff/Assign expert team...", "Evaluate/Review expert...", "Restructure/Replace/Remove expert..."
 
-Produce a prioritized action plan as a JSON array. Include 3-7 actions, most impactful first.
+Produce a prioritized action plan as a JSON array. Include ALL actions needed — don't limit yourself to a small number. Fix bugs AND evaluate focus areas AND staff experts in the same session. Most impactful first.
 
 [
   {
