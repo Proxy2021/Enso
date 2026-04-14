@@ -2388,7 +2388,6 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   };
   app.get("/api/reacts/quick", handleReactsQuick);
-  app.get("/api/remarks/quick", handleReactsQuick); // backward compat alias
 
   // Web form submission
   const handleReactsWeb = async (req: any, res: any) => {
@@ -2409,7 +2408,6 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   };
   app.post("/api/reacts/web", express.json(), handleReactsWeb);
-  app.post("/api/remarks/web", express.json(), handleReactsWeb); // backward compat alias
 
   // In-app react submission
   const handleReactsInApp = async (req: any, res: any) => {
@@ -2430,7 +2428,6 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   };
   app.post("/api/reacts", express.json(), handleReactsInApp);
-  app.post("/api/remarks", express.json(), handleReactsInApp); // backward compat alias
 
   // List reacts (for dashboard)
   const handleReactsList = async (req: any, res: any) => {
@@ -2443,7 +2440,6 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   };
   app.get("/api/reacts", handleReactsList);
-  app.get("/api/remarks", handleReactsList); // backward compat alias
 
   // React web form page (/r/<notificationId>)
   app.get("/r/:notificationId", async (req, res) => {
