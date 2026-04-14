@@ -4,11 +4,34 @@
 
 ## Overview
 
-Enso operates as a **living AI organization** with a single Team Leader (TL) agent at the helm. The TL wakes up on a configurable schedule, surveys the entire system, makes decisions, delegates to specialists, executes autonomously, and only pulls the user in when their brain is genuinely needed.
+Enso operates as a **living AI organization** where agents communicate through events. The Team Leader (TL) is the COO — the agent with the biggest responsibility and heaviest task load. Domain experts advise within their focus areas. All agents process events and can issue new events to each other, creating a continuously operating organization.
 
 **The TL's north star:** "Make this user's life better, every single day."
 
-**The user's role:** CEO. Approve at gates, provide creative direction, chat with experts. Everything else — the TL handles.
+**The user's role:** CEO. Approve at gates, provide creative direction, chat with experts. Everything else — the organization handles.
+
+## Agent Event Bus
+
+All work in Enso flows through a unified event system: `processEvent(event)`.
+
+```
+Event → Target Agent → LLM decides action → Execute + optionally emit new events to other agents
+```
+
+Any agent (TL or expert) can receive events and respond by: handling directly, launching a Claude Code session, starting an orchestration, or creating new events for other agents. The morning schedule is simply one event source — it fires `schedule.daily` and the TL processes it like any other event.
+
+### Event Types
+
+| Event | Target | What Happens |
+|-------|--------|-------------|
+| `schedule.daily` | TL | Full scan: gather signals, assess, execute, staff experts, deliver briefing |
+| `schedule.checkin` | TL | Quick urgent scan, alert if needed |
+| `focus.evaluation.done` | TL | Assess understanding, launch sprint immediately |
+| `focus.sprint.done` | TL + Experts | TL: assess progress, review results. Experts: review deliverables in their domain |
+| `remark.received` | TL or Expert | LLM reviews remark, decides: act / delegate / acknowledge / escalate |
+| `task.completed` | TL | Code change detection, restart handling |
+| `agent.escalate` | TL | Expert escalates something beyond their scope |
+| `agent.request` | Any agent | One agent asks another to look into something |
 
 ## The Organization
 
