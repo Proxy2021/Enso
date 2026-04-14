@@ -419,29 +419,53 @@ export default function FocusView() {
                 {area.semanticTags.length > 0 && <span>{area.semanticTags.slice(0, 2).join(", ")}</span>}
                 <span>{Math.round(area.confidence * 100)}% confidence</span>
               </div>
-              {/* Action buttons — what the user can do next */}
+              {/* Action buttons — take user directly to the final destination */}
               {(() => {
-                const actions: Array<{ emoji: string; label: string; bg: string; border: string; text: string; tab: DetailTab }> = [];
-                // Unreviewed sprint results
+                type ActionDef = { emoji: string; label: string; bg: string; border: string; text: string; action: () => void };
+                const actions: ActionDef[] = [];
+
+                // Unreviewed sprint results → open conversation where AI presents results
                 if (area.lastSprintResults && area.lastSprintDate) {
                   const lastActive = area.progress?.lastActiveAt ? new Date(area.progress.lastActiveAt).getTime() : 0;
                   const sprintTime = new Date(area.lastSprintDate).getTime();
                   const sprintAge = Math.floor((Date.now() - sprintTime) / 86400000);
                   if (lastActive < sprintTime || sprintAge <= 7) {
-                    actions.push({ emoji: "📬", label: "Review Sprint Results →", bg: "bg-amber-500/10", border: "border-amber-500/25", text: "text-amber-300", tab: "cortex" });
+                    actions.push({ emoji: "📬", label: "Review Results →", bg: "bg-amber-500/10", border: "border-amber-500/25", text: "text-amber-300",
+                      action: () => chatAboutFocus(area, "Show me the sprint results — what was delivered and what should I act on first?"),
+                    });
                   }
                 }
-                // Evaluated but no discussion yet
+                // Evaluated but no discussion → open conversation where AI arrives with briefing
                 if (area.preparedBriefing && !area.conversationId && !area.lastSprintResults) {
-                  actions.push({ emoji: "💬", label: "Start Discussion →", bg: "bg-violet-500/10", border: "border-violet-500/25", text: "text-violet-300", tab: "work" });
+                  actions.push({ emoji: "💬", label: "Discuss →", bg: "bg-violet-500/10", border: "border-violet-500/25", text: "text-violet-300",
+                    action: () => chatAboutFocus(area, "Based on your evaluation, what's the most important decision we need to make?"),
+                  });
                 }
-                // Has discussion but no sprint yet
+                // Has discussion but no sprint → launch evolve directly
                 if (area.conversationId && !area.lastSprintResults && area.preparedBriefing) {
-                  actions.push({ emoji: "⚡", label: "Launch Evolve Sprint →", bg: "bg-emerald-500/10", border: "border-emerald-500/25", text: "text-emerald-300", tab: "evolve" });
+                  actions.push({ emoji: "⚡", label: "Launch Sprint →", bg: "bg-emerald-500/10", border: "border-emerald-500/25", text: "text-emerald-300",
+                    action: () => { setSelectedId(area.id); setView("detail"); setDetailTab("evolve" as DetailTab); },
+                  });
                 }
-                // New — not yet evaluated
+                // New → trigger evaluation directly, show progress
                 if (!area.preparedBriefing && !area.lastSprintResults) {
-                  actions.push({ emoji: "🔍", label: "Run Evaluation →", bg: "bg-gray-500/10", border: "border-gray-700/30", text: "text-gray-400", tab: "work" });
+                  actions.push({ emoji: "🔍", label: "Evaluate →", bg: "bg-gray-500/10", border: "border-gray-700/30", text: "text-gray-400",
+                    action: async () => {
+                      setPreparing(true);
+                      setSelectedId(area.id); setView("detail"); setDetailTab("work");
+                      try {
+                        const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${area.id}/prepare`, { method: "POST", headers: authHeaders() });
+                        if (resp.ok) {
+                          const result = await resp.json() as { briefing: string; orchestrated?: boolean };
+                          if (!result.orchestrated) {
+                            await fetchFocusAreas();
+                            chatAboutFocus(area, "Based on your evaluation, what's the most important decision we need to make?");
+                          }
+                        }
+                      } catch { /* ignore */ }
+                      setPreparing(false);
+                    },
+                  });
                 }
                 if (actions.length === 0) return null;
                 return (
@@ -450,7 +474,7 @@ export default function FocusView() {
                       <span
                         key={i}
                         role="button"
-                        onClick={(e) => { e.stopPropagation(); setSelectedId(area.id); setView("detail"); setDetailTab(a.tab); }}
+                        onClick={(e) => { e.stopPropagation(); a.action(); }}
                         className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border ${a.bg} ${a.border} ${a.text} hover:brightness-125 transition-all cursor-pointer`}
                       >{a.emoji} {a.label}</span>
                     ))}
