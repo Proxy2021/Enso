@@ -419,10 +419,43 @@ export default function FocusView() {
                 {area.semanticTags.length > 0 && <span>{area.semanticTags.slice(0, 2).join(", ")}</span>}
                 <span>{Math.round(area.confidence * 100)}% confidence</span>
               </div>
+              {/* Attention indicators — what needs user action */}
+              {(() => {
+                const hints: Array<{ emoji: string; text: string; color: string }> = [];
+                // Unreviewed sprint results
+                if (area.lastSprintResults && area.lastSprintDate) {
+                  const sprintAge = Math.floor((Date.now() - new Date(area.lastSprintDate).getTime()) / 86400000);
+                  const lastActive = area.progress?.lastActiveAt ? new Date(area.progress.lastActiveAt).getTime() : 0;
+                  const sprintTime = new Date(area.lastSprintDate).getTime();
+                  if (lastActive < sprintTime || sprintAge <= 7) {
+                    hints.push({ emoji: "📬", text: "Sprint results ready for review", color: "text-amber-400" });
+                  }
+                }
+                // Evaluated but no discussion yet
+                if (area.preparedBriefing && !area.conversationId && !area.lastSprintResults) {
+                  hints.push({ emoji: "💬", text: "Ready to discuss — evaluation complete", color: "text-violet-400" });
+                }
+                // Has discussion but no sprint yet
+                if (area.conversationId && !area.lastSprintResults && area.preparedBriefing) {
+                  hints.push({ emoji: "⚡", text: "Ready to evolve — discussion started", color: "text-emerald-400" });
+                }
+                // New — not yet evaluated
+                if (!area.preparedBriefing && !area.lastSprintResults) {
+                  hints.push({ emoji: "🔍", text: "Start here — run an evaluation", color: "text-gray-500" });
+                }
+                if (hints.length === 0) return null;
+                return (
+                  <div className="mt-2 space-y-0.5">
+                    {hints.map((h, i) => (
+                      <p key={i} className={`text-[11px] ${h.color} font-medium`}>{h.emoji} {h.text}</p>
+                    ))}
+                  </div>
+                );
+              })()}
               {area.status === "emerging" && area.suggestedActions[0] && (
                 <p className="text-[11px] text-amber-500/70 mt-2 italic">{area.suggestedActions[0]}</p>
               )}
-              {area.progress.trend === "quiet" && area.status === "active" && (
+              {area.progress.trend === "quiet" && area.status === "active" && !area.lastSprintResults && (
                 <p className="text-[11px] text-gray-600 mt-2">Haven't seen activity recently</p>
               )}
             </button>
