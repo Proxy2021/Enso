@@ -1353,38 +1353,43 @@ export async function startEnsoServer(opts: {
         whyRecommended: book.whyRecommended,
       });
 
-      // Step 3: Generate deep content (runs in background)
-      const processed = await generateDeepContent({
-        entityId: book.entityId,
-        language: reqLanguage,
-        onProgress: (p) => {
-          logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${book.title}: ${p.phase} (${p.percentComplete}%)` });
-        },
-      });
+      // Steps 3+4: Generate deep content + send email in background
+      try {
+        const processed = await generateDeepContent({
+          entityId: book.entityId,
+          language: reqLanguage,
+          onProgress: (p) => {
+            logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${book.title}: ${p.phase} (${p.percentComplete}%)` });
+          },
+        });
 
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${book.title} — ${processed.durationMinutes} min` });
+        logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${book.title} — ${processed.durationMinutes} min` });
 
-      // Step 4: Build shareable page and send email with link
-      const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
-      const { shortUrl } = buildEntityPage(processed, baseUrl);
-      const notifyTo = getNotifyEmail();
-      if (notifyTo) {
-        const emailResult = await sendHtmlEmail({
-          to: notifyTo,
-          from: "Enso AI <noreply@enso.ai>",
-          subject: `📚 ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
-          html: `<div style="font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;padding:24px;text-align:center">
+        const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
+        const { shortUrl } = buildEntityPage(processed, baseUrl);
+        const notifyTo = getNotifyEmail();
+        if (notifyTo) {
+          const emailResult = await sendHtmlEmail({
+            to: notifyTo,
+            from: "Enso AI <noreply@enso.ai>",
+            subject: `📚 ${book.title} by ${book.author} — ${processed.durationMinutes} min AI Podcast`,
+            html: `<div style="font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;padding:24px;text-align:center">
 <h1 style="font-size:22px;margin:0 0 8px">${processed.title}</h1>
 <p style="color:#94a3b8;margin:4px 0">${book.author} · ${processed.durationMinutes} min AI Podcast</p>
 <p style="color:#94a3b8;font-size:13px;margin:16px 0">${book.whyRecommended}</p>
 <a href="${shortUrl}" style="display:inline-block;background:#7c3aed;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin:16px 0">▶ Play & Read Insights →</a>
 <p style="color:#475569;font-size:11px;margin-top:16px">Enso AI · Daily Recommendation</p></div>`,
-        });
-        logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Email sent: ${emailResult.success ? "✅" : "❌"} ${emailResult.message}` });
+          });
+          logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Email sent: ${emailResult.success ? "✅" : "❌"} ${emailResult.message}` });
+        }
+      } catch (bgErr) {
+        logError("book-recommendation", `Background pipeline failed for "${book.title}"`, bgErr);
       }
     } catch (err) {
       logError("book-recommendation", "Daily pipeline failed", err);
-      // Response already sent if we got past step 1
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: err instanceof Error ? err.message : String(err) });
+      }
     }
   });
 
