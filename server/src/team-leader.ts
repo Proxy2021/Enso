@@ -1109,14 +1109,19 @@ Rate your UNDERSTANDING of this goal on 0-100:
 
 First evaluation with briefing: typically 35-55. Only with sprint results and user feedback: 60+.
 
-Return JSON: { "understanding": <number>, "notes": "<one sentence>" }`,
+Return ONLY a JSON object, no other text: { "understanding": <number>, "notes": "<one sentence>" }`,
       tier: "fast",
       maxOutputTokens: 200,
       responseMimeType: "application/json",
       temperature: 0.3,
       timeoutMs: 20_000,
     });
-    const parsed = JSON.parse(assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, ""));
+    // Robust JSON extraction — handle preamble text, markdown fences, etc.
+    let jsonStr = assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, "");
+    const braceStart = jsonStr.indexOf("{");
+    const braceEnd = jsonStr.lastIndexOf("}");
+    if (braceStart >= 0 && braceEnd > braceStart) jsonStr = jsonStr.slice(braceStart, braceEnd + 1);
+    const parsed = JSON.parse(jsonStr);
     updateFn(area.id, {
       understanding: Math.max(10, Math.min(95, parsed.understanding || 35)),
       assessedBy: "tl-evaluate",
@@ -1289,9 +1294,12 @@ Return JSON: { "understanding": <number>, "progress": <number>, "notes": "<one s
         maxOutputTokens: 200,
         responseMimeType: "application/json",
         temperature: 0.3,
-        timeoutMs: 10_000,
+        timeoutMs: 20_000,
       });
-      const assessParsed = JSON.parse(assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, ""));
+      let assessJson = assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, "");
+      const bs2 = assessJson.indexOf("{"), be2 = assessJson.lastIndexOf("}");
+      if (bs2 >= 0 && be2 > bs2) assessJson = assessJson.slice(bs2, be2 + 1);
+      const assessParsed = JSON.parse(assessJson);
       updateFocusAssessment(area.id, {
         understanding: Math.max(10, Math.min(95, assessParsed.understanding || area.assessment?.understanding || 30)),
         progress: Math.max(0, Math.min(100, assessParsed.progress || area.assessment?.progress || 5)),

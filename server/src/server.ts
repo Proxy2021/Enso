@@ -2602,6 +2602,23 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   });
 
+  // Trigger LLM assessment for all focus areas with briefings
+  app.post("/api/focus-areas/reassess", async (_req, res) => {
+    try {
+      const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
+      const { assessFocusUnderstanding } = await import("./team-leader.js");
+      const state = loadFocusState();
+      if (!state?.areas.length) return res.json({ assessed: 0 });
+      const toAssess = state.areas.filter(a => a.preparedBriefing);
+      for (const area of toAssess) {
+        await assessFocusUnderstanding(area, updateFocusAssessment);
+      }
+      res.json({ assessed: toAssess.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Assessment failed" });
+    }
+  });
+
   // ── Focus Utilities API ──
 
   app.post("/api/focus-areas/backfill-summaries", async (_req, res) => {
