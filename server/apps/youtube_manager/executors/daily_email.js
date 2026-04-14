@@ -5,17 +5,52 @@ var p = params || {};
 
 var maxResults = p.maxResults || 10;
 
-// ── 1. Fetch feed ──
+// ── 1. Fetch feed (live API, with disk-cache fallback) ──
 var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: maxResults });
 var videos = [];
+var usingFallback = false;
 if (result && result.success && result.data) {
   videos = result.data.videos || [];
 } else if (result && typeof result === "string") {
   try { videos = JSON.parse(result).videos || []; } catch(e) {}
 }
 
+// Fallback 1: try the persistent feed disk cache (survives server restarts & quota errors)
 if (videos.length === 0) {
-  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_youtube_manager_daily_email", emailSent: false, error: "No videos in feed", videoCount: 0 }) }] };
+  try {
+    var os = require("os");
+    var path = require("path");
+    var fs = require("fs");
+    var feedCachePath = path.join(os.homedir(), ".enso", "data", "user-context", "cache", "youtube-feed-cache.json");
+    if (fs.existsSync(feedCachePath)) {
+      var feedCache = JSON.parse(fs.readFileSync(feedCachePath, "utf-8"));
+      if (feedCache.videos && feedCache.videos.length > 0) {
+        videos = feedCache.videos.slice(0, maxResults);
+        usingFallback = true;
+        ctx.log("Live feed empty — using persistent disk cache (" + videos.length + " videos from " + (feedCache.savedAt || "?") + ")");
+      }
+    }
+  } catch(e) { ctx.log("Disk cache fallback failed: " + (e.message || e)); }
+}
+
+// Fallback 2: try the user-context scan cache (youtube-data.json)
+if (videos.length === 0) {
+  try {
+    var scanCachePath = (require("path")).join((require("os")).homedir(), ".enso", "data", "user-context", "cache", "youtube-data.json");
+    var fsModule = require("fs");
+    if (fsModule.existsSync(scanCachePath)) {
+      var scanCache = JSON.parse(fsModule.readFileSync(scanCachePath, "utf-8"));
+      if (scanCache.feed && scanCache.feed.length > 0) {
+        videos = scanCache.feed.slice(0, maxResults);
+        usingFallback = true;
+        ctx.log("Live feed empty — using scan cache (" + videos.length + " videos)");
+      }
+    }
+  } catch(e) { ctx.log("Scan cache fallback failed: " + (e.message || e)); }
+}
+
+if (videos.length === 0) {
+  return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_youtube_manager_daily_email", emailSent: false, error: "No videos in feed (live API and all caches empty)", videoCount: 0 }) }] };
 }
 
 // ── 2. Config ──
