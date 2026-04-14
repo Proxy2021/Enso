@@ -114,6 +114,31 @@ interface TeamLeaderState {
   restartPending: boolean;
 }
 
+// ── Agent Event Bus ──
+
+/** Target for an agent event */
+export type AgentTarget =
+  | { agent: "tl" }
+  | { agent: "expert"; focusId: string; expertId: string };
+
+/** An event that an agent processes and can respond to by emitting more events */
+export interface AgentEvent {
+  id: string;
+  type: string;
+  /** Who/what created this event */
+  source: string;
+  /** Which agent should process this */
+  target: AgentTarget;
+  /** Event-specific data */
+  payload: Record<string, unknown>;
+  timestamp: number;
+}
+
+/** Helper to create an event with auto-generated ID + timestamp */
+export function createEvent(type: string, target: AgentTarget, payload: Record<string, unknown> = {}, source = "system"): AgentEvent {
+  return { id: randomUUID(), type, source, target, payload, timestamp: Date.now() };
+}
+
 // ── Paths ──
 
 const ENSO_HOME = join(homedir(), ".enso");
@@ -165,6 +190,298 @@ function saveState(state: TeamLeaderState): void {
   const dir = dirname(STATE_PATH);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), "utf-8");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ██  AGENT EVENT BUS — The core of the living organization      ██
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Process an event targeted at any agent (TL or expert).
+ * This is the single entry point for all work in the organization.
+ *
+ * - System cron fires schedule.daily → TL processes full scan + briefing
+ * - Evaluation completes → TL assesses + launches sprint
+ * - User submits remark → TL or expert reviews and decides action
+ * - Expert escalates → TL processes the escalation
+ * - Agents can emit new events to other agents (inter-agent communication)
+ */
+export async function processEvent(event: AgentEvent): Promise<void> {
+  logAction({ ts: Date.now(), type: "action", category: "agent-event",
+    message: `[${event.target.agent}] ${event.type} from ${event.source}: ${JSON.stringify(event.payload).slice(0, 100)}` });
+
+  if (event.target.agent === "tl") {
+    return processTLEvent(event);
+  } else if (event.target.agent === "expert") {
+    return processExpertEvent(event);
+  }
+}
+
+/** Route TL events to the right handler */
+async function processTLEvent(event: AgentEvent): Promise<void> {
+  switch (event.type) {
+    case "schedule.daily":
+      return handleDailyRoutine();
+    case "schedule.checkin":
+      return handleCheckInEvent();
+    case "focus.evaluation.done":
+      return handleEvaluationDone(event.payload.focusId as string);
+    case "focus.sprint.done":
+      return handleSprintDone(event.payload.focusId as string);
+    case "remark.received":
+      return handleRemarkForTL(event.payload.remarkId as string);
+    case "task.completed":
+      return handleTaskCompletedEvent(event.payload as { actionId: string; actionTitle?: string; result?: string });
+    case "agent.escalate":
+      return handleEscalation(event);
+    default:
+      logAction({ ts: Date.now(), type: "action", category: "agent-event",
+        message: `TL: unhandled event type "${event.type}"` });
+  }
+}
+
+/** Process an event targeted at an expert agent */
+async function processExpertEvent(event: AgentEvent): Promise<void> {
+  const target = event.target as { agent: "expert"; focusId: string; expertId: string };
+  const { loadFocusState } = await import("./focus-areas.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  const area = state.areas.find(a => a.id === target.focusId);
+  if (!area) return;
+  const expert = area.experts?.find(e => e.id === target.expertId);
+  if (!expert) return;
+
+  try {
+    const { llm } = await import("./llm.js");
+    const { cleanJson } = await import("./json-utils.js");
+
+    // Build event description
+    let eventDescription = `Event: ${event.type}`;
+    if (event.type === "remark.received") {
+      const { loadRemarks } = await import("./remarks.js");
+      const remark = loadRemarks().find((r: { id: string }) => r.id === event.payload.remarkId);
+      if (remark) eventDescription = `User remark (${remark.channel}): "${remark.text}"${remark.context?.summary ? `\nContext: ${remark.context.summary}` : ""}`;
+    } else if (event.type === "focus.sprint.done") {
+      eventDescription = `Sprint completed for "${area.title}". Results available for your domain review.`;
+      if (area.lastSprintSummary?.sprintSummary) eventDescription += `\nSprint summary: ${area.lastSprintSummary.sprintSummary}`;
+    } else if (event.payload.message) {
+      eventDescription = `Message from ${event.source}: ${event.payload.message}`;
+    }
+
+    const response = await llm({
+      prompt: `You are ${expert.name}, ${expert.role} for focus area "${area.title}".
+Your perspective: ${expert.perspective}
+Your goals: ${expert.goals.join("; ")}
+${area.intent ? `Focus goal: ${area.intent}` : ""}
+
+${eventDescription}
+
+As this expert, decide what to do:
+1. "respond" — Post a message in your conversation with the user (provide the message text)
+2. "escalate" — This needs the Team Leader's attention (provide reason)
+3. "note" — Record an internal note for your records (no user-visible action)
+4. "none" — No action needed
+
+Return JSON: { "action": "respond|escalate|note|none", "message": "<text>", "reason": "<why>" }`,
+      tier: "fast",
+      maxOutputTokens: 300,
+      temperature: 0.4,
+      timeoutMs: 20_000,
+    });
+
+    const parsed = JSON.parse(cleanJson(response)) as { action: string; message?: string; reason?: string };
+    logAction({ ts: Date.now(), type: "action", category: "agent-event",
+      message: `Expert ${expert.name}: ${parsed.action} — ${parsed.reason || parsed.message?.slice(0, 60) || ""}` });
+
+    if (parsed.action === "respond" && parsed.message && expert.conversationId) {
+      // Post message in expert's conversation
+      const { persistCard } = await import("./memory-bridge.js");
+      const { getAllClients } = await import("./server.js");
+      const cardId = randomUUID();
+      const text = `💬 **${expert.name}** (responding to your feedback):\n\n${parsed.message}`;
+      const clients = getAllClients();
+      if (clients.length > 0) {
+        persistCard(clients[0].id, expert.conversationId, {
+          id: cardId, runId: cardId, type: "chat", role: "assistant",
+          text, timestamp: Date.now(),
+        });
+        clients[0].send({ id: cardId, runId: cardId, sessionKey: clients[0].sessionKey, seq: 0, state: "final" as const,
+          text, conversationId: expert.conversationId, timestamp: Date.now() });
+      }
+    } else if (parsed.action === "escalate") {
+      // Fire event to TL
+      processEvent(createEvent("agent.escalate", { agent: "tl" }, {
+        fromExpert: expert.name, fromExpertId: expert.id, focusId: area.id,
+        focusTitle: area.title, reason: parsed.reason || parsed.message,
+        originalEvent: event.type,
+      }, `expert:${area.id}:${expert.id}`));
+    }
+
+    // Resolve the remark if this was a remark event
+    if (event.type === "remark.received" && event.payload.remarkId) {
+      const { resolveRemark } = await import("./remarks.js");
+      resolveRemark(event.payload.remarkId as string, `Processed by expert ${expert.name}: ${parsed.action} — ${parsed.reason || ""}`);
+    }
+  } catch (err) {
+    logError("agent-event", `Expert ${expert.name} failed to process ${event.type}`, err);
+  }
+}
+
+/** TL handles a remark event — reviews and decides action */
+async function handleRemarkForTL(remarkId: string): Promise<void> {
+  try {
+    const { loadRemarks, resolveRemark } = await import("./remarks.js");
+    const remarks = loadRemarks();
+    const remark = remarks.find((r: { id: string }) => r.id === remarkId);
+    if (!remark || remark.processed) return;
+
+    const { llm } = await import("./llm.js");
+    const { cleanJson } = await import("./json-utils.js");
+
+    const response = await llm({
+      prompt: `You are the Team Leader of Enso. A user remark just arrived.
+
+REMARK: "${remark.text}"
+CHANNEL: ${remark.channel}
+CONTEXT: ${remark.context?.type || "general"} — ${remark.context?.summary || "no context"}
+ACTION: ${remark.action || "custom text"}
+
+Decide what to do:
+1. "act" — Take immediate action (describe what). Use for actionable requests.
+2. "delegate" — Route to a domain expert for this focus area. Use when the remark is domain-specific and an expert can handle it better.
+3. "acknowledge" — Note for next routine. Use for feedback that doesn't need immediate action.
+4. "ignore" — No action needed. Use for auto-responses or irrelevant content.
+${remark.context?.focusId ? `\nThis remark is about a focus area. Consider delegating to a domain expert if it's domain-specific.` : ""}
+
+Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>", "actionDescription": "<what to do if act>" }`,
+      tier: "fast",
+      maxOutputTokens: 200,
+      temperature: 0.3,
+      timeoutMs: 15_000,
+    });
+
+    const parsed = JSON.parse(cleanJson(response)) as { decision: string; reason: string; actionDescription?: string };
+    logAction({ ts: Date.now(), type: "action", category: "agent-event",
+      message: `TL reviewed remark: ${parsed.decision} — ${parsed.reason}` });
+
+    if (parsed.decision === "act" && parsed.actionDescription) {
+      queueTask({
+        title: `User remark: ${remark.text.slice(0, 60)}`,
+        description: parsed.actionDescription,
+        source: "user-remark",
+      });
+    } else if (parsed.decision === "delegate" && remark.context?.focusId) {
+      // Delegate to the first expert on this focus area
+      const { loadFocusState } = await import("./focus-areas.js");
+      const focusState = loadFocusState();
+      const area = focusState?.areas.find(a => a.id === remark.context.focusId);
+      if (area?.experts?.length) {
+        const expert = area.experts[0]; // Primary expert
+        processEvent(createEvent("remark.received",
+          { agent: "expert", focusId: area.id, expertId: expert.id },
+          { remarkId }, `tl`));
+        logAction({ ts: Date.now(), type: "action", category: "agent-event",
+          message: `TL delegated remark to expert ${expert.name} on "${area.title}"` });
+      }
+    }
+
+    resolveRemark(remarkId, `TL: ${parsed.decision} — ${parsed.reason}`);
+  } catch (err) {
+    logError("agent-event", "TL failed to process remark", err);
+  }
+}
+
+/** TL handles an escalation from an expert */
+async function handleEscalation(event: AgentEvent): Promise<void> {
+  const { fromExpert, focusTitle, reason, originalEvent } = event.payload as Record<string, string>;
+  logAction({ ts: Date.now(), type: "action", category: "agent-event",
+    message: `TL received escalation from ${fromExpert} (${focusTitle}): ${reason}` });
+
+  // Queue for TL processing — will be picked up in next daily routine or handled immediately if urgent
+  queueTask({
+    title: `Escalation from ${fromExpert}: ${String(reason).slice(0, 60)}`,
+    description: `Expert ${fromExpert} on "${focusTitle}" escalated: ${reason}. Original event: ${originalEvent}`,
+    source: "follow-up",
+  });
+}
+
+/** TL handles evaluation.done — assess understanding + launch sprint */
+async function handleEvaluationDone(focusId: string): Promise<void> {
+  const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
+  const state = loadFocusState();
+  const area = state?.areas.find(a => a.id === focusId);
+  if (!area) return;
+
+  logAction({ ts: Date.now(), type: "action", category: "agent-event",
+    message: `[Event] Evaluation completed for "${area.title}" — queuing sprint` });
+
+  // Launch sprint immediately
+  const action: TeamLeaderAction = {
+    id: randomUUID(), title: `Launch evolution sprint for "${area.title}"`,
+    description: `Evaluation complete. Launch sprint.`, priority: "high",
+    type: "maintenance", delegation: "focus", estimatedEffort: "30min",
+    autoExecute: true, reasoning: "Event-driven: evaluation just completed", status: "proposed",
+  };
+  await handleFocusEvolve(action);
+}
+
+/** TL handles sprint.done — assess holistic progress + review results */
+async function handleSprintDone(focusId: string): Promise<void> {
+  const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
+  const state = loadFocusState();
+  const area = state?.areas.find(a => a.id === focusId);
+  if (!area) return;
+
+  logAction({ ts: Date.now(), type: "action", category: "agent-event",
+    message: `[Event] Sprint completed for "${area.title}" — assessing progress + reviewing` });
+
+  // 1. Assess holistic progress
+  await assessFocusProgress(area, updateFocusAssessment);
+
+  // 2. Review results
+  const reviewAction: TeamLeaderAction = {
+    id: randomUUID(), title: `Review results for "${area.title}"`,
+    description: `Sprint completed — reviewing.`, priority: "high",
+    type: "maintenance", delegation: "focus", estimatedEffort: "5min",
+    autoExecute: true, reasoning: "Event-driven: sprint just completed", status: "proposed",
+  };
+  await handleFocusReviewResults(reviewAction);
+
+  // 3. Notify experts to review deliverables in their domain
+  if (area.experts?.length) {
+    for (const expert of area.experts) {
+      processEvent(createEvent("focus.sprint.done", { agent: "expert", focusId, expertId: expert.id }, {
+        focusTitle: area.title, sprintSummary: area.lastSprintSummary?.sprintSummary,
+      }, "tl"));
+    }
+  }
+}
+
+/** TL handles task.completed — code change detection + restart */
+async function handleTaskCompletedEvent(payload: { actionId: string; actionTitle?: string; result?: string }): Promise<void> {
+  const { actionId, actionTitle } = payload;
+  logAction({ ts: Date.now(), type: "action", category: "agent-event",
+    message: `Task completed: "${actionTitle || actionId}"` });
+
+  // Update action status
+  updateActionStatus(actionId, "completed");
+
+  // Check for code changes
+  if (actionTitle) {
+    await checkForCodeChangesAndRestart(actionTitle);
+  }
+}
+
+/** Wrapper: daily routine handler (called from processEvent) */
+async function handleDailyRoutine(): Promise<void> {
+  // This is the existing runMorningRoutine logic — will be simplified in Step 6
+  await runMorningRoutine();
+}
+
+/** Wrapper: checkin handler (called from processEvent) */
+async function handleCheckInEvent(): Promise<void> {
+  await runCheckIn();
 }
 
 // ── 1. Gather Signals (zero LLM) ──
@@ -1144,56 +1461,13 @@ Return ONLY valid JSON: { "understanding": <number>, "notes": "<one sentence>" }
  * - "evaluation.completed" → queue sprint launch immediately
  * - "sprint.completed" → review results + assess holistic progress immediately
  */
+/** @deprecated Use processEvent() instead. Kept for backward compatibility. */
 export async function onFocusEvent(
   event: "evaluation.completed" | "sprint.completed",
   focusId: string,
 ): Promise<void> {
-  const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
-  const state = loadFocusState();
-  if (!state?.areas.length) return;
-  const area = state.areas.find(a => a.id === focusId);
-  if (!area) return;
-
-  if (event === "evaluation.completed") {
-    logAction({ ts: Date.now(), type: "action", category: "team-leader",
-      message: `[Event] Evaluation completed for "${area.title}" — queuing sprint immediately` });
-
-    // Queue the sprint as a self-task, then process it right away
-    const action: TeamLeaderAction = {
-      id: randomUUID(),
-      title: `Launch evolution sprint for "${area.title}"`,
-      description: `Evaluation complete. Launch sprint to make progress.`,
-      priority: "high",
-      type: "maintenance",
-      delegation: "focus",
-      effort: "30min",
-      autoExecute: true,
-      reasoning: "Event-driven: evaluation just completed",
-    };
-    await handleFocusEvolve(action);
-  }
-
-  if (event === "sprint.completed") {
-    logAction({ ts: Date.now(), type: "action", category: "team-leader",
-      message: `[Event] Sprint completed for "${area.title}" — reviewing results + assessing progress` });
-
-    // 1. Assess holistic progress toward the goal
-    await assessFocusProgress(area, updateFocusAssessment);
-
-    // 2. Review results to determine if user action is needed
-    const reviewAction: TeamLeaderAction = {
-      id: randomUUID(),
-      title: `Review results for "${area.title}"`,
-      description: `Sprint completed — reviewing deliverables to decide next step.`,
-      priority: "high",
-      type: "maintenance",
-      delegation: "focus",
-      effort: "5min",
-      autoExecute: true,
-      reasoning: "Event-driven: sprint just completed",
-    };
-    await handleFocusReviewResults(reviewAction);
-  }
+  const eventType = event === "evaluation.completed" ? "focus.evaluation.done" : "focus.sprint.done";
+  return processEvent(createEvent(eventType, { agent: "tl" }, { focusId }, "system"));
 }
 
 /**

@@ -914,9 +914,9 @@ The synthesizer task must dependsOn all other tasks.`,
                     message: `Stored briefing for "${area.title}": ${briefing.length} chars from orchestration` });
 
                   // Trigger TL: assess understanding + immediately queue next step
-                  import("./team-leader.js").then(({ assessFocusUnderstanding, onFocusEvent }) => {
+                  import("./team-leader.js").then(({ assessFocusUnderstanding, processEvent, createEvent }) => {
                     assessFocusUnderstanding(freshArea, updateFocusAssessment)
-                      .then(() => onFocusEvent("evaluation.completed", focusId))
+                      .then(() => processEvent(createEvent("focus.evaluation.done", { agent: "tl" }, { focusId }, "system")))
                       .catch(() => {});
                   }).catch(() => {});
                 }
@@ -1296,8 +1296,8 @@ Rules:
                     trackExpertSprintParticipation(focusId);
 
                     // Event-driven TL: immediately review results + assess progress
-                    import("./team-leader.js").then(({ onFocusEvent }) => {
-                      onFocusEvent("sprint.completed", focusId).catch(() => {});
+                    import("./team-leader.js").then(({ processEvent, createEvent }) => {
+                      processEvent(createEvent("focus.sprint.done", { agent: "tl" }, { focusId }, "system")).catch(() => {});
                     }).catch(() => {});
 
                     // Deliver sprint results through all channels (email, WeChat)

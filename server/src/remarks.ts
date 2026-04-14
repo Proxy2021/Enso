@@ -185,6 +185,16 @@ export function submitRemark(params: {
     message: `Remark received via ${params.channel}: "${params.text.slice(0, 80)}" (re: ${params.context.type}/${params.context.summary.slice(0, 40)})`,
   });
 
+  // Fire agent event — TL processes the remark immediately.
+  // TL may decide to delegate to an expert based on context.
+  import("./team-leader.js").then(({ processEvent, createEvent }) => {
+    processEvent(createEvent("remark.received", { agent: "tl" }, {
+      remarkId: remark.id,
+      focusId: params.context.focusId,
+      contextType: params.context.type,
+    }, "user"));
+  }).catch(() => {});
+
   return remark;
 }
 
