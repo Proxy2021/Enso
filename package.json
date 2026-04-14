@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.5.22",
   "versionCode": 228,
-  "description": "Self-hosted AI platform with a Knowledge Cortex that compounds with every interaction — data source apps, unified LLM layer, and a brain that learns from your books, browsing, projects, and conversations",
+  "description": "A self-hosted AI organization — scans your digital life, infers your goals, staffs expert teams, and autonomously drives progress through a Team Leader that manages the entire operation",
   "type": "module",
   "scripts": {
     "dev": "vite",

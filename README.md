@@ -1,25 +1,73 @@
-# Enso — A self-hosted AI platform with a Knowledge Cortex that compounds with every interaction
+# Enso — A self-hosted AI organization that works for you
 
-> 101 tools, 16+ apps, 7 data sources, AI-inferred focus areas, and a unified brain that learns from your books, browsing, projects, and conversations.
+> Scans your digital life, infers your goals, staffs domain-specific expert teams, and autonomously drives progress — with a Team Leader that manages the entire operation on a daily schedule.
 
 ![Enso Screenshot](https://img.shields.io/badge/status-active-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Desktop%20%7C%20Android%20%7C%20PWA-orange)
 
 ## What is Enso?
 
-Enso is a self-hosted AI platform with a Knowledge Cortex at its center. Ask a question and get a structured research dashboard, not a wall of text. Connect your data sources — Kindle library, YouTube subscriptions, browser history, email, projects — and watch the Cortex populate with hundreds of interlinked wiki pages on day one. Describe an app and watch Claude Code build it in a live terminal. Run `/evolve` and an AI team improves your entire installation autonomously.
+Enso is not an AI assistant — it's a **self-hosted AI organization** that understands who you are, figures out what matters to you, and mobilizes a full team of AI specialists to make real progress on your goals, every single day.
 
-**101 tools. 16+ apps. 7 data sources. 1 brain that compounds. Yours forever.**
+Connect your data sources — Kindle library, YouTube subscriptions, browser history, email, projects, photos, games, music — and Enso builds a **Knowledge Cortex** of 2000+ interlinked wiki pages mapping who you are, what you know, and what you're drawn to. From this, it infers **Focus Areas** — concrete, outcome-oriented goals like "Develop AlphaRank into a Market-Beating Quant Tool" or "Master Documentary Street Photography."
+
+A **Team Leader** agent wakes up on a configurable schedule, surveys the entire system, and runs the organization:
+- Staffs each focus area with 2-4 domain-specific **expert teams** (a Quant Strategist for finance, a Master Photographer for photography, an AI Architect for your dev project)
+- Evaluates expert performance, restructures teams when goals shift
+- Launches evaluation sprints, strategic dialogues, and multi-agent execution sprints
+- Delivers a unified daily briefing via email, WeChat, and in-app — with feedback buttons that loop back into the next cycle
+
+You are the CEO. Enso is the company that works for you. You approve at gates, chat with experts for opinions, provide creative direction when your brain is needed. Everything else — staffing, evaluation, execution, delivery — the organization handles.
+
+**Self-hosted. Open source. You own the factory, not just the product.**
+
+## The Arc: Understand → Focus → Staff → Execute → Deliver
+
+```
+ Your Digital Life (12 sources)
+         │
+         ▼
+ ┌─────────────────────────────┐
+ │   KNOWLEDGE CORTEX          │  2000+ interlinked wiki pages
+ │   (The Brain)               │  Cross-source synthesis
+ └──────────┬──────────────────┘
+            │ infers
+            ▼
+ ┌─────────────────────────────┐
+ │   FOCUS AREAS               │  AI-inferred goals with intent,
+ │   (What Matters)            │  deeper WHY, typed (project/
+ │                             │  creative/learning/lifestyle)
+ └──────────┬──────────────────┘
+            │ staffs
+            ▼
+ ┌─────────────────────────────┐
+ │   EXPERT TEAMS              │  2-4 domain specialists per goal
+ │   (Your People)             │  Direct chat, sprint participation
+ └──────────┬──────────────────┘
+            │ drives
+            ▼
+ ┌─────────────────────────────┐
+ │   TEAM LEADER               │  Morning routine: gather signals →
+ │   (The Operator)            │  assess → execute → brief → deliver
+ │                             │  Manages the entire org autonomously
+ └──────────┬──────────────────┘
+            │ delivers
+            ▼
+    Email / WeChat / In-App
+    (with feedback loop → next cycle)
+```
 
 ## Why Enso?
 
 | What You Want | Others | Enso |
 |---|---|---|
-| Research a topic | Wall of text | Interactive research board with 48+ sources, charts, AI podcast |
+| Progress on goals | You drive everything manually | Team Leader drives daily; you approve at gates |
+| Domain expertise | One generic AI for everything | Expert teams per goal (photographer, quant, architect) |
+| Research a topic | Wall of text | Interactive research board with 48+ sources |
 | Build an app | Component preview or code edits | Full app built live in Claude Code terminal |
-| Track knowledge | Re-derive from scratch every time | Knowledge Cortex: AI-maintained wiki that compounds with every use |
+| Track knowledge | Re-derive from scratch every time | Knowledge Cortex: AI-maintained wiki that compounds |
 | Improve your tools | Wait for vendor updates | AI team runs evolution sprints on YOUR installation |
-| Stay current | Manual news reading | Daily intelligence briefing: AI searches web for your interests, emails a digest |
-| Own your workspace | Rent SaaS ($20-200/mo) | Own source code + data + build pipeline. Fork it. Modify it. Keep it. |
+| Stay informed | Manual reading | Daily intelligence briefing emailed to you |
+| Own your workspace | Rent SaaS ($20-200/mo) | Own source code + data + build pipeline forever |
 
 ## Get Started
 
@@ -36,76 +84,37 @@ Setup handles everything interactively: API keys, Claude Code auth, remote acces
 
 ## Three Pillars
 
+### 🏢 A Living Organization
+
+Enso runs as a **living organization** with a Team Leader agent at the helm. The TL wakes up daily, gathers signals from every system, makes prioritized decisions, staffs expert teams, launches sprints, and delivers briefings. Every notification includes feedback buttons — your remarks feed back into the next assessment cycle. The organization learns and adapts.
+
+### 🧠 One Brain That Compounds
+
+The **Knowledge Cortex** is the single source of truth. Based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — 2000+ interlinked markdown pages auto-populated from 12 data sources. Cross-source synthesis finds connections you didn't know existed. Every sprint result, conversation insight, and research finding feeds back into the Cortex. It only grows.
+
 ### 🏭 Own the Factory
 
-Self-hosted. Open source. Your code, your data, your API keys. No subscriptions. No vendor
-lock-in. During setup, Claude Code personalizes the entire app based on who you are — a
-developer gets "Forge," an investor gets "Signal," a researcher gets "Nexus."
+Self-hosted. Open source. Your code, your data, your API keys. During setup, Claude Code personalizes the entire app based on who you are — a developer gets "Forge," an investor gets "Signal," a researcher gets "Nexus." See **[PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md)** for examples.
 
-See **[PERSONALIZATION-SHOWCASE.md](PERSONALIZATION-SHOWCASE.md)** for examples.
-
-### 📱 Every Answer Is an App
-
-Research questions become interactive dashboards. Build requests become running apps.
-File operations become a desktop-grade file manager. 16 built-in apps, plus unlimited custom
-apps from a single command.
-
-### 🧬 AI That Evolves Itself
-
-Type `/evolve` and an AI team — project leader, architect, engineers, QA, marketing, sales — runs a full improvement sprint with real browser testing, code implementation, and validation. No other tool does this.
-
-## Built-in Capabilities
+## Core Capabilities
 
 | Capability | Description |
 |---|---|
-| 🧠 Knowledge Cortex | The ONLY brain — 680+ interlinked wiki pages auto-populated from 7 data sources, treemap graph, web discovery, AI digest, daily intelligence briefing with email delivery |
-| 🎯 Focus Areas | AI-inferred goals from your Cortex data — concrete outcomes you're working toward. Progressive refinement through evidence + conversation. Deeper intention analysis reveals the WHY behind each goal and suggests adjacent pursuits |
-| 🔍 Research Engine | 48+ source analysis with structured boards, AI podcast, contradiction detection, deep research escalation via Claude Code |
-| 💻 Claude Code | `/code` — live terminal coding with model selection (Opus/Sonnet/Haiku), extended thinking |
+| 🧠 Knowledge Cortex | 2000+ interlinked wiki pages from 12 data sources, treemap graph, web discovery, daily intelligence briefing |
+| 🎯 Focus Areas | AI-inferred goals with typed focus (project/creative/learning/lifestyle), intent, deeper WHY, evidence |
+| 👥 Expert Teams | 2-4 domain specialists per focus area — direct chat with expert personas, TL-managed lifecycle |
+| 📋 Team Leader | Autonomous agent: daily routines, signal gathering, expert staffing/evaluation, sprint execution, multi-channel briefing |
+| 💬 Remark System | Async feedback via email/WeChat/web — every notification has action buttons that loop back to TL |
+| 🔍 Research Engine | 48+ source analysis with structured boards, deep research escalation via Claude Code |
+| 💻 Claude Code | Live terminal coding with model selection (Opus/Sonnet/Haiku), extended thinking |
 | ⚡ Orchestrator | Multi-agent teams with DAG-based task decomposition for complex goals |
 | 🧬 Evolution | AI team sprints: 7 phases, 6 parallel agents, persona testing, fix-verify loops |
 | 📸 Photo Studio | 56 film/cinematic styles, batch processing, AI analysis, EXIF editing |
-| 🎬 Video Studio | AI video generation from text prompts via Seedance |
-| 🌐 Remote Browser | Full Puppeteer-driven browser inside the conversation |
 | 📂 File Manager | Desktop-grade with previews, search, CRUD, 14 file operations |
-| 🖥️ Remote Desktop | Control remote machines with screenshots, click, type, scroll |
 | 🐚 Terminal | Full PTY terminal (PowerShell/bash/zsh) with xterm.js rendering |
-| 📊 Data Analyzer | CSV/JSON analysis with statistics, charts, queries |
-| 📚 Kindle Library | Browse 471+ books with covers, ratings, categories, one-click research into Cortex |
-| 📺 YouTube Manager | 208 subscriptions, liked videos, feed analysis — all ingested into Cortex |
-| 🌐 Browser Data | History + bookmarks combined — browsing patterns and interests into Cortex |
-| 📧 Email Scanner | Communication patterns, contacts, topics — feeds into Cortex |
-| 📁 Projects Scanner | Tech stack detection across local codebases — project knowledge into Cortex |
-| 💻 System Info | Environment analysis — installed apps, running processes |
-| 🔬 Mission Planner | AI VC team discovers project opportunities tailored to your interests |
-| ⏰ Scheduled Tasks | Durable cron system: run any tool or prompt on a schedule |
-| 🔄 Settings Transfer | Export/import 9 categories of data across machines |
-| 🛒 ClawHub | Skill store: browse, install, manage OpenClaw extensions |
-
-## Knowledge Cortex — The Unified Brain
-
-Based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — the Cortex is the ONLY brain for memory, profile, and knowledge. Instead of re-deriving knowledge from scratch each time, the LLM incrementally builds and maintains a persistent, interlinked markdown knowledge base that compounds with every interaction.
-
-**Grand Unification architecture:** `buildEnsoContext()` reads from Cortex only. Memory, user profile, interests, and all accumulated knowledge live as wiki pages. No separate memory or profile systems — the Cortex is the single source of truth.
-
-**7 data source apps** (each a standalone Enso app with its own UI):
-- **Kindle Library** (`server/apps/kindle/`) — 471 books with covers, ratings, highlights, categories
-- **YouTube Manager** (`server/apps/youtube/`) — 208 subscriptions, liked videos, feed analysis
-- **Browser Data** (`server/apps/browser/`) — history + bookmarks combined
-- **Email Scanner** — communication patterns and contacts
-- **Projects Scanner** — tech stack detection across local codebases
-- **System Info** — installed apps, running processes, environment
-- **Manual ingest** — any topic via the Cortex Explorer
-
-**Auto-ingest pipeline:** scan -> cache -> change detection -> Cortex pages. Per-item pages (one book, one channel) are deterministic templates with zero LLM cost. Synthesis pages use AI to find cross-source patterns.
-
-**First-run onboarding:** Connect data sources during setup, populate the Cortex with 680+ pages from day one.
-
-**Explorer app:** Dashboard with stats and knowledge gaps, treemap graph visualization (60+ nodes, 280+ connections), full-text search with tag cloud, article reader with backlinks and related pages.
-
-**Discovery:** Enter any topic — AI searches the web, suggests 5 branches to explore, one-click ingest into the Cortex.
-
-**Daily Intelligence Briefing:** Scheduled task searches the web daily for your top 10 interests, AI analyzes findings with personalized impact assessment and action items, ingests significant discoveries into the Cortex, emails you a curated digest.
+| 📚 Data Sources | 12 sources: Kindle, YouTube, browser, email, projects, system, Steam, movies/TV, photos, Twitter/X, QQ Music, manual |
+| 🔬 Discovery | AI VC team discovers project opportunities tailored to your interests |
+| ⏰ Scheduled Tasks | Durable cron system for automated routines |
 
 ## How It Works
 
@@ -113,23 +122,34 @@ Based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf5
 Your message
     │
     ▼
-┌─────────────────────────────────────────────────────┐
-│  Task Router (auto-classification)                  │
-│                                                     │
-│  "What's the weather?" ──→ Simple    → Agent chat   │
-│  "Fix this bug"        ──→ One-off   → Claude Code  │
-│  "Build a CRM system"  ──→ Complex   → Multi-agent  │
-│                              orchestration with DAG  │
-└──────────────────────────────┬──────────────────────┘
-                               │
-                               ▼
-                    Tool Result + Template
-                               │
-                               ▼
-                  Interactive React App (instant)
+┌──────────────────────────────────────────────────────┐
+│  Task Router (auto-classification)                   │
+│                                                      │
+│  "What's the weather?" ──→ Simple    → Agent chat    │
+│  "Fix this bug"        ──→ One-off   → Claude Code   │
+│  "Build a CRM system"  ──→ Complex   → Multi-agent   │
+│                              orchestration with DAG   │
+└───────────────────────────────┬──────────────────────┘
+                                │
+                                ▼
+                     Tool Result + Template
+                                │
+                                ▼
+                   Interactive React App (instant)
 ```
 
 No commands needed. The system auto-classifies every message and chooses the right level of effort.
+
+## 6-Tab Navigation
+
+| Tab | Purpose |
+|-----|---------|
+| **Chat** | Conversations with Enso and expert teams |
+| **Cortex** | Knowledge browser — wiki pages, graph, discovery |
+| **Focus** | AI-inferred goals with expert teams and typed focus areas |
+| **Tasks** | Team Leader command center + scheduled tasks |
+| **Evolve** | Self-evolution hub |
+| **Me** | Profile, connection, settings |
 
 ## Tech Stack
 
@@ -137,7 +157,6 @@ No commands needed. The system auto-classifies every message and chooses the rig
 **Backend:** Express, WebSocket, TypeScript 5.7, node-pty
 **AI:** Claude Code (Opus/Sonnet/Haiku), Unified `llm()` layer (Gemini, OpenAI, Anthropic, DeepSeek, Ollama, OpenRouter)
 **Mobile:** Capacitor Android APK + PWA (offline-capable)
-**Tools:** 99 registered tools across 14 families
 
 ## Architecture
 
@@ -146,31 +165,33 @@ No commands needed. The system auto-classifies every message and chooses the rig
 
 ```
 src/                          React frontend
-├── cards/                    Card renderers (DynamicUI, Terminal, Shell, Orchestration, Mission)
-├── components/               Timeline, ChatInput, CardContainer, ConnectionPicker
-├── store/chat.ts             Zustand state (cards, streaming, connections, evolution)
-└── lib/                      WS client, JSX sandbox (Sucrase), EnsoUI (27 components), connections
+├── cards/                    Card renderers (DynamicUI, Terminal, Shell, Orchestration)
+├── components/               FocusView, TasksView, EvolveView, ConversationSidebar
+├── store/chat.ts             Zustand state
+└── lib/                      WS client, JSX sandbox, EnsoUI (17 components), i18n
 
 server/                       Backend
-├── apps/                     16 shipped app packages incl. data source apps (kindle, youtube, browser, etc.)
+├── apps/                     Shipped app packages (cortex, kindle, youtube, browser, etc.)
 └── src/
-    ├── server.ts             Express + WS server with auth
-    ├── standalone-agent.ts   Chat agent for standalone mode
-    ├── task-router.ts        4-tier message classifier (simple/research/one-off/orchestrated)
+    ├── server.ts             Express + WS server
+    ├── standalone-agent.ts   Chat agent with tool routing
+    ├── team-leader.ts        Team Leader — the living organization
+    ├── focus-areas.ts        Focus area engine (infer, refine, evolve, expert tracking)
+    ├── focus-agent.ts        Focus utilities (analyze, pulse, deliver)
+    ├── focus-context-provider.ts  Decision-mode + expert persona injection
+    ├── team-generator.ts     Expert team generation for all focus types
+    ├── remarks.ts            Async feedback system (email/WeChat/web → TL)
+    ├── cortex-tools.ts       Knowledge Cortex engine (the ONLY brain)
+    ├── cortex-synthesis.ts   Cross-source intelligence
+    ├── llm.ts                Unified LLM layer (6 providers)
+    ├── task-router.ts        4-tier message classifier
     ├── orchestrator.ts       Multi-agent planner (goal → task DAG)
     ├── orchestrator-engine.ts  DAG executor with parallel agents
-    ├── evolution.ts          Self-evolution sprint system (7 phases, 6 parallel agents)
-    ├── researcher-tools.ts   Two-phase streaming research pipeline
-    ├── wiki-tools.ts         Knowledge Cortex engine (ingest, search, lint, import) — the ONLY brain
-    ├── llm.ts                Unified LLM layer — single llm() call across 6 providers
-    ├── claude-code.ts        Claude Code CLI integration (NDJSON streaming)
-    ├── build-via-claude.ts   Natural language → app build via Claude Code
-    ├── scheduled-tasks.ts    Durable cron system with task execution
-    ├── settings-transfer.ts  Cross-machine export/import (9 categories)
-    ├── user-context-tools.ts Consent-gated desktop environment scanner
-    └── *-tools.ts            14 tool families (99 total tools)
+    ├── evolution.ts          Self-evolution sprint system
+    ├── claude-code.ts        Claude Code CLI integration
+    └── *-tools.ts            Tool families
 
-shared/types.ts               WebSocket protocol types (shared frontend ↔ backend)
+shared/types.ts               WebSocket protocol types
 ```
 </details>
 
@@ -183,11 +204,10 @@ shared/types.ts               WebSocket protocol types (shared frontend ↔ back
 | **[CLAUDE-REFERENCE.md](CLAUDE-REFERENCE.md)** | App building API, ExecutorContext, template rules |
 | **[CLAUDE.md](CLAUDE.md)** | Full architecture reference for AI-assisted development |
 | **[PROJECTS.md](PROJECTS.md)** | Project import, AI team generation, evolution sprints |
-| **[CONTRIBUTING.md](CONTRIBUTING.md)** | How to contribute to Enso |
 
 ## Contributing
 
-We welcome contributions of all sizes — bug fixes, new app types, UI improvements, docs, translations. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for guidelines.
+We welcome contributions of all sizes — bug fixes, new capabilities, UI improvements, docs, translations. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for guidelines.
 
 ## License
 
