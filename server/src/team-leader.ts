@@ -44,8 +44,8 @@ export interface SystemSignals {
   cortexStats: { totalPages: number; entityCount: number; recentUpdates: string[] };
   taskResults: Array<{ taskId: string; taskName: string; status: string; firedAt: number; resultSummary?: string }>;
   platformHealth: { errorRate: number; failedTasks: string[]; uptimeHours: number };
-  /** Pending user remarks awaiting processing */
-  pendingRemarks: Array<{ id: string; channel: string; text: string; action?: string; contextSummary: string; timestamp: string }>;
+  /** Pending user reacts awaiting processing */
+  pendingReacts: Array<{ id: string; channel: string; text: string; action?: string; contextSummary: string; timestamp: string }>;
   /** Self-queued tasks from previous cycles */
   pendingTasks: Array<{ id: string; title: string; description: string; source: string }>;
 }
@@ -81,7 +81,7 @@ export interface QueuedTask {
   title: string;
   description: string;
   /** Where this task came from */
-  source: "self" | "user-remark" | "error-detected" | "follow-up";
+  source: "self" | "user-react" | "error-detected" | "follow-up";
   /** When this was queued */
   createdAt: string;
   /** Has this been processed? */
@@ -202,7 +202,7 @@ function saveState(state: TeamLeaderState): void {
  *
  * - System cron fires schedule.daily → TL processes full scan + briefing
  * - Evaluation completes → TL assesses + launches sprint
- * - User submits remark → TL or expert reviews and decides action
+ * - User submits react → TL or expert reviews and decides action
  * - Expert escalates → TL processes the escalation
  * - Agents can emit new events to other agents (inter-agent communication)
  */
@@ -228,8 +228,8 @@ async function processTLEvent(event: AgentEvent): Promise<void> {
       return handleEvaluationDone(event.payload.focusId as string);
     case "focus.sprint.done":
       return handleSprintDone(event.payload.focusId as string);
-    case "remark.received":
-      return handleRemarkForTL(event.payload.remarkId as string);
+    case "react.received":
+      return handleReactForTL(event.payload.reactId as string);
     case "task.completed":
       return handleTaskCompletedEvent(event.payload as { actionId: string; actionTitle?: string; result?: string });
     case "agent.escalate":
@@ -260,10 +260,10 @@ async function processExpertEvent(event: AgentEvent): Promise<void> {
 
     // Build event description
     let eventDescription = `Event: ${event.type}`;
-    if (event.type === "remark.received") {
-      const { loadRemarks } = await import("./remarks.js");
-      const remark = loadRemarks().find((r: { id: string }) => r.id === event.payload.remarkId);
-      if (remark) eventDescription = `User remark (${remark.channel}): "${remark.text}"${remark.context?.summary ? `\nContext: ${remark.context.summary}` : ""}`;
+    if (event.type === "react.received") {
+      const { loadReacts } = await import("./reacts.js");
+      const react = loadReacts().find((r: { id: string }) => r.id === event.payload.reactId);
+      if (react) eventDescription = `User react (${react.channel}): "${react.text}"${react.context?.summary ? `\nContext: ${react.context.summary}` : ""}`;
     } else if (event.type === "focus.sprint.done") {
       eventDescription = `Sprint completed for "${area.title}". Results available for your domain review.`;
       if (area.lastSprintSummary?.sprintSummary) eventDescription += `\nSprint summary: ${area.lastSprintSummary.sprintSummary}`;
@@ -428,42 +428,42 @@ Return JSON: {
       }
     }
 
-    // Resolve the remark if this was a remark event
-    if (event.type === "remark.received" && event.payload.remarkId) {
-      const { resolveRemark } = await import("./remarks.js");
+    // Resolve the react if this was a react event
+    if (event.type === "react.received" && event.payload.reactId) {
+      const { resolveReact } = await import("./reacts.js");
       const actionSummary = actions.map(a => a.type).join(", ") || "none";
-      resolveRemark(event.payload.remarkId as string, `Expert ${expert.name}: ${actionSummary}`);
+      resolveReact(event.payload.reactId as string, `Expert ${expert.name}: ${actionSummary}`);
     }
   } catch (err) {
     logError("agent-event", `Expert ${expert.name} failed to process ${event.type}`, err);
   }
 }
 
-/** TL handles a remark event — reviews and decides action */
-async function handleRemarkForTL(remarkId: string): Promise<void> {
+/** TL handles a react event — reviews and decides action */
+async function handleReactForTL(reactId: string): Promise<void> {
   try {
-    const { loadRemarks, resolveRemark } = await import("./remarks.js");
-    const remarks = loadRemarks();
-    const remark = remarks.find((r: { id: string }) => r.id === remarkId);
-    if (!remark || remark.processed) return;
+    const { loadReacts, resolveReact } = await import("./reacts.js");
+    const reacts = loadReacts();
+    const react = reacts.find((r: { id: string }) => r.id === reactId);
+    if (!react || react.processed) return;
 
     const { llm } = await import("./llm.js");
     const { cleanJson } = await import("./json-utils.js");
 
     const response = await llm({
-      prompt: `You are the Team Leader of Enso. A user remark just arrived.
+      prompt: `You are the Team Leader of Enso. A user react just arrived.
 
-REMARK: "${remark.text}"
-CHANNEL: ${remark.channel}
-CONTEXT: ${remark.context?.type || "general"} — ${remark.context?.summary || "no context"}
-ACTION: ${remark.action || "custom text"}
+REACT: "${react.text}"
+CHANNEL: ${react.channel}
+CONTEXT: ${react.context?.type || "general"} — ${react.context?.summary || "no context"}
+ACTION: ${react.action || "custom text"}
 
 Decide what to do:
 1. "act" — Take immediate action (describe what). Use for actionable requests.
-2. "delegate" — Route to a domain expert for this focus area. Use when the remark is domain-specific and an expert can handle it better.
+2. "delegate" — Route to a domain expert for this focus area. Use when the react is domain-specific and an expert can handle it better.
 3. "acknowledge" — Note for next routine. Use for feedback that doesn't need immediate action.
 4. "ignore" — No action needed. Use for auto-responses or irrelevant content.
-${remark.context?.focusId ? `\nThis remark is about a focus area. Consider delegating to a domain expert if it's domain-specific.` : ""}
+${react.context?.focusId ? `\nThis react is about a focus area. Consider delegating to a domain expert if it's domain-specific.` : ""}
 
 Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>", "actionDescription": "<what to do if act>" }`,
       tier: "fast",
@@ -474,7 +474,7 @@ Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>",
 
     const parsed = JSON.parse(cleanJson(response)) as { decision: string; reason: string; actionDescription?: string };
     logAction({ ts: Date.now(), type: "action", category: "agent-event",
-      message: `TL reviewed remark: ${parsed.decision} — ${parsed.reason}` });
+      message: `TL reviewed react: ${parsed.decision} — ${parsed.reason}` });
 
     // Create artifact so user sees TL's response
     const { createArtifact } = await import("./agent-artifacts.js");
@@ -482,12 +482,12 @@ Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>",
       createArtifact({
         type: parsed.decision === "act" ? "action" : "insight",
         agentId: "tl", agentName: "Team Leader",
-        focusId: remark.context?.focusId,
+        focusId: react.context?.focusId,
         title: parsed.decision === "act"
-          ? `Acting on your feedback: ${remark.text.slice(0, 50)}`
+          ? `Acting on your feedback: ${react.text.slice(0, 50)}`
           : parsed.decision === "delegate"
-          ? `Delegating to expert: ${remark.text.slice(0, 50)}`
-          : `Noted: ${remark.text.slice(0, 50)}`,
+          ? `Delegating to expert: ${react.text.slice(0, 50)}`
+          : `Noted: ${react.text.slice(0, 50)}`,
         body: parsed.reason,
         status: parsed.decision === "act" ? "in-progress" : "done",
       });
@@ -495,28 +495,28 @@ Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>",
 
     if (parsed.decision === "act" && parsed.actionDescription) {
       queueTask({
-        title: `User remark: ${remark.text.slice(0, 60)}`,
+        title: `User react: ${react.text.slice(0, 60)}`,
         description: parsed.actionDescription,
-        source: "user-remark",
+        source: "user-react",
       });
-    } else if (parsed.decision === "delegate" && remark.context?.focusId) {
+    } else if (parsed.decision === "delegate" && react.context?.focusId) {
       // Delegate to the first expert on this focus area
       const { loadFocusState } = await import("./focus-areas.js");
       const focusState = loadFocusState();
-      const area = focusState?.areas.find(a => a.id === remark.context.focusId);
+      const area = focusState?.areas.find(a => a.id === react.context.focusId);
       if (area?.experts?.length) {
         const expert = area.experts[0]; // Primary expert
-        processEvent(createEvent("remark.received",
+        processEvent(createEvent("react.received",
           { agent: "expert", focusId: area.id, expertId: expert.id },
-          { remarkId }, `tl`));
+          { reactId }, `tl`));
         logAction({ ts: Date.now(), type: "action", category: "agent-event",
-          message: `TL delegated remark to expert ${expert.name} on "${area.title}"` });
+          message: `TL delegated react to expert ${expert.name} on "${area.title}"` });
       }
     }
 
-    resolveRemark(remarkId, `TL: ${parsed.decision} — ${parsed.reason}`);
+    resolveReact(reactId, `TL: ${parsed.decision} — ${parsed.reason}`);
   } catch (err) {
-    logError("agent-event", "TL failed to process remark", err);
+    logError("agent-event", "TL failed to process react", err);
   }
 }
 
@@ -699,11 +699,11 @@ export async function gatherSignals(): Promise<SystemSignals> {
   const errorRate = recentErrors.length / Math.max(recentActions.length, 1);
   const failedTasks = taskResults.filter(r => r.status === "failed").map(r => r.taskName);
 
-  // Pending user remarks
-  let pendingRemarks: SystemSignals["pendingRemarks"] = [];
+  // Pending user reacts
+  let pendingReacts: SystemSignals["pendingReacts"] = [];
   try {
-    const { getPendingRemarks } = await import("./remarks.js");
-    pendingRemarks = getPendingRemarks().map(r => ({
+    const { getPendingReacts } = await import("./reacts.js");
+    pendingReacts = getPendingReacts().map(r => ({
       id: r.id,
       channel: r.channel,
       text: r.text,
@@ -711,7 +711,7 @@ export async function gatherSignals(): Promise<SystemSignals> {
       contextSummary: `${r.context.type}: ${r.context.summary}`,
       timestamp: r.timestamp,
     }));
-  } catch { /* remarks system not available */ }
+  } catch { /* reacts system not available */ }
 
   // Self-queued tasks from previous cycles
   const pendingTasks = getPendingTasks().map(t => ({
@@ -721,7 +721,7 @@ export async function gatherSignals(): Promise<SystemSignals> {
   return {
     recentErrors, recentActions, focusAnalyses, cortexStats, taskResults,
     platformHealth: { errorRate, failedTasks, uptimeHours: Math.round(process.uptime() / 3600) },
-    pendingRemarks, pendingTasks,
+    pendingReacts, pendingTasks,
   };
 }
 
@@ -767,10 +767,10 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
       ? signals.taskResults.map(t => `- ${t.taskName}: ${t.status}${t.resultSummary ? ` — ${t.resultSummary.slice(0, 100)}` : ""}`).join("\n")
       : "No task runs in last 24h.",
     "",
-    `## User Remarks (${signals.pendingRemarks.length} pending)`,
-    signals.pendingRemarks.length > 0
-      ? signals.pendingRemarks.map(r => `- [${r.channel}] "${r.text}" (re: ${r.contextSummary}) — ${r.action || "custom"}`).join("\n")
-      : "No pending remarks from user.",
+    `## User Reacts (${signals.pendingReacts.length} pending)`,
+    signals.pendingReacts.length > 0
+      ? signals.pendingReacts.map(r => `- [${r.channel}] "${r.text}" (re: ${r.contextSummary}) — ${r.action || "custom"}`).join("\n")
+      : "No pending reacts from user.",
     "",
     `## Self-Queued Tasks (${signals.pendingTasks.length} pending)`,
     signals.pendingTasks.length > 0
@@ -929,15 +929,15 @@ Rules:
     wechatMessage: string;
   };
 
-  // Register notification context for remark tracking
+  // Register notification context for react tracking
   let notificationId = "";
   try {
-    const { registerNotification, emailRemarkActions } = await import("./remarks.js");
+    const { registerNotification, emailReactActions } = await import("./reacts.js");
     notificationId = registerNotification(
       { type: "briefing", summary: parsed.headline },
       { isEmail: true },
     );
-  } catch { /* remarks system not critical */ }
+  } catch { /* reacts system not critical */ }
 
   // Build HTML email
   const sectionHtml = parsed.sections.map(s => {
@@ -950,12 +950,12 @@ Rules:
     </div>`;
   }).join("");
 
-  // Build remark actions for email footer
-  let remarkActionsHtml = "";
+  // Build react actions for email footer
+  let reactActionsHtml = "";
   if (notificationId) {
     try {
-      const { emailRemarkActions } = await import("./remarks.js");
-      remarkActionsHtml = emailRemarkActions(notificationId, getEnsoUrl());
+      const { emailReactActions } = await import("./reacts.js");
+      reactActionsHtml = emailReactActions(notificationId, getEnsoUrl());
     } catch { /* non-critical */ }
   }
 
@@ -966,7 +966,7 @@ Rules:
     </div>
     <div style="padding:20px 24px;">
       ${sectionHtml}
-      ${remarkActionsHtml}
+      ${reactActionsHtml}
     </div>
     <div style="padding:16px 24px;text-align:center;border-top:1px solid #1f2937;">
       <a href="${getEnsoUrl()}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">Open Enso →</a>
@@ -2167,12 +2167,12 @@ export async function runMorningRoutine(): Promise<DailyBriefing> {
   const completed = executedActions.filter(a => a.status === "completed").length;
   const proposed = executedActions.filter(a => a.status === "proposed").length;
 
-  // 3b. Mark pending remarks as processed
-  if (signals.pendingRemarks.length > 0) {
+  // 3b. Mark pending reacts as processed
+  if (signals.pendingReacts.length > 0) {
     try {
-      const { resolveRemark } = await import("./remarks.js");
-      for (const r of signals.pendingRemarks) {
-        resolveRemark(r.id, `Processed in morning routine — incorporated into ${actions.length} action plan`);
+      const { resolveReact } = await import("./reacts.js");
+      for (const r of signals.pendingReacts) {
+        resolveReact(r.id, `Processed in morning routine — incorporated into ${actions.length} action plan`);
       }
     } catch { /* best effort */ }
   }

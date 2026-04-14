@@ -28,7 +28,7 @@ Any agent (TL or expert) can receive events and respond by: handling directly, l
 | `schedule.checkin` | TL | Quick urgent scan, alert if needed |
 | `focus.evaluation.done` | TL | Assess understanding, launch sprint immediately |
 | `focus.sprint.done` | TL + Experts | TL: assess progress, review results. Experts: review deliverables in their domain |
-| `remark.received` | TL or Expert | LLM reviews remark, decides: act / delegate / acknowledge / escalate |
+| `react.received` | TL or Expert | LLM reviews react, decides: act / delegate / acknowledge / escalate |
 | `task.completed` | TL | Code change detection, restart handling |
 | `agent.escalate` | TL | Expert escalates something beyond their scope |
 | `agent.request` | Any agent | One agent asks another to look into something |
@@ -72,7 +72,7 @@ The TL runs on a configurable schedule (default: full routine at 9am, check-ins 
    ├── Focus area state (all active areas + expert metrics)
    ├── Cortex health (page count, entity count, recent updates)
    ├── Scheduled task results (last 24h)
-   ├── Pending user remarks (feedback from previous notifications)
+   ├── Pending user reacts (feedback from previous notifications)
    └── Self-queued tasks (follow-ups from previous cycles)
 
 2. ASSESS & PRIORITIZE (single LLM call)
@@ -98,7 +98,7 @@ The TL runs on a configurable schedule (default: full routine at 9am, check-ins 
    ├── Track all background tasks (running → completed/failed)
    ├── When ALL tasks done → deliver completion summary
    ├── Check for code changes → auto-rebuild → auto-restart
-   └── Process user remarks from previous notifications
+   └── Process user reacts from previous notifications
 ```
 
 ### Check-In (lightweight, every 6h)
@@ -257,16 +257,16 @@ The TL will only restart the server when:
 
 If the build fails, the TL logs the error and does NOT restart. Changes are left uncommitted for manual review.
 
-## Remark System (Async Feedback Loop)
+## React System (Async Feedback Loop)
 
 Every notification the TL sends includes action buttons for async feedback:
 
 - **Email**: Approve / Defer / Reply buttons
-- **WeChat**: User replies to messages, webhook captures as remarks
+- **WeChat**: User replies to messages, webhook captures as reacts
 - **Web form**: `/r/<notificationId>` standalone page
-- **In-app**: Direct remark submission via API
+- **In-app**: Direct react submission via API
 
-Remarks are gathered in `gatherSignals()` and incorporated into the next assessment. The TL sees what the user thought about previous actions and adjusts accordingly.
+Reacts are gathered in `gatherSignals()` and incorporated into the next assessment. The TL sees what the user thought about previous actions and adjusts accordingly.
 
 ## Configuration
 
@@ -308,8 +308,8 @@ Stored at `~/.enso/data/team-leader-config.json`:
 | `server/src/focus-areas.ts` | Focus area engine: CRUD, evolution, expert tracking, sprint completion |
 | `server/src/focus-context-provider.ts` | Decision-mode + expert persona injection for focus/expert conversations |
 | `server/src/team-generator.ts` | Expert team generation for all focus types |
-| `server/src/remarks.ts` | Async feedback system: email/WeChat/web → queue → TL processes |
-| `src/components/TasksView.tsx` | TL dashboard: actions, briefing, remarks |
+| `server/src/reacts.ts` | Async feedback system: email/WeChat/web → queue → TL processes |
+| `src/components/TasksView.tsx` | TL dashboard: actions, briefing, reacts |
 | `src/components/FocusView.tsx` | Focus detail: 2-tab layout (Focus + Experts), status badges, action cards |
 
 ## Design Principles
@@ -318,5 +318,5 @@ Stored at `~/.enso/data/team-leader-config.json`:
 2. **Act, don't ask.** TL executes everything it can autonomously. Only surfaces items that genuinely need the user's brain.
 3. **One brain.** All knowledge lives in the Cortex. TL reads from and writes to the same wiki the user sees.
 4. **Experts work under TL.** Users chat with experts for opinions. TL manages experts (hire, fire, evaluate).
-5. **Feedback loops compound.** Every remark, every sprint result, every expert evaluation feeds into the next cycle. The organization gets smarter.
+5. **Feedback loops compound.** Every react, every sprint result, every expert evaluation feeds into the next cycle. The organization gets smarter.
 6. **Safety first for code changes.** Build must pass before restart. All sessions must be idle. Failed builds are never deployed.

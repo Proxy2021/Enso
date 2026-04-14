@@ -86,7 +86,7 @@ Setup handles everything interactively: API keys, Claude Code auth, remote acces
 
 ### 🏢 A Living Organization
 
-Enso runs as a **living organization** with a Team Leader agent at the helm. The TL wakes up daily, gathers signals from every system, makes prioritized decisions, staffs expert teams, launches sprints, and delivers briefings. Every notification includes feedback buttons — your remarks feed back into the next assessment cycle. The organization learns and adapts.
+Enso runs as a **living organization** with a Team Leader agent at the helm. The TL wakes up daily, gathers signals from every system, makes prioritized decisions, staffs expert teams, launches sprints, and delivers briefings. Every notification includes feedback buttons — your reacts feed back into the next assessment cycle. The organization learns and adapts.
 
 ### 🧠 One Brain That Compounds
 
@@ -104,7 +104,7 @@ Self-hosted. Open source. Your code, your data, your API keys. During setup, Cla
 | 🎯 Focus Areas | AI-inferred goals with typed focus (project/creative/learning/lifestyle), intent, deeper WHY, evidence |
 | 👥 Expert Teams | 2-4 domain specialists per focus area — direct chat with expert personas, TL-managed lifecycle |
 | 📋 Team Leader | Autonomous agent: daily routines, signal gathering, expert staffing/evaluation, sprint execution, multi-channel briefing |
-| 💬 Remark System | Async feedback via email/WeChat/web — every notification has action buttons that loop back to TL |
+| 💬 React System | Async feedback via email/WeChat/web — every notification has action buttons that loop back to TL |
 | 🔍 Research Engine | 48+ source analysis with structured boards, deep research escalation via Claude Code |
 | 💻 Claude Code | Live terminal coding with model selection (Opus/Sonnet/Haiku), extended thinking |
 | ⚡ Orchestrator | Multi-agent teams with DAG-based task decomposition for complex goals |
@@ -180,7 +180,7 @@ server/                       Backend
     ├── focus-agent.ts        Focus utilities (analyze, pulse, deliver)
     ├── focus-context-provider.ts  Decision-mode + expert persona injection
     ├── team-generator.ts     Expert team generation for all focus types
-    ├── remarks.ts            Async feedback system (email/WeChat/web → TL)
+    ├── reacts.ts             Async feedback system (email/WeChat/web → TL)
     ├── cortex-tools.ts       Knowledge Cortex engine (the ONLY brain)
     ├── cortex-synthesis.ts   Cross-source intelligence
     ├── llm.ts                Unified LLM layer (6 providers)

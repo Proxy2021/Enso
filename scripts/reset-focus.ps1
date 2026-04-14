@@ -10,7 +10,7 @@
 #   .\scripts\reset-focus.ps1 -WhatIf      # Show what would be cleaned without doing it
 
 param(
-    [switch]$All,        # Also clean TL state, remarks, conversations, Cortex sprint pages
+    [switch]$All,        # Also clean TL state, reacts, conversations, Cortex sprint pages
     [switch]$WhatIf      # Dry run — show what would be cleaned
 )
 
@@ -80,10 +80,10 @@ if ($All) {
     }
     Write-Host "  $action TL state" -ForegroundColor Green
 
-    # Remarks
-    $remarksPath = Join-Path $ensoHome "data/remarks.json"
-    if (-not $WhatIf) { "[]" | Set-Content $remarksPath -Encoding UTF8 }
-    Write-Host "  $action remarks" -ForegroundColor Green
+    # Reacts
+    $reactsPath = Join-Path $ensoHome "data/reacts.json"
+    if (-not $WhatIf) { "[]" | Set-Content $reactsPath -Encoding UTF8 }
+    Write-Host "  $action reacts" -ForegroundColor Green
 
     # Notification contexts
     $ctxPath = Join-Path $ensoHome "data/notification-contexts.json"

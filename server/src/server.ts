@@ -2371,31 +2371,33 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   });
 
-  // ── Remarks API ──
+  // ── Reacts API ──
 
   // Quick action from email button (approve/dismiss/defer)
-  app.get("/api/remarks/quick", async (req, res) => {
+  const handleReactsQuick = async (req: any, res: any) => {
     try {
       const { nid, action } = req.query as { nid?: string; action?: string };
       if (!nid || !action) { res.status(400).send("Missing nid or action"); return; }
-      const { getNotificationContext, submitRemark } = await import("./remarks.js");
+      const { getNotificationContext, submitReact } = await import("./reacts.js");
       const context = getNotificationContext(nid);
       if (!context) { res.send("<html><body style='background:#0f172a;color:#f1f5f9;display:flex;justify-content:center;padding:60px;font-family:sans-serif;'><div><h2>Link expired</h2><p>This notification context has expired (7 day limit).</p></div></body></html>"); return; }
-      submitRemark({ channel: "email", context, text: action, action: action as any });
-      res.send(`<html><body style='background:#0f172a;color:#f1f5f9;display:flex;justify-content:center;padding:60px;font-family:sans-serif;'><div style='text-align:center;'><h2 style='color:#10b981;'>✓ ${action === "approve" ? "Approved" : action === "defer" ? "Deferred" : "Noted"}</h2><p style='color:#9ca3af;'>Your response has been recorded. The Team Leader will process it.</p></div></body></html>`);
+      submitReact({ channel: "email", context, text: action, action: action as any });
+      res.send(`<html><body style='background:#0f172a;color:#f1f5f9;display:flex;justify-content:center;padding:60px;font-family:sans-serif;'><div style='text-align:center;'><h2 style='color:#10b981;'>${action === "approve" ? "Approved" : action === "defer" ? "Deferred" : "Noted"}</h2><p style='color:#9ca3af;'>Your response has been recorded. The Team Leader will process it.</p></div></body></html>`);
     } catch (err: any) {
-      res.status(500).send("Error processing remark");
+      res.status(500).send("Error processing react");
     }
-  });
+  };
+  app.get("/api/reacts/quick", handleReactsQuick);
+  app.get("/api/remarks/quick", handleReactsQuick); // backward compat alias
 
   // Web form submission
-  app.post("/api/remarks/web", express.json(), async (req, res) => {
+  const handleReactsWeb = async (req: any, res: any) => {
     try {
       const { notificationId, text } = req.body as { notificationId?: string; text?: string };
       if (!text?.trim()) { res.status(400).json({ error: "Text required" }); return; }
-      const { getNotificationContext, submitRemark } = await import("./remarks.js");
+      const { getNotificationContext, submitReact } = await import("./reacts.js");
       const context = getNotificationContext(notificationId || "");
-      submitRemark({
+      submitReact({
         channel: "web",
         context: context || { type: "briefing", notificationId: notificationId || "unknown", summary: "Web form submission", sentAt: new Date().toISOString() },
         text: text.trim(),
@@ -2403,47 +2405,53 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       });
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to submit remark" });
+      res.status(500).json({ error: err?.message || "Failed to submit react" });
     }
-  });
+  };
+  app.post("/api/reacts/web", express.json(), handleReactsWeb);
+  app.post("/api/remarks/web", express.json(), handleReactsWeb); // backward compat alias
 
-  // In-app remark submission
-  app.post("/api/remarks", express.json(), async (req, res) => {
+  // In-app react submission
+  const handleReactsInApp = async (req: any, res: any) => {
     try {
       const { notificationId, text, action } = req.body as { notificationId?: string; text?: string; action?: string };
       if (!text?.trim() && !action) { res.status(400).json({ error: "Text or action required" }); return; }
-      const { getNotificationContext, submitRemark } = await import("./remarks.js");
+      const { getNotificationContext, submitReact } = await import("./reacts.js");
       const context = getNotificationContext(notificationId || "");
-      const remark = submitRemark({
+      const react = submitReact({
         channel: "in-app",
-        context: context || { type: "briefing", notificationId: notificationId || "unknown", summary: "In-app remark", sentAt: new Date().toISOString() },
+        context: context || { type: "briefing", notificationId: notificationId || "unknown", summary: "In-app react", sentAt: new Date().toISOString() },
         text: text?.trim() || action || "",
         action: action as any,
       });
-      res.json({ success: true, remark });
+      res.json({ success: true, react });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to submit remark" });
+      res.status(500).json({ error: err?.message || "Failed to submit react" });
     }
-  });
+  };
+  app.post("/api/reacts", express.json(), handleReactsInApp);
+  app.post("/api/remarks", express.json(), handleReactsInApp); // backward compat alias
 
-  // List remarks (for dashboard)
-  app.get("/api/remarks", async (req, res) => {
+  // List reacts (for dashboard)
+  const handleReactsList = async (req: any, res: any) => {
     try {
-      const { getAllRemarks, getPendingRemarks } = await import("./remarks.js");
+      const { getAllReacts, getPendingReacts } = await import("./reacts.js");
       const pending = (req.query.pending === "true");
-      res.json({ remarks: pending ? getPendingRemarks() : getAllRemarks(50) });
+      res.json({ reacts: pending ? getPendingReacts() : getAllReacts(50) });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load remarks" });
+      res.status(500).json({ error: err?.message || "Failed to load reacts" });
     }
-  });
+  };
+  app.get("/api/reacts", handleReactsList);
+  app.get("/api/remarks", handleReactsList); // backward compat alias
 
-  // Remark web form page (/r/<notificationId>)
+  // React web form page (/r/<notificationId>)
   app.get("/r/:notificationId", async (req, res) => {
     try {
-      const { buildRemarkPage } = await import("./remarks.js");
-      res.type("html").send(buildRemarkPage(req.params.notificationId));
+      const { buildReactPage } = await import("./reacts.js");
+      res.type("html").send(buildReactPage(req.params.notificationId));
     } catch (err: any) {
-      res.status(500).send("Error loading remark form");
+      res.status(500).send("Error loading react form");
     }
   });
 

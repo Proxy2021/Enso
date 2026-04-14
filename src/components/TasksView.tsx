@@ -168,10 +168,10 @@ export default function TasksView() {
   // Team Leader state
   const [tlBriefing, setTlBriefing] = useState<{ headline: string; timestamp: string; sections: Array<{ emoji: string; title: string; items: string[] }>; proposedActions: Array<{ id: string; priority: string; type: string; title: string; reasoning: string; delegation: string; estimatedEffort: string; autoExecute: boolean; needsUserInput?: boolean; status: string }> } | null>(null);
   const [tlState, setTlState] = useState<{ lastMorningRoutineAt: string | null; lastCheckInAt: string | null } | null>(null);
-  const [tlRemarks, setTlRemarks] = useState<Array<{ id: string; channel: string; text: string; timestamp: string; processed: boolean; resolution?: string; context: { summary: string } }>>([]);
-  const [tlTab, setTlTab] = useState<"briefing" | "actions" | "remarks">("actions");
+  const [tlReacts, setTlReacts] = useState<Array<{ id: string; channel: string; text: string; timestamp: string; processed: boolean; resolution?: string; context: { summary: string } }>>([]);
+  const [tlTab, setTlTab] = useState<"briefing" | "actions" | "reacts">("actions");
   const [tlRunning, setTlRunning] = useState(false);
-  const [remarkInput, setRemarkInput] = useState<{ actionId: string; text: string } | null>(null);
+  const [reactInput, setReactInput] = useState<{ actionId: string; text: string } | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -199,10 +199,10 @@ export default function TasksView() {
     try {
       const baseUrl = getBackendBaseUrl();
       const headers = authHeaders();
-      const [stateRes, briefingRes, remarksRes, focusRes] = await Promise.all([
+      const [stateRes, briefingRes, reactsRes, focusRes] = await Promise.all([
         fetch(`${baseUrl}/api/team-leader/state`, { headers }).catch(() => null),
         fetch(`${baseUrl}/api/team-leader/briefing`, { headers }).catch(() => null),
-        fetch(`${baseUrl}/api/remarks`, { headers }).catch(() => null),
+        fetch(`${baseUrl}/api/reacts`, { headers }).catch(() => null),
         fetch(`${baseUrl}/api/focus-areas`, { headers }).catch(() => null),
       ]);
       if (stateRes?.ok) setTlState(await stateRes.json());
@@ -210,9 +210,9 @@ export default function TasksView() {
         const b = await briefingRes.json();
         if (b.headline) setTlBriefing(b);
       }
-      if (remarksRes?.ok) {
-        const r = await remarksRes.json();
-        setTlRemarks(r.remarks || []);
+      if (reactsRes?.ok) {
+        const r = await reactsRes.json();
+        setTlReacts(r.reacts || []);
       }
       if (focusRes?.ok) {
         const f = await focusRes.json();
@@ -355,13 +355,13 @@ export default function TasksView() {
 
           {/* TL Tabs */}
           <div className="flex border-b border-gray-800/40">
-            {(["actions", "briefing", "remarks"] as const).map(tab => (
+            {(["actions", "briefing", "reacts"] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setTlTab(tab)}
                 className={`flex-1 py-2 text-[11px] font-medium transition-colors ${tlTab === tab ? "text-violet-300 border-b-2 border-violet-500" : "text-gray-500 hover:text-gray-300"}`}
               >
-                {tab === "actions" ? "Activity" : tab === "briefing" ? "Briefing" : `Remarks (${tlRemarks.length})`}
+                {tab === "actions" ? "Activity" : tab === "briefing" ? "Briefing" : `Reacts (${tlReacts.length})`}
               </button>
             ))}
           </div>
@@ -397,13 +397,13 @@ export default function TasksView() {
             </div>
           )}
 
-          {/* TL Remarks Tab */}
-          {tlTab === "remarks" && (
+          {/* TL Reacts Tab */}
+          {tlTab === "reacts" && (
             <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto">
-              {tlRemarks.length === 0 ? (
-                <p className="text-gray-500 text-xs text-center py-4">No remarks yet. Use 💬 on actions to send feedback.</p>
+              {tlReacts.length === 0 ? (
+                <p className="text-gray-500 text-xs text-center py-4">No reacts yet. Use the react button on actions to send feedback.</p>
               ) : (
-                tlRemarks.map(r => (
+                tlReacts.map(r => (
                   <div key={r.id} className="rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400 border border-gray-700/40">{r.channel}</span>

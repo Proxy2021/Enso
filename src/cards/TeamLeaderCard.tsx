@@ -43,7 +43,7 @@ interface TLState {
   recentActions: TeamLeaderAction[];
 }
 
-interface Remark {
+interface React {
   id: string;
   channel: string;
   text: string;
@@ -123,26 +123,26 @@ function timeAgo(iso: string): string {
 export default function TeamLeaderCard({ card }: CardRendererProps) {
   const [state, setState] = useState<TLState | null>(null);
   const [config, setConfig] = useState<TLConfig | null>(null);
-  const [remarks, setRemarks] = useState<Remark[]>([]);
+  const [reacts, setReacts] = useState<React[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  const [remarkInput, setRemarkInput] = useState<{ actionId: string; text: string } | null>(null);
-  const [tab, setTab] = useState<"briefing" | "actions" | "remarks">("briefing");
+  const [reactInput, setReactInput] = useState<{ actionId: string; text: string } | null>(null);
+  const [tab, setTab] = useState<"briefing" | "actions" | "reacts">("briefing");
 
   const baseUrl = getBackendBaseUrl();
 
   const fetchAll = useCallback(async () => {
     try {
-      const [stateRes, configRes, remarksRes] = await Promise.all([
+      const [stateRes, configRes, reactsRes] = await Promise.all([
         fetch(`${baseUrl}/api/team-leader/state`, { headers: authHeaders() }),
         fetch(`${baseUrl}/api/team-leader/config`, { headers: authHeaders() }),
-        fetch(`${baseUrl}/api/remarks?pending=false`, { headers: authHeaders() }),
+        fetch(`${baseUrl}/api/reacts?pending=false`, { headers: authHeaders() }),
       ]);
       if (stateRes.ok) setState(await stateRes.json());
       if (configRes.ok) setConfig(await configRes.json());
-      if (remarksRes.ok) {
-        const data = await remarksRes.json();
-        setRemarks(data.remarks || []);
+      if (reactsRes.ok) {
+        const data = await reactsRes.json();
+        setReacts(data.reacts || []);
       }
       setError(null);
     } catch (err) {
@@ -171,9 +171,9 @@ export default function TeamLeaderCard({ card }: CardRendererProps) {
     }
   };
 
-  const submitRemark = async (actionTitle: string, text: string) => {
+  const submitReact = async (actionTitle: string, text: string) => {
     try {
-      await fetch(`${baseUrl}/api/remarks`, {
+      await fetch(`${baseUrl}/api/reacts`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -181,7 +181,7 @@ export default function TeamLeaderCard({ card }: CardRendererProps) {
           action: "custom",
         }),
       });
-      setRemarkInput(null);
+      setReactInput(null);
       await fetchAll();
     } catch { /* best effort */ }
   };
@@ -232,13 +232,13 @@ export default function TeamLeaderCard({ card }: CardRendererProps) {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-800/40">
-        {(["briefing", "actions", "remarks"] as const).map(t => (
+        {(["briefing", "actions", "reacts"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === t ? "text-violet-300 border-b-2 border-violet-500" : "text-gray-500 hover:text-gray-300"}`}
           >
-            {t === "briefing" ? `Briefing${briefing ? "" : " (none)"}` : t === "actions" ? `Actions (${allActions.length})` : `Remarks (${remarks.length})`}
+            {t === "briefing" ? `Briefing${briefing ? "" : " (none)"}` : t === "actions" ? `Actions (${allActions.length})` : `Reacts (${reacts.length})`}
           </button>
         ))}
       </div>
@@ -298,30 +298,30 @@ export default function TeamLeaderCard({ card }: CardRendererProps) {
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">{action.reasoning}</p>
                   </div>
-                  {/* Remark button */}
+                  {/* React button */}
                   <button
-                    onClick={() => setRemarkInput(remarkInput?.actionId === action.id ? null : { actionId: action.id, text: "" })}
+                    onClick={() => setReactInput(reactInput?.actionId === action.id ? null : { actionId: action.id, text: "" })}
                     className="text-[10px] px-2 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/20 shrink-0"
-                    title="Add a remark about this action"
+                    title="Add a react about this action"
                   >
                     💬
                   </button>
                 </div>
-                {/* Inline remark input */}
-                {remarkInput?.actionId === action.id && (
+                {/* Inline react input */}
+                {reactInput?.actionId === action.id && (
                   <div className="mt-2 flex gap-2">
                     <input
                       type="text"
-                      value={remarkInput.text}
-                      onChange={e => setRemarkInput({ ...remarkInput, text: e.target.value })}
-                      placeholder="Your remark or instruction..."
+                      value={reactInput.text}
+                      onChange={e => setReactInput({ ...reactInput, text: e.target.value })}
+                      placeholder="Your react or instruction..."
                       className="flex-1 text-xs bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500"
                       autoFocus
-                      onKeyDown={e => { if (e.key === "Enter" && remarkInput.text.trim()) submitRemark(action.title, remarkInput.text); }}
+                      onKeyDown={e => { if (e.key === "Enter" && reactInput.text.trim()) submitReact(action.title, reactInput.text); }}
                     />
                     <button
-                      onClick={() => remarkInput.text.trim() && submitRemark(action.title, remarkInput.text)}
-                      disabled={!remarkInput.text.trim()}
+                      onClick={() => reactInput.text.trim() && submitReact(action.title, reactInput.text)}
+                      disabled={!reactInput.text.trim()}
                       className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-30"
                     >
                       Send
@@ -334,13 +334,13 @@ export default function TeamLeaderCard({ card }: CardRendererProps) {
         </div>
       )}
 
-      {/* Remarks Tab */}
-      {tab === "remarks" && (
+      {/* Reacts Tab */}
+      {tab === "reacts" && (
         <div className="p-4 space-y-2">
-          {remarks.length === 0 ? (
-            <p className="text-gray-500 text-xs text-center py-6">No remarks yet. Use the 💬 button on any action to send feedback.</p>
+          {reacts.length === 0 ? (
+            <p className="text-gray-500 text-xs text-center py-6">No reacts yet. Use the react button on any action to send feedback.</p>
           ) : (
-            remarks.map(r => (
+            reacts.map(r => (
               <div key={r.id} className="rounded-lg border border-gray-800/30 bg-gray-900/20 p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400 border border-gray-700/40">{r.channel}</span>

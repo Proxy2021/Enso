@@ -209,20 +209,20 @@ Rules: Use EXACT focusId/title. Be specific not generic. Order by urgency.`,
     </td></tr>`;
   }).join("\n");
 
-  let remarkHtml = "";
+  let reactHtml = "";
   try {
-    const { registerNotification, emailRemarkActions } = await import("./remarks.js");
+    const { registerNotification, emailReactActions } = await import("./reacts.js");
     const nId = registerNotification({ type: "pulse", summary: parsed.headline }, { isEmail: true });
-    remarkHtml = emailRemarkActions(nId, getEnsoUrl());
+    reactHtml = emailReactActions(nId, getEnsoUrl());
   } catch { /* non-critical */ }
 
   const htmlSummary = `<div style="max-width:600px;margin:0 auto;background:#111827;border-radius:12px;overflow:hidden;font-family:-apple-system,sans-serif;color:#f9fafb;">
     <div style="background:linear-gradient(135deg,#4c1d95,#7c3aed);padding:20px 24px;">
-      <h2 style="margin:0;font-size:18px;color:#fff;">📊 Focus Pulse</h2>
+      <h2 style="margin:0;font-size:18px;color:#fff;">Focus Pulse</h2>
       <p style="margin:4px 0 0;font-size:14px;color:#c4b5fd;">${parsed.headline}</p>
     </div>
     <table style="width:100%;border-collapse:collapse;">${htmlItems}</table>
-    <div style="padding:16px 24px;">${remarkHtml}</div>
+    <div style="padding:16px 24px;">${reactHtml}</div>
     <div style="padding:8px 24px 16px;text-align:center;border-top:1px solid #1f2937;">
       <a href="${getEnsoUrl()}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">Open Enso →</a>
     </div>
@@ -252,12 +252,12 @@ export async function deliverSprintResults(
     `Next steps:`, ...summary.nextSteps.map(s => `  • ${s}`),
   ].join("\n");
 
-  // Remark actions
-  let remarkHtml = "";
+  // React actions
+  let reactHtml = "";
   try {
-    const { registerNotification, emailRemarkActions } = await import("./remarks.js");
+    const { registerNotification, emailReactActions } = await import("./reacts.js");
     const nId = registerNotification({ type: "sprint-complete", summary: `Sprint: ${focusTitle}`, focusId }, { isEmail: true });
-    remarkHtml = emailRemarkActions(nId, getEnsoUrl());
+    reactHtml = emailReactActions(nId, getEnsoUrl());
   } catch { /* non-critical */ }
 
   const deliverableCards = summary.deliverables.map((d, i) => {
@@ -284,7 +284,7 @@ export async function deliverSprintResults(
       <h3 style="font-size:13px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin:20px 0 8px;">Next Steps</h3>
       <ul style="margin:0;padding-left:20px;color:#d1d5db;font-size:14px;">${summary.nextSteps.map(s => `<li style="margin-bottom:4px;">${s}</li>`).join("\n")}</ul>
     </div>
-    <div style="padding:16px 24px;">${remarkHtml}</div>
+    <div style="padding:16px 24px;">${reactHtml}</div>
     <div style="padding:8px 24px 16px;text-align:center;border-top:1px solid #1f2937;">
       <a href="${getEnsoUrl()}" style="display:inline-block;background:#10b981;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">Open in Enso →</a>
     </div>

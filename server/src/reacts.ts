@@ -1,15 +1,15 @@
 /**
- * Remark System — Async feedback loop between Enso and user.
+ * React System — Async feedback loop between Enso and user.
  *
- * Every notification Enso sends (email, WeChat, in-app) includes remark actions.
+ * Every notification Enso sends (email, WeChat, in-app) includes react actions.
  * Users can respond through any channel:
  *   - WeChat: Reply to the message → webhook captures it
- *   - Email: Click action buttons → hits /api/remark endpoint
+ *   - Email: Click action buttons → hits /api/reacts endpoint
  *   - Web: Visit /r/<id> → simple form submission
- *   - In-app: Remark button on notification cards
+ *   - In-app: React button on notification cards
  *
- * Remarks are queued and processed by the Team Leader on next check-in.
- * The TL decides if a remark warrants a new task, priority change, or response.
+ * Reacts are queued and processed by the Team Leader on next check-in.
+ * The TL decides if a react warrants a new task, priority change, or response.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -35,30 +35,32 @@ export interface NotificationContext {
   sentAt: string;
 }
 
-export interface Remark {
+export interface React {
   id: string;
   /** How the user responded */
   channel: "wechat" | "email" | "web" | "in-app";
   /** The notification this is a response to */
   context: NotificationContext;
-  /** User's remark text */
+  /** User's react text */
   text: string;
   /** Quick action the user took (if any) */
   action?: "approve" | "dismiss" | "defer" | "custom";
-  /** When the remark was received */
+  /** When the react was received */
   timestamp: string;
   /** Has the Team Leader processed this? */
   processed: boolean;
   processedAt?: string;
   /** What the TL decided to do with it */
   resolution?: string;
-  /** Task ID created from this remark (if any) */
+  /** Task ID created from this react (if any) */
   resultingTaskId?: string;
 }
 
 // ── Storage ──
 
-const REMARKS_PATH = join(homedir(), ".enso", "data", "remarks.json");
+const REACTS_PATH = join(homedir(), ".enso", "data", "reacts.json");
+// Backward compat: read from old file if new one doesn't exist yet
+const LEGACY_REACTS_PATH = join(homedir(), ".enso", "data", "remarks.json");
 const NOTIFICATION_CONTEXT_PATH = join(homedir(), ".enso", "data", "notification-contexts.json");
 
 // Notification context registry — maps notificationId → context
@@ -93,19 +95,21 @@ function saveContextRegistry(reg: ContextRegistry): void {
   writeFileSync(NOTIFICATION_CONTEXT_PATH, JSON.stringify(reg, null, 2), "utf-8");
 }
 
-export function loadRemarks(): Remark[] {
+export function loadReacts(): React[] {
   try {
-    if (existsSync(REMARKS_PATH)) return JSON.parse(readFileSync(REMARKS_PATH, "utf-8")) as Remark[];
+    if (existsSync(REACTS_PATH)) return JSON.parse(readFileSync(REACTS_PATH, "utf-8")) as React[];
+    // Backward compat: read from old remarks.json if reacts.json doesn't exist
+    if (existsSync(LEGACY_REACTS_PATH)) return JSON.parse(readFileSync(LEGACY_REACTS_PATH, "utf-8")) as React[];
   } catch { /* fresh */ }
   return [];
 }
 
-function saveRemarks(remarks: Remark[]): void {
-  const dir = dirname(REMARKS_PATH);
+function saveReacts(reacts: React[]): void {
+  const dir = dirname(REACTS_PATH);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  // Keep last 200 remarks
-  const trimmed = remarks.slice(-200);
-  writeFileSync(REMARKS_PATH, JSON.stringify(trimmed, null, 2), "utf-8");
+  // Keep last 200 reacts
+  const trimmed = reacts.slice(-200);
+  writeFileSync(REACTS_PATH, JSON.stringify(trimmed, null, 2), "utf-8");
 }
 
 // ── Register Notification Context ──
@@ -157,18 +161,18 @@ export function getLastWechatNotification(openId: string): NotificationContext |
   return reg.contexts[nId] ?? null;
 }
 
-// ── Submit Remarks ──
+// ── Submit Reacts ──
 
 /**
- * Submit a remark from any channel. Queued for Team Leader processing.
+ * Submit a react from any channel. Queued for Team Leader processing.
  */
-export function submitRemark(params: {
-  channel: Remark["channel"];
+export function submitReact(params: {
+  channel: React["channel"];
   context: NotificationContext;
   text: string;
-  action?: Remark["action"];
-}): Remark {
-  const remark: Remark = {
+  action?: React["action"];
+}): React {
+  const react: React = {
     id: randomUUID(),
     channel: params.channel,
     context: params.context,
@@ -178,36 +182,36 @@ export function submitRemark(params: {
     processed: false,
   };
 
-  const remarks = loadRemarks();
-  remarks.push(remark);
-  saveRemarks(remarks);
+  const reacts = loadReacts();
+  reacts.push(react);
+  saveReacts(reacts);
 
   logAction({
-    ts: Date.now(), type: "action", category: "remarks",
-    message: `Remark received via ${params.channel}: "${params.text.slice(0, 80)}" (re: ${params.context.type}/${params.context.summary.slice(0, 40)})`,
+    ts: Date.now(), type: "action", category: "reacts",
+    message: `React received via ${params.channel}: "${params.text.slice(0, 80)}" (re: ${params.context.type}/${params.context.summary.slice(0, 40)})`,
   });
 
-  // Fire agent event — TL processes the remark immediately.
+  // Fire agent event — TL processes the react immediately.
   // TL may decide to delegate to an expert based on context.
   import("./team-leader.js").then(({ processEvent, createEvent }) => {
-    processEvent(createEvent("remark.received", { agent: "tl" }, {
-      remarkId: remark.id,
+    processEvent(createEvent("react.received", { agent: "tl" }, {
+      reactId: react.id,
       focusId: params.context.focusId,
       contextType: params.context.type,
     }, "user"));
   }).catch(() => {});
 
-  return remark;
+  return react;
 }
 
 /**
- * Submit a remark from a WeChat reply — auto-associates with last notification.
+ * Submit a react from a WeChat reply — auto-associates with last notification.
  */
-export function submitWechatRemark(openId: string, text: string): Remark | null {
+export function submitWechatReact(openId: string, text: string): React | null {
   const context = getLastWechatNotification(openId);
   if (!context) {
     // No recent notification to associate with — store as general feedback
-    return submitRemark({
+    return submitReact({
       channel: "wechat",
       context: {
         type: "briefing",
@@ -220,7 +224,7 @@ export function submitWechatRemark(openId: string, text: string): Remark | null 
     });
   }
 
-  return submitRemark({
+  return submitReact({
     channel: "wechat",
     context,
     text,
@@ -228,40 +232,40 @@ export function submitWechatRemark(openId: string, text: string): Remark | null 
   });
 }
 
-// ── Read & Process Remarks ──
+// ── Read & Process Reacts ──
 
 /**
- * Get all unprocessed remarks (for Team Leader consumption).
+ * Get all unprocessed reacts (for Team Leader consumption).
  */
-export function getPendingRemarks(): Remark[] {
-  return loadRemarks().filter(r => !r.processed);
+export function getPendingReacts(): React[] {
+  return loadReacts().filter(r => !r.processed);
 }
 
 /**
- * Get all remarks (for dashboard/history).
+ * Get all reacts (for dashboard/history).
  */
-export function getAllRemarks(limit = 50): Remark[] {
-  return loadRemarks().slice(-limit).reverse();
+export function getAllReacts(limit = 50): React[] {
+  return loadReacts().slice(-limit).reverse();
 }
 
 /**
- * Mark a remark as processed by the Team Leader.
+ * Mark a react as processed by the Team Leader.
  */
-export function resolveRemark(remarkId: string, resolution: string, taskId?: string): boolean {
-  const remarks = loadRemarks();
-  const remark = remarks.find(r => r.id === remarkId);
-  if (!remark) return false;
+export function resolveReact(reactId: string, resolution: string, taskId?: string): boolean {
+  const reacts = loadReacts();
+  const react = reacts.find(r => r.id === reactId);
+  if (!react) return false;
 
-  remark.processed = true;
-  remark.processedAt = new Date().toISOString();
-  remark.resolution = resolution;
-  if (taskId) remark.resultingTaskId = taskId;
+  react.processed = true;
+  react.processedAt = new Date().toISOString();
+  react.resolution = resolution;
+  if (taskId) react.resultingTaskId = taskId;
 
-  saveRemarks(remarks);
+  saveReacts(reacts);
 
   logAction({
-    ts: Date.now(), type: "action", category: "remarks",
-    message: `Remark resolved: "${remark.text.slice(0, 40)}" → ${resolution.slice(0, 60)}${taskId ? ` (task: ${taskId})` : ""}`,
+    ts: Date.now(), type: "action", category: "reacts",
+    message: `React resolved: "${react.text.slice(0, 40)}" → ${resolution.slice(0, 60)}${taskId ? ` (task: ${taskId})` : ""}`,
   });
 
   return true;
@@ -270,20 +274,20 @@ export function resolveRemark(remarkId: string, resolution: string, taskId?: str
 // ── Notification Template Helpers ──
 
 /**
- * Generate remark action buttons/links for email notifications.
+ * Generate react action buttons/links for email notifications.
  * Returns HTML string with quick-action buttons.
  */
-export function emailRemarkActions(notificationId: string, baseUrl: string): string {
+export function emailReactActions(notificationId: string, baseUrl: string): string {
   const actions = [
-    { label: "👍 Approve", action: "approve", color: "#10b981" },
-    { label: "⏸ Defer", action: "defer", color: "#6b7280" },
-    { label: "💬 Reply", action: "remark", color: "#7c3aed" },
+    { label: "Approve", action: "approve", color: "#10b981" },
+    { label: "Defer", action: "defer", color: "#6b7280" },
+    { label: "Reply", action: "react", color: "#7c3aed" },
   ];
 
   const buttons = actions.map(a => {
-    const url = a.action === "remark"
+    const url = a.action === "react"
       ? `${baseUrl}/r/${notificationId}`
-      : `${baseUrl}/api/remarks/quick?nid=${notificationId}&action=${a.action}`;
+      : `${baseUrl}/api/reacts/quick?nid=${notificationId}&action=${a.action}`;
     return `<a href="${url}" style="display:inline-block;background:${a.color};color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;margin-right:8px;">${a.label}</a>`;
   }).join("");
 
@@ -294,17 +298,17 @@ export function emailRemarkActions(notificationId: string, baseUrl: string): str
 }
 
 /**
- * Generate remark prompt for WeChat messages.
+ * Generate react prompt for WeChat messages.
  * Appended to the end of WeChat notifications.
  */
-export function wechatRemarkPrompt(): string {
-  return "\n\n💬 Reply to this message with any thoughts or instructions.";
+export function wechatReactPrompt(): string {
+  return "\n\n Reply to this message with any thoughts or instructions.";
 }
 
 /**
- * Build the HTML for the /r/<notificationId> remark web form.
+ * Build the HTML for the /r/<notificationId> react web form.
  */
-export function buildRemarkPage(notificationId: string): string {
+export function buildReactPage(notificationId: string): string {
   const context = getNotificationContext(notificationId);
   const contextInfo = context
     ? `<p style="color:#9ca3af;font-size:14px;margin:8px 0 20px;">Re: ${context.type} — ${context.summary}</p>`
@@ -313,7 +317,7 @@ export function buildRemarkPage(notificationId: string): string {
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Enso — Your Remark</title>
+<title>Enso — Your React</title>
 <style>
   body { background:#0f172a; color:#f1f5f9; font-family:-apple-system,sans-serif; display:flex; justify-content:center; padding:40px 20px; margin:0; }
   .card { max-width:500px; width:100%; background:#1e293b; border-radius:12px; padding:32px; }
@@ -327,9 +331,9 @@ export function buildRemarkPage(notificationId: string): string {
 </style>
 </head><body>
 <div class="card">
-  <h1>💬 Your Remark</h1>
+  <h1>Your React</h1>
   ${contextInfo}
-  <form id="form" method="POST" action="/api/remarks/web">
+  <form id="form" method="POST" action="/api/reacts/web">
     <input type="hidden" name="notificationId" value="${notificationId}">
     <textarea name="text" placeholder="Share your thoughts, instructions, or feedback..." autofocus></textarea>
     <button type="submit">Send to Enso</button>
@@ -342,13 +346,13 @@ document.getElementById('form').addEventListener('submit', async function(e) {
   const body = { notificationId: fd.get('notificationId'), text: fd.get('text') };
   if (!body.text?.trim()) return;
   try {
-    const res = await fetch('/api/remarks/web', {
+    const res = await fetch('/api/reacts/web', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (res.ok) {
-      document.querySelector('.card').innerHTML = '<div class="success"><h2>✓ Received</h2><p style="color:#9ca3af;">Your remark has been queued. The Team Leader will process it on the next check-in.</p></div>';
+      document.querySelector('.card').innerHTML = '<div class="success"><h2>Received</h2><p style="color:#9ca3af;">Your react has been queued. The Team Leader will process it on the next check-in.</p></div>';
     }
   } catch(err) { alert('Failed to send. Please try again.'); }
 });

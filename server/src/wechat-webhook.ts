@@ -97,15 +97,15 @@ wechatRoutes.post("/", async (req, res) => {
     message: `Received ${msgType} message from ${fromUser}${content ? `: ${content.slice(0, 50)}` : ""}`,
   });
 
-  // Check if this is a remark (reply to a notification) or a fresh interaction
+  // Check if this is a react (reply to a notification) or a fresh interaction
   if (msgType === "text" && content.trim()) {
     try {
-      const { submitWechatRemark } = await import("./remarks.js");
-      const remark = submitWechatRemark(fromUser, content.trim());
-      if (remark) {
-        // Reply acknowledging the remark
+      const { submitWechatReact } = await import("./reacts.js");
+      const react = submitWechatReact(fromUser, content.trim());
+      if (react) {
+        // Reply acknowledging the react
         const timestamp = Math.floor(Date.now() / 1000);
-        const ackContent = `Received your remark. The Team Leader will process it shortly.`;
+        const ackContent = `Received your react. The Team Leader will process it shortly.`;
         const reply = `<xml>
 <ToUserName><![CDATA[${fromUser}]]></ToUserName>
 <FromUserName><![CDATA[${toUser}]]></FromUserName>
@@ -117,11 +117,11 @@ wechatRoutes.post("/", async (req, res) => {
         return;
       }
     } catch {
-      // Remark system not available — fall through to default reply
+      // React system not available — fall through to default reply
     }
   }
 
-  // Default reply for non-text messages or when remark system unavailable
+  // Default reply for non-text messages or when react system unavailable
   const timestamp = Math.floor(Date.now() / 1000);
   const replyContent = "Enso AI connected. Your 48-hour messaging window is now active.";
 

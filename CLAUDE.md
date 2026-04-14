@@ -101,10 +101,10 @@ server/                       # Enso server (the backend)
     ├── *-tools.ts            # System app implementations (filesystem, workspace, media, screen, travel, meal)
     ├── team-leader.ts        # Team Leader agent — the living organization (gather → assess → execute → brief → deliver)
     ├── focus-agent.ts        # Focus utilities — analyzeFocusAreas, generateProgressPulse, deliverSprintResults
-    ├── remarks.ts            # Async remark system — email/WeChat/web feedback → queue → TL processes
+    ├── reacts.ts             # Async react system — email/WeChat/web feedback → queue → TL processes
     ├── wechat.ts             # WeChat Official Account API (token mgmt, customer service msgs, mass send, followers)
     ├── wechat-tools.ts       # WeChat tools (enso_wechat_send, enso_wechat_followers)
-    ├── wechat-webhook.ts     # WeChat webhook (server verification + message receiving + remark capture)
+    ├── wechat-webhook.ts     # WeChat webhook (server verification + message receiving + react capture)
     ├── app-catalog.ts          # APP_CATALOG definitions (system + app entries)
     ├── tunnel-registry.ts    # Cloudflare tunnel provisioning for <name>.enso.net
     └── native-tools/         # App action bridge
@@ -402,11 +402,11 @@ Enso runs as a **living organization** with a single Team Leader (TL) agent that
 **The TL's north star:** "Make this user's life better, every single day." Whether that means delivering a focus pulse, fixing a platform bug, launching an evolution sprint, or restructuring an expert team — the TL handles it all.
 
 **Morning routine** (configurable, default 9am daily):
-1. **Gather signals** — Action log errors, focus area state, Cortex health, scheduled task results, user remarks, platform metrics. Zero LLM cost.
+1. **Gather signals** — Action log errors, focus area state, Cortex health, scheduled task results, user reacts, platform metrics. Zero LLM cost.
 2. **Assess & prioritize** — Single LLM call sees ALL signals, produces 3-7 prioritized actions with reasoning. Each action has: priority (critical→low), type (user-task/platform-fix/platform-feature/maintenance), delegation target, effort estimate.
 3. **Execute** — Auto-executes low-effort actions (≤5min by default). Proposes high-effort actions for user approval. Delegates to: focus utilities, Cortex enrichment, orchestration sprints.
-4. **Brief the user** — One unified daily briefing delivered via email + WeChat + in-app. Replaces 8+ separate notification emails. Every notification includes remark action buttons.
-5. **Process remarks** — User feedback from previous notifications is incorporated into the assessment.
+4. **Brief the user** — One unified daily briefing delivered via email + WeChat + in-app. Replaces 8+ separate notification emails. Every notification includes react action buttons.
+5. **Process reacts** — User feedback from previous notifications is incorporated into the assessment.
 
 **Configuration** (`~/.enso/data/team-leader-config.json`):
 - `schedule.morningRoutine` — cron for full routine (default: `"0 9 * * *"`)
@@ -417,25 +417,25 @@ Enso runs as a **living organization** with a single Team Leader (TL) agent that
 
 **REST API**: `GET/PATCH /api/team-leader/config`, `POST /api/team-leader/morning`, `POST /api/team-leader/checkin`, `GET /api/team-leader/briefing`, `GET /api/team-leader/state`
 
-**Dashboard** (`/dashboard` command): `TeamLeaderCard.tsx` renders three tabs — Briefing (sections with items), Actions (each with priority/reasoning/delegation + 💬 remark button), Remarks (history with resolution status).
+**Dashboard** (`/dashboard` command): `TeamLeaderCard.tsx` renders three tabs — Briefing (sections with items), Actions (each with priority/reasoning/delegation + react button), Reacts (history with resolution status).
 
-- Key files: `team-leader.ts` (core agent), `focus-agent.ts` (focus utilities), `remarks.ts` (feedback loop), `TeamLeaderCard.tsx` (dashboard)
+- Key files: `team-leader.ts` (core agent), `focus-agent.ts` (focus utilities), `reacts.ts` (feedback loop), `TeamLeaderCard.tsx` (dashboard)
 
-### Remark System (Async Feedback Loop)
+### React System (Async Feedback Loop)
 
-Every notification Enso sends includes **remark actions** — clickable buttons that let the user respond asynchronously without opening the app. Remarks feed back to the Team Leader for processing.
+Every notification Enso sends includes **react actions** — clickable buttons that let the user respond asynchronously without opening the app. Reacts feed back to the Team Leader for processing.
 
 **Channels:**
-- **Email**: 👍 Approve / ⏸ Defer / 💬 Reply buttons. Approve/Defer hit `GET /api/remarks/quick?nid=<id>&action=approve`. Reply opens `/r/<id>` web form.
+- **Email**: Approve / Defer / Reply buttons. Approve/Defer hit `GET /api/reacts/quick?nid=<id>&action=approve`. Reply opens `/r/<id>` web form.
 - **WeChat**: User replies to messages → webhook captures with notification context association.
 - **Web form**: `/r/<notificationId>` — standalone HTML page with text input, no auth required.
-- **In-app**: `POST /api/remarks` with notificationId + text.
+- **In-app**: `POST /api/reacts` with notificationId + text.
 
-**Processing:** TL reads pending remarks in `gatherSignals()`, incorporates into LLM assessment (user remarks appear as signals alongside errors and focus state), marks as processed after the routine.
+**Processing:** TL reads pending reacts in `gatherSignals()`, incorporates into LLM assessment (user reacts appear as signals alongside errors and focus state), marks as processed after the routine.
 
 **Notification context tracking:** `registerNotification()` stores context for each sent notification. `getLastWechatNotification()` associates WeChat replies with the most recent notification. Contexts auto-expire after 7 days.
 
-- Key files: `remarks.ts` (system), `wechat-webhook.ts` (WeChat capture), `server.ts` (API routes + `/r/<id>` page)
+- Key files: `reacts.ts` (system), `wechat-webhook.ts` (WeChat capture), `server.ts` (API routes + `/r/<id>` page)
 
 ### Focus Areas (AI-Inferred Goals)
 
