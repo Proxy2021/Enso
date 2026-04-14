@@ -3903,6 +3903,11 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
         await registerFocusProviders();
         runtime.log?.("[enso] focus area conversation providers registered");
 
+        // Clean up stale TL task statuses from before restart
+        import("./team-leader.js").then(({ cleanupStaleTasksOnStartup }) => {
+          cleanupStaleTasksOnStartup();
+        }).catch(() => {});
+
         // Proactive delivery loop — check every 60s for messages to deliver
         setInterval(async () => {
           try {

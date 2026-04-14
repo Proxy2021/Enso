@@ -1797,6 +1797,48 @@ export function getTeamLeaderState(): TeamLeaderState {
 }
 
 /**
+ * Cleanup stale "executing"/"running" statuses on server startup.
+ * If the server restarted while tasks were running, their callbacks never fired.
+ * Mark them as completed (best-effort) so the UI doesn't show stuck blue dots.
+ */
+export function cleanupStaleTasksOnStartup(): void {
+  const st = loadState();
+  let changed = false;
+
+  // Clean up background tasks stuck on "running"
+  for (const task of (st.backgroundTasks || [])) {
+    if (task.status === "running") {
+      task.status = "completed";
+      task.completedAt = new Date().toISOString();
+      task.result = "Server restarted — assumed completed";
+      changed = true;
+    }
+  }
+
+  // Clean up actions stuck on "executing"
+  for (const action of st.recentActions) {
+    if (action.status === "executing") {
+      action.status = "completed";
+      changed = true;
+    }
+  }
+  if (st.lastBriefing) {
+    for (const action of st.lastBriefing.proposedActions) {
+      if (action.status === "executing") {
+        action.status = "completed";
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    saveState(st);
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Cleaned up stale executing/running statuses after server restart` });
+  }
+}
+
+/**
  * Mark a user-facing action as completed.
  * Called when user acts on a proposed item (reviews results, starts discussion, etc.)
  */
