@@ -484,14 +484,24 @@ Decide what to do:
 4. "ignore" — No action needed. Use for auto-responses or irrelevant content.
 ${react.context?.focusId ? `\nThis react is about a focus area. Consider delegating to a domain expert if it's domain-specific.` : ""}
 
-Return JSON only, no markdown: {"decision":"act","reason":"...","actionDescription":"..."}`,
+Return JSON only, no markdown: {"decision":"act","reason":"short reason","actionDescription":"what to do"}`,
       tier: "fast",
-      maxOutputTokens: 300,
+      maxOutputTokens: 500,
       temperature: 0.3,
       timeoutMs: 15_000,
     });
 
-    const parsed = JSON.parse(cleanJson(response)) as { decision: string; reason: string; actionDescription?: string };
+    let parsed: { decision: string; reason: string; actionDescription?: string };
+    try {
+      parsed = JSON.parse(cleanJson(response));
+    } catch {
+      // If LLM output is unparseable but contains "act", treat as act with original text
+      if (response.toLowerCase().includes('"act"')) {
+        parsed = { decision: "act", reason: "Direct user instruction", actionDescription: react.text };
+      } else {
+        parsed = { decision: "acknowledge", reason: "Could not parse LLM response" };
+      }
+    }
     logAction({ ts: Date.now(), type: "action", category: "agent-event",
       message: `TL reviewed react: ${parsed.decision} — ${parsed.reason}` });
 
@@ -512,7 +522,9 @@ Return JSON only, no markdown: {"decision":"act","reason":"...","actionDescripti
       });
     }
 
-    if (parsed.decision === "act" && parsed.actionDescription) {
+    if (parsed.decision === "act") {
+      // Use actionDescription from LLM, or fall back to the original react text
+      const actionDesc = parsed.actionDescription || react.text;
       // Proactive reacts (direct user instructions) → execute immediately via Claude Code
       const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
       if (proactiveTypes.has(react.context?.type)) {
@@ -521,7 +533,7 @@ Return JSON only, no markdown: {"decision":"act","reason":"...","actionDescripti
           priority: "high",
           type: "platform-feature",
           title: react.text.slice(0, 80),
-          reasoning: parsed.actionDescription,
+          reasoning: actionDesc,
           delegation: "self",
           estimatedEffort: "15min",
           autoExecute: true,
@@ -535,7 +547,7 @@ Return JSON only, no markdown: {"decision":"act","reason":"...","actionDescripti
       } else {
         queueTask({
           title: `User react: ${react.text.slice(0, 60)}`,
-          description: parsed.actionDescription,
+          description: actionDesc,
           source: "user-react",
         });
       }
