@@ -90,6 +90,17 @@ export interface QueuedTask {
   result?: string;
 }
 
+/** Tracks a background task launched by the TL */
+interface BackgroundTask {
+  actionId: string;
+  actionTitle: string;
+  type: "claude-code" | "orchestration";
+  launchedAt: string;
+  completedAt?: string;
+  status: "running" | "completed" | "failed";
+  result?: string;
+}
+
 interface TeamLeaderState {
   lastMorningRoutineAt: string | null;
   lastCheckInAt: string | null;
@@ -97,6 +108,10 @@ interface TeamLeaderState {
   recentActions: TeamLeaderAction[];
   /** Tasks the TL has assigned to itself for next cycle */
   taskQueue: QueuedTask[];
+  /** Background tasks from the current/last routine */
+  backgroundTasks: BackgroundTask[];
+  /** Whether a restart is pending (code was changed by a TL session) */
+  restartPending: boolean;
 }
 
 // ── Paths ──
@@ -136,7 +151,7 @@ export function saveConfig(config: TeamLeaderConfig): void {
 // ── State ──
 
 function loadState(): TeamLeaderState {
-  const defaults: TeamLeaderState = { lastMorningRoutineAt: null, lastCheckInAt: null, lastBriefing: null, recentActions: [], taskQueue: [] };
+  const defaults: TeamLeaderState = { lastMorningRoutineAt: null, lastCheckInAt: null, lastBriefing: null, recentActions: [], taskQueue: [], backgroundTasks: [], restartPending: false };
   try {
     if (existsSync(STATE_PATH)) {
       const raw = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
@@ -1239,6 +1254,9 @@ Be thorough but focused. When done, summarize what you changed.`;
     logAction({ ts: Date.now(), type: "action", category: "team-leader",
       message: `Launching Claude Code session for: "${action.title}"` });
 
+    // Register background task
+    registerBackgroundTask(action.id, action.title, "claude-code");
+
     runClaudeCode({
       prompt,
       client: client as Parameters<typeof runClaudeCode>[0]["client"],
@@ -1246,25 +1264,18 @@ Be thorough but focused. When done, summarize what you changed.`;
       targetCardId: `tl-${action.id.slice(0, 8)}`,
       model: "sonnet",
       skipPersist: true,
-    }).then(() => {
+    }).then(async () => {
       action.status = "completed";
-      // Persist completion to state so UI updates
-      const st = loadState();
-      const found = st.recentActions.find(a => a.id === action.id);
-      if (found) found.status = "completed";
-      if (st.lastBriefing) {
-        const ba = st.lastBriefing.proposedActions.find(a => a.id === action.id);
-        if (ba) ba.status = "completed";
-      }
-      saveState(st);
+      updateActionStatus(action.id, "completed");
+      completeBackgroundTask(action.id, "completed");
       logAction({ ts: Date.now(), type: "action", category: "team-leader",
         message: `Claude Code task completed: "${action.title}"` });
+      // Check if code was changed and restart may be needed
+      await checkForCodeChangesAndRestart(action.title);
     }).catch(err => {
       action.status = "proposed";
-      const st = loadState();
-      const found = st.recentActions.find(a => a.id === action.id);
-      if (found) found.status = "proposed";
-      saveState(st);
+      updateActionStatus(action.id, "proposed");
+      completeBackgroundTask(action.id, "failed", String(err));
       logError("team-leader", `Claude Code task failed: "${action.title}"`, err);
     });
 
@@ -1302,6 +1313,8 @@ async function launchOrchestration(action: TeamLeaderAction): Promise<void> {
     logAction({ ts: Date.now(), type: "action", category: "team-leader",
       message: `Launching orchestration sprint for: "${action.title}"` });
 
+    registerBackgroundTask(action.id, action.title, "orchestration");
+
     handleOrchestration({
       userMessage: `[Team Leader] ${action.title}`,
       classification: { complexity: "orchestrated" as const, reasoning: `Team Leader priority: ${action.reasoning}` },
@@ -1312,21 +1325,16 @@ async function launchOrchestration(action: TeamLeaderAction): Promise<void> {
       useGeminiPlanning: true,
       onComplete: async (orchId, status) => {
         action.status = status === "completed" ? "completed" : "proposed";
-        const st = loadState();
-        const found = st.recentActions.find(a => a.id === action.id);
-        if (found) found.status = action.status;
-        if (st.lastBriefing) {
-          const ba = st.lastBriefing.proposedActions.find(a => a.id === action.id);
-          if (ba) ba.status = action.status;
-        }
-        saveState(st);
+        updateActionStatus(action.id, action.status);
+        completeBackgroundTask(action.id, status === "completed" ? "completed" : "failed");
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Orchestration ${status} for: "${action.title}" (${orchId})` });
+        await checkForCodeChangesAndRestart(action.title);
       },
     }).catch(err => {
       action.status = "proposed";
-      const st = loadState();
-      const found = st.recentActions.find(a => a.id === action.id);
+      updateActionStatus(action.id, "proposed");
+      completeBackgroundTask(action.id, "failed", String(err));
       if (found) found.status = "proposed";
       saveState(st);
       logError("team-leader", `Orchestration failed for "${action.title}"`, err);
@@ -1369,10 +1377,222 @@ export function getPendingTasks(): QueuedTask[] {
   return loadState().taskQueue.filter(t => !t.processed);
 }
 
+// ── 5d. Background Task Tracking ──
+
+/** Helper to update an action's status in persisted state */
+function updateActionStatus(actionId: string, status: string): void {
+  const st = loadState();
+  const found = st.recentActions.find(a => a.id === actionId);
+  if (found) found.status = status;
+  if (st.lastBriefing) {
+    const ba = st.lastBriefing.proposedActions.find(a => a.id === actionId);
+    if (ba) ba.status = status;
+  }
+  saveState(st);
+}
+
+/** Register a background task for tracking */
+function registerBackgroundTask(actionId: string, title: string, type: "claude-code" | "orchestration"): void {
+  const st = loadState();
+  st.backgroundTasks = st.backgroundTasks || [];
+  st.backgroundTasks.push({
+    actionId, actionTitle: title, type,
+    launchedAt: new Date().toISOString(),
+    status: "running",
+  });
+  saveState(st);
+}
+
+/** Mark a background task as completed/failed and check if all tasks are done */
+function completeBackgroundTask(actionId: string, status: "completed" | "failed", result?: string): void {
+  const st = loadState();
+  st.backgroundTasks = st.backgroundTasks || [];
+  const task = st.backgroundTasks.find(t => t.actionId === actionId);
+  if (task) {
+    task.status = status;
+    task.completedAt = new Date().toISOString();
+    task.result = result;
+  }
+  saveState(st);
+
+  // Check if ALL background tasks from this routine are now done
+  const running = st.backgroundTasks.filter(t => t.status === "running");
+  if (running.length === 0 && st.backgroundTasks.length > 0) {
+    deliverRoutineCompletionSummary().catch(err =>
+      logError("team-leader", "Failed to deliver completion summary", err));
+  }
+}
+
+/**
+ * When all background tasks from a routine are done, deliver a summary.
+ * This is the "all clear" notification — everything the TL launched has finished.
+ */
+async function deliverRoutineCompletionSummary(): Promise<void> {
+  const st = loadState();
+  const tasks = st.backgroundTasks || [];
+  if (tasks.length === 0) return;
+
+  const completed = tasks.filter(t => t.status === "completed");
+  const failed = tasks.filter(t => t.status === "failed");
+
+  const summary = [
+    `✅ **TL Routine Complete** — ${completed.length} task${completed.length !== 1 ? "s" : ""} finished${failed.length ? `, ${failed.length} failed` : ""}`,
+    "",
+    ...completed.map(t => `✓ ${t.actionTitle}`),
+    ...failed.map(t => `✗ ${t.actionTitle}${t.result ? `: ${t.result.slice(0, 80)}` : ""}`),
+  ].join("\n");
+
+  // Deliver in-app
+  try {
+    const { getAllClients } = await import("./server.js");
+    const { persistCard } = await import("./memory-bridge.js");
+    const clients = getAllClients();
+    if (clients.length > 0) {
+      const client = clients[0];
+      const cardId = randomUUID();
+      persistCard(client.id, "main", {
+        id: cardId, runId: cardId, type: "chat", role: "assistant",
+        text: summary, timestamp: Date.now(),
+      });
+      client.send({
+        id: cardId, runId: cardId, sessionKey: client.sessionKey,
+        seq: 0, state: "final" as const,
+        text: summary,
+        conversationId: "main", timestamp: Date.now(),
+      });
+    }
+  } catch { /* best effort */ }
+
+  // Deliver email
+  try {
+    const { getNotifyEmail } = await import("./shareable-pages.js");
+    const email = getNotifyEmail();
+    if (email) {
+      const { sendHtmlEmail } = await import("./email.js");
+      const htmlItems = tasks.map(t => {
+        const icon = t.status === "completed" ? "✅" : "❌";
+        return `<div style="padding:6px 0;font-size:14px;color:#d1d5db;">${icon} ${t.actionTitle}</div>`;
+      }).join("");
+      await sendHtmlEmail({
+        to: email,
+        subject: `✅ TL Routine Complete — ${completed.length} done${failed.length ? `, ${failed.length} failed` : ""}`,
+        html: `<div style="max-width:600px;margin:0 auto;background:#111827;border-radius:12px;overflow:hidden;font-family:-apple-system,sans-serif;color:#f9fafb;">
+          <div style="background:linear-gradient(135deg,#065f46,#10b981);padding:20px 24px;">
+            <h2 style="margin:0;font-size:18px;color:#fff;">✅ TL Routine Complete</h2>
+            <p style="margin:4px 0 0;font-size:14px;color:#a7f3d0;">${completed.length} tasks completed${failed.length ? `, ${failed.length} failed` : ""}</p>
+          </div>
+          <div style="padding:16px 24px;">${htmlItems}</div>
+          ${st.restartPending ? '<div style="padding:12px 24px;background:#1e1b4b;"><p style="color:#c4b5fd;font-size:13px;">🔄 Code was changed — server restart pending</p></div>' : ""}
+          <div style="padding:12px 24px;text-align:center;border-top:1px solid #1f2937;">
+            <a href="${getEnsoUrl()}" style="display:inline-block;background:#10b981;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:14px;">Open Enso →</a>
+          </div>
+        </div>`,
+        textFallback: summary,
+      });
+    }
+  } catch { /* best effort */ }
+
+  // Check if restart is needed
+  if (st.restartPending) {
+    await handleAutoRestart();
+  }
+
+  // Clear background tasks for next routine
+  st.backgroundTasks = [];
+  saveState(st);
+
+  logAction({ ts: Date.now(), type: "action", category: "team-leader",
+    message: `Routine completion: ${completed.length} done, ${failed.length} failed` });
+}
+
+// ── 5e. Auto-Restart After Code Changes ──
+
+/**
+ * Check if a Claude Code session changed server/frontend code.
+ * If so, flag a restart for when all background tasks complete.
+ */
+async function checkForCodeChangesAndRestart(taskTitle: string): Promise<void> {
+  try {
+    const { execSync } = await import("node:child_process");
+    const diff = execSync("git diff --name-only", { cwd: "D:/Github/Enso", encoding: "utf-8", timeout: 5000 });
+    if (!diff.trim()) return; // No changes
+
+    const changedFiles = diff.trim().split("\n");
+    const serverFiles = changedFiles.filter(f => f.startsWith("server/") || f.startsWith("shared/"));
+    const frontendFiles = changedFiles.filter(f => f.startsWith("src/"));
+
+    if (serverFiles.length === 0 && frontendFiles.length === 0) return;
+
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Code changes detected after "${taskTitle}": ${changedFiles.length} file(s) — ${serverFiles.length} server, ${frontendFiles.length} frontend` });
+
+    // Verify the build passes before flagging restart
+    try {
+      execSync("npm run build", { cwd: "D:/Github/Enso", encoding: "utf-8", timeout: 60000, stdio: "pipe" });
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Build passed after code changes — restart flagged` });
+
+      // Auto-commit the changes
+      execSync('git add -A && git commit -m "fix: TL auto-fix — ' + taskTitle.replace(/"/g, '\\"').slice(0, 60) + '"', {
+        cwd: "D:/Github/Enso", encoding: "utf-8", timeout: 15000, stdio: "pipe",
+      });
+      execSync("git push", { cwd: "D:/Github/Enso", encoding: "utf-8", timeout: 15000, stdio: "pipe" });
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Code changes committed and pushed` });
+    } catch (buildErr) {
+      logError("team-leader", `Build failed after code changes from "${taskTitle}" — NOT restarting. Changes left uncommitted.`, buildErr);
+      return;
+    }
+
+    // Flag restart pending — will happen when all background tasks complete
+    const st = loadState();
+    st.restartPending = true;
+    saveState(st);
+  } catch (err) {
+    logError("team-leader", `Failed to check code changes after "${taskTitle}"`, err);
+  }
+}
+
+/**
+ * Perform auto-restart: exit with code 78 (self-heal) so guardian restarts the process.
+ * Only called when all background tasks are done and build has passed.
+ */
+async function handleAutoRestart(): Promise<void> {
+  // Verify no active sessions before restarting
+  try {
+    const { getActiveSessions } = await import("./session-registry.js");
+    const active = getActiveSessions();
+    if (active.length > 0) {
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Restart deferred — ${active.length} active session(s) still running` });
+      return;
+    }
+  } catch { /* registry not available, proceed cautiously */ }
+
+  logAction({ ts: Date.now(), type: "action", category: "team-leader",
+    message: `Auto-restart initiated — code changes applied, build passed, all tasks complete` });
+
+  // Clear the restart flag
+  const st = loadState();
+  st.restartPending = false;
+  saveState(st);
+
+  // Give 2 seconds for log flush, then exit with code 78 (guardian restarts)
+  setTimeout(() => {
+    process.exit(78);
+  }, 2000);
+}
+
 // ── 6. Morning Routine (full pipeline) ──
 
 export async function runMorningRoutine(): Promise<DailyBriefing> {
   logAction({ ts: Date.now(), type: "action", category: "team-leader", message: "Morning routine starting..." });
+
+  // 0. Clear background tasks from previous routine
+  const prevState = loadState();
+  prevState.backgroundTasks = [];
+  prevState.restartPending = false;
+  saveState(prevState);
 
   // 1. Gather signals
   const signals = await gatherSignals();
