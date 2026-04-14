@@ -216,6 +216,43 @@ if ($All) {
     Write-Host ""
 }
 
+# ── 5. Clean Orchestration & Sprint History ──
+if ($All) {
+    Write-Host "--- Orchestrations & Sprints ---" -ForegroundColor Cyan
+
+    # Orchestration workspaces
+    $orchDir = Join-Path $ensoHome "orchestrations"
+    if (Test-Path $orchDir) {
+        $orchCount = (Get-ChildItem $orchDir -ErrorAction SilentlyContinue).Count
+        if (-not $WhatIf) { Remove-Item "$orchDir/*" -Recurse -Force -ErrorAction SilentlyContinue }
+        Write-Host "  $action $orchCount orchestration workspace(s)" -ForegroundColor Green
+    }
+
+    # Sprint archives (all projects)
+    $projectsDir = Join-Path $ensoHome "projects"
+    if (Test-Path $projectsDir) {
+        $sprintCount = 0
+        foreach ($projDir in Get-ChildItem $projectsDir -Directory -ErrorAction SilentlyContinue) {
+            $sprintsDir = Join-Path $projDir.FullName "sprints"
+            if (Test-Path $sprintsDir) {
+                $sprints = Get-ChildItem $sprintsDir -Directory -ErrorAction SilentlyContinue
+                $sprintCount += $sprints.Count
+                if (-not $WhatIf) { Remove-Item "$sprintsDir/*" -Recurse -Force -ErrorAction SilentlyContinue }
+            }
+        }
+        Write-Host "  $action $sprintCount sprint archive(s)" -ForegroundColor Green
+    }
+
+    # Stale orchestration output files in server/
+    $serverDir = Join-Path $PSScriptRoot ".." "server"
+    $orchOutputs = Get-ChildItem $serverDir -Filter ".orchestration-*" -ErrorAction SilentlyContinue
+    if ($orchOutputs) {
+        if (-not $WhatIf) { $orchOutputs | Remove-Item -Force }
+        Write-Host "  $action $($orchOutputs.Count) orchestration output file(s)" -ForegroundColor Green
+    }
+    Write-Host ""
+}
+
 # ── Summary ──
 Write-Host "=== Done ===" -ForegroundColor Cyan
 if ($WhatIf) {
