@@ -2519,6 +2519,25 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   });
 
+  app.post("/api/team-leader/actions/:id/complete", async (req, res) => {
+    try {
+      const { completeAction } = await import("./team-leader.js");
+      const success = completeAction(req.params.id);
+      res.json({ completed: success });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to complete action" });
+    }
+  });
+
+  app.get("/api/team-leader/pending-actions", async (_req, res) => {
+    try {
+      const { getPendingUserActions } = await import("./team-leader.js");
+      res.json({ actions: getPendingUserActions() });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to load pending actions" });
+    }
+  });
+
   app.post("/api/focus-areas/:id/generate-experts", async (req, res) => {
     try {
       const { loadFocusState, saveFocusState, clearFocusCache } = await import("./focus-areas.js");

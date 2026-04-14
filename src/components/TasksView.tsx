@@ -374,19 +374,24 @@ export default function TasksView() {
                 tlBriefing.proposedActions.map(action => {
                   const pColor: Record<string, string> = { critical: "text-red-400", high: "text-orange-400", medium: "text-yellow-400", low: "text-gray-500" };
                   const pBg: Record<string, string> = { critical: "bg-red-500/15 border-red-500/25", high: "bg-orange-500/15 border-orange-500/25", medium: "bg-yellow-500/15 border-yellow-500/25", low: "bg-gray-500/10 border-gray-700/30" };
-                  const statusIcon = action.status === "completed" ? "✓" : action.status === "executing" ? "◉" : action.status === "proposed" ? "○" : "—";
-                  const statusCol = action.status === "completed" ? "text-emerald-400" : action.status === "executing" ? "text-blue-400 animate-pulse" : "text-violet-400";
+                  const isUserAction = action.needsUserInput || action.status === "proposed";
+                  const statusIcon = action.status === "completed" ? "✓" : action.status === "executing" ? "◉" : isUserAction ? "☐" : "○";
+                  const statusCol = action.status === "completed" ? "text-emerald-400" : action.status === "executing" ? "text-blue-400 animate-pulse" : isUserAction ? "text-amber-400" : "text-violet-400";
                   const typeEmoji: Record<string, string> = { "user-task": "🎯", "platform-fix": "🔧", "platform-feature": "🚀", maintenance: "🧹" };
                   const delegLabels: Record<string, string> = { focus: "Focus", knowledge: "Cortex", research: "Research", builder: "Builder", outreach: "Outreach", self: "TL" };
-                  // Match action to a focus area for navigation
+                  // Match action to a focus area for direct navigation
                   const titleLower = action.title.toLowerCase();
                   const matchedFocus = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()) || titleLower.includes(f.id));
                   const isNavigable = !!matchedFocus && (action.needsUserInput || action.status === "proposed");
+                  // Determine the right chat prompt based on action type
+                  const chatPrompt = titleLower.includes("review") ? "Show me the sprint results — what was delivered and what should I act on first?"
+                    : titleLower.includes("discuss") ? "Based on your evaluation, what's the most important decision we need to make?"
+                    : undefined;
                   return (
                     <div
                       key={action.id}
                       className={`rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5 ${isNavigable ? "cursor-pointer hover:border-violet-500/30 hover:bg-violet-500/5 transition-colors" : ""}`}
-                      onClick={isNavigable ? () => navigateToFocus(matchedFocus!.id, "work") : undefined}
+                      onClick={isNavigable ? () => navigateToFocus(matchedFocus!.id, chatPrompt ? undefined : "work", chatPrompt) : undefined}
                     >
                       <div className="flex items-start gap-2">
                         <span className={`${statusCol} text-sm mt-0.5 shrink-0`}>{statusIcon}</span>

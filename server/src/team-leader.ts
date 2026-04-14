@@ -527,13 +527,19 @@ export async function deliverBriefing(briefing: DailyBriefing): Promise<string[]
           const actionLines = proposedActions.map(a => {
             const titleLower = a.title.toLowerCase();
             const matched = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()));
-            const focusLink = matched ? ` *(→ Focus: ${matched.title})*` : "";
             const pEmoji = a.priority === "critical" ? "🔴" : a.priority === "high" ? "🟠" : a.priority === "medium" ? "🟡" : "⚪";
-            return `${pEmoji} **${a.title}**${focusLink}\n${a.reasoning}`;
+            // Give a direct instruction the user can act on
+            let actionHint = "";
+            if (matched) {
+              if (titleLower.includes("review")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **📬 Review Results**`;
+              else if (titleLower.includes("discuss")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **💬 Discuss**`;
+              else actionHint = `\n→ Go to **Focus** tab → **${matched.title}**`;
+            }
+            return `${pEmoji} **${a.title}**\n${a.reasoning}${actionHint}`;
           }).join("\n\n");
 
           const attentionCardId = randomUUID();
-          const attentionText = `🙋 **Needs Your Input** (${proposedActions.length} item${proposedActions.length > 1 ? "s" : ""})\n\n${actionLines}\n\n*Open the **Tasks** tab to respond, or click a focus area in the **Focus** tab to take action.*`;
+          const attentionText = `🙋 **Needs Your Input** (${proposedActions.length} item${proposedActions.length > 1 ? "s" : ""})\n\n${actionLines}`;
           persistCard(client.id, "main", {
             id: attentionCardId, runId: attentionCardId, type: "chat", role: "assistant",
             text: attentionText, timestamp: Date.now() + 1,
@@ -1291,6 +1297,40 @@ export function getLastBriefing(): DailyBriefing | null {
 
 export function getTeamLeaderState(): TeamLeaderState {
   return loadState();
+}
+
+/**
+ * Mark a user-facing action as completed.
+ * Called when user acts on a proposed item (reviews results, starts discussion, etc.)
+ */
+export function completeAction(actionId: string): boolean {
+  const state = loadState();
+  if (!state.lastBriefing) return false;
+  const action = state.lastBriefing.proposedActions.find(a => a.id === actionId);
+  if (!action) {
+    // Also check recentActions
+    const recent = state.recentActions.find(a => a.id === actionId);
+    if (recent) { recent.status = "completed"; saveState(state); return true; }
+    return false;
+  }
+  action.status = "completed";
+  // Also update in recentActions
+  const recent = state.recentActions.find(a => a.id === actionId);
+  if (recent) recent.status = "completed";
+  saveState(state);
+  logAction({ ts: Date.now(), type: "action", category: "team-leader", message: `User completed: "${action.title}"` });
+  return true;
+}
+
+/**
+ * Get pending user actions — items that need user input and haven't been completed.
+ */
+export function getPendingUserActions(): TeamLeaderAction[] {
+  const state = loadState();
+  if (!state.lastBriefing) return [];
+  return state.lastBriefing.proposedActions.filter(a =>
+    (a.status === "proposed" || a.needsUserInput) && a.status !== "completed"
+  );
 }
 
 // ── Helpers ──

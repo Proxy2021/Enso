@@ -115,18 +115,27 @@ export default function FocusView() {
   const [focusState, setFocusState] = useState<FocusState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const [pendingTlActions, setPendingTlActions] = useState<Array<{ id: string; title: string; focusId?: string }>>([]);
 
   // Handle pending navigation from TL dashboard or chat cards
   useEffect(() => {
     if (pendingFocusNav && focusState?.areas.length) {
       const area = focusState.areas.find(a => a.id === pendingFocusNav.focusId);
       if (area) {
-        setSelectedId(area.id);
-        setView("detail");
-        if (pendingFocusNav.tab) setDetailTab(pendingFocusNav.tab as DetailTab);
-        else setDetailTab("work");
+        if (pendingFocusNav.chatPrompt) {
+          // Direct-to-chat: open the focus conversation immediately with the prompt
+          useChatStore.setState({ pendingFocusNavigation: null });
+          chatAboutFocus(area, pendingFocusNav.chatPrompt);
+        } else {
+          setSelectedId(area.id);
+          setView("detail");
+          if (pendingFocusNav.tab) setDetailTab(pendingFocusNav.tab as DetailTab);
+          else setDetailTab("work");
+          useChatStore.setState({ pendingFocusNavigation: null });
+        }
+      } else {
+        useChatStore.setState({ pendingFocusNavigation: null });
       }
-      useChatStore.setState({ pendingFocusNavigation: null });
     }
   }, [pendingFocusNav, focusState]);
   const [loading, setLoading] = useState(false);
@@ -160,6 +169,18 @@ export default function FocusView() {
       const data = await resp.json();
       setFocusState(data as FocusState);
     } catch { /* ignore */ }
+    // Also fetch pending TL actions to show on focus cards
+    try {
+      const tlRes = await fetch(`${getBackendBaseUrl()}/api/team-leader/pending-actions`, { headers: authHeaders() });
+      if (tlRes.ok) {
+        const tlData = await tlRes.json();
+        const actions = (tlData.actions || []).map((a: { id: string; title: string }) => {
+          const titleLower = a.title.toLowerCase();
+          return { ...a, focusId: undefined as string | undefined };
+        });
+        setPendingTlActions(actions);
+      }
+    } catch { /* TL not available */ }
     setLoading(false);
   }, []);
 
@@ -175,6 +196,18 @@ export default function FocusView() {
       }).then(() => useChatStore.getState().refreshConversationsList()).catch(() => {});
     }
   }, [fetchFocusAreas]);
+
+  /** Mark a TL action as completed when user takes the action */
+  const completeTlAction = useCallback(async (focusTitle: string) => {
+    const titleLower = focusTitle.toLowerCase();
+    const matched = pendingTlActions.find(a => a.title.toLowerCase().includes(titleLower));
+    if (matched) {
+      fetch(`${getBackendBaseUrl()}/api/team-leader/actions/${matched.id}/complete`, {
+        method: "POST", headers: authHeaders(),
+      }).catch(() => {});
+      setPendingTlActions(prev => prev.filter(a => a.id !== matched.id));
+    }
+  }, [pendingTlActions]);
 
   // Auto-refresh when viewing a focus area that hasn't been enriched yet (waiting for async enrichment)
   useEffect(() => {
@@ -431,14 +464,14 @@ export default function FocusView() {
                   const sprintAge = Math.floor((Date.now() - sprintTime) / 86400000);
                   if (lastActive < sprintTime || sprintAge <= 7) {
                     actions.push({ emoji: "📬", label: "Review Results →", bg: "bg-amber-500/10", border: "border-amber-500/25", text: "text-amber-300",
-                      action: () => chatAboutFocus(area, "Show me the sprint results — what was delivered and what should I act on first?"),
+                      action: () => { completeTlAction(area.title); chatAboutFocus(area, "Show me the sprint results — what was delivered and what should I act on first?"); },
                     });
                   }
                 }
                 // Evaluated but no discussion → open conversation where AI arrives with briefing
                 if (area.preparedBriefing && !area.conversationId && !area.lastSprintResults) {
                   actions.push({ emoji: "💬", label: "Discuss →", bg: "bg-violet-500/10", border: "border-violet-500/25", text: "text-violet-300",
-                    action: () => chatAboutFocus(area, "Based on your evaluation, what's the most important decision we need to make?"),
+                    action: () => { completeTlAction(area.title); chatAboutFocus(area, "Based on your evaluation, what's the most important decision we need to make?"); },
                   });
                 }
                 // Has discussion but no sprint → launch evolve directly
