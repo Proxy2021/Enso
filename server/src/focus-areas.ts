@@ -912,6 +912,11 @@ The synthesizer task must dependsOn all other tasks.`,
                   saveFocusState(freshState);
                   logAction({ ts: Date.now(), type: "action", category: "focus-areas",
                     message: `Stored briefing for "${area.title}": ${briefing.length} chars from orchestration` });
+
+                  // Trigger TL assessment now that briefing is ready
+                  import("./team-leader.js").then(({ assessFocusUnderstanding }) => {
+                    assessFocusUnderstanding(freshArea, updateFocusAssessment).catch(() => {});
+                  }).catch(() => {});
                 }
               }
             } catch (err) {

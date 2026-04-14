@@ -1049,57 +1049,21 @@ async function handleFocusEvaluate(action: TeamLeaderAction): Promise<void> {
     if (resp.ok) {
       const result = await resp.json();
 
-      // LLM-driven assessment of understanding after evaluation
       const { updateFocusAssessment } = await import("./focus-areas.js");
-      try {
-        const { llm } = await import("./llm.js");
-        const assessResult = await llm({
-          prompt: `You are the Team Leader assessing your understanding of a focus area after completing an evaluation.
-
-FOCUS: "${area.title}"
-DESCRIPTION: ${area.description}
-INTENT: ${area.intent || "Not yet defined"}
-TYPE: ${area.focusType || "general"}
-HAS EVALUATION BRIEFING: ${result.orchestrated ? "In progress (orchestrated)" : "Yes — complete"}
-HAS PRIOR SPRINTS: ${area.lastSprintResults ? "Yes" : "No"}
-EVIDENCE POINTS: ${area.evidence?.length || 0}
-EXPERTS ASSIGNED: ${area.experts?.length || 0}
-
-Rate your UNDERSTANDING of this goal on a scale of 0-100:
-- 0-20: Barely know what this is about. Just inferred from data signals.
-- 20-40: Surface understanding. Know the topic but not the user's specific angle.
-- 40-60: Good understanding. Know what they want and why, but gaps in specifics.
-- 60-80: Strong understanding. Clear picture of goals, constraints, and approach.
-- 80-100: Deep understanding. Could independently make strategic decisions.
-
-Be HONEST — don't inflate. A first evaluation typically gets 30-50. Only repeated cycles with sprint results push toward 70+.
-
-Return JSON: { "understanding": <number>, "notes": "<one sentence reasoning>" }`,
-          tier: "fast",
-          maxOutputTokens: 200,
-          responseMimeType: "application/json",
-          temperature: 0.3,
-          timeoutMs: 10_000,
-        });
-        const parsed = JSON.parse(assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, ""));
-        updateFocusAssessment(area.id, {
-          understanding: Math.max(10, Math.min(95, parsed.understanding || 35)),
-          assessedBy: "tl-evaluate",
-          notes: parsed.notes || "Evaluation completed",
-        });
-      } catch {
-        // Fallback: modest bump
-        updateFocusAssessment(area.id, {
-          understanding: Math.min(50, (area.assessment?.understanding ?? 10) + 20),
-          assessedBy: "tl-evaluate",
-          notes: "Evaluation complete (assessment call failed, using estimate)",
-        });
-      }
 
       if (result.orchestrated) {
+        // Orchestrated evaluation is async — assessment will happen when briefing is ready
+        // Just mark that evaluation was launched
+        updateFocusAssessment(area.id, {
+          understanding: 15, // Slight bump: eval launched but not done yet
+          assessedBy: "tl-evaluate",
+          notes: "Evaluation in progress — assessment will update when briefing completes",
+        });
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Orchestrated evaluation launched for "${area.title}" — will complete asynchronously` });
       } else {
+        // Non-orchestrated: briefing ready immediately — run LLM assessment
+        await assessFocusUnderstanding(area, updateFocusAssessment);
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Evaluation complete for "${area.title}" — briefing ready` });
         // Queue next step: launch sprint
@@ -1108,6 +1072,66 @@ Return JSON: { "understanding": <number>, "notes": "<one sentence reasoning>" }`
     }
   } catch (err) {
     logError("team-leader", `Failed to evaluate "${area.title}"`, err);
+  }
+}
+
+/**
+ * LLM-driven assessment of how well the TL understands a focus area.
+ * Called after evaluation briefing is ready (both sync and async orchestration paths).
+ * Exported so focus-areas.ts can call it when an orchestrated evaluation completes.
+ */
+export async function assessFocusUnderstanding(
+  area: { id: string; title: string; description: string; intent?: string; focusType?: string; lastSprintResults?: string; evidence?: string[]; experts?: Array<{ id: string }>; preparedBriefing?: string; assessment?: { understanding: number } },
+  updateFn: (id: string, update: { understanding?: number; progress?: number; assessedBy: string; notes: string }) => void,
+): Promise<void> {
+  try {
+    const { llm } = await import("./llm.js");
+    const briefingSnippet = area.preparedBriefing ? area.preparedBriefing.slice(0, 500) : "No briefing available yet";
+    const assessResult = await llm({
+      prompt: `You are the Team Leader assessing your understanding of a focus area after evaluation.
+
+FOCUS: "${area.title}"
+DESCRIPTION: ${area.description}
+INTENT: ${area.intent || "Not yet defined"}
+TYPE: ${area.focusType || "general"}
+HAS BRIEFING: ${area.preparedBriefing ? "Yes" : "No"}
+BRIEFING PREVIEW: ${briefingSnippet}
+HAS PRIOR SPRINTS: ${area.lastSprintResults ? "Yes" : "No"}
+EVIDENCE POINTS: ${area.evidence?.length || 0}
+EXPERTS ASSIGNED: ${area.experts?.length || 0}
+
+Rate your UNDERSTANDING of this goal on 0-100:
+- 0-20: Barely know what this is. Just inferred from data.
+- 20-40: Surface understanding. Know the topic, not the user's specific angle.
+- 40-60: Good understanding. Know what they want and why, gaps in specifics.
+- 60-80: Strong. Clear picture of goals, constraints, approach.
+- 80-100: Deep. Could independently make strategic decisions.
+
+First evaluation with briefing: typically 35-55. Only with sprint results and user feedback: 60+.
+
+Return JSON: { "understanding": <number>, "notes": "<one sentence>" }`,
+      tier: "fast",
+      maxOutputTokens: 200,
+      responseMimeType: "application/json",
+      temperature: 0.3,
+      timeoutMs: 20_000,
+    });
+    const parsed = JSON.parse(assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, ""));
+    updateFn(area.id, {
+      understanding: Math.max(10, Math.min(95, parsed.understanding || 35)),
+      assessedBy: "tl-evaluate",
+      notes: parsed.notes || "Evaluation completed",
+    });
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Assessment for "${area.title}": understanding=${parsed.understanding}% — ${parsed.notes || ""}` });
+  } catch (err) {
+    // Fallback: modest value based on whether briefing exists
+    updateFn(area.id, {
+      understanding: area.preparedBriefing ? 40 : Math.min(50, (area.assessment?.understanding ?? 10) + 15),
+      assessedBy: "tl-evaluate",
+      notes: "Evaluation complete (assessment LLM failed, using estimate)",
+    });
+    logError("team-leader", `Assessment LLM failed for "${area.title}"`, err);
   }
 }
 

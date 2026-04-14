@@ -3858,6 +3858,17 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
         initScheduler(executeScheduledTask, broadcastToClients);
         runtime.log?.("[enso] scheduled task scheduler started");
 
+        // Validate that all tool-type tasks reference registered tools
+        import("./scheduled-tasks.js").then(async ({ listTasks }) => {
+          const { isToolRegistered } = await import("./native-tools/registry.js");
+          const toolTasks = listTasks().filter(t => t.enabled && t.action.type === "tool" && t.action.toolId);
+          for (const t of toolTasks) {
+            if (!isToolRegistered(t.action.toolId!)) {
+              logError("scheduled-tasks", `Task "${t.name}" (${t.taskId}) references unregistered tool "${t.action.toolId}" — will fail when fired`);
+            }
+          }
+        }).catch(() => {});
+
         // Register Team Leader scheduled tasks (morning routine + check-in)
         import("./team-leader.js").then(async ({ loadConfig }) => {
           const { getTask, createTask } = await import("./scheduled-tasks.js");
