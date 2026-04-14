@@ -25,7 +25,7 @@ if (!forceRefresh) {
       try {
         if (fs.existsSync(tastePath)) {
           var tp = JSON.parse(fs.readFileSync(tastePath, "utf-8"));
-          tasteProfile = { interactionCount: tp.interactionCount || 0, streak: tp.streak || { current: 0, longest: 0 }, topGenres: Object.entries(tp.genreWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 3).map(function(e) { return e[0]; }) };
+          tasteProfile = { interactionCount: tp.interactionCount || 0, streak: tp.streak || { current: 0, longest: 0 }, topGenres: Object.entries(tp.genreWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 3).map(function(e) { return e[0]; }), topMoods: Object.entries(tp.moodWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5).map(function(e) { return { mood: e[0], weight: Math.round(e[1] * 100) / 100 }; }), lengthPreference: (tp.lengthPreference || 0) > 0.3 ? "long" : (tp.lengthPreference || 0) < -0.3 ? "short" : "balanced" };
         }
       } catch (e2) {}
       cached.tasteProfile = tasteProfile;
@@ -164,6 +164,47 @@ async function fetchNYTBestsellers(listName) {
   }
 }
 
+// ── Source 4: Hardcover GraphQL API (community trending) ──
+async function fetchHardcover(subjects) {
+  try {
+    var subjectMap = {
+      "self_help": "self-help", "psychology": "psychology", "biography": "biography",
+      "history": "history", "science": "science", "nature": "nature",
+      "fiction": "fiction", "literary_fiction": "literary-fiction",
+      "mystery": "mystery", "thriller": "thriller",
+      "science_fiction": "science-fiction", "fantasy": "fantasy"
+    };
+    var mapped = subjects.map(function(s) { return subjectMap[s] || s; });
+    var query = '{ books(where: {subjects: {_in: ' + JSON.stringify(mapped) + '}}, order_by: {users_read_count: desc}, limit: 15) { id title contributions { author { name } } image { url } description rating ratings_count users_read_count users_reading_count cached_tags } }';
+    var response = await ctx.fetch("https://api.hardcover.app/v1/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: query })
+    });
+    if (!response.ok && !response.data) return [];
+    var data = (response.data || response);
+    var books = ((data.data || {}).books || []);
+    return books.map(function(b) {
+      return {
+        title: b.title || "",
+        author: (b.contributions || []).map(function(c) { return (c.author || {}).name || ""; }).join(", "),
+        coverUrl: (b.image || {}).url || "",
+        description: (b.description || "").replace(/<[^>]+>/g, "").slice(0, 400),
+        rating: b.rating || 0,
+        ratingsCount: b.ratings_count || 0,
+        categories: (b.cached_tags || []).slice(0, 3),
+        source: "hardcover",
+        sourceUrl: "https://hardcover.app/books/" + (b.id || ""),
+        communityReading: b.users_reading_count || 0,
+        communityRead: b.users_read_count || 0,
+      };
+    }).filter(function(b) { return b.title; });
+  } catch (e) {
+    ctx.log("Hardcover error: " + (e.message || e));
+    return [];
+  }
+}
+
 // ── Parallel fetch from all sources ──
 var fetchPromises = [];
 // Open Library — 2 subjects
@@ -174,11 +215,13 @@ for (var si = 0; si < theme.subjects.length; si++) {
 fetchPromises.push(fetchGoogleBooks(theme.googleTerms));
 // NYT Bestsellers
 fetchPromises.push(fetchNYTBestsellers(theme.nytList));
+// Hardcover community trending
+fetchPromises.push(fetchHardcover(theme.subjects));
 
 var settled = await Promise.allSettled(fetchPromises);
 
 var allCandidates = [];
-var sourceCounts = { openlibrary: 0, google: 0, nyt: 0 };
+var sourceCounts = { openlibrary: 0, google: 0, nyt: 0, hardcover: 0 };
 for (var i = 0; i < settled.length; i++) {
   if (settled[i].status === "fulfilled" && Array.isArray(settled[i].value)) {
     var items = settled[i].value;
@@ -189,7 +232,7 @@ for (var i = 0; i < settled.length; i++) {
   }
 }
 
-ctx.log("Candidates: " + allCandidates.length + " (OL: " + sourceCounts.openlibrary + ", Google: " + sourceCounts.google + ", NYT: " + sourceCounts.nyt + ")");
+ctx.log("Candidates: " + allCandidates.length + " (OL: " + sourceCounts.openlibrary + ", Google: " + sourceCounts.google + ", NYT: " + sourceCounts.nyt + ", HC: " + sourceCounts.hardcover + ")");
 
 // ── Deduplicate by normalized title ──
 function normalizeTitle(t) {
@@ -214,7 +257,20 @@ for (var k = 0; k < allCandidates.length; k++) {
   if (!norm) continue;
   if (seen[norm] !== undefined) {
     if (richness(c) > richness(deduped[seen[norm]])) {
+      // Preserve community data from Hardcover when overwriting
+      var prevCommunity = deduped[seen[norm]].communityReading;
+      var prevCommunityRead = deduped[seen[norm]].communityRead;
       deduped[seen[norm]] = c;
+      if (!c.communityReading && prevCommunity) {
+        deduped[seen[norm]].communityReading = prevCommunity;
+        deduped[seen[norm]].communityRead = prevCommunityRead;
+      }
+    } else {
+      // Merge community data into existing richer entry
+      if (c.communityReading && !deduped[seen[norm]].communityReading) {
+        deduped[seen[norm]].communityReading = c.communityReading;
+        deduped[seen[norm]].communityRead = c.communityRead;
+      }
     }
   } else {
     seen[norm] = deduped.length;
@@ -248,11 +304,22 @@ var candidateList = deduped.slice(0, 40).map(function(c, idx) {
   };
 });
 
+// ── Load Cortex themes for richer context ──
+var cortexThemes = [];
+try {
+  var profilePath = path.join(os.homedir(), ".enso", "cortex", "synthesis", "profile.json");
+  if (fs.existsSync(profilePath)) {
+    var profileData = JSON.parse(fs.readFileSync(profilePath, "utf-8"));
+    cortexThemes = (profileData.interests || profileData.themes || []).slice(0, 10);
+  }
+} catch (e) {}
+
 // ── LLM Curation ──
 var topGenres = Object.entries(tasteProfile.genreWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
 var recentSaved = (tasteProfile.savedBooks || []).slice(-5).map(function(b) { return b.title; });
 var recentDismissed = (tasteProfile.dismissedBooks || []).slice(-5).map(function(b) { return b.title; });
 var topAuthors = Object.entries(tasteProfile.authorAffinities || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 3);
+var topMoodWeights = Object.entries(tasteProfile.moodWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
 
 var curationPrompt = "You are a book curator for a daily discovery feature. Today's theme: " + theme.name + " (" + theme.icon + ").\n\n";
 
@@ -261,25 +328,36 @@ if (tasteProfile.interactionCount > 0) {
   curationPrompt += "- Top genres: " + (topGenres.length > 0 ? topGenres.map(function(g) { return g[0] + " (" + g[1].toFixed(2) + ")"; }).join(", ") : "none yet") + "\n";
   curationPrompt += "- Recently saved: " + (recentSaved.length > 0 ? recentSaved.join(", ") : "none") + "\n";
   curationPrompt += "- Recently dismissed: " + (recentDismissed.length > 0 ? recentDismissed.join(", ") : "none") + "\n";
-  curationPrompt += "- Author affinities: " + (topAuthors.length > 0 ? topAuthors.map(function(a) { return a[0]; }).join(", ") : "none") + "\n\n";
+  curationPrompt += "- Author affinities: " + (topAuthors.length > 0 ? topAuthors.map(function(a) { return a[0]; }).join(", ") : "none") + "\n";
+  if (topMoodWeights.length > 0) {
+    curationPrompt += "- Mood preferences: " + topMoodWeights.map(function(m) { return m[0] + " (" + m[1].toFixed(2) + ")"; }).join(", ") + "\n";
+  }
+  curationPrompt += "\n";
 } else {
   curationPrompt += "This is a new user with no taste data yet. Focus on popular, highly-rated, well-known books.\n\n";
 }
 
+if (cortexThemes.length > 0) {
+  curationPrompt += "Known interests (from knowledge base): " + cortexThemes.join(", ") + "\n\n";
+}
+
 curationPrompt += "Candidate pool (" + candidateList.length + " books):\n";
 curationPrompt += JSON.stringify(candidateList, null, 1) + "\n\n";
+curationPrompt += "Mood vocabulary (use ONLY these labels): uplifting, dark, contemplative, thrilling, cozy, mind-bending, heartwarming, intense, witty, melancholic, adventurous, practical\n\n";
 curationPrompt += "Select and return ONLY a valid JSON object (no markdown, no explanation):\n";
 curationPrompt += '{\n';
-curationPrompt += '  "bookOfTheDay": { "index": <number>, "whyThisBook": "<1-2 sentences>", "whoItsFor": "<1 sentence>" },\n';
-curationPrompt += '  "themePicks": [ { "index": <number>, "oneLinePitch": "<compelling pitch>" } ],\n';
-curationPrompt += '  "bestsellerSpotlight": { "index": <number or -1 if no NYT books>, "rankingContext": "<context>" },\n';
-curationPrompt += '  "serendipityPick": { "index": <number>, "whyUnexpected": "<why this might surprise>" }\n';
+curationPrompt += '  "bookOfTheDay": { "index": <number>, "whyThisBook": "<1-2 sentences>", "whoItsFor": "<1 sentence>", "moodTags": ["<1-3 mood labels>"], "cortexConnection": "<1 sentence linking to user interests or empty string>" },\n';
+curationPrompt += '  "themePicks": [ { "index": <number>, "oneLinePitch": "<compelling pitch>", "moodTags": ["<1-3 mood labels>"] } ],\n';
+curationPrompt += '  "bestsellerSpotlight": { "index": <number or -1 if no NYT books>, "rankingContext": "<context>", "moodTags": ["<1-3 mood labels>"] },\n';
+curationPrompt += '  "serendipityPick": { "index": <number>, "whyUnexpected": "<why this might surprise>", "moodTags": ["<1-3 mood labels>"] }\n';
 curationPrompt += '}\n\n';
 curationPrompt += "Rules:\n";
 curationPrompt += "- bookOfTheDay: highest quality match for the theme. MUST have hasCover=true. Write engaging whyThisBook.\n";
 curationPrompt += "- themePicks: 3-5 diverse books from the theme. Do not duplicate BOTD. Prefer rated > 3.5.\n";
 curationPrompt += "- bestsellerSpotlight: pick from source='nyt' candidates only. If no NYT books, set index to -1.\n";
 curationPrompt += "- serendipityPick: deliberately outside user's top genres. Explain why it might delight.\n";
+curationPrompt += "- Add 'moodTags' (1-3 labels from the mood vocabulary above) to EVERY selected book.\n";
+curationPrompt += "- Add 'cortexConnection' to bookOfTheDay: 1 sentence linking the book to the user's known interests (if available). Empty string if no interests known.\n";
 curationPrompt += "- Never pick dismissed books. Return only valid candidate indices.\n";
 
 var curation = null;
@@ -320,6 +398,8 @@ if (curation) {
       result.bookOfTheDay = Object.assign({}, botd, {
         whyThisBook: curation.bookOfTheDay.whyThisBook || "",
         whoItsFor: curation.bookOfTheDay.whoItsFor || "",
+        moodTags: curation.bookOfTheDay.moodTags || [],
+        cortexConnection: curation.bookOfTheDay.cortexConnection || "",
       });
     }
   }
@@ -331,7 +411,10 @@ if (curation) {
       var tp = curation.themePicks[ti];
       var tBook = resolveBook(tp.index);
       if (tBook) {
-        result.themePicks.push(Object.assign({}, tBook, { oneLinePitch: tp.oneLinePitch || "" }));
+        result.themePicks.push(Object.assign({}, tBook, {
+          oneLinePitch: tp.oneLinePitch || "",
+          moodTags: tp.moodTags || [],
+        }));
       }
     }
   }
@@ -342,6 +425,7 @@ if (curation) {
     if (bsBook) {
       result.bestsellerSpotlight = Object.assign({}, bsBook, {
         rankingContext: curation.bestsellerSpotlight.rankingContext || "",
+        moodTags: curation.bestsellerSpotlight.moodTags || [],
       });
     }
   }
@@ -352,6 +436,7 @@ if (curation) {
     if (spBook) {
       result.serendipityPick = Object.assign({}, spBook, {
         whyUnexpected: curation.serendipityPick.whyUnexpected || "",
+        moodTags: curation.serendipityPick.moodTags || [],
       });
     }
   }
@@ -364,30 +449,48 @@ if (curation) {
     result.bookOfTheDay = Object.assign({}, withCover[0], {
       whyThisBook: "Top pick for today's " + theme.name + " theme.",
       whoItsFor: "Readers interested in " + theme.name.toLowerCase() + ".",
+      moodTags: [],
+      cortexConnection: "",
     });
   }
   result.themePicks = withCover.slice(1, 5).map(function(b) {
-    return Object.assign({}, b, { oneLinePitch: b.description ? b.description.slice(0, 80) : b.title });
+    return Object.assign({}, b, { oneLinePitch: b.description ? b.description.slice(0, 80) : b.title, moodTags: [] });
   });
   var nytBooks = sorted.filter(function(b) { return b.source === "nyt"; });
   if (nytBooks.length > 0) {
     result.bestsellerSpotlight = Object.assign({}, nytBooks[0], {
       rankingContext: nytBooks[0].rank ? "#" + nytBooks[0].rank + " NYT, " + (nytBooks[0].weeksOnList || 0) + " weeks" : "NYT Bestseller",
+      moodTags: [],
     });
   }
   // Serendipity: pick the last unique one
   if (sorted.length > 5) {
     result.serendipityPick = Object.assign({}, sorted[sorted.length - 1], {
       whyUnexpected: "Something different from today's main theme.",
+      moodTags: [],
     });
   }
 }
+
+// ── Community Trending (Hardcover top picks) ──
+var hardcoverBooks = deduped.filter(function(b) { return b.source === "hardcover" && b.communityReading > 0; });
+hardcoverBooks.sort(function(a, b) { return (b.communityReading || 0) - (a.communityReading || 0); });
+result.communityTrending = hardcoverBooks.slice(0, 5).map(function(b) {
+  return {
+    title: b.title, author: b.author, coverUrl: b.coverUrl,
+    rating: b.rating, communityReading: b.communityReading,
+    communityRead: b.communityRead, source: b.source, sourceUrl: b.sourceUrl,
+    categories: b.categories, description: (b.description || "").slice(0, 150),
+  };
+});
 
 // ── Attach taste profile summary ──
 result.tasteProfile = {
   interactionCount: tasteProfile.interactionCount || 0,
   streak: tasteProfile.streak || { current: 0, longest: 0 },
   topGenres: Object.entries(tasteProfile.genreWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 3).map(function(e) { return e[0]; }),
+  topMoods: Object.entries(tasteProfile.moodWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5).map(function(e) { return { mood: e[0], weight: Math.round(e[1] * 100) / 100 }; }),
+  lengthPreference: (tasteProfile.lengthPreference || 0) > 0.3 ? "long" : (tasteProfile.lengthPreference || 0) < -0.3 ? "short" : "balanced",
 };
 
 // ── Save to cache ──

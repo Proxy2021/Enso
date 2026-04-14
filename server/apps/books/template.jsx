@@ -21,6 +21,7 @@ function GeneratedUI({ data, onAction }) {
   var [tasteActionStatus, setTasteActionStatus] = React.useState({});
   var [selectedRating, setSelectedRating] = React.useState(0);
   var [ratingBookId, setRatingBookId] = React.useState(null);
+  var [activeMoodFilter, setActiveMoodFilter] = React.useState(null);
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
   var navStack = d.navStack || [];
@@ -555,7 +556,7 @@ function GeneratedUI({ data, onAction }) {
       var bookSlug = (book.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
       var key = section + "-" + bookSlug;
       var status = tasteActionStatus[key];
-      var bookPayload = { title: book.title, author: book.author, categories: book.categories || [], coverUrl: book.coverUrl || "" };
+      var bookPayload = { title: book.title, author: book.author, categories: book.categories || [], coverUrl: book.coverUrl || "", moodTags: book.moodTags || [], pageCount: book.pageCount || 0 };
 
       if (status === "saved") return <Badge variant="success" style={{ fontSize: "10px" }}>Saved</Badge>;
       if (status === "dismissed") return <Badge variant="secondary" style={{ fontSize: "10px", opacity: 0.6 }}>Dismissed</Badge>;
@@ -640,6 +641,29 @@ function GeneratedUI({ data, onAction }) {
             </UICard>
           )}
 
+          {/* Mood Preferences */}
+          {(prof.topMoods || []).length > 0 && (
+            <UICard style={{ padding: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}>Mood Preferences</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {(prof.topMoods || []).map(function(m) {
+                  var pct = Math.round((m.weight || 0.5) * 100);
+                  return (
+                    <div key={m.mood} style={{ background: "#1e1b4b", padding: "4px 10px", borderRadius: "12px", fontSize: "11px" }}>
+                      <span style={{ color: "#c4b5fd" }}>{m.mood}</span>
+                      <span style={{ color: "#64748b", marginLeft: "4px" }}>{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {prof.lengthPreference && prof.lengthPreference !== "balanced" && (
+                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "6px" }}>
+                  Length preference: {prof.lengthPreference === "long" ? "\u{1F4DA} Prefers longer reads" : "\u26A1 Prefers shorter reads"}
+                </div>
+              )}
+            </UICard>
+          )}
+
           {/* Top Authors */}
           {(prof.topAuthors || []).length > 0 && (
             <UICard style={{ padding: "12px" }}>
@@ -719,12 +743,52 @@ function GeneratedUI({ data, onAction }) {
             <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "#1e40af", color: "#93c5fd" }}>Open Library: {disc.sourceCounts.openlibrary || 0}</span>
             <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "#065f46", color: "#6ee7b7" }}>Google Books: {disc.sourceCounts.google || 0}</span>
             <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "#78350f", color: "#fcd34d" }}>NYT: {disc.sourceCounts.nyt || 0}</span>
+            {disc.sourceCounts.hardcover > 0 && (
+              <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "#7c2d12", color: "#fdba74" }}>Hardcover: {disc.sourceCounts.hardcover}</span>
+            )}
             {disc.fromCache && <Badge variant="secondary" style={{ fontSize: "9px" }}>Cached</Badge>}
           </div>
         )}
 
+        {/* Mood Filter Chips */}
+        {(function() {
+          var allMoods = {};
+          [disc.bookOfTheDay, disc.serendipityPick, disc.bestsellerSpotlight]
+            .concat(disc.themePicks || [])
+            .filter(Boolean)
+            .forEach(function(b) { (b.moodTags || []).forEach(function(m) { allMoods[m] = (allMoods[m] || 0) + 1; }); });
+          var moodList = Object.keys(allMoods);
+          if (moodList.length === 0) return null;
+          return (
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: "11px", color: "#64748b" }}>Mood:</span>
+              {moodList.map(function(mood) {
+                var isActive = activeMoodFilter === mood;
+                return (
+                  <button key={mood}
+                    onClick={function() { setActiveMoodFilter(isActive ? null : mood); }}
+                    style={{
+                      fontSize: "10px", padding: "2px 8px", borderRadius: "12px",
+                      border: "1px solid " + (isActive ? "#a78bfa" : "#475569"),
+                      background: isActive ? "#7c3aed33" : "transparent",
+                      color: isActive ? "#c4b5fd" : "#94a3b8", cursor: "pointer"
+                    }}>
+                    {mood}
+                  </button>
+                );
+              })}
+              {activeMoodFilter && (
+                <button onClick={function() { setActiveMoodFilter(null); }}
+                  style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "12px", border: "none", background: "transparent", color: "#64748b", cursor: "pointer" }}>
+                  Clear
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Book of the Day */}
-        {botd && (
+        {botd && (!activeMoodFilter || (botd.moodTags || []).indexOf(activeMoodFilter) >= 0) && (
           <UICard style={{ padding: "14px", borderColor: "#f59e0b44", borderWidth: "1px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
               <span style={{ fontSize: "14px" }}>{"\u{1F4D5}"}</span>
@@ -748,14 +812,31 @@ function GeneratedUI({ data, onAction }) {
                     {"\u201C"}{botd.description.slice(0, 200)}{botd.description.length > 200 ? "..." : ""}{"\u201D"}
                   </div>
                 )}
+                {(botd.moodTags || []).length > 0 && (
+                  <div style={{ display: "flex", gap: "4px", marginTop: "4px", flexWrap: "wrap" }}>
+                    {(botd.moodTags || []).map(function(mood) {
+                      return <Badge key={mood} variant="outline" style={{ fontSize: "9px", borderColor: "#7c3aed", color: "#c4b5fd" }}>{mood}</Badge>;
+                    })}
+                  </div>
+                )}
                 {botd.whyThisBook && (
                   <div style={{ fontSize: "12px", color: "#a78bfa", marginTop: "6px" }}>
                     {"\u{1F4A1}"} <strong>Why today:</strong> {botd.whyThisBook}
                   </div>
                 )}
+                {botd.cortexConnection && (
+                  <div style={{ fontSize: "11px", color: "#22d3ee", marginTop: "2px" }}>
+                    {"\u{1F517}"} {botd.cortexConnection}
+                  </div>
+                )}
                 {botd.whoItsFor && (
                   <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
                     {"\u{1F464}"} {botd.whoItsFor}
+                  </div>
+                )}
+                {botd.communityReading > 0 && (
+                  <div style={{ fontSize: "10px", color: "#fdba74", marginTop: "3px" }}>
+                    {"\u{1F4D6}"} {botd.communityReading} reading now
                   </div>
                 )}
                 <div style={{ marginTop: "8px" }}>
@@ -767,39 +848,53 @@ function GeneratedUI({ data, onAction }) {
         )}
 
         {/* Theme Picks */}
-        {picks.length > 0 && (
-          <UICard style={{ padding: "12px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "14px" }}>{"\u{1F4DA}"}</span>
-              <span style={{ fontSize: "13px", fontWeight: 700 }}>Theme Picks</span>
-              <Badge variant="secondary" style={{ fontSize: "10px" }}>{picks.length}</Badge>
-            </div>
-            <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }}>
-              {picks.map(function(pick, idx) {
-                return (
-                  <div key={idx} style={{ minWidth: "160px", maxWidth: "180px", flexShrink: 0 }}>
-                    {pick.coverUrl && (
-                      <img src={pick.coverUrl} alt={pick.title} style={{ width: "100%", height: "120px", objectFit: "cover", borderRadius: "6px" }} />
-                    )}
-                    <div style={{ fontWeight: 600, fontSize: "12px", marginTop: "6px", lineHeight: 1.3 }}>{pick.title}</div>
-                    {pick.author && <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>{pick.author}</div>}
-                    {pick.oneLinePitch && (
-                      <div style={{ fontSize: "10px", color: "#a78bfa", marginTop: "3px", lineHeight: 1.3, fontStyle: "italic" }}>
-                        {"\u201C"}{pick.oneLinePitch}{"\u201D"}
+        {(function() {
+          var filteredPicks = activeMoodFilter ? picks.filter(function(p) { return (p.moodTags || []).indexOf(activeMoodFilter) >= 0; }) : picks;
+          if (filteredPicks.length === 0) return null;
+          return (
+            <UICard style={{ padding: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "14px" }}>{"\u{1F4DA}"}</span>
+                <span style={{ fontSize: "13px", fontWeight: 700 }}>Theme Picks</span>
+                <Badge variant="secondary" style={{ fontSize: "10px" }}>{filteredPicks.length}</Badge>
+              </div>
+              <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }}>
+                {filteredPicks.map(function(pick, idx) {
+                  return (
+                    <div key={idx} style={{ minWidth: "160px", maxWidth: "180px", flexShrink: 0 }}>
+                      {pick.coverUrl && (
+                        <img src={pick.coverUrl} alt={pick.title} style={{ width: "100%", height: "120px", objectFit: "cover", borderRadius: "6px" }} />
+                      )}
+                      <div style={{ fontWeight: 600, fontSize: "12px", marginTop: "6px", lineHeight: 1.3 }}>{pick.title}</div>
+                      {pick.author && <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>{pick.author}</div>}
+                      {(pick.moodTags || []).length > 0 && (
+                        <div style={{ display: "flex", gap: "3px", marginTop: "3px", flexWrap: "wrap" }}>
+                          {(pick.moodTags || []).map(function(mood) {
+                            return <span key={mood} style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "8px", background: "#7c3aed22", color: "#c4b5fd", border: "1px solid #7c3aed44" }}>{mood}</span>;
+                          })}
+                        </div>
+                      )}
+                      {pick.oneLinePitch && (
+                        <div style={{ fontSize: "10px", color: "#a78bfa", marginTop: "3px", lineHeight: 1.3, fontStyle: "italic" }}>
+                          {"\u201C"}{pick.oneLinePitch}{"\u201D"}
+                        </div>
+                      )}
+                      {pick.communityReading > 0 && (
+                        <div style={{ fontSize: "9px", color: "#fdba74", marginTop: "2px" }}>{"\u{1F4D6}"} {pick.communityReading} reading</div>
+                      )}
+                      <div style={{ marginTop: "6px" }}>
+                        <DiscoveryBookActions book={pick} section={"pick-" + idx} />
                       </div>
-                    )}
-                    <div style={{ marginTop: "6px" }}>
-                      <DiscoveryBookActions book={pick} section={"pick-" + idx} />
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </UICard>
-        )}
+                  );
+                })}
+              </div>
+            </UICard>
+          );
+        })()}
 
         {/* Bestseller Spotlight */}
-        {bestseller && (
+        {bestseller && (!activeMoodFilter || (bestseller.moodTags || []).indexOf(activeMoodFilter) >= 0) && (
           <UICard style={{ padding: "12px", borderColor: "#eab30844" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
               <span style={{ fontSize: "14px" }}>{"\u{1F3C6}"}</span>
@@ -823,8 +918,39 @@ function GeneratedUI({ data, onAction }) {
           </UICard>
         )}
 
+        {/* Community Trending */}
+        {(disc.communityTrending || []).length > 0 && !activeMoodFilter && (
+          <UICard style={{ padding: "12px", borderColor: "#f97316aa" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "14px" }}>{"\u{1F525}"}</span>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#fdba74" }}>Community Trending</span>
+              <Badge variant="secondary" style={{ fontSize: "10px" }}>Hardcover</Badge>
+            </div>
+            <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }}>
+              {(disc.communityTrending || []).map(function(book, idx) {
+                return (
+                  <div key={idx} style={{ minWidth: "140px", maxWidth: "160px", flexShrink: 0 }}>
+                    {book.coverUrl && (
+                      <img src={book.coverUrl} alt={book.title} style={{ width: "100%", height: "100px", objectFit: "cover", borderRadius: "6px" }} />
+                    )}
+                    <div style={{ fontWeight: 600, fontSize: "11px", marginTop: "4px", lineHeight: 1.3 }}>{book.title}</div>
+                    {book.author && <div style={{ fontSize: "10px", color: "#94a3b8" }}>{book.author}</div>}
+                    <div style={{ display: "flex", gap: "4px", marginTop: "3px", alignItems: "center", flexWrap: "wrap" }}>
+                      {book.rating > 0 && <span style={{ fontSize: "10px", color: "#f59e0b" }}>{"\u2B50"} {book.rating.toFixed(1)}</span>}
+                      <span style={{ fontSize: "9px", color: "#fdba74" }}>{"\u{1F4D6}"} {book.communityReading} reading</span>
+                    </div>
+                    <div style={{ marginTop: "4px" }}>
+                      <DiscoveryBookActions book={book} section={"trending-" + idx} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
         {/* Serendipity Pick */}
-        {serendipity && (
+        {serendipity && (!activeMoodFilter || (serendipity.moodTags || []).indexOf(activeMoodFilter) >= 0) && (
           <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
               <span style={{ fontSize: "14px" }}>{"\u{1F3B2}"}</span>
@@ -855,6 +981,7 @@ function GeneratedUI({ data, onAction }) {
           {streak.current > 0 && <span>{"\u{1F525}"} {streak.current}-day streak</span>}
           {tp.interactionCount > 0 && <span>{"\u{1F4BE}"} {tp.interactionCount} interactions</span>}
           {(tp.topGenres || []).length > 0 && <span>Top: {(tp.topGenres || []).slice(0, 3).map(function(g) { return g.replace(/_/g, " "); }).join(", ")}</span>}
+          {(tp.topMoods || []).length > 0 && <span>Mood: {(tp.topMoods || []).slice(0, 2).map(function(m) { return m.mood; }).join(", ")}</span>}
         </div>
 
         {/* Empty state if no data yet */}

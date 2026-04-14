@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "createdAt": 1713100800000,
+  "spec": {
+    "toolFamily": "quality_dashboard",
+    "toolPrefix": "enso_quality_dashboard_",
+    "description": "Quality & Insights Dashboard — monitor Enso's quality scores, activity feed, personalization profile, and AI-generated insights. Provides transparent visibility into how well your AI assistant is performing.",
+    "signatureId": "quality_dashboard_view",
+    "tools": [
+      {
+        "suffix": "overview",
+        "description": "Get Enso quality overview: composite score (0-100), dimension breakdowns (Response Quality, Action Success, Proactive Relevance, Orchestration Value), 7-day and 30-day trends. Use when the user says: 'show quality dashboard', 'how is Enso doing', 'quality score', 'show quality overview', 'Enso health'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "period": {
+              "type": "string",
+              "description": "Time period for trends: '7d' or '30d' (default: '7d')"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_quality_dashboard_overview",
+          "compositeScore": 78,
+          "confidence": "medium",
+          "trend": "improving",
+          "period": "7d",
+          "dimensions": {
+            "accuracy": { "score": 82, "trend": "improving", "sampleSize": 45, "label": "Response Quality" },
+            "completion": { "score": 91, "trend": "stable", "sampleSize": 38, "label": "Action Success" },
+            "proactive": { "score": 65, "trend": "improving", "sampleSize": 22, "label": "Proactive Relevance" },
+            "orchestration": { "score": 73, "trend": "stable", "sampleSize": 8, "label": "Orchestration Value" }
+          },
+          "dailyScores": [
+            { "date": "2026-04-08", "score": 72, "sampleSize": 14 },
+            { "date": "2026-04-09", "score": 74, "sampleSize": 18 },
+            { "date": "2026-04-10", "score": 71, "sampleSize": 12 },
+            { "date": "2026-04-11", "score": 78, "sampleSize": 20 },
+            { "date": "2026-04-12", "score": 80, "sampleSize": 16 },
+            { "date": "2026-04-13", "score": 79, "sampleSize": 22 },
+            { "date": "2026-04-14", "score": 78, "sampleSize": 19 }
+          ],
+          "signalCounts": {
+            "response.rated": 45,
+            "action.succeeded": 38,
+            "followup.accepted": 15,
+            "followup.ignored": 7,
+            "sprint.scored": 8,
+            "session.depth": 19
+          },
+          "totalSignals": 132,
+          "generatedAt": 1713100800000
+        },
+        "requiredDataKeys": ["tool", "compositeScore"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "activity",
+        "description": "Get chronological activity feed with quality signals. Filter by interaction type (chat, action, proactive, orchestration), quality level, or date range. Use when the user says: 'show activity', 'recent interactions', 'what has Enso been doing', 'activity log', 'quality feed'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filter": {
+              "type": "string",
+              "description": "Filter by type: 'all', 'chat', 'action', 'proactive', 'orchestration' (default: 'all')"
+            },
+            "quality": {
+              "type": "string",
+              "description": "Filter by quality: 'all', 'good', 'neutral', 'poor' (default: 'all')"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Number of entries to return (default: 30)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_quality_dashboard_activity",
+          "filter": "all",
+          "quality": "all",
+          "total": 8,
+          "entries": [
+            { "id": "a1", "timestamp": 1713100200000, "type": "chat", "title": "Morning briefing", "description": "Generated daily briefing with 3 action items", "quality": "good", "signal": "response.rated", "signalValue": 1, "feedback": "thumbs_up" },
+            { "id": "a2", "timestamp": 1713098400000, "type": "action", "title": "Email sent", "description": "Sent weekly progress report to team", "quality": "good", "signal": "action.succeeded", "signalValue": 1, "toolFamily": "email" },
+            { "id": "a3", "timestamp": 1713094800000, "type": "orchestration", "title": "Sprint: Photography Evolution", "description": "Completed sprint with 4 deliverables, score 8/10", "quality": "good", "signal": "sprint.scored", "signalValue": 8, "sprintScore": 8 },
+            { "id": "a4", "timestamp": 1713091200000, "type": "proactive", "title": "Follow-up suggestion", "description": "Suggested reviewing yesterday's book notes", "quality": "neutral", "signal": "followup.ignored", "signalValue": 0 },
+            { "id": "a5", "timestamp": 1713087600000, "type": "chat", "title": "Code review question", "description": "Helped debug authentication middleware", "quality": "good", "signal": "response.rated", "signalValue": 1, "feedback": "thumbs_up" },
+            { "id": "a6", "timestamp": 1713084000000, "type": "action", "title": "Photo organized", "description": "Tagged and organized 23 photos from weekend trip", "quality": "good", "signal": "action.succeeded", "signalValue": 1, "toolFamily": "media_gallery" },
+            { "id": "a7", "timestamp": 1713080400000, "type": "proactive", "title": "Follow-up accepted", "description": "User explored suggested focus area analysis", "quality": "good", "signal": "followup.accepted", "signalValue": 1 },
+            { "id": "a8", "timestamp": 1713076800000, "type": "chat", "title": "Task planning", "description": "Helped plan weekly project milestones", "quality": "neutral", "signal": "response.regenerated", "signalValue": 0, "feedback": "regenerated" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "entries"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "profile",
+        "description": "View personalization profile — what Enso has learned about the user. Shows work patterns, communication preferences, topic interests, tool usage with confidence levels and evidence counts. Users can edit or delete preferences. Use when the user says: 'what does Enso know about me', 'personalization profile', 'my preferences', 'learned preferences', 'show my profile'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'view', 'delete' (default: 'view')"
+            },
+            "preferenceId": {
+              "type": "string",
+              "description": "Preference ID to delete (required for delete action)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_quality_dashboard_profile",
+          "action": "view",
+          "categories": [
+            {
+              "name": "Work Patterns",
+              "icon": "briefcase",
+              "preferences": [
+                { "id": "wp1", "label": "Most productive hours", "value": "9:00 AM — 11:30 AM", "confidence": 0.87, "evidenceCount": 34, "lastUpdated": 1713014400000 },
+                { "id": "wp2", "label": "Preferred planning time", "value": "Sunday evenings", "confidence": 0.72, "evidenceCount": 12, "lastUpdated": 1712928000000 },
+                { "id": "wp3", "label": "Focus session length", "value": "~45 minutes", "confidence": 0.65, "evidenceCount": 18, "lastUpdated": 1712841600000 }
+              ]
+            },
+            {
+              "name": "Communication Style",
+              "icon": "message-circle",
+              "preferences": [
+                { "id": "cs1", "label": "Response length", "value": "Concise, bullet-point format", "confidence": 0.91, "evidenceCount": 67, "lastUpdated": 1713014400000 },
+                { "id": "cs2", "label": "Notification timing", "value": "Morning (8-9 AM) and evening (6-7 PM)", "confidence": 0.78, "evidenceCount": 22, "lastUpdated": 1712928000000 },
+                { "id": "cs3", "label": "Language preference", "value": "English with occasional Chinese", "confidence": 0.84, "evidenceCount": 45, "lastUpdated": 1712841600000 }
+              ]
+            },
+            {
+              "name": "Topic Interests",
+              "icon": "star",
+              "preferences": [
+                { "id": "ti1", "label": "Primary interests", "value": "AI/ML, Photography, Software Architecture", "confidence": 0.95, "evidenceCount": 89, "lastUpdated": 1713014400000 },
+                { "id": "ti2", "label": "Current focus", "value": "Enso development, Focus Evolution sprint", "confidence": 0.88, "evidenceCount": 41, "lastUpdated": 1713014400000 },
+                { "id": "ti3", "label": "Reading preference", "value": "Technical articles, science fiction", "confidence": 0.71, "evidenceCount": 15, "lastUpdated": 1712841600000 }
+              ]
+            },
+            {
+              "name": "Tool Usage",
+              "icon": "wrench",
+              "preferences": [
+                { "id": "tu1", "label": "Most used app", "value": "Media Gallery (34 sessions)", "confidence": 0.98, "evidenceCount": 34, "lastUpdated": 1713014400000 },
+                { "id": "tu2", "label": "Preferred coding tool", "value": "Claude Code for complex tasks", "confidence": 0.82, "evidenceCount": 28, "lastUpdated": 1712928000000 },
+                { "id": "tu3", "label": "Orchestration style", "value": "Prefers multi-agent sprints over single-shot", "confidence": 0.69, "evidenceCount": 11, "lastUpdated": 1712841600000 }
+              ]
+            }
+          ],
+          "totalPreferences": 12,
+          "lastProfileUpdate": 1713014400000
+        },
+        "requiredDataKeys": ["tool", "categories"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "insights",
+        "description": "Get AI-generated insights and recommendations based on usage patterns. Shows productivity insights, feature recommendations, and weekly summary stats. Use when the user says: 'show insights', 'recommendations', 'usage patterns', 'weekly summary', 'what can I improve', 'Enso suggestions'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "period": {
+              "type": "string",
+              "description": "Period for summary: 'week' or 'month' (default: 'week')"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_quality_dashboard_insights",
+          "period": "week",
+          "insights": [
+            { "id": "i1", "type": "productivity", "icon": "trending-up", "title": "Peak productivity window detected", "description": "You're most productive between 9-11am — Enso now prioritizes deep work suggestions during this time.", "impact": "high", "confidence": 0.87 },
+            { "id": "i2", "type": "improvement", "icon": "zap", "title": "Orchestration quality improving", "description": "Sprint scores increased 15% this week. Multi-agent tasks are producing better deliverables.", "impact": "medium", "confidence": 0.79 },
+            { "id": "i3", "type": "pattern", "icon": "repeat", "title": "Follow-up engagement rising", "description": "You accepted 68% of proactive suggestions this week, up from 45% last week.", "impact": "medium", "confidence": 0.82 },
+            { "id": "i4", "type": "suggestion", "icon": "lightbulb", "title": "Try the Travel Planner", "description": "Based on your recent browsing about weekend trips, Enso's Travel Planner could help with itinerary planning.", "impact": "low", "confidence": 0.61 }
+          ],
+          "recommendations": [
+            { "id": "r1", "title": "Enable weekly pulse survey", "description": "A 3-question weekly check-in helps Enso calibrate quality more accurately", "action": "enable_pulse" },
+            { "id": "r2", "title": "Try voice notes", "description": "Record quick thoughts on the go — Enso will organize them into your focus areas", "action": "try_voice" },
+            { "id": "r3", "title": "Review focus area priorities", "description": "Your photography focus area hasn't been active in 5 days", "action": "review_focus" }
+          ],
+          "weeklySummary": {
+            "totalInteractions": 127,
+            "tasksCompleted": 34,
+            "entitiesCreated": 8,
+            "orchestrationsRun": 3,
+            "avgSessionDepth": 6.2,
+            "topApps": [
+              { "name": "Media Gallery", "sessions": 12 },
+              { "name": "Books", "sessions": 8 },
+              { "name": "Email", "sessions": 6 }
+            ],
+            "qualityTrend": "improving",
+            "comparedToLastWeek": {
+              "interactions": 12,
+              "tasks": 5,
+              "entities": -2
+            }
+          },
+          "generatedAt": 1713100800000
+        },
+        "requiredDataKeys": ["tool", "insights"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "feedback",
+        "description": "Submit quality feedback: rate a response (thumbs up/down), answer a pulse question, or provide freeform feedback. Use when the user says: 'rate this', 'give feedback', 'thumbs up', 'thumbs down', 'quality feedback'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Feedback type: 'rating', 'pulse', 'freeform'"
+            },
+            "value": {
+              "type": "number",
+              "description": "For rating: 1 (thumbs up) or 0 (thumbs down). For pulse: 1-5 scale."
+            },
+            "text": {
+              "type": "string",
+              "description": "Freeform feedback text or pulse question response"
+            },
+            "contextId": {
+              "type": "string",
+              "description": "ID of the interaction being rated (optional)"
+            }
+          },
+          "required": ["type"]
+        },
+        "sampleParams": { "type": "rating", "value": 1 },
+        "sampleData": {
+          "tool": "enso_quality_dashboard_feedback",
+          "success": true,
+          "type": "rating",
+          "value": 1,
+          "message": "Thanks for the feedback! This helps Enso improve.",
+          "totalFeedback": 45,
+          "recentScore": 78
+        },
+        "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

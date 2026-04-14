@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "createdAt": 1744675200000,
+  "spec": {
+    "toolFamily": "golden_hour_planner",
+    "toolPrefix": "enso_ghp_",
+    "description": "Golden Hour Planner: plan photography trips around golden/blue hour timing, create shot planning cards with lighting/lens/subject details, track shooting streaks and weekly progress, access camera settings cheat sheets and composition guides, and run One Lens Challenge sessions.",
+    "signatureId": "golden_hour_planner_view",
+    "tools": [
+      {
+        "suffix": "plan_trip",
+        "label": "Plan Trip",
+        "description": "Calculate golden hour, blue hour, sunrise, and sunset windows for a travel destination across your trip dates. Shows a daily shooting schedule with pre-dawn scout time, morning/evening golden hours, blue hours, and midday rest periods. Use when the user says: 'plan golden hour trip', 'golden hour schedule for my trip', 'photography trip planner'.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "description": "Destination city name" },
+            "startDate": { "type": "string", "description": "Trip start date (YYYY-MM-DD)" },
+            "endDate": { "type": "string", "description": "Trip end date (YYYY-MM-DD)" },
+            "locations": { "type": "string", "description": "Comma-separated list of key locations to photograph" }
+          },
+          "required": ["city"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "manage_shots",
+        "label": "Shot Planning Cards",
+        "description": "Create and manage shot planning cards for your trip. Each card tracks location, best time of day, focal length, subject type, light direction, and completion status (scouted/attempted/got the shot). Use when the user says: 'plan my shots', 'add shot card', 'shot planning', 'manage shot list'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "description": "Action: load, add, update, delete, toggle_scouted, toggle_attempted, toggle_got_it" },
+            "city": { "type": "string", "description": "Destination city for this shot plan" },
+            "shotId": { "type": "string", "description": "Shot ID for update/delete/toggle actions" },
+            "location": { "type": "string", "description": "Location name for the shot" },
+            "bestTime": { "type": "string", "description": "Best time: morning_golden, evening_golden, blue_hour, midday_ok" },
+            "focalLength": { "type": "string", "description": "Planned focal length: 28mm, 35mm, 50mm, 85mm+" },
+            "subjectType": { "type": "string", "description": "Subject: architecture, portrait, street, landscape, culture" },
+            "lightDirection": { "type": "string", "description": "Light direction: front_lit, side_lit, back_lit, silhouette" },
+            "notes": { "type": "string", "description": "Additional notes for this shot" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "weekly_review",
+        "label": "Weekly Review",
+        "description": "Weekly review dashboard showing shots planned vs attempted vs completed, golden hour session streak, and motivational tips from elite photographers. Use when the user says: 'weekly review', 'shooting stats', 'how am I doing', 'golden hour streak'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string", "description": "City to review (uses current trip if omitted)" },
+            "action": { "type": "string", "description": "Action: load, log_session, reset_streak" },
+            "sessionDate": { "type": "string", "description": "Date of golden hour session (YYYY-MM-DD) for log_session action" },
+            "sessionType": { "type": "string", "description": "Type: morning, evening, both" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "quick_ref",
+        "label": "Quick Reference",
+        "description": "Camera settings cheat sheet for golden hour photography, composition reminders (rule of thirds, leading lines, frame within frame, light as subject), and gear checklist. Use when the user says: 'camera settings', 'cheat sheet', 'composition tips', 'golden hour settings'.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "lens_challenge",
+        "label": "One Lens Challenge",
+        "description": "Track your One Lens Challenge — commit to shooting with only one focal length for an entire day or trip. Log daily entries, track your streak, and review what you learned. Use when the user says: 'one lens challenge', 'lens challenge', 'single lens day', 'track my lens challenge'.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "description": "Action: load, start, log_day, end_challenge" },
+            "focalLength": { "type": "string", "description": "Chosen focal length: 28mm, 35mm, 50mm, 85mm" },
+            "date": { "type": "string", "description": "Date (YYYY-MM-DD) for log_day action" },
+            "shotCount": { "type": "number", "description": "Number of shots taken that day" },
+            "bestShot": { "type": "string", "description": "Description of your best shot of the day" },
+            "lesson": { "type": "string", "description": "What you learned shooting with this one lens" }
+          },
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

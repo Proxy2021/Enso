@@ -13,7 +13,7 @@ var tastePath = path.join(cacheDir, "book-taste-profile.json");
 
 // ── Load or initialize profile ──
 var profile = {
-  version: 1,
+  version: 2,
   updatedAt: new Date().toISOString(),
   interactionCount: 0,
   genreWeights: {},
@@ -22,6 +22,9 @@ var profile = {
   dismissedBooks: [],
   authorAffinities: {},
   streak: { current: 0, longest: 0, lastDate: "" },
+  moodWeights: {},
+  lengthPreference: 0,
+  recentMoods: [],
 };
 
 try {
@@ -48,6 +51,27 @@ function updateAuthorAffinity(author, delta) {
   if (!author) return;
   var current = profile.authorAffinities[author] || 0.5;
   profile.authorAffinities[author] = Math.max(0, Math.min(1, current + delta));
+}
+
+// ── Helper: update mood weights ──
+function updateMoodWeights(moodTags, delta) {
+  if (!moodTags || !Array.isArray(moodTags)) return;
+  if (!profile.moodWeights) profile.moodWeights = {};
+  for (var i = 0; i < moodTags.length; i++) {
+    var mood = moodTags[i].toLowerCase();
+    var current = profile.moodWeights[mood] || 0.5;
+    profile.moodWeights[mood] = Math.max(0, Math.min(1, current + delta));
+  }
+  if (!profile.recentMoods) profile.recentMoods = [];
+  profile.recentMoods = profile.recentMoods.concat(moodTags).slice(-20);
+}
+
+// ── Helper: update length preference ──
+function updateLengthPreference(pageCount, isPositive) {
+  if (!pageCount || pageCount <= 0) return;
+  var signal = pageCount > 400 ? 0.1 : pageCount < 200 ? -0.1 : 0;
+  if (!isPositive) signal = -signal;
+  profile.lengthPreference = Math.max(-1, Math.min(1, (profile.lengthPreference || 0) + signal));
 }
 
 // ── Helper: update streak ──
@@ -97,6 +121,8 @@ if (action === "save") {
     // Update weights: save = +0.15 per category
     updateGenreWeights(bookData.categories, 0.15);
     updateAuthorAffinity(bookData.author, 0.15);
+    updateMoodWeights(bookData.moodTags, 0.15);
+    updateLengthPreference(bookData.pageCount, true);
     profile.interactionCount = (profile.interactionCount || 0) + 1;
     updateStreak();
     responseMessage = "Saved \"" + title + "\" to your taste profile.";
@@ -133,6 +159,8 @@ if (action === "save") {
   var weightDelta = (rating - 3) * 0.05 + (rating >= 4 ? 0.05 : 0);
   updateGenreWeights(bookData.categories, weightDelta);
   updateAuthorAffinity(bookData.author, weightDelta);
+  updateMoodWeights(bookData.moodTags, weightDelta);
+  updateLengthPreference(bookData.pageCount, rating >= 3);
   profile.interactionCount = (profile.interactionCount || 0) + 1;
   updateStreak();
   responseMessage = "Rated \"" + title + "\" " + rating + "/5.";
@@ -153,6 +181,7 @@ if (action === "save") {
     });
     // Dismiss = -0.1 per category
     updateGenreWeights(bookData.categories, -0.1);
+    updateMoodWeights(bookData.moodTags, -0.1);
     profile.interactionCount = (profile.interactionCount || 0) + 1;
     updateStreak();
     responseMessage = "Dismissed \"" + title + "\". It won't appear in future picks.";
@@ -186,6 +215,13 @@ if (profile.updatedAt && profile.updatedAt.slice(0, 10) !== todayStr && action !
       var ak = authorKeys[ai];
       var aval = profile.authorAffinities[ak];
       profile.authorAffinities[ak] = 0.5 + (aval - 0.5) * decayFactor;
+    }
+    // Decay mood weights toward 0.5 baseline
+    var moodKeys = Object.keys(profile.moodWeights || {});
+    for (var mi = 0; mi < moodKeys.length; mi++) {
+      var mk = moodKeys[mi];
+      var mval = profile.moodWeights[mk];
+      profile.moodWeights[mk] = 0.5 + (mval - 0.5) * decayFactor;
     }
   }
 }
@@ -221,6 +257,8 @@ var result = {
     ratings: profile.ratings.slice(-10),
     streak: profile.streak || { current: 0, longest: 0 },
     topAuthors: Object.entries(profile.authorAffinities || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5).map(function(e) { return { author: e[0], affinity: Math.round(e[1] * 100) / 100 }; }),
+    topMoods: Object.entries(profile.moodWeights || {}).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5).map(function(e) { return { mood: e[0], weight: Math.round(e[1] * 100) / 100 }; }),
+    lengthPreference: (profile.lengthPreference || 0) > 0.3 ? "long" : (profile.lengthPreference || 0) < -0.3 ? "short" : "balanced",
   },
 };
 

@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "createdAt": 1713100000000,
+  "spec": {
+    "toolFamily": "strategy_simulator",
+    "toolPrefix": "enso_strategy_simulator_",
+    "description": "Portfolio strategy simulator for exploring construction parameters, risk budgeting, performance benchmarks, development roadmaps, and decision tracking for quantitative trading strategies",
+    "signatureId": "strategy_simulator_view",
+    "tools": [
+      {
+        "suffix": "configure",
+        "description": "Configure portfolio construction parameters and see computed impact metrics. Adjusts holdings count, rebalance frequency, weighting scheme, concentration limits, and regime buffer. Use when the user says: 'configure strategy', 'set portfolio parameters', 'adjust holdings', 'strategy settings'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "holdings": {
+              "type": "number",
+              "description": "Number of holdings (10, 20, 30, or 50)"
+            },
+            "rebalanceFrequency": {
+              "type": "string",
+              "description": "Rebalance frequency: weekly, monthly, or quarterly"
+            },
+            "weightingScheme": {
+              "type": "string",
+              "description": "Weighting scheme: equal_weight, rank_weighted, or volatility_scaled"
+            },
+            "maxSingleWeight": {
+              "type": "number",
+              "description": "Maximum single-stock weight percentage (1-10)"
+            },
+            "maxSectorConcentration": {
+              "type": "number",
+              "description": "Maximum sector concentration percentage (15-40)"
+            },
+            "regimeBuffer": {
+              "type": "boolean",
+              "description": "Enable regime-conditional cash buffer"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "holdings": 30, "rebalanceFrequency": "monthly", "weightingScheme": "equal_weight" },
+        "sampleData": {
+          "tool": "enso_strategy_simulator_configure",
+          "config": {
+            "holdings": 30,
+            "rebalanceFrequency": "monthly",
+            "weightingScheme": "equal_weight",
+            "maxSingleWeight": 5,
+            "maxSectorConcentration": 25,
+            "regimeBuffer": false
+          },
+          "metrics": {
+            "estimatedTurnover": "~140%",
+            "diversificationScore": 7.5,
+            "concentrationRisk": "Medium",
+            "rebalanceCostImpact": "0.35%",
+            "effectivePositions": 28.5,
+            "herfindahlIndex": 0.035
+          },
+          "warnings": []
+        },
+        "requiredDataKeys": ["tool", "config", "metrics"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "benchmark",
+        "description": "Show historical performance reference table comparing benchmark strategies with CAGR, Sharpe ratio, max drawdown, and turnover data. Use when the user says: 'show benchmarks', 'performance comparison', 'historical returns', 'strategy comparison'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "period": {
+              "type": "string",
+              "description": "Historical period: 10yr, 20yr, or full (default: 20yr)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_strategy_simulator_benchmark",
+          "period": "20yr",
+          "strategies": [
+            { "name": "S&P 500 Buy & Hold", "cagr": 10.5, "sharpe": 0.65, "maxDrawdown": -33.9, "turnover": 5, "category": "passive" },
+            { "name": "Equal-Weight Top 20 (Value)", "cagr": 14.2, "sharpe": 0.82, "maxDrawdown": -38.1, "turnover": 120, "category": "factor" },
+            { "name": "ML Ensemble Top 30 (Backtest)", "cagr": 18.5, "sharpe": 1.15, "maxDrawdown": -28.4, "turnover": 150, "category": "ml" },
+            { "name": "Target AlphaRank", "cagr": 18.0, "sharpe": 1.5, "maxDrawdown": -25.0, "turnover": 200, "category": "target" }
+          ],
+          "notes": "Historical data sourced from published academic research and index providers. ML backtest results are in-sample and subject to overfitting bias."
+        },
+        "requiredDataKeys": ["tool", "strategies"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "risk_calc",
+        "description": "Interactive risk budget calculator. Given portfolio size, return target, and max drawdown, computes required Sharpe ratio, volatility budget, position count, transaction costs, and break-even win rate. Use when the user says: 'calculate risk budget', 'risk analysis', 'how much can I lose', 'position sizing'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "portfolioSize": {
+              "type": "number",
+              "description": "Portfolio size in dollars"
+            },
+            "returnTarget": {
+              "type": "number",
+              "description": "Annual return target percentage"
+            },
+            "maxDrawdown": {
+              "type": "number",
+              "description": "Maximum acceptable drawdown percentage"
+            },
+            "turnoverEstimate": {
+              "type": "number",
+              "description": "Estimated annual turnover percentage (default: 150)"
+            },
+            "commissionBps": {
+              "type": "number",
+              "description": "Commission in basis points per trade (default: 5)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "portfolioSize": 100000, "returnTarget": 18, "maxDrawdown": 25 },
+        "sampleData": {
+          "tool": "enso_strategy_simulator_risk_calc",
+          "inputs": {
+            "portfolioSize": 100000,
+            "returnTarget": 18,
+            "maxDrawdown": 25,
+            "turnoverEstimate": 150,
+            "commissionBps": 5
+          },
+          "outputs": {
+            "requiredSharpe": 1.44,
+            "impliedVolatility": 12.5,
+            "suggestedPositions": 25,
+            "annualTransactionCosts": 1500,
+            "transactionCostPct": 1.5,
+            "breakEvenWinRate": 55.2,
+            "kellyFraction": 0.18,
+            "riskOfRuin": 2.3
+          },
+          "formulas": {
+            "sharpe": "Required Sharpe = Return Target / Implied Volatility",
+            "volatility": "Implied Vol = Max Drawdown / (Drawdown Multiplier × √T)",
+            "positions": "Min Positions = 1 / (Max Single Weight × Concentration Factor)",
+            "costs": "Annual Costs = Portfolio × Turnover × 2 × Commission(bps)/10000",
+            "winRate": "Break-even = 0.5 + (Costs / (2 × Portfolio × Return%))"
+          }
+        },
+        "requiredDataKeys": ["tool", "inputs", "outputs"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "roadmap",
+        "description": "Show the development roadmap timeline with phases, deliverables, success criteria, and GO/NO-GO gates for building a quantitative trading strategy. Use when the user says: 'show roadmap', 'development timeline', 'project phases', 'what comes next'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "startMonth": {
+              "type": "string",
+              "description": "Start month in YYYY-MM format (default: current month)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_strategy_simulator_roadmap",
+          "startMonth": "2026-04",
+          "phases": [
+            {
+              "id": 1, "name": "Data Pipeline", "months": "1-2", "startDate": "2026-04", "endDate": "2026-05",
+              "status": "active",
+              "deliverables": ["Clean price/volume feeds", "Fundamental data pipeline", "Alternative data ingestion", "Data quality monitoring"],
+              "successCriteria": ["99.5% data availability", "<5min latency for daily updates", "Automated anomaly detection live"],
+              "isGate": false
+            },
+            {
+              "id": 2, "name": "Model Development", "months": "2-4", "startDate": "2026-05", "endDate": "2026-07",
+              "status": "upcoming",
+              "deliverables": ["Feature engineering (15-20 signals)", "ML ensemble architecture", "Backtesting framework", "Factor exposure analysis"],
+              "successCriteria": ["IC > 0.03 across 5+ features", "Turnover-adjusted returns positive", "No single-factor dominance"],
+              "isGate": false
+            },
+            {
+              "id": 3, "name": "Walk-Forward Validation", "months": "4-6", "startDate": "2026-07", "endDate": "2026-09",
+              "status": "upcoming",
+              "deliverables": ["Walk-forward test harness", "Out-of-sample validation", "Regime stress tests", "GO/NO-GO decision document"],
+              "successCriteria": ["OOS Sharpe > 0.8", "Max DD < 30% in stress tests", "Consistent IC across regimes"],
+              "isGate": true, "gateLabel": "GO / NO-GO"
+            },
+            {
+              "id": 4, "name": "Paper Trading", "months": "6-18", "startDate": "2026-09", "endDate": "2027-09",
+              "status": "upcoming",
+              "deliverables": ["Paper trading infrastructure", "Real-time signal generation", "Execution simulation", "Monthly performance reports"],
+              "successCriteria": ["12-month Sharpe > 1.0", "Live IC matches backtest IC ± 20%", "No systematic execution gaps"],
+              "isGate": false
+            },
+            {
+              "id": 5, "name": "Live Deployment", "months": "18+", "startDate": "2027-09", "endDate": "ongoing",
+              "status": "upcoming",
+              "deliverables": ["Broker integration", "Position management system", "Risk monitoring dashboard", "Automated alerting"],
+              "successCriteria": ["Slippage < 10bps average", "Risk limits never breached", "Quarterly review cycle established"],
+              "isGate": false
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "phases"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "checklist",
+        "description": "Interactive decision checklist for tracking key milestones and go/no-go criteria in quantitative strategy development. Persists state across sessions. Use when the user says: 'show checklist', 'track progress', 'decision checklist', 'what have I completed'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: view, toggle, or reset"
+            },
+            "itemId": {
+              "type": "string",
+              "description": "Item ID to toggle (for toggle action)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "action": "view" },
+        "sampleData": {
+          "tool": "enso_strategy_simulator_checklist",
+          "items": [
+            { "id": "data_sources", "label": "Data sources selected and tested", "phase": "Data Pipeline", "checked": false, "notes": "" },
+            { "id": "feature_universe", "label": "Feature universe defined (15-20 signals)", "phase": "Model Development", "checked": false, "notes": "" },
+            { "id": "walkforward_protocol", "label": "Walk-forward validation protocol designed", "phase": "Validation", "checked": false, "notes": "" },
+            { "id": "backtest_ic", "label": "Backtest shows IC > 0.03 sustained", "phase": "Validation", "checked": false, "notes": "" },
+            { "id": "paper_launched", "label": "Paper trading launched", "phase": "Paper Trading", "checked": false, "notes": "" },
+            { "id": "paper_6m_review", "label": "6-month paper trading results reviewed", "phase": "Paper Trading", "checked": false, "notes": "" },
+            { "id": "paper_12m_sharpe", "label": "12-month paper trading Sharpe > 1.0", "phase": "Paper Trading", "checked": false, "notes": "" },
+            { "id": "risk_rules", "label": "Risk management rules coded and tested", "phase": "Risk Management", "checked": false, "notes": "" },
+            { "id": "live_deploy", "label": "Live deployment with position limits", "phase": "Deployment", "checked": false, "notes": "" }
+          ],
+          "completedCount": 0,
+          "totalCount": 9,
+          "progressPct": 0
+        },
+        "requiredDataKeys": ["tool", "items"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

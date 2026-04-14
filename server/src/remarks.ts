@@ -72,12 +72,14 @@ interface ContextRegistry {
 }
 
 function loadContextRegistry(): ContextRegistry {
+  const defaults: ContextRegistry = { contexts: {}, lastWechatNotification: {}, lastEmailNotificationId: null };
   try {
     if (existsSync(NOTIFICATION_CONTEXT_PATH)) {
-      return JSON.parse(readFileSync(NOTIFICATION_CONTEXT_PATH, "utf-8")) as ContextRegistry;
+      const raw = JSON.parse(readFileSync(NOTIFICATION_CONTEXT_PATH, "utf-8"));
+      return { ...defaults, ...raw };
     }
   } catch { /* fresh */ }
-  return { contexts: {}, lastWechatNotification: {}, lastEmailNotificationId: null };
+  return defaults;
 }
 
 function saveContextRegistry(reg: ContextRegistry): void {
@@ -91,7 +93,7 @@ function saveContextRegistry(reg: ContextRegistry): void {
   writeFileSync(NOTIFICATION_CONTEXT_PATH, JSON.stringify(reg, null, 2), "utf-8");
 }
 
-function loadRemarks(): Remark[] {
+export function loadRemarks(): Remark[] {
   try {
     if (existsSync(REMARKS_PATH)) return JSON.parse(readFileSync(REMARKS_PATH, "utf-8")) as Remark[];
   } catch { /* fresh */ }

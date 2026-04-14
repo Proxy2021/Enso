@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "createdAt": 1744675200000,
+  "spec": {
+    "toolFamily": "album_designer",
+    "toolPrefix": "enso_album_designer_",
+    "description": "Gift photo album designer — plan Printique 10x10 lay-flat hardcover albums with 5-pass curation tracking, spread layout planning, narrative arc visualization, and print-ready checklists.",
+    "signatureId": "album_designer_view",
+    "tools": [
+      {
+        "suffix": "setup_project",
+        "description": "Create or load an album project with title, recipient, theme, and format specs. Use when the user says: 'start album project', 'create a photo book', 'design a gift album', 'plan my photo album'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: create, load, update, list, delete"
+            },
+            "projectId": {
+              "type": "string",
+              "description": "Project ID for load/update/delete (omit for create/list)"
+            },
+            "title": {
+              "type": "string",
+              "description": "Album title"
+            },
+            "recipient": {
+              "type": "string",
+              "description": "Who is this gift for?"
+            },
+            "theme": {
+              "type": "string",
+              "description": "Trip or theme name"
+            },
+            "targetSpreads": {
+              "type": "number",
+              "description": "Target number of spreads (default: 35)"
+            },
+            "targetImages": {
+              "type": "number",
+              "description": "Target total images (default: 60)"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "create", "title": "Summer in Kyoto", "recipient": "Mom", "theme": "Japan 2025" },
+        "sampleData": {
+          "tool": "enso_album_designer_setup_project",
+          "action": "create",
+          "project": {
+            "id": "proj_1744675200",
+            "title": "Summer in Kyoto",
+            "recipient": "Mom",
+            "theme": "Japan 2025",
+            "format": {
+              "printer": "Printique",
+              "size": "10×10 inches",
+              "binding": "Lay-flat hardcover",
+              "finish": "Lustre",
+              "paper": "200+ gsm premium",
+              "colorProfile": "sRGB"
+            },
+            "targetSpreads": 35,
+            "targetImages": 60,
+            "createdAt": "2026-04-14T00:00:00Z",
+            "updatedAt": "2026-04-14T00:00:00Z"
+          },
+          "projects": []
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "update_curation",
+        "description": "Track the 5-pass curation journey: update progress for each pass (Technical Kill, Print Test, Thematic Grouping, Narrative Arc, Album Cut) with remaining counts and completion status.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "description": "Project ID"
+            },
+            "pass": {
+              "type": "number",
+              "description": "Pass number 1-5"
+            },
+            "remainingCount": {
+              "type": "number",
+              "description": "Number of images remaining after this pass"
+            },
+            "completed": {
+              "type": "boolean",
+              "description": "Mark this pass as completed"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Optional notes for this pass"
+            }
+          },
+          "required": ["projectId"]
+        },
+        "sampleParams": { "projectId": "proj_1744675200", "pass": 1, "remainingCount": 25000, "completed": true },
+        "sampleData": {
+          "tool": "enso_album_designer_update_curation",
+          "projectId": "proj_1744675200",
+          "curation": {
+            "startCount": 124000,
+            "passes": [
+              { "pass": 1, "name": "Technical Kill", "targetRange": "~25,000", "startCount": 124000, "remainingCount": 25000, "culledPercent": 79.8, "completed": true, "notes": "", "starRating": 1 },
+              { "pass": 2, "name": "Print Test", "targetRange": "~5,000", "startCount": 25000, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 2 },
+              { "pass": 3, "name": "Thematic Grouping", "targetRange": "~500", "startCount": 5000, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 3 },
+              { "pass": 4, "name": "Narrative Arc", "targetRange": "~120", "startCount": 500, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 4 },
+              { "pass": 5, "name": "Album Cut", "targetRange": "50–70", "startCount": 120, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 5 }
+            ],
+            "overallProgress": 20,
+            "currentPass": 2
+          }
+        },
+        "requiredDataKeys": ["tool", "projectId", "curation"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "manage_spreads",
+        "description": "Plan album spread layouts — add, update, reorder, or remove spreads. Each spread has a layout type, image descriptions, theme tag, and narrative position.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "description": "Project ID"
+            },
+            "action": {
+              "type": "string",
+              "description": "Action: add, update, remove, reorder, list"
+            },
+            "spreadIndex": {
+              "type": "number",
+              "description": "Spread index (0-based) for update/remove"
+            },
+            "layout": {
+              "type": "string",
+              "description": "Layout type: full_bleed, two_side_by_side, large_small, three_grid, text_page"
+            },
+            "imageDesc": {
+              "type": "string",
+              "description": "Description of images on this spread"
+            },
+            "themeTag": {
+              "type": "string",
+              "description": "Theme tag: light_shadow, faces, architecture, nature, culture, street, food, transport"
+            },
+            "narrativePos": {
+              "type": "string",
+              "description": "Narrative position: opening, rising, climax, resolution"
+            },
+            "moveFrom": {
+              "type": "number",
+              "description": "Source index for reorder"
+            },
+            "moveTo": {
+              "type": "number",
+              "description": "Destination index for reorder"
+            }
+          },
+          "required": ["projectId", "action"]
+        },
+        "sampleParams": { "projectId": "proj_1744675200", "action": "add", "layout": "full_bleed", "imageDesc": "Golden hour over Kinkaku-ji", "themeTag": "architecture", "narrativePos": "climax" },
+        "sampleData": {
+          "tool": "enso_album_designer_manage_spreads",
+          "projectId": "proj_1744675200",
+          "action": "add",
+          "totalSpreads": 1,
+          "targetSpreads": 35,
+          "spreads": [
+            { "index": 0, "layout": "full_bleed", "imageDesc": "Golden hour over Kinkaku-ji", "themeTag": "architecture", "narrativePos": "climax", "imageCount": 1 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "projectId", "action", "spreads"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "view_narrative",
+        "description": "Visualize the album's narrative arc — see emotional pacing, theme distribution, and layout variety across all spreads. Flags pacing issues like consecutive similar themes.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "description": "Project ID"
+            }
+          },
+          "required": ["projectId"]
+        },
+        "sampleParams": { "projectId": "proj_1744675200" },
+        "sampleData": {
+          "tool": "enso_album_designer_view_narrative",
+          "projectId": "proj_1744675200",
+          "title": "Summer in Kyoto",
+          "totalSpreads": 10,
+          "arcData": [
+            { "spread": 1, "narrativePos": "opening", "arcValue": 20, "themeTag": "nature", "layout": "full_bleed", "imageDesc": "Bamboo grove entrance" },
+            { "spread": 2, "narrativePos": "opening", "arcValue": 25, "themeTag": "architecture", "layout": "two_side_by_side", "imageDesc": "Temple gates" }
+          ],
+          "themeDistribution": [
+            { "theme": "nature", "count": 3, "color": "#22c55e" },
+            { "theme": "architecture", "count": 2, "color": "#3b82f6" }
+          ],
+          "layoutDistribution": [
+            { "layout": "full_bleed", "count": 4 },
+            { "layout": "two_side_by_side", "count": 3 }
+          ],
+          "pacingWarnings": [
+            { "type": "consecutive_theme", "start": 3, "end": 5, "theme": "nature", "message": "3 consecutive 'nature' spreads (3-5) — consider alternating themes" }
+          ],
+          "arcBalance": { "opening": 2, "rising": 3, "climax": 3, "resolution": 2 }
+        },
+        "requiredDataKeys": ["tool", "projectId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "print_checklist",
+        "description": "View and update the print-ready checklist — export settings, color profile, proof copy, spine text, cover image, budget estimate, and Printique order specs.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "description": "Project ID"
+            },
+            "toggleItem": {
+              "type": "string",
+              "description": "Checklist item key to toggle: dpi_300, srgb_profile, proof_ordered, spine_text, cover_selected, images_exported, final_review"
+            },
+            "spineText": {
+              "type": "string",
+              "description": "Text for the album spine"
+            },
+            "coverImageDesc": {
+              "type": "string",
+              "description": "Description of the chosen cover image"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Additional notes"
+            }
+          },
+          "required": ["projectId"]
+        },
+        "sampleParams": { "projectId": "proj_1744675200", "toggleItem": "dpi_300" },
+        "sampleData": {
+          "tool": "enso_album_designer_print_checklist",
+          "projectId": "proj_1744675200",
+          "title": "Summer in Kyoto",
+          "checklist": [
+            { "key": "dpi_300", "label": "All images exported at 300 DPI", "checked": true, "category": "Export" },
+            { "key": "srgb_profile", "label": "Color profile set to sRGB", "checked": false, "category": "Export" },
+            { "key": "images_exported", "label": "Final images exported to print folder", "checked": false, "category": "Export" },
+            { "key": "proof_ordered", "label": "Proof copy ordered", "checked": false, "category": "Review" },
+            { "key": "final_review", "label": "Final spread-by-spread review complete", "checked": false, "category": "Review" },
+            { "key": "spine_text", "label": "Spine text decided", "checked": false, "category": "Design" },
+            { "key": "cover_selected", "label": "Cover image selected", "checked": false, "category": "Design" }
+          ],
+          "completedCount": 1,
+          "totalCount": 7,
+          "spineText": "",
+          "coverImageDesc": "",
+          "specs": {
+            "printer": "Printique",
+            "size": "10×10 inches",
+            "binding": "Lay-flat hardcover",
+            "finish": "Lustre",
+            "paper": "200+ gsm premium",
+            "colorProfile": "sRGB",
+            "orderUrl": "https://www.printique.com/photo-books"
+          },
+          "budget": {
+            "basePrice": 89.99,
+            "perExtraSpread": 1.99,
+            "estimatedSpreads": 35,
+            "estimatedTotal": 139.64,
+            "currency": "USD",
+            "note": "Estimate based on 10×10 lay-flat hardcover with lustre finish"
+          }
+        },
+        "requiredDataKeys": ["tool", "projectId", "checklist"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

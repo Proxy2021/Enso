@@ -1,0 +1,335 @@
+{
+  "version": 1,
+  "createdAt": 1713100800000,
+  "spec": {
+    "toolFamily": "workflow_mapper",
+    "toolPrefix": "enso_workflow_mapper_",
+    "description": "Workflow integration mapper — inventory your daily tools, map workflows, discover Enso integration opportunities, and build automation rules to eliminate friction",
+    "signatureId": "workflow_mapper_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "description": "View your workflow profile: tool inventory summary, mapped workflows, integration score, and automation rules. Use when the user says: 'open workflow mapper', 'show my workflows', 'workflow dashboard', 'integration planner', 'show my tools'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_workflow_mapper_browse",
+          "toolCount": 8,
+          "workflowCount": 3,
+          "automationCount": 2,
+          "integrationScore": 72,
+          "tools": [
+            { "id": "t1", "name": "Gmail", "category": "Communication", "frequency": "daily", "useCase": "Work email", "painPoints": "Inbox overwhelm" },
+            { "id": "t2", "name": "GitHub", "category": "Development", "frequency": "daily", "useCase": "Code review", "painPoints": "PR notifications" },
+            { "id": "t3", "name": "Notion", "category": "Productivity", "frequency": "daily", "useCase": "Note-taking", "painPoints": "" },
+            { "id": "t4", "name": "Calendar", "category": "Productivity", "frequency": "daily", "useCase": "Scheduling", "painPoints": "Meeting prep" },
+            { "id": "t5", "name": "Slack", "category": "Communication", "frequency": "daily", "useCase": "Team chat", "painPoints": "Too many channels" }
+          ],
+          "workflows": [
+            { "id": "w1", "name": "Morning routine", "stepCount": 5, "totalMinutes": 45, "frictionPoints": 2, "createdAt": "2026-04-14T08:00:00Z" },
+            { "id": "w2", "name": "Meeting prep", "stepCount": 4, "totalMinutes": 20, "frictionPoints": 1, "createdAt": "2026-04-14T09:00:00Z" },
+            { "id": "w3", "name": "End of day review", "stepCount": 4, "totalMinutes": 30, "frictionPoints": 2, "createdAt": "2026-04-14T17:00:00Z" }
+          ],
+          "automations": [
+            { "id": "a1", "trigger": "New calendar event", "triggerTool": "Calendar", "action": "Prepare meeting brief", "priority": "high", "status": "available" },
+            { "id": "a2", "trigger": "PR assigned", "triggerTool": "GitHub", "action": "Summarize changes", "priority": "medium", "status": "planned" }
+          ]
+        },
+        "requiredDataKeys": ["tool"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "inventory",
+        "description": "Add, remove, or update tools in your daily tool inventory. Specify category, frequency, use case, and pain points for each tool. Use when the user says: 'add a tool', 'I use Slack', 'update my tools', 'remove tool', 'edit tool inventory'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: add, remove, update, list"
+            },
+            "name": {
+              "type": "string",
+              "description": "Tool name (e.g. Gmail, Slack, GitHub, Notion, Calendar)"
+            },
+            "category": {
+              "type": "string",
+              "description": "Category: Communication, Productivity, Development, Media, Finance, Other"
+            },
+            "frequency": {
+              "type": "string",
+              "description": "Usage frequency: daily, weekly, monthly"
+            },
+            "useCase": {
+              "type": "string",
+              "description": "Primary use case in 1-3 words"
+            },
+            "painPoints": {
+              "type": "string",
+              "description": "Optional friction or pain points with this tool"
+            },
+            "toolId": {
+              "type": "string",
+              "description": "Tool ID for remove/update actions"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "add", "name": "Slack", "category": "Communication", "frequency": "daily", "useCase": "Team chat", "painPoints": "Too many channels" },
+        "sampleData": {
+          "tool": "enso_workflow_mapper_inventory",
+          "action": "add",
+          "message": "Added Slack to your tool inventory",
+          "addedTool": { "id": "t6", "name": "Slack", "category": "Communication", "frequency": "daily", "useCase": "Team chat", "painPoints": "Too many channels" },
+          "tools": [
+            { "id": "t1", "name": "Gmail", "category": "Communication", "frequency": "daily", "useCase": "Work email", "painPoints": "Inbox overwhelm" },
+            { "id": "t6", "name": "Slack", "category": "Communication", "frequency": "daily", "useCase": "Team chat", "painPoints": "Too many channels" }
+          ],
+          "totalTools": 2,
+          "byCategory": { "Communication": 2 }
+        },
+        "requiredDataKeys": ["tool", "action", "tools"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "map_workflow",
+        "description": "Create or edit a daily workflow mapping with ordered steps, tools used, time estimates, and friction points. Use template names like 'Morning routine', 'Work deep focus', 'Meeting prep', 'End of day review', 'Weekend planning'. Use when the user says: 'map a workflow', 'create workflow', 'morning routine', 'map my process', 'add workflow steps'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: create, view, add_step, remove_step, delete"
+            },
+            "name": {
+              "type": "string",
+              "description": "Workflow name"
+            },
+            "template": {
+              "type": "string",
+              "description": "Template: morning_routine, deep_focus, meeting_prep, end_of_day, weekend_planning, blank"
+            },
+            "workflowId": {
+              "type": "string",
+              "description": "Workflow ID for view/edit/delete actions"
+            },
+            "stepLabel": {
+              "type": "string",
+              "description": "Step description for add_step"
+            },
+            "stepTool": {
+              "type": "string",
+              "description": "Tool used at this step for add_step"
+            },
+            "stepMinutes": {
+              "type": "number",
+              "description": "Estimated minutes for this step"
+            },
+            "stepFriction": {
+              "type": "string",
+              "description": "Friction/pain point at this step (optional)"
+            },
+            "stepId": {
+              "type": "string",
+              "description": "Step ID for remove_step"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "create", "name": "Morning routine", "template": "morning_routine" },
+        "sampleData": {
+          "tool": "enso_workflow_mapper_map_workflow",
+          "action": "create",
+          "workflowId": "w1",
+          "name": "Morning routine",
+          "template": "morning_routine",
+          "steps": [
+            { "id": "s1", "order": 1, "label": "Check email inbox", "tool": "Gmail", "minutes": 10, "friction": "Too many unread, hard to prioritize" },
+            { "id": "s2", "order": 2, "label": "Review calendar for today", "tool": "Calendar", "minutes": 5, "friction": "" },
+            { "id": "s3", "order": 3, "label": "Check team messages", "tool": "Slack", "minutes": 10, "friction": "Catching up on overnight messages" },
+            { "id": "s4", "order": 4, "label": "Review task list", "tool": "Todoist", "minutes": 5, "friction": "Prioritization takes effort" },
+            { "id": "s5", "order": 5, "label": "Plan day's focus", "tool": "Notion", "minutes": 15, "friction": "Context switching between tools" }
+          ],
+          "totalMinutes": 45,
+          "frictionPoints": 3,
+          "message": "Created 'Morning routine' workflow with 5 steps"
+        },
+        "requiredDataKeys": ["tool", "action", "steps"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "analyze",
+        "description": "Analyze your tool inventory and workflows to discover integration opportunities — where Enso can add value, connect tools, save time, and reduce friction. Returns scored recommendations with impact levels. Use when the user says: 'find integration opportunities', 'how can Enso help', 'analyze my workflow', 'integration suggestions', 'where can Enso fit in'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focus": {
+              "type": "string",
+              "description": "Focus area: all, communication, productivity, automation, time_saving (default: all)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_workflow_mapper_analyze",
+          "focus": "all",
+          "integrationScore": 72,
+          "totalTimeSaveable": 45,
+          "opportunities": [
+            {
+              "id": "opp1",
+              "title": "Morning Email Triage",
+              "impact": "high",
+              "description": "Enso reads your inbox, categorizes by priority, and delivers a 3-line briefing with action items",
+              "connects": ["Gmail", "Calendar"],
+              "timeSaved": 15,
+              "available": true,
+              "example": "Enso reads your calendar → prepares meeting briefs → sends summary to Slack"
+            },
+            {
+              "id": "opp2",
+              "title": "Meeting Preparation Automation",
+              "impact": "high",
+              "description": "When a meeting appears on your calendar, Enso gathers relevant docs, past notes, and attendee context",
+              "connects": ["Calendar", "Notion", "Gmail"],
+              "timeSaved": 12,
+              "available": true,
+              "example": "Calendar event detected → Enso pulls attendee emails, related Notion pages → pre-built agenda"
+            },
+            {
+              "id": "opp3",
+              "title": "PR Review Assistant",
+              "impact": "medium",
+              "description": "Enso summarizes PR changes, highlights key areas, and drafts review comments",
+              "connects": ["GitHub"],
+              "timeSaved": 8,
+              "available": false,
+              "example": "PR assigned → Enso reads diff, identifies patterns → suggests review focus"
+            },
+            {
+              "id": "opp4",
+              "title": "End-of-Day Digest",
+              "impact": "medium",
+              "description": "Enso compiles what you accomplished, what's pending, and tomorrow's priorities from all tools",
+              "connects": ["Gmail", "GitHub", "Todoist", "Calendar"],
+              "timeSaved": 10,
+              "available": true,
+              "example": "5pm trigger → Enso aggregates completed tasks, PRs, emails → sends evening summary"
+            }
+          ],
+          "categories": {
+            "available_now": 3,
+            "needs_development": 1
+          }
+        },
+        "requiredDataKeys": ["tool", "opportunities"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "automation",
+        "description": "Create, view, or manage automation rules: 'When [trigger] in [tool], Enso should [action]'. Includes pre-built templates. Use when the user says: 'create automation', 'set up a rule', 'when this happens do that', 'automation templates', 'build automation'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: create, list, delete, use_template"
+            },
+            "trigger": {
+              "type": "string",
+              "description": "Trigger event description"
+            },
+            "triggerTool": {
+              "type": "string",
+              "description": "Tool that triggers the automation"
+            },
+            "ensoAction": {
+              "type": "string",
+              "description": "What Enso should do when triggered"
+            },
+            "priority": {
+              "type": "string",
+              "description": "Priority: high, medium, low"
+            },
+            "templateId": {
+              "type": "string",
+              "description": "Template ID for use_template action"
+            },
+            "automationId": {
+              "type": "string",
+              "description": "Automation ID for delete action"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "create", "trigger": "New calendar event", "triggerTool": "Calendar", "ensoAction": "Prepare meeting brief", "priority": "high" },
+        "sampleData": {
+          "tool": "enso_workflow_mapper_automation",
+          "action": "create",
+          "message": "Automation rule created",
+          "automation": { "id": "a1", "trigger": "New calendar event", "triggerTool": "Calendar", "action": "Prepare meeting brief", "priority": "high", "status": "available", "createdAt": "2026-04-14T10:00:00Z" },
+          "automations": [
+            { "id": "a1", "trigger": "New calendar event", "triggerTool": "Calendar", "action": "Prepare meeting brief", "priority": "high", "status": "available" }
+          ],
+          "templates": [
+            { "id": "tmpl1", "trigger": "New email from VIP contact", "triggerTool": "Email", "action": "Notify immediately with summary", "priority": "high" },
+            { "id": "tmpl2", "trigger": "Calendar event in 30 minutes", "triggerTool": "Calendar", "action": "Prepare meeting brief with attendee context", "priority": "high" },
+            { "id": "tmpl3", "trigger": "End of work day", "triggerTool": "Calendar", "action": "Compile daily accomplishments and tomorrow's priorities", "priority": "medium" },
+            { "id": "tmpl4", "trigger": "New PR assigned", "triggerTool": "GitHub", "action": "Summarize code changes and flag key areas", "priority": "medium" },
+            { "id": "tmpl5", "trigger": "Weekly on Monday morning", "triggerTool": "Calendar", "action": "Generate week-ahead briefing from all tools", "priority": "low" }
+          ],
+          "totalAutomations": 1
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "export",
+        "description": "Export your workflow map, integration analysis, and automation plan as a structured report. Use when the user says: 'export workflow report', 'download integration plan', 'export my workflow map', 'save analysis'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "type": "string",
+              "description": "Export format: summary, detailed, json (default: summary)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "format": "summary" },
+        "sampleData": {
+          "tool": "enso_workflow_mapper_export",
+          "format": "summary",
+          "profile": {
+            "toolCount": 5,
+            "workflowCount": 3,
+            "automationCount": 2,
+            "integrationScore": 72,
+            "totalDailyMinutes": 95,
+            "potentialTimeSaved": 45,
+            "topOpportunities": [
+              { "title": "Morning Email Triage", "impact": "high", "timeSaved": 15 },
+              { "title": "Meeting Preparation Automation", "impact": "high", "timeSaved": 12 }
+            ],
+            "toolsByCategory": { "Communication": 2, "Productivity": 2, "Development": 1 },
+            "automationsByPriority": { "high": 1, "medium": 1 }
+          },
+          "exportedAt": "2026-04-14T10:00:00Z"
+        },
+        "requiredDataKeys": ["tool", "format", "profile"],
+        "isPrimary": false
+      }
+    ]
+  }
+}
