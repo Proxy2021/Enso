@@ -37,8 +37,9 @@ export interface SystemSignals {
   recentErrors: Array<{ ts: number; category: string; message: string }>;
   recentActions: Array<{ ts: number; category: string; message: string }>;
   focusAnalyses: Array<{
-    focusId: string; title: string; recommendedAction: string;
+    focusId: string; title: string; focusType?: string; recommendedAction: string;
     actionReason: string; daysSinceActivity: number; hasUnreviewedResults: boolean;
+    experts: Array<{ id: string; name: string; role: string; hasConversation: boolean }>;
   }>;
   cortexStats: { totalPages: number; entityCount: number; recentUpdates: string[] };
   taskResults: Array<{ taskId: string; taskName: string; status: string; firedAt: number; resultSummary?: string }>;
@@ -167,8 +168,9 @@ export async function gatherSignals(): Promise<SystemSignals> {
     const { analyzeFocusAreas } = await import("./focus-agent.js");
     const analyses = await analyzeFocusAreas();
     focusAnalyses = analyses.map(a => ({
-      focusId: a.focusId, title: a.title, recommendedAction: a.recommendedAction,
+      focusId: a.focusId, title: a.title, focusType: a.focusType, recommendedAction: a.recommendedAction,
       actionReason: a.actionReason, daysSinceActivity: a.daysSinceActivity, hasUnreviewedResults: a.hasUnreviewedResults,
+      experts: a.experts,
     }));
   } catch { /* focus agent not available */ }
 
@@ -249,9 +251,12 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     signals.recentErrors.length > 0 ? `Recent errors (${signals.recentErrors.length}):\n${signals.recentErrors.slice(0, 5).map(e => `  - [${e.category}] ${e.message}`).join("\n")}` : "No recent errors.",
     "",
     `## Focus Areas (${signals.focusAnalyses.length} active)`,
-    ...signals.focusAnalyses.map(f =>
-      `- "${f.title}" — ${f.recommendedAction}: ${f.actionReason}${f.hasUnreviewedResults ? " [UNREVIEWED RESULTS]" : ""} (${f.daysSinceActivity}d inactive)`
-    ),
+    ...signals.focusAnalyses.map(f => {
+      const expertLine = f.experts.length > 0
+        ? `\n    Expert team: ${f.experts.map(e => `${e.name} (${e.role}${e.hasConversation ? ", has chat" : ""})`).join(", ")}`
+        : "\n    No expert team assigned yet";
+      return `- "${f.title}" [${f.focusType || "general"}] — ${f.recommendedAction}: ${f.actionReason}${f.hasUnreviewedResults ? " [UNREVIEWED RESULTS]" : ""} (${f.daysSinceActivity}d inactive)${expertLine}`;
+    }),
     "",
     `## Cortex`,
     `${signals.cortexStats.totalPages} wiki pages, ${signals.cortexStats.entityCount} entities`,
@@ -295,6 +300,12 @@ When in doubt, ACT. The user wants a proactive partner, not a cautious assistant
 Do NOT defer work to "next cycle" — execute everything you can right now.
 You can also CREATE NEW TASKS for yourself if you identify follow-up work during assessment.
 You run the organization. Be decisive, be thorough, be proactive.
+
+EXPERT TEAMS: Each focus area may have domain-specific experts (shown above).
+- You can delegate tasks to specific experts by setting delegation to "expert:<expert-name>"
+- If a focus area has NO experts yet, consider generating them as an action
+- Experts are your team — use them. Don't do everything yourself when a specialist is available.
+- Consider scheduling a "team sync" action if experts haven't been consulted recently.
 
 Produce a prioritized action plan as a JSON array. Include 3-7 actions, most impactful first.
 

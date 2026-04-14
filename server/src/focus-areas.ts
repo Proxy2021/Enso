@@ -1002,11 +1002,21 @@ export async function launchFocusEvolve(params: {
     },
   };
 
+  // Build expert team context for the orchestration planner
+  const expertContext = area.experts?.length
+    ? `\n\n## Expert Team\nThis focus area has ${area.experts.length} domain experts. Use them as agent roles in the sprint:\n${area.experts.map(e => `- **${e.name}** (${e.role}, agentRole: ${e.agentRole}): ${e.responsibilities}`).join("\n")}`
+    : "";
+
   const context: OCtx = {
     type: "focus",
-    goal: brief || `Evolve focus area: ${area.title}\n\nGoal: ${area.intent || area.description}\nWhy: ${area.deeperIntent || ""}`,
+    goal: (brief || `Evolve focus area: ${area.title}\n\nGoal: ${area.intent || area.description}\nWhy: ${area.deeperIntent || ""}`) + expertContext,
     briefing: area.preparedBriefing,
     discussion: discussion || undefined,
+    teamAgents: area.experts?.map(e => ({
+      id: e.id, name: e.name, role: e.role,
+      responsibilities: e.responsibilities, goals: e.goals,
+      perspective: e.perspective, agentRole: e.agentRole,
+    })),
     scale: "standard",
   };
 
@@ -1750,7 +1760,10 @@ export function getFocusContextForAgent(userMessage?: string): string {
     const intentStr = a.intent ? ` → ${a.intent}` : "";
     const deeperStr = a.deeperIntent ? ` (WHY: ${a.deeperIntent})` : "";
     const matched = matchedFocus?.id === a.id ? " ← CURRENT TOPIC" : "";
-    return `- ${a.title} [${a.clarity}, ${marker}]: ${a.description}${intentStr}${deeperStr}${matched}`;
+    const expertStr = a.experts?.length
+      ? `\n  Experts: ${a.experts.map(e => `${e.name} (${e.role})`).join(", ")}`
+      : "";
+    return `- ${a.title} [${a.focusType || "general"}, ${a.clarity}, ${marker}]: ${a.description}${intentStr}${deeperStr}${matched}${expertStr}`;
   });
 
   let block = `<focus_areas>\nUser's active focus areas (what matters to them right now):\n${lines.join("\n")}`;
