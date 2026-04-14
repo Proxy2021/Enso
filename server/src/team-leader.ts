@@ -468,10 +468,11 @@ async function handleReactForTL(reactId: string): Promise<void> {
     const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
     const isProactive = proactiveTypes.has(react.context?.type);
 
+    const escapedText = react.text.replace(/"/g, '\\"');
     const response = await llm({
       prompt: `You are the Team Leader of Enso. A user react just arrived.
 ${isProactive ? "\n**This is a DIRECT USER INSTRUCTION** (not a response to a notification). Treat with high priority and bias toward action.\n" : ""}
-REACT: "${react.text}"
+REACT: "${escapedText}"
 CHANNEL: ${react.channel}
 CONTEXT: ${react.context?.type || "general"} — ${react.context?.summary || "no context"}
 ACTION: ${react.action || "custom text"}
@@ -483,9 +484,9 @@ Decide what to do:
 4. "ignore" — No action needed. Use for auto-responses or irrelevant content.
 ${react.context?.focusId ? `\nThis react is about a focus area. Consider delegating to a domain expert if it's domain-specific.` : ""}
 
-Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>", "actionDescription": "<what to do if act>" }`,
+Return JSON only, no markdown: {"decision":"act","reason":"...","actionDescription":"..."}`,
       tier: "fast",
-      maxOutputTokens: 200,
+      maxOutputTokens: 300,
       temperature: 0.3,
       timeoutMs: 15_000,
     });
