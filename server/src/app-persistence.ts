@@ -146,8 +146,10 @@ function saveStoreForFamily(family: string, data: Record<string, unknown>): void
 
 /**
  * Build an ExecutorContext that bridges generated app executors to real
- * Enso capabilities. Each call is logged, timed, and guarded with
- * a timeout + max nesting depth.
+ * Enso capabilities. Each call is logged, timed, and guarded with a timeout.
+ * Recursive depth is tracked only for callTool (the only op that can cause
+ * executor-to-executor recursion). Leaf I/O ops (fetch/search/ask) are
+ * deliberately NOT depth-tracked so executors can call them in parallel.
  */
 export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, apiKey?: string): ExecutorContext {
   let callDepth = 0;

@@ -438,9 +438,12 @@ if (curation && Array.isArray(curation.picks)) {
       tags: pick.tags || [],
     }));
   }
-} else {
-  // Fallback: top rated candidates
+}
+
+// Fallback: use top-rated candidates if LLM curation failed or returned no valid picks
+if (finalPicks.length === 0 && candidates.length > 0) {
   finalPicks = candidates
+    .slice()
     .sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); })
     .slice(0, 12)
     .map(function(b) { return Object.assign({}, b, { whyRecommended: "Highly rated in your preferred genres.", matchScore: 0.5, tags: [] }); });
