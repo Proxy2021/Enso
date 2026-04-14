@@ -243,6 +243,14 @@ if ($All) {
         Write-Host "  $action $sprintCount sprint archive(s)" -ForegroundColor Green
     }
 
+    # Discovery history
+    $discoverDir = Join-Path $ensoHome "discoveries"
+    if (Test-Path $discoverDir) {
+        $discCount = (Get-ChildItem $discoverDir -ErrorAction SilentlyContinue).Count
+        if (-not $WhatIf) { Remove-Item "$discoverDir/*" -Recurse -Force -ErrorAction SilentlyContinue }
+        Write-Host "  $action $discCount discovery run(s)" -ForegroundColor Green
+    }
+
     # Stale orchestration output files in server/
     $serverDir = Join-Path $PSScriptRoot ".." "server"
     $orchOutputs = Get-ChildItem $serverDir -Filter ".orchestration-*" -ErrorAction SilentlyContinue
