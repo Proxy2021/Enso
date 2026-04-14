@@ -947,7 +947,7 @@ Rules:
   // Register notification context for react tracking
   let notificationId = "";
   try {
-    const { registerNotification, emailReactActions } = await import("./reacts.js");
+    const { registerNotification } = await import("./reacts.js");
     notificationId = registerNotification(
       { type: "briefing", summary: parsed.headline },
       { isEmail: true },
@@ -965,15 +965,6 @@ Rules:
     </div>`;
   }).join("");
 
-  // Build react actions for email footer
-  let reactActionsHtml = "";
-  if (notificationId) {
-    try {
-      const { emailReactActions } = await import("./reacts.js");
-      reactActionsHtml = emailReactActions(notificationId, getEnsoUrl());
-    } catch { /* non-critical */ }
-  }
-
   const htmlEmail = `<div style="max-width:600px;margin:0 auto;background:#111827;border-radius:12px;overflow:hidden;font-family:-apple-system,sans-serif;color:#f9fafb;">
     <div style="background:linear-gradient(135deg,#1e1b4b,#4c1d95);padding:20px 24px;">
       <h2 style="margin:0;font-size:18px;color:#fff;">Enso Daily Briefing</h2>
@@ -981,10 +972,9 @@ Rules:
     </div>
     <div style="padding:20px 24px;">
       ${sectionHtml}
-      ${reactActionsHtml}
     </div>
     <div style="padding:16px 24px;text-align:center;border-top:1px solid #1f2937;">
-      <a href="${getEnsoUrl()}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">Open Enso →</a>
+      <a href="${getEnsoUrl()}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">Review in Enso →</a>
     </div>
   </div>`;
 
