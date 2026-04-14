@@ -296,20 +296,28 @@ TODAY'S SYSTEM STATE:
 ${signalText}
 
 AUTONOMY POLICY:
-You are the decision-maker. You should AUTO-EXECUTE anything that:
-- Does not require the user's ideas, opinions, or creative input
-- You are confident is the right thing to do for Enso
-- Includes: fixing bugs, enriching data, running evaluations, triggering research, building features, resolving errors
+You are the decision-maker. You drive the ENTIRE focus evolution cycle autonomously.
 
-You should PROPOSE (not auto-execute) only when:
-- The action requires the user's personal preference or creative direction (e.g., "which goal matters more?")
-- The action is irreversible AND you're unsure it's correct
-- The user explicitly needs to review something (e.g., sprint results they haven't seen)
+FOCUS EVOLUTION — YOU DRIVE THIS, NOT THE USER:
+- Focus has no evaluation? → Auto-execute: "Evaluate [focus name]" (delegation: focus)
+- Focus is evaluated but no sprint? → Auto-execute: "Launch evolution sprint for [focus name]" (delegation: focus)
+- Focus has sprint results? → Auto-execute: "Review results for [focus name]" (delegation: focus)
+  The review handler will use LLM to decide if user action is genuinely needed.
+  Most results DON'T need user involvement — only surface items when the user needs to
+  personally READ, DECIDE, or APPLY something in real life.
+- After review, queue next evaluation cycle automatically.
 
-When in doubt, ACT. The user wants a proactive partner, not a cautious assistant.
-Do NOT defer work to "next cycle" — execute everything you can right now.
-You can also CREATE NEW TASKS for yourself if you identify follow-up work during assessment.
-You run the organization. Be decisive, be thorough, be proactive.
+The user should NOT be a bottleneck in the evolution loop. You drive progress.
+Only pull the user in when their brain is genuinely needed.
+
+GENERAL AUTONOMY:
+- AUTO-EXECUTE anything that doesn't require the user's ideas, opinions, or creative input
+- This includes: fixing bugs, enriching data, running evaluations, launching sprints, reviewing results, building features
+- PROPOSE (not auto-execute) ONLY when the action requires personal preference, creative direction, or a real-life decision
+- When in doubt, ACT. The user wants a proactive partner, not a cautious assistant.
+- Do NOT defer work to "next cycle" — execute everything you can right now.
+- CREATE NEW TASKS for yourself when you identify follow-up work.
+- You run the organization. Be decisive, be thorough, be proactive.
 
 EXPERT TEAM MANAGEMENT (you own the org chart):
 - If ANY focus area has NO experts yet → ALWAYS create an action to "Generate expert team for [focus]" with delegation "focus"
@@ -622,6 +630,15 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
           } else if (titleLower.includes("expert") && (titleLower.includes("restructur") || titleLower.includes("replace") || titleLower.includes("remove"))) {
             // Expert team restructuring
             await handleExpertRestructuring(action);
+          } else if (titleLower.includes("evaluat") && !titleLower.includes("expert")) {
+            // Focus evaluation — run the prepare/evaluate step for a specific focus
+            await handleFocusEvaluate(action);
+          } else if (titleLower.includes("evolve") || titleLower.includes("sprint") || titleLower.includes("launch")) {
+            // Launch an evolution sprint for a focus area
+            await handleFocusEvolve(action);
+          } else if (titleLower.includes("review") && titleLower.includes("result")) {
+            // TL reviews sprint results autonomously — only surfaces to user if action needed
+            await handleFocusReviewResults(action);
           } else if (titleLower.includes("pulse")) {
             const { generateProgressPulse } = await import("./focus-agent.js");
             await generateProgressPulse();
@@ -981,6 +998,190 @@ async function persistExpertsToCortex(
     ].filter(Boolean).join("\n");
 
     writeFileSync(pagePath, content, "utf-8");
+  }
+}
+
+// ── 5a-2. Focus Evolution Cycle (autonomous) ──
+
+/**
+ * Run evaluation (prepare) for a focus area autonomously.
+ * TL triggers the deep study without user involvement.
+ */
+async function handleFocusEvaluate(action: TeamLeaderAction): Promise<void> {
+  const { loadFocusState } = await import("./focus-areas.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  const titleLower = action.title.toLowerCase();
+  const area = state.areas.find(a => titleLower.includes(a.title.toLowerCase()) || titleLower.includes(a.id));
+  if (!area) return;
+
+  // Skip if already evaluated
+  if (area.preparedBriefing) {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `"${area.title}" already evaluated — skipping` });
+    return;
+  }
+
+  try {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Evaluating focus area: "${area.title}"` });
+
+    const resp = await fetch(`http://localhost:3001/api/focus-areas/${area.id}/prepare`, { method: "POST" });
+    if (resp.ok) {
+      const result = await resp.json();
+      if (result.orchestrated) {
+        logAction({ ts: Date.now(), type: "action", category: "team-leader",
+          message: `Orchestrated evaluation launched for "${area.title}" — will complete asynchronously` });
+      } else {
+        logAction({ ts: Date.now(), type: "action", category: "team-leader",
+          message: `Evaluation complete for "${area.title}" — briefing ready` });
+        // Queue next step: launch sprint
+        queueTask({ title: `Launch evolution sprint for "${area.title}"`, description: `Evaluation complete. Launch sprint to make progress.`, source: "follow-up" });
+      }
+    }
+  } catch (err) {
+    logError("team-leader", `Failed to evaluate "${area.title}"`, err);
+  }
+}
+
+/**
+ * Launch an evolution sprint for a focus area autonomously.
+ * TL drives the evolve step without user approval.
+ */
+async function handleFocusEvolve(action: TeamLeaderAction): Promise<void> {
+  const { loadFocusState } = await import("./focus-areas.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  const titleLower = action.title.toLowerCase();
+  const area = state.areas.find(a => titleLower.includes(a.title.toLowerCase()) || titleLower.includes(a.id));
+  if (!area) return;
+
+  // Need evaluation first
+  if (!area.preparedBriefing) {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Cannot evolve "${area.title}" — needs evaluation first. Queuing evaluation.` });
+    queueTask({ title: `Evaluate "${area.title}"`, description: `Need evaluation before sprint.`, source: "follow-up" });
+    return;
+  }
+
+  try {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Launching evolution sprint for "${area.title}"` });
+
+    // Use the focus evolve function — build a brief from the evaluation
+    const brief = area.preparedBriefing.slice(0, 2000);
+    const { launchFocusEvolve } = await import("./focus-areas.js");
+    const { getActiveAccount, getAllClients } = await import("./server.js");
+    const account = getActiveAccount();
+    if (!account) {
+      logError("team-leader", `Cannot evolve "${area.title}" — no active account`);
+      return;
+    }
+    // Use headless client for autonomous sprints
+    const noop = () => {};
+    const headlessClient = {
+      id: "team-leader-evolve", sessionKey: "team-leader",
+      ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+      send: noop, _disconnectedBuffer: [], conversationId: "tl-background",
+    } as unknown as import("./server.js").ConnectedClient;
+    await launchFocusEvolve({ focusId: area.id, brief, client: headlessClient, account });
+
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Evolution sprint launched for "${area.title}"` });
+  } catch (err) {
+    logError("team-leader", `Failed to launch sprint for "${area.title}"`, err);
+  }
+}
+
+/**
+ * TL reviews sprint results autonomously.
+ * Uses LLM to determine if user action is needed or if TL can proceed to next cycle.
+ */
+async function handleFocusReviewResults(action: TeamLeaderAction): Promise<void> {
+  const { loadFocusState } = await import("./focus-areas.js");
+  const { llm } = await import("./llm.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  const titleLower = action.title.toLowerCase();
+  const area = state.areas.find(a => titleLower.includes(a.title.toLowerCase()) || titleLower.includes(a.id));
+  if (!area?.lastSprintResults) return;
+
+  try {
+    // Have the TL assess whether user action is needed
+    const summary = area.lastSprintSummary;
+    const deliverables = summary?.deliverables.map(d =>
+      `- ${d.taskTitle} [${d.entityType}]: ${d.howItHelps} → quickStart: ${d.quickStart}`
+    ).join("\n") || "No structured summary available.";
+
+    const assessment = await llm({
+      prompt: `You are the Team Leader reviewing sprint results for "${area.title}".
+
+SPRINT SUMMARY: ${summary?.sprintSummary || "Sprint completed."}
+
+DELIVERABLES:
+${deliverables}
+
+NEXT STEPS FROM SPRINT:
+${summary?.nextSteps?.join("\n") || "None specified."}
+
+Question: Does the user need to personally act on any of these deliverables, or can you (the TL) proceed to the next evolution cycle autonomously?
+
+User action is needed ONLY when:
+- A deliverable requires the user to READ something and form an opinion
+- A deliverable requires a PERSONAL DECISION (which direction to take, what to prioritize)
+- A deliverable requires the user to APPLY something in real life (use a tool, follow a guide on a trip)
+
+User action is NOT needed when:
+- Deliverables are internal improvements (code, architecture, documentation)
+- Results are incremental progress that the TL can build upon
+- Next steps are things the TL or experts can handle
+
+Return JSON: { "needsUser": true/false, "reason": "why", "userTasks": ["specific thing user should do"] }`,
+      tier: "fast",
+      maxOutputTokens: 1500,
+      responseMimeType: "application/json",
+      temperature: 0.3,
+      timeoutMs: 15_000,
+    });
+
+    let parsed: { needsUser: boolean; reason: string; userTasks?: string[] };
+    try {
+      let jsonStr = assessment.trim();
+      const fm = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fm) jsonStr = fm[1].trim();
+      const bs = jsonStr.indexOf("{"), be = jsonStr.lastIndexOf("}");
+      if (bs >= 0 && be > bs) jsonStr = jsonStr.slice(bs, be + 1);
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      // Default to surfacing to user if parse fails
+      parsed = { needsUser: true, reason: "Could not assess — surfacing to user for safety." };
+    }
+
+    if (parsed.needsUser) {
+      // Surface specific tasks to user — DON'T auto-complete this action
+      action.autoExecute = false;
+      action.needsUserInput = true;
+      action.status = "proposed";
+      action.reasoning = `${parsed.reason}${parsed.userTasks?.length ? `\n→ ${parsed.userTasks.join("\n→ ")}` : ""}`;
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Sprint results for "${area.title}" need user action: ${parsed.reason}` });
+    } else {
+      // TL handles it — clear the results and queue next cycle
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Sprint results for "${area.title}" reviewed by TL — no user action needed: ${parsed.reason}. Queuing next cycle.` });
+      // Queue the next evaluation cycle
+      queueTask({
+        title: `Evaluate "${area.title}" for next sprint`,
+        description: `Previous sprint reviewed. ${parsed.reason}. Ready for next cycle.`,
+        source: "follow-up",
+      });
+      action.status = "completed";
+    }
+  } catch (err) {
+    logError("team-leader", `Failed to review results for "${area.title}"`, err);
   }
 }
 
