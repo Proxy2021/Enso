@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { getBackendBaseUrl, authHeaders } from "../lib/connection";
+import { getBackendBaseUrl, authHeaders, resolveMediaUrl } from "../lib/connection";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
 import { useT } from "../lib/i18n";
@@ -170,7 +170,7 @@ export default function TasksView() {
   // Team Leader state
   const [tlBriefing, setTlBriefing] = useState<{ headline: string; timestamp: string; sections: Array<{ emoji: string; title: string; items: string[] }>; proposedActions: Array<{ id: string; priority: string; type: string; title: string; reasoning: string; delegation: string; estimatedEffort: string; autoExecute: boolean; needsUserInput?: boolean; status: string }> } | null>(null);
   const [tlState, setTlState] = useState<{ lastMorningRoutineAt: string | null; lastCheckInAt: string | null } | null>(null);
-  const [tlReacts, setTlReacts] = useState<Array<{ id: string; channel: string; text: string; action?: string; timestamp: string; processed: boolean; processedAt?: string; resolution?: string; resultingTaskId?: string; context: { type: string; summary: string; focusId?: string } }>>([]);
+  const [tlReacts, setTlReacts] = useState<Array<{ id: string; channel: string; text: string; action?: string; imageUrls?: string[]; timestamp: string; processed: boolean; processedAt?: string; resolution?: string; resultingTaskId?: string; context: { type: string; summary: string; focusId?: string } }>>([]);
   const [tlTab, setTlTab] = useState<"briefing" | "actions" | "reacts">("actions");
   const [tlRunning, setTlRunning] = useState(false);
   const [reactInput, setReactInput] = useState<{ actionId: string; text: string } | null>(null);
@@ -525,6 +525,17 @@ export default function TasksView() {
                     {/* User's instruction */}
                     <div className="rounded-lg bg-gray-800/40 px-3 py-2 mb-1.5">
                       <p className="text-[11px] text-gray-200 leading-relaxed">{r.text}</p>
+                      {/* Attached images */}
+                      {r.imageUrls && r.imageUrls.length > 0 && (
+                        <div className="flex gap-1.5 mt-2 flex-wrap">
+                          {r.imageUrls.map((url, idx) => (
+                            <a key={idx} href={resolveMediaUrl(url)} target="_blank" rel="noopener noreferrer"
+                              className="block w-20 h-20 rounded-lg overflow-hidden border border-gray-700 hover:border-violet-500/50 transition-colors">
+                              <img src={resolveMediaUrl(url)} alt={`Attachment ${idx + 1}`} className="w-full h-full object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Agent's follow-up */}

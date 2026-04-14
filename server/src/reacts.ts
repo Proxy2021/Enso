@@ -45,6 +45,8 @@ export interface React {
   text: string;
   /** Quick action the user took (if any) */
   action?: "approve" | "dismiss" | "defer" | "custom";
+  /** Attached image URLs (media paths like /media/...) */
+  imageUrls?: string[];
   /** When the react was received */
   timestamp: string;
   /** Has the Team Leader processed this? */
@@ -171,6 +173,8 @@ export function submitReact(params: {
   context: NotificationContext;
   text: string;
   action?: React["action"];
+  /** Attached image URLs (media paths) */
+  imageUrls?: string[];
   /** Target a specific agent. Defaults to TL. */
   agentTarget?: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string };
 }): React {
@@ -180,6 +184,7 @@ export function submitReact(params: {
     context: params.context,
     text: params.text,
     action: params.action,
+    imageUrls: params.imageUrls?.length ? params.imageUrls : undefined,
     timestamp: new Date().toISOString(),
     processed: false,
   };

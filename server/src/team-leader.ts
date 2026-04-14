@@ -524,7 +524,17 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
 
     if (parsed.decision === "act") {
       // Use actionDescription from LLM, or fall back to the original react text
-      const actionDesc = parsed.actionDescription || react.text;
+      let actionDesc = parsed.actionDescription || react.text;
+      // Append image file paths so Claude Code can read/view the screenshots
+      if (react.imageUrls?.length) {
+        const filePaths = react.imageUrls.map(url => {
+          // Reverse toMediaUrl: /media/<base64url>?ext=... → decode base64url → file path
+          const match = url.match(/\/media\/([^?]+)/);
+          if (match) try { return Buffer.from(match[1], "base64url").toString("utf-8"); } catch { /* */ }
+          return url;
+        });
+        actionDesc += `\n\nATTACHED SCREENSHOTS (${filePaths.length}):\n${filePaths.map((p, i) => `${i + 1}. ${p}`).join("\n")}\nUse the Read tool to view these images for context.`;
+      }
       // Proactive reacts (direct user instructions) → execute immediately via Claude Code
       const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
       if (proactiveTypes.has(react.context?.type)) {

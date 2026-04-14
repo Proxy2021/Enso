@@ -2417,10 +2417,11 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
   // In-app react submission (supports direct context + agent targeting)
   const handleReactsInApp = async (req: any, res: any) => {
     try {
-      const { notificationId, text, action, context: directContext, agentTarget } = req.body as {
+      const { notificationId, text, action, context: directContext, agentTarget, imageUrls } = req.body as {
         notificationId?: string; text?: string; action?: string;
         context?: { type: string; summary: string; focusId?: string };
         agentTarget?: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string };
+        imageUrls?: string[];
       };
       if (!text?.trim() && !action) { res.status(400).json({ error: "Text or action required" }); return; }
       const { getNotificationContext, submitReact } = await import("./reacts.js");
@@ -2445,6 +2446,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
         context: resolvedContext,
         text: text?.trim() || action || "",
         action: action as any,
+        imageUrls: imageUrls?.length ? imageUrls : undefined,
         agentTarget,
       });
       res.json({ success: true, react });
