@@ -1109,19 +1109,14 @@ Rate your UNDERSTANDING of this goal on 0-100:
 
 First evaluation with briefing: typically 35-55. Only with sprint results and user feedback: 60+.
 
-Return ONLY a JSON object, no other text: { "understanding": <number>, "notes": "<one sentence>" }`,
-      tier: "fast",
+Return ONLY valid JSON: { "understanding": <number>, "notes": "<one sentence>" }`,
+      tier: "utility",
       maxOutputTokens: 200,
-      responseMimeType: "application/json",
       temperature: 0.3,
-      timeoutMs: 20_000,
+      timeoutMs: 30_000,
     });
-    // Robust JSON extraction — handle preamble text, markdown fences, etc.
-    let jsonStr = assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, "");
-    const braceStart = jsonStr.indexOf("{");
-    const braceEnd = jsonStr.lastIndexOf("}");
-    if (braceStart >= 0 && braceEnd > braceStart) jsonStr = jsonStr.slice(braceStart, braceEnd + 1);
-    const parsed = JSON.parse(jsonStr);
+    const { cleanJson } = await import("./json-utils.js");
+    const parsed = JSON.parse(cleanJson(assessResult));
     updateFn(area.id, {
       understanding: Math.max(10, Math.min(95, parsed.understanding || 35)),
       assessedBy: "tl-evaluate",
@@ -1289,17 +1284,14 @@ PROGRESS (how far toward the goal):
 
 Be HONEST. A single sprint typically adds 10-20 to progress. Don't inflate.
 
-Return JSON: { "understanding": <number>, "progress": <number>, "notes": "<one sentence>" }`,
-        tier: "fast",
+Return ONLY valid JSON: { "understanding": <number>, "progress": <number>, "notes": "<one sentence>" }`,
+        tier: "utility",
         maxOutputTokens: 200,
-        responseMimeType: "application/json",
         temperature: 0.3,
         timeoutMs: 20_000,
       });
-      let assessJson = assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, "");
-      const bs2 = assessJson.indexOf("{"), be2 = assessJson.lastIndexOf("}");
-      if (bs2 >= 0 && be2 > bs2) assessJson = assessJson.slice(bs2, be2 + 1);
-      const assessParsed = JSON.parse(assessJson);
+      const { cleanJson } = await import("./json-utils.js");
+      const assessParsed = JSON.parse(cleanJson(assessResult));
       updateFocusAssessment(area.id, {
         understanding: Math.max(10, Math.min(95, assessParsed.understanding || area.assessment?.understanding || 30)),
         progress: Math.max(0, Math.min(100, assessParsed.progress || area.assessment?.progress || 5)),
