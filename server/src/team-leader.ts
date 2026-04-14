@@ -2145,6 +2145,7 @@ async function handleAutoRestart(): Promise<void> {
 
 export async function runMorningRoutine(): Promise<DailyBriefing> {
   logAction({ ts: Date.now(), type: "action", category: "team-leader", message: "Morning routine starting..." });
+  const { createArtifact, updateArtifact } = await import("./agent-artifacts.js");
 
   // 0. Clear stale state from previous routine
   const prevState = loadState();
@@ -2152,15 +2153,49 @@ export async function runMorningRoutine(): Promise<DailyBriefing> {
   prevState.restartPending = false;
   saveState(prevState);
 
+  // Immediately show user what's happening
+  const scanArtifact = createArtifact({
+    type: "report", agentId: "tl", agentName: "Team Leader",
+    title: "🔍 Scanning system...",
+    body: "Gathering signals: focus areas, errors, Cortex health, scheduled tasks, pending reacts.",
+    status: "in-progress",
+  });
+
   // 1. Gather signals
   const signals = await gatherSignals();
   logAction({ ts: Date.now(), type: "action", category: "team-leader",
     message: `Signals: ${signals.focusAnalyses.length} focus areas, ${signals.recentErrors.length} errors, ${signals.taskResults.length} task runs` });
 
+  // Resolve scan artifact — useful for live watching, auto-dismissed for later viewers
+  const signalSummary = [
+    `${signals.focusAnalyses.length} focus areas`,
+    signals.recentErrors.length > 0 ? `${signals.recentErrors.length} errors` : null,
+    signals.taskResults.length > 0 ? `${signals.taskResults.length} task results` : null,
+    signals.pendingReacts.length > 0 ? `${signals.pendingReacts.length} pending reacts` : null,
+    signals.pendingTasks.length > 0 ? `${signals.pendingTasks.length} queued tasks` : null,
+  ].filter(Boolean).join(", ");
+  updateArtifact(scanArtifact.id, {
+    status: "dismissed", // Auto-dismiss so it doesn't clutter the feed later
+    body: `Scanned: ${signalSummary}.`,
+  });
+
   // 2. Assess & prioritize
   const actions = await assessAndPrioritize(signals);
   logAction({ ts: Date.now(), type: "action", category: "team-leader",
     message: `Plan: ${actions.length} actions prioritized` });
+
+  // Show the plan
+  const autoActions = actions.filter(a => a.autoExecute);
+  const userActions = actions.filter(a => !a.autoExecute);
+  createArtifact({
+    type: "report", agentId: "tl", agentName: "Team Leader",
+    title: `📋 Plan: ${actions.length} actions`,
+    body: [
+      autoActions.length > 0 ? `**Executing (${autoActions.length}):** ${autoActions.map(a => a.title).join(", ")}` : null,
+      userActions.length > 0 ? `**Needs your input (${userActions.length}):** ${userActions.map(a => a.title).join(", ")}` : null,
+    ].filter(Boolean).join("\n\n"),
+    status: "done",
+  });
 
   // 3. Execute auto-executable actions (creates artifacts for each action)
   const executedActions = await executeActions(actions);
@@ -2177,8 +2212,7 @@ export async function runMorningRoutine(): Promise<DailyBriefing> {
     } catch { /* best effort */ }
   }
 
-  // 4. Generate briefing + deliver immediately (no deferring)
-  // Background tasks complete asynchronously and fire their own events.
+  // 4. Generate briefing + deliver immediately
   const briefing = await generateBriefing(signals, executedActions);
   const channels = await deliverBriefing(briefing);
 
