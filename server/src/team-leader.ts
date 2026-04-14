@@ -727,7 +727,7 @@ async function handleExpertEvaluation(action: TeamLeaderAction): Promise<void> {
       const daysSinceActive = m.lastActiveAt
         ? Math.floor((Date.now() - new Date(m.lastActiveAt).getTime()) / (24 * 60 * 60 * 1000))
         : -1;
-      return `- ${e.name} (${e.role}): ${m.conversationCount} conversations, ${m.sprintCount} sprints, last active ${daysSinceActive >= 0 ? `${daysSinceActive}d ago` : "never"}`;
+      return `- [id="${e.id}"] ${e.name} (${e.role}): ${m.conversationCount} conversations, ${m.sprintCount} sprints, last active ${daysSinceActive >= 0 ? `${daysSinceActive}d ago` : "never"}`;
     }).join("\n");
 
     try {
@@ -744,7 +744,8 @@ CLARITY: ${area.clarity}
 For each expert, write a ONE-LINE evaluation: are they contributing? underperforming? should they be replaced or reassigned?
 If the team composition no longer fits the focus direction, note what changes you'd make.
 
-Return JSON: { "evaluations": [{ "expertId": "id", "status": "active|idle|stale", "note": "brief evaluation" }], "teamNote": "overall team assessment" }`,
+Return JSON: { "evaluations": [{ "expertId": "exact id from brackets above", "status": "active|idle|stale", "note": "brief evaluation" }], "teamNote": "overall team assessment" }
+IMPORTANT: Use the EXACT expertId shown in [id="..."] brackets above.`,
         tier: "fast",
         maxOutputTokens: 2000,
         responseMimeType: "application/json",
@@ -762,9 +763,13 @@ Return JSON: { "evaluations": [{ "expertId": "id", "status": "active|idle|stale"
         parsed = JSON.parse(jsonStr);
       } catch { continue; }
 
-      // Write evaluations back to expert metrics
+      // Write evaluations back to expert metrics (match by ID or name)
       const updatedExperts = area.experts!.map(expert => {
-        const eval_ = parsed.evaluations.find(e => e.expertId === expert.id);
+        const eval_ = parsed.evaluations.find(e =>
+          e.expertId === expert.id ||
+          e.expertId.toLowerCase() === expert.name.toLowerCase() ||
+          expert.name.toLowerCase().includes(e.expertId.toLowerCase())
+        );
         if (!eval_) return expert;
         return {
           ...expert,
@@ -910,9 +915,8 @@ async function persistExpertsToCortex(
   focusTitle: string,
   experts: Array<import("./project-manager.js").TeamAgent>,
 ): Promise<void> {
-  const { ensureDirectoryExists, getEnsoPath } = await import("./utils/home.js");
-  const focusWikiDir = getEnsoPath("wiki", "focuses", focusId);
-  ensureDirectoryExists(focusWikiDir);
+  const { ensureEnsoDir } = await import("./utils/home.js");
+  const focusWikiDir = ensureEnsoDir("wiki", "focuses", focusId);
 
   for (const expert of experts) {
     const slug = expert.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -964,23 +968,19 @@ async function launchBuilderTask(action: TeamLeaderAction): Promise<void> {
 async function launchClaudeCodeSession(action: TeamLeaderAction): Promise<void> {
   try {
     const { runClaudeCode } = await import("./claude-code.js");
-    const { getAllClients } = await import("./server.js");
 
-    const clients = getAllClients();
-    let client: unknown;
-    if (clients.length > 0) {
-      client = clients[0];
-    } else {
-      const noop = () => {};
-      client = {
-        id: "team-leader-builder",
-        sessionKey: "team-leader",
-        ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
-        send: noop,
-        _disconnectedBuffer: [],
-        conversationId: "default",
-      };
-    }
+    // Always use a headless noop client for TL sessions — never use the user's real client.
+    // Using the real client causes TL terminal cards to show up in whatever conversation
+    // the user is viewing, polluting their chat experience.
+    const noop = () => {};
+    const client: unknown = {
+      id: "team-leader-builder",
+      sessionKey: "team-leader",
+      ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+      send: noop,
+      _disconnectedBuffer: [],
+      conversationId: "tl-background",
+    };
 
     const runId = randomUUID();
     const prompt = `[Team Leader Task: ${action.title}]
@@ -1023,9 +1023,8 @@ Be thorough but focused. When done, summarize what you changed.`;
 async function launchOrchestration(action: TeamLeaderAction): Promise<void> {
   try {
     const { handleOrchestration } = await import("./orchestrator.js");
-    const { getAllClients, getActiveAccount } = await import("./server.js");
+    const { getActiveAccount } = await import("./server.js");
 
-    const clients = getAllClients();
     const account = getActiveAccount();
     if (!account) {
       logError("team-leader", `Cannot launch orchestration for "${action.title}" — no active account`);
@@ -1033,21 +1032,16 @@ async function launchOrchestration(action: TeamLeaderAction): Promise<void> {
       return;
     }
 
-    // Use connected client or create a headless one
-    let client: unknown;
-    if (clients.length > 0) {
-      client = clients[0];
-    } else {
-      const noop = () => {};
-      client = {
-        id: "team-leader-orchestrator",
-        sessionKey: "team-leader",
-        ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
-        send: noop,
-        _disconnectedBuffer: [],
-        conversationId: "default",
-      };
-    }
+    // Always use headless client — never pollute user's active conversation
+    const noop = () => {};
+    const client: unknown = {
+      id: "team-leader-orchestrator",
+      sessionKey: "team-leader",
+      ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+      send: noop,
+      _disconnectedBuffer: [],
+      conversationId: "tl-background",
+    };
 
     logAction({ ts: Date.now(), type: "action", category: "team-leader",
       message: `Launching orchestration sprint for: "${action.title}"` });
