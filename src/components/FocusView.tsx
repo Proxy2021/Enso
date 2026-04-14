@@ -81,16 +81,8 @@ interface ActivityData {
   total: number;
 }
 
-interface GapAnalysis {
-  currentState: string;
-  gaps: Array<{ area: string; description: string; severity: "critical" | "significant" | "minor"; category: string }>;
-  bottlenecks: Array<{ description: string; impact: string }>;
-  solutions: Array<{ gap: string; solution: string; ensoAction: string; effort: string }>;
-  nextPriority: string;
-}
-
 type View = "list" | "detail";
-type DetailTab = "work" | "cortex" | "experts" | "evolve" | "overview" | "activity" | "plan"; // legacy names kept for backward compat
+type DetailTab = "focus" | "experts";
 
 // ── Source icons ──
 const SOURCE_ICONS: Record<string, string> = {
@@ -107,14 +99,12 @@ export default function FocusView() {
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const setChatViewOpen = useChatStore((s) => s.setChatViewOpen);
   const selectConversation = useChatStore((s) => s.selectConversation);
-  const startNewChat = useChatStore((s) => s.startNewChat);
-  const conversationsList = useChatStore((s) => s.conversationsList);
   const pendingFocusNav = useChatStore((s) => s.pendingFocusNavigation);
 
   const [view, setView] = useState<View>("list");
   const [focusState, setFocusState] = useState<FocusState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const [detailTab, setDetailTab] = useState<DetailTab>("focus");
   const [pendingTlActions, setPendingTlActions] = useState<Array<{ id: string; title: string; focusId?: string }>>([]);
 
   // Handle pending navigation from TL dashboard or chat cards
@@ -130,7 +120,7 @@ export default function FocusView() {
           setSelectedId(area.id);
           setView("detail");
           if (pendingFocusNav.tab) setDetailTab(pendingFocusNav.tab as DetailTab);
-          else setDetailTab("work");
+          else setDetailTab("focus");
           useChatStore.setState({ pendingFocusNavigation: null });
         }
       } else {
@@ -145,14 +135,6 @@ export default function FocusView() {
   const [addTitle, setAddTitle] = useState("");
   const [addDesc, setAddDesc] = useState("");
   const [addIntent, setAddIntent] = useState("");
-  const [planGoal, setPlanGoal] = useState<string | null>(null);
-  const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis | null>(null);
-  const [analyzingGaps, setAnalyzingGaps] = useState(false);
-  const [preparing, setPreparing] = useState(false);
-  const [chatReady, setChatReady] = useState(false);
-  const [showEvolveBrief, setShowEvolveBrief] = useState(false);
-  const [evolveBrief, setEvolveBrief] = useState("");
-  const [sprintLaunched, setSprintLaunched] = useState(false);
   const [generatingExperts, setGeneratingExperts] = useState(false);
   const [expandedDeliverable, setExpandedDeliverable] = useState<string | null>(null);
   const [deliverableContent, setDeliverableContent] = useState("");
@@ -322,11 +304,8 @@ export default function FocusView() {
 
   const openDetail = async (id: string) => {
     setSelectedId(id);
-    setDetailTab("overview");
+    setDetailTab("focus");
     setView("detail");
-    setEvolveBrief("");
-    setShowEvolveBrief(false);
-    setSprintLaunched(false);
     // Fetch activity data
     try {
       const resp = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}/activity`, { headers: authHeaders() });
@@ -334,35 +313,6 @@ export default function FocusView() {
     } catch { setActivity(null); }
   };
 
-  const handleGapAnalysis = async (id: string) => {
-    setAnalyzingGaps(true);
-    try {
-      const resp = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}/gaps`, {
-        method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" },
-      });
-      const data = await resp.json();
-      if (data?.gaps) setGapAnalysis(data);
-    } catch { /* ignore */ }
-    setAnalyzingGaps(false);
-  };
-
-  const handlePlan = async (id: string) => {
-    try {
-      const resp = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${id}/plan`, {
-        method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" },
-      });
-      const data = await resp.json();
-      if (data?.goal) {
-        setPlanGoal(data.goal);
-      }
-    } catch { /* ignore */ }
-  };
-
-  const launchPlanOrchestration = () => {
-    if (!planGoal || !selected) return;
-    chatAboutFocus(selected, planGoal);
-    setPlanGoal(null);
-  };
 
   const selected = focusState?.areas.find(a => a.id === selectedId);
 
@@ -443,7 +393,7 @@ export default function FocusView() {
                     }`}>{area.focusType}</span>
                   )}
                 </div>
-                <WorkflowBadge area={area} />
+                <FocusStatus area={area} />
               </div>
               <p className="text-xs text-gray-400 mb-2 line-clamp-2">{area.intent || area.description}</p>
               <div className="flex items-center gap-3 text-[11px] text-gray-500">
@@ -477,29 +427,10 @@ export default function FocusView() {
                 // Has discussion but no sprint → launch evolve directly
                 if (area.conversationId && !area.lastSprintResults && area.preparedBriefing) {
                   actions.push({ emoji: "⚡", label: "Launch Sprint →", bg: "bg-emerald-500/10", border: "border-emerald-500/25", text: "text-emerald-300",
-                    action: () => { setSelectedId(area.id); setView("detail"); setDetailTab("evolve" as DetailTab); },
+                    action: () => { setSelectedId(area.id); setView("detail"); setDetailTab("focus"); },
                   });
                 }
-                // New → trigger evaluation directly, show progress
-                if (!area.preparedBriefing && !area.lastSprintResults) {
-                  actions.push({ emoji: "🔍", label: "Evaluate →", bg: "bg-gray-500/10", border: "border-gray-700/30", text: "text-gray-400",
-                    action: async () => {
-                      setPreparing(true);
-                      setSelectedId(area.id); setView("detail"); setDetailTab("work");
-                      try {
-                        const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${area.id}/prepare`, { method: "POST", headers: authHeaders() });
-                        if (resp.ok) {
-                          const result = await resp.json() as { briefing: string; orchestrated?: boolean };
-                          if (!result.orchestrated) {
-                            await fetchFocusAreas();
-                            chatAboutFocus(area, "Based on your evaluation, what's the most important decision we need to make?");
-                          }
-                        }
-                      } catch { /* ignore */ }
-                      setPreparing(false);
-                    },
-                  });
-                }
+                // New areas: no action needed — TL handles evaluation autonomously
                 if (actions.length === 0) return null;
                 return (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -579,7 +510,7 @@ export default function FocusView() {
                 {selected.title}
               </h2>
             )}
-            <WorkflowBadge area={selected} />
+            <FocusStatus area={selected} />
           </div>
           {editingField === "description" ? (
             <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
@@ -608,319 +539,179 @@ export default function FocusView() {
 
         {/* Detail tabs */}
         <div className="flex border-b border-gray-800/60 px-5">
-          {(["work", "cortex", "experts", "evolve"] as const).map(tab => (
-            <button key={tab} onClick={() => { setDetailTab(tab as DetailTab); if (tab === "cortex" && !activity) openDetail(selected.id); }}
+          {(["focus", "experts"] as const).map(tab => (
+            <button key={tab} onClick={() => { setDetailTab(tab); if (tab === "focus" && !activity) openDetail(selected.id); }}
               className={`px-3 py-2.5 text-xs font-medium transition-colors border-b-2 ${
-                (detailTab === "overview" || detailTab === "activity" ? "work" : detailTab) === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
+                detailTab === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
               }`}>
-              {tab === "work" ? "Work" : tab === "cortex" ? "Cortex" : tab === "experts" ? `Experts${selected.experts?.length ? ` (${selected.experts.length})` : ""}` : "Evolve"}
+              {tab === "focus" ? "Focus" : `Experts${selected.experts?.length ? ` (${selected.experts.length})` : ""}`}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
         <div className="px-5 py-4">
-          {(detailTab === "overview" || detailTab === "work") && (
+          {detailTab === "focus" && (
             <div className="space-y-5">
-              {/* Context bar: intent + deeper WHY (compact, editable) */}
-              <div className="rounded-lg border border-gray-800/40 bg-gray-900/20 p-4 space-y-3">
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Goal</label>
-                  {editingField === "intent" ? (
-                    <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
-                      onBlur={() => saveEdit("intent")} onKeyDown={e => e.key === "Enter" && saveEdit("intent")}
-                      className="text-sm text-gray-200 bg-transparent border-b border-violet-500 focus:outline-none w-full" />
-                  ) : (
-                    <p className="text-sm text-gray-300 cursor-pointer hover:text-violet-300"
-                      onClick={() => { setEditingField("intent"); setEditValue(selected.intent || ""); }}>
-                      {selected.intent || <span className="text-gray-600 italic">Click to define...</span>}
-                    </p>
-                  )}
-                </div>
-                {(selected.deeperIntent || !selected.intent) && (
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Why this matters</label>
-                    {editingField === "deeperIntent" ? (
-                      <textarea autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
-                        onBlur={() => saveEdit("deeperIntent")}
-                        className="text-xs text-gray-300 bg-gray-900/60 border border-violet-500/50 rounded px-3 py-2 focus:outline-none w-full min-h-[40px]" />
-                    ) : (
-                      <p className="text-xs text-gray-400 cursor-pointer hover:text-violet-300"
-                        onClick={() => { setEditingField("deeperIntent"); setEditValue(selected.deeperIntent || ""); }}>
-                        {selected.deeperIntent || <span className="text-gray-600 italic">Click to explore your deeper motivation...</span>}
-                      </p>
+              {/* Section A: Status Banner */}
+              {(() => {
+                const hasUnreviewedResults = selected.lastSprintResults && selected.lastSprintDate && (() => {
+                  const lastActive = selected.progress?.lastActiveAt ? new Date(selected.progress.lastActiveAt).getTime() : 0;
+                  const sprintTime = new Date(selected.lastSprintDate!).getTime();
+                  return lastActive < sprintTime || (Date.now() - sprintTime) / 86400000 <= 7;
+                })();
+                const hasDeliverables = selected.lastSprintSummary?.deliverables?.length || 0;
+
+                let bannerColor = "border-gray-800/40 bg-gray-900/20";
+                let subtitle = "Team Leader is managing this focus area autonomously.";
+                if (hasUnreviewedResults && hasDeliverables) {
+                  bannerColor = "border-emerald-500/30 bg-emerald-950/15";
+                  subtitle = `${hasDeliverables} deliverables from the latest sprint are ready for your review.`;
+                } else if (selected.preparedBriefing && !selected.lastSprintResults) {
+                  bannerColor = "border-violet-500/30 bg-violet-950/15";
+                  subtitle = "TL has completed evaluation. A sprint is queued or you can discuss strategy.";
+                } else if (!selected.preparedBriefing && !selected.lastSprintResults) {
+                  bannerColor = "border-gray-800/40 bg-gray-900/20";
+                  subtitle = "TL is gathering data and studying this focus area. Check back soon.";
+                }
+
+                return (
+                  <div className={`rounded-lg border p-3 mb-1 ${bannerColor}`}>
+                    <div className="flex items-center gap-2">
+                      <FocusStatus area={selected} />
+                      <button
+                        onClick={() => chatAboutFocus(selected, selected.preparedBriefing
+                          ? `Based on your evaluation, what's the most important decision we need to make?`
+                          : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
+                        className="ml-auto text-[10px] px-2.5 py-1 rounded bg-violet-600/40 text-violet-200 hover:bg-violet-500/40 transition-colors"
+                      >
+                        Discuss
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1.5">{subtitle}</p>
+                  </div>
+                );
+              })()}
+
+              {/* Section B: User Action Cards */}
+              {(() => {
+                const focusActions = pendingTlActions.filter(a =>
+                  a.focusId === selected.id || a.title.toLowerCase().includes(selected.title.toLowerCase())
+                );
+                const hasUnreviewedResults = selected.lastSprintResults && selected.lastSprintDate && (() => {
+                  const lastActive = selected.progress?.lastActiveAt ? new Date(selected.progress.lastActiveAt).getTime() : 0;
+                  const sprintTime = new Date(selected.lastSprintDate!).getTime();
+                  return lastActive < sprintTime || (Date.now() - sprintTime) / 86400000 <= 7;
+                })();
+
+                if (focusActions.length === 0 && !hasUnreviewedResults) {
+                  return (
+                    <div className="rounded-lg border border-gray-800/30 bg-gray-900/20 px-4 py-3">
+                      <p className="text-xs text-gray-500">No action needed — TL is handling this focus area.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2">
+                    {hasUnreviewedResults && (
+                      <button
+                        onClick={() => { completeTlAction(selected.title); chatAboutFocus(selected, "Show me the sprint results — what was delivered and what should I act on first?"); }}
+                        className="w-full text-left rounded-lg border border-amber-500/25 bg-amber-950/15 p-3 hover:border-amber-500/40 transition-all"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{"📬"}</span>
+                          <span className="text-xs font-medium text-amber-300">Review Sprint Results</span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1 ml-6">New deliverables are ready — discuss with AI to decide what to act on</p>
+                      </button>
+                    )}
+                    {focusActions.map(action => (
+                      <button key={action.id}
+                        onClick={() => { completeTlAction(selected.title); chatAboutFocus(selected, action.title); }}
+                        className="w-full text-left rounded-lg border border-violet-500/25 bg-violet-950/15 p-3 hover:border-violet-500/40 transition-all"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{"📋"}</span>
+                          <span className="text-xs font-medium text-violet-300">{action.title}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* Section C: Sprint Progress */}
+              {(() => {
+                // Check if there's an active orchestration for this focus
+                const cards = useChatStore.getState().cards;
+                const allOrchCards = Object.values(cards).filter(c => c.type === "orchestration");
+                const activeOrch = allOrchCards.find(c => c.status === "streaming");
+                const hasActiveSprint = !!activeOrch;
+
+                if (hasActiveSprint) {
+                  return (
+                    <div className="rounded-lg border border-indigo-500/20 bg-indigo-950/10 p-1">
+                      <EvolveTab focusArea={selected} onNavigateToChat={() => {
+                        if (selected.conversationId) {
+                          selectConversation(selected.conversationId);
+                          setActiveTab("chat");
+                        }
+                      }} />
+                    </div>
+                  );
+                }
+
+                if (selected.lastSprintDate) {
+                  return (
+                    <details className="rounded-lg border border-gray-800/30 bg-gray-900/20">
+                      <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-gray-400 hover:text-gray-200 flex items-center gap-2">
+                        <span>Last Sprint</span>
+                        <span className="text-[10px] text-gray-600">{selected.lastSprintDate.slice(0, 10)}</span>
+                      </summary>
+                      <div className="px-4 pb-4">
+                        {selected.lastSprintResults && (
+                          <div className="text-xs text-gray-300 overflow-y-auto max-h-[400px]">
+                            <Suspense fallback={<p className="text-gray-500">Loading...</p>}>
+                              <MarkdownText text={selected.lastSprintResults} />
+                            </Suspense>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  );
+                }
+
+                return null;
+              })()}
+
+              {/* Section D: Deliverables */}
+              {selected.lastSprintSummary && (
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-violet-500/20 bg-violet-950/10 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm">{"\uD83C\uDFAF"}</span>
+                      <label className="text-[10px] uppercase tracking-wider text-violet-400/70">Sprint Results</label>
+                      <span className="text-[10px] text-gray-500 ml-auto">
+                        {exploredDeliverables.size} of {selected.lastSprintSummary.deliverables.length} explored
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-relaxed mb-3">{selected.lastSprintSummary.sprintSummary}</p>
+                    {selected.lastSprintSummary.nextSteps.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selected.lastSprintSummary.nextSteps.map((step, i) => (
+                          <button key={i} onClick={() => chatAboutFocus(selected, step)}
+                            className="text-[10px] px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:border-violet-500/40 hover:bg-violet-500/20 transition-colors">
+                            {step}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
-                )}
-                <div className="flex items-center gap-3 text-[10px] text-gray-600 pt-1 border-t border-gray-800/30">
-                  <span>{selected.evidence.length} evidence points</span>
-                  {selected.preparedAt && <><span>{"\u00B7"}</span><span className="text-amber-400/60">prepared {selected.preparedAt.slice(0, 10)}</span></>}
-                </div>
-              </div>
-
-              {/* === THE WORKFLOW: Evaluate → Discuss → Evolve === */}
-              <div className="space-y-3">
-                <label className="text-[10px] uppercase tracking-wider text-gray-600 block">Workflow</label>
-
-                {/* Step 1: Evaluate */}
-                <button
-                  disabled={preparing}
-                  onClick={async () => {
-                    setPreparing(true);
-                    setChatReady(false);
-                    try {
-                      const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/prepare`, {
-                        method: "POST",
-                        headers: authHeaders(),
-                      });
-                      if (resp.ok) {
-                        const result = await resp.json() as { briefing: string; orchestrated?: boolean };
-                        if (result.orchestrated) {
-                          // Orchestration launched — switch to Evolve tab to show progress
-                          setDetailTab("evolve" as DetailTab);
-                          setPreparing(false);
-                          // Poll for completion: check every 10s if briefing has been stored
-                          const pollInterval = setInterval(async () => {
-                            await fetchFocusAreas();
-                            const fresh = focusState?.areas.find(a => a.id === selected.id);
-                            if (fresh?.preparedBriefing && fresh.preparedAt !== selected.preparedAt) {
-                              clearInterval(pollInterval);
-                              setChatReady(true);
-                              setTimeout(() => {
-                                chatAboutFocus(selected, `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`);
-                                setChatReady(false);
-                              }, 2000);
-                            }
-                          }, 10000);
-                          // Stop polling after 10 minutes
-                          setTimeout(() => clearInterval(pollInterval), 600000);
-                          return;
-                        }
-                        // Non-orchestrated (fallback LLM) — briefing is ready immediately
-                        await fetchFocusAreas();
-                        setChatReady(true);
-                        setTimeout(() => {
-                          chatAboutFocus(selected, `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`);
-                          setChatReady(false);
-                        }, 2000);
-                      }
-                    } catch { /* preparation failed */ }
-                    setPreparing(false);
-                  }}
-                  className={`w-full text-left rounded-lg border p-3 transition-all ${
-                    preparing ? "border-amber-500/40 bg-amber-950/20 animate-pulse"
-                    : selected.preparedBriefing ? "border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/50"
-                    : "border-gray-700/40 bg-gray-900/20 hover:border-amber-500/40 hover:bg-amber-950/10"
-                  }`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">{preparing ? "\u23F3" : selected.preparedBriefing ? "\u2705" : "\uD83D\uDD0D"}</span>
-                    <span className={`text-xs font-medium ${preparing ? "text-amber-300" : selected.preparedBriefing ? "text-emerald-300" : "text-gray-300"}`}>
-                      {preparing ? "Evaluating everything about this focus..." : selected.preparedBriefing ? "Evaluated — AI has studied your data" : "Evaluate — Deep study before discussion"}
-                    </span>
-                  </div>
-                  {!preparing && !selected.preparedBriefing && (
-                    <p className="text-[11px] text-gray-500 mt-1 ml-6">AI team researches, analyzes codebase, and synthesizes all knowledge about this focus</p>
-                  )}
-                  {selected.preparedBriefing && !preparing && (
-                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Click to re-evaluate with latest data</p>
-                  )}
-                </button>
-
-                {/* Step 2: Discuss */}
-                {(() => {
-                  const hasConversation = selected.conversationId && conversationsList.some(c => c.id === selected.conversationId);
-                  return (
-                    <button
-                      onClick={() => chatAboutFocus(selected, selected.preparedBriefing
-                        ? `I've reviewed the preparation briefing. Based on your comprehensive study of this focus area, what's the most important question or decision we should address first?`
-                        : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
-                      className={`w-full text-left rounded-lg border p-3 transition-all ${
-                        chatReady ? "border-violet-500 bg-violet-950/30 animate-pulse shadow-lg shadow-violet-500/20"
-                        : hasConversation ? "border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/50"
-                        : "border-gray-700/40 bg-gray-900/20 hover:border-violet-500/40 hover:bg-violet-950/10"
-                      }`}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{chatReady ? "\uD83D\uDCAC" : hasConversation ? "\u2705" : "\uD83D\uDCAC"}</span>
-                        <span className={`text-xs font-medium ${chatReady ? "text-violet-200" : hasConversation ? "text-emerald-300" : "text-gray-300"}`}>
-                          {chatReady ? "Ready — Start the strategic dialogue" : hasConversation ? "Discussed — Continue the dialogue" : "Discuss — Strategic dialogue with AI"}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-500 mt-1 ml-6">
-                        {hasConversation ? "Click to continue the conversation, or move on to Evolve when ready" : "Flesh out the problem space, agree on priorities, build an Evolve-ready brief"}
-                      </p>
-                    </button>
-                  );
-                })()}
-
-                {/* Step 3: Evolve */}
-                {selected.lastSprintDate ? (
-                  <button
-                    onClick={() => setDetailTab("evolve" as DetailTab)}
-                    className={`w-full text-left rounded-lg border p-3 transition-all border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/50`}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{"\u2705"}</span>
-                      <span className="text-xs font-medium text-emerald-300">Evolved — Sprint completed {selected.lastSprintDate.slice(0, 10)}</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Click to view sprint results and deliverables</p>
-                  </button>
-                ) : (
-                <div className="rounded-lg border border-gray-700/40 bg-gray-900/20 p-3 space-y-3">
-                  <button
-                    onClick={async () => {
-                      if (!evolveBrief) {
-                        try {
-                          const absorbResp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/absorb-conversation`, {
-                            method: "POST", headers: authHeaders(),
-                          });
-                          if (absorbResp.ok) {
-                            const { updated, area: revisedArea } = await absorbResp.json() as { updated: boolean; area?: FocusArea };
-                            if (updated && revisedArea) {
-                              setFocusState(prev => prev ? {
-                                ...prev,
-                                areas: prev.areas.map(a => a.id === selected.id ? { ...a, ...revisedArea } : a),
-                              } : prev);
-                              Object.assign(selected, revisedArea);
-                            }
-                          }
-                        } catch { /* absorption failed */ }
-
-                        const lines: string[] = [];
-                        lines.push(`Focus: ${selected.title}`);
-                        if (selected.intent) lines.push(`Goal: ${selected.intent}`);
-                        if (selected.deeperIntent) lines.push(`Why: ${selected.deeperIntent}`);
-
-                        try {
-                          const resp = await fetch(`${getBackendBaseUrl()}${API.FOCUS_AREAS}/${selected.id}/transcript`, { headers: authHeaders() });
-                          if (resp.ok) {
-                            const { transcript } = await resp.json() as { transcript: string };
-                            if (transcript.trim()) {
-                              const recent = transcript.length > 4000 ? transcript.slice(-4000) : transcript;
-                              lines.push(`\n--- Strategic Discussion ---`);
-                              lines.push(recent);
-                            }
-                          }
-                        } catch { /* transcript fetch failed */ }
-
-                        if (selected.nextSteps?.length) {
-                          lines.push(`\n--- Priorities ---`);
-                          selected.nextSteps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
-                        }
-                        if (selected.preparedBriefing) {
-                          lines.push(`\n--- Key findings from evaluation ---`);
-                          lines.push(selected.preparedBriefing.slice(0, 800).trim());
-                        }
-                        setEvolveBrief(lines.join("\n"));
-                      }
-                      setShowEvolveBrief(true);
-                    }}
-                    className="w-full text-left hover:opacity-90 transition-opacity">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{"\uD83D\uDE80"}</span>
-                      <span className="text-xs font-medium text-gray-300">Evolve — Launch AI team sprint</span>
-                      {showEvolveBrief && <span className="text-[10px] text-gray-600 ml-auto cursor-pointer" onClick={(e) => { e.stopPropagation(); setShowEvolveBrief(false); }}>{"\u25B2"} Collapse</span>}
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-1 ml-6">Full team of AI agents executes on the agreed goals from your discussion</p>
-                  </button>
-
-                  {showEvolveBrief && (
-                    <div className="space-y-2 pt-2 border-t border-gray-800/40">
-                      <label className="text-[10px] uppercase tracking-wider text-gray-600 block">Sprint Brief — what the AI team will work on</label>
-                      <textarea
-                        value={evolveBrief}
-                        onChange={e => setEvolveBrief(e.target.value)}
-                        className="w-full bg-gray-950/60 border border-gray-700/50 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-violet-500/50 min-h-[120px] max-h-[300px] resize-y"
-                        placeholder="Describe what the AI team should focus on..."
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            useChatStore.getState().sendFocusEvolve(selected.id, evolveBrief);
-                            setSprintLaunched(true);
-                            setDetailTab("evolve" as DetailTab);
-                          }}
-                          className="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
-                          Launch Sprint
-                        </button>
-                        <span className="text-[10px] text-gray-600">{evolveBrief.length} chars</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                )}
-              </div>
-
-              {/* Next steps / suggested actions (if any) */}
-              {(selected.nextSteps?.length || selected.suggestedActions.length > 0) && (
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">
-                    {selected.nextSteps?.length ? "Next Steps" : "Suggested Actions"}
-                  </label>
-                  <div className="space-y-1.5">
-                    {(selected.nextSteps || selected.suggestedActions).map((item, i) => (
-                      <button key={i} onClick={() => chatAboutFocus(selected, item)}
-                        className="w-full text-left text-xs text-gray-300 px-3 py-2 rounded bg-gray-800/40 border border-gray-700/30 hover:border-violet-500/30 hover:text-violet-300 transition-colors">
-                        {item}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
 
-              {/* Adjacent pursuits */}
-              {selected.adjacentPursuits && selected.adjacentPursuits.length > 0 && (
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1.5 block">Adjacent Pursuits</label>
-                  <div className="space-y-1.5">
-                    {selected.adjacentPursuits.map((pursuit, i) => (
-                      <button key={i} onClick={() => chatAboutFocus(selected, `Let's explore: ${pursuit}`)}
-                        className="w-full text-left text-xs text-amber-300/80 px-3 py-2 rounded bg-amber-900/10 border border-amber-500/15 hover:border-amber-500/30 hover:bg-amber-900/20 transition-colors">
-                        {"\u2728"} {pursuit}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {(detailTab === "cortex" || detailTab === "activity") && (
-            <div className="space-y-5">
-              {/* Stats bar */}
-              <div className="flex items-center gap-3 text-[11px] flex-wrap">
-                {selected.relatedEntityIds && selected.relatedEntityIds.length > 0 && (
-                  <span className="px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">{selected.relatedEntityIds.length} deliverables</span>
-                )}
-                <span className="px-2 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20">{selected.evidence.length} evidence</span>
-                {activity && <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">{activity.total} related</span>}
-                <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">{selected.refinements.length} refinements</span>
-                <span className="px-2 py-1 rounded bg-gray-500/10 text-gray-400 border border-gray-700/30">{selected.semanticTags.join(", ")}</span>
-              </div>
-
-              {/* Sprint Results Summary Header — when structured summary exists */}
-              {selected.lastSprintSummary && (
-                <div className="rounded-lg border border-violet-500/20 bg-violet-950/10 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm">{"\uD83C\uDFAF"}</span>
-                    <label className="text-[10px] uppercase tracking-wider text-violet-400/70">Sprint Results</label>
-                    <span className="text-[10px] text-gray-500 ml-auto">
-                      {exploredDeliverables.size} of {selected.lastSprintSummary.deliverables.length} explored
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-300 leading-relaxed mb-3">{selected.lastSprintSummary.sprintSummary}</p>
-                  {selected.lastSprintSummary.nextSteps.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {selected.lastSprintSummary.nextSteps.map((step, i) => (
-                        <button key={i} onClick={() => chatAboutFocus(selected, step)}
-                          className="text-[10px] px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:border-violet-500/40 hover:bg-violet-500/20 transition-colors">
-                          {step}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Sprint Deliverables — activation cards (structured) or fallback (plain) */}
+              {/* Sprint Deliverables — activation cards */}
               {selected.relatedEntityIds && selected.relatedEntityIds.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -929,7 +720,6 @@ export default function FocusView() {
                   </div>
                   <div className="space-y-2">
                     {selected.relatedEntityIds.map((eid, i) => {
-                      // Parse entity ID: "cortex:article:elite-photographer-gallery"
                       const parts = eid.split(":");
                       const entityType = parts[1] || "unknown";
                       const slug = parts.slice(2).join(":");
@@ -940,14 +730,12 @@ export default function FocusView() {
                         movie: "\uD83C\uDFAC", channel: "\uD83D\uDCFA", place: "\u2708\uFE0F",
                       };
 
-                      // Try to find matching deliverable from structured summary
                       const summaryDeliverable = selected.lastSprintSummary?.deliverables.find(d => d.entityId === eid);
                       const isRecommended = selected.lastSprintSummary?.recommendedFirstAction.deliverableIndex ===
                         selected.lastSprintSummary?.deliverables.findIndex(d => d.entityId === eid);
                       const isExpanded = expandedDeliverable === eid;
                       const isExplored = exploredDeliverables.has(eid);
 
-                      // Activation card colors by entity type
                       const activationColors: Record<string, { border: string; bg: string; badge: string; badgeText: string; actionBtn: string }> = {
                         app: { border: "border-blue-500/25", bg: "bg-blue-950/15", badge: "bg-blue-500/20", badgeText: "text-blue-300", actionBtn: "bg-blue-600 hover:bg-blue-500 text-white" },
                         article: { border: "border-emerald-500/25", bg: "bg-emerald-950/15", badge: "bg-emerald-500/20", badgeText: "text-emerald-300", actionBtn: "bg-emerald-600 hover:bg-emerald-500 text-white" },
@@ -987,7 +775,6 @@ export default function FocusView() {
                         } catch { setDeliverableContent("Failed to load content"); }
                       };
 
-                      // ── Structured activation card (when summary exists for this deliverable) ──
                       if (summaryDeliverable) {
                         const colors = activationColors[summaryDeliverable.entityType] || activationColors.synthesis;
                         const actionLabels: Record<string, string> = { run: "Run App", read: "Read", explore: "Explore", review: "Review" };
@@ -995,7 +782,6 @@ export default function FocusView() {
 
                         return (
                           <div key={i} className={`rounded-lg border ${colors.border} ${colors.bg} p-3 transition-all ${isRecommended ? "ring-1 ring-violet-400/30" : ""}`}>
-                            {/* Header row */}
                             <div className="flex items-start gap-2 mb-2">
                               <span className="text-base shrink-0">{typeIcons[entityType] || "\uD83D\uDCC4"}</span>
                               <div className="min-w-0 flex-1">
@@ -1016,11 +802,7 @@ export default function FocusView() {
                                 <p className="text-[11px] text-gray-400 mt-1 leading-snug">{summaryDeliverable.painPoint}</p>
                               </div>
                             </div>
-
-                            {/* How it helps */}
                             <p className="text-[11px] text-gray-300 leading-relaxed mb-2 pl-7">{summaryDeliverable.howItHelps}</p>
-
-                            {/* Quick start hint + action button */}
                             <div className="flex items-center gap-2 pl-7">
                               <span className="text-[10px] text-gray-500 flex-1 truncate">{summaryDeliverable.quickStart}</span>
                               {summaryDeliverable.actionType === "run" ? (
@@ -1042,8 +824,6 @@ export default function FocusView() {
                                 </button>
                               )}
                             </div>
-
-                            {/* Expanded content */}
                             {isExpanded && (
                               <div className="mt-2 ml-7 rounded-lg border border-gray-700/30 bg-gray-900/30 p-3 max-h-[400px] overflow-y-auto">
                                 <Suspense fallback={<div className="text-xs text-gray-500">Loading...</div>}>
@@ -1055,7 +835,6 @@ export default function FocusView() {
                         );
                       }
 
-                      // ── Fallback: plain expandable card (no structured summary for this entity) ──
                       const fallbackColors: Record<string, string> = {
                         idea: "border-amber-500/20 bg-amber-950/10 hover:border-amber-500/40",
                         article: "border-blue-500/20 bg-blue-950/10 hover:border-blue-500/40",
@@ -1091,129 +870,154 @@ export default function FocusView() {
                 </div>
               )}
 
-              {/* Preparation Briefing — the centerpiece */}
-              {selected.preparedBriefing && (
-                <div className="rounded-lg border border-amber-500/20 bg-amber-950/5 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm">{"\uD83D\uDCCB"}</span>
-                    <label className="text-[10px] uppercase tracking-wider text-amber-400/70">Preparation Briefing</label>
-                    {selected.preparedAt && <span className="text-[10px] text-gray-600 ml-auto">{selected.preparedAt.slice(0, 10)}</span>}
-                  </div>
-                  <div className="text-sm text-gray-300 leading-relaxed max-h-80 overflow-y-auto pr-2">
-                    <Suspense fallback={<div className="text-xs text-gray-500">Loading...</div>}>
-                      <MarkdownText text={selected.preparedBriefing} />
-                    </Suspense>
-                  </div>
-                </div>
-              )}
-
-              {/* Deeper Motivation */}
-              {selected.deeperIntent && (
-                <div className="rounded-lg border border-violet-500/15 bg-violet-950/5 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm">{"\uD83D\uDCA1"}</span>
-                    <label className="text-[10px] uppercase tracking-wider text-violet-400/60">Why This Matters</label>
-                  </div>
-                  <p className="text-xs text-gray-300 leading-relaxed">{selected.deeperIntent}</p>
-                </div>
-              )}
-
-              {/* Evidence — grouped by source type */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm">{"\uD83D\uDCDA"}</span>
-                  <label className="text-[10px] uppercase tracking-wider text-gray-600">Evidence & Sources</label>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {selected.evidence.map((ev, i) => {
-                    const sourceMatch = ev.match(/^(Project|Reading|YouTube|Game|Movie|Photo|Email|Browser|System):\s*/i);
-                    const source = sourceMatch ? sourceMatch[1].toLowerCase() : "";
-                    const icon = SOURCE_ICONS[source === "reading" ? "kindle" : source === "game" ? "steam" : source === "movie" ? "movies_tv" : source === "youtube" ? "youtube" : source === "project" ? "projects" : source] || "\uD83D\uDCC4";
-                    return (
-                      <div key={i} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-gray-800/30 border border-gray-800/40 hover:border-gray-700/60 transition-colors">
-                        <span className="shrink-0">{icon}</span>
-                        <span className="text-gray-300 truncate">{ev}</span>
+              {/* Section E: Context (collapsed by default) */}
+              <details className="rounded-lg border border-gray-800/30 bg-gray-900/20">
+                <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-gray-400 hover:text-gray-200">Context & Intelligence</summary>
+                <div className="px-4 pb-4 space-y-4">
+                  {selected.intent && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Goal</label>
+                      {editingField === "intent" ? (
+                        <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
+                          onBlur={() => saveEdit("intent")} onKeyDown={e => e.key === "Enter" && saveEdit("intent")}
+                          className="text-sm text-gray-200 bg-transparent border-b border-violet-500 focus:outline-none w-full" />
+                      ) : (
+                        <p className="text-sm text-gray-300 cursor-pointer hover:text-violet-300"
+                          onClick={() => { setEditingField("intent"); setEditValue(selected.intent || ""); }}>
+                          {selected.intent}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {selected.deeperIntent && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Why this matters</label>
+                      <p className="text-xs text-gray-300 leading-relaxed">{selected.deeperIntent}</p>
+                    </div>
+                  )}
+                  {selected.preparedBriefing && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Evaluation Briefing</label>
+                      <div className="text-xs text-gray-300 leading-relaxed max-h-60 overflow-y-auto pr-2">
+                        <Suspense fallback={<div className="text-xs text-gray-500">Loading...</div>}>
+                          <MarkdownText text={selected.preparedBriefing.length > 1200 ? selected.preparedBriefing.slice(0, 1200) + "\n\n..." : selected.preparedBriefing} />
+                        </Suspense>
                       </div>
-                    );
-                  })}
+                    </div>
+                  )}
+                  {selected.nextSteps && selected.nextSteps.length > 0 && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Next Steps</label>
+                      <div className="space-y-1">
+                        {selected.nextSteps.map((step, i) => (
+                          <button key={i} onClick={() => chatAboutFocus(selected, step)}
+                            className="w-full text-left text-xs text-gray-300 px-3 py-2 rounded bg-gray-800/40 border border-gray-700/30 hover:border-violet-500/30 hover:text-violet-300 transition-colors">
+                            {step}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {selected.adjacentPursuits && selected.adjacentPursuits.length > 0 && (
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600 mb-1 block">Adjacent Pursuits</label>
+                      <div className="space-y-1">
+                        {selected.adjacentPursuits.map((pursuit, i) => (
+                          <button key={i} onClick={() => chatAboutFocus(selected, `Let's explore: ${pursuit}`)}
+                            className="w-full text-left text-xs text-amber-300/80 px-3 py-2 rounded bg-amber-900/10 border border-amber-500/15 hover:border-amber-500/30 hover:bg-amber-900/20 transition-colors">
+                            {"\u2728"} {pursuit}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              </details>
 
-              {/* Related Knowledge from Cortex */}
-              {activity && activity.entities.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm">{"\uD83E\uDDE0"}</span>
-                    <label className="text-[10px] uppercase tracking-wider text-gray-600">Related in Cortex ({activity.total})</label>
+              {/* Section F: Knowledge (collapsed by default) */}
+              <details className="rounded-lg border border-gray-800/30 bg-gray-900/20">
+                <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-gray-400 hover:text-gray-200">Knowledge & Evidence</summary>
+                <div className="px-4 pb-4 space-y-4">
+                  {/* Evidence — grouped by source type */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm">{"\uD83D\uDCDA"}</span>
+                      <label className="text-[10px] uppercase tracking-wider text-gray-600">Evidence & Sources</label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {selected.evidence.map((ev, i) => {
+                        const sourceMatch = ev.match(/^(Project|Reading|YouTube|Game|Movie|Photo|Email|Browser|System):\s*/i);
+                        const source = sourceMatch ? sourceMatch[1].toLowerCase() : "";
+                        const icon = SOURCE_ICONS[source === "reading" ? "kindle" : source === "game" ? "steam" : source === "movie" ? "movies_tv" : source === "youtube" ? "youtube" : source === "project" ? "projects" : source] || "\uD83D\uDCC4";
+                        return (
+                          <div key={i} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-gray-800/30 border border-gray-800/40 hover:border-gray-700/60 transition-colors">
+                            <span className="shrink-0">{icon}</span>
+                            <span className="text-gray-300 truncate">{ev}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  {(() => {
-                    // Group by source
-                    const groups = new Map<string, typeof activity.entities>();
-                    for (const ent of activity.entities) {
-                      if (!groups.has(ent.source)) groups.set(ent.source, []);
-                      groups.get(ent.source)!.push(ent);
-                    }
-                    return Array.from(groups.entries()).map(([src, ents]) => (
-                      <div key={src} className="mb-3">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-xs">{SOURCE_ICONS[src] || "\uD83D\uDCC4"}</span>
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wider">{src}</span>
-                          <span className="text-[10px] text-gray-600">({ents.length})</span>
-                        </div>
-                        <div className="space-y-0.5 ml-5">
-                          {ents.map((ent, i) => (
-                            <div key={i} className="text-xs text-gray-400 py-1 flex items-start gap-2">
-                              <span className="text-gray-300 truncate">{ent.title}</span>
-                              {ent.matchReason && <span className="text-[10px] text-gray-600 italic shrink-0">{ent.matchReason}</span>}
+
+                  {/* Related Knowledge from Cortex */}
+                  {activity && activity.entities.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm">{"\uD83E\uDDE0"}</span>
+                        <label className="text-[10px] uppercase tracking-wider text-gray-600">Related in Cortex ({activity.total})</label>
+                      </div>
+                      {(() => {
+                        const groups = new Map<string, typeof activity.entities>();
+                        for (const ent of activity.entities) {
+                          if (!groups.has(ent.source)) groups.set(ent.source, []);
+                          groups.get(ent.source)!.push(ent);
+                        }
+                        return Array.from(groups.entries()).map(([src, ents]) => (
+                          <div key={src} className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-xs">{SOURCE_ICONS[src] || "\uD83D\uDCC4"}</span>
+                              <span className="text-[10px] text-gray-500 uppercase tracking-wider">{src}</span>
+                              <span className="text-[10px] text-gray-600">({ents.length})</span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              )}
+                            <div className="space-y-0.5 ml-5">
+                              {ents.map((ent, i) => (
+                                <div key={i} className="text-xs text-gray-400 py-1 flex items-start gap-2">
+                                  <span className="text-gray-300 truncate">{ent.title}</span>
+                                  {ent.matchReason && <span className="text-[10px] text-gray-600 italic shrink-0">{ent.matchReason}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  )}
 
-              {/* Adjacent pursuits */}
-              {selected.adjacentPursuits && selected.adjacentPursuits.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm">{"\u2728"}</span>
-                    <label className="text-[10px] uppercase tracking-wider text-gray-600">Adjacent Pursuits</label>
-                  </div>
-                  <div className="space-y-1.5">
-                    {selected.adjacentPursuits.map((pursuit, i) => (
-                      <div key={i} className="text-xs text-amber-300/70 px-3 py-2 rounded-lg bg-amber-900/10 border border-amber-500/10">
-                        {pursuit}
+                  {/* Journey timeline */}
+                  {selected.refinements.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm">{"\uD83D\uDDD3\uFE0F"}</span>
+                        <label className="text-[10px] uppercase tracking-wider text-gray-600">Journey ({selected.refinements.length} milestones)</label>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Journey timeline */}
-              {selected.refinements.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm">{"\uD83D\uDDD3\uFE0F"}</span>
-                    <label className="text-[10px] uppercase tracking-wider text-gray-600">Journey ({selected.refinements.length} milestones)</label>
-                  </div>
-                  <div className="space-y-1 border-l-2 border-gray-800/60 pl-3 ml-1">
-                    {selected.refinements.slice().reverse().map((r, i) => (
-                      <div key={i} className="text-[11px] text-gray-500 relative">
-                        <span className={`absolute -left-[17px] top-1.5 w-2 h-2 rounded-full ${
-                          r.source === "conversation" ? "bg-blue-500/60" : r.source === "user_edit" ? "bg-emerald-500/60" : "bg-gray-600"
-                        }`} />
-                        <span className="text-gray-600">{r.date.slice(0, 10)}</span>
-                        <span className="text-gray-700 mx-1">{"\u00B7"}</span>
-                        <span className={r.source === "conversation" ? "text-blue-400/70" : r.source === "user_edit" ? "text-emerald-400/70" : "text-gray-500"}>{r.source}</span>
-                        <span className="text-gray-700 mx-1">{"\u00B7"}</span>
-                        {r.change}
+                      <div className="space-y-1 border-l-2 border-gray-800/60 pl-3 ml-1">
+                        {selected.refinements.slice().reverse().map((r, i) => (
+                          <div key={i} className="text-[11px] text-gray-500 relative">
+                            <span className={`absolute -left-[17px] top-1.5 w-2 h-2 rounded-full ${
+                              r.source === "conversation" ? "bg-blue-500/60" : r.source === "user_edit" ? "bg-emerald-500/60" : "bg-gray-600"
+                            }`} />
+                            <span className="text-gray-600">{r.date.slice(0, 10)}</span>
+                            <span className="text-gray-700 mx-1">{"\u00B7"}</span>
+                            <span className={r.source === "conversation" ? "text-blue-400/70" : r.source === "user_edit" ? "text-emerald-400/70" : "text-gray-500"}>{r.source}</span>
+                            <span className="text-gray-700 mx-1">{"\u00B7"}</span>
+                            {r.change}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </details>
             </div>
           )}
 
@@ -1402,15 +1206,6 @@ export default function FocusView() {
             </div>
           )}
 
-          {detailTab === "evolve" && (
-            <EvolveTab focusArea={selected} sprintLaunched={sprintLaunched} onNavigateToChat={() => {
-              if (selected.conversationId) {
-                selectConversation(selected.conversationId);
-                setActiveTab("chat");
-              }
-            }} />
-          )}
-
         </div>
       </div>
     </>
@@ -1427,7 +1222,7 @@ const ROLE_EMOJI: Record<string, string> = {
   reviewer: "\u2705",
 };
 
-function EvolveTab({ focusArea, sprintLaunched, onNavigateToChat }: { focusArea: FocusArea; sprintLaunched?: boolean; onNavigateToChat: () => void }) {
+function EvolveTab({ focusArea, onNavigateToChat }: { focusArea: FocusArea; onNavigateToChat: () => void }) {
   const cards = useChatStore((s) => s.cards);
   const [tick, setTick] = useState(0);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
@@ -1462,22 +1257,6 @@ function EvolveTab({ focusArea, sprintLaunched, onNavigateToChat }: { focusArea:
   const elapsed = orchCard ? Math.round((Date.now() - orchCard.createdAt) / 60000) : 0;
 
   if (!orchCard || total === 0) {
-    if (sprintLaunched) {
-      return (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-indigo-500/30 bg-indigo-950/10 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm animate-pulse">{"\u26A1"}</span>
-              <span className="text-xs font-medium text-indigo-200">Planning Sprint...</span>
-            </div>
-            <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-              <div className="h-full w-[15%] rounded-full bg-indigo-500 animate-pulse" />
-            </div>
-            <p className="text-[11px] text-gray-500">AI is analyzing your focus area and designing the task plan. This typically takes 1-2 minutes.</p>
-          </div>
-        </div>
-      );
-    }
     if (focusArea.lastSprintResults) {
       return (
         <div className="space-y-4">
@@ -1515,7 +1294,7 @@ function EvolveTab({ focusArea, sprintLaunched, onNavigateToChat }: { focusArea:
   const isComplete = completed === total && total > 0;
   const isRunning = running.length > 0;
   const goal = plan?.goal || "";
-  const isEvolution = goal.includes("Evolution") || sprintLaunched;
+  const isEvolution = goal.includes("Evolution");
 
   return (
     <div className="space-y-4">
@@ -1617,16 +1396,26 @@ function EvolveTab({ focusArea, sprintLaunched, onNavigateToChat }: { focusArea:
 
 // ── Helper Components ──
 
-function WorkflowBadge({ area }: { area: FocusArea }) {
-  const phase = area.lastSprintDate
-    ? { label: "Evolved", bg: "bg-emerald-900/30 text-emerald-400" }
-    : area.conversationId
-    ? { label: "In Discussion", bg: "bg-emerald-900/30 text-emerald-400" }
-    : area.preparedBriefing
-    ? { label: "Evaluated", bg: "bg-emerald-900/30 text-emerald-400" }
-    : { label: "New", bg: "bg-gray-800/40 text-gray-500" };
+function FocusStatus({ area, compact }: { area: FocusArea; compact?: boolean }) {
+  const hasUnreviewedResults = area.lastSprintResults && area.lastSprintDate && (() => {
+    const lastActive = area.progress?.lastActiveAt ? new Date(area.progress.lastActiveAt).getTime() : 0;
+    const sprintTime = new Date(area.lastSprintDate!).getTime();
+    return lastActive < sprintTime || (Date.now() - sprintTime) / 86400000 <= 7;
+  })();
+  const hasDeliverables = area.lastSprintSummary?.deliverables?.length || 0;
 
-  return (
-    <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${phase.bg}`}>{phase.label}</span>
-  );
+  let status: { label: string; bg: string };
+  if (hasUnreviewedResults && hasDeliverables) {
+    status = { label: compact ? `${hasDeliverables} ready` : `${hasDeliverables} deliverables ready`, bg: "bg-emerald-900/30 text-emerald-400" };
+  } else if (area.preparedBriefing && !area.lastSprintResults) {
+    status = { label: compact ? "Evaluated" : "TL evaluated — sprint queued", bg: "bg-violet-900/30 text-violet-400" };
+  } else if (area.lastSprintDate && !hasUnreviewedResults) {
+    status = { label: compact ? "Active" : "Active — TL managing", bg: "bg-gray-800/40 text-gray-400" };
+  } else if (!area.preparedBriefing && !area.lastSprintResults) {
+    status = { label: compact ? "New" : "TL is studying this area...", bg: "bg-gray-800/40 text-gray-500" };
+  } else {
+    status = { label: compact ? "Active" : "Active — TL managing", bg: "bg-gray-800/40 text-gray-400" };
+  }
+
+  return <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${status.bg}`}>{status.label}</span>;
 }
