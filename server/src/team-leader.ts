@@ -990,68 +990,19 @@ export async function deliverBriefing(briefing: DailyBriefing): Promise<string[]
   const config = loadConfig();
   const delivered: string[] = [];
 
-  // In-app
+  // In-app — create a briefing artifact instead of chat cards
   if (config.channels.inApp) {
     try {
-      const { getAllClients } = await import("./server.js");
-      const { persistCard } = await import("./memory-bridge.js");
-      const clients = getAllClients();
-      if (clients.length > 0) {
-        const client = clients[0];
-        const cardId = randomUUID();
-        persistCard(client.id, "main", {
-          id: cardId, runId: cardId, type: "chat", role: "assistant",
-          text: `📋 **Enso Daily** — ${briefing.headline}\n\n${briefing.textSummary}`,
-          timestamp: Date.now(),
-        });
-        client.send({
-          id: cardId, runId: cardId, sessionKey: client.sessionKey,
-          seq: 0, state: "final" as const,
-          text: `📋 **Enso Daily** — ${briefing.headline}\n\n${briefing.textSummary}`,
-          conversationId: "main", timestamp: Date.now(),
-        });
-
-        // Send individual attention cards for proposed actions that need user input
-        const proposedActions = briefing.proposedActions.filter(a => a.status === "proposed" || a.needsUserInput);
-        if (proposedActions.length > 0) {
-          // Match actions to focus areas for actionable links
-          let focusAreas: Array<{ id: string; title: string }> = [];
-          try {
-            const { loadFocusState } = await import("./focus-areas.js");
-            const state = loadFocusState();
-            focusAreas = (state?.areas || []).map(a => ({ id: a.id, title: a.title }));
-          } catch { /* focus areas not available */ }
-
-          const actionLines = proposedActions.map(a => {
-            const titleLower = a.title.toLowerCase();
-            const matched = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()));
-            const pEmoji = a.priority === "critical" ? "🔴" : a.priority === "high" ? "🟠" : a.priority === "medium" ? "🟡" : "⚪";
-            // Give a direct instruction the user can act on
-            let actionHint = "";
-            if (matched) {
-              if (titleLower.includes("review")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **📬 Review Results**`;
-              else if (titleLower.includes("discuss")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **💬 Discuss**`;
-              else actionHint = `\n→ Go to **Focus** tab → **${matched.title}**`;
-            }
-            return `${pEmoji} **${a.title}**\n${a.reasoning}${actionHint}`;
-          }).join("\n\n");
-
-          const attentionCardId = randomUUID();
-          const attentionText = `🙋 **Needs Your Input** (${proposedActions.length} item${proposedActions.length > 1 ? "s" : ""})\n\n${actionLines}`;
-          persistCard(client.id, "main", {
-            id: attentionCardId, runId: attentionCardId, type: "chat", role: "assistant",
-            text: attentionText, timestamp: Date.now() + 1,
-          });
-          client.send({
-            id: attentionCardId, runId: attentionCardId, sessionKey: client.sessionKey,
-            seq: 0, state: "final" as const,
-            text: attentionText,
-            conversationId: "main", timestamp: Date.now() + 1,
-          });
-        }
-
-        delivered.push("in-app");
-      }
+      const { createArtifact } = await import("./agent-artifacts.js");
+      createArtifact({
+        type: "report", agentId: "tl", agentName: "Team Leader",
+        title: `📋 Daily Briefing — ${briefing.headline}`,
+        body: briefing.textSummary,
+        status: "done",
+        metadata: { type: "daily-briefing" },
+      });
+      // Note: proposed actions are already created as individual artifacts by executeActions()
+      delivered.push("in-app");
     } catch (err) {
       logError("team-leader", "In-app delivery failed", err);
     }
@@ -1197,6 +1148,50 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
       action.status = "proposed"; // Fall back to user visibility on failure
     }
   }
+
+  // Create artifacts for all actions — both completed and proposed
+  try {
+    const { createArtifact } = await import("./agent-artifacts.js");
+    const { loadFocusState } = await import("./focus-areas.js");
+    const focusState = loadFocusState();
+
+    for (const action of actions) {
+      // Skip actions that already created their own artifacts (focus lifecycle events)
+      const titleLower = action.title.toLowerCase();
+      if (titleLower.includes("sprint") && titleLower.includes("launch")) continue; // handleEvaluationDone creates these
+      if (titleLower.includes("review") && titleLower.includes("result")) continue; // handleSprintDone creates these
+
+      // Match to focus area for context
+      const matchedFocus = focusState?.areas.find(a =>
+        titleLower.includes(a.title.toLowerCase()) || titleLower.includes(a.id));
+
+      if (action.needsUserInput || action.status === "proposed") {
+        // User-facing action → pending artifact with action buttons
+        createArtifact({
+          type: "action", agentId: "tl", agentName: "Team Leader",
+          focusId: matchedFocus?.id,
+          title: action.title,
+          body: action.reasoning || "",
+          status: "pending",
+          actions: [
+            { id: randomUUID(), label: "Approve", type: "approve", payload: matchedFocus ? { focusId: matchedFocus.id } : {} },
+            { id: randomUUID(), label: "Dismiss", type: "dismiss" },
+          ],
+          metadata: { priority: action.priority, delegation: action.delegation },
+        });
+      } else if (action.status === "completed") {
+        // Auto-executed action → done artifact (informational)
+        createArtifact({
+          type: "action", agentId: "tl", agentName: "Team Leader",
+          focusId: matchedFocus?.id,
+          title: `✓ ${action.title}`,
+          body: action.reasoning || "",
+          status: "done",
+          metadata: { priority: action.priority, delegation: action.delegation },
+        });
+      }
+    }
+  } catch { /* best effort */ }
 
   return actions;
 }
@@ -2043,7 +2038,7 @@ function registerBackgroundTask(actionId: string, title: string, type: "claude-c
   saveState(st);
 }
 
-/** Mark a background task as completed/failed and check if all tasks are done */
+/** Mark a background task as completed/failed. Fire event for each completion. */
 function completeBackgroundTask(actionId: string, status: "completed" | "failed", result?: string): void {
   const st = loadState();
   st.backgroundTasks = st.backgroundTasks || [];
@@ -2055,104 +2050,18 @@ function completeBackgroundTask(actionId: string, status: "completed" | "failed"
   }
   saveState(st);
 
-  // Check if ALL background tasks from this routine are now done
-  const running = st.backgroundTasks.filter(t => t.status === "running");
-  if (running.length === 0 && st.backgroundTasks.length > 0) {
-    deliverRoutineCompletionSummary().catch(err =>
-      logError("team-leader", "Failed to deliver completion summary", err));
-  }
+  // Fire event for this task completion — code change detection, restart, etc.
+  processEvent(createEvent("task.completed", { agent: "tl" }, {
+    actionId, actionTitle: task?.actionTitle, result, status,
+  }, "system")).catch(() => {});
 }
 
 /**
  * When all background tasks from a routine are done, deliver a summary.
  * This is the "all clear" notification — everything the TL launched has finished.
  */
-async function deliverRoutineCompletionSummary(): Promise<void> {
-  const st = loadState();
-  const tasks = st.backgroundTasks || [];
-  if (tasks.length === 0) return;
-
-  const completedTasks = tasks.filter(t => t.status === "completed");
-  const failedTasks = tasks.filter(t => t.status === "failed");
-
-  logAction({ ts: Date.now(), type: "action", category: "team-leader",
-    message: `All background tasks finished: ${completedTasks.length} done, ${failedTasks.length} failed. Delivering final briefing.` });
-
-  // Regenerate the briefing with FINAL action statuses (all tasks now resolved)
-  // This ensures the email shows accurate ✓/✗ instead of ◉
-  if (st.lastBriefing) {
-    // Update the briefing's proposed actions with final statuses
-    for (const action of st.lastBriefing.proposedActions) {
-      const recent = st.recentActions.find(a => a.id === action.id);
-      if (recent) action.status = recent.status;
-    }
-
-    // Now deliver the full briefing via all channels (email, WeChat, in-app)
-    // This is the ONLY email the user receives — with final, accurate status
-    await deliverBriefing(st.lastBriefing);
-
-    // Also send the "Needs Your Input" attention cards
-    const proposedActions = st.lastBriefing.proposedActions.filter(a => a.status === "proposed" || a.needsUserInput);
-    if (proposedActions.length > 0) {
-      try {
-        const { getAllClients } = await import("./server.js");
-        const { persistCard } = await import("./memory-bridge.js");
-        const clients = getAllClients();
-        if (clients.length > 0) {
-          const client = clients[0];
-
-          let focusAreas: Array<{ id: string; title: string }> = [];
-          try {
-            const { loadFocusState } = await import("./focus-areas.js");
-            const fState = loadFocusState();
-            focusAreas = (fState?.areas || []).map(a => ({ id: a.id, title: a.title }));
-          } catch { /* focus areas not available */ }
-
-          const actionLines = proposedActions.map(a => {
-            const titleLower = a.title.toLowerCase();
-            const matched = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()));
-            const pEmoji = a.priority === "critical" ? "🔴" : a.priority === "high" ? "🟠" : a.priority === "medium" ? "🟡" : "⚪";
-            let actionHint = "";
-            if (matched) {
-              if (titleLower.includes("review")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **📬 Review Results**`;
-              else if (titleLower.includes("discuss")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **💬 Discuss**`;
-              else actionHint = `\n→ Go to **Focus** tab → **${matched.title}**`;
-            }
-            return `${pEmoji} **${a.title}**\n${a.reasoning}${actionHint}`;
-          }).join("\n\n");
-
-          const attentionCardId = randomUUID();
-          const attentionText = `🙋 **Needs Your Input** (${proposedActions.length} item${proposedActions.length > 1 ? "s" : ""})\n\n${actionLines}`;
-          persistCard(client.id, "main", {
-            id: attentionCardId, runId: attentionCardId, type: "chat", role: "assistant",
-            text: attentionText, timestamp: Date.now() + 1,
-          });
-          client.send({
-            id: attentionCardId, runId: attentionCardId, sessionKey: client.sessionKey,
-            seq: 0, state: "final" as const,
-            text: attentionText,
-            conversationId: "main", timestamp: Date.now() + 1,
-          });
-        }
-      } catch { /* best effort */ }
-    }
-
-    saveState(st);
-  }
-
-  // Check if restart is needed
-  if (st.restartPending) {
-    await handleAutoRestart();
-  }
-
-  // Clear background tasks for next routine
-  const st2 = loadState();
-  st2.backgroundTasks = [];
-  saveState(st2);
-
-  logAction({ ts: Date.now(), type: "action", category: "team-leader",
-    message: `Routine complete: ${completedTasks.length} done, ${failedTasks.length} failed — briefing delivered` });
-}
+// deliverRoutineCompletionSummary removed — each task completion fires its own event.
+// Briefing delivered immediately during morning routine. No deferring needed.
 
 // ── 5e. Auto-Restart After Code Changes ──
 
@@ -2237,7 +2146,7 @@ async function handleAutoRestart(): Promise<void> {
 export async function runMorningRoutine(): Promise<DailyBriefing> {
   logAction({ ts: Date.now(), type: "action", category: "team-leader", message: "Morning routine starting..." });
 
-  // 0. Clear background tasks from previous routine
+  // 0. Clear stale state from previous routine
   const prevState = loadState();
   prevState.backgroundTasks = [];
   prevState.restartPending = false;
@@ -2253,68 +2162,27 @@ export async function runMorningRoutine(): Promise<DailyBriefing> {
   logAction({ ts: Date.now(), type: "action", category: "team-leader",
     message: `Plan: ${actions.length} actions prioritized` });
 
-  // 3. Execute auto-executable actions
+  // 3. Execute auto-executable actions (creates artifacts for each action)
   const executedActions = await executeActions(actions);
   const completed = executedActions.filter(a => a.status === "completed").length;
   const proposed = executedActions.filter(a => a.status === "proposed").length;
 
-  // 3b. Mark pending remarks as processed (TL has seen them and incorporated into plan)
+  // 3b. Mark pending remarks as processed
   if (signals.pendingRemarks.length > 0) {
     try {
       const { resolveRemark } = await import("./remarks.js");
       for (const r of signals.pendingRemarks) {
         resolveRemark(r.id, `Processed in morning routine — incorporated into ${actions.length} action plan`);
       }
-      logAction({ ts: Date.now(), type: "action", category: "team-leader",
-        message: `Processed ${signals.pendingRemarks.length} user remark(s)` });
     } catch { /* best effort */ }
   }
 
-  // 4. Check if there are background tasks still running
-  const currentState = loadState();
-  const hasBackgroundTasks = (currentState.backgroundTasks || []).some(t => t.status === "running");
-
-  if (hasBackgroundTasks) {
-    // Background tasks still running — defer full briefing to completion summary.
-    // Save state now so the TL dashboard shows actions immediately.
-    currentState.lastMorningRoutineAt = new Date().toISOString();
-    currentState.recentActions = [...executedActions, ...currentState.recentActions].slice(0, 50);
-    saveState(currentState);
-
-    // Send a lightweight in-app-only notification that the routine started
-    try {
-      const { getAllClients } = await import("./server.js");
-      const { persistCard } = await import("./memory-bridge.js");
-      const clients = getAllClients();
-      if (clients.length > 0) {
-        const client = clients[0];
-        const cardId = randomUUID();
-        const inProgressText = `⏳ **TL Routine Running** — ${executedActions.filter(a => a.status === "completed").length} instant tasks done, ${(currentState.backgroundTasks || []).filter(t => t.status === "running").length} background tasks in progress. Full briefing will arrive when everything completes.`;
-        persistCard(client.id, "main", { id: cardId, runId: cardId, type: "chat", role: "assistant", text: inProgressText, timestamp: Date.now() });
-        client.send({ id: cardId, runId: cardId, sessionKey: client.sessionKey, seq: 0, state: "final" as const, text: inProgressText, conversationId: "main", timestamp: Date.now() });
-      }
-    } catch { /* best effort */ }
-
-    logAction({ ts: Date.now(), type: "action", category: "team-leader",
-      message: `Routine in progress: ${completed} instant, ${(currentState.backgroundTasks || []).filter(t => t.status === "running").length} background tasks running. Briefing deferred.` });
-
-    // Generate briefing but store it — don't deliver yet. Completion summary will deliver it.
-    const briefing = await generateBriefing(signals, executedActions);
-    const st2 = loadState();
-    st2.lastBriefing = briefing;
-    saveState(st2);
-
-    return briefing;
-  }
-
-  // No background tasks — deliver briefing immediately (all tasks were synchronous)
-  // 4. Generate briefing
+  // 4. Generate briefing + deliver immediately (no deferring)
+  // Background tasks complete asynchronously and fire their own events.
   const briefing = await generateBriefing(signals, executedActions);
-
-  // 5. Deliver
   const channels = await deliverBriefing(briefing);
 
-  // 6. Save state
+  // 5. Save state
   const state = loadState();
   state.lastMorningRoutineAt = new Date().toISOString();
   state.lastBriefing = briefing;

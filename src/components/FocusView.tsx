@@ -427,32 +427,27 @@ export default function FocusView() {
                   <span>{Math.round((area.confidence ?? 0.5) * 100)}% confidence</span>
                 )}
               </div>
-              {/* Action buttons — take user directly to the final destination */}
+              {/* Action buttons — navigate directly to Focus detail view */}
               {(() => {
                 type ActionDef = { emoji: string; label: string; bg: string; border: string; text: string; action: () => void };
                 const actions: ActionDef[] = [];
+                const openFocus = () => { setSelectedId(area.id); setView("detail"); setDetailTab("focus"); };
 
-                // Unreviewed sprint results → open conversation where AI presents results
+                // Unreviewed sprint results → open Focus detail (deliverables + activity feed there)
                 if (area.lastSprintResults && area.lastSprintDate) {
                   const lastActive = area.progress?.lastActiveAt ? new Date(area.progress.lastActiveAt).getTime() : 0;
                   const sprintTime = new Date(area.lastSprintDate).getTime();
                   const sprintAge = Math.floor((Date.now() - sprintTime) / 86400000);
                   if (lastActive < sprintTime || sprintAge <= 7) {
                     actions.push({ emoji: "📬", label: "Review Results →", bg: "bg-amber-500/10", border: "border-amber-500/25", text: "text-amber-300",
-                      action: () => { completeTlAction(area.title); chatAboutFocus(area, "Show me the sprint results — what was delivered and what should I act on first?"); },
+                      action: openFocus,
                     });
                   }
                 }
-                // Evaluated but no discussion → open conversation where AI arrives with briefing
-                if (area.preparedBriefing && !area.conversationId && !area.lastSprintResults) {
+                // Evaluated → open Focus detail to see activity
+                if (area.preparedBriefing && !area.lastSprintResults) {
                   actions.push({ emoji: "💬", label: "Discuss →", bg: "bg-violet-500/10", border: "border-violet-500/25", text: "text-violet-300",
-                    action: () => { completeTlAction(area.title); chatAboutFocus(area, "Based on your evaluation, what's the most important decision we need to make?"); },
-                  });
-                }
-                // Has discussion but no sprint → launch evolve directly
-                if (area.conversationId && !area.lastSprintResults && area.preparedBriefing) {
-                  actions.push({ emoji: "⚡", label: "Launch Sprint →", bg: "bg-emerald-500/10", border: "border-emerald-500/25", text: "text-emerald-300",
-                    action: () => { setSelectedId(area.id); setView("detail"); setDetailTab("focus"); },
+                    action: openFocus,
                   });
                 }
                 // New areas: no action needed — TL handles evaluation autonomously
