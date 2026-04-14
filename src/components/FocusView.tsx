@@ -23,6 +23,14 @@ interface FocusArea {
     goals: string[]; perspective: string;
     agentRole: "researcher" | "architect" | "builder" | "coder" | "reviewer";
     conversationId?: string;
+    metrics?: {
+      conversationCount: number;
+      lastActiveAt: string | null;
+      sprintCount: number;
+      insightsGenerated: number;
+      lastEvaluation?: string;
+      lastEvaluatedAt?: string;
+    };
   }>;
   intent?: string;
   deeperIntent?: string;
@@ -1128,6 +1136,39 @@ export default function FocusView() {
                 </div>
               ) : (
                 <>
+                  {/* Team health summary */}
+                  {(() => {
+                    const experts = selected.experts!;
+                    const active = experts.filter(e => {
+                      if (!e.metrics?.lastActiveAt) return false;
+                      return (Date.now() - new Date(e.metrics.lastActiveAt).getTime()) / 86400000 <= 7;
+                    }).length;
+                    const idle = experts.filter(e => {
+                      if (!e.metrics?.lastActiveAt) return false;
+                      const d = (Date.now() - new Date(e.metrics.lastActiveAt).getTime()) / 86400000;
+                      return d > 7 && d <= 30;
+                    }).length;
+                    const stale = experts.length - active - idle;
+                    const totalConvos = experts.reduce((sum, e) => sum + (e.metrics?.conversationCount || 0), 0);
+                    const totalSprints = experts.reduce((sum, e) => sum + (e.metrics?.sprintCount || 0), 0);
+                    return (
+                      <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-800/30 mb-3">
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /><span className="text-[10px] text-gray-400">{active}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500" /><span className="text-[10px] text-gray-400">{idle}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500/60" /><span className="text-[10px] text-gray-400">{stale}</span>
+                        </div>
+                        <span className="text-[9px] text-gray-600 mx-1">|</span>
+                        <span className="text-[10px] text-gray-500">💬 {totalConvos}</span>
+                        <span className="text-[10px] text-gray-500">⚡ {totalSprints}</span>
+                      </div>
+                    );
+                  })()}
+
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] text-gray-500 uppercase tracking-wider">Expert Team ({selected.experts.length})</p>
                     <button
@@ -1152,15 +1193,52 @@ export default function FocusView() {
                       architect: "bg-blue-500", reviewer: "bg-amber-500", researcher: "bg-emerald-500",
                       coder: "bg-violet-500", builder: "bg-orange-500",
                     };
+                    // Activity status indicator
+                    const m = expert.metrics;
+                    let activityStatus: "active" | "idle" | "stale" = "stale";
+                    let activityLabel = "Never active";
+                    if (m?.lastActiveAt) {
+                      const daysSince = Math.floor((Date.now() - new Date(m.lastActiveAt).getTime()) / 86400000);
+                      if (daysSince <= 7) { activityStatus = "active"; activityLabel = daysSince === 0 ? "Active today" : `Active ${daysSince}d ago`; }
+                      else if (daysSince <= 30) { activityStatus = "idle"; activityLabel = `Idle ${daysSince}d`; }
+                      else { activityLabel = `Stale ${daysSince}d`; }
+                    }
+                    const statusColors = { active: "bg-emerald-500", idle: "bg-amber-500", stale: "bg-red-500/60" };
+                    const statusBorder = { active: "border-emerald-500/20", idle: "border-amber-500/20", stale: "border-red-500/10" };
+
                     return (
-                      <div key={expert.id} className="rounded-xl border border-gray-800/50 bg-gray-900/30 p-4">
+                      <div key={expert.id} className={`rounded-xl border ${statusBorder[activityStatus]} bg-gray-900/30 p-4`}>
                         <div className="flex items-center gap-2 mb-2">
                           <div className={`w-2.5 h-2.5 rounded-full ${roleColors[expert.agentRole] || "bg-gray-500"}`} />
                           <span className="text-sm font-medium text-gray-100">{expert.name}</span>
                           <span className="text-[10px] text-gray-500">{expert.role}</span>
+                          <div className="ml-auto flex items-center gap-1.5">
+                            <div className={`w-1.5 h-1.5 rounded-full ${statusColors[activityStatus]}`} />
+                            <span className={`text-[9px] ${activityStatus === "active" ? "text-emerald-400" : activityStatus === "idle" ? "text-amber-400" : "text-gray-500"}`}>
+                              {activityLabel}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-xs text-gray-400 mb-2 leading-relaxed">{expert.responsibilities}</p>
                         <p className="text-[11px] text-amber-400/70 italic mb-3">"{expert.perspective}"</p>
+
+                        {/* Activity metrics row */}
+                        {m && (m.conversationCount > 0 || m.sprintCount > 0) && (
+                          <div className="flex gap-3 mb-2">
+                            <span className="text-[10px] text-gray-500">💬 {m.conversationCount} convos</span>
+                            <span className="text-[10px] text-gray-500">⚡ {m.sprintCount} sprints</span>
+                            {m.insightsGenerated > 0 && <span className="text-[10px] text-gray-500">💡 {m.insightsGenerated} insights</span>}
+                          </div>
+                        )}
+
+                        {/* TL evaluation note */}
+                        {m?.lastEvaluation && (
+                          <div className="mb-2 px-2 py-1.5 rounded-lg bg-indigo-950/30 border border-indigo-500/10">
+                            <span className="text-[9px] text-indigo-400/60 uppercase tracking-wider">TL Review</span>
+                            <p className="text-[10px] text-indigo-300/80 mt-0.5">{m.lastEvaluation}</p>
+                          </div>
+                        )}
+
                         <div className="flex flex-wrap gap-1 mb-3">
                           {expert.goals.map((g, i) => (
                             <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800/60 text-gray-400 border border-gray-700/40">{g}</span>

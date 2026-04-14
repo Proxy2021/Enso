@@ -26,7 +26,10 @@ export interface FocusAnalysis {
   recommendedAction: "evaluate" | "discuss" | "evolve" | "review_results" | "continue" | "reactivate" | "none";
   actionReason: string;
   /** Expert team assigned to this focus area */
-  experts: Array<{ id: string; name: string; role: string; hasConversation: boolean }>;
+  experts: Array<{
+    id: string; name: string; role: string; hasConversation: boolean;
+    metrics?: { conversationCount: number; lastActiveAt: string | null; sprintCount: number; insightsGenerated: number; lastEvaluation?: string; lastEvaluatedAt?: string };
+  }>;
 }
 
 export interface ProgressPulse {
@@ -103,7 +106,7 @@ export async function analyzeFocusAreas(): Promise<FocusAnalysis[]> {
       focusType: area.focusType,
       daysSinceActivity, trend: area.progress?.trend || "steady",
       hasUnreviewedResults, hasEvaluation, hasSprint, recommendedAction, actionReason,
-      experts: (area.experts || []).map(e => ({ id: e.id, name: e.name, role: e.role, hasConversation: !!e.conversationId })),
+      experts: (area.experts || []).map(e => ({ id: e.id, name: e.name, role: e.role, hasConversation: !!e.conversationId, metrics: e.metrics })),
     });
   }
 

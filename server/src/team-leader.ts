@@ -252,9 +252,19 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     "",
     `## Focus Areas (${signals.focusAnalyses.length} active)`,
     ...signals.focusAnalyses.map(f => {
-      const expertLine = f.experts.length > 0
-        ? `\n    Expert team: ${f.experts.map(e => `${e.name} (${e.role}${e.hasConversation ? ", has chat" : ""})`).join(", ")}`
-        : "\n    No expert team assigned yet";
+      let expertLine: string;
+      if (f.experts.length > 0) {
+        const expertDetails = f.experts.map(e => {
+          const m = (e as Record<string, unknown>).metrics as { conversationCount?: number; lastActiveAt?: string | null; sprintCount?: number; lastEvaluation?: string } | undefined;
+          const convos = m?.conversationCount ?? 0;
+          const lastActive = m?.lastActiveAt ? `${Math.floor((Date.now() - new Date(m.lastActiveAt).getTime()) / 86400000)}d ago` : "never";
+          const eval_ = m?.lastEvaluation ? ` [eval: ${m.lastEvaluation}]` : "";
+          return `${e.name} (${e.role}, ${convos} convos, active: ${lastActive}${eval_})`;
+        }).join("; ");
+        expertLine = `\n    Expert team (${f.experts.length}): ${expertDetails}`;
+      } else {
+        expertLine = "\n    ⚠️ No expert team — NEEDS STAFFING";
+      }
       return `- "${f.title}" [${f.focusType || "general"}] — ${f.recommendedAction}: ${f.actionReason}${f.hasUnreviewedResults ? " [UNREVIEWED RESULTS]" : ""} (${f.daysSinceActivity}d inactive)${expertLine}`;
     }),
     "",
@@ -301,11 +311,14 @@ Do NOT defer work to "next cycle" — execute everything you can right now.
 You can also CREATE NEW TASKS for yourself if you identify follow-up work during assessment.
 You run the organization. Be decisive, be thorough, be proactive.
 
-EXPERT TEAMS: Each focus area may have domain-specific experts (shown above).
-- You can delegate tasks to specific experts by setting delegation to "expert:<expert-name>"
-- If a focus area has NO experts yet, consider generating them as an action
-- Experts are your team — use them. Don't do everything yourself when a specialist is available.
-- Consider scheduling a "team sync" action if experts haven't been consulted recently.
+EXPERT TEAM MANAGEMENT (you own the org chart):
+- If ANY focus area has NO experts yet → ALWAYS create an action to "Generate expert team for [focus]" with delegation "focus"
+- If experts have 0 conversations and have never been active → flag for restructuring or outreach
+- If the focus direction has shifted significantly since experts were created → create "Restructure expert team for [focus]" action
+- Periodically (at least weekly) create "Evaluate expert teams" actions to review team performance
+- Consider "Team sync for [focus]" if experts haven't been consulted in 7+ days
+- Use delegation "focus" for all expert management actions (staffing, evaluation, restructuring)
+- Title patterns the system recognizes: "Generate/Staff/Assign expert team...", "Evaluate/Review expert...", "Restructure/Replace/Remove expert..."
 
 Produce a prioritized action plan as a JSON array. Include 3-7 actions, most impactful first.
 
@@ -557,12 +570,24 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
 
       switch (action.delegation) {
         case "focus": {
-          // Focus-related actions: pulse, evaluate, analyze
-          const { generateProgressPulse, analyzeFocusAreas } = await import("./focus-agent.js");
-          if (action.type === "user-task" && action.title.toLowerCase().includes("pulse")) {
+          // Focus-related actions: pulse, evaluate, analyze, expert staffing
+          const titleLower = action.title.toLowerCase();
+
+          if (titleLower.includes("expert") && (titleLower.includes("generate") || titleLower.includes("staff") || titleLower.includes("assign"))) {
+            // Expert team generation — find which focus area(s) need staffing
+            await handleExpertStaffing(action);
+          } else if (titleLower.includes("expert") && (titleLower.includes("evaluat") || titleLower.includes("review") || titleLower.includes("sync"))) {
+            // Expert team evaluation / sync
+            await handleExpertEvaluation(action);
+          } else if (titleLower.includes("expert") && (titleLower.includes("restructur") || titleLower.includes("replace") || titleLower.includes("remove"))) {
+            // Expert team restructuring
+            await handleExpertRestructuring(action);
+          } else if (titleLower.includes("pulse")) {
+            const { generateProgressPulse } = await import("./focus-agent.js");
             await generateProgressPulse();
           } else {
-            await analyzeFocusAreas(); // Refresh analysis
+            const { analyzeFocusAreas } = await import("./focus-agent.js");
+            await analyzeFocusAreas();
           }
           action.status = "completed";
           break;
@@ -627,6 +652,292 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
   }
 
   return actions;
+}
+
+// ── 5a. Expert Team Management ──
+
+/**
+ * Generate expert teams for focus areas that don't have them yet.
+ * TL autonomously staffs unstaffed focus areas.
+ */
+async function handleExpertStaffing(action: TeamLeaderAction): Promise<void> {
+  const { loadFocusState, updateFocusArea } = await import("./focus-areas.js");
+  const { generateFocusExperts } = await import("./team-generator.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  const unstaffed = state.areas.filter(a =>
+    a.status !== "completed" && a.status !== "paused" && (!a.experts || a.experts.length === 0)
+  );
+
+  for (const area of unstaffed) {
+    try {
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Generating expert team for "${area.title}" [${area.focusType || "general"}]` });
+
+      const experts = await generateFocusExperts({
+        focusId: area.id,
+        focusTitle: area.title,
+        focusType: area.focusType,
+        intent: area.intent,
+        deeperIntent: area.deeperIntent,
+        semanticTags: area.semanticTags,
+        evidence: area.evidence,
+        codebasePath: area.codebasePath,
+      });
+
+      // Initialize metrics on each expert
+      const expertsWithMetrics = experts.map(e => ({
+        ...e,
+        metrics: { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 },
+      }));
+
+      updateFocusArea(area.id, { experts: expertsWithMetrics });
+
+      // Also persist experts as Cortex wiki pages
+      try {
+        await persistExpertsToCortex(area.id, area.title, expertsWithMetrics);
+      } catch { /* non-critical */ }
+
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Staffed "${area.title}" with ${experts.length} experts: ${experts.map(e => e.name).join(", ")}` });
+    } catch (err) {
+      logError("team-leader", `Failed to generate experts for "${area.title}"`, err);
+    }
+  }
+}
+
+/**
+ * Evaluate expert performance — review metrics, flag underperformers.
+ * TL "syncs" with each expert by reviewing their activity and writing evaluations.
+ */
+async function handleExpertEvaluation(action: TeamLeaderAction): Promise<void> {
+  const { loadFocusState, updateFocusArea } = await import("./focus-areas.js");
+  const { llm } = await import("./llm.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  const areasWithExperts = state.areas.filter(a =>
+    a.status !== "completed" && a.experts && a.experts.length > 0
+  );
+
+  for (const area of areasWithExperts) {
+    const expertSummaries = area.experts!.map(e => {
+      const m = e.metrics || { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 };
+      const daysSinceActive = m.lastActiveAt
+        ? Math.floor((Date.now() - new Date(m.lastActiveAt).getTime()) / (24 * 60 * 60 * 1000))
+        : -1;
+      return `- ${e.name} (${e.role}): ${m.conversationCount} conversations, ${m.sprintCount} sprints, last active ${daysSinceActive >= 0 ? `${daysSinceActive}d ago` : "never"}`;
+    }).join("\n");
+
+    try {
+      const evaluation = await llm({
+        prompt: `You are the Team Leader evaluating expert performance for the focus area "${area.title}".
+
+EXPERTS:
+${expertSummaries}
+
+FOCUS CONTEXT: ${area.intent || area.description}
+FOCUS TYPE: ${area.focusType || "general"}
+CLARITY: ${area.clarity}
+
+For each expert, write a ONE-LINE evaluation: are they contributing? underperforming? should they be replaced or reassigned?
+If the team composition no longer fits the focus direction, note what changes you'd make.
+
+Return JSON: { "evaluations": [{ "expertId": "id", "status": "active|idle|stale", "note": "brief evaluation" }], "teamNote": "overall team assessment" }`,
+        tier: "fast",
+        maxOutputTokens: 2000,
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        timeoutMs: 15_000,
+      });
+
+      let parsed: { evaluations: Array<{ expertId: string; status: string; note: string }>; teamNote: string };
+      try {
+        let jsonStr = evaluation.trim();
+        const fm = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fm) jsonStr = fm[1].trim();
+        const bs = jsonStr.indexOf("{"), be = jsonStr.lastIndexOf("}");
+        if (bs >= 0 && be > bs) jsonStr = jsonStr.slice(bs, be + 1);
+        parsed = JSON.parse(jsonStr);
+      } catch { continue; }
+
+      // Write evaluations back to expert metrics
+      const updatedExperts = area.experts!.map(expert => {
+        const eval_ = parsed.evaluations.find(e => e.expertId === expert.id);
+        if (!eval_) return expert;
+        return {
+          ...expert,
+          metrics: {
+            ...(expert.metrics || { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 }),
+            lastEvaluation: eval_.note,
+            lastEvaluatedAt: new Date().toISOString(),
+          },
+        };
+      });
+
+      updateFocusArea(area.id, { experts: updatedExperts });
+
+      logAction({ ts: Date.now(), type: "action", category: "team-leader",
+        message: `Evaluated experts for "${area.title}": ${parsed.teamNote}` });
+    } catch (err) {
+      logError("team-leader", `Expert evaluation failed for "${area.title}"`, err);
+    }
+  }
+}
+
+/**
+ * Restructure expert teams — add, remove, or replace experts based on TL's assessment.
+ * Called when focus direction has shifted significantly.
+ */
+async function handleExpertRestructuring(action: TeamLeaderAction): Promise<void> {
+  const { loadFocusState, updateFocusArea } = await import("./focus-areas.js");
+  const { generateFocusExperts } = await import("./team-generator.js");
+  const { llm } = await import("./llm.js");
+  const state = loadFocusState();
+  if (!state?.areas.length) return;
+
+  // Find focus areas where restructuring is needed based on action reasoning
+  const areasWithExperts = state.areas.filter(a =>
+    a.status !== "completed" && a.experts && a.experts.length > 0
+  );
+
+  for (const area of areasWithExperts) {
+    // Check if this area's experts have stale evaluations or zero activity
+    const hasStaleExperts = area.experts!.some(e => {
+      const m = e.metrics || { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 };
+      return m.conversationCount === 0 && !m.lastActiveAt;
+    });
+    if (!hasStaleExperts && !action.reasoning.toLowerCase().includes(area.title.toLowerCase())) continue;
+
+    try {
+      // Ask LLM which experts to keep/replace
+      const currentTeam = area.experts!.map(e => {
+        const m = e.metrics || { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 };
+        return `${e.name} (${e.role}): ${m.conversationCount} convos, ${m.sprintCount} sprints, eval: ${m.lastEvaluation || "none"}`;
+      }).join("\n");
+
+      const decision = await llm({
+        prompt: `You are the Team Leader restructuring the expert team for "${area.title}" (${area.focusType || "general"}).
+
+CURRENT TEAM:
+${currentTeam}
+
+FOCUS INTENT: ${area.intent || area.description}
+DEEPER INTENT: ${area.deeperIntent || "not defined"}
+
+Should this team be restructured? Consider:
+1. Are experts aligned with current focus direction?
+2. Are any experts never used (0 conversations)?
+3. Does the team have the right mix of skills?
+
+Return JSON: { "action": "keep|regenerate|partial", "reason": "why", "keepIds": ["id1"] }
+- "keep" = team is fine as-is
+- "regenerate" = replace entire team with fresh experts
+- "partial" = keep some, regenerate the rest (list keepIds)`,
+        tier: "fast",
+        maxOutputTokens: 1500,
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        timeoutMs: 15_000,
+      });
+
+      let parsed: { action: string; reason: string; keepIds?: string[] };
+      try {
+        let jsonStr = decision.trim();
+        const fm = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fm) jsonStr = fm[1].trim();
+        const bs = jsonStr.indexOf("{"), be = jsonStr.lastIndexOf("}");
+        if (bs >= 0 && be > bs) jsonStr = jsonStr.slice(bs, be + 1);
+        parsed = JSON.parse(jsonStr);
+      } catch { continue; }
+
+      if (parsed.action === "keep") {
+        logAction({ ts: Date.now(), type: "action", category: "team-leader",
+          message: `Expert team for "${area.title}" reviewed — keeping as-is: ${parsed.reason}` });
+        continue;
+      }
+
+      if (parsed.action === "regenerate") {
+        // Full team regeneration
+        const newExperts = await generateFocusExperts({
+          focusId: area.id, focusTitle: area.title, focusType: area.focusType,
+          intent: area.intent, deeperIntent: area.deeperIntent,
+          semanticTags: area.semanticTags, evidence: area.evidence,
+          codebasePath: area.codebasePath,
+        });
+        const withMetrics = newExperts.map(e => ({
+          ...e,
+          metrics: { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 },
+        }));
+        updateFocusArea(area.id, { experts: withMetrics });
+        try { await persistExpertsToCortex(area.id, area.title, withMetrics); } catch { /* non-critical */ }
+        logAction({ ts: Date.now(), type: "action", category: "team-leader",
+          message: `Regenerated expert team for "${area.title}": ${newExperts.map(e => e.name).join(", ")} (reason: ${parsed.reason})` });
+      } else if (parsed.action === "partial") {
+        // Keep some, regenerate others
+        const keepIds = new Set(parsed.keepIds || []);
+        const kept = area.experts!.filter(e => keepIds.has(e.id));
+        const slotsNeeded = Math.max(1, area.experts!.length - kept.length);
+        const newExperts = await generateFocusExperts({
+          focusId: area.id, focusTitle: area.title, focusType: area.focusType,
+          intent: area.intent, deeperIntent: area.deeperIntent,
+          semanticTags: area.semanticTags, evidence: area.evidence,
+          codebasePath: area.codebasePath,
+        });
+        // Take only the needed slots from new generation
+        const newSlots = newExperts.slice(0, slotsNeeded).map(e => ({
+          ...e,
+          metrics: { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 },
+        }));
+        const merged = [...kept, ...newSlots];
+        updateFocusArea(area.id, { experts: merged });
+        try { await persistExpertsToCortex(area.id, area.title, merged); } catch { /* non-critical */ }
+        logAction({ ts: Date.now(), type: "action", category: "team-leader",
+          message: `Restructured "${area.title}" team: kept ${kept.map(e => e.name).join(", ")}, added ${newSlots.map(e => e.name).join(", ")} (reason: ${parsed.reason})` });
+      }
+    } catch (err) {
+      logError("team-leader", `Expert restructuring failed for "${area.title}"`, err);
+    }
+  }
+}
+
+/**
+ * Persist expert definitions as Cortex wiki pages for cross-focus discoverability.
+ */
+async function persistExpertsToCortex(
+  focusId: string,
+  focusTitle: string,
+  experts: Array<import("./project-manager.js").TeamAgent>,
+): Promise<void> {
+  const { ensureDirectoryExists, getEnsoPath } = await import("./utils/home.js");
+  const focusWikiDir = getEnsoPath("wiki", "focuses", focusId);
+  ensureDirectoryExists(focusWikiDir);
+
+  for (const expert of experts) {
+    const slug = expert.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const pagePath = join(focusWikiDir, `expert-${slug}.md`);
+    const metrics = expert.metrics || { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 };
+    const content = [
+      `# ${expert.name}`,
+      `> ${expert.role} — Expert for "${focusTitle}"`,
+      "",
+      `**Agent Role:** ${expert.agentRole}`,
+      `**Responsibilities:** ${expert.responsibilities}`,
+      `**Perspective:** ${expert.perspective}`,
+      "",
+      `## Goals`,
+      ...expert.goals.map(g => `- ${g}`),
+      "",
+      `## Activity`,
+      `- Conversations: ${metrics.conversationCount}`,
+      `- Sprint participations: ${metrics.sprintCount}`,
+      `- Last active: ${metrics.lastActiveAt || "never"}`,
+      metrics.lastEvaluation ? `- Last evaluation: ${metrics.lastEvaluation}` : "",
+    ].filter(Boolean).join("\n");
+
+    writeFileSync(pagePath, content, "utf-8");
+  }
 }
 
 // ── 5b. Launch Builder/Research Tasks via Claude Code ──

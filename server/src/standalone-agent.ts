@@ -572,12 +572,20 @@ export async function handleStandaloneInbound(params: {
   const conversationId = message.conversationId ?? "default";
   const clientId = message.clientId;
 
-  // Look up if this conversation belongs to a focus area (for refinement after response)
+  // Look up if this conversation belongs to a focus area or expert (for refinement/tracking after response)
   let activeFocusId: string | null = null;
   try {
     const { contextRegistry } = await import("./conversation-context.js");
     const provider = contextRegistry.getProvider(conversationId);
     if (provider?.type === "focus") activeFocusId = provider.sourceId;
+    // Track expert activity when user messages an expert
+    if (provider?.type === "expert" && provider.sourceId) {
+      const [focusId, expertId] = provider.sourceId.split(":");
+      if (focusId && expertId) {
+        const { trackExpertActivity } = await import("./focus-areas.js");
+        trackExpertActivity(focusId, expertId);
+      }
+    }
   } catch { /* registry not available */ }
 
   // Hydrate from journal on cold start (server restart or first message in this conversation)

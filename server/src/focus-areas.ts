@@ -1255,6 +1255,9 @@ Rules:
                       });
                     }).catch(() => {});
 
+                    // Track expert sprint participation
+                    trackExpertSprintParticipation(focusId);
+
                     // Deliver sprint results through all channels (email, WeChat)
                     import("./focus-agent.js").then(({ deliverSprintResults }) => {
                       deliverSprintResults(focusId, area.title, sprintSummary).catch(err => {
@@ -1561,6 +1564,76 @@ export function updateFocusArea(focusId: string, updates: Partial<FocusArea>): F
   }
 
   return area;
+}
+
+/**
+ * Track expert activity — called when a conversation message is sent to an expert.
+ * Increments conversation count and updates lastActiveAt.
+ */
+export function trackExpertActivity(focusId: string, expertId: string): void {
+  const state = loadFocusState();
+  if (!state) return;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area?.experts) return;
+  const expert = area.experts.find(e => e.id === expertId);
+  if (!expert) return;
+
+  if (!expert.metrics) {
+    expert.metrics = { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 };
+  }
+  expert.metrics.conversationCount++;
+  expert.metrics.lastActiveAt = new Date().toISOString();
+  saveFocusState(state);
+}
+
+/**
+ * Track expert sprint participation — called when a sprint completes for this focus area.
+ */
+export function trackExpertSprintParticipation(focusId: string): void {
+  const state = loadFocusState();
+  if (!state) return;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area?.experts) return;
+
+  for (const expert of area.experts) {
+    if (!expert.metrics) {
+      expert.metrics = { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 };
+    }
+    expert.metrics.sprintCount++;
+    expert.metrics.lastActiveAt = new Date().toISOString();
+  }
+  saveFocusState(state);
+}
+
+/**
+ * Get expert health summary for a focus area — used by TL dashboard.
+ * Returns activity status per expert: active (convos in last 7d), idle (7-30d), stale (30d+/never).
+ */
+export function getExpertHealthSummary(focusId: string): Array<{
+  id: string; name: string; role: string; status: "active" | "idle" | "stale";
+  conversationCount: number; lastActiveAt: string | null; lastEvaluation?: string;
+}> {
+  const state = loadFocusState();
+  if (!state) return [];
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area?.experts) return [];
+
+  const now = Date.now();
+  return area.experts.map(e => {
+    const m = e.metrics || { conversationCount: 0, lastActiveAt: null, sprintCount: 0, insightsGenerated: 0 };
+    let status: "active" | "idle" | "stale" = "stale";
+    if (m.lastActiveAt) {
+      const daysSince = Math.floor((now - new Date(m.lastActiveAt).getTime()) / 86400000);
+      if (daysSince <= 7) status = "active";
+      else if (daysSince <= 30) status = "idle";
+    }
+    return {
+      id: e.id, name: e.name, role: e.role, status,
+      conversationCount: m.conversationCount,
+      lastActiveAt: m.lastActiveAt,
+      lastEvaluation: m.lastEvaluation,
+    };
+  });
 }
 
 /** Delete a focus area by ID */

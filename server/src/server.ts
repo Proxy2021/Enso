@@ -2563,6 +2563,16 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   });
 
+  app.get("/api/focus-areas/:id/expert-health", async (req, res) => {
+    try {
+      const { getExpertHealthSummary } = await import("./focus-areas.js");
+      const health = getExpertHealthSummary(req.params.id);
+      res.json({ experts: health });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to get expert health" });
+    }
+  });
+
   app.post("/api/focus-areas/detect-types", async (_req, res) => {
     try {
       const { detectFocusTypes } = await import("./focus-areas.js");

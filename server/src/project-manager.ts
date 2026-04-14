@@ -35,6 +35,16 @@ export interface TeamAgent {
   painPoints?: string[];
   /** Dedicated conversation ID for chatting directly with this expert */
   conversationId?: string;
+  /** Performance metrics tracked by the Team Leader */
+  metrics?: {
+    conversationCount: number;
+    lastActiveAt: string | null;
+    sprintCount: number;
+    insightsGenerated: number;
+    /** TL's last evaluation note */
+    lastEvaluation?: string;
+    lastEvaluatedAt?: string;
+  };
 }
 
 export interface SprintFinding {
