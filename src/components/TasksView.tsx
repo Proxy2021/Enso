@@ -170,7 +170,7 @@ export default function TasksView() {
   // Team Leader state
   const [tlBriefing, setTlBriefing] = useState<{ headline: string; timestamp: string; sections: Array<{ emoji: string; title: string; items: string[] }>; proposedActions: Array<{ id: string; priority: string; type: string; title: string; reasoning: string; delegation: string; estimatedEffort: string; autoExecute: boolean; needsUserInput?: boolean; status: string }> } | null>(null);
   const [tlState, setTlState] = useState<{ lastMorningRoutineAt: string | null; lastCheckInAt: string | null } | null>(null);
-  const [tlReacts, setTlReacts] = useState<Array<{ id: string; channel: string; text: string; timestamp: string; processed: boolean; resolution?: string; context: { summary: string } }>>([]);
+  const [tlReacts, setTlReacts] = useState<Array<{ id: string; channel: string; text: string; action?: string; timestamp: string; processed: boolean; processedAt?: string; resolution?: string; resultingTaskId?: string; context: { type: string; summary: string; focusId?: string } }>>([]);
   const [tlTab, setTlTab] = useState<"briefing" | "actions" | "reacts">("actions");
   const [tlRunning, setTlRunning] = useState(false);
   const [reactInput, setReactInput] = useState<{ actionId: string; text: string } | null>(null);
@@ -408,26 +408,50 @@ export default function TasksView() {
             </div>
           )}
 
-          {/* TL Reacts Tab */}
+          {/* TL Reacts Tab — user instructions + agent follow-ups */}
           {tlTab === "reacts" && (
-            <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto">
+            <div className="p-3 space-y-2 max-h-[400px] overflow-y-auto">
               {tlReacts.length === 0 ? (
-                <p className="text-gray-500 text-xs text-center py-4">No reacts yet. Use the react button on actions to send feedback.</p>
+                <p className="text-gray-500 text-xs text-center py-6">No reacts yet. Send instructions to agents using the input above, or via card menus and focus buttons.</p>
               ) : (
-                tlReacts.map(r => (
-                  <div key={r.id} className="rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-400 border border-gray-700/40">{r.channel}</span>
-                      <span className="text-[10px] text-gray-500">{timeAgo(new Date(r.timestamp).getTime())}</span>
-                      {r.processed
-                        ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Processed</span>
-                        : <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">Pending</span>
-                      }
+                tlReacts.map(r => {
+                  const contextIcon = { card: "\uD83C\uDFB4", focus: "\uD83C\uDFAF", sprint: "\uD83D\uDE80", deliverable: "\uD83D\uDCE6", entity: "\uD83D\uDCD6", direct: "\uD83D\uDCE8", briefing: "\uD83D\uDCCB", pulse: "\uD83D\uDCCA", alert: "\u26A0\uFE0F", checkin: "\uD83D\uDD0D", discovery: "\uD83C\uDF1F" }[r.context?.type] || "\uD83D\uDCAC";
+                  const channelLabel = { "in-app": "App", email: "Email", wechat: "WeChat", web: "Web" }[r.channel] || r.channel;
+                  return (
+                  <div key={r.id} className={`rounded-xl border p-3 transition-colors ${r.processed ? "border-gray-800/30 bg-gray-900/20" : "border-violet-500/20 bg-violet-950/10"}`}>
+                    {/* Header: context + channel + time + status */}
+                    <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                      <span className="text-xs">{contextIcon}</span>
+                      <span className="text-[10px] text-gray-400 font-medium truncate max-w-[200px]">{r.context?.summary || "General"}</span>
+                      <span className="text-gray-700 text-[10px]">{"\u00B7"}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-500 border border-gray-700/30">{channelLabel}</span>
+                      <span className="text-[10px] text-gray-600">{timeAgo(new Date(r.timestamp).getTime())}</span>
+                      <span className="ml-auto">
+                        {r.processed
+                          ? <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{"\u2713"} Done</span>
+                          : <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 animate-pulse">Pending</span>
+                        }
+                      </span>
                     </div>
-                    <p className="text-[11px] text-gray-300">{r.text}</p>
-                    {r.resolution && <p className="text-[10px] text-violet-400 mt-1">{r.resolution}</p>}
+
+                    {/* User's instruction */}
+                    <div className="rounded-lg bg-gray-800/40 px-3 py-2 mb-1.5">
+                      <p className="text-[11px] text-gray-200 leading-relaxed">{r.text}</p>
+                    </div>
+
+                    {/* Agent's follow-up */}
+                    {r.resolution && (
+                      <div className="rounded-lg bg-violet-500/5 border border-violet-500/10 px-3 py-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-[9px] text-violet-400 font-medium">{"\uD83D\uDC54"} Agent Response</span>
+                          {r.processedAt && <span className="text-[9px] text-gray-600">{"\u00B7"} {timeAgo(new Date(r.processedAt).getTime())}</span>}
+                        </div>
+                        <p className="text-[11px] text-violet-300/90 leading-relaxed">{r.resolution}</p>
+                      </div>
+                    )}
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
