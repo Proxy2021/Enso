@@ -419,35 +419,40 @@ export default function FocusView() {
                 {area.semanticTags.length > 0 && <span>{area.semanticTags.slice(0, 2).join(", ")}</span>}
                 <span>{Math.round(area.confidence * 100)}% confidence</span>
               </div>
-              {/* Attention indicators — what needs user action */}
+              {/* Action buttons — what the user can do next */}
               {(() => {
-                const hints: Array<{ emoji: string; text: string; color: string }> = [];
+                const actions: Array<{ emoji: string; label: string; bg: string; border: string; text: string; tab: DetailTab }> = [];
                 // Unreviewed sprint results
                 if (area.lastSprintResults && area.lastSprintDate) {
-                  const sprintAge = Math.floor((Date.now() - new Date(area.lastSprintDate).getTime()) / 86400000);
                   const lastActive = area.progress?.lastActiveAt ? new Date(area.progress.lastActiveAt).getTime() : 0;
                   const sprintTime = new Date(area.lastSprintDate).getTime();
+                  const sprintAge = Math.floor((Date.now() - sprintTime) / 86400000);
                   if (lastActive < sprintTime || sprintAge <= 7) {
-                    hints.push({ emoji: "📬", text: "Sprint results ready for review", color: "text-amber-400" });
+                    actions.push({ emoji: "📬", label: "Review Sprint Results →", bg: "bg-amber-500/10", border: "border-amber-500/25", text: "text-amber-300", tab: "cortex" });
                   }
                 }
                 // Evaluated but no discussion yet
                 if (area.preparedBriefing && !area.conversationId && !area.lastSprintResults) {
-                  hints.push({ emoji: "💬", text: "Ready to discuss — evaluation complete", color: "text-violet-400" });
+                  actions.push({ emoji: "💬", label: "Start Discussion →", bg: "bg-violet-500/10", border: "border-violet-500/25", text: "text-violet-300", tab: "work" });
                 }
                 // Has discussion but no sprint yet
                 if (area.conversationId && !area.lastSprintResults && area.preparedBriefing) {
-                  hints.push({ emoji: "⚡", text: "Ready to evolve — discussion started", color: "text-emerald-400" });
+                  actions.push({ emoji: "⚡", label: "Launch Evolve Sprint →", bg: "bg-emerald-500/10", border: "border-emerald-500/25", text: "text-emerald-300", tab: "evolve" });
                 }
                 // New — not yet evaluated
                 if (!area.preparedBriefing && !area.lastSprintResults) {
-                  hints.push({ emoji: "🔍", text: "Start here — run an evaluation", color: "text-gray-500" });
+                  actions.push({ emoji: "🔍", label: "Run Evaluation →", bg: "bg-gray-500/10", border: "border-gray-700/30", text: "text-gray-400", tab: "work" });
                 }
-                if (hints.length === 0) return null;
+                if (actions.length === 0) return null;
                 return (
-                  <div className="mt-2 space-y-0.5">
-                    {hints.map((h, i) => (
-                      <p key={i} className={`text-[11px] ${h.color} font-medium`}>{h.emoji} {h.text}</p>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {actions.map((a, i) => (
+                      <span
+                        key={i}
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(area.id); setView("detail"); setDetailTab(a.tab); }}
+                        className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border ${a.bg} ${a.border} ${a.text} hover:brightness-125 transition-all cursor-pointer`}
+                      >{a.emoji} {a.label}</span>
                     ))}
                   </div>
                 );
