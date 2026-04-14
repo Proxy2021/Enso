@@ -349,3 +349,118 @@ function parseTeamGenResponse(raw: string, projectId: string): {
     throw new Error(`Team generation failed: could not parse LLM response`);
   }
 }
+
+// ── Focus Expert Generation (all focus types) ──
+
+export interface GenerateFocusExpertsParams {
+  focusId: string;
+  focusTitle: string;
+  focusDescription: string;
+  focusType: string;
+  intent?: string;
+  deeperIntent?: string;
+  semanticTags?: string[];
+  evidence?: string[];
+  codebasePath?: string;
+}
+
+/**
+ * Generate 2-4 domain-specific experts for any focus area type.
+ * For project-type with codebasePath: includes codebase context.
+ * For creative/learning/lifestyle: uses domain expertise prompt.
+ */
+export async function generateFocusExperts(params: GenerateFocusExpertsParams): Promise<TeamAgent[]> {
+  const { focusId, focusTitle, focusDescription, focusType, intent, deeperIntent, semanticTags, evidence, codebasePath } = params;
+
+  logAction({ ts: Date.now(), type: "action", category: "team-generator",
+    message: `Generating experts for focus: "${focusTitle}" (type: ${focusType})` });
+
+  // Build codebase context for project-type focuses
+  let codebaseContext = "";
+  if (focusType === "project" && codebasePath) {
+    try {
+      const scan = scanCodebase(codebasePath);
+      codebaseContext = `\n## Codebase\nLanguages: ${scan.languages.join(", ")}\nFrameworks: ${scan.frameworks.join(", ")}\nStructure: ${scan.structure}\n${scan.readmeExcerpt ? `README excerpt: ${scan.readmeExcerpt.slice(0, 500)}` : ""}`;
+    } catch { /* no codebase scan available */ }
+  }
+
+  const prompt = `You are designing an expert team for a personal AI assistant's focus area.
+
+## Focus Area
+Title: "${focusTitle}"
+Type: ${focusType}
+Description: ${focusDescription}
+${intent ? `Goal: ${intent}` : ""}
+${deeperIntent ? `Deeper motivation: ${deeperIntent}` : ""}
+${semanticTags?.length ? `Themes: ${semanticTags.join(", ")}` : ""}
+${evidence?.length ? `Evidence from user's data: ${evidence.join("; ")}` : ""}
+${codebaseContext}
+
+## Task
+Generate 2-4 domain experts who would be the IDEAL team for someone pursuing this goal.
+Each expert should be a distinct specialist with deep knowledge in their area.
+
+Think about what the user is ACTUALLY trying to achieve and who would help them most:
+- For photography: a master photographer who can critique composition, a location scout who knows hidden gems
+- For a coding project: a software architect, a domain specialist, a QA expert
+- For media library: a super librarian who knows cataloging, a film critic who finds connections
+- For quant finance: a quantitative strategist, a risk manager, a data pipeline engineer
+- For learning goals: a subject expert, a learning coach, a practitioner
+
+Each expert should feel like a REAL person with opinions, not a generic role description.
+
+Return JSON:
+{
+  "experts": [
+    {
+      "id": "kebab-case-id",
+      "name": "Full Name (realistic, memorable)",
+      "role": "Their specific title/role",
+      "responsibilities": "2-3 sentences: what they bring to the table, their approach, what they care about",
+      "goals": ["2-3 specific goals they'd pursue for this focus area"],
+      "perspective": "1-2 sentences: their unique viewpoint, what lens they see through, what they'd challenge",
+      "agentRole": "researcher|architect|builder|coder|reviewer"
+    }
+  ]
+}
+
+Rules:
+- 2-4 experts, each genuinely different in expertise and perspective
+- Names should feel real and memorable (e.g., "Dr. Elena Vasquez", "Marcus Chen", "Sarah Blackwood")
+- Responsibilities must be specific to THIS focus area, not generic
+- agentRole maps to: researcher (gathers/analyzes), architect (designs/plans), builder (creates), coder (implements), reviewer (validates/critiques)
+- perspective should have OPINIONS — these are experts who push back, not yes-men`;
+
+  const response = await llm({
+    prompt,
+    tier: "utility",
+    maxOutputTokens: 4000,
+    responseMimeType: "application/json",
+    temperature: 0.5,
+    timeoutMs: 30_000,
+  });
+
+  // Parse response
+  let jsonStr = response.trim();
+  const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) jsonStr = fenceMatch[1].trim();
+  const bs = jsonStr.indexOf("{"), be = jsonStr.lastIndexOf("}");
+  if (bs >= 0 && be > bs) jsonStr = jsonStr.slice(bs, be + 1);
+
+  const parsed = JSON.parse(jsonStr) as { experts: TeamAgent[] };
+
+  if (!parsed.experts?.length) {
+    throw new Error("LLM returned no experts");
+  }
+
+  // Ensure IDs are valid and unique
+  for (const expert of parsed.experts) {
+    if (!expert.id) expert.id = expert.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    if (!expert.agentRole) expert.agentRole = "researcher";
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "team-generator",
+    message: `Generated ${parsed.experts.length} experts for "${focusTitle}": ${parsed.experts.map(e => e.name).join(", ")}` });
+
+  return parsed.experts;
+}

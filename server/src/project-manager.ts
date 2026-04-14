@@ -33,6 +33,8 @@ export interface TeamAgent {
   perspective: string;
   agentRole: "researcher" | "architect" | "builder" | "coder" | "reviewer";
   painPoints?: string[];
+  /** Dedicated conversation ID for chatting directly with this expert */
+  conversationId?: string;
 }
 
 export interface SprintFinding {

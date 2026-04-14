@@ -342,3 +342,95 @@ The full conversation history will feed into an /Evolve orchestration — a mult
 
 ${decisionContext}`;
 }
+
+// ── Expert Context Provider ──
+
+/**
+ * Context provider for expert conversations — makes the LLM behave as a specific
+ * domain expert when chatting inside an expert's dedicated conversation.
+ */
+export class ExpertContextProvider implements ConversationContextProvider {
+  type = "expert" as const;
+  sourceId: string;
+  private focusId: string;
+  private expertId: string;
+
+  constructor(focusId: string, expertId: string) {
+    this.focusId = focusId;
+    this.expertId = expertId;
+    this.sourceId = `${focusId}:${expertId}`;
+  }
+
+  async getContextForPrompt(): Promise<string> {
+    var focus: FocusArea | null = null;
+    var expert: import("./project-manager.js").TeamAgent | null = null;
+    try {
+      const { loadFocusState } = await import("./focus-areas.js");
+      var state = loadFocusState();
+      focus = state?.areas.find(a => a.id === this.focusId) ?? null;
+      expert = focus?.experts?.find(e => e.id === this.expertId) ?? null;
+    } catch { return ""; }
+    if (!focus || !expert) return "";
+
+    // Build expert persona
+    var sections: string[] = [];
+
+    sections.push(`## You ARE ${expert.name}
+
+**Role:** ${expert.role}
+**Perspective:** ${expert.perspective}
+
+${expert.responsibilities}
+
+**Your goals for this focus area:**
+${expert.goals.map((g, i) => `${i + 1}. ${g}`).join("\n")}
+${expert.painPoints?.length ? `\n**Pain points you watch for:**\n${expert.painPoints.map(p => `- ${p}`).join("\n")}` : ""}`);
+
+    // Focus context — what the user is working on
+    sections.push(`## Focus: ${focus.title}
+${focus.description}
+${focus.intent ? `**Goal:** ${focus.intent}` : ""}
+${focus.deeperIntent ? `**Why it matters:** ${focus.deeperIntent}` : ""}`);
+
+    // Other experts on the team — so this expert can reference/defer to them
+    var otherExperts = focus.experts?.filter(e => e.id !== this.expertId) ?? [];
+    if (otherExperts.length > 0) {
+      sections.push(`## Your Team
+You work alongside these experts on this focus area:
+${otherExperts.map(e => `- **${e.name}** (${e.role}): ${e.perspective}`).join("\n")}
+If a question falls outside your expertise, suggest the user talk to the appropriate team member.`);
+    }
+
+    // Related Cortex knowledge
+    try {
+      const { searchIndex } = await import("./cortex-tools.js");
+      var hits = searchIndex(focus.title + " " + expert.role, 5);
+      if (hits.length > 0) {
+        sections.push(`## Relevant Knowledge
+${hits.map(h => `- **${h.title}**: ${h.summary}`).join("\n")}`);
+      }
+    } catch { /* cortex not available */ }
+
+    return `<expert_persona>
+This conversation is with ${expert.name}, a domain expert for the focus area "${focus.title}".
+
+CRITICAL INSTRUCTIONS:
+- You ARE ${expert.name}. Respond in first person as this expert.
+- You have deep domain knowledge in your area. Share opinions, push back on bad ideas, challenge assumptions.
+- You are NOT a generic AI assistant. You are a specialist with a distinct perspective.
+- Reference your specific expertise and the user's data when relevant.
+- If asked about something outside your domain, acknowledge the boundary and suggest which team member might help.
+- Be warm but direct. Experts have opinions — share yours.
+
+${sections.join("\n\n")}
+</expert_persona>`;
+  }
+
+  async getProactiveMessages(): Promise<ProactiveMessage[]> {
+    return [];
+  }
+
+  async onEvent(_event: ContextEvent): Promise<ProactiveMessage | null> {
+    return null;
+  }
+}

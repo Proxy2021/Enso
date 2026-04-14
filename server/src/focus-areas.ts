@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { logAction, logError } from "./action-log.js";
+import type { TeamAgent } from "./project-manager.js";
 
 // ── Types ──
 
@@ -34,6 +35,8 @@ export interface FocusArea {
   codebasePath?: string;
   /** For project-type focuses: linked project ID */
   projectId?: string;
+  /** Domain experts generated for this focus area */
+  experts?: TeamAgent[];
 
   /** How well-defined is this focus? */
   clarity: "emerging" | "developing" | "clear";
@@ -561,6 +564,15 @@ export async function registerFocusProviders(): Promise<void> {
   for (const area of state.areas) {
     if (area.conversationId && !contextRegistry.getProvider(area.conversationId)) {
       contextRegistry.register(area.conversationId, new FocusContextProvider(area.id));
+    }
+    // Register expert conversation providers
+    if (area.experts) {
+      const { ExpertContextProvider } = await import("./focus-context-provider.js");
+      for (const expert of area.experts) {
+        if (expert.conversationId && !contextRegistry.getProvider(expert.conversationId)) {
+          contextRegistry.register(expert.conversationId, new ExpertContextProvider(area.id, expert.id));
+        }
+      }
     }
   }
 }
@@ -1520,6 +1532,12 @@ export function updateFocusArea(focusId: string, updates: Partial<FocusArea>): F
   // conversationId is a silent update — no refinement log needed
   if (updates.conversationId && updates.conversationId !== area.conversationId) {
     area.conversationId = updates.conversationId;
+  }
+  // experts is a silent update — stored on focus area + persisted to Cortex separately
+  if (updates.experts) {
+    area.experts = updates.experts;
+    saveFocusState(state);
+    return area;
   }
 
   if (changes.length > 0) {

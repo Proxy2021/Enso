@@ -109,6 +109,7 @@ export default function ConversationSidebar() {
 
           const CONTEXT_STYLES: Record<string, { icon: string; border: string; bg: string; activeBg: string; label: string; badge: string }> = {
             focus: { icon: "\u25CE", border: "border-violet-500/40", bg: "hover:bg-violet-500/10", activeBg: "bg-violet-500/15 border-violet-500/60", label: "Focus Areas", badge: "bg-violet-500/20 text-violet-300" },
+            expert: { icon: "\u2726", border: "border-amber-500/40", bg: "hover:bg-amber-500/10", activeBg: "bg-amber-500/15 border-amber-500/60", label: "Experts", badge: "bg-amber-500/20 text-amber-300" },
             project: { icon: "\u25A3", border: "border-emerald-500/40", bg: "hover:bg-emerald-500/10", activeBg: "bg-emerald-500/15 border-emerald-500/60", label: "Projects", badge: "bg-emerald-500/20 text-emerald-300" },
           };
           const defaultStyle = { icon: "\u25C7", border: "border-cyan-500/40", bg: "hover:bg-cyan-500/10", activeBg: "bg-cyan-500/15 border-cyan-500/60", label: "Threads", badge: "bg-cyan-500/20 text-cyan-300" };

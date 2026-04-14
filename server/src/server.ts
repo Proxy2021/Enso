@@ -2519,6 +2519,50 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   });
 
+  app.post("/api/focus-areas/:id/generate-experts", async (req, res) => {
+    try {
+      const { loadFocusState, saveFocusState, clearFocusCache } = await import("./focus-areas.js");
+      const state = loadFocusState();
+      const area = state?.areas.find((a: { id: string }) => a.id === req.params.id);
+      if (!area) { res.status(404).json({ error: "Focus area not found" }); return; }
+
+      const { generateFocusExperts } = await import("./team-generator.js");
+      const experts = await generateFocusExperts({
+        focusId: area.id,
+        focusTitle: area.title,
+        focusDescription: area.description,
+        focusType: area.focusType || "general",
+        intent: area.intent,
+        deeperIntent: area.deeperIntent,
+        semanticTags: area.semanticTags,
+        evidence: area.evidence,
+        codebasePath: area.codebasePath,
+      });
+
+      // Save experts on focus area
+      area.experts = experts;
+      saveFocusState(state!);
+      clearFocusCache();
+
+      // Persist each expert as a Cortex wiki page
+      try {
+        const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
+        for (const expert of experts) {
+          await ingestDiscoveredEntity({
+            title: `${expert.name} — ${expert.role}`,
+            type: "synthesis",
+            source: "cortex",
+            description: `Expert for "${area.title}": ${expert.responsibilities}`,
+          }).catch(() => {});
+        }
+      } catch { /* best effort Cortex persist */ }
+
+      res.json({ experts });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Expert generation failed" });
+    }
+  });
+
   app.post("/api/focus-areas/detect-types", async (_req, res) => {
     try {
       const { detectFocusTypes } = await import("./focus-areas.js");

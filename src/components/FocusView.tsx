@@ -18,6 +18,12 @@ interface FocusArea {
   focusType?: "project" | "creative" | "learning" | "lifestyle" | "general";
   codebasePath?: string;
   projectId?: string;
+  experts?: Array<{
+    id: string; name: string; role: string; responsibilities: string;
+    goals: string[]; perspective: string;
+    agentRole: "researcher" | "architect" | "builder" | "coder" | "reviewer";
+    conversationId?: string;
+  }>;
   intent?: string;
   deeperIntent?: string;
   adjacentPursuits?: string[];
@@ -76,7 +82,7 @@ interface GapAnalysis {
 }
 
 type View = "list" | "detail";
-type DetailTab = "work" | "cortex" | "evolve" | "overview" | "activity" | "plan"; // legacy names kept for backward compat
+type DetailTab = "work" | "cortex" | "experts" | "evolve" | "overview" | "activity" | "plan"; // legacy names kept for backward compat
 
 // ── Source icons ──
 const SOURCE_ICONS: Record<string, string> = {
@@ -91,6 +97,7 @@ export default function FocusView() {
   const { t } = useT();
   const sendMessage = useChatStore((s) => s.sendMessage);
   const setActiveTab = useChatStore((s) => s.setActiveTab);
+  const setChatViewOpen = useChatStore((s) => s.setChatViewOpen);
   const selectConversation = useChatStore((s) => s.selectConversation);
   const startNewChat = useChatStore((s) => s.startNewChat);
   const conversationsList = useChatStore((s) => s.conversationsList);
@@ -114,6 +121,7 @@ export default function FocusView() {
   const [showEvolveBrief, setShowEvolveBrief] = useState(false);
   const [evolveBrief, setEvolveBrief] = useState("");
   const [sprintLaunched, setSprintLaunched] = useState(false);
+  const [generatingExperts, setGeneratingExperts] = useState(false);
   const [expandedDeliverable, setExpandedDeliverable] = useState<string | null>(null);
   const [deliverableContent, setDeliverableContent] = useState("");
   const [exploredDeliverables, setExploredDeliverables] = useState<Set<string>>(new Set());
@@ -482,12 +490,12 @@ export default function FocusView() {
 
         {/* Detail tabs */}
         <div className="flex border-b border-gray-800/60 px-5">
-          {(["work", "cortex", "evolve"] as const).map(tab => (
+          {(["work", "cortex", "experts", "evolve"] as const).map(tab => (
             <button key={tab} onClick={() => { setDetailTab(tab as DetailTab); if (tab === "cortex" && !activity) openDetail(selected.id); }}
               className={`px-3 py-2.5 text-xs font-medium transition-colors border-b-2 ${
                 (detailTab === "overview" || detailTab === "activity" ? "work" : detailTab) === tab ? "border-violet-500 text-violet-300" : "border-transparent text-gray-500 hover:text-gray-300"
               }`}>
-              {tab === "work" ? "Work" : tab === "cortex" ? "Cortex" : "Evolve"}
+              {tab === "work" ? "Work" : tab === "cortex" ? "Cortex" : tab === "experts" ? `Experts${selected.experts?.length ? ` (${selected.experts.length})` : ""}` : "Evolve"}
             </button>
           ))}
         </div>
@@ -1087,6 +1095,121 @@ export default function FocusView() {
                     ))}
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {detailTab === "experts" && (
+            <div className="space-y-4 px-5 py-4">
+              {(!selected.experts || selected.experts.length === 0) ? (
+                <div className="text-center py-10">
+                  <div className="text-3xl mb-3">{"\uD83E\uDDD1\u200D\uD83D\uDD2C"}</div>
+                  <h3 className="text-sm font-medium text-gray-200 mb-2">No experts yet</h3>
+                  <p className="text-xs text-gray-500 mb-4 max-w-sm mx-auto">
+                    Generate a team of domain-specific experts who can help you make progress on "{selected.title}".
+                    Each expert has a unique perspective and can be consulted directly via chat.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      setGeneratingExperts(true);
+                      try {
+                        const res = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${selected.id}/generate-experts`, {
+                          method: "POST", headers: authHeaders(),
+                        });
+                        if (res.ok) { await fetchFocusAreas(); }
+                      } catch { /* ignore */ }
+                      setGeneratingExperts(false);
+                    }}
+                    disabled={generatingExperts}
+                    className="text-sm px-4 py-2 rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/30 hover:bg-amber-600/30 disabled:opacity-50"
+                  >
+                    {generatingExperts ? "Generating team..." : "Generate Expert Team"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Expert Team ({selected.experts.length})</p>
+                    <button
+                      onClick={async () => {
+                        setGeneratingExperts(true);
+                        try {
+                          const res = await fetch(`${getBackendBaseUrl()}/api/focus-areas/${selected.id}/generate-experts`, {
+                            method: "POST", headers: authHeaders(),
+                          });
+                          if (res.ok) await fetchFocusAreas();
+                        } catch { /* ignore */ }
+                        setGeneratingExperts(false);
+                      }}
+                      disabled={generatingExperts}
+                      className="text-[10px] px-2 py-1 rounded bg-gray-800/60 text-gray-400 border border-gray-700/40 hover:text-amber-300 hover:border-amber-500/30 disabled:opacity-50"
+                    >
+                      {generatingExperts ? "..." : "Regenerate"}
+                    </button>
+                  </div>
+                  {selected.experts.map(expert => {
+                    const roleColors: Record<string, string> = {
+                      architect: "bg-blue-500", reviewer: "bg-amber-500", researcher: "bg-emerald-500",
+                      coder: "bg-violet-500", builder: "bg-orange-500",
+                    };
+                    return (
+                      <div key={expert.id} className="rounded-xl border border-gray-800/50 bg-gray-900/30 p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${roleColors[expert.agentRole] || "bg-gray-500"}`} />
+                          <span className="text-sm font-medium text-gray-100">{expert.name}</span>
+                          <span className="text-[10px] text-gray-500">{expert.role}</span>
+                        </div>
+                        <p className="text-xs text-gray-400 mb-2 leading-relaxed">{expert.responsibilities}</p>
+                        <p className="text-[11px] text-amber-400/70 italic mb-3">"{expert.perspective}"</p>
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {expert.goals.map((g, i) => (
+                            <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800/60 text-gray-400 border border-gray-700/40">{g}</span>
+                          ))}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (expert.conversationId) {
+                              selectConversation(expert.conversationId);
+                              setActiveTab("chat");
+                              setChatViewOpen(true);
+                              return;
+                            }
+                            // Create new conversation for this expert
+                            try {
+                              const convRes = await fetch(`${getBackendBaseUrl()}/api/conversations`, {
+                                method: "POST",
+                                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  clientId: getClientId(),
+                                  title: `${expert.name} — ${selected.title}`,
+                                  context: { type: "expert", sourceId: `${selected.id}:${expert.id}`, label: "Expert" },
+                                }),
+                              });
+                              if (!convRes.ok) return;
+                              const created = await convRes.json();
+                              // Save conversationId on expert
+                              const updatedExperts = selected.experts!.map(e =>
+                                e.id === expert.id ? { ...e, conversationId: created.id } : e
+                              );
+                              await fetch(`${getBackendBaseUrl()}/api/focus-areas/${selected.id}`, {
+                                method: "PATCH",
+                                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                                body: JSON.stringify({ experts: updatedExperts }),
+                              });
+                              await fetchFocusAreas();
+                              selectConversation(created.id);
+                              setActiveTab("chat");
+                              setChatViewOpen(true);
+                            } catch { /* ignore */ }
+                          }}
+                          className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                        >
+                          Chat with {expert.name.split(" ")[0]} →
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
           )}
