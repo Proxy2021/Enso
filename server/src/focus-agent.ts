@@ -6,9 +6,36 @@
  * There is no independent "Focus Agent" — the Team Leader is the only agent.
  */
 
-import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { homedir, hostname } from "node:os";
 import { logAction, logError } from "./action-log.js";
+
+// ── State ──
+
+const STATE_PATH = join(homedir(), ".enso", "data", "focus-agent-state.json");
+
+interface FocusAgentState {
+  lastPulseAt: string | null;
+  lastMonitorAt: string | null;
+  recommendations: Array<{ focusId: string; title: string; action: string; reason: string; urgency: string }>;
+  acceptedCount: number;
+  rejectedCount: number;
+}
+
+function loadFocusAgentState(): FocusAgentState {
+  const defaults: FocusAgentState = { lastPulseAt: null, lastMonitorAt: null, recommendations: [], acceptedCount: 0, rejectedCount: 0 };
+  try {
+    if (existsSync(STATE_PATH)) return { ...defaults, ...JSON.parse(readFileSync(STATE_PATH, "utf-8")) };
+  } catch { /* use defaults */ }
+  return defaults;
+}
+
+function saveFocusAgentState(state: FocusAgentState): void {
+  const dir = dirname(STATE_PATH);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), "utf-8");
+}
 
 // ── Types ──
 
@@ -290,20 +317,59 @@ export async function deliverSprintResults(
  * The Team Leader uses analyzeFocusAreas() directly; this is for ad-hoc user requests.
  */
 export function createFocusAgentTools(): Array<import("./local-types.js").EnsoAgentTool> {
-  return [{
-    name: "enso_focus_pulse",
-    label: "Focus Pulse",
-    description: "Generate a Focus Pulse — concise progress report on all active focus areas with recommended next actions. Use when user asks about goals, progress, or says '/pulse'.",
-    isPrimary: true,
-    parameters: { type: "object", properties: {}, additionalProperties: false },
-    execute: async (_callId: string, _params: Record<string, unknown>) => {
-      const pulse = await generateProgressPulse();
-      const msg = [`📊 **Focus Pulse** — ${pulse.headline}`, "",
-        ...pulse.items.map(i => `${i.statusEmoji} **${i.title}** — ${i.statusLabel}\n${i.oneLiner}\n→ ${i.recommendedAction}`),
-      ].join("\n");
-      return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_focus_pulse", headline: pulse.headline, items: pulse.items, message: msg }) }] };
+  return [
+    {
+      name: "enso_focus_pulse",
+      label: "Focus Pulse",
+      description: "Generate a Focus Pulse — concise progress report on all active focus areas with recommended next actions. Use when user asks about goals, progress, or says '/pulse'.",
+      isPrimary: true,
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async (_callId: string, _params: Record<string, unknown>) => {
+        const pulse = await generateProgressPulse();
+        const state = loadFocusAgentState();
+        state.lastPulseAt = pulse.timestamp;
+        saveFocusAgentState(state);
+        const msg = [`📊 **Focus Pulse** — ${pulse.headline}`, "",
+          ...pulse.items.map(i => `${i.statusEmoji} **${i.title}** — ${i.statusLabel}\n${i.oneLiner}\n→ ${i.recommendedAction}`),
+        ].join("\n");
+        return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_focus_pulse", headline: pulse.headline, items: pulse.items, message: msg }) }] };
+      },
     },
-  }];
+    {
+      name: "enso_focus_monitor",
+      label: "Focus Area Monitor",
+      description: "Scheduled monitor — checks focus areas for stalls, unreviewed results, and stores recommendations for the Team Leader.",
+      isPrimary: false,
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async (_callId: string, _params: Record<string, unknown>) => {
+        const analyses = await analyzeFocusAreas();
+        const now = new Date().toISOString();
+
+        const recommendations = analyses
+          .filter(a => a.recommendedAction !== "none" && a.recommendedAction !== "continue")
+          .map(a => ({
+            focusId: a.focusId,
+            title: a.title,
+            action: a.recommendedAction,
+            reason: a.actionReason,
+            urgency: a.hasUnreviewedResults ? "high" : a.daysSinceActivity > 7 ? "medium" : "low",
+          }));
+
+        const state = loadFocusAgentState();
+        state.lastMonitorAt = now;
+        state.recommendations = recommendations;
+        saveFocusAgentState(state);
+
+        const summary = recommendations.length === 0
+          ? "All focus areas are on track."
+          : `${recommendations.length} area(s) need attention: ${recommendations.map(r => `${r.title} (${r.action})`).join(", ")}`;
+
+        logAction({ ts: Date.now(), type: "action", category: "focus-monitor", message: summary });
+
+        return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_focus_monitor", monitoredAt: now, recommendations, summary }) }] };
+      },
+    },
+  ];
 }
 
 // ── Helper ──

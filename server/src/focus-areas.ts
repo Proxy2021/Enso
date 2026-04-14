@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { logAction, logError } from "./action-log.js";
+import { cleanJson } from "./json-utils.js";
 import type { TeamAgent } from "./project-manager.js";
 
 // ── Types ──
@@ -366,7 +367,7 @@ Return JSON: { "areas": [ { ... } ] }`;
       timeoutMs: 90_000,
     });
 
-    const parsed = JSON.parse(response) as { areas: Array<Record<string, unknown>> };
+    const parsed = JSON.parse(cleanJson(response)) as { areas: Array<Record<string, unknown>> };
     const now = new Date().toISOString();
 
     const areas: FocusArea[] = (parsed.areas || []).map((raw) => ({
@@ -641,7 +642,7 @@ If nothing changed, return { "hasRefinement": false }.`;
       temperature: 0.2,
     });
 
-    const result = JSON.parse(response) as {
+    const result = JSON.parse(cleanJson(response)) as {
       hasRefinement: boolean;
       newClarity?: string;
       updatedIntent?: string;
@@ -1767,7 +1768,7 @@ Return JSON:
       timeoutMs: 30_000,
     });
 
-    const result = JSON.parse(response) as {
+    const result = JSON.parse(cleanJson(response)) as {
       deeperIntent?: string;
       evidence?: string[];
       semanticTags?: string[];
@@ -1991,7 +1992,7 @@ For example, if the goal is about photography travel, gaps should be about photo
       timeoutMs: 60_000,
     });
 
-    const result = JSON.parse(response) as FocusGapAnalysis;
+    const result = JSON.parse(cleanJson(response)) as FocusGapAnalysis;
 
     logAction({
       ts: Date.now(), type: "action", category: "focus-areas",
@@ -2106,7 +2107,7 @@ Select 10-30 most relevant items. Be inclusive but meaningful — don't force we
       timeoutMs: 45_000,
     });
 
-    const parsed = JSON.parse(response) as { matches: Array<{ idx: number; reason: string }> };
+    const parsed = JSON.parse(cleanJson(response)) as { matches: Array<{ idx: number; reason: string }> };
     const results = (parsed.matches || [])
       .filter(m => typeof m.idx === "number" && m.idx >= 0 && m.idx < entityLookup.length)
       .map(m => ({

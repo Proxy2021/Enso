@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "createdAt": 1713100000000,
+  "spec": {
+    "toolFamily": "pkg_tracker",
+    "toolPrefix": "enso_pkg_tracker_",
+    "description": "Personal Knowledge Graph deployment tracker with phase-based progress, data source monitoring, graph statistics, and quick actions for managing PKG infrastructure",
+    "signatureId": "pkg_tracker_dashboard",
+    "tools": [
+      {
+        "suffix": "get_status",
+        "description": "Get the full PKG deployment status including all phases, tool statuses, progress bars, and data source health. Use when the user says: 'show PKG status', 'deployment progress', 'check tracker', 'open PKG tracker', 'knowledge graph setup'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_pkg_tracker_get_status",
+          "phases": [
+            {
+              "id": "foundation",
+              "name": "Foundation",
+              "phase": 1,
+              "progress": 33,
+              "tools": [
+                { "id": "calibre_web", "name": "Calibre-Web", "status": "deployed", "notes": "Running on port 8083", "checklist": [{"item": "Install Docker container", "done": true}, {"item": "Mount library volume", "done": true}, {"item": "Configure OPDS feed", "done": false}] },
+                { "id": "meilisearch", "name": "Meilisearch", "status": "not_started", "notes": "", "checklist": [{"item": "Deploy instance", "done": false}, {"item": "Create indexes", "done": false}, {"item": "Configure API key", "done": false}] },
+                { "id": "readwise_reader", "name": "Readwise Reader", "status": "not_started", "notes": "", "checklist": [{"item": "Set up API token", "done": false}, {"item": "Configure sync schedule", "done": false}, {"item": "Map highlight categories", "done": false}] }
+              ]
+            }
+          ],
+          "overallProgress": 8,
+          "totalTools": 12,
+          "deployedTools": 1,
+          "sources": [
+            { "id": "enso_cortex", "name": "Enso Cortex", "status": "connected", "lastSync": "2026-04-14T10:00:00Z", "recordCount": 342, "health": "healthy" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "phases"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "update_status",
+        "description": "Update the deployment status of a specific tool within a phase. Statuses: not_started, in_progress, deployed, verified. Use when: 'mark Calibre-Web as deployed', 'update Neo4j status', 'set tool status'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "toolId": {
+              "type": "string",
+              "description": "Tool identifier (e.g. calibre_web, neo4j, jellyfin)"
+            },
+            "status": {
+              "type": "string",
+              "description": "New status: not_started, in_progress, deployed, or verified"
+            }
+          },
+          "required": ["toolId", "status"]
+        },
+        "sampleParams": { "toolId": "calibre_web", "status": "deployed" },
+        "sampleData": {
+          "tool": "enso_pkg_tracker_update_status",
+          "toolId": "calibre_web",
+          "toolName": "Calibre-Web",
+          "oldStatus": "in_progress",
+          "newStatus": "deployed",
+          "phaseProgress": 33,
+          "overallProgress": 8
+        },
+        "requiredDataKeys": ["tool", "toolId", "newStatus"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "update_notes",
+        "description": "Update notes or toggle checklist items for a deployment tool. Use when: 'add notes to Neo4j', 'check off Docker install for Calibre', 'update tool notes'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "toolId": {
+              "type": "string",
+              "description": "Tool identifier"
+            },
+            "notes": {
+              "type": "string",
+              "description": "New notes text (optional, omit to keep current)"
+            },
+            "toggleCheckItem": {
+              "type": "number",
+              "description": "Index of checklist item to toggle (0-based, optional)"
+            }
+          },
+          "required": ["toolId"]
+        },
+        "sampleParams": { "toolId": "calibre_web", "toggleCheckItem": 0 },
+        "sampleData": {
+          "tool": "enso_pkg_tracker_update_notes",
+          "toolId": "calibre_web",
+          "toolName": "Calibre-Web",
+          "notes": "Running on port 8083",
+          "checklist": [{"item": "Install Docker container", "done": true}, {"item": "Mount library volume", "done": true}, {"item": "Configure OPDS feed", "done": false}]
+        },
+        "requiredDataKeys": ["tool", "toolId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "check_connections",
+        "description": "Check connection status and health of all configured data sources. Returns live status for each source. Use when: 'check connections', 'data source health', 'are my services running'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_pkg_tracker_check_connections",
+          "sources": [
+            { "id": "enso_cortex", "name": "Enso Cortex", "status": "connected", "lastSync": "2026-04-14T10:00:00Z", "recordCount": 342, "health": "healthy" },
+            { "id": "kindle_readwise", "name": "Kindle / Readwise", "status": "disconnected", "lastSync": null, "recordCount": 0, "health": "unknown" },
+            { "id": "photos", "name": "Photos", "status": "connected", "lastSync": "2026-04-13T22:00:00Z", "recordCount": 15420, "health": "healthy" },
+            { "id": "calibre_web", "name": "Calibre-Web", "status": "disconnected", "lastSync": null, "recordCount": 0, "health": "unknown" },
+            { "id": "jellyfin", "name": "Jellyfin", "status": "disconnected", "lastSync": null, "recordCount": 0, "health": "unknown" },
+            { "id": "playnite", "name": "Playnite", "status": "disconnected", "lastSync": null, "recordCount": 0, "health": "unknown" },
+            { "id": "obsidian", "name": "Obsidian", "status": "disconnected", "lastSync": null, "recordCount": 0, "health": "unknown" }
+          ],
+          "checkedAt": "2026-04-14T10:30:00Z"
+        },
+        "requiredDataKeys": ["tool", "sources"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "graph_stats",
+        "description": "Get knowledge graph statistics including node counts by type, relationship counts, and most connected entities. Returns placeholder data until Neo4j is deployed. Use when: 'graph stats', 'knowledge graph overview', 'show graph metrics'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_pkg_tracker_graph_stats",
+          "isPlaceholder": true,
+          "nodesByType": [
+            { "type": "Book", "count": 156 },
+            { "type": "Author", "count": 89 },
+            { "type": "Movie", "count": 74 },
+            { "type": "Game", "count": 42 },
+            { "type": "Article", "count": 210 },
+            { "type": "Concept", "count": 135 },
+            { "type": "Person", "count": 67 },
+            { "type": "Photo", "count": 15420 }
+          ],
+          "totalNodes": 16193,
+          "relationshipsByType": [
+            { "type": "WRITTEN_BY", "count": 156 },
+            { "type": "REFERENCES", "count": 423 },
+            { "type": "TAGGED_WITH", "count": 891 },
+            { "type": "RELATED_TO", "count": 312 },
+            { "type": "CONTAINS", "count": 567 }
+          ],
+          "totalRelationships": 2349,
+          "mostConnected": [
+            { "name": "Artificial Intelligence", "type": "Concept", "connections": 47 },
+            { "name": "Photography", "type": "Concept", "connections": 38 },
+            { "name": "Software Engineering", "type": "Concept", "connections": 31 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "nodesByType", "totalNodes"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "run_action",
+        "description": "Execute a quick action: full_sync, reset_tracker, export_status, or add_custom_tool. Use when: 'run full sync', 'reset tracker', 'export status', 'add custom tool'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action to run: full_sync, reset_tracker, export_status, add_custom_tool"
+            },
+            "phaseId": {
+              "type": "string",
+              "description": "Phase ID for add_custom_tool action"
+            },
+            "toolName": {
+              "type": "string",
+              "description": "Tool name for add_custom_tool action"
+            },
+            "checklistItems": {
+              "type": "string",
+              "description": "Comma-separated checklist items for add_custom_tool"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "full_sync" },
+        "sampleData": {
+          "tool": "enso_pkg_tracker_run_action",
+          "action": "full_sync",
+          "result": "Sync initiated across all connected sources",
+          "syncResults": [
+            { "source": "Enso Cortex", "status": "synced", "records": 342 },
+            { "source": "Photos", "status": "synced", "records": 15420 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action", "result"],
+        "isPrimary": false
+      }
+    ]
+  }
+}
