@@ -512,11 +512,32 @@ Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>",
     }
 
     if (parsed.decision === "act" && parsed.actionDescription) {
-      queueTask({
-        title: `User react: ${react.text.slice(0, 60)}`,
-        description: parsed.actionDescription,
-        source: "user-react",
-      });
+      // Proactive reacts (direct user instructions) → execute immediately via Claude Code
+      const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
+      if (proactiveTypes.has(react.context?.type)) {
+        const action: TeamLeaderAction = {
+          id: randomUUID(),
+          priority: "high",
+          type: "platform-feature",
+          title: react.text.slice(0, 80),
+          reasoning: parsed.actionDescription,
+          delegation: "self",
+          estimatedEffort: "15min",
+          autoExecute: true,
+          status: "executing",
+        };
+        logAction({ ts: Date.now(), type: "action", category: "team-leader",
+          message: `Immediately executing user react: "${action.title}"` });
+        // Fire and forget — don't await so the react resolves quickly
+        launchBuilderTask(action).catch(err =>
+          logError("team-leader", `Failed to execute react action: ${action.title}`, err));
+      } else {
+        queueTask({
+          title: `User react: ${react.text.slice(0, 60)}`,
+          description: parsed.actionDescription,
+          source: "user-react",
+        });
+      }
     } else if (parsed.decision === "delegate" && react.context?.focusId) {
       // Delegate to the first expert on this focus area
       const { loadFocusState } = await import("./focus-areas.js");
