@@ -251,33 +251,46 @@ export async function deliverSprintResults(
   const typeIcons: Record<string, string> = { app: "📱", article: "📄", idea: "💡", synthesis: "📊" };
   const typeColors: Record<string, string> = { app: "#10b981", article: "#3b82f6", idea: "#f59e0b", synthesis: "#8b5cf6" };
 
-  const deliverableRows = summary.deliverables.map((d, i) => {
+  const actionLabels: Record<string, string> = { run: "▶ Run", read: "📖 Read", explore: "🔍 Explore", review: "✓ Review" };
+  const actionColors: Record<string, string> = { run: "#10b981", read: "#3b82f6", explore: "#8b5cf6", review: "#f59e0b" };
+
+  const deliverableCards = summary.deliverables.map((d, i) => {
     const isRec = i === (summary.recommendedFirstAction?.deliverableIndex ?? -1);
     const icon = typeIcons[d.entityType] || "📦";
     const color = typeColors[d.entityType] || "#6b7280";
-    return `<tr>
-      <td style="padding:10px 16px;border-bottom:1px solid #1f2937;">
-        <div style="font-size:14px;color:#f9fafb;">${icon} <strong>${d.taskTitle}</strong>${isRec ? ' <span style="color:#10b981;font-size:11px;">⭐ Start here</span>' : ""}</div>
-        <div style="font-size:13px;color:#9ca3af;margin-top:3px;">${d.howItHelps}</div>
-      </td>
-    </tr>`;
+    const btnLabel = actionLabels[d.actionType] || "Open";
+    const btnColor = actionColors[d.actionType] || "#6b7280";
+    return `<div style="background:#0d1117;border-radius:8px;padding:14px 16px;margin-bottom:8px;border-left:3px solid ${color};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-size:14px;color:#f9fafb;font-weight:600;">${icon} ${d.taskTitle}${isRec ? ' <span style="background:#065f46;color:#34d399;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px;">START HERE</span>' : ""}</div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:4px;">${d.howItHelps}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <a href="${ensoUrl}" style="display:inline-block;background:${btnColor};color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;">${btnLabel}</a>
+        <span style="font-size:11px;color:#6b7280;margin-left:8px;">${d.quickStart}</span>
+      </div>
+    </div>`;
   }).join("\n");
 
-  const nextStepsList = summary.nextSteps.map(s => `<li style="margin-bottom:4px;color:#d1d5db;font-size:13px;">${s}</li>`).join("\n");
+  const nextStepsList = summary.nextSteps.map(s =>
+    `<div style="padding:8px 12px;background:#0d1117;border-radius:6px;margin-bottom:6px;font-size:13px;color:#d1d5db;">• ${s}</div>`
+  ).join("\n");
 
   const html = `<div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
     <div style="background:linear-gradient(135deg,#065f46,#059669);padding:24px;border-radius:12px 12px 0 0;">
-      <div style="font-size:13px;color:#a7f3d0;margin-bottom:4px;">SPRINT COMPLETE</div>
+      <div style="font-size:12px;color:#a7f3d0;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">SPRINT COMPLETE</div>
       <h2 style="margin:0;font-size:20px;color:#fff;line-height:1.3;">${focusTitle}</h2>
     </div>
     <div style="background:#111827;padding:20px 24px;">
       <p style="font-size:14px;color:#d1d5db;line-height:1.6;margin:0 0 20px;">${summary.sprintSummary}</p>
-      <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">${deliverableCount} Deliverables</div>
-      <table style="width:100%;border-collapse:collapse;background:#0d1117;border-radius:8px;overflow:hidden;">${deliverableRows}</table>
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${deliverableCount} DELIVERABLES</div>
+      ${deliverableCards}
     </div>
     <div style="background:#111827;padding:0 24px 20px;">
-      <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Next Steps</div>
-      <ul style="margin:0;padding-left:20px;">${nextStepsList}</ul>
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">NEXT STEPS</div>
+      ${nextStepsList}
     </div>
     <div style="background:#111827;padding:16px 24px;text-align:center;border-radius:0 0 12px 12px;border-top:1px solid #1f2937;">
       <a href="${ensoUrl}" style="display:inline-block;background:#10b981;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Review in Enso →</a>

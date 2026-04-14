@@ -19,7 +19,7 @@ import { logAction, logError } from "./action-log.js";
 
 export interface TeamLeaderConfig {
   schedule: {
-    /** Full assessment + briefing. Default: "0 9 * * *" (9am daily) */
+    /** Full assessment + briefing. Default: "0 6 * * *" (6am daily) */
     morningRoutine: string;
     /** Lightweight scan for urgent items. Default: every 6 hours */
     checkIn: string;
@@ -149,7 +149,7 @@ const STATE_PATH = join(ENSO_HOME, "data", "team-leader-state.json");
 
 const DEFAULT_CONFIG: TeamLeaderConfig = {
   schedule: {
-    morningRoutine: "0 9 * * *",
+    morningRoutine: "0 6 * * *",
     checkIn: "0 */6 * * *",
   },
   channels: { email: true, wechat: true, inApp: true },
