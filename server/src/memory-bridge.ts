@@ -744,9 +744,9 @@ export async function getTopicRelevantCortex(): Promise<string> {
 /** List available Enso apps. */
 function buildAvailableAppsSummary(): string {
   try {
-    const appIds = APP_CATALOG.map((a) => a.appId);
-    if (appIds.length === 0) return "";
-    return `Available Enso apps: ${appIds.join(", ")}`;
+    if (APP_CATALOG.length === 0) return "";
+    const lines = APP_CATALOG.map(a => `- **${a.appId}**: ${a.description}`);
+    return `Enso platform capabilities (${APP_CATALOG.length} apps):\n${lines.join("\n")}`;
   } catch {
     return "";
   }

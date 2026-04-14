@@ -793,6 +793,31 @@ Themes: ${area.semanticTags.join(", ")}`);
     }
   } catch { /* ignore */ }
 
+  // Enso platform capabilities — what apps/tools already exist
+  try {
+    const { buildAppInventoryContext } = await import("./orchestrator.js");
+    const appInventory = buildAppInventoryContext();
+    if (appInventory) sections.push(`\n${appInventory}`);
+  } catch { /* ignore */ }
+
+  // Data source state — what's been scanned, how many entities
+  try {
+    const { getEntityIndex } = await import("./entity-model.js");
+    const index = getEntityIndex();
+    const bySource: Record<string, number> = {};
+    for (const [, e] of index) {
+      const src = e.source || "unknown";
+      bySource[src] = (bySource[src] || 0) + 1;
+    }
+    if (Object.keys(bySource).length > 0) {
+      const sourceLines = Object.entries(bySource)
+        .sort((a, b) => b[1] - a[1])
+        .map(([src, count]) => `- ${src}: ${count} entities`)
+        .join("\n");
+      sections.push(`\n# Enso Data Sources (${index.size} total entities)\nThe user has already scanned and ingested content from these sources into the Knowledge Cortex:\n${sourceLines}\n\nThese are EXISTING resources. Build on what's already here — enhance, cross-reference, and fill gaps rather than starting from scratch.`);
+    }
+  } catch { /* ignore */ }
+
   return sections.join("\n\n");
 }
 

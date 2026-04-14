@@ -387,6 +387,10 @@ ${ctx.goal}`);
   const cortexCtx = getCortexPlanningContext(ctx.goal);
   if (cortexCtx) sections.push(cortexCtx);
 
+  // Enso platform capabilities — what apps/tools already exist
+  const appInventory = buildAppInventoryContext();
+  if (appInventory) sections.push(appInventory);
+
   // Planning guidance based on type
   sections.push(`## Sprint Design Guidelines
 
@@ -1238,7 +1242,7 @@ export function getActiveOrchestration(orchestrationId: string) {
 
 // ── App Inventory for Prompts ──
 
-function buildAppInventoryContext(): string {
+export function buildAppInventoryContext(): string {
   const lines: string[] = [];
   try {
     const allApps = loadAllApps();
