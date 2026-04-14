@@ -153,16 +153,21 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
   let callDepth = 0;
   const tag = toolFamily && toolSuffix ? `${toolFamily}/${toolSuffix}` : "executor";
 
-  async function withTimeout<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  // trackDepth=true only for callTool (which can recursively invoke other executors).
+  // Leaf I/O ops (fetch, search, ask, fs) run in parallel and must NOT share the depth
+  // counter — they are concurrent leaf calls, not recursive executor invocations.
+  async function withTimeout<T>(label: string, fn: () => Promise<T>, trackDepth = false): Promise<T> {
     const t0 = Date.now();
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), EXECUTOR_CTX_TIMEOUT_MS);
 
     try {
-      if (callDepth >= EXECUTOR_CTX_MAX_DEPTH) {
-        throw new Error(`ctx call depth exceeded (max ${EXECUTOR_CTX_MAX_DEPTH})`);
+      if (trackDepth) {
+        if (callDepth >= EXECUTOR_CTX_MAX_DEPTH) {
+          throw new Error(`ctx call depth exceeded (max ${EXECUTOR_CTX_MAX_DEPTH})`);
+        }
+        callDepth++;
       }
-      callDepth++;
       const result = await Promise.race([
         fn(),
         new Promise<never>((_, reject) => {
@@ -175,7 +180,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
       logError("persistence", `executor-ctx ${tag} → ${label} FAILED [${Date.now() - t0}ms]`, err);
       throw err;
     } finally {
-      callDepth--;
+      if (trackDepth) callDepth--;
       clearTimeout(timer);
     }
   }
@@ -185,7 +190,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
       return withTimeout(`callTool("${toolName}")`, async () => {
         const result = await executeToolDirect(toolName, params);
         return { success: result.success, data: result.data, error: result.error ?? undefined };
-      });
+      }, true); // trackDepth=true: callTool can recursively invoke other executors
     },
 
     async listDir(dirPath: string) {
@@ -255,7 +260,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
           return { ok: false as const, results: [] };
         }
 
-        const count = Math.min(Math.max(options?.count ?? 3, 1), 5);
+        const count = Math.min(Math.max(options?.count ?? 3, 1), 10);
         const searchUrl = new URL(BRAVE_WEB_SEARCH);
         searchUrl.searchParams.set("q", query);
         searchUrl.searchParams.set("count", String(count));

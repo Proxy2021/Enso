@@ -165,7 +165,7 @@ async function searchBraveWeb(query) {
 // ── Source 2: Google Books based on preferences ──
 async function searchGoogleBooksPreference(terms) {
   try {
-    var url = "https://www.googleapis.com/books/v1/volumes?q=" + encodeURIComponent(terms) + "&orderBy=relevance&maxResults=10&langRestrict=en";
+    var url = "https://www.googleapis.com/books/v1/volumes?q=" + encodeURIComponent(terms) + "&orderBy=relevance&maxResults=10";
     var response = await ctx.fetch(url);
     if (!response.ok && !response.data) return [];
     var data = response.data || response;
@@ -229,13 +229,23 @@ async function searchOpenLibrary(subject) {
 // ── Run all searches in parallel ──
 var searchPromises = searchQueries.map(function(q) { return searchBraveWeb(q.q); });
 
-// Google Books with genre-based terms
-var googleTerms = focusQuery || (topGenres.length > 0 ? topGenres.slice(0, 2).join(" ").replace(/_/g, " ") : "nonfiction science");
+// Google Books — prioritize: focusQuery > genres > top author > "nonfiction"
+var googleTerms = focusQuery
+  || (topGenres.length > 0 ? topGenres.slice(0, 2).join(" ").replace(/_/g, " ") : null)
+  || (topAuthors.length > 0 ? "inauthor:\"" + topAuthors[0] + "\" OR similar" : null)
+  || "nonfiction";
 searchPromises.push(searchGoogleBooksPreference(googleTerms));
 
-// Open Library for top genre
+// Google Books second pass by top author when no genres (gives more structured results)
+if (!focusQuery && topGenres.length === 0 && topAuthors.length > 0) {
+  searchPromises.push(searchGoogleBooksPreference(topAuthors[0]));
+}
+
+// Open Library — use top genre if available, fall back to top author
 if (topGenres.length > 0) {
   searchPromises.push(searchOpenLibrary(topGenres[0].replace(/_/g, " ")));
+} else if (topAuthors.length > 0) {
+  searchPromises.push(searchOpenLibrary(topAuthors[0]));
 }
 
 var settled = await Promise.allSettled(searchPromises);
@@ -297,6 +307,58 @@ var candidates = deduped.filter(function(b) {
 }).slice(0, 50);
 
 ctx.log("After dedup+filter: " + candidates.length + " candidates");
+
+// ── If structured sources returned nothing, extract books from web snippets ──
+if (candidates.length === 0 && webSnippets.length > 0) {
+  ctx.log("No structured candidates — attempting extraction from " + webSnippets.length + " web snippets");
+  try {
+    var extractPrompt = "From these web search snippets about book recommendations, extract specific book titles and authors mentioned.\n";
+    extractPrompt += "User reading profile: " + (topAuthors.length > 0 ? "Reads " + topAuthors.slice(0, 3).join(", ") : "") + "\n\n";
+    extractPrompt += "Snippets:\n";
+    webSnippets.slice(0, 25).forEach(function(s, i) {
+      extractPrompt += (i + 1) + ". " + s.title + " — " + s.description.slice(0, 200) + "\n";
+    });
+    extractPrompt += "\nReturn ONLY valid JSON (no markdown):\n";
+    extractPrompt += '{ "books": [{ "title": "...", "author": "...", "description": "...", "whyRecommended": "..." }] }\n';
+    extractPrompt += "Rules: extract 10-15 distinct books actually mentioned. Skip generic list headings. Include only real book titles.";
+
+    var extractResult = await ctx.ask(extractPrompt, { temperature: 0.3 });
+    if (extractResult && extractResult.ok && extractResult.text) {
+      var extractText = extractResult.text.trim().replace(/```json?\s*/g, "").replace(/```/g, "").trim();
+      var extractJson = JSON.parse(extractText);
+      if (extractJson.books && Array.isArray(extractJson.books)) {
+        candidates = extractJson.books
+          .filter(function(b) { return b.title && b.title.length > 2; })
+          .filter(function(b) {
+            var norm = normalizeTitle(b.title);
+            return ownedTitles.indexOf(norm) < 0 && dismissedTitles.indexOf(norm) < 0;
+          })
+          .slice(0, 20)
+          .map(function(b) {
+            return {
+              title: b.title,
+              author: b.author || "",
+              coverUrl: "",
+              description: b.description || "",
+              rating: 0,
+              ratingsCount: 0,
+              categories: [],
+              pageCount: 0,
+              publishedDate: "",
+              source: "web",
+              sourceUrl: "",
+              whyRecommended: b.whyRecommended || "",
+              matchScore: 0.5,
+              tags: [],
+            };
+          });
+        ctx.log("Extracted " + candidates.length + " books from web snippets");
+      }
+    }
+  } catch (e) {
+    ctx.log("Snippet extraction error: " + (e.message || e));
+  }
+}
 
 // ── LLM curation: rank candidates + explain recommendations ──
 var preferenceContext = "";
