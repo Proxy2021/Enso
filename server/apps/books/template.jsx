@@ -7,15 +7,20 @@ function GeneratedUI({ data, onAction }) {
   var isEnrich = tool === "enso_books_enrich" || tool === "enso_kindle_enrich";
   var isAddResults = tool === "enso_books_add";
   var isEntityDetail = tool === "entity_detail" || !!d.focusEntity;
+  var isDiscover = tool === "enso_books_discover";
+  var isTaste = tool === "enso_books_taste";
 
   // Hooks MUST be at top level — never inside conditionals
   var [searchInput, setSearchInput] = React.useState(d.query || "");
   var [sortBy, setSortBy] = React.useState(d.sortBy || "publicationDate");
   var [showTranscript, setShowTranscript] = React.useState(false);
-  var [activeTab, setActiveTab] = React.useState(d.tab || "all");
+  var [activeTab, setActiveTab] = React.useState(isDiscover ? "daily" : (d.tab || "all"));
   var [playingVideo, setPlayingVideo] = React.useState(null);
   var [addBookInput, setAddBookInput] = React.useState("");
   var [addedStatus, setAddedStatus] = React.useState({});
+  var [tasteActionStatus, setTasteActionStatus] = React.useState({});
+  var [selectedRating, setSelectedRating] = React.useState(0);
+  var [ratingBookId, setRatingBookId] = React.useState(null);
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
   var navStack = d.navStack || [];
@@ -533,6 +538,336 @@ function GeneratedUI({ data, onAction }) {
     );
   }
 
+  // ── Daily Discovery View ──
+  if (isDiscover || isTaste) {
+    var disc = isDiscover ? d : {};
+    var tasteData = isTaste ? d : {};
+    var thm = disc.theme || {};
+    var botd = disc.bookOfTheDay;
+    var picks = disc.themePicks || [];
+    var bestseller = disc.bestsellerSpotlight;
+    var serendipity = disc.serendipityPick;
+    var tp = disc.tasteProfile || tasteData.profile || {};
+    var streak = tp.streak || { current: 0, longest: 0 };
+
+    // Helper: render taste action buttons for a book
+    function DiscoveryBookActions({ book, section }) {
+      var bookSlug = (book.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+      var key = section + "-" + bookSlug;
+      var status = tasteActionStatus[key];
+      var bookPayload = { title: book.title, author: book.author, categories: book.categories || [], coverUrl: book.coverUrl || "" };
+
+      if (status === "saved") return <Badge variant="success" style={{ fontSize: "10px" }}>Saved</Badge>;
+      if (status === "dismissed") return <Badge variant="secondary" style={{ fontSize: "10px", opacity: 0.6 }}>Dismissed</Badge>;
+      if (status === "rated") return <Badge variant="info" style={{ fontSize: "10px" }}>Rated</Badge>;
+
+      return (
+        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+          <Button variant="outline" size="sm" style={{ fontSize: "10px", padding: "2px 8px" }}
+            onClick={function() {
+              setTasteActionStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "saved"; return n; });
+              onAction("taste", { action: "save", bookId: bookSlug, bookData: bookPayload });
+            }}>Save</Button>
+          <Button variant="outline" size="sm" style={{ fontSize: "10px", padding: "2px 8px" }}
+            onClick={function() {
+              setRatingBookId(ratingBookId === key ? null : key);
+              setSelectedRating(0);
+            }}>Rate</Button>
+          <Button variant="ghost" size="sm" style={{ fontSize: "10px", padding: "2px 8px", color: "#64748b" }}
+            onClick={function() {
+              setTasteActionStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "dismissed"; return n; });
+              onAction("taste", { action: "dismiss", bookId: bookSlug, bookData: bookPayload });
+            }}>Not for me</Button>
+          <Button variant="outline" size="sm" style={{ fontSize: "10px", padding: "2px 8px", color: "#22c55e", borderColor: "#22c55e44" }}
+            onClick={function() { onAction("add", { query: book.title + (book.author ? " " + book.author : "") }); }}>Add to Library</Button>
+          {ratingBookId === key && (
+            <div style={{ display: "flex", gap: "2px", alignItems: "center", marginLeft: "4px" }}>
+              {[1, 2, 3, 4, 5].map(function(star) {
+                return (
+                  <span key={star} style={{ cursor: "pointer", fontSize: "16px", color: star <= selectedRating ? "#f59e0b" : "#475569" }}
+                    onClick={function() {
+                      setSelectedRating(star);
+                      setTasteActionStatus(function(prev) { var n = Object.assign({}, prev); n[key] = "rated"; return n; });
+                      setRatingBookId(null);
+                      onAction("taste", { action: "rate", bookId: bookSlug, rating: star, bookData: bookPayload });
+                    }}
+                    onMouseEnter={function() { setSelectedRating(star); }}
+                  >{star <= selectedRating ? "\u2605" : "\u2606"}</span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Taste Profile view (when action=view)
+    if (isTaste && tasteData.action === "view") {
+      var prof = tasteData.profile || {};
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {breadcrumb}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "20px" }}>{"\u{1F3AF}"}</span>
+              <span style={{ fontWeight: 700, fontSize: "16px" }}>Your Taste Profile</span>
+              <Badge variant="secondary">{prof.interactionCount || 0} interactions</Badge>
+            </div>
+            <Button variant="outline" size="sm" onClick={function() { onAction("discover", {}); }}>{"\u2728"} Daily Picks</Button>
+          </div>
+
+          {/* Streak + Stats */}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <Stat label="Streak" value={(prof.streak || {}).current || 0} accent="#f59e0b" />
+            <Stat label="Saved" value={prof.savedCount || 0} accent="#22c55e" />
+            <Stat label="Rated" value={prof.ratedCount || 0} accent="#3b82f6" />
+            <Stat label="Dismissed" value={prof.dismissedCount || 0} accent="#64748b" />
+          </div>
+
+          {/* Top Genres */}
+          {(prof.topGenres || []).length > 0 && (
+            <UICard style={{ padding: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}>Genre Preferences</div>
+              {(prof.topGenres || []).map(function(g) {
+                return (
+                  <div key={g.genre} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "12px", color: "#cbd5e1", width: "120px" }}>{g.genre.replace(/_/g, " ")}</span>
+                    <Progress value={Math.round(g.weight * 100)} max={100} style={{ flex: 1 }} />
+                    <span style={{ fontSize: "11px", color: "#64748b", width: "36px", textAlign: "right" }}>{Math.round(g.weight * 100)}%</span>
+                  </div>
+                );
+              })}
+            </UICard>
+          )}
+
+          {/* Top Authors */}
+          {(prof.topAuthors || []).length > 0 && (
+            <UICard style={{ padding: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}>Favorite Authors</div>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {(prof.topAuthors || []).map(function(a) {
+                  return <Badge key={a.author} variant="default">{a.author} ({Math.round(a.affinity * 100)}%)</Badge>;
+                })}
+              </div>
+            </UICard>
+          )}
+
+          {/* Recent Saved */}
+          {(prof.savedBooks || []).length > 0 && (
+            <UICard style={{ padding: "12px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}>Recently Saved</div>
+              {(prof.savedBooks || []).slice(-5).reverse().map(function(b) {
+                return (
+                  <div key={b.slug} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                    {b.coverUrl && <img src={b.coverUrl} alt={b.title} style={{ width: "30px", height: "44px", objectFit: "cover", borderRadius: "3px" }} />}
+                    <div>
+                      <div style={{ fontSize: "12px", fontWeight: 500 }}>{b.title}</div>
+                      <div style={{ fontSize: "10px", color: "#94a3b8" }}>{b.author} {"\u00B7"} {b.savedAt ? b.savedAt.slice(0, 10) : ""}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </UICard>
+          )}
+        </div>
+      );
+    }
+
+    // Taste action confirmation (save/rate/dismiss response)
+    if (isTaste && tasteData.action !== "view") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {breadcrumb}
+          <UICard style={{ padding: "16px", textAlign: "center" }}>
+            <div style={{ fontSize: "16px", marginBottom: "4px" }}>{tasteData.action === "save" ? "\u{1F4BE}" : tasteData.action === "rate" ? "\u2B50" : "\u{1F44E}"}</div>
+            <div style={{ fontSize: "14px", fontWeight: 500 }}>{tasteData.message || "Done!"}</div>
+            <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "center" }}>
+              <Button variant="default" size="sm" onClick={function() { onAction("discover", {}); }}>{"\u2728"} Back to Daily</Button>
+              <Button variant="outline" size="sm" onClick={function() { onAction("taste", { action: "view" }); }}>{"\u{1F3AF}"} View Profile</Button>
+            </div>
+          </UICard>
+        </div>
+      );
+    }
+
+    // Main Daily Discovery layout
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {breadcrumb}
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <span style={{ fontSize: "22px", marginRight: "6px" }}>{thm.icon || "\u2728"}</span>
+            <span style={{ fontWeight: 700, fontSize: "16px" }}>{thm.name || "Daily Discovery"}</span>
+            <span style={{ fontSize: "12px", color: "#94a3b8", marginLeft: "8px" }}>{thm.dayLabel || ""}</span>
+            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "4px" }}>{disc.date || ""}</span>
+          </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+              onClick={function() { onAction("taste", { action: "view" }); }}>{"\u{1F3AF}"} Profile</Button>
+            <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+              onClick={function() { onAction("discover", { refresh: true }); }}>{"\u{1F504}"} Refresh</Button>
+            <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+              onClick={function() { onAction("browse", {}); }}>{"\u2190"} Library</Button>
+          </div>
+        </div>
+
+        {/* Source counts */}
+        {disc.sourceCounts && (
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "#1e40af", color: "#93c5fd" }}>Open Library: {disc.sourceCounts.openlibrary || 0}</span>
+            <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "#065f46", color: "#6ee7b7" }}>Google Books: {disc.sourceCounts.google || 0}</span>
+            <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "#78350f", color: "#fcd34d" }}>NYT: {disc.sourceCounts.nyt || 0}</span>
+            {disc.fromCache && <Badge variant="secondary" style={{ fontSize: "9px" }}>Cached</Badge>}
+          </div>
+        )}
+
+        {/* Book of the Day */}
+        {botd && (
+          <UICard style={{ padding: "14px", borderColor: "#f59e0b44", borderWidth: "1px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "14px" }}>{"\u{1F4D5}"}</span>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#fbbf24" }}>Book of the Day</span>
+            </div>
+            <div style={{ display: "flex", gap: "14px" }}>
+              {botd.coverUrl && (
+                <img src={botd.coverUrl} alt={botd.title} style={{ width: "80px", height: "120px", objectFit: "cover", borderRadius: "6px", flexShrink: 0 }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: "15px", lineHeight: 1.3 }}>{botd.title}</div>
+                {botd.author && <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "2px" }}>{botd.author}</div>}
+                <div style={{ display: "flex", gap: "6px", marginTop: "4px", flexWrap: "wrap", alignItems: "center" }}>
+                  {botd.rating > 0 && <span style={{ fontSize: "11px", color: "#f59e0b" }}>{"\u2B50"} {botd.rating}</span>}
+                  {botd.pageCount > 0 && <span style={{ fontSize: "11px", color: "#64748b" }}>{botd.pageCount} pages</span>}
+                  {(botd.categories || []).slice(0, 2).map(function(c) { return <Badge key={c} variant="secondary" style={{ fontSize: "9px" }}>{c}</Badge>; })}
+                  <Badge variant="outline" style={{ fontSize: "9px" }}>{botd.source}</Badge>
+                </div>
+                {botd.description && (
+                  <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "6px", lineHeight: 1.5, fontStyle: "italic" }}>
+                    {"\u201C"}{botd.description.slice(0, 200)}{botd.description.length > 200 ? "..." : ""}{"\u201D"}
+                  </div>
+                )}
+                {botd.whyThisBook && (
+                  <div style={{ fontSize: "12px", color: "#a78bfa", marginTop: "6px" }}>
+                    {"\u{1F4A1}"} <strong>Why today:</strong> {botd.whyThisBook}
+                  </div>
+                )}
+                {botd.whoItsFor && (
+                  <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                    {"\u{1F464}"} {botd.whoItsFor}
+                  </div>
+                )}
+                <div style={{ marginTop: "8px" }}>
+                  <DiscoveryBookActions book={botd} section="botd" />
+                </div>
+              </div>
+            </div>
+          </UICard>
+        )}
+
+        {/* Theme Picks */}
+        {picks.length > 0 && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "14px" }}>{"\u{1F4DA}"}</span>
+              <span style={{ fontSize: "13px", fontWeight: 700 }}>Theme Picks</span>
+              <Badge variant="secondary" style={{ fontSize: "10px" }}>{picks.length}</Badge>
+            </div>
+            <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }}>
+              {picks.map(function(pick, idx) {
+                return (
+                  <div key={idx} style={{ minWidth: "160px", maxWidth: "180px", flexShrink: 0 }}>
+                    {pick.coverUrl && (
+                      <img src={pick.coverUrl} alt={pick.title} style={{ width: "100%", height: "120px", objectFit: "cover", borderRadius: "6px" }} />
+                    )}
+                    <div style={{ fontWeight: 600, fontSize: "12px", marginTop: "6px", lineHeight: 1.3 }}>{pick.title}</div>
+                    {pick.author && <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>{pick.author}</div>}
+                    {pick.oneLinePitch && (
+                      <div style={{ fontSize: "10px", color: "#a78bfa", marginTop: "3px", lineHeight: 1.3, fontStyle: "italic" }}>
+                        {"\u201C"}{pick.oneLinePitch}{"\u201D"}
+                      </div>
+                    )}
+                    <div style={{ marginTop: "6px" }}>
+                      <DiscoveryBookActions book={pick} section={"pick-" + idx} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* Bestseller Spotlight */}
+        {bestseller && (
+          <UICard style={{ padding: "12px", borderColor: "#eab30844" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "14px" }}>{"\u{1F3C6}"}</span>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#fbbf24" }}>Bestseller Spotlight</span>
+            </div>
+            <div style={{ display: "flex", gap: "12px" }}>
+              {bestseller.coverUrl && (
+                <img src={bestseller.coverUrl} alt={bestseller.title} style={{ width: "60px", height: "90px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: "14px" }}>{bestseller.title}</div>
+                {bestseller.author && <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{bestseller.author}</div>}
+                {bestseller.rankingContext && (
+                  <div style={{ fontSize: "11px", color: "#fbbf24", marginTop: "4px" }}>{"\u{1F4C8}"} {bestseller.rankingContext}</div>
+                )}
+                <div style={{ marginTop: "6px" }}>
+                  <DiscoveryBookActions book={bestseller} section="bestseller" />
+                </div>
+              </div>
+            </div>
+          </UICard>
+        )}
+
+        {/* Serendipity Pick */}
+        {serendipity && (
+          <UICard style={{ padding: "12px", borderColor: "#7c3aed44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "14px" }}>{"\u{1F3B2}"}</span>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#c4b5fd" }}>Serendipity Pick</span>
+            </div>
+            <div style={{ display: "flex", gap: "12px" }}>
+              {serendipity.coverUrl && (
+                <img src={serendipity.coverUrl} alt={serendipity.title} style={{ width: "60px", height: "90px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: "14px" }}>{serendipity.title}</div>
+                {serendipity.author && <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{serendipity.author}</div>}
+                {serendipity.whyUnexpected && (
+                  <div style={{ fontSize: "12px", color: "#c4b5fd", marginTop: "4px", fontStyle: "italic" }}>
+                    {"\u201C"}{serendipity.whyUnexpected}{"\u201D"}
+                  </div>
+                )}
+                <div style={{ marginTop: "6px" }}>
+                  <DiscoveryBookActions book={serendipity} section="serendipity" />
+                </div>
+              </div>
+            </div>
+          </UICard>
+        )}
+
+        {/* Streak + Stats Footer */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", padding: "8px", fontSize: "12px", color: "#64748b", borderTop: "1px solid #374151" }}>
+          {streak.current > 0 && <span>{"\u{1F525}"} {streak.current}-day streak</span>}
+          {tp.interactionCount > 0 && <span>{"\u{1F4BE}"} {tp.interactionCount} interactions</span>}
+          {(tp.topGenres || []).length > 0 && <span>Top: {(tp.topGenres || []).slice(0, 3).map(function(g) { return g.replace(/_/g, " "); }).join(", ")}</span>}
+        </div>
+
+        {/* Empty state if no data yet */}
+        {!botd && picks.length === 0 && !bestseller && !serendipity && (
+          <EmptyState
+            title="No discoveries yet"
+            description={"Click Refresh to generate today's picks, or wait for the Team Leader morning routine."}
+          />
+        )}
+      </div>
+    );
+  }
+
   // ── Browse (primary collection view) ──
   if (isBrowse) {
     var books = d.books || [];
@@ -589,13 +924,18 @@ function GeneratedUI({ data, onAction }) {
             { id: "kindle", label: "Kindle", count: d.kindleCount || 0 },
             { id: "weread", label: "微信读书", count: d.wereadCount || 0 },
             { id: "discovered", label: "Discovered", count: discoveredBooks.length },
+            { id: "daily", label: "\u2728 Daily", count: null },
           ].map(function(t) {
             var isActive = activeTab === t.id;
             return (
               <Button key={t.id} variant={isActive ? "default" : "ghost"} size="sm"
-                style={{ fontSize: "12px", opacity: t.count === 0 && t.id !== "all" ? 0.5 : 1 }}
-                onClick={function() { setActiveTab(t.id); if (t.id !== "discovered") onAction("browse", { tab: t.id, sortBy: sortBy, page: 1 }); }}>
-                {t.label} <Badge variant="secondary" style={{ marginLeft: "4px", fontSize: "10px" }}>{t.count}</Badge>
+                style={{ fontSize: "12px", opacity: t.count === 0 && t.id !== "all" && t.id !== "daily" ? 0.5 : 1 }}
+                onClick={function() {
+                  setActiveTab(t.id);
+                  if (t.id === "daily") { onAction("discover", {}); }
+                  else if (t.id !== "discovered") { onAction("browse", { tab: t.id, sortBy: sortBy, page: 1 }); }
+                }}>
+                {t.label} {t.count !== null ? <Badge variant="secondary" style={{ marginLeft: "4px", fontSize: "10px" }}>{t.count}</Badge> : null}
               </Button>
             );
           })}

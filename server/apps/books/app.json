@@ -3,7 +3,7 @@
   "spec": {
     "toolFamily": "books",
     "toolPrefix": "enso_books_",
-    "description": "Books: unified library across Kindle and WeRead (微信读书). Browse, search, scan from multiple sources, view enriched metadata, deep AI podcasts, and research from your reading.",
+    "description": "Books: unified library across Kindle and WeRead (微信读书). Browse, search, scan from multiple sources, view enriched metadata, deep AI podcasts, daily discovery picks, and taste-based personalization.",
     "signatureId": "books_library",
     "tools": [
       {
@@ -125,6 +125,91 @@
           "properties": {},
           "required": [],
           "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "discover",
+        "label": "Daily Discovery",
+        "description": "Get today's book discovery picks. Fetches themed recommendations from Open Library, Google Books, and NYT Bestsellers, curated by LLM against your taste profile. Cached per day. Use 'refresh: true' to force regeneration.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "description": "Date in YYYY-MM-DD format (default: today)"
+            },
+            "refresh": {
+              "type": "boolean",
+              "description": "Force refresh even if cached (default: false)"
+            },
+            "theme": {
+              "type": "string",
+              "description": "Override theme (e.g., 'science_fiction'). Default: day-of-week rotation."
+            }
+          },
+          "additionalProperties": false
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_books_discover",
+          "date": "2026-04-14",
+          "theme": { "name": "Mind & Motivation", "icon": "🧠", "dayLabel": "Monday" },
+          "bookOfTheDay": {
+            "title": "Thinking, Fast and Slow",
+            "author": "Daniel Kahneman",
+            "coverUrl": "https://covers.openlibrary.org/b/id/12547191-M.jpg",
+            "description": "A groundbreaking tour of the mind.",
+            "rating": 4.5,
+            "categories": ["Psychology"],
+            "source": "google",
+            "whyThisBook": "A masterclass in cognitive biases.",
+            "whoItsFor": "Anyone curious about decision-making."
+          },
+          "themePicks": [],
+          "bestsellerSpotlight": null,
+          "serendipityPick": null,
+          "tasteProfile": { "interactionCount": 0 }
+        }
+      },
+      {
+        "suffix": "taste",
+        "label": "Taste Profile",
+        "description": "Record user interaction with a discovered book (save, rate, dismiss) or view the current taste profile. Interactions shape future daily picks.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": ["save", "rate", "dismiss", "view"],
+              "description": "Interaction type"
+            },
+            "bookId": {
+              "type": "string",
+              "description": "Title slug or identifier of the book"
+            },
+            "rating": {
+              "type": "number",
+              "description": "1-5 rating (only for action=rate)"
+            },
+            "bookData": {
+              "type": "object",
+              "description": "Full book metadata (title, author, categories, etc.) for save/rate actions"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sampleParams": { "action": "view" },
+        "sampleData": {
+          "tool": "enso_books_taste",
+          "action": "view",
+          "profile": {
+            "interactionCount": 12,
+            "genreWeights": { "psychology": 0.85, "science_fiction": 0.72 },
+            "savedBooks": [],
+            "ratings": [],
+            "dismissedBooks": [],
+            "streak": { "current": 3, "longest": 5 }
+          }
         }
       }
     ]
