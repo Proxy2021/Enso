@@ -1323,7 +1323,7 @@ They already own these books (DO NOT recommend any of these): ${existingList || 
 
 They already have AI podcasts for these books (DO NOT recommend these or any variant/edition of these): ${processedList || "none"}
 
-${webContext}Select ${Math.max(count + 2, 3)} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
+${webContext}Select ${Math.max(count + 7, 8)} book(s) that would be most valuable and thought-provoking for this person. Pick books that:
 - Are COMPLETELY DIFFERENT from books they already own or have podcasts for — no variant editions, translations, or related titles
 - Are highly acclaimed and substantive (not pop/superficial)
 - Match their core interests but EXPAND their thinking in new, surprising directions
@@ -1369,7 +1369,7 @@ CRITICAL: Return ONLY valid JSON. Pick real, existing books with correct authors
     const allKnownTitles = [...existingTitles, ...processedTitles.map(t => t.toLowerCase())];
 
     const results: DiscoveredBook[] = [];
-    for (const book of parsed.books.slice(0, count + 3)) { // request extras in case some get filtered
+    for (const book of parsed.books.slice(0, count + 8)) { // request extras in case some get filtered
       if (!book.title || !book.author) continue;
       if (results.length >= count) break;
 
@@ -1397,6 +1397,21 @@ CRITICAL: Return ONLY valid JSON. Pick real, existing books with correct authors
         whyRecommended: book.whyRecommended,
         entityId,
       });
+    }
+
+    // If all candidates were filtered, try one more time with a relaxed fuzzy threshold
+    if (results.length === 0 && parsed.books.length > 0) {
+      logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: `All ${parsed.books.length} candidates filtered — retrying with relaxed matching` });
+      for (const book of parsed.books) {
+        if (!book.title || !book.author) continue;
+        if (results.length >= count) break;
+        // Only apply exact match, skip fuzzy check on retry
+        if (existingTitles.has(book.title.toLowerCase())) continue;
+        const slug = book.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+        const entityId = `research:book:${slug}`;
+        if (processedIds.has(entityId)) continue;
+        results.push({ title: book.title, author: book.author, year: book.year || undefined, description: book.description, whyRecommended: book.whyRecommended, entityId });
+      }
     }
 
     logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: `Discovered ${results.length} new books: ${results.map(b => b.title).join(", ")}` });

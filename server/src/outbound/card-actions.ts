@@ -35,7 +35,7 @@ import { recordAppInteraction, buildFailureContext } from "../interaction-tracke
 import { sendHtmlEmail } from "../email.js";
 import { sendTextMessage, sendArticle, getFollowerOpenIds } from "../wechat.js";
 import type { CardContext } from "./card-context.js";
-import { cardContexts, isPathWithinRoot, validateScopedAction } from "./card-context.js";
+import { cardContexts, getCardContext, isPathWithinRoot, validateScopedAction } from "./card-context.js";
 import {
   compactPromptText,
   summarizeCardDataForAgent,
@@ -171,7 +171,7 @@ export async function handlePluginCardAction(params: {
   logAction({ ts: Date.now(), type: "action", category: "action", message: `Action: ${action}`, cardId, metadata: { payload } });
   sendOperation("processing", "Processing action");
 
-  let ctx = cardContexts.get(cardId);
+  let ctx = getCardContext(cardId);
   if (!ctx) {
     // ── Reconstruct minimal context for known tool families ──
     // After server restart, card contexts are lost. For tools where the

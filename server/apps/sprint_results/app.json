@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "createdAt": 1713100800000,
+  "spec": {
+    "toolFamily": "sprint_results",
+    "toolPrefix": "enso_sprint_results_",
+    "description": "Sprint Results Dashboard — interactive view of focus area sprint deliverables with one-click actions, progress tracking, and shareable summaries. Shows deliverable cards, recommended first action, next steps, and focus area cycle progress.",
+    "signatureId": "sprint_results_view",
+    "tools": [
+      {
+        "suffix": "load",
+        "description": "Load sprint results for a focus area. Shows deliverable cards, recommended first action, next steps, and cycle progress. If no focusId is given, loads results for the most recently completed sprint. Use when the user says: 'show sprint results', 'sprint dashboard', 'what did the sprint produce', 'show deliverables', 'focus area results'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID to load results for. If omitted, loads the most recently completed sprint."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_sprint_results_load",
+          "focusId": "focus-photography",
+          "focusTitle": "Photography & Visual Storytelling",
+          "sprintDate": "2026-04-14T10:30:00Z",
+          "cycleCount": 12,
+          "entityCount": 47,
+          "sprintSummary": "This sprint addressed three key pain points in your photography workflow: organizing large shoots, developing a personal editing style, and sharing your work with a wider audience.",
+          "deliverables": [
+            {
+              "taskTitle": "Photo Curation Workflow App",
+              "entityType": "app",
+              "entityId": "entity-abc123",
+              "painPoint": "Manually sorting through hundreds of photos after each shoot is tedious and time-consuming",
+              "howItHelps": "Automated curation pipeline that pre-selects your best shots using AI analysis of composition, lighting, and your historical preferences",
+              "quickStart": "Run the app and point it at your latest shoot folder to see AI-ranked selections",
+              "actionType": "run",
+              "status": "new"
+            },
+            {
+              "taskTitle": "Personal Editing Style Guide",
+              "entityType": "article",
+              "entityId": "entity-def456",
+              "painPoint": "Inconsistent editing across different shoots makes your portfolio look disjointed",
+              "howItHelps": "Analyzes your best-rated photos to extract a coherent editing formula — color palette, contrast curve, and mood descriptors",
+              "quickStart": "Read the guide to see your extracted style profile and suggested Lightroom presets",
+              "actionType": "read",
+              "status": "new"
+            },
+            {
+              "taskTitle": "Portfolio Strategy Framework",
+              "entityType": "idea",
+              "entityId": "entity-ghi789",
+              "painPoint": "No clear strategy for which photos to share and where",
+              "howItHelps": "A decision framework for selecting portfolio pieces based on your goals — exhibition, social media growth, or client acquisition",
+              "quickStart": "Explore the framework and tag 5 photos using its criteria to test the approach",
+              "actionType": "explore",
+              "status": "new"
+            },
+            {
+              "taskTitle": "Shoot Planning Checklist",
+              "entityType": "synthesis",
+              "entityId": "entity-jkl012",
+              "painPoint": "Forgetting key gear or missing optimal lighting windows on planned shoots",
+              "howItHelps": "Dynamic checklist that adapts to shoot type, location weather data, and golden hour timing",
+              "quickStart": "Review the checklist template and customize it for your next planned shoot",
+              "actionType": "review",
+              "status": "new"
+            }
+          ],
+          "recommendedFirstAction": {
+            "deliverableIndex": 0,
+            "reason": "This app directly addresses your most frequent pain point — photo sorting — and can save you 2+ hours per shoot immediately."
+          },
+          "nextSteps": [
+            "Test the Photo Curation app on your most recent shoot folder",
+            "Read the Style Guide and compare its suggestions against your favorite edits",
+            "Use the Portfolio Framework to select 10 portfolio candidates",
+            "Customize the Shoot Planning Checklist for your upcoming weekend trip"
+          ],
+          "allFocusAreas": [
+            { "id": "focus-photography", "title": "Photography & Visual Storytelling", "hasSprint": true, "lastSprintDate": "2026-04-14T10:30:00Z" },
+            { "id": "focus-enso-dev", "title": "Enso Development", "hasSprint": true, "lastSprintDate": "2026-04-13T08:00:00Z" },
+            { "id": "focus-reading", "title": "Reading & Knowledge", "hasSprint": false, "lastSprintDate": null }
+          ]
+        },
+        "requiredDataKeys": ["tool", "focusTitle"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "launch",
+        "description": "Launch or open a specific sprint deliverable. For apps, triggers a run. For articles/ideas/synthesis, opens the entity content. Use when the user clicks an action button on a deliverable card.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entityId": {
+              "type": "string",
+              "description": "The Cortex entity ID of the deliverable"
+            },
+            "entityType": {
+              "type": "string",
+              "description": "Type: app, article, idea, or synthesis"
+            },
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID for context"
+            }
+          },
+          "required": ["entityId", "entityType"]
+        },
+        "sampleParams": { "entityId": "entity-abc123", "entityType": "app", "focusId": "focus-photography" },
+        "sampleData": {
+          "tool": "enso_sprint_results_launch",
+          "success": true,
+          "entityId": "entity-abc123",
+          "entityType": "app",
+          "title": "Photo Curation Workflow App",
+          "content": "App launched successfully. The Photo Curation Workflow is now running.",
+          "message": "Launched: Photo Curation Workflow App"
+        },
+        "requiredDataKeys": ["tool", "success", "entityId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "next_cycle",
+        "description": "Start the next evolution cycle for a focus area. Triggers a new Evaluate phase. Use when the user clicks 'Start Next Cycle'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID to start the next cycle for"
+            }
+          },
+          "required": ["focusId"]
+        },
+        "sampleParams": { "focusId": "focus-photography" },
+        "sampleData": {
+          "tool": "enso_sprint_results_next_cycle",
+          "success": true,
+          "focusId": "focus-photography",
+          "focusTitle": "Photography & Visual Storytelling",
+          "message": "New evaluation cycle initiated for Photography & Visual Storytelling. The next briefing will assess your current position and identify new growth areas.",
+          "newCycleCount": 13
+        },
+        "requiredDataKeys": ["tool", "success", "focusId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "share",
+        "description": "Generate a shareable text summary of sprint results. Produces a formatted summary suitable for sharing via email, chat, or notes. Use when the user clicks 'Share Results'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID"
+            },
+            "format": {
+              "type": "string",
+              "description": "Output format: 'text' or 'markdown' (default: 'markdown')"
+            }
+          },
+          "required": ["focusId"]
+        },
+        "sampleParams": { "focusId": "focus-photography" },
+        "sampleData": {
+          "tool": "enso_sprint_results_share",
+          "success": true,
+          "focusId": "focus-photography",
+          "focusTitle": "Photography & Visual Storytelling",
+          "format": "markdown",
+          "shareText": "# Sprint Results: Photography & Visual Storytelling\n\n**Date:** April 14, 2026 | **Cycle:** #12\n\n## Summary\nThis sprint addressed three key pain points...\n\n## Deliverables\n1. **Photo Curation Workflow App** (App) — Automated curation pipeline\n2. **Personal Editing Style Guide** (Article) — Coherent editing formula\n3. **Portfolio Strategy Framework** (Idea) — Decision framework for sharing\n4. **Shoot Planning Checklist** (Synthesis) — Dynamic planning checklist\n\n## Next Steps\n- Test the Photo Curation app on your most recent shoot folder\n- Read the Style Guide and compare suggestions\n\n---\n*Generated by Enso Sprint Results Dashboard*",
+          "message": "Shareable summary generated"
+        },
+        "requiredDataKeys": ["tool", "success", "shareText"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "mark_status",
+        "description": "Mark a deliverable's status as viewed or acted-on. Tracks engagement with sprint deliverables. Use when the user interacts with a deliverable.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID"
+            },
+            "entityId": {
+              "type": "string",
+              "description": "The entity ID of the deliverable"
+            },
+            "status": {
+              "type": "string",
+              "description": "New status: 'viewed' or 'acted_on'"
+            }
+          },
+          "required": ["focusId", "entityId", "status"]
+        },
+        "sampleParams": { "focusId": "focus-photography", "entityId": "entity-abc123", "status": "viewed" },
+        "sampleData": {
+          "tool": "enso_sprint_results_mark_status",
+          "success": true,
+          "entityId": "entity-abc123",
+          "status": "viewed",
+          "message": "Deliverable marked as viewed"
+        },
+        "requiredDataKeys": ["tool", "success", "entityId"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

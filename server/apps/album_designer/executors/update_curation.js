@@ -17,6 +17,10 @@ if (!curation) {
   return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_album_designer_update_curation", error: "Curation data not found for project: " + projectId }) }] };
 }
 
+// Load project for due date info
+var allProjects = await ctx.store.get("album_projects") || {};
+var project = allProjects[projectId] || {};
+
 // Update specific pass if provided
 if (passNum && passNum >= 1 && passNum <= 5) {
   var passIdx = passNum - 1;
@@ -62,6 +66,35 @@ for (var i = 0; i < curation.passes.length; i++) {
 }
 curation.overallProgress = Math.round((completedPasses / 5) * 100);
 curation.currentPass = currentPass;
+
+// Calculate daily culling goal
+var dailyGoal = null;
+var activePass = curation.passes[currentPass - 1];
+if (activePass && !activePass.completed && project.dueDate) {
+  var dueDate = new Date(project.dueDate);
+  var now = new Date();
+  var daysRemaining = Math.max(1, Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+
+  // Photos remaining for current pass: start count minus target (or remaining if already partially done)
+  var photosInCurrentPass = activePass.startCount || 0;
+  var targetForPass = 0;
+  // Parse target range to get an approximate number
+  var targetStr = (activePass.targetRange || "").replace(/[^0-9]/g, "");
+  if (targetStr) targetForPass = parseInt(targetStr) || 0;
+  var photosToProcess = photosInCurrentPass;
+  if (activePass.remainingCount !== null) {
+    photosToProcess = activePass.remainingCount;
+  }
+
+  dailyGoal = {
+    photosPerDay: Math.ceil(photosToProcess / daysRemaining),
+    daysRemaining: daysRemaining,
+    photosRemaining: photosToProcess,
+    passName: activePass.name
+  };
+}
+
+curation.dailyGoal = dailyGoal;
 
 await ctx.store.set("curation_" + projectId, curation);
 

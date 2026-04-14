@@ -16,9 +16,11 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { ScheduledTaskDef, ScheduledTaskRun } from "@shared/types.js";
 import { logAction, logError } from "./action-log.js";
+import { isToolRegistered } from "./native-tools/registry.js";
 
 // ── Constants ──
 
+const MAX_CONSECUTIVE_FAILURES = 3;
 const CHECK_INTERVAL_MS = 15_000; // 15 second check loop
 const MAX_CONCURRENT = 2;
 const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -221,12 +223,28 @@ async function fireTask(task: ScheduledTaskDef): Promise<void> {
     task.lastFiredAt = now;
     task.lastRunStatus = run.status;
 
+    // Track consecutive failures for circuit breaker
+    if (run.status === "failed") {
+      task.consecutiveFailures = (task.consecutiveFailures || 0) + 1;
+
+      if (task.recurring && task.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        task.enabled = false;
+        task.nextFireAt = undefined;
+        logError("scheduled-tasks",
+          `Task "${task.name}" auto-disabled after ${task.consecutiveFailures} consecutive failures. ` +
+          `Last error: ${run.error || "unknown"}. Re-enable manually after fixing the issue.`
+        );
+      }
+    } else if (run.status === "success") {
+      task.consecutiveFailures = 0;
+    }
+
     if (!task.recurring) {
       // One-shot: auto-disable after fire
       task.enabled = false;
       task.nextFireAt = undefined;
-    } else {
-      // Recurring: compute next fire
+    } else if (task.enabled) {
+      // Recurring: compute next fire (only if still enabled after circuit breaker check)
       task.nextFireAt = computeNextFire(task);
     }
 
@@ -243,7 +261,18 @@ async function fireTask(task: ScheduledTaskDef): Promise<void> {
   } catch (err) {
     task.lastFiredAt = now;
     task.lastRunStatus = "failed";
-    task.nextFireAt = task.recurring ? computeNextFire(task) : undefined;
+    task.consecutiveFailures = (task.consecutiveFailures || 0) + 1;
+
+    if (task.recurring && task.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      task.enabled = false;
+      task.nextFireAt = undefined;
+      logError("scheduled-tasks",
+        `Task "${task.name}" auto-disabled after ${task.consecutiveFailures} consecutive failures. ` +
+        `Last error: ${err instanceof Error ? err.message : String(err)}. Re-enable manually after fixing.`
+      );
+    } else {
+      task.nextFireAt = task.recurring ? computeNextFire(task) : undefined;
+    }
     if (!task.recurring) task.enabled = false;
     persistTasks();
 
@@ -321,6 +350,16 @@ export function createTask(def: Partial<ScheduledTaskDef>): ScheduledTaskDef {
     throw new Error(`Task with id "${taskId}" already exists`);
   }
 
+  // Validate tool tasks reference a registered tool
+  if (def.action?.type === "tool" && def.action.toolId) {
+    if (!isToolRegistered(def.action.toolId)) {
+      throw new Error(
+        `Cannot create task "${def.name || taskId}": tool "${def.action.toolId}" is not registered. ` +
+        `Register the tool before creating a scheduled task for it.`
+      );
+    }
+  }
+
   const task: ScheduledTaskDef = {
     taskId,
     name: def.name || taskId,
@@ -334,6 +373,7 @@ export function createTask(def: Partial<ScheduledTaskDef>): ScheduledTaskDef {
     maxAgeMs: def.maxAgeMs ?? DEFAULT_MAX_AGE_MS,
     notifyOnComplete: def.notifyOnComplete ?? true,
     model: def.model,
+    consecutiveFailures: 0,
   };
 
   task.nextFireAt = computeNextFire(task);

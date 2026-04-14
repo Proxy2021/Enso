@@ -1,0 +1,381 @@
+{
+  "version": 1,
+  "createdAt": 1713100000000,
+  "spec": {
+    "toolFamily": "media_library",
+    "toolPrefix": "enso_media_library_",
+    "description": "Cross-media library for browsing, searching, rating, tracking, and discovering books, movies, TV series, games, music, and photos from your Knowledge Cortex entity index",
+    "signatureId": "media_library_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "description": "Browse all media entities with filters. Supports filtering by media type (books, movies, games, music, photos, tv, documentaries), consumption status, favorites, minimum rating, collection membership, and sorting/grouping options. Use when the user says: 'show my media library', 'browse my books', 'show all movies', 'list my games', 'what have I completed'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mediaType": {
+              "type": "string",
+              "description": "Filter by media type: all, books, movies, tv, documentaries, games, music, photos (default: all)"
+            },
+            "status": {
+              "type": "string",
+              "description": "Filter by consumption status: not_started, in_progress, completed, dropped, on_hold"
+            },
+            "favorite": {
+              "type": "boolean",
+              "description": "Filter to favorites only"
+            },
+            "minRating": {
+              "type": "number",
+              "description": "Minimum user rating (1-10)"
+            },
+            "collectionId": {
+              "type": "string",
+              "description": "Filter to items in a specific collection"
+            },
+            "sortBy": {
+              "type": "string",
+              "description": "Sort by: title, rating, updatedAt, dateCompleted (default: title)"
+            },
+            "groupBy": {
+              "type": "string",
+              "description": "Group results by: mediaType, status, rating (default: none)"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max results per page (default: 50)"
+            },
+            "offset": {
+              "type": "number",
+              "description": "Pagination offset (default: 0)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_media_library_browse",
+          "mediaType": "all",
+          "total": 1889,
+          "showing": 50,
+          "offset": 0,
+          "items": [
+            {
+              "entityId": "kindle:book:the-book-of-five-rings",
+              "type": "book",
+              "source": "kindle",
+              "title": "The Book of Five Rings",
+              "imageUrl": "https://m.media-amazon.com/images/I/41kanz9HFfL._SY400_.jpg",
+              "tags": ["martial arts", "philosophy"],
+              "semanticTags": ["martial-arts-philosophy", "strategy"],
+              "userRating": null,
+              "isFavorite": false,
+              "consumptionStatus": null
+            }
+          ],
+          "typeCounts": {
+            "book": 510,
+            "movie": 299,
+            "tv-series": 161,
+            "documentary": 53,
+            "album": 783,
+            "game": 17,
+            "artist": 1
+          }
+        },
+        "requiredDataKeys": ["tool", "items"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "search",
+        "description": "Full-text search across all indexed media entities. Searches titles, tags, semantic tags, and metadata. Returns ranked results with match reasons. Use when the user says: 'search for sci-fi books', 'find martial arts movies', 'search strategy games'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query string"
+            },
+            "mediaType": {
+              "type": "string",
+              "description": "Limit search to a media type: books, movies, tv, documentaries, games, music, photos"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max results (default: 30)"
+            }
+          },
+          "required": ["query"]
+        },
+        "sampleParams": { "query": "martial arts" },
+        "sampleData": {
+          "tool": "enso_media_library_search",
+          "query": "martial arts",
+          "total": 12,
+          "results": [
+            {
+              "entityId": "kindle:book:the-book-of-five-rings",
+              "type": "book",
+              "title": "The Book of Five Rings",
+              "matchScore": 3,
+              "matchReasons": ["tag: martial arts", "semanticTag: martial-arts-philosophy"]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "query", "results"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "rate",
+        "description": "Rate a media entity on a 1-10 scale with optional notes. Use when the user says: 'rate this book', 'give it an 8', 'rate my movie'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entityId": {
+              "type": "string",
+              "description": "The entity ID to rate"
+            },
+            "rating": {
+              "type": "number",
+              "description": "Rating from 1-10 (0 to clear)"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Optional notes about the rating"
+            }
+          },
+          "required": ["entityId", "rating"]
+        },
+        "sampleParams": { "entityId": "kindle:book:the-book-of-five-rings", "rating": 9 },
+        "sampleData": {
+          "tool": "enso_media_library_rate",
+          "entityId": "kindle:book:the-book-of-five-rings",
+          "title": "The Book of Five Rings",
+          "userRating": 9,
+          "success": true
+        },
+        "requiredDataKeys": ["tool", "entityId", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "status",
+        "description": "Update consumption status and progress for a media entity. Use when the user says: 'I started reading this', 'mark as completed', 'I dropped this show', 'update my progress'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entityId": {
+              "type": "string",
+              "description": "The entity ID to update"
+            },
+            "status": {
+              "type": "string",
+              "description": "Status: not_started, in_progress, completed, dropped, on_hold"
+            },
+            "progress": {
+              "type": "string",
+              "description": "Progress description (e.g., 'Chapter 5', '45%', 'Episode 3')"
+            }
+          },
+          "required": ["entityId", "status"]
+        },
+        "sampleParams": { "entityId": "kindle:book:the-book-of-five-rings", "status": "completed" },
+        "sampleData": {
+          "tool": "enso_media_library_status",
+          "entityId": "kindle:book:the-book-of-five-rings",
+          "title": "The Book of Five Rings",
+          "consumptionStatus": "completed",
+          "dateCompleted": "2026-04-14T00:00:00.000Z",
+          "success": true
+        },
+        "requiredDataKeys": ["tool", "entityId", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "favorite",
+        "description": "Toggle or set the favorite flag on a media entity. Use when the user says: 'favorite this', 'add to favorites', 'unfavorite this book'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entityId": {
+              "type": "string",
+              "description": "The entity ID to toggle favorite"
+            },
+            "favorite": {
+              "type": "boolean",
+              "description": "Set true/false, or omit to toggle"
+            }
+          },
+          "required": ["entityId"]
+        },
+        "sampleParams": { "entityId": "kindle:book:the-book-of-five-rings" },
+        "sampleData": {
+          "tool": "enso_media_library_favorite",
+          "entityId": "kindle:book:the-book-of-five-rings",
+          "title": "The Book of Five Rings",
+          "isFavorite": true,
+          "success": true
+        },
+        "requiredDataKeys": ["tool", "entityId", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "collection",
+        "description": "Manage media collections: create, list, view (with resolved entities), add/remove items, or delete collections. Use when the user says: 'create a collection', 'add to reading list', 'show my collections', 'view watch later list'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: create, list, view, add_item, remove_item, delete"
+            },
+            "collectionId": {
+              "type": "string",
+              "description": "Collection ID (for view, add_item, remove_item, delete)"
+            },
+            "name": {
+              "type": "string",
+              "description": "Collection name (for create)"
+            },
+            "description": {
+              "type": "string",
+              "description": "Collection description (for create)"
+            },
+            "entityId": {
+              "type": "string",
+              "description": "Entity ID to add/remove"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "list" },
+        "sampleData": {
+          "tool": "enso_media_library_collection",
+          "action": "list",
+          "collections": [
+            { "id": "must-read-2026", "name": "Must Read 2026", "description": "Top books for this year", "itemCount": 5, "createdAt": "2026-04-14T00:00:00.000Z" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "stats",
+        "description": "Cross-media statistics and insights from your entire library. Shows totals by type, rating distributions, completion rates, top-rated items, recent activity, and more. Use when the user says: 'show my library stats', 'how many books have I read', 'media statistics', 'library overview'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mediaType": {
+              "type": "string",
+              "description": "Limit stats to a specific media type (optional)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_media_library_stats",
+          "totalEntities": 1889,
+          "typeCounts": { "book": 510, "movie": 299, "tv-series": 161, "game": 17 },
+          "favoriteCount": 25,
+          "ratedCount": 40,
+          "averageRating": 7.5,
+          "statusDistribution": { "completed": 50, "in_progress": 10, "not_started": 1800 },
+          "topRated": [],
+          "recentlyCompleted": []
+        },
+        "requiredDataKeys": ["tool", "totalEntities"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "add",
+        "description": "Manually add a new media entity to the library. Use when the user says: 'add a book', 'add movie to library', 'register new game'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Entity type: book, movie, tv-series, documentary, game, album, artist"
+            },
+            "title": {
+              "type": "string",
+              "description": "Title of the entity"
+            },
+            "imageUrl": {
+              "type": "string",
+              "description": "Cover image URL (optional)"
+            },
+            "tags": {
+              "type": "string",
+              "description": "Comma-separated tags"
+            },
+            "semanticTags": {
+              "type": "string",
+              "description": "Comma-separated semantic tags"
+            }
+          },
+          "required": ["type", "title"]
+        },
+        "sampleParams": { "type": "book", "title": "Dune" },
+        "sampleData": {
+          "tool": "enso_media_library_add",
+          "entityId": "manual:book:dune",
+          "type": "book",
+          "title": "Dune",
+          "success": true
+        },
+        "requiredDataKeys": ["tool", "entityId", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "discover",
+        "description": "AI-powered cross-media discovery suggestions based on your ratings, favorites, and consumption patterns. Analyzes taste clusters from semantic tags to recommend items you might enjoy. Use when the user says: 'suggest something to watch', 'recommend books', 'what should I play next', 'discover new media'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mediaType": {
+              "type": "string",
+              "description": "Limit suggestions to a media type (optional)"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max suggestions per category (default: 5)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_media_library_discover",
+          "categories": [
+            {
+              "title": "Based on your favorites",
+              "items": [
+                { "entityId": "weread:book:example", "type": "book", "title": "Example Book", "reason": "Similar themes to your top-rated books" }
+              ]
+            },
+            {
+              "title": "Cross-media connections",
+              "items": []
+            }
+          ],
+          "tasteProfile": {
+            "topTags": ["martial-arts", "strategy", "philosophy"],
+            "totalRated": 10,
+            "totalFavorites": 5
+          }
+        },
+        "requiredDataKeys": ["tool", "categories"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

@@ -8,6 +8,7 @@ import {
   type ToolTemplateCoverageStatus,
 } from "../native-tools/registry.js";
 import { logAction } from "../action-log.js";
+import { persistCardContext, loadPersistedCard } from "./card-persistence.js";
 
 // ── Card Interaction Context ──
 
@@ -59,6 +60,14 @@ export interface CardContext {
 
 export const cardContexts = new Map<string, CardContext>();
 
+/** Resolver for account reconstruction from persisted cards. Set at startup. */
+let accountResolver: ((accountId: string) => ResolvedEnsoAccount | null) | null = null;
+
+/** Set the account resolver used by the persistence fallback. Call once at startup. */
+export function setCardAccountResolver(resolver: (accountId: string) => ResolvedEnsoAccount | null): void {
+  accountResolver = resolver;
+}
+
 /** Register a card context externally (used by tool-factory). */
 export function registerCardContext(cardId: string, ctx: {
   cardId: string;
@@ -77,6 +86,26 @@ export function registerCardContext(cardId: string, ctx: {
   allowedRoot?: string;
 }): void {
   cardContexts.set(cardId, ctx as CardContext);
+  persistCardContext(cardId, ctx as CardContext);
+}
+
+/**
+ * Look up a card context by ID — checks in-memory first, then falls back
+ * to disk persistence. Returns undefined if not found anywhere.
+ */
+export function getCardContext(cardId: string): CardContext | undefined {
+  const cached = cardContexts.get(cardId);
+  if (cached) return cached;
+
+  // Fallback: try loading from disk
+  if (accountResolver) {
+    const loaded = loadPersistedCard(cardId, accountResolver);
+    if (loaded) {
+      cardContexts.set(cardId, loaded);
+      return loaded;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -91,7 +120,7 @@ export function getCardState(cardId: string): {
   coverageStatus?: string;
   toolMeta?: { toolId?: string };
 } | null {
-  const ctx = cardContexts.get(cardId);
+  const ctx = getCardContext(cardId);
   if (!ctx) return null;
 
   // Resolve the template JSX
@@ -160,7 +189,7 @@ export function createScopedShareContext(
   sourceCardId: string,
   allowedRoot: string,
 ): { ok: true; shareCardId: string; normalizedRoot: string } | { ok: false; error: string } {
-  const sourceCtx = cardContexts.get(sourceCardId);
+  const sourceCtx = getCardContext(sourceCardId);
   if (!sourceCtx) return { ok: false, error: "Source card context not found" };
 
   const normalizedRoot = normalize(resolve(allowedRoot)).replace(/[/\\]+$/, "");

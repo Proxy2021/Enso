@@ -4,12 +4,12 @@
   "spec": {
     "toolFamily": "album_designer",
     "toolPrefix": "enso_album_designer_",
-    "description": "Gift photo album designer — plan Printique 10x10 lay-flat hardcover albums with 5-pass curation tracking, spread layout planning, narrative arc visualization, and print-ready checklists.",
+    "description": "Photo book project planner — manage multiple album projects from concept to print. Multi-printer support (Printique, Saal Digital, WhiteWall), 5-pass curation with daily goals, chapter-based sequence building, narrative arc visualization, and print-ready checklists.",
     "signatureId": "album_designer_view",
     "tools": [
       {
         "suffix": "setup_project",
-        "description": "Create or load an album project with title, recipient, theme, and format specs. Use when the user says: 'start album project', 'create a photo book', 'design a gift album', 'plan my photo album'.",
+        "description": "Create or load an album project with title, recipient, theme, format specs, printer choice, due date, and occasion. Use when the user says: 'start album project', 'create a photo book', 'design a gift album', 'plan my photo album'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -41,11 +41,31 @@
             "targetImages": {
               "type": "number",
               "description": "Target total images (default: 60)"
+            },
+            "totalCandidates": {
+              "type": "number",
+              "description": "Total candidate photos to cull from (e.g. 2400 for a single trip)"
+            },
+            "printer": {
+              "type": "string",
+              "description": "Print service: printique, saal_digital, whitewall (default: saal_digital)"
+            },
+            "dueDate": {
+              "type": "string",
+              "description": "Target completion date (ISO format, e.g. 2026-06-15)"
+            },
+            "occasion": {
+              "type": "string",
+              "description": "Occasion or reason (e.g. Mom's birthday, Anniversary gift)"
+            },
+            "status": {
+              "type": "string",
+              "description": "Project status: planning, culling, selecting, sequencing, layout, printing, done"
             }
           },
           "required": ["action"]
         },
-        "sampleParams": { "action": "create", "title": "Summer in Kyoto", "recipient": "Mom", "theme": "Japan 2025" },
+        "sampleParams": { "action": "create", "title": "Summer in Kyoto", "recipient": "Mom", "theme": "Japan 2025", "printer": "saal_digital", "dueDate": "2026-06-15", "occasion": "Mom's birthday" },
         "sampleData": {
           "tool": "enso_album_designer_setup_project",
           "action": "create",
@@ -54,12 +74,16 @@
             "title": "Summer in Kyoto",
             "recipient": "Mom",
             "theme": "Japan 2025",
+            "status": "planning",
+            "dueDate": "2026-06-15",
+            "occasion": "Mom's birthday",
+            "totalCandidates": 2400,
             "format": {
-              "printer": "Printique",
-              "size": "10×10 inches",
+              "printer": "Saal Digital",
+              "size": "28×28 cm",
               "binding": "Lay-flat hardcover",
-              "finish": "Lustre",
-              "paper": "200+ gsm premium",
+              "line": "Professional Line",
+              "paper": "Fine Art print",
               "colorProfile": "sRGB"
             },
             "targetSpreads": 35,
@@ -73,8 +97,57 @@
         "isPrimary": true
       },
       {
+        "suffix": "dashboard",
+        "description": "View the project dashboard — see all active photo book projects at a glance with status, photo counts, deadlines, and cost estimates. Use when the user says: 'show my projects', 'album dashboard', 'project overview', 'what photo books am I working on'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filter": {
+              "type": "string",
+              "description": "Filter by status: all, active, done (default: all)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_album_designer_dashboard",
+          "projects": [
+            {
+              "id": "proj_1744675200",
+              "title": "Summer in Kyoto",
+              "recipient": "Mom",
+              "theme": "Japan 2025",
+              "status": "culling",
+              "dueDate": "2026-06-15",
+              "occasion": "Mom's birthday",
+              "daysRemaining": 62,
+              "totalCandidates": 2400,
+              "currentCount": 600,
+              "finalCount": 0,
+              "targetImages": 60,
+              "curationProgress": 40,
+              "spreadCount": 5,
+              "targetSpreads": 35,
+              "estimatedCost": 89.95,
+              "currency": "EUR",
+              "printer": "Saal Digital"
+            }
+          ],
+          "summary": {
+            "totalProjects": 1,
+            "activeProjects": 1,
+            "completedProjects": 0,
+            "totalEstimatedCost": 89.95
+          }
+        },
+        "requiredDataKeys": ["tool", "projects"],
+        "isPrimary": false
+      },
+      {
         "suffix": "update_curation",
-        "description": "Track the 5-pass curation journey: update progress for each pass (Technical Kill, Print Test, Thematic Grouping, Narrative Arc, Album Cut) with remaining counts and completion status.",
+        "description": "Track the 5-pass curation journey: update progress for each pass (Technical Kill, Print Test, Thematic Grouping, Narrative Arc, Album Cut) with remaining counts, daily goals, and completion status.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -107,19 +180,90 @@
           "tool": "enso_album_designer_update_curation",
           "projectId": "proj_1744675200",
           "curation": {
-            "startCount": 124000,
+            "startCount": 2400,
             "passes": [
-              { "pass": 1, "name": "Technical Kill", "targetRange": "~25,000", "startCount": 124000, "remainingCount": 25000, "culledPercent": 79.8, "completed": true, "notes": "", "starRating": 1 },
-              { "pass": 2, "name": "Print Test", "targetRange": "~5,000", "startCount": 25000, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 2 },
-              { "pass": 3, "name": "Thematic Grouping", "targetRange": "~500", "startCount": 5000, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 3 },
-              { "pass": 4, "name": "Narrative Arc", "targetRange": "~120", "startCount": 500, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 4 },
-              { "pass": 5, "name": "Album Cut", "targetRange": "50–70", "startCount": 120, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 5 }
+              { "pass": 1, "name": "Technical Kill", "targetRange": "~600", "startCount": 2400, "remainingCount": 600, "culledPercent": 75.0, "completed": true, "notes": "", "starRating": 1 },
+              { "pass": 2, "name": "Print Test", "targetRange": "~150", "startCount": 600, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 2 },
+              { "pass": 3, "name": "Thematic Grouping", "targetRange": "~80", "startCount": 150, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 3 },
+              { "pass": 4, "name": "Narrative Arc", "targetRange": "~60", "startCount": 80, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 4 },
+              { "pass": 5, "name": "Album Cut", "targetRange": "40–60", "startCount": 60, "remainingCount": null, "culledPercent": null, "completed": false, "notes": "", "starRating": 5 }
             ],
             "overallProgress": 20,
-            "currentPass": 2
+            "currentPass": 2,
+            "dailyGoal": { "photosPerDay": 15, "daysRemaining": 62, "photosRemaining": 600, "passName": "Print Test" }
           }
         },
         "requiredDataKeys": ["tool", "projectId", "curation"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "sequence_builder",
+        "description": "Plan the album's narrative flow at chapter level — add, edit, remove, or reorder chapters/sections with spread counts, pacing notes, and variety reminders. Use when the user says: 'plan album chapters', 'sequence my album', 'plan the narrative', 'organize album sections'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "description": "Project ID"
+            },
+            "action": {
+              "type": "string",
+              "description": "Action: add, update, remove, reorder, list"
+            },
+            "chapterIndex": {
+              "type": "number",
+              "description": "Chapter index (0-based) for update/remove"
+            },
+            "name": {
+              "type": "string",
+              "description": "Chapter name (e.g. 'Arrival', 'The Old City')"
+            },
+            "spreadCount": {
+              "type": "number",
+              "description": "Number of spreads allocated to this chapter"
+            },
+            "pacingNotes": {
+              "type": "string",
+              "description": "Pacing notes (e.g. 'mix wide + detail, slow pace')"
+            },
+            "varietyTags": {
+              "type": "string",
+              "description": "Comma-separated variety tags: wide, detail, portrait, food, street, aerial"
+            },
+            "moveFrom": {
+              "type": "number",
+              "description": "Source index for reorder"
+            },
+            "moveTo": {
+              "type": "number",
+              "description": "Destination index for reorder"
+            }
+          },
+          "required": ["projectId", "action"]
+        },
+        "sampleParams": { "projectId": "proj_1744675200", "action": "add", "name": "Arrival", "spreadCount": 4, "pacingNotes": "Gentle introduction, wide establishing shots", "varietyTags": "wide, street" },
+        "sampleData": {
+          "tool": "enso_album_designer_sequence_builder",
+          "projectId": "proj_1744675200",
+          "action": "add",
+          "chapters": [
+            { "index": 0, "name": "Arrival", "spreadCount": 4, "pacingNotes": "Gentle introduction, wide establishing shots", "varietyTags": ["wide", "street"] }
+          ],
+          "totalChapters": 1,
+          "totalAllocatedSpreads": 4,
+          "targetSpreads": 35,
+          "printSpec": {
+            "pageCount": 70,
+            "printer": "Saal Digital",
+            "line": "Professional Line",
+            "paper": "Fine Art print",
+            "binding": "Lay-flat hardcover",
+            "estimatedCost": 89.95,
+            "currency": "EUR"
+          }
+        },
+        "requiredDataKeys": ["tool", "projectId", "action", "chapters"],
         "isPrimary": false
       },
       {
@@ -224,7 +368,7 @@
       },
       {
         "suffix": "print_checklist",
-        "description": "View and update the print-ready checklist — export settings, color profile, proof copy, spine text, cover image, budget estimate, and Printique order specs.",
+        "description": "View and update the print-ready checklist — export settings, color calibration, bleed areas, proof copy, cover image, budget estimate, and order links for Saal Digital, Printique, or WhiteWall.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -235,7 +379,7 @@
             },
             "toggleItem": {
               "type": "string",
-              "description": "Checklist item key to toggle: dpi_300, srgb_profile, proof_ordered, spine_text, cover_selected, images_exported, final_review"
+              "description": "Checklist item key to toggle: dpi_300, srgb_profile, jpeg_quality, proof_ordered, spine_text, cover_selected, images_exported, final_review, color_calibrated, bleed_checked"
             },
             "spineText": {
               "type": "string",
@@ -257,35 +401,39 @@
           "tool": "enso_album_designer_print_checklist",
           "projectId": "proj_1744675200",
           "title": "Summer in Kyoto",
+          "printer": "saal_digital",
           "checklist": [
             { "key": "dpi_300", "label": "All images exported at 300 DPI", "checked": true, "category": "Export" },
             { "key": "srgb_profile", "label": "Color profile set to sRGB", "checked": false, "category": "Export" },
+            { "key": "jpeg_quality", "label": "JPEG quality 95%+ or TIFF", "checked": false, "category": "Export" },
             { "key": "images_exported", "label": "Final images exported to print folder", "checked": false, "category": "Export" },
+            { "key": "color_calibrated", "label": "Monitor color calibration verified", "checked": false, "category": "Quality" },
+            { "key": "bleed_checked", "label": "Bleed areas accounted for (3mm)", "checked": false, "category": "Quality" },
             { "key": "proof_ordered", "label": "Proof copy ordered", "checked": false, "category": "Review" },
             { "key": "final_review", "label": "Final spread-by-spread review complete", "checked": false, "category": "Review" },
             { "key": "spine_text", "label": "Spine text decided", "checked": false, "category": "Design" },
             { "key": "cover_selected", "label": "Cover image selected", "checked": false, "category": "Design" }
           ],
           "completedCount": 1,
-          "totalCount": 7,
+          "totalCount": 10,
           "spineText": "",
           "coverImageDesc": "",
           "specs": {
-            "printer": "Printique",
-            "size": "10×10 inches",
+            "printer": "Saal Digital",
+            "line": "Professional Line",
+            "size": "28×28 cm",
             "binding": "Lay-flat hardcover",
-            "finish": "Lustre",
-            "paper": "200+ gsm premium",
+            "paper": "Fine Art print",
             "colorProfile": "sRGB",
-            "orderUrl": "https://www.printique.com/photo-books"
+            "orderUrl": "https://www.saal-digital.com/photo-book/professional-line/"
           },
           "budget": {
-            "basePrice": 89.99,
-            "perExtraSpread": 1.99,
-            "estimatedSpreads": 35,
-            "estimatedTotal": 139.64,
-            "currency": "USD",
-            "note": "Estimate based on 10×10 lay-flat hardcover with lustre finish"
+            "basePrice": 59.95,
+            "perPage": 1.25,
+            "estimatedPages": 70,
+            "estimatedTotal": 89.95,
+            "currency": "EUR",
+            "note": "Saal Digital Professional Line 28×28cm, lay-flat, fine art paper"
           }
         },
         "requiredDataKeys": ["tool", "projectId", "checklist"],

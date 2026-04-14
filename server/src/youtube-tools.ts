@@ -6,6 +6,9 @@
  */
 
 import { google } from "googleapis";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { EnsoAgentTool } from "./local-types.js";
 import { getAuthenticatedClient, isAuthorized } from "./youtube-auth.js";
 import { logAction, logError } from "./action-log.js";
@@ -95,6 +98,8 @@ function formatVideo(item: any, stats?: { viewCount?: string; likeCount?: string
 
 // ── Feed Cache ──
 
+const FEED_DISK_CACHE_PATH = join(homedir(), ".enso", "data", "user-context", "cache", "youtube-feed-cache.json");
+
 interface FeedCacheEntry {
   data: VideoInfo[];
   ts: number;
@@ -108,13 +113,32 @@ function getCachedFeed(key: string): VideoInfo[] | null {
   return null;
 }
 
+function getDiskFeed(): VideoInfo[] | null {
+  try {
+    if (!existsSync(FEED_DISK_CACHE_PATH)) return null;
+    const raw = JSON.parse(readFileSync(FEED_DISK_CACHE_PATH, "utf-8"));
+    return Array.isArray(raw.videos) && raw.videos.length > 0 ? raw.videos : null;
+  } catch {
+    return null;
+  }
+}
+
 function getStaleFeed(key: string): VideoInfo[] | null {
+  // Try in-memory first, then fall back to disk cache
   const entry = feedCache.get(key);
-  return entry ? entry.data : null;
+  if (entry) return entry.data;
+  return getDiskFeed();
 }
 
 function setCachedFeed(key: string, data: VideoInfo[]): void {
   feedCache.set(key, { data, ts: Date.now() });
+  // Persist to disk for cross-restart resilience
+  if (data.length > 0) {
+    try {
+      mkdirSync(join(homedir(), ".enso", "data", "user-context", "cache"), { recursive: true });
+      writeFileSync(FEED_DISK_CACHE_PATH, JSON.stringify({ videos: data, savedAt: new Date().toISOString() }, null, 2));
+    } catch { /* non-fatal */ }
+  }
 }
 
 // ── Tool Implementations ──

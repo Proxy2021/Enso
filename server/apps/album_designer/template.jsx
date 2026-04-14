@@ -20,15 +20,31 @@ export default function GeneratedUI({ data, onAction }) {
   };
 
   var LAYOUT_ICONS = {
-    full_bleed: "[ ████████ ]",
-    two_side_by_side: "[ ████ ████ ]",
-    large_small: "[ ██████ ██ ]",
-    three_grid: "[ ██ ██ ██ ]",
+    full_bleed: "[ \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 ]",
+    two_side_by_side: "[ \u2588\u2588\u2588\u2588 \u2588\u2588\u2588\u2588 ]",
+    large_small: "[ \u2588\u2588\u2588\u2588\u2588\u2588 \u2588\u2588 ]",
+    three_grid: "[ \u2588\u2588 \u2588\u2588 \u2588\u2588 ]",
     text_page: "[ Aa  Text ]"
   };
 
   var ARC_LABELS = { opening: "Opening", rising: "Rising", climax: "Climax", resolution: "Resolution" };
   var ARC_ACCENTS = { opening: "cyan", rising: "amber", climax: "rose", resolution: "emerald" };
+
+  var STATUS_CONFIG = {
+    planning: { label: "Planning", color: "info", icon: "Lightbulb" },
+    culling: { label: "Culling", color: "warning", icon: "Scissors" },
+    selecting: { label: "Selecting", color: "warning", icon: "Star" },
+    sequencing: { label: "Sequencing", color: "info", icon: "List" },
+    layout: { label: "Layout", color: "info", icon: "LayoutGrid" },
+    printing: { label: "Printing", color: "warning", icon: "Printer" },
+    done: { label: "Done", color: "success", icon: "CheckCircle" }
+  };
+
+  var PRINTER_LABELS = {
+    saal_digital: "Saal Digital",
+    printique: "Printique",
+    whitewall: "WhiteWall"
+  };
 
   var getTheme = function(tag) { return THEME_COLORS[tag] || THEME_COLORS.nature; };
 
@@ -85,6 +101,42 @@ export default function GeneratedUI({ data, onAction }) {
   var createTheme = createThemeState[0];
   var setCreateTheme = createThemeState[1];
 
+  var createPrinterState = useState("saal_digital");
+  var createPrinter = createPrinterState[0];
+  var setCreatePrinter = createPrinterState[1];
+
+  var createDueDateState = useState("");
+  var createDueDate = createDueDateState[0];
+  var setCreateDueDate = createDueDateState[1];
+
+  var createOccasionState = useState("");
+  var createOccasion = createOccasionState[0];
+  var setCreateOccasion = createOccasionState[1];
+
+  var createCandidatesState = useState("");
+  var createCandidates = createCandidatesState[0];
+  var setCreateCandidates = createCandidatesState[1];
+
+  var addChapterState = useState(false);
+  var showAddChapter = addChapterState[0];
+  var setShowAddChapter = addChapterState[1];
+
+  var chapterNameState = useState("");
+  var chapterName = chapterNameState[0];
+  var setChapterName = chapterNameState[1];
+
+  var chapterSpreadsState = useState("4");
+  var chapterSpreads = chapterSpreadsState[0];
+  var setChapterSpreads = chapterSpreadsState[1];
+
+  var chapterNotesState = useState("");
+  var chapterNotes = chapterNotesState[0];
+  var setChapterNotes = chapterNotesState[1];
+
+  var chapterTagsState = useState("");
+  var chapterTags = chapterTagsState[0];
+  var setChapterTags = chapterTagsState[1];
+
   // ── Error view ──
   if (data && data.error) {
     return (
@@ -97,6 +149,151 @@ export default function GeneratedUI({ data, onAction }) {
 
   // ── Route by tool ──
   var tool = (data && data.tool) || "";
+
+  // ═══════════════════════════════════════════════════════════════
+  // DASHBOARD VIEW
+  // ═══════════════════════════════════════════════════════════════
+  if (tool === "enso_album_designer_dashboard") {
+    var dashProjects = data.projects || [];
+    var summary = data.summary || {};
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-lg font-semibold text-white">Project Dashboard</div>
+            <div className="text-xs text-zinc-500">{summary.totalProjects || 0} projects ({summary.activeProjects || 0} active)</div>
+          </div>
+          <Button variant="primary" icon={LucideReact.Plus} onClick={function() { setShowCreate(true); }}>New Project</Button>
+        </div>
+
+        {/* Summary stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <Stat label="Active" value={summary.activeProjects || 0} accent="amber" />
+          <Stat label="Completed" value={summary.completedProjects || 0} accent="emerald" />
+          <Stat label="Est. Total Cost" value={(summary.totalEstimatedCost || 0).toFixed(0)} accent="blue" />
+        </div>
+
+        {/* Create form dialog */}
+        <Dialog open={showCreate} onClose={function() { setShowCreate(false); }} title="New Photo Book Project" footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={function() { setShowCreate(false); }}>Cancel</Button>
+            <Button variant="primary" onClick={function() {
+              onAction("setup_project", {
+                action: "create",
+                title: createTitle,
+                recipient: createRecipient,
+                theme: createTheme,
+                printer: createPrinter,
+                dueDate: createDueDate,
+                occasion: createOccasion,
+                totalCandidates: parseInt(createCandidates) || 2400
+              });
+              setShowCreate(false);
+              setCreateTitle(""); setCreateRecipient(""); setCreateTheme("");
+              setCreatePrinter("saal_digital"); setCreateDueDate(""); setCreateOccasion(""); setCreateCandidates("");
+            }}>Create</Button>
+          </div>
+        }>
+          <div className="space-y-3">
+            <Input placeholder="Album title (e.g. Summer in Kyoto)" value={createTitle} onChange={function(e) { setCreateTitle(e.target.value); }} icon={LucideReact.BookOpen} />
+            <Input placeholder="Gift recipient (e.g. Mom)" value={createRecipient} onChange={function(e) { setCreateRecipient(e.target.value); }} icon={LucideReact.Heart} />
+            <Input placeholder="Trip / theme (e.g. Japan 2025)" value={createTheme} onChange={function(e) { setCreateTheme(e.target.value); }} icon={LucideReact.MapPin} />
+            <div>
+              <div className="text-xs text-zinc-400 mb-1">Print Service</div>
+              <Select options={[
+                { value: "saal_digital", label: "Saal Digital (Professional Line)" },
+                { value: "printique", label: "Printique (10\u00d710 Lay-flat)" },
+                { value: "whitewall", label: "WhiteWall (Coffee Table Book)" }
+              ]} value={createPrinter} onChange={function(v) { setCreatePrinter(v); }} />
+            </div>
+            <Input placeholder="Total candidate photos (e.g. 2400)" value={createCandidates} onChange={function(e) { setCreateCandidates(e.target.value); }} type="number" icon={LucideReact.Camera} />
+            <Input placeholder="Due date (e.g. 2026-06-15)" value={createDueDate} onChange={function(e) { setCreateDueDate(e.target.value); }} icon={LucideReact.Calendar} />
+            <Input placeholder="Occasion (e.g. Mom's birthday)" value={createOccasion} onChange={function(e) { setCreateOccasion(e.target.value); }} icon={LucideReact.Gift} />
+          </div>
+        </Dialog>
+
+        {/* Project cards */}
+        {dashProjects.length === 0 ? (
+          <EmptyState icon={LucideReact.BookOpen} title="No Photo Book Projects" description="Create your first photo book project to start planning." action={<Button variant="primary" onClick={function() { setShowCreate(true); }}>Create Project</Button>} />
+        ) : (
+          <div className="space-y-3">
+            {dashProjects.map(function(p, i) {
+              var sc = STATUS_CONFIG[p.status] || STATUS_CONFIG.planning;
+              var isUrgent = p.daysRemaining >= 0 && p.daysRemaining <= 14;
+              var isOverdue = p.daysRemaining < 0 && p.dueDate;
+
+              return (
+                <div key={p.id || i} className={"rounded-lg border p-4 space-y-3 bg-zinc-900/50 " + (isOverdue ? "border-red-500/40" : isUrgent ? "border-amber-500/40" : "border-zinc-700/50") + " hover:border-zinc-600/60 transition-colors"}>
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-zinc-100 truncate">{p.title}</div>
+                      <div className="text-xs text-zinc-500 mt-0.5">
+                        {p.recipient ? "For " + p.recipient : ""}{p.recipient && p.theme ? " \u00b7 " : ""}{p.theme || ""}
+                      </div>
+                    </div>
+                    <Badge variant={sc.color}>{sc.label}</Badge>
+                  </div>
+
+                  {/* Photo funnel */}
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-zinc-500">{(p.totalCandidates || 0).toLocaleString()}</span>
+                    <LucideReact.ChevronRight className="w-3 h-3 text-zinc-600" />
+                    <span className="text-amber-400 font-medium">{(p.currentCount || 0).toLocaleString()}</span>
+                    <LucideReact.ChevronRight className="w-3 h-3 text-zinc-600" />
+                    <span className="text-emerald-400 font-medium">{p.finalCount || "?"}</span>
+                    <span className="text-zinc-600 ml-1">/ {p.targetImages} target</span>
+                  </div>
+
+                  {/* Progress + info row */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Curation</span>
+                      <span className="text-zinc-300">{p.curationProgress}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Spreads</span>
+                      <span className="text-zinc-300">{p.spreadCount} / {p.targetSpreads}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Est. Cost</span>
+                      <span className="text-zinc-300">{p.currency === "EUR" ? "\u20ac" : "$"}{p.estimatedCost}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Printer</span>
+                      <span className="text-zinc-300">{p.printer}</span>
+                    </div>
+                  </div>
+
+                  {/* Due date */}
+                  {p.dueDate && (
+                    <div className={"flex items-center gap-1.5 text-xs " + (isOverdue ? "text-red-400" : isUrgent ? "text-amber-400" : "text-zinc-500")}>
+                      <LucideReact.Calendar className="w-3 h-3" />
+                      <span>{p.occasion ? p.occasion + " \u2014 " : ""}{p.dueDate}</span>
+                      {p.daysRemaining >= 0 && <span className="font-medium">({p.daysRemaining}d left)</span>}
+                      {isOverdue && <span className="font-medium">(overdue)</span>}
+                    </div>
+                  )}
+
+                  {/* Curation progress bar */}
+                  <Progress value={p.curationProgress} max={100} variant={p.curationProgress === 100 ? "emerald" : "amber"} />
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="primary" size="sm" onClick={function() { onAction("setup_project", { action: "load", projectId: p.id }); }}>Open</Button>
+                    <Button variant="outline" size="sm" icon={LucideReact.Filter} onClick={function() { onAction("update_curation", { projectId: p.id }); }}>Cull</Button>
+                    <Button variant="outline" size="sm" icon={LucideReact.List} onClick={function() { onAction("sequence_builder", { projectId: p.id, action: "list" }); }}>Chapters</Button>
+                    <Button variant="outline" size="sm" icon={LucideReact.CheckSquare} onClick={function() { onAction("print_checklist", { projectId: p.id }); }}>Print</Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // SETUP PROJECT VIEW
@@ -112,19 +309,32 @@ export default function GeneratedUI({ data, onAction }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold text-white">Album Designer</div>
-            <div className="text-xs text-zinc-500">Printique 10×10 Lay-Flat Hardcover</div>
+            <div className="text-xs text-zinc-500">Photo Book Project Planner</div>
           </div>
-          <Button variant="primary" icon={LucideReact.Plus} onClick={function() { setShowCreate(true); }}>New Album</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" icon={LucideReact.LayoutDashboard} onClick={function() { onAction("dashboard", {}); }}>Dashboard</Button>
+            <Button variant="primary" icon={LucideReact.Plus} onClick={function() { setShowCreate(true); }}>New Album</Button>
+          </div>
         </div>
 
         {/* Create form dialog */}
-        <Dialog open={showCreate} onClose={function() { setShowCreate(false); }} title="New Album Project" footer={
+        <Dialog open={showCreate} onClose={function() { setShowCreate(false); }} title="New Photo Book Project" footer={
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={function() { setShowCreate(false); }}>Cancel</Button>
             <Button variant="primary" onClick={function() {
-              onAction("setup_project", { action: "create", title: createTitle, recipient: createRecipient, theme: createTheme });
+              onAction("setup_project", {
+                action: "create",
+                title: createTitle,
+                recipient: createRecipient,
+                theme: createTheme,
+                printer: createPrinter,
+                dueDate: createDueDate,
+                occasion: createOccasion,
+                totalCandidates: parseInt(createCandidates) || 2400
+              });
               setShowCreate(false);
               setCreateTitle(""); setCreateRecipient(""); setCreateTheme("");
+              setCreatePrinter("saal_digital"); setCreateDueDate(""); setCreateOccasion(""); setCreateCandidates("");
             }}>Create</Button>
           </div>
         }>
@@ -132,11 +342,17 @@ export default function GeneratedUI({ data, onAction }) {
             <Input placeholder="Album title (e.g. Summer in Kyoto)" value={createTitle} onChange={function(e) { setCreateTitle(e.target.value); }} icon={LucideReact.BookOpen} />
             <Input placeholder="Gift recipient (e.g. Mom)" value={createRecipient} onChange={function(e) { setCreateRecipient(e.target.value); }} icon={LucideReact.Heart} />
             <Input placeholder="Trip / theme (e.g. Japan 2025)" value={createTheme} onChange={function(e) { setCreateTheme(e.target.value); }} icon={LucideReact.MapPin} />
-            <div className="bg-zinc-800/50 rounded-lg p-3 text-xs text-zinc-400 space-y-1">
-              <div className="font-medium text-zinc-300">Pre-configured Format</div>
-              <div>Printique 10×10" lay-flat hardcover, lustre finish, 200+ gsm</div>
-              <div>Target: 50–70 images across 30–40 spreads</div>
+            <div>
+              <div className="text-xs text-zinc-400 mb-1">Print Service</div>
+              <Select options={[
+                { value: "saal_digital", label: "Saal Digital (Professional Line)" },
+                { value: "printique", label: "Printique (10\u00d710 Lay-flat)" },
+                { value: "whitewall", label: "WhiteWall (Coffee Table Book)" }
+              ]} value={createPrinter} onChange={function(v) { setCreatePrinter(v); }} />
             </div>
+            <Input placeholder="Total candidate photos (e.g. 2400)" value={createCandidates} onChange={function(e) { setCreateCandidates(e.target.value); }} type="number" icon={LucideReact.Camera} />
+            <Input placeholder="Due date (e.g. 2026-06-15)" value={createDueDate} onChange={function(e) { setCreateDueDate(e.target.value); }} icon={LucideReact.Calendar} />
+            <Input placeholder="Occasion (e.g. Mom's birthday)" value={createOccasion} onChange={function(e) { setCreateOccasion(e.target.value); }} icon={LucideReact.Gift} />
           </div>
         </Dialog>
 
@@ -148,30 +364,45 @@ export default function GeneratedUI({ data, onAction }) {
                 <LucideReact.BookOpen className="w-4 h-4 text-amber-400" />
                 <span>{project.title}</span>
               </div>
-              <Badge variant="info">{action === "create" ? "Just Created" : "Active"}</Badge>
+              <Badge variant={(STATUS_CONFIG[project.status] || STATUS_CONFIG.planning).color}>
+                {(STATUS_CONFIG[project.status] || STATUS_CONFIG.planning).label}
+              </Badge>
             </div>
           }>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-zinc-500">Recipient</div>
-                <div className="text-sm text-zinc-200">{project.recipient || "—"}</div>
+                <div className="text-sm text-zinc-200">{project.recipient || "\u2014"}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-zinc-500">Theme</div>
-                <div className="text-sm text-zinc-200">{project.theme || "—"}</div>
+                <div className="text-sm text-zinc-200">{project.theme || "\u2014"}</div>
               </div>
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Format</div>
-                <div className="text-sm text-zinc-200">{project.format ? project.format.size + " " + project.format.binding : "10×10 Lay-flat"}</div>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Printer</div>
+                <div className="text-sm text-zinc-200">{project.format ? project.format.printer : PRINTER_LABELS[project.printer] || "Saal Digital"}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-zinc-500">Target</div>
                 <div className="text-sm text-zinc-200">{project.targetImages || 60} images / {project.targetSpreads || 35} spreads</div>
               </div>
+              {project.dueDate && (
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-500">Due Date</div>
+                  <div className="text-sm text-zinc-200">{project.occasion ? project.occasion + " \u2014 " : ""}{project.dueDate}</div>
+                </div>
+              )}
+              {project.totalCandidates && (
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-500">Candidates</div>
+                  <div className="text-sm text-zinc-200">{project.totalCandidates.toLocaleString()} photos</div>
+                </div>
+              )}
             </div>
             <Separator />
             <div className="flex gap-2 flex-wrap">
               <Button variant="primary" icon={LucideReact.Filter} onClick={function() { onAction("update_curation", { projectId: project.id }); }}>Curation Tracker</Button>
+              <Button variant="outline" icon={LucideReact.List} onClick={function() { onAction("sequence_builder", { projectId: project.id, action: "list" }); }}>Chapters</Button>
               <Button variant="outline" icon={LucideReact.LayoutGrid} onClick={function() { onAction("manage_spreads", { projectId: project.id, action: "list" }); }}>Spread Planner</Button>
               <Button variant="outline" icon={LucideReact.TrendingUp} onClick={function() { onAction("view_narrative", { projectId: project.id }); }}>Narrative Arc</Button>
               <Button variant="outline" icon={LucideReact.CheckSquare} onClick={function() { onAction("print_checklist", { projectId: project.id }); }}>Print Checklist</Button>
@@ -184,14 +415,15 @@ export default function GeneratedUI({ data, onAction }) {
           <div className="space-y-2">
             <div className="text-xs font-medium text-zinc-400 uppercase tracking-wider">All Projects</div>
             {projects.map(function(p, i) {
+              var psc = STATUS_CONFIG[p.status] || STATUS_CONFIG.planning;
               return (
                 <div key={p.id || i} className="flex items-center justify-between bg-zinc-800/40 rounded-lg px-3 py-2 border border-zinc-700/50 hover:border-amber-500/30 transition-colors cursor-pointer" onClick={function() { onAction("setup_project", { action: "load", projectId: p.id }); }}>
                   <div>
                     <div className="text-sm text-zinc-200 font-medium">{p.title}</div>
-                    <div className="text-xs text-zinc-500">{p.recipient ? "For " + p.recipient + " · " : ""}{p.theme || "No theme"}</div>
+                    <div className="text-xs text-zinc-500">{p.recipient ? "For " + p.recipient + " \u00b7 " : ""}{p.theme || "No theme"}</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="text-[10px] text-zinc-600">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : ""}</div>
+                    <Badge variant={psc.color}>{psc.label}</Badge>
                     <LucideReact.ChevronRight className="w-4 h-4 text-zinc-600" />
                   </div>
                 </div>
@@ -217,12 +449,13 @@ export default function GeneratedUI({ data, onAction }) {
     var overall = curation.overallProgress || 0;
     var currentPass = curation.currentPass || 1;
     var pid = data.projectId;
+    var dailyGoal = curation.dailyGoal || null;
 
     var PASS_DESCRIPTIONS = [
-      "Mechanical rejection: out-of-focus, motion blur, blown highlights, duplicates. 2–3 sec/image.",
-      "Would you pay $20 to print this at 16×20? Trust your gut. 3–5 sec/image.",
-      "Group by theme, keep only the top 10% of each group. 5–8 sec/image.",
-      "Sequence for emotional storytelling — opening, build, climax, resolve. 10–15 sec/image.",
+      "Mechanical rejection: out-of-focus, motion blur, blown highlights, duplicates. 2\u20133 sec/image.",
+      "Would you pay $20 to print this at 16\u00d720? Trust your gut. 3\u20135 sec/image.",
+      "Group by theme, keep only the top 10% of each group. 5\u20138 sec/image.",
+      "Sequence for emotional storytelling \u2014 opening, build, climax, resolve. 10\u201315 sec/image.",
       "Final cut for the album. Every image must earn its spread. 30+ sec/image."
     ];
 
@@ -245,9 +478,27 @@ export default function GeneratedUI({ data, onAction }) {
           <Progress value={overall} max={100} variant="amber" showLabel />
           <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
             <LucideReact.Camera className="w-3 h-3" />
-            <span>{curation.startCount ? curation.startCount.toLocaleString() : "124,000"} photos → 50–70 heroes</span>
+            <span>{curation.startCount ? curation.startCount.toLocaleString() : "?"} photos \u2192 50\u201370 heroes</span>
           </div>
         </UICard>
+
+        {/* Daily goal card */}
+        {dailyGoal && (
+          <UICard accent="blue">
+            <div className="flex items-center gap-2 mb-2">
+              <LucideReact.Target className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-medium text-zinc-300">Daily Culling Goal</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Stat label="Per Day" value={dailyGoal.photosPerDay} accent="blue" />
+              <Stat label="Remaining" value={dailyGoal.photosRemaining.toLocaleString()} accent="amber" />
+              <Stat label="Days Left" value={dailyGoal.daysRemaining} accent={dailyGoal.daysRemaining <= 14 ? "rose" : "emerald"} />
+            </div>
+            <div className="mt-2 text-xs text-zinc-500">
+              Review <span className="text-blue-400 font-medium">{dailyGoal.photosPerDay}</span> photos/day to finish <span className="text-zinc-300">{dailyGoal.passName}</span> on time
+            </div>
+          </UICard>
+        )}
 
         {/* Individual passes */}
         <div className="space-y-3">
@@ -279,7 +530,7 @@ export default function GeneratedUI({ data, onAction }) {
 
                 {/* Stats row */}
                 <div className="flex items-center gap-4 text-xs">
-                  <span className="text-zinc-400">In: <span className="text-zinc-200">{p.startCount ? p.startCount.toLocaleString() : "—"}</span></span>
+                  <span className="text-zinc-400">In: <span className="text-zinc-200">{p.startCount ? p.startCount.toLocaleString() : "\u2014"}</span></span>
                   {p.remainingCount !== null && (
                     <span className="text-zinc-400">Out: <span className="text-zinc-200">{p.remainingCount.toLocaleString()}</span></span>
                   )}
@@ -323,6 +574,158 @@ export default function GeneratedUI({ data, onAction }) {
             );
           })}
         </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SEQUENCE BUILDER VIEW
+  // ═══════════════════════════════════════════════════════════════
+  if (tool === "enso_album_designer_sequence_builder") {
+    var chapters = data.chapters || [];
+    var totalChapters = data.totalChapters || 0;
+    var allocatedSpreads = data.totalAllocatedSpreads || 0;
+    var targetSpreadsSeq = data.targetSpreads || 35;
+    var printSpec = data.printSpec || {};
+    var pidSeq = data.projectId;
+
+    var VARIETY_COLORS = {
+      wide: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      detail: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+      portrait: "bg-red-500/20 text-red-400 border-red-500/30",
+      food: "bg-pink-500/20 text-pink-400 border-pink-500/30",
+      street: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+      aerial: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-lg font-semibold text-white">Sequence Builder</div>
+            <div className="text-xs text-zinc-500">{totalChapters} chapters \u00b7 {allocatedSpreads} / {targetSpreadsSeq} spreads allocated</div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" icon={LucideReact.ArrowLeft} onClick={function() { onAction("setup_project", { action: "load", projectId: pidSeq }); }}>Back</Button>
+            <Button variant="primary" icon={LucideReact.Plus} onClick={function() { setShowAddChapter(true); }}>Add Chapter</Button>
+          </div>
+        </div>
+
+        {/* Allocation progress */}
+        <div className="grid grid-cols-3 gap-2">
+          <Stat label="Chapters" value={totalChapters} accent="amber" />
+          <Stat label="Spreads" value={allocatedSpreads + " / " + targetSpreadsSeq} accent={allocatedSpreads > targetSpreadsSeq ? "rose" : "blue"} />
+          <Stat label="Pages" value={printSpec.pageCount || 0} accent="purple" />
+        </div>
+        <Progress value={allocatedSpreads} max={targetSpreadsSeq} variant={allocatedSpreads > targetSpreadsSeq ? "rose" : "amber"} showLabel />
+
+        {/* Add chapter dialog */}
+        <Dialog open={showAddChapter} onClose={function() { setShowAddChapter(false); }} title="Add Chapter" footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={function() { setShowAddChapter(false); }}>Cancel</Button>
+            <Button variant="primary" onClick={function() {
+              onAction("sequence_builder", {
+                projectId: pidSeq,
+                action: "add",
+                name: chapterName,
+                spreadCount: parseInt(chapterSpreads) || 4,
+                pacingNotes: chapterNotes,
+                varietyTags: chapterTags
+              });
+              setShowAddChapter(false);
+              setChapterName(""); setChapterSpreads("4"); setChapterNotes(""); setChapterTags("");
+            }}>Add</Button>
+          </div>
+        }>
+          <div className="space-y-3">
+            <Input placeholder="Chapter name (e.g. Arrival, The Old City)" value={chapterName} onChange={function(e) { setChapterName(e.target.value); }} icon={LucideReact.BookOpen} />
+            <Input placeholder="Spreads for this chapter (e.g. 4)" value={chapterSpreads} onChange={function(e) { setChapterSpreads(e.target.value); }} type="number" icon={LucideReact.LayoutGrid} />
+            <Input placeholder="Pacing notes (e.g. slow intro, mix wide + detail)" value={chapterNotes} onChange={function(e) { setChapterNotes(e.target.value); }} icon={LucideReact.FileText} />
+            <Input placeholder="Variety: wide, detail, portrait, food, street, aerial" value={chapterTags} onChange={function(e) { setChapterTags(e.target.value); }} icon={LucideReact.Tag} />
+          </div>
+        </Dialog>
+
+        {/* Chapters list */}
+        {chapters.length === 0 ? (
+          <EmptyState icon={LucideReact.List} title="No Chapters Yet" description="Plan your album's narrative flow by adding chapters." action={<Button variant="primary" onClick={function() { setShowAddChapter(true); }}>Add First Chapter</Button>} />
+        ) : (
+          <div className="space-y-2">
+            {chapters.map(function(ch, idx) {
+              var tags = ch.varietyTags || [];
+              return (
+                <div key={idx} className="rounded-lg border border-zinc-700/50 p-3 space-y-2 bg-zinc-800/30">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="text-xs font-mono text-zinc-500 w-6 text-center flex-shrink-0">{idx + 1}</div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-zinc-200">{ch.name}</div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="info">{ch.spreadCount} spreads</Badge>
+                          {tags.map(function(tag, ti) {
+                            var vc = VARIETY_COLORS[tag] || "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
+                            return <span key={ti} className={"text-[10px] px-1.5 py-0.5 rounded border " + vc}>{tag}</span>;
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      {idx > 0 && (
+                        <button className="p-1 text-zinc-500 hover:text-zinc-300" onClick={function() { onAction("sequence_builder", { projectId: pidSeq, action: "reorder", moveFrom: idx, moveTo: idx - 1 }); }}>
+                          <LucideReact.ChevronUp className="w-3 h-3" />
+                        </button>
+                      )}
+                      {idx < chapters.length - 1 && (
+                        <button className="p-1 text-zinc-500 hover:text-zinc-300" onClick={function() { onAction("sequence_builder", { projectId: pidSeq, action: "reorder", moveFrom: idx, moveTo: idx + 1 }); }}>
+                          <LucideReact.ChevronDown className="w-3 h-3" />
+                        </button>
+                      )}
+                      <button className="p-1 text-zinc-500 hover:text-red-400" onClick={function() { onAction("sequence_builder", { projectId: pidSeq, action: "remove", chapterIndex: idx }); }}>
+                        <LucideReact.Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  {ch.pacingNotes && (
+                    <div className="text-xs text-zinc-500 italic pl-8">{ch.pacingNotes}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Print spec summary */}
+        {printSpec.printer && (
+          <UICard accent="blue" header={
+            <div className="flex items-center gap-2">
+              <LucideReact.Printer className="w-4 h-4 text-blue-400" />
+              <span>Print Specification</span>
+            </div>
+          }>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="space-y-1">
+                <div className="text-zinc-500">Printer</div>
+                <div className="text-zinc-200">{printSpec.printer}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-zinc-500">Pages</div>
+                <div className="text-zinc-200">{printSpec.pageCount}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-zinc-500">Binding</div>
+                <div className="text-zinc-200">{printSpec.binding}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-zinc-500">Paper</div>
+                <div className="text-zinc-200">{printSpec.paper}</div>
+              </div>
+            </div>
+            <Separator />
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-zinc-400">Estimated Cost</span>
+              <span className="text-lg font-bold text-amber-400">{printSpec.currency === "EUR" ? "\u20ac" : "$"}{printSpec.estimatedCost}</span>
+            </div>
+          </UICard>
+        )}
       </div>
     );
   }
@@ -420,7 +823,6 @@ export default function GeneratedUI({ data, onAction }) {
             {spreads.map(function(sp, idx) {
               var thm = getTheme(sp.themeTag);
               var arcAccent = ARC_ACCENTS[sp.narrativePos] || "blue";
-              var isEditing = editIdx === idx;
 
               return (
                 <div key={idx} className={"rounded-lg border p-3 " + thm.bg + " " + thm.border}>
@@ -488,7 +890,7 @@ export default function GeneratedUI({ data, onAction }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold text-white">Narrative Arc</div>
-            <div className="text-xs text-zinc-500">{albumTitle} — {data.totalSpreads || 0} spreads</div>
+            <div className="text-xs text-zinc-500">{albumTitle} \u2014 {data.totalSpreads || 0} spreads</div>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" icon={LucideReact.ArrowLeft} onClick={function() { onAction("setup_project", { action: "load", projectId: pid3 }); }}>Back</Button>
@@ -612,12 +1014,13 @@ export default function GeneratedUI({ data, onAction }) {
   if (tool === "enso_album_designer_print_checklist") {
     var checklist = data.checklist || [];
     var completed = data.completedCount || 0;
-    var total = data.totalCount || 7;
+    var total = data.totalCount || 10;
     var specs = data.specs || {};
     var budget = data.budget || {};
     var pid4 = data.projectId;
     var spText = data.spineText || "";
     var coverDesc = data.coverImageDesc || "";
+    var printerKey = data.printer || "saal_digital";
 
     // Group by category
     var categories = {};
@@ -627,12 +1030,15 @@ export default function GeneratedUI({ data, onAction }) {
       categories[cat].push(checklist[ci2]);
     }
 
+    var CAT_ICONS = { Export: "Upload", Quality: "Shield", Review: "Eye", Design: "Palette" };
+    var CAT_ACCENTS = { Export: "blue", Quality: "cyan", Review: "amber", Design: "purple" };
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold text-white">Print Checklist</div>
-            <div className="text-xs text-zinc-500">{data.title || "Album"} — {completed}/{total} complete</div>
+            <div className="text-xs text-zinc-500">{data.title || "Album"} \u2014 {completed}/{total} complete</div>
           </div>
           <Button variant="ghost" icon={LucideReact.ArrowLeft} onClick={function() { onAction("setup_project", { action: "load", projectId: pid4 }); }}>Back</Button>
         </div>
@@ -642,12 +1048,13 @@ export default function GeneratedUI({ data, onAction }) {
         {/* Checklist by category */}
         {Object.keys(categories).map(function(cat) {
           var items = categories[cat];
+          var accent = CAT_ACCENTS[cat] || "blue";
+          var iconName = CAT_ICONS[cat] || "CheckSquare";
+          var IconComp = LucideReact[iconName] || LucideReact.CheckSquare;
           return (
-            <UICard key={cat} accent={cat === "Export" ? "blue" : cat === "Review" ? "amber" : "purple"} header={
+            <UICard key={cat} accent={accent} header={
               <div className="flex items-center gap-2">
-                {cat === "Export" && <LucideReact.Upload className="w-4 h-4" />}
-                {cat === "Review" && <LucideReact.Eye className="w-4 h-4" />}
-                {cat === "Design" && <LucideReact.Palette className="w-4 h-4" />}
+                <IconComp className="w-4 h-4" />
                 <span>{cat}</span>
               </div>
             }>
@@ -677,7 +1084,7 @@ export default function GeneratedUI({ data, onAction }) {
           <div className="space-y-3">
             <div>
               <div className="text-xs text-zinc-400 mb-1">Spine Text</div>
-              <div className="text-sm text-zinc-200 bg-zinc-800/50 rounded px-3 py-2 font-medium">{spText || "Not set — tap to update"}</div>
+              <div className="text-sm text-zinc-200 bg-zinc-800/50 rounded px-3 py-2 font-medium">{spText || "Not set \u2014 tap to update"}</div>
             </div>
             <div>
               <div className="text-xs text-zinc-400 mb-1">Cover Image</div>
@@ -690,30 +1097,32 @@ export default function GeneratedUI({ data, onAction }) {
         <UICard accent="blue" header={
           <div className="flex items-center gap-2">
             <LucideReact.Printer className="w-4 h-4 text-blue-400" />
-            <span>Printique Specs & Budget</span>
+            <span>{specs.printer || "Printer"} Specs & Budget</span>
           </div>
         }>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="space-y-1">
               <div className="text-zinc-500">Printer</div>
-              <div className="text-zinc-200">{specs.printer || "Printique"}</div>
+              <div className="text-zinc-200">{specs.printer || "Saal Digital"}</div>
             </div>
             <div className="space-y-1">
               <div className="text-zinc-500">Size</div>
-              <div className="text-zinc-200">{specs.size || "10×10\""}</div>
+              <div className="text-zinc-200">{specs.size || "28\u00d728cm"}</div>
             </div>
             <div className="space-y-1">
               <div className="text-zinc-500">Binding</div>
               <div className="text-zinc-200">{specs.binding || "Lay-flat"}</div>
             </div>
             <div className="space-y-1">
-              <div className="text-zinc-500">Finish</div>
-              <div className="text-zinc-200">{specs.finish || "Lustre"}</div>
-            </div>
-            <div className="space-y-1">
               <div className="text-zinc-500">Paper</div>
-              <div className="text-zinc-200">{specs.paper || "200+ gsm"}</div>
+              <div className="text-zinc-200">{specs.paper || "Fine Art"}</div>
             </div>
+            {specs.line && (
+              <div className="space-y-1">
+                <div className="text-zinc-500">Line</div>
+                <div className="text-zinc-200">{specs.line}</div>
+              </div>
+            )}
             <div className="space-y-1">
               <div className="text-zinc-500">Color Profile</div>
               <div className="text-zinc-200">{specs.colorProfile || "sRGB"}</div>
@@ -724,29 +1133,43 @@ export default function GeneratedUI({ data, onAction }) {
 
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-400">Base price ({budget.includedSpreads || 20} spreads)</span>
-              <span className="text-zinc-200">${budget.basePrice || "89.99"}</span>
+              <span className="text-zinc-400">Base price</span>
+              <span className="text-zinc-200">{budget.currency === "EUR" ? "\u20ac" : "$"}{budget.basePrice || "59.95"}</span>
             </div>
-            {(budget.extraSpreads || 0) > 0 && (
+            {budget.perPage && (
               <div className="flex justify-between text-xs">
-                <span className="text-zinc-400">{budget.extraSpreads} extra spreads × ${budget.perExtraSpread || "1.99"}</span>
-                <span className="text-zinc-200">${((budget.extraSpreads || 0) * (budget.perExtraSpread || 1.99)).toFixed(2)}</span>
+                <span className="text-zinc-400">{budget.actualPages || 0} pages \u00d7 {budget.currency === "EUR" ? "\u20ac" : "$"}{budget.perPage}/page</span>
+                <span className="text-zinc-200">{budget.currency === "EUR" ? "\u20ac" : "$"}{((budget.actualPages || 0) * (budget.perPage || 0)).toFixed(2)}</span>
+              </div>
+            )}
+            {budget.extraSpreads > 0 && (
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-400">{budget.extraSpreads} extra spreads \u00d7 ${budget.perExtraSpread}</span>
+                <span className="text-zinc-200">${(budget.extraSpreads * budget.perExtraSpread).toFixed(2)}</span>
               </div>
             )}
             <Separator />
             <div className="flex justify-between">
               <span className="text-sm font-medium text-zinc-300">Estimated Total</span>
-              <span className="text-lg font-bold text-amber-400">${budget.estimatedTotal || "89.99"}</span>
+              <span className="text-lg font-bold text-amber-400">{budget.currency === "EUR" ? "\u20ac" : "$"}{budget.estimatedTotal || "0.00"}</span>
             </div>
             <div className="text-[10px] text-zinc-600">{budget.note || ""}</div>
           </div>
+
+          {specs.orderUrl && (
+            <div className="mt-2 text-xs text-blue-400">
+              Order at: {specs.orderUrl}
+            </div>
+          )}
         </UICard>
 
         {completed === total && (
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 text-center space-y-2">
             <LucideReact.PartyPopper className="w-8 h-8 text-emerald-400 mx-auto" />
             <div className="text-sm font-medium text-emerald-300">All checks passed! Ready to order.</div>
-            <div className="text-xs text-zinc-400">Visit printique.com/photo-books to place your order</div>
+            {specs.orderUrl && (
+              <div className="text-xs text-zinc-400">Visit {specs.printer || "your printer"} to place your order</div>
+            )}
           </div>
         )}
       </div>
@@ -757,8 +1180,13 @@ export default function GeneratedUI({ data, onAction }) {
   // FALLBACK
   // ═══════════════════════════════════════════════════════════════
   return (
-    <UICard accent="amber" header="Album Designer">
-      <EmptyState icon={LucideReact.BookOpen} title="Album Designer" description="Plan your Printique gift album — from 124K photos to a 50-image masterpiece." action={<Button variant="primary" onClick={function() { onAction("setup_project", { action: "list" }); }}>Get Started</Button>} />
+    <UICard accent="amber" header="Photo Book Planner">
+      <EmptyState icon={LucideReact.BookOpen} title="Photo Book Project Planner" description="Plan gift-quality photo books \u2014 from culling to print." action={
+        <div className="flex gap-2">
+          <Button variant="primary" onClick={function() { onAction("dashboard", {}); }}>Dashboard</Button>
+          <Button variant="outline" onClick={function() { onAction("setup_project", { action: "list" }); }}>All Projects</Button>
+        </div>
+      } />
     </UICard>
   );
 }

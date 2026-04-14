@@ -296,9 +296,11 @@ function addCrossReference(entry: EntityIndexEntry, targetId: EntityId, reason: 
 
 // ── Level 4: YouTube Video Recommendations ──
 
-/** Max entities to process per recommendVideos call (YouTube API quota: 100 units per search) */
-const VIDEO_BATCH_SIZE = 100;
-const VIDEO_SEARCH_DELAY_MS = 200; // delay between API calls
+/** Max entities to process per recommendVideos call (YouTube API quota: 100 units per search).
+ *  YouTube daily quota = 10,000 units. Each search.list = 100 units.
+ *  Cap at 20 to leave quota headroom for enso_youtube_my_feed and other tools. */
+const VIDEO_BATCH_SIZE = 20;
+const VIDEO_SEARCH_DELAY_MS = 300; // delay between API calls
 
 /**
  * Search YouTube for relevant videos for each entity and store top results.

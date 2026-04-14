@@ -595,6 +595,7 @@ export interface ScheduledTaskDef {
   recurring: boolean;
   maxAgeMs?: number;
   notifyOnComplete: boolean;
+  consecutiveFailures?: number;
 }
 
 export interface ScheduledTaskRun {
