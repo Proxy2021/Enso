@@ -320,19 +320,32 @@ Return JSON: {
 
       switch (act.type) {
         case "respond": {
-          if (!act.message || !expert.conversationId) break;
-          const { persistCard } = await import("./memory-bridge.js");
-          const { getAllClients } = await import("./server.js");
-          const cardId = randomUUID();
-          const text = `💬 **${expert.name}**:\n\n${act.message}`;
-          const clients = getAllClients();
-          if (clients.length > 0) {
-            persistCard(clients[0].id, expert.conversationId, {
-              id: cardId, runId: cardId, type: "chat", role: "assistant",
-              text, timestamp: Date.now(),
-            });
-            clients[0].send({ id: cardId, runId: cardId, sessionKey: clients[0].sessionKey, seq: 0, state: "final" as const,
-              text, conversationId: expert.conversationId, timestamp: Date.now() });
+          if (!act.message) break;
+          // Create artifact — visible on Focus view activity feed
+          const { createArtifact: createArt } = await import("./agent-artifacts.js");
+          createArt({
+            type: act.reason?.toLowerCase().includes("recommend") ? "recommendation" : "insight",
+            agentId: agentSource, agentName: expert.name,
+            focusId: area.id, title: `${expert.name}: ${act.message.slice(0, 60)}`,
+            body: act.message,
+            status: "done",
+            metadata: { expertRole: expert.role },
+          });
+          // Also post to conversation if it exists (backward compat)
+          if (expert.conversationId) {
+            const { persistCard } = await import("./memory-bridge.js");
+            const { getAllClients } = await import("./server.js");
+            const cardId = randomUUID();
+            const text = `💬 **${expert.name}**:\n\n${act.message}`;
+            const clients = getAllClients();
+            if (clients.length > 0) {
+              persistCard(clients[0].id, expert.conversationId, {
+                id: cardId, runId: cardId, type: "chat", role: "assistant",
+                text, timestamp: Date.now(),
+              });
+              clients[0].send({ id: cardId, runId: cardId, sessionKey: clients[0].sessionKey, seq: 0, state: "final" as const,
+                text, conversationId: expert.conversationId, timestamp: Date.now() });
+            }
           }
           break;
         }
@@ -463,6 +476,23 @@ Return JSON: { "decision": "act|delegate|acknowledge|ignore", "reason": "<why>",
     logAction({ ts: Date.now(), type: "action", category: "agent-event",
       message: `TL reviewed remark: ${parsed.decision} — ${parsed.reason}` });
 
+    // Create artifact so user sees TL's response
+    const { createArtifact } = await import("./agent-artifacts.js");
+    if (parsed.decision !== "ignore") {
+      createArtifact({
+        type: parsed.decision === "act" ? "action" : "insight",
+        agentId: "tl", agentName: "Team Leader",
+        focusId: remark.context?.focusId,
+        title: parsed.decision === "act"
+          ? `Acting on your feedback: ${remark.text.slice(0, 50)}`
+          : parsed.decision === "delegate"
+          ? `Delegating to expert: ${remark.text.slice(0, 50)}`
+          : `Noted: ${remark.text.slice(0, 50)}`,
+        body: parsed.reason,
+        status: parsed.decision === "act" ? "in-progress" : "done",
+      });
+    }
+
     if (parsed.decision === "act" && parsed.actionDescription) {
       queueTask({
         title: `User remark: ${remark.text.slice(0, 60)}`,
@@ -506,13 +536,22 @@ async function handleEscalation(event: AgentEvent): Promise<void> {
 
 /** TL handles evaluation.done — assess understanding + launch sprint */
 async function handleEvaluationDone(focusId: string): Promise<void> {
-  const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
+  const { loadFocusState } = await import("./focus-areas.js");
+  const { createArtifact } = await import("./agent-artifacts.js");
   const state = loadFocusState();
   const area = state?.areas.find(a => a.id === focusId);
   if (!area) return;
 
   logAction({ ts: Date.now(), type: "action", category: "agent-event",
-    message: `[Event] Evaluation completed for "${area.title}" — queuing sprint` });
+    message: `[Event] Evaluation completed for "${area.title}" — launching sprint` });
+
+  // Create artifact so user sees what's happening
+  createArtifact({
+    type: "action", agentId: "tl", agentName: "Team Leader",
+    focusId, title: `Launching sprint for "${area.title}"`,
+    body: `Evaluation complete. Starting an evolution sprint to make progress on this focus area.`,
+    status: "in-progress",
+  });
 
   // Launch sprint immediately
   const action: TeamLeaderAction = {
@@ -527,6 +566,7 @@ async function handleEvaluationDone(focusId: string): Promise<void> {
 /** TL handles sprint.done — assess holistic progress + review results */
 async function handleSprintDone(focusId: string): Promise<void> {
   const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
+  const { createArtifact } = await import("./agent-artifacts.js");
   const state = loadFocusState();
   const area = state?.areas.find(a => a.id === focusId);
   if (!area) return;
@@ -546,7 +586,24 @@ async function handleSprintDone(focusId: string): Promise<void> {
   };
   await handleFocusReviewResults(reviewAction);
 
-  // 3. Notify experts to review deliverables in their domain
+  // 3. Create artifact with deliverables summary
+  const deliverables = area.lastSprintSummary?.deliverables;
+  if (deliverables?.length) {
+    const deliverableList = deliverables.map((d: { taskTitle: string; howItHelps: string; actionType: string }) =>
+      `- **${d.taskTitle}**: ${d.howItHelps} → *${d.actionType}*`).join("\n");
+    createArtifact({
+      type: "deliverable", agentId: "tl", agentName: "Team Leader",
+      focusId, title: `Sprint completed: ${deliverables.length} deliverables for "${area.title}"`,
+      body: `${area.lastSprintSummary?.sprintSummary || "Sprint completed."}\n\n${deliverableList}`,
+      status: "pending",
+      actions: [
+        { id: randomUUID(), label: "Review Deliverables", type: "navigate", payload: { focusId, tab: "focus" } },
+        { id: randomUUID(), label: "Dismiss", type: "dismiss" },
+      ],
+    });
+  }
+
+  // 4. Notify experts to review deliverables in their domain
   if (area.experts?.length) {
     for (const expert of area.experts) {
       processEvent(createEvent("focus.sprint.done", { agent: "expert", focusId, expertId: expert.id }, {

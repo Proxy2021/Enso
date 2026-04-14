@@ -6,6 +6,7 @@ import { getClientId } from "../lib/ws-client";
 import { TabHeader, MobileViewHeader } from "./TabNavigation";
 import { API } from "../lib/constants";
 const MarkdownText = lazy(() => import("./MarkdownText"));
+import { ActivityFeed } from "./ActivityFeed";
 
 // ── Types ──
 
@@ -636,53 +637,8 @@ export default function FocusView() {
                 );
               })()}
 
-              {/* Section B: User Action Cards */}
-              {(() => {
-                const focusActions = pendingTlActions.filter(a =>
-                  a.focusId === selected.id || a.title.toLowerCase().includes(selected.title.toLowerCase())
-                );
-                const hasUnreviewedResults = selected.lastSprintResults && selected.lastSprintDate && (() => {
-                  const lastActive = selected.progress?.lastActiveAt ? new Date(selected.progress.lastActiveAt).getTime() : 0;
-                  const sprintTime = new Date(selected.lastSprintDate!).getTime();
-                  return lastActive < sprintTime || (Date.now() - sprintTime) / 86400000 <= 7;
-                })();
-
-                if (focusActions.length === 0 && !hasUnreviewedResults) {
-                  return (
-                    <div className="rounded-lg border border-gray-800/30 bg-gray-900/20 px-4 py-3">
-                      <p className="text-xs text-gray-500">No action needed — TL is handling this focus area.</p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="space-y-2">
-                    {hasUnreviewedResults && (
-                      <button
-                        onClick={() => { completeTlAction(selected.title); chatAboutFocus(selected, "Show me the sprint results — what was delivered and what should I act on first?"); }}
-                        className="w-full text-left rounded-lg border border-amber-500/25 bg-amber-950/15 p-3 hover:border-amber-500/40 transition-all"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{"📬"}</span>
-                          <span className="text-xs font-medium text-amber-300">Review Sprint Results</span>
-                        </div>
-                        <p className="text-[11px] text-gray-500 mt-1 ml-6">New deliverables are ready — discuss with AI to decide what to act on</p>
-                      </button>
-                    )}
-                    {focusActions.map(action => (
-                      <button key={action.id}
-                        onClick={() => { completeTlAction(selected.title); chatAboutFocus(selected, action.title); }}
-                        className="w-full text-left rounded-lg border border-violet-500/25 bg-violet-950/15 p-3 hover:border-violet-500/40 transition-all"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{"📋"}</span>
-                          <span className="text-xs font-medium text-violet-300">{action.title}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
+              {/* Section B: Activity Feed — agent artifacts for this focus */}
+              <ActivityFeed focusId={selected.id} />
 
               {/* Section C: Sprint Progress */}
               {(() => {

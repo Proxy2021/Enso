@@ -8,6 +8,7 @@ import type { Card } from "../cards/types";
 import { isOrchestrationCardData } from "@shared/types";
 import type { ScheduledTaskDef } from "@shared/types";
 import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
+import { ActivityFeed } from "./ActivityFeed";
 import { timeAgo, timeUntil, formatElapsedTime } from "../lib/time-utils";
 import { ScheduledTaskDialog } from "./ScheduledTaskDialog";
 import { Clock, Play, Pause, Trash2, Pencil, Plus, RefreshCw } from "lucide-react";
@@ -360,92 +361,15 @@ export default function TasksView() {
                 onClick={() => setTlTab(tab)}
                 className={`flex-1 py-2 text-[11px] font-medium transition-colors ${tlTab === tab ? "text-violet-300 border-b-2 border-violet-500" : "text-gray-500 hover:text-gray-300"}`}
               >
-                {tab === "actions" ? `Actions (${tlBriefing?.proposedActions?.length ?? 0})` : tab === "briefing" ? "Briefing" : `Remarks (${tlRemarks.length})`}
+                {tab === "actions" ? "Activity" : tab === "briefing" ? "Briefing" : `Remarks (${tlRemarks.length})`}
               </button>
             ))}
           </div>
 
-          {/* TL Actions Tab */}
+          {/* TL Activity Tab — all agent artifacts */}
           {tlTab === "actions" && (
-            <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto">
-              {!tlBriefing?.proposedActions?.length ? (
-                <p className="text-gray-500 text-xs text-center py-4">No actions yet. Click "Run Routine" to start.</p>
-              ) : (
-                tlBriefing.proposedActions.map(action => {
-                  const pColor: Record<string, string> = { critical: "text-red-400", high: "text-orange-400", medium: "text-yellow-400", low: "text-gray-500" };
-                  const pBg: Record<string, string> = { critical: "bg-red-500/15 border-red-500/25", high: "bg-orange-500/15 border-orange-500/25", medium: "bg-yellow-500/15 border-yellow-500/25", low: "bg-gray-500/10 border-gray-700/30" };
-                  const isUserAction = action.needsUserInput || action.status === "proposed";
-                  const statusIcon = action.status === "completed" ? "✓" : action.status === "executing" ? "◉" : isUserAction ? "☐" : "○";
-                  const statusCol = action.status === "completed" ? "text-emerald-400" : action.status === "executing" ? "text-blue-400 animate-pulse" : isUserAction ? "text-amber-400" : "text-violet-400";
-                  const typeEmoji: Record<string, string> = { "user-task": "🎯", "platform-fix": "🔧", "platform-feature": "🚀", maintenance: "🧹" };
-                  const delegLabels: Record<string, string> = { focus: "Focus", knowledge: "Cortex", research: "Research", builder: "Builder", outreach: "Outreach", self: "TL" };
-                  // Match action to a focus area for direct navigation
-                  const titleLower = action.title.toLowerCase();
-                  const matchedFocus = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()) || titleLower.includes(f.id));
-                  const isNavigable = !!matchedFocus && (action.needsUserInput || action.status === "proposed");
-                  // Determine the right chat prompt based on action type
-                  const chatPrompt = titleLower.includes("review") ? "Show me the sprint results — what was delivered and what should I act on first?"
-                    : titleLower.includes("discuss") ? "Based on your evaluation, what's the most important decision we need to make?"
-                    : undefined;
-                  return (
-                    <div
-                      key={action.id}
-                      className={`rounded-lg border border-gray-800/30 bg-gray-900/20 p-2.5 ${isNavigable ? "cursor-pointer hover:border-violet-500/30 hover:bg-violet-500/5 transition-colors" : ""}`}
-                      onClick={isNavigable ? () => navigateToFocus(matchedFocus!.id, chatPrompt ? undefined : "work", chatPrompt) : undefined}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className={`${statusCol} text-sm mt-0.5 shrink-0`}>{statusIcon}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs">{typeEmoji[action.type] || "📋"}</span>
-                            <span className="text-[13px] font-medium text-gray-200">{action.title}</span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded border ${pBg[action.priority]} ${pColor[action.priority]}`}>{action.priority}</span>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-500 border border-gray-700/40">{delegLabels[action.delegation] || action.delegation}</span>
-                            {isNavigable && <span className="text-[9px] text-violet-400">→ Open</span>}
-                          </div>
-                          <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{action.reasoning}</p>
-                        </div>
-                        <button
-                          onClick={() => setRemarkInput(remarkInput?.actionId === action.id ? null : { actionId: action.id, text: "" })}
-                          className="text-[10px] px-1.5 py-1 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/20 shrink-0"
-                        >💬</button>
-                      </div>
-                      {remarkInput?.actionId === action.id && (
-                        <div className="mt-2 flex gap-2 ml-6">
-                          <input
-                            type="text" value={remarkInput.text}
-                            onChange={e => setRemarkInput({ ...remarkInput, text: e.target.value })}
-                            placeholder="Your remark..."
-                            className="flex-1 text-xs bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500"
-                            autoFocus
-                            onKeyDown={e => {
-                              if (e.key === "Enter" && remarkInput.text.trim()) {
-                                fetch(`${getBackendBaseUrl()}/api/remarks`, {
-                                  method: "POST",
-                                  headers: { ...authHeaders(), "Content-Type": "application/json" },
-                                  body: JSON.stringify({ text: `Re: "${action.title}" — ${remarkInput.text}`, action: "custom" }),
-                                }).then(() => { setRemarkInput(null); fetchTL(); }).catch(() => {});
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={() => {
-                              if (!remarkInput.text.trim()) return;
-                              fetch(`${getBackendBaseUrl()}/api/remarks`, {
-                                method: "POST",
-                                headers: { ...authHeaders(), "Content-Type": "application/json" },
-                                body: JSON.stringify({ text: `Re: "${action.title}" — ${remarkInput.text}`, action: "custom" }),
-                              }).then(() => { setRemarkInput(null); fetchTL(); }).catch(() => {});
-                            }}
-                            disabled={!remarkInput.text.trim()}
-                            className="text-[11px] px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-30"
-                          >Send</button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+            <div className="p-3 max-h-[400px] overflow-y-auto">
+              <ActivityFeed showResolved limit={30} />
             </div>
           )}
 

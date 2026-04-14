@@ -2603,6 +2603,41 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
   });
 
   // Trigger LLM assessment for all focus areas with briefings
+  // ── Agent Artifacts API ──
+
+  app.get("/api/artifacts", async (req, res) => {
+    try {
+      const { getArtifacts } = await import("./agent-artifacts.js");
+      const filter: Record<string, unknown> = {};
+      if (req.query.focusId) filter.focusId = req.query.focusId;
+      if (req.query.status) filter.status = (req.query.status as string).split(",");
+      if (req.query.type) filter.type = (req.query.type as string).split(",");
+      if (req.query.limit) filter.limit = parseInt(req.query.limit as string, 10);
+      res.json({ artifacts: getArtifacts(filter as any) });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to load artifacts" });
+    }
+  });
+
+  app.get("/api/artifacts/counts", async (_req, res) => {
+    try {
+      const { getArtifactCounts } = await import("./agent-artifacts.js");
+      res.json(getArtifactCounts());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to count artifacts" });
+    }
+  });
+
+  app.post("/api/artifacts/:id/action", async (req, res) => {
+    try {
+      const { executeArtifactAction } = await import("./agent-artifacts.js");
+      const result = await executeArtifactAction(req.params.id, req.body.actionId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Action failed" });
+    }
+  });
+
   app.post("/api/focus-areas/reassess", async (_req, res) => {
     try {
       const { loadFocusState, updateFocusAssessment } = await import("./focus-areas.js");
