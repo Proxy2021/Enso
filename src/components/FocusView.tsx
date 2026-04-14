@@ -7,6 +7,7 @@ import { TabHeader, MobileViewHeader } from "./TabNavigation";
 import { API } from "../lib/constants";
 const MarkdownText = lazy(() => import("./MarkdownText"));
 import { ActivityFeed } from "./ActivityFeed";
+import ReactToTL from "./ReactToTL";
 
 // ── Types ──
 
@@ -114,6 +115,7 @@ export default function FocusView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("focus");
   const [pendingTlActions, setPendingTlActions] = useState<Array<{ id: string; title: string; focusId?: string }>>([]);
+  const [reactToTLTarget, setReactToTLTarget] = useState<{ focusId: string; type: "focus" | "deliverable"; summary: string; detail?: string } | null>(null);
 
   // Handle pending navigation from TL dashboard or chat cards
   useEffect(() => {
@@ -599,14 +601,27 @@ export default function FocusView() {
                   <div className={`rounded-lg border p-3 mb-1 ${bannerColor}`}>
                     <div className="flex items-center gap-2">
                       <FocusStatus area={selected} />
-                      <button
-                        onClick={() => chatAboutFocus(selected, selected.preparedBriefing
-                          ? `Based on your evaluation, what's the most important decision we need to make?`
-                          : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
-                        className="ml-auto text-[10px] px-2.5 py-1 rounded bg-violet-600/40 text-violet-200 hover:bg-violet-500/40 transition-colors"
-                      >
-                        Discuss
-                      </button>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <button
+                          onClick={() => setReactToTLTarget({
+                            focusId: selected.id,
+                            type: "focus",
+                            summary: `Focus: ${selected.title}`,
+                            detail: `Status: ${selected.status}, Clarity: ${selected.clarity}. ${selected.assessment ? `Understanding: ${selected.assessment.understanding}%, Progress: ${selected.assessment.progress}%` : ""}`,
+                          })}
+                          className="text-[10px] px-2 py-1 rounded bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 transition-colors"
+                        >
+                          Instruct TL
+                        </button>
+                        <button
+                          onClick={() => chatAboutFocus(selected, selected.preparedBriefing
+                            ? `Based on your evaluation, what's the most important decision we need to make?`
+                            : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
+                          className="text-[10px] px-2.5 py-1 rounded bg-violet-600/40 text-violet-200 hover:bg-violet-500/40 transition-colors"
+                        >
+                          Discuss
+                        </button>
+                      </div>
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1.5">{subtitle}</p>
                     {/* Assessment bars */}
@@ -817,6 +832,18 @@ export default function FocusView() {
                                   {isExpanded ? "Collapse" : actionLabel}
                                 </button>
                               )}
+                              <button
+                                onClick={() => setReactToTLTarget({
+                                  focusId: selected.id,
+                                  type: "deliverable",
+                                  summary: `Deliverable: ${title} (${summaryDeliverable.entityType})`,
+                                  detail: `Pain: ${summaryDeliverable.painPoint}. How: ${summaryDeliverable.howItHelps}`,
+                                })}
+                                className="text-[10px] px-1.5 py-1 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors shrink-0"
+                                title="Send to agent"
+                              >
+                                TL
+                              </button>
                             </div>
                             {isExpanded && (
                               <div className="mt-2 ml-7 rounded-lg border border-gray-700/30 bg-gray-900/30 p-3 max-h-[400px] overflow-y-auto">
@@ -1202,6 +1229,25 @@ export default function FocusView() {
 
         </div>
       </div>
+
+      {/* ReactToTL overlay for focus / deliverable instructions */}
+      {reactToTLTarget && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={() => setReactToTLTarget(null)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative z-10 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <ReactToTL
+              context={{
+                type: reactToTLTarget.type,
+                summary: reactToTLTarget.summary,
+                focusId: reactToTLTarget.focusId,
+                detail: reactToTLTarget.detail,
+              }}
+              onClose={() => setReactToTLTarget(null)}
+              mode="inline"
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

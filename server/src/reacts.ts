@@ -22,7 +22,7 @@ import { logAction, logError } from "./action-log.js";
 
 export interface NotificationContext {
   /** What type of notification this was */
-  type: "briefing" | "pulse" | "sprint-complete" | "alert" | "checkin" | "discovery";
+  type: "briefing" | "pulse" | "sprint-complete" | "alert" | "checkin" | "discovery" | "card" | "focus" | "entity" | "sprint" | "deliverable" | "direct";
   /** Unique ID for the notification instance */
   notificationId: string;
   /** Which focus area this relates to (if any) */
@@ -171,6 +171,8 @@ export function submitReact(params: {
   context: NotificationContext;
   text: string;
   action?: React["action"];
+  /** Target a specific agent. Defaults to TL. */
+  agentTarget?: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string };
 }): React {
   const react: React = {
     id: randomUUID(),
@@ -186,15 +188,17 @@ export function submitReact(params: {
   reacts.push(react);
   saveReacts(reacts);
 
+  const target = params.agentTarget || { agent: "tl" as const };
+  const targetLabel = target.agent === "tl" ? "TL" : `expert:${(target as any).expertId}`;
+
   logAction({
     ts: Date.now(), type: "action", category: "reacts",
-    message: `React received via ${params.channel}: "${params.text.slice(0, 80)}" (re: ${params.context.type}/${params.context.summary.slice(0, 40)})`,
+    message: `React received via ${params.channel} → ${targetLabel}: "${params.text.slice(0, 80)}" (re: ${params.context.type}/${params.context.summary.slice(0, 40)})`,
   });
 
-  // Fire agent event — TL processes the react immediately.
-  // TL may decide to delegate to an expert based on context.
+  // Fire agent event — target agent processes the react immediately.
   import("./team-leader.js").then(({ processEvent, createEvent }) => {
-    processEvent(createEvent("react.received", { agent: "tl" }, {
+    processEvent(createEvent("react.received", target, {
       reactId: react.id,
       focusId: params.context.focusId,
       contextType: params.context.type,

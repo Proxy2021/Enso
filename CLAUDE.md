@@ -423,19 +423,37 @@ Enso runs as a **living organization** with a single Team Leader (TL) agent that
 
 ### React System (Async Feedback Loop)
 
-Every notification Enso sends includes **react actions** — clickable buttons that let the user respond asynchronously without opening the app. Reacts feed back to the Team Leader for processing.
+Every notification Enso sends includes **react actions** — clickable buttons that let the user respond asynchronously without opening the app. Reacts feed back to the Team Leader (or any expert agent) for processing.
+
+**Two modes:**
+- **Reactive** — User responds to a TL-sent notification (email button, WeChat reply, web form)
+- **Proactive** — User sends instructions to any agent directly from the UI with auto-attached context. Six context types: `card`, `focus`, `entity`, `sprint`, `deliverable`, `direct`
 
 **Channels:**
 - **Email**: Approve / Defer / Reply buttons. Approve/Defer hit `GET /api/reacts/quick?nid=<id>&action=approve`. Reply opens `/r/<id>` web form.
 - **WeChat**: User replies to messages → webhook captures with notification context association.
 - **Web form**: `/r/<notificationId>` — standalone HTML page with text input, no auth required.
-- **In-app**: `POST /api/reacts` with notificationId + text.
+- **In-app**: `POST /api/reacts` with optional `context` (direct) + optional `agentTarget` (TL or specific expert).
 
-**Processing:** TL reads pending reacts in `gatherSignals()`, incorporates into LLM assessment (user reacts appear as signals alongside errors and focus state), marks as processed after the routine.
+**Agent targeting:** Reacts can target any agent via `agentTarget`:
+- `{ agent: "tl" }` — Team Leader (default)
+- `{ agent: "expert", focusId, expertId }` — specific focus area expert
+- `GET /api/agents` lists all available agents (TL + focus experts) for the frontend dropdown
+
+**In-app touchpoints** (5 places to send reacts with context):
+1. **Tasks tab** — Inline input in TL dashboard (always visible, primary command center)
+2. **Card share menu** — "Send to Agent" in every card's ⋯ menu
+3. **Focus detail** — "Instruct TL" button in status banner
+4. **Sprint deliverables** — "TL" button on each deliverable card
+5. **Orchestration completion** — "Send to Agent" in sprint completion header
+
+**Shared component:** `ReactToTL.tsx` — reusable popup/inline with agent dropdown, context preview, textarea. Supports `mode: "popup" | "inline"`.
+
+**Processing:** TL reads pending reacts in `gatherSignals()`, incorporates into LLM assessment (user reacts appear as signals alongside errors and focus state), marks as processed after the routine. Proactive reacts get a "DIRECT USER INSTRUCTION" flag in the LLM prompt, biasing toward action.
 
 **Notification context tracking:** `registerNotification()` stores context for each sent notification. `getLastWechatNotification()` associates WeChat replies with the most recent notification. Contexts auto-expire after 7 days.
 
-- Key files: `reacts.ts` (system), `wechat-webhook.ts` (WeChat capture), `server.ts` (API routes + `/r/<id>` page)
+- Key files: `reacts.ts` (system), `wechat-webhook.ts` (WeChat capture), `server.ts` (API routes + `/r/<id>` page + `/api/agents`), `ReactToTL.tsx` (shared UI component)
 
 ### Focus Areas (AI-Inferred Goals)
 

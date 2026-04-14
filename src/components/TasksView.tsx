@@ -11,7 +11,9 @@ import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 import { ActivityFeed } from "./ActivityFeed";
 import { timeAgo, timeUntil, formatElapsedTime } from "../lib/time-utils";
 import { ScheduledTaskDialog } from "./ScheduledTaskDialog";
-import { Clock, Play, Pause, Trash2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Clock, Play, Pause, Trash2, Pencil, Plus, RefreshCw, Send } from "lucide-react";
+import ReactToTL from "./ReactToTL";
+import type { ReactContext } from "./ReactToTL";
 
 // ── Types (mirrors session-registry.ts) ──
 
@@ -351,6 +353,15 @@ export default function TasksView() {
                 {tlRunning ? "Running..." : "Run Routine"}
               </button>
             </div>
+          </div>
+
+          {/* Inline React Input — direct command to any agent */}
+          <div className="px-4 py-2 border-b border-gray-800/20">
+            <ReactToTL
+              context={{ type: "direct", summary: "Direct instruction from command center" }}
+              onClose={() => {}}
+              mode="inline"
+            />
           </div>
 
           {/* TL Tabs */}

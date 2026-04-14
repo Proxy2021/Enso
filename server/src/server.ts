@@ -2414,18 +2414,38 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
   };
   app.post("/api/reacts/web", express.json(), handleReactsWeb);
 
-  // In-app react submission
+  // In-app react submission (supports direct context + agent targeting)
   const handleReactsInApp = async (req: any, res: any) => {
     try {
-      const { notificationId, text, action } = req.body as { notificationId?: string; text?: string; action?: string };
+      const { notificationId, text, action, context: directContext, agentTarget } = req.body as {
+        notificationId?: string; text?: string; action?: string;
+        context?: { type: string; summary: string; focusId?: string };
+        agentTarget?: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string };
+      };
       if (!text?.trim() && !action) { res.status(400).json({ error: "Text or action required" }); return; }
       const { getNotificationContext, submitReact } = await import("./reacts.js");
-      const context = getNotificationContext(notificationId || "");
+
+      // Resolve context: direct > notificationId lookup > fallback
+      let resolvedContext;
+      if (directContext?.type && directContext?.summary) {
+        resolvedContext = {
+          type: directContext.type as any,
+          notificationId: notificationId || "proactive",
+          focusId: directContext.focusId,
+          summary: directContext.summary,
+          sentAt: new Date().toISOString(),
+        };
+      } else {
+        const looked = getNotificationContext(notificationId || "");
+        resolvedContext = looked || { type: "briefing" as const, notificationId: notificationId || "unknown", summary: "In-app react", sentAt: new Date().toISOString() };
+      }
+
       const react = submitReact({
         channel: "in-app",
-        context: context || { type: "briefing", notificationId: notificationId || "unknown", summary: "In-app react", sentAt: new Date().toISOString() },
+        context: resolvedContext,
         text: text?.trim() || action || "",
         action: action as any,
+        agentTarget,
       });
       res.json({ success: true, react });
     } catch (err: any) {
@@ -2433,6 +2453,36 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   };
   app.post("/api/reacts", express.json(), handleReactsInApp);
+
+  // List available agents for react targeting
+  app.get("/api/agents", async (_req, res) => {
+    try {
+      const agents: Array<{ id: string; name: string; role?: string; type: "tl" | "expert"; focusTitle?: string; focusId?: string; expertId?: string }> = [
+        { id: "tl", name: "Team Leader", type: "tl" },
+      ];
+      const { loadFocusState } = await import("./focus-areas.js");
+      const state = loadFocusState();
+      if (state?.areas) {
+        for (const area of state.areas) {
+          if (area.status === "completed" || area.status === "paused") continue;
+          for (const expert of area.experts || []) {
+            agents.push({
+              id: `expert:${area.id}:${expert.id}`,
+              name: expert.name,
+              role: expert.role,
+              type: "expert",
+              focusTitle: area.title,
+              focusId: area.id,
+              expertId: expert.id,
+            });
+          }
+        }
+      }
+      res.json({ agents });
+    } catch (err: any) {
+      res.json({ agents: [{ id: "tl", name: "Team Leader", type: "tl" }] });
+    }
+  });
 
   // List reacts (for dashboard)
   const handleReactsList = async (req: any, res: any) => {

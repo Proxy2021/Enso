@@ -275,7 +275,7 @@ function clearFaviconBadge(): void {
 
 // ── In-App Toast System ──
 
-function pushToast(title: string, body: string, success: boolean, dismissMs = 6000): void {
+export function pushToast(title: string, body: string, success: boolean, dismissMs = 6000): void {
   const entry: ToastEntry = {
     id: ++_toastIdCounter,
     title,

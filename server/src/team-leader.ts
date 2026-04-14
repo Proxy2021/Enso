@@ -465,9 +465,12 @@ async function handleReactForTL(reactId: string): Promise<void> {
     const { llm } = await import("./llm.js");
     const { cleanJson } = await import("./json-utils.js");
 
+    const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
+    const isProactive = proactiveTypes.has(react.context?.type);
+
     const response = await llm({
       prompt: `You are the Team Leader of Enso. A user react just arrived.
-
+${isProactive ? "\n**This is a DIRECT USER INSTRUCTION** (not a response to a notification). Treat with high priority and bias toward action.\n" : ""}
 REACT: "${react.text}"
 CHANNEL: ${react.channel}
 CONTEXT: ${react.context?.type || "general"} — ${react.context?.summary || "no context"}
@@ -710,9 +713,14 @@ export async function gatherSignals(): Promise<SystemSignals> {
     }
   } catch { /* scheduler not available */ }
 
-  // Platform health
+  // Platform health — only report tasks whose MOST RECENT run failed (not recovered failures)
   const errorRate = recentErrors.length / Math.max(recentActions.length, 1);
-  const failedTasks = taskResults.filter(r => r.status === "failed").map(r => r.taskName);
+  const latestRunByTask = new Map<string, typeof taskResults[0]>();
+  for (const r of taskResults) {
+    const prev = latestRunByTask.get(r.taskId);
+    if (!prev || r.firedAt > prev.firedAt) latestRunByTask.set(r.taskId, r);
+  }
+  const failedTasks = [...latestRunByTask.values()].filter(r => r.status === "failed").map(r => r.taskName);
 
   // Pending user reacts
   let pendingReacts: SystemSignals["pendingReacts"] = [];

@@ -15,6 +15,8 @@ import { nativeShare } from "../lib/native-share";
 import TerminalContent from "./TerminalContent";
 import { copyAsMarkdown, copyAsPlainText, downloadAsCSV, hasMarkdownTables } from "../lib/export";
 import { API, TIMINGS } from "../lib/constants";
+import ReactToTL from "./ReactToTL";
+import type { ReactContext } from "./ReactToTL";
 
 const APP_ICONS: Record<string, string> = {
   alpharank: "\uD83D\uDCC8",
@@ -734,6 +736,7 @@ function CardShareMenu({ card, isShareable }: { card: Card; isShareable: boolean
   const [imgBusy, setImgBusy] = useState(false);
   const [showShareLink, setShowShareLink] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showReactToTL, setShowReactToTL] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const sendCardAction = useChatStore((s) => s.sendCardAction);
@@ -900,9 +903,32 @@ function CardShareMenu({ card, isShareable }: { card: Card; isShareable: boolean
                 Share Live Link
               </button>
             )}
+            {/* ── Send to Team Leader ── */}
+            <div className="h-px bg-gray-700/50 mx-2" />
+            <button
+              onClick={() => { setOpen(false); setShowReactToTL(true); }}
+              className={menuBtnClass}
+            >
+              <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Send to Agent
+            </button>
           </div>
         )}
       </div>
+      {showReactToTL && (
+        <div className="relative">
+          <ReactToTL
+            context={{
+              type: "card",
+              summary: `${card.type} card: ${title}`,
+              detail: card.text?.slice(0, 200),
+            }}
+            onClose={() => setShowReactToTL(false)}
+          />
+        </div>
+      )}
       {showShareLink && <ShareDialog card={card} onClose={() => setShowShareLink(false)} />}
       {showEmailDialog && (
         <CardEmailDialog

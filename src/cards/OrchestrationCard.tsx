@@ -14,6 +14,7 @@ import type {
   OrchestrationTask,
   AgentRole,
 } from "@shared/types";
+import ReactToTL from "../components/ReactToTL";
 
 type Phase = "input" | "planning" | "review" | "executing" | "complete" | "error";
 
@@ -564,6 +565,7 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
   const { t } = useT();
   const [tab, setTab] = useState<CompleteTab>("summary");
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const [showReactToTL, setShowReactToTL] = useState(false);
 
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const failed = plan.tasks.filter((t) => t.status === "failed").length;
@@ -578,7 +580,26 @@ function CompletePhase({ plan, taskTerminals }: { plan: OrchestrationPlan; taskT
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">{"\u2705"}</span>
         <h3 className="text-sm font-semibold text-green-300">{t("orchestration.missionComplete")}</h3>
+        <button
+          onClick={() => setShowReactToTL(!showReactToTL)}
+          className="ml-auto text-[10px] px-2 py-1 rounded bg-violet-500/15 text-violet-300 border border-violet-500/20 hover:bg-violet-500/25 transition-colors"
+        >
+          Send to Agent
+        </button>
       </div>
+      {showReactToTL && (
+        <div className="mb-3">
+          <ReactToTL
+            context={{
+              type: "sprint",
+              summary: `Sprint complete: ${plan.goal?.slice(0, 80)}`,
+              detail: `${completed} completed, ${failed} failed. ${allFindings.length} findings, ${allRecs.length} recommendations.`,
+            }}
+            onClose={() => setShowReactToTL(false)}
+            mode="inline"
+          />
+        </div>
+      )}
 
       {/* Goal */}
       <div className="mb-2 p-2 rounded-lg bg-green-500/5 border border-green-500/20">
