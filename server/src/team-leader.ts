@@ -252,6 +252,8 @@ async function processExpertEvent(event: AgentEvent): Promise<void> {
   const expert = area.experts?.find(e => e.id === target.expertId);
   if (!expert) return;
 
+  const agentSource = `expert:${area.id}:${expert.id}`;
+
   try {
     const { llm } = await import("./llm.js");
     const { cleanJson } = await import("./json-utils.js");
@@ -265,63 +267,159 @@ async function processExpertEvent(event: AgentEvent): Promise<void> {
     } else if (event.type === "focus.sprint.done") {
       eventDescription = `Sprint completed for "${area.title}". Results available for your domain review.`;
       if (area.lastSprintSummary?.sprintSummary) eventDescription += `\nSprint summary: ${area.lastSprintSummary.sprintSummary}`;
+      const deliverables = area.lastSprintSummary?.deliverables?.map((d: { taskTitle: string; howItHelps: string }) =>
+        `- ${d.taskTitle}: ${d.howItHelps}`).join("\n") || "";
+      if (deliverables) eventDescription += `\nDeliverables:\n${deliverables}`;
     } else if (event.payload.message) {
       eventDescription = `Message from ${event.source}: ${event.payload.message}`;
     }
+
+    // Other team members for context
+    const teammates = (area.experts || []).filter(e => e.id !== expert.id)
+      .map(e => `${e.name} (${e.role})`).join(", ");
 
     const response = await llm({
       prompt: `You are ${expert.name}, ${expert.role} for focus area "${area.title}".
 Your perspective: ${expert.perspective}
 Your goals: ${expert.goals.join("; ")}
+${expert.responsibilities ? `Your responsibilities: ${expert.responsibilities}` : ""}
 ${area.intent ? `Focus goal: ${area.intent}` : ""}
+${area.deeperIntent ? `Why it matters: ${area.deeperIntent}` : ""}
+${teammates ? `Your teammates: ${teammates}` : ""}
+${area.codebasePath ? `Codebase: ${area.codebasePath}` : ""}
 
 ${eventDescription}
 
-As this expert, decide what to do:
-1. "respond" — Post a message in your conversation with the user (provide the message text)
-2. "escalate" — This needs the Team Leader's attention (provide reason)
-3. "note" — Record an internal note for your records (no user-visible action)
-4. "none" — No action needed
+As this expert, you have FULL agent capabilities. Choose the best action:
 
-Return JSON: { "action": "respond|escalate|note|none", "message": "<text>", "reason": "<why>" }`,
-      tier: "fast",
-      maxOutputTokens: 300,
+1. "respond" — Post a message in your conversation with the user (provide message text)
+2. "code" — Launch a Claude Code session to build/fix/research something (provide the prompt)
+3. "orchestrate" — Launch a multi-agent sprint for complex work (provide goal description)
+4. "notify" — Send an event to another agent: TL or a teammate (provide target + message)
+5. "none" — No action needed right now
+
+You can combine actions — e.g., respond to user AND notify TL.
+
+Return JSON: {
+  "actions": [
+    { "type": "respond|code|orchestrate|notify|none", "message": "<text>", "target": "<tl or expert name>", "reason": "<why>" }
+  ]
+}`,
+      tier: "utility",
+      maxOutputTokens: 500,
       temperature: 0.4,
-      timeoutMs: 20_000,
+      timeoutMs: 25_000,
     });
 
-    const parsed = JSON.parse(cleanJson(response)) as { action: string; message?: string; reason?: string };
-    logAction({ ts: Date.now(), type: "action", category: "agent-event",
-      message: `Expert ${expert.name}: ${parsed.action} — ${parsed.reason || parsed.message?.slice(0, 60) || ""}` });
+    const parsed = JSON.parse(cleanJson(response)) as { actions: Array<{ type: string; message?: string; target?: string; reason?: string }> };
+    const actions = parsed.actions || [];
 
-    if (parsed.action === "respond" && parsed.message && expert.conversationId) {
-      // Post message in expert's conversation
-      const { persistCard } = await import("./memory-bridge.js");
-      const { getAllClients } = await import("./server.js");
-      const cardId = randomUUID();
-      const text = `💬 **${expert.name}** (responding to your feedback):\n\n${parsed.message}`;
-      const clients = getAllClients();
-      if (clients.length > 0) {
-        persistCard(clients[0].id, expert.conversationId, {
-          id: cardId, runId: cardId, type: "chat", role: "assistant",
-          text, timestamp: Date.now(),
-        });
-        clients[0].send({ id: cardId, runId: cardId, sessionKey: clients[0].sessionKey, seq: 0, state: "final" as const,
-          text, conversationId: expert.conversationId, timestamp: Date.now() });
+    for (const act of actions) {
+      logAction({ ts: Date.now(), type: "action", category: "agent-event",
+        message: `Expert ${expert.name}: ${act.type} — ${act.reason || act.message?.slice(0, 60) || ""}` });
+
+      switch (act.type) {
+        case "respond": {
+          if (!act.message || !expert.conversationId) break;
+          const { persistCard } = await import("./memory-bridge.js");
+          const { getAllClients } = await import("./server.js");
+          const cardId = randomUUID();
+          const text = `💬 **${expert.name}**:\n\n${act.message}`;
+          const clients = getAllClients();
+          if (clients.length > 0) {
+            persistCard(clients[0].id, expert.conversationId, {
+              id: cardId, runId: cardId, type: "chat", role: "assistant",
+              text, timestamp: Date.now(),
+            });
+            clients[0].send({ id: cardId, runId: cardId, sessionKey: clients[0].sessionKey, seq: 0, state: "final" as const,
+              text, conversationId: expert.conversationId, timestamp: Date.now() });
+          }
+          break;
+        }
+
+        case "code": {
+          if (!act.message) break;
+          // Launch Claude Code session as this expert
+          const prompt = `[Expert: ${expert.name}, ${expert.role}]\nFocus: ${area.title}\n\n${act.message}`;
+          try {
+            const noop = () => {};
+            const headlessClient = {
+              id: `expert-${expert.id}`, sessionKey: "expert-event",
+              ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+              send: noop, _disconnectedBuffer: [], conversationId: expert.conversationId || "expert-bg",
+            } as unknown as import("./server.js").ConnectedClient;
+            const { getActiveAccount } = await import("./server.js");
+            const { runClaudeCode } = await import("./claude-code.js");
+            const account = getActiveAccount();
+            if (account) {
+              runClaudeCode({ prompt, client: headlessClient, account, model: "sonnet" });
+              logAction({ ts: Date.now(), type: "action", category: "agent-event",
+                message: `Expert ${expert.name} launched Claude Code: ${act.message.slice(0, 80)}` });
+            }
+          } catch (err) {
+            logError("agent-event", `Expert ${expert.name} failed to launch Claude Code`, err);
+          }
+          break;
+        }
+
+        case "orchestrate": {
+          if (!act.message) break;
+          // Launch orchestration sprint
+          try {
+            const noop = () => {};
+            const headlessClient = {
+              id: `expert-${expert.id}`, sessionKey: "expert-event",
+              ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+              send: noop, _disconnectedBuffer: [], conversationId: expert.conversationId || "expert-bg",
+            } as unknown as import("./server.js").ConnectedClient;
+            const { getActiveAccount } = await import("./server.js");
+            const { launchOrchestration: launchOrch } = await import("./orchestrator.js");
+            const account = getActiveAccount();
+            if (account) {
+              launchOrch({
+                goal: `[${expert.name}] ${act.message}`,
+                client: headlessClient, account,
+                context: { focusId: area.id, focusTitle: area.title, brief: area.preparedBriefing?.slice(0, 2000) },
+              });
+              logAction({ ts: Date.now(), type: "action", category: "agent-event",
+                message: `Expert ${expert.name} launched orchestration: ${act.message.slice(0, 80)}` });
+            }
+          } catch (err) {
+            logError("agent-event", `Expert ${expert.name} failed to launch orchestration`, err);
+          }
+          break;
+        }
+
+        case "notify": {
+          if (!act.message) break;
+          const targetName = (act.target || "tl").toLowerCase();
+          if (targetName === "tl" || targetName === "team leader") {
+            // Escalate/notify TL
+            processEvent(createEvent("agent.escalate", { agent: "tl" }, {
+              fromExpert: expert.name, fromExpertId: expert.id, focusId: area.id,
+              focusTitle: area.title, reason: act.reason || act.message,
+              originalEvent: event.type,
+            }, agentSource));
+          } else {
+            // Notify a teammate expert
+            const teammate = (area.experts || []).find(e =>
+              e.name.toLowerCase().includes(targetName) || e.role.toLowerCase().includes(targetName));
+            if (teammate) {
+              processEvent(createEvent("agent.request", { agent: "expert", focusId: area.id, expertId: teammate.id }, {
+                fromExpert: expert.name, message: act.message,
+              }, agentSource));
+            }
+          }
+          break;
+        }
       }
-    } else if (parsed.action === "escalate") {
-      // Fire event to TL
-      processEvent(createEvent("agent.escalate", { agent: "tl" }, {
-        fromExpert: expert.name, fromExpertId: expert.id, focusId: area.id,
-        focusTitle: area.title, reason: parsed.reason || parsed.message,
-        originalEvent: event.type,
-      }, `expert:${area.id}:${expert.id}`));
     }
 
     // Resolve the remark if this was a remark event
     if (event.type === "remark.received" && event.payload.remarkId) {
       const { resolveRemark } = await import("./remarks.js");
-      resolveRemark(event.payload.remarkId as string, `Processed by expert ${expert.name}: ${parsed.action} — ${parsed.reason || ""}`);
+      const actionSummary = actions.map(a => a.type).join(", ") || "none";
+      resolveRemark(event.payload.remarkId as string, `Expert ${expert.name}: ${actionSummary}`);
     }
   } catch (err) {
     logError("agent-event", `Expert ${expert.name} failed to process ${event.type}`, err);
