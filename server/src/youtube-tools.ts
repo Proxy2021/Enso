@@ -93,12 +93,41 @@ function formatVideo(item: any, stats?: { viewCount?: string; likeCount?: string
   };
 }
 
+// ── Feed Cache ──
+
+interface FeedCacheEntry {
+  data: VideoInfo[];
+  ts: number;
+}
+const feedCache = new Map<string, FeedCacheEntry>();
+const FEED_CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
+
+function getCachedFeed(key: string): VideoInfo[] | null {
+  const entry = feedCache.get(key);
+  if (entry && Date.now() - entry.ts < FEED_CACHE_TTL_MS) return entry.data;
+  return null;
+}
+
+function getStaleFeed(key: string): VideoInfo[] | null {
+  const entry = feedCache.get(key);
+  return entry ? entry.data : null;
+}
+
+function setCachedFeed(key: string, data: VideoInfo[]): void {
+  feedCache.set(key, { data, ts: Date.now() });
+}
+
 // ── Tool Implementations ──
 
 async function myFeed(params: Record<string, unknown>): Promise<VideoInfo[]> {
   const yt = getYouTube();
   const maxResults = Math.min(Number(params.maxResults) || 10, 50);
   const publishedAfter = params.publishedAfter as string | undefined;
+  const cacheKey = `${maxResults}:${publishedAfter || ""}`;
+
+  // Return cached result if fresh
+  const cached = getCachedFeed(cacheKey);
+  if (cached) return cached;
 
   // Step 1: Get subscriptions
   const subs: string[] = [];
@@ -115,7 +144,7 @@ async function myFeed(params: Record<string, unknown>): Promise<VideoInfo[]> {
       if (chId) subs.push(chId);
     }
     pageToken = res.data.nextPageToken || undefined;
-  } while (pageToken && subs.length < 100); // Cap at 100 channels
+  } while (pageToken && subs.length < 50); // Cap at 50 channels to conserve quota
 
   if (subs.length === 0) return [];
 
@@ -173,10 +202,13 @@ async function myFeed(params: Record<string, unknown>): Promise<VideoInfo[]> {
   const videoIds = topVideos.map((v) => v.contentDetails?.videoId || v.snippet?.resourceId?.videoId || "").filter(Boolean);
   const stats = await enrichVideos(yt, videoIds);
 
-  return topVideos.map((v) => {
+  const result = topVideos.map((v) => {
     const vid = v.contentDetails?.videoId || v.snippet?.resourceId?.videoId || "";
     return formatVideo(v, stats.get(vid));
   });
+
+  setCachedFeed(cacheKey, result);
+  return result;
 }
 
 async function trending(params: Record<string, unknown>): Promise<VideoInfo[]> {
@@ -396,13 +428,26 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       isPrimary: true,
       execute: async (_callId, params) => {
+        const maxResults = Math.min(Number(params.maxResults) || 10, 50);
+        const publishedAfter = params.publishedAfter as string | undefined;
+        const cacheKey = `${maxResults}:${publishedAfter || ""}`;
         try {
           const videos = await myFeed(params);
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed: ${videos.length} videos` });
           return jsonResult({ tool: "enso_youtube_my_feed", count: videos.length, videos });
         } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const isQuota = msg.includes("quota");
+          // On quota error, return stale cache if available
+          if (isQuota) {
+            const stale = getStaleFeed(cacheKey);
+            if (stale) {
+              logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed (stale cache, quota exceeded): ${stale.length} videos` });
+              return jsonResult({ tool: "enso_youtube_my_feed", count: stale.length, videos: stale, stale: true, warning: "YouTube API quota exceeded — showing cached results." });
+            }
+          }
           logError("youtube", "my_feed failed", err);
-          return errorResult(err instanceof Error ? err.message : String(err));
+          return errorResult(isQuota ? "YouTube API quota exceeded for today. Feed will be available again after midnight Pacific time." : msg);
         }
       },
     } as EnsoAgentTool,

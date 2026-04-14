@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "spec": {
+    "toolFamily": "email",
+    "toolPrefix": "enso_email",
+    "description": "Email: send messages via Gmail SMTP with attachments, CC/BCC, HTML support",
+    "signatureId": "email_send",
+    "tools": [
+      {
+        "suffix": "send",
+        "label": "Send Email",
+        "description": "Send an email via Gmail SMTP.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "to": { "type": "string", "description": "Recipient email address(es)" },
+            "subject": { "type": "string", "description": "Email subject" },
+            "body": { "type": "string", "description": "Email body (plain text or HTML)" },
+            "html": { "type": "boolean", "description": "Treat body as HTML" },
+            "cc": { "type": "string", "description": "CC recipients" },
+            "bcc": { "type": "string", "description": "BCC recipients" }
+          },
+          "required": ["to", "subject", "body"],
+          "additionalProperties": false
+        },
+        "sampleParams": {}
+      }
+    ]
+  },
+  "createdAt": 1744646400000
+}

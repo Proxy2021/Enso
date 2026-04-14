@@ -45,6 +45,8 @@ export interface LLMCallOptions {
   temperature?: number;
   /** Response MIME type (e.g., "application/json" for structured output) */
   responseMimeType?: string;
+  /** JSON schema for structured output (Gemini API only, used with responseMimeType) */
+  responseSchema?: object;
   /** Provider keys override */
   providerKeys?: Record<string, string>;
   /** Direct Gemini API key override */
@@ -159,7 +161,7 @@ export async function llm(opts: LLMCallOptions): Promise<string> {
 
   // If we have a Gemini key AND the model is a Gemini model, use direct Gemini API with retry
   if (geminiKey && isGeminiModel(model)) {
-    return callGeminiWithRetry(opts.prompt, geminiKey, model, timeoutMs, maxOutputTokens, opts.temperature, opts.responseMimeType, opts.systemPrompt);
+    return callGeminiWithRetry(opts.prompt, geminiKey, model, timeoutMs, maxOutputTokens, opts.temperature, opts.responseMimeType, opts.systemPrompt, undefined, undefined, opts.responseSchema);
   }
 
   // Multi-provider fallback via callChatLLM
@@ -274,12 +276,13 @@ async function callGeminiWithRetry(
   systemPrompt?: string,
   image?: { base64: string; mimeType: string },
   maxAttempts = 3,
+  responseSchema?: object,
 ): Promise<string> {
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const result = await callGeminiOnce(prompt, apiKey, model, timeoutMs, maxOutputTokens, temperature, responseMimeType, systemPrompt, image);
+      const result = await callGeminiOnce(prompt, apiKey, model, timeoutMs, maxOutputTokens, temperature, responseMimeType, systemPrompt, image, responseSchema);
       return result;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -308,6 +311,7 @@ async function callGeminiOnce(
   responseMimeType?: string,
   systemPrompt?: string,
   image?: { base64: string; mimeType: string },
+  responseSchema?: object,
 ): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -325,6 +329,7 @@ async function callGeminiOnce(
         maxOutputTokens,
         ...(temperature !== undefined ? { temperature } : {}),
         ...(responseMimeType ? { responseMimeType } : {}),
+        ...(responseSchema ? { responseSchema } : {}),
       },
     };
     if (systemPrompt) {

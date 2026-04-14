@@ -20,6 +20,7 @@ import {
   type EntityId, type EntityIndexEntry,
 } from "./entity-model.js";
 import { logAction, logError } from "./action-log.js";
+import { cleanJson } from "./json-utils.js";
 
 // ── Constants ──
 
@@ -84,11 +85,22 @@ Return ONLY the JSON array, no markdown fences.`;
         prompt,
         tier: "fast",
         responseMimeType: "application/json",
+        responseSchema: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              entityId: { type: "string" },
+              semanticTags: { type: "array", items: { type: "string" } },
+            },
+            required: ["entityId", "semanticTags"],
+          },
+        },
         temperature: 0.3,
         maxOutputTokens: 8192,
       });
 
-      const parsed = JSON.parse(response) as Array<{ entityId: string; semanticTags: string[] }>;
+      const parsed = JSON.parse(cleanJson(response)) as Array<{ entityId: string; semanticTags: string[] }>;
 
       for (const item of parsed) {
         const entry = lookupEntity(item.entityId);
@@ -200,16 +212,48 @@ Return JSON array of cross-references:
 Only include meaningful connections, not forced ones. If no good cross-source match exists for an item, omit it. Return ONLY the JSON array, no markdown fences.`;
 
     try {
-      const response = await llm({
+      const crossRefSchema = {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            from: { type: "string" },
+            to: { type: "string" },
+            reason: { type: "string" },
+          },
+          required: ["from", "to", "reason"],
+        },
+      };
+      let response = await llm({
         prompt,
         tier: "utility",
         responseMimeType: "application/json",
+        responseSchema: crossRefSchema,
         temperature: 0.3,
         maxOutputTokens: 16384,
         timeoutMs: 120_000,
       });
 
-      const refs = JSON.parse(response) as Array<{ from: string; to: string; reason: string }>;
+      let refs: Array<{ from: string; to: string; reason: string }>;
+      try {
+        refs = JSON.parse(cleanJson(response));
+      } catch {
+        // Retry once with stricter prompt on parse failure
+        logAction({
+          ts: Date.now(), type: "action", category: "cortex-enrichment",
+          message: `Cross-reference JSON parse failed, retrying with stricter prompt`,
+        });
+        response = await llm({
+          prompt: prompt + "\n\nIMPORTANT: Return ONLY valid JSON array. No trailing commas, no unescaped quotes in reason strings. Escape all special characters.",
+          tier: "utility",
+          responseMimeType: "application/json",
+          responseSchema: crossRefSchema,
+          temperature: 0.1,
+          maxOutputTokens: 16384,
+          timeoutMs: 120_000,
+        });
+        refs = JSON.parse(cleanJson(response));
+      }
 
       for (const ref of refs) {
         if (!ref.from || !ref.to || !ref.reason) continue;

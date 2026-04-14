@@ -28,10 +28,16 @@ var fetchCount = categoryChannelIds ? Math.min(maxResults * 4, 100) : maxResults
 var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: fetchCount });
 
 var videos = [];
+var feedWarning = null;
 if (result && result.success && result.data) {
   videos = result.data.videos || [];
+  if (result.data.warning) feedWarning = result.data.warning;
 } else if (result && typeof result === "string") {
-  try { videos = JSON.parse(result).videos || []; } catch(e) {}
+  try {
+    var parsed = JSON.parse(result);
+    videos = parsed.videos || [];
+    if (parsed.warning) feedWarning = parsed.warning;
+  } catch(e) {}
 }
 
 // Apply category filter
@@ -59,5 +65,6 @@ var data = {
   category: categoryFilter,
   feedCategories: feedCategories
 };
+if (feedWarning) data.warning = feedWarning;
 
 return { content: [{ type: "text", text: JSON.stringify(data) }] };

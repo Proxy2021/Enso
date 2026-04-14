@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "createdAt": 1775260800000,
+  "spec": {
+    "toolFamily": "youtube",
+    "toolPrefix": "enso_youtube_",
+    "description": "YouTube: personalized feed from subscriptions, trending, search, channel videos, liked videos, subscriptions list",
+    "signatureId": "youtube_feed",
+    "tools": [
+      {
+        "suffix": "my_feed",
+        "label": "My Feed",
+        "description": "Get latest videos from subscribed YouTube channels, sorted by newest",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxResults": { "type": "number", "description": "Number of videos (default 10, max 50)" },
+            "publishedAfter": { "type": "string", "description": "Only include videos published after this ISO date" }
+          },
+          "required": []
+        },
+        "sampleParams": {}
+      },
+      {
+        "suffix": "trending",
+        "label": "Trending",
+        "description": "Get trending YouTube videos by region",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "regionCode": { "type": "string", "description": "Country code (default US)" },
+            "maxResults": { "type": "number", "description": "Number of videos (default 10)" }
+          },
+          "required": []
+        }
+      },
+      {
+        "suffix": "search",
+        "label": "Search",
+        "description": "Search YouTube videos",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": { "type": "string", "description": "Search query" },
+            "maxResults": { "type": "number", "description": "Number of results (default 10)" }
+          },
+          "required": ["query"]
+        }
+      },
+      {
+        "suffix": "liked_videos",
+        "label": "Liked Videos",
+        "description": "Get your liked YouTube videos",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxResults": { "type": "number", "description": "Number of videos (default 10)" }
+          },
+          "required": []
+        }
+      },
+      {
+        "suffix": "subscriptions",
+        "label": "Subscriptions",
+        "description": "List your YouTube channel subscriptions",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxResults": { "type": "number", "description": "Number of channels (default 20)" }
+          },
+          "required": []
+        }
+      },
+      {
+        "suffix": "channel_videos",
+        "label": "Channel Videos",
+        "description": "Get recent videos from a specific YouTube channel",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "channelId": { "type": "string", "description": "YouTube channel ID" },
+            "maxResults": { "type": "number", "description": "Number of videos (default 10)" }
+          },
+          "required": ["channelId"]
+        }
+      },
+      {
+        "suffix": "unsubscribe",
+        "label": "Unsubscribe",
+        "description": "Unsubscribe from YouTube channels",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "channelIds": { "type": "array", "items": { "type": "string" }, "description": "Channel IDs to unsubscribe from" }
+          },
+          "required": []
+        }
+      }
+    ]
+  }
+}
