@@ -1048,16 +1048,53 @@ async function handleFocusEvaluate(action: TeamLeaderAction): Promise<void> {
     const resp = await fetch(`http://localhost:3001/api/focus-areas/${area.id}/prepare`, { method: "POST" });
     if (resp.ok) {
       const result = await resp.json();
-      // Update assessment — understanding improves after evaluation
+
+      // LLM-driven assessment of understanding after evaluation
       const { updateFocusAssessment } = await import("./focus-areas.js");
-      const prev = area.assessment?.understanding ?? Math.round((area.confidence ?? 0.5) * 100);
-      updateFocusAssessment(area.id, {
-        understanding: Math.min(95, prev + 25),
-        assessedBy: "tl-evaluate",
-        notes: result.orchestrated
-          ? `Orchestrated evaluation launched — deep study in progress`
-          : `Evaluation complete — comprehensive briefing produced`,
-      });
+      try {
+        const { llm } = await import("./llm.js");
+        const assessResult = await llm({
+          prompt: `You are the Team Leader assessing your understanding of a focus area after completing an evaluation.
+
+FOCUS: "${area.title}"
+DESCRIPTION: ${area.description}
+INTENT: ${area.intent || "Not yet defined"}
+TYPE: ${area.focusType || "general"}
+HAS EVALUATION BRIEFING: ${result.orchestrated ? "In progress (orchestrated)" : "Yes — complete"}
+HAS PRIOR SPRINTS: ${area.lastSprintResults ? "Yes" : "No"}
+EVIDENCE POINTS: ${area.evidence?.length || 0}
+EXPERTS ASSIGNED: ${area.experts?.length || 0}
+
+Rate your UNDERSTANDING of this goal on a scale of 0-100:
+- 0-20: Barely know what this is about. Just inferred from data signals.
+- 20-40: Surface understanding. Know the topic but not the user's specific angle.
+- 40-60: Good understanding. Know what they want and why, but gaps in specifics.
+- 60-80: Strong understanding. Clear picture of goals, constraints, and approach.
+- 80-100: Deep understanding. Could independently make strategic decisions.
+
+Be HONEST — don't inflate. A first evaluation typically gets 30-50. Only repeated cycles with sprint results push toward 70+.
+
+Return JSON: { "understanding": <number>, "notes": "<one sentence reasoning>" }`,
+          tier: "fast",
+          maxOutputTokens: 200,
+          responseMimeType: "application/json",
+          temperature: 0.3,
+          timeoutMs: 10_000,
+        });
+        const parsed = JSON.parse(assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, ""));
+        updateFocusAssessment(area.id, {
+          understanding: Math.max(10, Math.min(95, parsed.understanding || 35)),
+          assessedBy: "tl-evaluate",
+          notes: parsed.notes || "Evaluation completed",
+        });
+      } catch {
+        // Fallback: modest bump
+        updateFocusAssessment(area.id, {
+          understanding: Math.min(50, (area.assessment?.understanding ?? 10) + 20),
+          assessedBy: "tl-evaluate",
+          notes: "Evaluation complete (assessment call failed, using estimate)",
+        });
+      }
 
       if (result.orchestrated) {
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
@@ -1189,18 +1226,63 @@ Return JSON: { "needsUser": true/false, "reason": "why", "userTasks": ["specific
       parsed = { needsUser: true, reason: "Could not assess — surfacing to user for safety." };
     }
 
-    // Update progress assessment — sprint completion moves the needle
+    // LLM-driven assessment of both understanding and progress after sprint review
     const { updateFocusAssessment } = await import("./focus-areas.js");
-    const prevProgress = area.assessment?.progress ?? 0;
-    const deliverableCount = summary?.deliverables?.length ?? 0;
-    const progressBump = Math.min(25, 5 + deliverableCount * 4); // 5-25 points per sprint
-    updateFocusAssessment(area.id, {
-      progress: Math.min(100, prevProgress + progressBump),
-      assessedBy: "tl-sprint-review",
-      notes: parsed.needsUser
-        ? `Sprint reviewed — ${deliverableCount} deliverables, user action needed: ${parsed.reason}`
-        : `Sprint reviewed — ${deliverableCount} deliverables, TL proceeding to next cycle`,
-    });
+    try {
+      const assessResult = await llm({
+        prompt: `You are the Team Leader assessing a focus area after reviewing sprint results.
+
+FOCUS: "${area.title}"
+INTENT: ${area.intent || "Not defined"}
+TYPE: ${area.focusType || "general"}
+CURRENT UNDERSTANDING: ${area.assessment?.understanding ?? 10}%
+CURRENT PROGRESS: ${area.assessment?.progress ?? 0}%
+
+SPRINT RESULTS:
+${summary?.sprintSummary || "Sprint completed."}
+
+DELIVERABLES (${summary?.deliverables?.length || 0}):
+${deliverables}
+
+Rate BOTH dimensions on 0-100:
+
+UNDERSTANDING (how well you know this goal):
+- Did the sprint reveal new insights about what the user actually wants?
+- Do you now better understand the approach and constraints?
+
+PROGRESS (how far toward the goal):
+- 0: Nothing done yet
+- 10-25: Initial research/planning done
+- 25-50: First tangible outputs produced
+- 50-75: Significant deliverables, clear momentum
+- 75-90: Most of the goal achieved, refinement phase
+- 90-100: Goal essentially complete
+
+Be HONEST. A single sprint typically adds 10-20 to progress. Don't inflate.
+
+Return JSON: { "understanding": <number>, "progress": <number>, "notes": "<one sentence>" }`,
+        tier: "fast",
+        maxOutputTokens: 200,
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        timeoutMs: 10_000,
+      });
+      const assessParsed = JSON.parse(assessResult.trim().replace(/```json?\s*/g, "").replace(/```/g, ""));
+      updateFocusAssessment(area.id, {
+        understanding: Math.max(10, Math.min(95, assessParsed.understanding || area.assessment?.understanding || 30)),
+        progress: Math.max(0, Math.min(100, assessParsed.progress || area.assessment?.progress || 5)),
+        assessedBy: "tl-sprint-review",
+        notes: assessParsed.notes || `Sprint reviewed — ${summary?.deliverables?.length || 0} deliverables`,
+      });
+    } catch {
+      // Fallback: modest bump
+      const deliverableCount = summary?.deliverables?.length ?? 0;
+      updateFocusAssessment(area.id, {
+        progress: Math.min(100, (area.assessment?.progress ?? 0) + Math.min(20, 5 + deliverableCount * 3)),
+        assessedBy: "tl-sprint-review",
+        notes: `Sprint reviewed — ${deliverableCount} deliverables (assessment call failed)`,
+      });
+    }
 
     if (parsed.needsUser) {
       // Surface specific tasks to user — DON'T auto-complete this action

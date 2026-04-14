@@ -404,11 +404,11 @@ Return JSON: { "areas": [ { ... } ] }`;
       nextSteps: undefined,
       confidence: typeof raw.confidence === "number" ? raw.confidence : 0.5,
       assessment: {
-        understanding: Math.round((typeof raw.confidence === "number" ? raw.confidence : 0.5) * 100),
+        understanding: 10, // Just inferred — TL hasn't studied this yet
         progress: 0,
         assessedAt: now,
         assessedBy: "inference",
-        notes: "Initial inference from Cortex data",
+        notes: "Newly inferred — awaiting TL evaluation",
       },
       evidence: Array.isArray(raw.evidence) ? raw.evidence.map(String).slice(0, 5) : [],
       relatedEntityIds: [],
@@ -1769,13 +1769,21 @@ export function migrateFocusAssessments(): void {
 
   let changed = false;
   for (const area of state.areas) {
-    if (!area.assessment) {
+    // Migrate areas without assessment, or fix inflated values from v1 migration
+    const needsMigration = !area.assessment
+      || area.assessment.assessedBy === "inference"  // v1 used old confidence scores
+      || (area.assessment.assessedBy === "migration" && area.assessment.understanding > 50); // fix inflated v1 migration
+    if (needsMigration) {
+      // Honest starting values — no inflated numbers
+      // Understanding starts low: TL hasn't actually studied these yet
+      const hasEval = !!area.preparedBriefing;
+      const hasSprint = !!area.lastSprintResults;
       area.assessment = {
-        understanding: Math.round((area.confidence ?? 0.5) * 100),
-        progress: area.lastSprintResults ? 15 : 0,
+        understanding: hasEval ? 40 : 10,
+        progress: hasSprint ? 15 : 0,
         assessedAt: area.updatedAt || area.createdAt,
-        assessedBy: "inference",
-        notes: "Migrated from legacy confidence score",
+        assessedBy: "migration",
+        notes: "Awaiting TL examination for accurate assessment",
       };
       changed = true;
     }
