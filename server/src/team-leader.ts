@@ -1432,65 +1432,73 @@ async function deliverRoutineCompletionSummary(): Promise<void> {
   const tasks = st.backgroundTasks || [];
   if (tasks.length === 0) return;
 
-  const completed = tasks.filter(t => t.status === "completed");
-  const failed = tasks.filter(t => t.status === "failed");
+  const completedTasks = tasks.filter(t => t.status === "completed");
+  const failedTasks = tasks.filter(t => t.status === "failed");
 
-  const summary = [
-    `✅ **TL Routine Complete** — ${completed.length} task${completed.length !== 1 ? "s" : ""} finished${failed.length ? `, ${failed.length} failed` : ""}`,
-    "",
-    ...completed.map(t => `✓ ${t.actionTitle}`),
-    ...failed.map(t => `✗ ${t.actionTitle}${t.result ? `: ${t.result.slice(0, 80)}` : ""}`),
-  ].join("\n");
+  logAction({ ts: Date.now(), type: "action", category: "team-leader",
+    message: `All background tasks finished: ${completedTasks.length} done, ${failedTasks.length} failed. Delivering final briefing.` });
 
-  // Deliver in-app
-  try {
-    const { getAllClients } = await import("./server.js");
-    const { persistCard } = await import("./memory-bridge.js");
-    const clients = getAllClients();
-    if (clients.length > 0) {
-      const client = clients[0];
-      const cardId = randomUUID();
-      persistCard(client.id, "main", {
-        id: cardId, runId: cardId, type: "chat", role: "assistant",
-        text: summary, timestamp: Date.now(),
-      });
-      client.send({
-        id: cardId, runId: cardId, sessionKey: client.sessionKey,
-        seq: 0, state: "final" as const,
-        text: summary,
-        conversationId: "main", timestamp: Date.now(),
-      });
+  // Regenerate the briefing with FINAL action statuses (all tasks now resolved)
+  // This ensures the email shows accurate ✓/✗ instead of ◉
+  if (st.lastBriefing) {
+    // Update the briefing's proposed actions with final statuses
+    for (const action of st.lastBriefing.proposedActions) {
+      const recent = st.recentActions.find(a => a.id === action.id);
+      if (recent) action.status = recent.status;
     }
-  } catch { /* best effort */ }
 
-  // Deliver email
-  try {
-    const { getNotifyEmail } = await import("./shareable-pages.js");
-    const email = getNotifyEmail();
-    if (email) {
-      const { sendHtmlEmail } = await import("./email.js");
-      const htmlItems = tasks.map(t => {
-        const icon = t.status === "completed" ? "✅" : "❌";
-        return `<div style="padding:6px 0;font-size:14px;color:#d1d5db;">${icon} ${t.actionTitle}</div>`;
-      }).join("");
-      await sendHtmlEmail({
-        to: email,
-        subject: `✅ TL Routine Complete — ${completed.length} done${failed.length ? `, ${failed.length} failed` : ""}`,
-        html: `<div style="max-width:600px;margin:0 auto;background:#111827;border-radius:12px;overflow:hidden;font-family:-apple-system,sans-serif;color:#f9fafb;">
-          <div style="background:linear-gradient(135deg,#065f46,#10b981);padding:20px 24px;">
-            <h2 style="margin:0;font-size:18px;color:#fff;">✅ TL Routine Complete</h2>
-            <p style="margin:4px 0 0;font-size:14px;color:#a7f3d0;">${completed.length} tasks completed${failed.length ? `, ${failed.length} failed` : ""}</p>
-          </div>
-          <div style="padding:16px 24px;">${htmlItems}</div>
-          ${st.restartPending ? '<div style="padding:12px 24px;background:#1e1b4b;"><p style="color:#c4b5fd;font-size:13px;">🔄 Code was changed — server restart pending</p></div>' : ""}
-          <div style="padding:12px 24px;text-align:center;border-top:1px solid #1f2937;">
-            <a href="${getEnsoUrl()}" style="display:inline-block;background:#10b981;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:14px;">Open Enso →</a>
-          </div>
-        </div>`,
-        textFallback: summary,
-      });
+    // Now deliver the full briefing via all channels (email, WeChat, in-app)
+    // This is the ONLY email the user receives — with final, accurate status
+    await deliverBriefing(st.lastBriefing);
+
+    // Also send the "Needs Your Input" attention cards
+    const proposedActions = st.lastBriefing.proposedActions.filter(a => a.status === "proposed" || a.needsUserInput);
+    if (proposedActions.length > 0) {
+      try {
+        const { getAllClients } = await import("./server.js");
+        const { persistCard } = await import("./memory-bridge.js");
+        const clients = getAllClients();
+        if (clients.length > 0) {
+          const client = clients[0];
+
+          let focusAreas: Array<{ id: string; title: string }> = [];
+          try {
+            const { loadFocusState } = await import("./focus-areas.js");
+            const fState = loadFocusState();
+            focusAreas = (fState?.areas || []).map(a => ({ id: a.id, title: a.title }));
+          } catch { /* focus areas not available */ }
+
+          const actionLines = proposedActions.map(a => {
+            const titleLower = a.title.toLowerCase();
+            const matched = focusAreas.find(f => titleLower.includes(f.title.toLowerCase()));
+            const pEmoji = a.priority === "critical" ? "🔴" : a.priority === "high" ? "🟠" : a.priority === "medium" ? "🟡" : "⚪";
+            let actionHint = "";
+            if (matched) {
+              if (titleLower.includes("review")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **📬 Review Results**`;
+              else if (titleLower.includes("discuss")) actionHint = `\n→ Go to **Focus** tab → **${matched.title}** → click **💬 Discuss**`;
+              else actionHint = `\n→ Go to **Focus** tab → **${matched.title}**`;
+            }
+            return `${pEmoji} **${a.title}**\n${a.reasoning}${actionHint}`;
+          }).join("\n\n");
+
+          const attentionCardId = randomUUID();
+          const attentionText = `🙋 **Needs Your Input** (${proposedActions.length} item${proposedActions.length > 1 ? "s" : ""})\n\n${actionLines}`;
+          persistCard(client.id, "main", {
+            id: attentionCardId, runId: attentionCardId, type: "chat", role: "assistant",
+            text: attentionText, timestamp: Date.now() + 1,
+          });
+          client.send({
+            id: attentionCardId, runId: attentionCardId, sessionKey: client.sessionKey,
+            seq: 0, state: "final" as const,
+            text: attentionText,
+            conversationId: "main", timestamp: Date.now() + 1,
+          });
+        }
+      } catch { /* best effort */ }
     }
-  } catch { /* best effort */ }
+
+    saveState(st);
+  }
 
   // Check if restart is needed
   if (st.restartPending) {
@@ -1498,11 +1506,12 @@ async function deliverRoutineCompletionSummary(): Promise<void> {
   }
 
   // Clear background tasks for next routine
-  st.backgroundTasks = [];
-  saveState(st);
+  const st2 = loadState();
+  st2.backgroundTasks = [];
+  saveState(st2);
 
   logAction({ ts: Date.now(), type: "action", category: "team-leader",
-    message: `Routine completion: ${completed.length} done, ${failed.length} failed` });
+    message: `Routine complete: ${completedTasks.length} done, ${failedTasks.length} failed — briefing delivered` });
 }
 
 // ── 5e. Auto-Restart After Code Changes ──
