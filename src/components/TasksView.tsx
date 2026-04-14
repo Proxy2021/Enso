@@ -174,6 +174,7 @@ export default function TasksView() {
   const [tlTab, setTlTab] = useState<"briefing" | "actions" | "reacts">("actions");
   const [tlRunning, setTlRunning] = useState(false);
   const [reactInput, setReactInput] = useState<{ actionId: string; text: string } | null>(null);
+  const [reactFromActivity, setReactFromActivity] = useState<{ type: "card"; summary: string; focusId?: string; detail?: string } | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -380,7 +381,12 @@ export default function TasksView() {
           {/* TL Activity Tab — all agent artifacts */}
           {tlTab === "actions" && (
             <div className="p-3 max-h-[400px] overflow-y-auto">
-              <ActivityFeed showResolved limit={30} />
+              <ActivityFeed
+                showResolved
+                limit={30}
+                focusAreas={focusAreas}
+                onReact={(ctx) => setReactFromActivity(ctx)}
+              />
             </div>
           )}
 
@@ -388,23 +394,105 @@ export default function TasksView() {
           {tlTab === "briefing" && (
             <div className="p-3 max-h-[400px] overflow-y-auto">
               {!tlBriefing ? (
-                <p className="text-gray-500 text-xs text-center py-4">No briefing yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <h3 className="text-sm font-medium text-violet-300">{tlBriefing.headline}</h3>
-                    <p className="text-[10px] text-gray-500">{new Date(tlBriefing.timestamp).toLocaleString()}</p>
-                  </div>
-                  {tlBriefing.sections.map((s, i) => (
-                    <div key={i} className="rounded-lg border border-gray-800/30 bg-gray-900/30 p-2.5">
-                      <h4 className="text-xs font-medium text-gray-300 mb-1.5">{s.emoji} {s.title}</h4>
-                      {s.items.map((item, j) => (
-                        <p key={j} className="text-[11px] text-gray-400 leading-relaxed">{item}</p>
-                      ))}
+                <p className="text-gray-500 text-xs text-center py-6">No briefing yet. TL runs a morning routine daily — or click "Run Routine" above.</p>
+              ) : (() => {
+                const briefingAge = timeAgo(new Date(tlBriefing.timestamp).getTime());
+                const isToday = new Date(tlBriefing.timestamp).toDateString() === new Date().toDateString();
+                // Sections that need user action get special styling
+                const needsInputKeywords = ["input", "review", "authorize", "approve", "decision", "attention"];
+                const isActionSection = (title: string) => needsInputKeywords.some(k => title.toLowerCase().includes(k));
+
+                return (
+                  <div className="space-y-3">
+                    {/* Headline + age */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-violet-300 leading-snug">{tlBriefing.headline}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isToday ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-amber-500/10 text-amber-300 border border-amber-500/20"}`}>
+                            {isToday ? "Today" : "Stale"}
+                          </span>
+                          <span className="text-[10px] text-gray-500">{briefingAge}</span>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {/* Sections */}
+                    {tlBriefing.sections.map((s, i) => {
+                      const needsAction = isActionSection(s.title);
+                      return (
+                        <div key={i} className={`rounded-lg border p-2.5 ${
+                          needsAction
+                            ? "border-amber-500/25 bg-amber-950/10"
+                            : "border-gray-800/30 bg-gray-900/30"
+                        }`}>
+                          <h4 className={`text-xs font-medium mb-1.5 ${needsAction ? "text-amber-300" : "text-gray-300"}`}>
+                            {s.emoji} {s.title}
+                          </h4>
+                          {s.items.map((item, j) => (
+                            <div key={j} className="flex items-start gap-2 group">
+                              <p className={`text-[11px] leading-relaxed flex-1 ${needsAction ? "text-amber-200/80" : "text-gray-400"}`}>{item}</p>
+                              {/* Quick respond button on actionable items */}
+                              {needsAction && (
+                                <button
+                                  onClick={() => setReactFromActivity({
+                                    type: "card",
+                                    summary: `Briefing: ${s.title}`,
+                                    detail: item.slice(0, 150),
+                                  })}
+                                  className="shrink-0 opacity-0 group-hover:opacity-100 text-[9px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/20 hover:bg-violet-500/25 transition-all"
+                                >
+                                  Respond
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+
+                    {/* Proposed actions summary */}
+                    {tlBriefing.proposedActions && tlBriefing.proposedActions.length > 0 && (
+                      <div className="rounded-lg border border-violet-500/20 bg-violet-950/10 p-2.5">
+                        <h4 className="text-xs font-medium text-violet-300 mb-1.5">{"\uD83C\uDFAF"} TL's Planned Actions ({tlBriefing.proposedActions.length})</h4>
+                        {tlBriefing.proposedActions.map((a, j) => {
+                          const priorityStyle: Record<string, string> = {
+                            critical: "text-red-400 bg-red-500/10 border-red-500/20",
+                            high: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+                            medium: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+                            low: "text-gray-400 bg-gray-500/10 border-gray-500/20",
+                          };
+                          const statusIcon = a.status === "completed" ? "\u2705" : a.status === "executing" ? "\u26A1" : a.needsUserInput ? "\uD83D\uDC41" : "\u23F3";
+                          return (
+                            <div key={j} className="flex items-start gap-2 py-1 group">
+                              <span className="text-[10px] mt-0.5">{statusIcon}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[11px] text-gray-200">{a.title}</span>
+                                  <span className={`text-[8px] px-1 py-0.5 rounded border ${priorityStyle[a.priority] || priorityStyle.low}`}>{a.priority}</span>
+                                </div>
+                                <p className="text-[10px] text-gray-500 leading-snug">{a.reasoning}</p>
+                              </div>
+                              {a.needsUserInput && (
+                                <button
+                                  onClick={() => setReactFromActivity({
+                                    type: "card",
+                                    summary: `TL Action: ${a.title}`,
+                                    detail: a.reasoning,
+                                  })}
+                                  className="shrink-0 opacity-0 group-hover:opacity-100 text-[9px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/20 hover:bg-violet-500/25 transition-all"
+                                >
+                                  Respond
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -456,6 +544,20 @@ export default function TasksView() {
             </div>
           )}
         </section>
+
+        {/* React overlay from Activity tab */}
+        {reactFromActivity && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={() => setReactFromActivity(null)}>
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <div className="relative z-10 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+              <ReactToTL
+                context={reactFromActivity}
+                onClose={() => setReactFromActivity(null)}
+                mode="inline"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Active Orchestrations */}
         {activeOrchs.length > 0 && (
