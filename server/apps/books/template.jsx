@@ -9,6 +9,7 @@ function GeneratedUI({ data, onAction }) {
   var isEntityDetail = tool === "entity_detail" || !!d.focusEntity;
   var isDiscover = tool === "enso_books_discover";
   var isTaste = tool === "enso_books_taste";
+  var isSuperSearch = tool === "enso_books_super_search";
 
   // Hooks MUST be at top level — never inside conditionals
   var [searchInput, setSearchInput] = React.useState(d.query || "");
@@ -22,6 +23,7 @@ function GeneratedUI({ data, onAction }) {
   var [selectedRating, setSelectedRating] = React.useState(0);
   var [ratingBookId, setRatingBookId] = React.useState(null);
   var [activeMoodFilter, setActiveMoodFilter] = React.useState(null);
+  var [superSearchInput, setSuperSearchInput] = React.useState("");
 
   // ── Breadcrumb navigation bar (shown when navStack has entries) ──
   var navStack = d.navStack || [];
@@ -995,6 +997,207 @@ function GeneratedUI({ data, onAction }) {
     );
   }
 
+  // ── Super Search Results ──
+  if (isSuperSearch) {
+    var ssResults = Array.isArray(d.results) ? d.results : [];
+    var ssPrefs = d.preferences || {};
+    var SOURCE_COLORS = {
+      google: { bg: "#1d4ed8", color: "#fff", label: "Google Books" },
+      openlibrary: { bg: "#065f46", color: "#6ee7b7", label: "Open Library" },
+      web: { bg: "#374151", color: "#d1d5db", label: "Web" },
+    };
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {breadcrumb}
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+          <div>
+            <span style={{ fontSize: "20px", marginRight: "8px" }}>⚡</span>
+            <span style={{ fontWeight: 700, fontSize: "16px" }}>Super Search</span>
+            {d.query && <span style={{ fontSize: "12px", color: "#94a3b8", marginLeft: "8px" }}>focused on "{d.query}"</span>}
+            {!d.query && <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>personalized for your library</span>}
+          </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+              onClick={function() { onAction("super_search", { refresh: true, query: d.query || undefined }); }}>🔄 Refresh</Button>
+            <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+              onClick={function() { onAction("browse", {}); }}>← Library</Button>
+          </div>
+        </div>
+
+        {/* Search insight banner */}
+        {d.searchInsight && (
+          <div style={{ background: "linear-gradient(135deg, #1e1b4b, #0f172a)", border: "1px solid #7c3aed44", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#c4b5fd" }}>
+            💡 {d.searchInsight}
+          </div>
+        )}
+
+        {/* Preference signals used */}
+        {(ssPrefs.topGenres || []).length > 0 || (ssPrefs.topAuthors || []).length > 0 ? (
+          <UICard style={{ padding: "10px" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "6px" }}>Based on your reading profile</div>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {(ssPrefs.topGenres || []).map(function(g) {
+                return <Badge key={g} variant="default" style={{ fontSize: "9px", background: "#1e40af" }}>{g.replace(/_/g, " ")}</Badge>;
+              })}
+              {(ssPrefs.topAuthors || []).map(function(a) {
+                return <Badge key={a} variant="secondary" style={{ fontSize: "9px" }}>{a}</Badge>;
+              })}
+              {ssPrefs.librarySize > 0 && (
+                <span style={{ fontSize: "10px", color: "#475569", alignSelf: "center" }}>· {ssPrefs.librarySize} books in library</span>
+              )}
+              {d.fromCache && <Badge variant="outline" style={{ fontSize: "9px" }}>Cached</Badge>}
+            </div>
+          </UICard>
+        ) : null}
+
+        {/* Error state */}
+        {d.error && (
+          <UICard style={{ borderColor: "#ef444444", padding: "12px" }}>
+            <div style={{ color: "#ef4444", fontSize: "13px" }}>{d.error}</div>
+          </UICard>
+        )}
+
+        {/* Empty state */}
+        {ssResults.length === 0 && !d.error && (
+          <UICard style={{ padding: "20px", textAlign: "center" }}>
+            <div style={{ fontSize: "24px", marginBottom: "8px" }}>📚</div>
+            <div style={{ fontWeight: 600, marginBottom: "4px" }}>No recommendations found</div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "12px" }}>
+              Try scanning your Kindle library first, or provide a focus query.
+            </div>
+            <Button size="sm" onClick={function() { onAction("browse", {}); }}>← Back to Library</Button>
+          </UICard>
+        )}
+
+        {/* Results count */}
+        {ssResults.length > 0 && (
+          <div style={{ fontSize: "12px", color: "#64748b" }}>
+            {ssResults.length} recommendation{ssResults.length !== 1 ? "s" : ""} · Not in your library
+          </div>
+        )}
+
+        {/* Results grid */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {ssResults.map(function(book, idx) {
+            var srcStyle = SOURCE_COLORS[book.source] || SOURCE_COLORS.web;
+            var bookKey = "ss-" + idx;
+            var addStatus = addedStatus[bookKey];
+
+            return (
+              <UICard key={idx} style={{ padding: "12px" }}>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  {/* Cover */}
+                  {book.coverUrl ? (
+                    <img src={book.coverUrl} alt={book.title}
+                      style={{ width: "60px", height: "90px", objectFit: "cover", borderRadius: "6px", flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: "60px", height: "90px", borderRadius: "6px", flexShrink: 0, background: "#1e293b",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>📖</div>
+                  )}
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: "14px", lineHeight: 1.3 }}>{book.title}</div>
+                    {book.author && <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{book.author}</div>}
+
+                    <div style={{ display: "flex", gap: "5px", marginTop: "4px", flexWrap: "wrap", alignItems: "center" }}>
+                      {book.rating > 0 && (
+                        <span style={{ fontSize: "11px", color: "#f59e0b" }}>⭐ {book.rating}</span>
+                      )}
+                      {book.pageCount > 0 && (
+                        <span style={{ fontSize: "11px", color: "#64748b" }}>{book.pageCount}pp</span>
+                      )}
+                      <span style={{ fontSize: "9px", padding: "1px 6px", borderRadius: "4px", background: srcStyle.bg, color: srcStyle.color }}>{srcStyle.label}</span>
+                      {(book.tags || []).map(function(tag) {
+                        return <Badge key={tag} variant="outline" style={{ fontSize: "9px", borderColor: "#7c3aed44", color: "#a78bfa" }}>{tag}</Badge>;
+                      })}
+                    </div>
+
+                    {/* Why recommended */}
+                    {book.whyRecommended && (
+                      <div style={{ fontSize: "11px", color: "#a78bfa", marginTop: "6px", lineHeight: 1.5, background: "#1e1b4b", padding: "5px 8px", borderRadius: "6px", borderLeft: "2px solid #7c3aed" }}>
+                        💡 {book.whyRecommended}
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {book.description && !book.whyRecommended && (
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: 1.4 }}>
+                        {book.description.slice(0, 160)}{book.description.length > 160 ? "..." : ""}
+                      </div>
+                    )}
+
+                    {/* Match score bar */}
+                    {book.matchScore > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "5px" }}>
+                        <span style={{ fontSize: "9px", color: "#475569" }}>Match</span>
+                        <div style={{ flex: 1, maxWidth: "80px", height: "3px", background: "#334155", borderRadius: "2px" }}>
+                          <div style={{ width: Math.round(book.matchScore * 100) + "%", height: "100%", background: "linear-gradient(90deg, #7c3aed, #3b82f6)", borderRadius: "2px" }} />
+                        </div>
+                        <span style={{ fontSize: "9px", color: "#64748b" }}>{Math.round(book.matchScore * 100)}%</span>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
+                      {addStatus === "adding" && (
+                        <Badge variant="secondary" style={{ fontSize: "10px" }}>Adding...</Badge>
+                      )}
+                      {addStatus === "added" && (
+                        <Badge variant="success" style={{ fontSize: "10px", background: "#065f46", color: "#6ee7b7" }}>✓ Added to Cortex</Badge>
+                      )}
+                      {addStatus === "error" && (
+                        <Badge variant="destructive" style={{ fontSize: "10px" }}>Error</Badge>
+                      )}
+                      {!addStatus && (
+                        <Button size="sm" style={{ fontSize: "10px", padding: "2px 10px", background: "#059669", color: "#fff" }}
+                          onClick={function() {
+                            setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[bookKey] = "adding"; return n; });
+                            try {
+                              onAction("add_to_cortex", {
+                                title: book.title,
+                                type: "book",
+                                creator: book.author || "",
+                                year: book.publishedDate ? book.publishedDate.slice(0, 4) : "",
+                                description: book.description || book.whyRecommended || "",
+                                imageUrl: book.coverUrl || "",
+                                sourceUrl: book.sourceUrl || "",
+                                categories: book.categories || [],
+                                rating: book.rating || 0,
+                                source: "research",
+                              });
+                              setTimeout(function() {
+                                setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[bookKey] = "added"; return n; });
+                              }, 800);
+                            } catch(e) {
+                              setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[bookKey] = "error"; return n; });
+                            }
+                          }}>📥 Add to Cortex</Button>
+                      )}
+                      <Button size="sm" variant="outline" style={{ fontSize: "10px", padding: "2px 10px" }}
+                        onClick={function() { onAction("add", { query: book.title + (book.author ? " " + book.author : "") }); }}>
+                        + Add to Library
+                      </Button>
+                      {book.sourceUrl && (
+                        <a href={book.sourceUrl} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: "10px", color: "#60a5fa", alignSelf: "center", textDecoration: "none" }}>
+                          View ↗
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </UICard>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── Browse (primary collection view) ──
   if (isBrowse) {
     var books = d.books || [];
@@ -1068,16 +1271,38 @@ function GeneratedUI({ data, onAction }) {
           })}
         </div>
 
-        {/* Add Book search bar */}
-        <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
-          <Input
-            placeholder="Add a new book — search by title, author, or ISBN..."
-            value={addBookInput}
-            onChange={function(v) { setAddBookInput(v); }}
-            onKeyDown={function(e) { if (e.key === "Enter" && addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}
-            style={{ flex: 1, fontSize: "12px" }}
-          />
-          <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>🔍 Search & Add</Button>
+        {/* Add Book search bar + Super Search */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
+            <Input
+              placeholder="Add a new book — search by title, author, or ISBN..."
+              value={addBookInput}
+              onChange={function(v) { setAddBookInput(v); }}
+              onKeyDown={function(e) { if (e.key === "Enter" && addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}
+              style={{ flex: 1, fontSize: "12px" }}
+            />
+            <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>🔍 Search & Add</Button>
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <Button
+              variant="outline"
+              size="sm"
+              style={{ fontSize: "11px", background: "linear-gradient(135deg, #4c1d95, #1e3a8a)", color: "#c4b5fd", borderColor: "#7c3aed44", flex: "none" }}
+              onClick={function() { onAction("super_search", {}); }}
+              title="AI-powered recommendations based on your reading history and preferences"
+            >⚡ Super Search</Button>
+            <Input
+              placeholder="Focus super search on a topic (optional)..."
+              value={superSearchInput}
+              onChange={function(v) { setSuperSearchInput(v); }}
+              onKeyDown={function(e) { if (e.key === "Enter") onAction("super_search", superSearchInput.trim() ? { query: superSearchInput.trim() } : {}); }}
+              style={{ flex: 1, fontSize: "12px" }}
+            />
+            {superSearchInput.trim() && (
+              <Button variant="ghost" size="sm" style={{ fontSize: "11px", color: "#94a3b8" }}
+                onClick={function() { setSuperSearchInput(""); }}>✕</Button>
+            )}
+          </div>
         </div>
 
         {/* Search bar + Sort (hidden for Discovered tab) */}

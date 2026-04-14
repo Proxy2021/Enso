@@ -172,6 +172,39 @@
         }
       },
       {
+        "suffix": "super_search",
+        "label": "Super Search",
+        "description": "Personalized book discovery: reads your Kindle highlights and reading preferences, then searches the web for targeted recommendations. Finds books you'll love based on what you've already read.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Optional focus query (e.g., 'books about human psychology', 'science fiction like Dune'). If omitted, uses your reading history automatically."
+            },
+            "refresh": {
+              "type": "boolean",
+              "description": "Force refresh even if cached (default: false)"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_books_super_search",
+          "query": null,
+          "totalResults": 12,
+          "results": [],
+          "searchInsight": "Based on your interest in psychology and habit formation, these picks extend themes from your recent reads.",
+          "preferences": {
+            "topGenres": ["psychology", "science"],
+            "topAuthors": ["Daniel Kahneman", "Malcolm Gladwell"],
+            "recentBooks": [],
+            "librarySize": 471
+          }
+        }
+      },
+      {
         "suffix": "taste",
         "label": "Taste Profile",
         "description": "Record user interaction with a discovered book (save, rate, dismiss) or view the current taste profile. Interactions shape future daily picks.",
