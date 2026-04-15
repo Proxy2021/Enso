@@ -634,7 +634,14 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Immediately executing user react: "${action.title}"` });
         // Fire and forget — don't await so the react resolves quickly
-        launchBuilderTask(action, { artifactId, reactId, focusId: react.context?.focusId }).catch(err =>
+        // Pass the FULL react text (with any Discuss conversation) so Claude Code
+        // sees the user's complete intent, not just the LLM's summarized version.
+        launchBuilderTask(action, {
+          artifactId,
+          reactId,
+          focusId: react.context?.focusId,
+          fullUserRequest: react.text,
+        }).catch(err =>
           logError("team-leader", `Failed to execute react action: ${action.title}`, err));
       } else {
         queueTask({
@@ -2007,7 +2014,7 @@ Only set needsUser to true in genuinely exceptional cases.`,
  * Simple tasks (≤30min, single-agent): Direct Claude Code session
  * Complex tasks (sprint-level, multi-agent): Full orchestration with DAG
  */
-async function launchBuilderTask(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string; focusId?: string }): Promise<void> {
+async function launchBuilderTask(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string; focusId?: string; fullUserRequest?: string }): Promise<void> {
   const isComplex = action.estimatedEffort === "sprint" || action.estimatedEffort === "1h";
 
   if (isComplex) {
@@ -2020,7 +2027,7 @@ async function launchBuilderTask(action: TeamLeaderAction, opts?: { artifactId?:
 }
 
 /** Launch a single Claude Code session for simple tasks */
-async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string; focusId?: string }): Promise<void> {
+async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string; focusId?: string; fullUserRequest?: string }): Promise<void> {
   try {
     const { runClaudeCode } = await import("./claude-code.js");
     const { getAllClients } = await import("./server.js");
@@ -2066,6 +2073,19 @@ ${fc}
       } catch { /* non-critical */ }
     }
 
+    // The full user request — includes any prior Discuss conversation.
+    // Always preferred over the truncated title since it preserves intent.
+    const userRequestBlock = opts?.fullUserRequest
+      ? `
+
+=== FULL USER REQUEST ===
+This is the user's original message verbatim, including any prior discussion they had with the Team Leader before clicking Execute. Read it carefully — it contains the complete intent and any context the user already established.
+
+${opts.fullUserRequest}
+=== END USER REQUEST ===
+`
+      : "";
+
     const prompt = `[Team Leader Task: ${action.title}]
 
 You are executing a task assigned by the Enso Team Leader.
@@ -2073,9 +2093,9 @@ You are executing a task assigned by the Enso Team Leader.
 TASK: ${action.title}
 TYPE: ${action.type}
 PRIORITY: ${action.priority}
-REASONING: ${action.reasoning}
-${focusBlock}
-The Enso codebase is at D:/Github/Enso. Execute this task now.
+TL'S INTERPRETATION: ${action.reasoning}
+${userRequestBlock}${focusBlock}
+The Enso codebase is at D:/Github/Enso. Execute this task now based on the FULL USER REQUEST above (not just the truncated title or TL interpretation).
 Be thorough but focused. When done, summarize what you changed.`;
 
     logAction({ ts: Date.now(), type: "action", category: "team-leader",
