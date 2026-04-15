@@ -507,8 +507,9 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
 
     // Create artifact so user sees TL's response
     const { createArtifact } = await import("./agent-artifacts.js");
+    let artifactId: string | undefined;
     if (parsed.decision !== "ignore") {
-      createArtifact({
+      const artifact = createArtifact({
         type: parsed.decision === "act" ? "action" : "insight",
         agentId: "tl", agentName: "Team Leader",
         focusId: react.context?.focusId,
@@ -520,6 +521,7 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
         body: parsed.reason,
         status: parsed.decision === "act" ? "in-progress" : "done",
       });
+      artifactId = artifact?.id;
     }
 
     if (parsed.decision === "act") {
@@ -552,7 +554,7 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Immediately executing user react: "${action.title}"` });
         // Fire and forget — don't await so the react resolves quickly
-        launchBuilderTask(action).catch(err =>
+        launchBuilderTask(action, { artifactId, reactId }).catch(err =>
           logError("team-leader", `Failed to execute react action: ${action.title}`, err));
       } else {
         queueTask({
@@ -1925,7 +1927,7 @@ Only set needsUser to true in genuinely exceptional cases.`,
  * Simple tasks (≤30min, single-agent): Direct Claude Code session
  * Complex tasks (sprint-level, multi-agent): Full orchestration with DAG
  */
-async function launchBuilderTask(action: TeamLeaderAction): Promise<void> {
+async function launchBuilderTask(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string }): Promise<void> {
   const isComplex = action.estimatedEffort === "sprint" || action.estimatedEffort === "1h";
 
   if (isComplex) {
@@ -1933,12 +1935,12 @@ async function launchBuilderTask(action: TeamLeaderAction): Promise<void> {
     await launchOrchestration(action);
   } else {
     // Simple — single Claude Code session
-    await launchClaudeCodeSession(action);
+    await launchClaudeCodeSession(action, opts);
   }
 }
 
 /** Launch a single Claude Code session for simple tasks */
-async function launchClaudeCodeSession(action: TeamLeaderAction): Promise<void> {
+async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string }): Promise<void> {
   try {
     const { runClaudeCode } = await import("./claude-code.js");
     const { getAllClients } = await import("./server.js");
@@ -1997,6 +1999,43 @@ Be thorough but focused. When done, summarize what you changed.`;
       completeBackgroundTask(action.id, "completed");
       logAction({ ts: Date.now(), type: "action", category: "team-leader",
         message: `Claude Code task completed: "${action.title}"` });
+
+      // Extract session summary from the terminal card text (last meaningful lines)
+      let resultSummary = `Task completed: ${action.title}`;
+      try {
+        const { getAllClients } = await import("./server.js");
+        const cardId = `tl-${action.id.slice(0, 8)}`;
+        // Read session summary from persisted card journal
+        const { loadCardHistory } = await import("./memory-bridge.js");
+        const clients = getAllClients();
+        const clientId = clients[0]?.id || "team-leader-builder";
+        const history = loadCardHistory(clientId, "tl-tasks", 20);
+        const card = history?.find((c: { id?: string }) => c.id === cardId);
+        if (card?.text) {
+          // Extract last non-empty, non-marker lines as summary
+          const lines = (card.text as string).split("\n")
+            .filter((l: string) => l.trim() && !l.includes("\u200B[") && !l.startsWith(">>>"))
+            .slice(-8);
+          if (lines.length > 0) resultSummary = lines.join("\n").slice(0, 500);
+        }
+      } catch { /* card text extraction is best-effort */ }
+
+      // Update artifact with completion result
+      if (opts?.artifactId) {
+        try {
+          const { resolveArtifact } = await import("./agent-artifacts.js");
+          resolveArtifact(opts.artifactId, `Completed: ${resultSummary.slice(0, 200)}`);
+        } catch { /* */ }
+      }
+
+      // Update react resolution with result
+      if (opts?.reactId) {
+        try {
+          const { resolveReact } = await import("./reacts.js");
+          resolveReact(opts.reactId, `Completed: ${resultSummary.slice(0, 300)}`);
+        } catch { /* */ }
+      }
+
       // Check if code was changed and restart may be needed
       await checkForCodeChangesAndRestart(action.title);
     }).catch(err => {
@@ -2004,6 +2043,18 @@ Be thorough but focused. When done, summarize what you changed.`;
       updateActionStatus(action.id, "proposed");
       completeBackgroundTask(action.id, "failed", String(err));
       logError("team-leader", `Claude Code task failed: "${action.title}"`, err);
+
+      // Update artifact with failure
+      if (opts?.artifactId) {
+        import("./agent-artifacts.js").then(({ resolveArtifact }) => {
+          resolveArtifact(opts!.artifactId!, `Failed: ${String(err).slice(0, 200)}`);
+        }).catch(() => {});
+      }
+      if (opts?.reactId) {
+        import("./reacts.js").then(({ resolveReact }) => {
+          resolveReact(opts!.reactId!, `Failed: ${String(err).slice(0, 200)}`);
+        }).catch(() => {});
+      }
     });
 
     action.status = "executing";
