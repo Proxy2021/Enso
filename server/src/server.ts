@@ -2480,17 +2480,27 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       const ensoCtx = await buildEnsoContext();
       const contextBlock = context?.summary ? `\nCONTEXT: ${context.summary}${context.detail ? `\nDETAIL: ${context.detail}` : ""}` : "";
 
+      // Rich focus context when discussing a focus area
+      let focusBlock = "";
+      if (context?.focusId) {
+        try {
+          const { buildRichFocusContext } = await import("./team-leader.js");
+          const fc = await buildRichFocusContext(context.focusId);
+          focusBlock = `\n\n=== FOCUS AREA CONTEXT ===\n${fc}\n=== END CONTEXT ===\n`;
+        } catch { /* non-critical */ }
+      }
+
       const systemPrompt = `You are ${agentName || "Team Leader"}${agentRole ? `, ${agentRole}` : ""} of the Enso platform.
 The user wants to discuss a task before committing to execution. Help them refine their idea, ask clarifying questions, suggest approaches, and identify potential issues.
-${contextBlock}
+${contextBlock}${focusBlock}
 
 ${ensoCtx.slice(0, 2000)}
 
 BEHAVIOR:
 - Be concise and direct (2-5 sentences per response)
+- Ground your responses in the FOCUS AREA CONTEXT above — reference specific evidence, deliverables, goals, and the user's actual situation
 - Ask clarifying questions to understand the task fully
 - Suggest specific implementation approaches when appropriate
-- Reference the Enso codebase architecture when relevant
 - When the task is well-defined, say so — encourage the user to click Execute
 - Do NOT execute anything — this is a planning discussion only`;
 
@@ -2503,10 +2513,10 @@ BEHAVIOR:
 
       const reply = await llm({
         prompt: fullPrompt,
-        tier: "fast",
-        maxOutputTokens: 500,
+        tier: "utility",
+        maxOutputTokens: 800,
         temperature: 0.5,
-        timeoutMs: 15_000,
+        timeoutMs: 25_000,
       });
 
       res.json({ reply: reply.trim() });

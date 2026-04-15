@@ -197,6 +197,89 @@ function saveState(state: TeamLeaderState): void {
 // ══════════════════════════════════════════════════════════════════
 
 /**
+ * Build rich context about a focus area for agent prompts.
+ * Pulls the full focus wiki page, assessment, evidence, adjacent pursuits,
+ * last sprint deliverables, and related Cortex entities — everything the
+ * agent needs to converse meaningfully about the focus.
+ */
+export async function buildRichFocusContext(focusId: string): Promise<string> {
+  try {
+    const { loadFocusState } = await import("./focus-areas.js");
+    const state = loadFocusState();
+    const area = state?.areas.find(a => a.id === focusId);
+    if (!area) return `Unknown focus: ${focusId}`;
+
+    const lines: string[] = [];
+    lines.push(`FOCUS: ${area.title}`);
+    if (area.description) lines.push(`Description: ${area.description}`);
+    if (area.intent) lines.push(`Goal: ${area.intent}`);
+    if (area.deeperIntent) lines.push(`Why it matters: ${area.deeperIntent}`);
+
+    // Assessment state
+    if (area.assessment) {
+      lines.push(`\nCurrent state: Understanding ${area.assessment.understanding}%, Progress ${area.assessment.progress}% | Clarity: ${area.clarity} | Trend: ${area.progress?.trend || "steady"}`);
+      if (area.assessment.notes) lines.push(`Assessment notes: ${area.assessment.notes}`);
+    } else {
+      lines.push(`\nClarity: ${area.clarity} | Trend: ${area.progress?.trend || "steady"}`);
+    }
+
+    // Evidence — what's in the user's life that grounds this focus
+    if (area.evidence?.length) {
+      lines.push(`\nEvidence from user's life:`);
+      area.evidence.forEach(e => lines.push(`  - ${e}`));
+    }
+
+    // Adjacent pursuits
+    if (area.adjacentPursuits?.length) {
+      lines.push(`\nAdjacent pursuits (suggested expansions):`);
+      area.adjacentPursuits.forEach(p => lines.push(`  - ${p}`));
+    }
+
+    // Latest sprint summary
+    if (area.lastSprintSummary) {
+      lines.push(`\nLast sprint summary: ${area.lastSprintSummary.sprintSummary}`);
+      if (area.lastSprintSummary.deliverables?.length) {
+        lines.push(`Deliverables produced:`);
+        area.lastSprintSummary.deliverables.forEach((d: { taskTitle: string; howItHelps: string }) =>
+          lines.push(`  - ${d.taskTitle}: ${d.howItHelps}`));
+      }
+      if (area.lastSprintSummary.nextSteps?.length) {
+        lines.push(`Recommended next steps:`);
+        area.lastSprintSummary.nextSteps.forEach((s: string) => lines.push(`  - ${s}`));
+      }
+    }
+
+    // Focus wiki page — the richest single source
+    try {
+      const slug = area.id.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+      const wikiPath = join(homedir(), ".enso", "wiki", "focuses", `${slug}.md`);
+      if (existsSync(wikiPath)) {
+        const wiki = readFileSync(wikiPath, "utf-8");
+        // Extract everything past the title but cap length
+        const body = wiki.replace(/^#\s+.*$/m, "").trim().slice(0, 3000);
+        if (body) lines.push(`\n--- Full focus wiki page ---\n${body}`);
+      }
+    } catch { /* non-critical */ }
+
+    // Related Cortex entities (top 8)
+    try {
+      const { findRelatedContent } = await import("./cortex-synthesis.js");
+      const related = findRelatedContent(area.title, 8);
+      if (related.hits?.length) {
+        lines.push(`\nRelated Cortex knowledge:`);
+        related.hits.slice(0, 8).forEach(h =>
+          lines.push(`  - "${h.title}" [${h.source}]${h.summary ? `: ${h.summary.slice(0, 120)}` : ""}`));
+      }
+    } catch { /* non-critical */ }
+
+    return lines.join("\n");
+  } catch (err) {
+    logError("team-leader", `buildRichFocusContext failed for ${focusId}`, err);
+    return `Focus: ${focusId} (context unavailable)`;
+  }
+}
+
+/**
  * Process an event targeted at any agent (TL or expert).
  * This is the single entry point for all work in the organization.
  *
@@ -278,30 +361,20 @@ async function processExpertEvent(event: AgentEvent): Promise<void> {
     const teammates = (area.experts || []).filter(e => e.id !== expert.id)
       .map(e => `${e.name} (${e.role})`).join(", ");
 
-    // Cortex knowledge about this focus area
-    let cortexContext = "";
-    try {
-      const { findRelatedContent } = await import("./cortex-synthesis.js");
-      const related = findRelatedContent(area.title, 5);
-      if (related.hits.length > 0) {
-        cortexContext = `\nKnowledge Cortex (what we know):\n${related.hits.slice(0, 5).map(h => `- "${h.title}" [${h.source}]`).join("\n")}`;
-      }
-    } catch { /* non-critical */ }
-
-    // Previous sprint deliverables
-    const prevDeliverables = area.lastSprintSummary?.deliverables?.length
-      ? `\nPrevious sprint produced: ${area.lastSprintSummary.deliverables.map((d: { taskTitle: string }) => d.taskTitle).join(", ")}`
-      : "";
+    // Rich focus context — everything about the focus area
+    const focusContext = await buildRichFocusContext(area.id);
 
     const response = await llm({
-      prompt: `You are ${expert.name}, ${expert.role} for focus area "${area.title}".
+      prompt: `You are ${expert.name}, ${expert.role} for this focus area.
 Your perspective: ${expert.perspective}
 Your goals: ${expert.goals.join("; ")}
 ${expert.responsibilities ? `Your responsibilities: ${expert.responsibilities}` : ""}
-${area.intent ? `Focus goal: ${area.intent}` : ""}
-${area.deeperIntent ? `Why it matters: ${area.deeperIntent}` : ""}
 ${teammates ? `Your teammates: ${teammates}` : ""}
-${area.codebasePath ? `Codebase: ${area.codebasePath}` : ""}${cortexContext}${prevDeliverables}
+${area.codebasePath ? `Codebase: ${area.codebasePath}` : ""}
+
+=== FOCUS AREA CONTEXT ===
+${focusContext}
+=== END CONTEXT ===
 
 ${eventDescription}
 
@@ -321,9 +394,9 @@ Return JSON: {
   ]
 }`,
       tier: "utility",
-      maxOutputTokens: 500,
+      maxOutputTokens: 1200,
       temperature: 0.4,
-      timeoutMs: 25_000,
+      timeoutMs: 30_000,
     });
 
     const parsed = JSON.parse(cleanJson(response)) as { actions: Array<{ type: string; message?: string; target?: string; reason?: string }> };
@@ -468,14 +541,20 @@ async function handleReactForTL(reactId: string): Promise<void> {
     const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
     const isProactive = proactiveTypes.has(react.context?.type);
 
-    const escapedText = react.text.replace(/"/g, '\\"').slice(0, 2000);
-    const contextSummary = (react.context?.summary || "no context").split("\n")[0].slice(0, 100); // First line only, avoid duplication with text
+    const escapedText = react.text.replace(/"/g, '\\"').slice(0, 3000);
+
+    // Rich focus context if this react is about a focus area
+    let focusContext = "";
+    if (react.context?.focusId) {
+      const fc = await buildRichFocusContext(react.context.focusId);
+      focusContext = `\n\n=== FOCUS AREA CONTEXT ===\n${fc}\n=== END CONTEXT ===\n`;
+    }
+
     const response = await llm({
       prompt: `You are the Team Leader of Enso. A user react just arrived.
-${isProactive ? "\n**This is a DIRECT USER INSTRUCTION** (not a response to a notification). Treat with high priority and bias toward action.\n" : ""}
+${isProactive ? "\n**This is a DIRECT USER INSTRUCTION** (not a response to a notification). Treat with high priority and bias toward action.\n" : ""}${focusContext}
 REACT: "${escapedText}"
 CHANNEL: ${react.channel}
-CONTEXT: ${react.context?.type || "general"} — ${contextSummary}
 ACTION: ${react.action || "custom text"}
 
 Decide what to do:
@@ -486,10 +565,10 @@ Decide what to do:
 ${react.context?.focusId ? `\nThis react is about a focus area. Consider delegating to a domain expert if it's domain-specific.` : ""}
 
 Return JSON only, no markdown: {"decision":"act","reason":"short reason","actionDescription":"what to do"}`,
-      tier: "fast",
-      maxOutputTokens: 500,
+      tier: "utility",
+      maxOutputTokens: 800,
       temperature: 0.3,
-      timeoutMs: 15_000,
+      timeoutMs: 25_000,
     });
 
     let parsed: { decision: string; reason: string; actionDescription?: string };
