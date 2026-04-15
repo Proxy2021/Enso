@@ -920,6 +920,8 @@ export async function handleOrchestrationApprove(params: {
     userContextBlock = await buildUserContext({ profileChars: 400, themeChars: 600 });
     const focusId = orch.context?.type === "focus" ? orch.context?.focusId : undefined;
     if (focusId) focusContextBlock = await buildRichFocusContext(focusId);
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator",
+      message: `Task context injected for ${orchestrationId}: user=${userContextBlock.length}ch, focus=${focusContextBlock.length}ch${focusId ? ` (${focusId})` : ""}` });
   } catch { /* non-critical */ }
 
   try {
