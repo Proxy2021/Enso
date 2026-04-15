@@ -904,10 +904,26 @@ Rules:
 - Reference SPECIFIC data from the signals (error counts, focus area names, entity counts)
 - "reasoning" must explain impact on the user, not just describe the action
 - "autoExecute" = true for ANYTHING that doesn't need the user's brain. Effort is irrelevant.
-- "needsUserInput" = true ONLY when you literally need the user to tell you something (a preference, a decision, a review)
+- "needsUserInput" = true is EXTREMELY RARE. You are the decision-maker. The user trusts you to act.
 - For recurring errors (same error appearing multiple times), prioritize as critical and auto-execute the fix
 - Include at least one platform improvement if any gaps are visible
-- Order by impact, not effort`;
+- Order by impact, not effort
+
+CRITICAL — "needsUserInput" guidelines:
+  TRUE (genuinely need the user's brain):
+    - Choosing between two fundamentally different strategic directions
+    - Spending real money (API subscriptions, purchases)
+    - Deleting or removing something the user created
+    - Personal life decisions (career, relationships, health)
+  FALSE (you handle it — DO NOT ask the user):
+    - Launching sprints, evaluations, reviews → just do it
+    - Approving feature implementations → just do it
+    - Expert team staffing, restructuring → just do it
+    - Fixing bugs, errors, failed tasks → just do it
+    - Addressing expert escalations → just do it
+    - Data enrichment, Cortex maintenance → just do it
+    - Any technical decision about the platform → just do it
+  If you're unsure, set needsUserInput to FALSE and act. The user wants progress, not permission requests.`;
 
   const response = await llm({
     prompt,
@@ -1833,17 +1849,22 @@ ${summary?.nextSteps?.join("\n") || "None specified."}
 
 Question: Does the user need to personally act on any of these deliverables, or can you (the TL) proceed to the next evolution cycle autonomously?
 
+DEFAULT TO FALSE. You are the decision-maker. Almost all sprint results can be handled autonomously.
+
 User action is needed ONLY when:
-- A deliverable requires the user to READ something and form an opinion
-- A deliverable requires a PERSONAL DECISION (which direction to take, what to prioritize)
-- A deliverable requires the user to APPLY something in real life (use a tool, follow a guide on a trip)
+- A deliverable requires a REAL-LIFE action by the user (travel somewhere, install an app on their phone, make a purchase)
+- A deliverable requires an irreversible PERSONAL DECISION with major consequences
+- The user explicitly asked to be consulted about this topic
 
-User action is NOT needed when:
-- Deliverables are internal improvements (code, architecture, documentation)
-- Results are incremental progress that the TL can build upon
-- Next steps are things the TL or experts can handle
+User action is NOT needed (just proceed autonomously):
+- Internal improvements (code, architecture, documentation, bug fixes)
+- New features or tools built — just proceed to next cycle
+- Expert evaluations, recommendations, analysis — TL processes these
+- Research results, knowledge articles — TL ingests and moves on
+- ANY incremental progress — queue next cycle immediately
 
-Return JSON: { "needsUser": true/false, "reason": "why", "userTasks": ["specific thing user should do"] }`,
+Return JSON: { "needsUser": false, "reason": "why" }
+Only set needsUser to true in genuinely exceptional cases.`,
       tier: "fast",
       maxOutputTokens: 1500,
       responseMimeType: "application/json",
