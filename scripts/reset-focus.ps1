@@ -252,7 +252,7 @@ if ($All) {
     }
 
     # Stale orchestration output files in server/
-    $serverDir = Join-Path $PSScriptRoot ".." "server"
+    $serverDir = Join-Path (Join-Path $PSScriptRoot "..") "server"
     $orchOutputs = Get-ChildItem $serverDir -Filter ".orchestration-*" -ErrorAction SilentlyContinue
     if ($orchOutputs) {
         if (-not $WhatIf) { $orchOutputs | Remove-Item -Force }
