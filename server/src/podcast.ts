@@ -64,8 +64,16 @@ export async function generatePodcastScript(
   const nonLatinRatio = (content.title.match(/[^\u0000-\u007F]/g) ?? []).length / Math.max(content.title.length, 1);
   const topicLang = nonLatinRatio > 0.3 ? "the same language the title is written in" : "English";
 
-  const prompt = `${PODCAST_SCRIPT_PROMPT}
+  // Personalize the podcast — connect to the listener's interests and active focus areas
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    const ctx = await buildUserContext({ profileChars: 400, themeChars: 600, includeApps: false });
+    if (ctx) userContext = `\n\n## About the Listener\nWhen relevant, the hosts can naturally connect topics to the listener's known interests, projects, and focus areas. Don't force it — only when the connection is genuine and adds value.\n\n${ctx}\n`;
+  } catch { /* non-critical */ }
 
+  const prompt = `${PODCAST_SCRIPT_PROMPT}
+${userContext}
 LANGUAGE FOR THIS PODCAST: ${topicLang}
 
 Title: ${content.title}

@@ -78,10 +78,34 @@ ctx.log("Found " + allFindings.length + " web results across " + topicsSearched 
 // ── Step 3: Deep AI analysis — filter, categorize, personalize, synthesize ──
 var analysisResult = null;
 if (allFindings.length > 0) {
+  // Read the user profile + active focus areas from the filesystem so the analyst
+  // can prioritize findings that advance the user's actual goals
+  var personalContext = "";
+  try {
+    var os = require("os");
+    var path = require("path");
+    var fs = require("fs");
+    var ensoHome = process.env.ENSO_HOME || path.join(os.homedir(), ".enso");
+    var profilePath = path.join(ensoHome, "wiki", "synthesis", "user-profile.md");
+    if (fs.existsSync(profilePath)) {
+      personalContext += "## Who the user is\n" + fs.readFileSync(profilePath, "utf8").slice(0, 800) + "\n\n";
+    }
+    var focusStatePath = path.join(ensoHome, "data", "focus-areas.json");
+    if (fs.existsSync(focusStatePath)) {
+      var focusState = JSON.parse(fs.readFileSync(focusStatePath, "utf8"));
+      var active = (focusState.areas || []).filter(function(a) { return a.status === "active" || a.status === "emerging"; });
+      if (active.length > 0) {
+        personalContext += "## User's active focus areas\nWeight findings that advance these higher:\n" +
+          active.map(function(a) { return "- **" + a.title + "**: " + (a.intent || a.description || ""); }).join("\n") + "\n\n";
+      }
+    }
+  } catch(e) { /* non-critical */ }
+
   try {
     var analysisPrompt = "You are a personal intelligence analyst. Your client has a Knowledge Cortex (personal knowledge base) with these topics:\n\n" +
       knowledgeProfile.slice(0, 3000) +
-      "\n\n---\n\nHere are today's web search results across their tracked topics:\n\n" +
+      "\n\n---\n\n" + personalContext +
+      "---\n\nHere are today's web search results across their tracked topics:\n\n" +
       allFindings.map(function(f, i) {
         return (i+1) + ". [" + f.topic + "] " + f.title + "\n   " + f.description + "\n   URL: " + f.url;
       }).join("\n\n") +

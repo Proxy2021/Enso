@@ -838,7 +838,7 @@ function buildCardEvolutionPlanningPrompt(
     ? `\n## Pre-computed Summary\nOverview: ${cardContent.summary.overview}\nKey Outcomes:\n${cardContent.summary.keyOutcomes.map((o) => `- ${o}`).join("\n")}\nNarrative:\n${cardContent.summary.narrative}\n`
     : "";
 
-  const contentBlock = `## Card Content (${extracted.cardType})\nTitle: ${extracted.title}\n\n${extracted.body.slice(0, 6000)}`;
+  const contentBlock = `## Card Content (${extracted.cardType})\nTitle: ${extracted.title}\n\n${extracted.body.slice(0, 10000)}`;
 
   const typeGuidance = getTypeGuidance(cardType, includeResearch);
   const userGoalBlock = evolutionGoal
@@ -946,6 +946,11 @@ async function evolveViaOrchestration(params: CardEvolutionParams): Promise<void
       },
       client,
       account,
+      // Pass context so per-task user context injection runs during execution
+      context: {
+        type: "custom",
+        goal: `Evolve ${cardType} card into a polished interactive app`,
+      },
       maxConcurrency: 3,
       planningModel: "opus",
       targetCardId: cardId,

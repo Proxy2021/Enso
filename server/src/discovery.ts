@@ -88,6 +88,11 @@ export async function handleDiscovery(params: DiscoveryParams): Promise<void> {
       },
       client,
       account,
+      // Pass discovery context so per-task user context injection runs during execution
+      context: {
+        type: "discovery",
+        goal: `Discover high-potential project opportunities${focusLabel ? ` in: ${focusLabel}` : ""}`,
+      },
       maxConcurrency: 4,
       planningModel: "opus",
       planningPromptBuilder: (orchestrationId, planFilePath) =>

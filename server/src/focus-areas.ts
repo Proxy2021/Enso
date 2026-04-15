@@ -881,6 +881,13 @@ export async function prepareFocusArea(
         classification: { complexity: "orchestrated", reasoning: "Focus area preparation — multi-agent deep evaluation" },
         client,
         account,
+        // Pass context so per-task buildRichFocusContext injection runs during execution.
+        // The custom planningPromptBuilder below still takes precedence for the planning prompt itself.
+        context: {
+          type: "focus",
+          focusId: area.id,
+          goal: `Evaluate focus area: ${area.title}`,
+        },
         skipApproval: true,
         maxConcurrency: 3,
         useGeminiPlanning: true,
@@ -1086,6 +1093,7 @@ export async function launchFocusEvolve(params: {
 
   const context: OCtx = {
     type: "focus",
+    focusId: area.id, // Enables per-task buildRichFocusContext injection
     goal: (brief || `Evolve focus area: ${area.title}\n\nGoal: ${area.intent || area.description}\nWhy: ${area.deeperIntent || ""}`) + expertContext,
     briefing: area.preparedBriefing,
     discussion: discussion || undefined,

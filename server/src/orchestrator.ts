@@ -67,6 +67,8 @@ const activeOrchestrations = new Map<
     plan: OrchestrationPlan;
     client: ConnectedClient;
     account: ResolvedEnsoAccount;
+    /** Full OrchestrationContext (focus/project/research/discovery) — used to inject context into per-task prompts */
+    context?: OrchestrationContext;
     sharedContext: Map<string, string>; // taskId → result summary
     bootstrapCardId: string;
     terminalCardId: string; // Reused across planning + execution sessions
@@ -327,6 +329,10 @@ export interface OrchestrationContext {
   type: "evolution" | "focus" | "research" | "discovery" | "custom";
   /** The goal — what the user wants to achieve */
   goal: string;
+  /** When type === "focus", the ID of the focus area — used to load buildRichFocusContext for every task */
+  focusId?: string;
+  /** When type === "evolution" with a project codebase, the project ID */
+  projectId?: string;
   /** Rich context the PL should study before planning (evaluation briefing, research) */
   briefing?: string;
   /** Strategic discussion transcript */
@@ -668,6 +674,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       const orchType: OrchestrationType = params.onComplete ? "evolution" : "orchestration";
       activeOrchestrations.set(orchestrationId, {
         plan, client, account,
+        context: params.context, // Store full OrchestrationContext for per-task focus context lookup
         sharedContext: new Map(),
         bootstrapCardId, terminalCardId,
         aborted: false, taskRunIds: new Map(), taskSessionIds: new Map(),
@@ -722,17 +729,20 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
     userContext = await buildUserContext({ profileChars: 600, themeChars: 800 });
   } catch { /* non-critical */ }
 
+  // Note: planningPromptBuilder takes precedence over context-driven prompt — this lets
+  // a caller (e.g., Focus Prepare) provide a custom planning prompt while still passing
+  // `context` so per-task focus context injection kicks in during execution.
   let planningPrompt: string;
-  if (params.context) {
-    planningPrompt = buildContextDrivenPlanningPrompt(params.context, orchestrationId, planFilePath);
-  } else if (params.planningPromptBuilder) {
+  if (params.planningPromptBuilder) {
     planningPrompt = params.planningPromptBuilder(orchestrationId, planFilePath);
+  } else if (params.context) {
+    planningPrompt = buildContextDrivenPlanningPrompt(params.context, orchestrationId, planFilePath);
   } else {
     planningPrompt = buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath, userContext);
   }
 
-  // For context-driven plans, prepend user context if not already there
-  if (params.context && userContext && !planningPrompt.includes("USER CONTEXT")) {
+  // Prepend user context to any planning prompt that doesn't already have it
+  if (userContext && !planningPrompt.includes("USER CONTEXT")) {
     planningPrompt = `=== USER CONTEXT ===\nThe following describes who the user is, what knowledge they have, what apps are available, and their active focus areas. Use this to ground every planning decision.\n\n${userContext}\n=== END USER CONTEXT ===\n\n${planningPrompt}`;
   }
 
@@ -774,6 +784,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
       plan,
       client,
       account,
+      context: params.context, // Store full OrchestrationContext for per-task focus context lookup
       sharedContext: new Map(),
       bootstrapCardId,
       terminalCardId,
@@ -907,7 +918,7 @@ export async function handleOrchestrationApprove(params: {
   try {
     const { buildUserContext, buildRichFocusContext } = await import("./team-leader.js");
     userContextBlock = await buildUserContext({ profileChars: 400, themeChars: 600 });
-    const focusId = (orch as any).context?.contextType === "focus" ? (orch as any).context?.contextId : undefined;
+    const focusId = orch.context?.type === "focus" ? orch.context?.focusId : undefined;
     if (focusId) focusContextBlock = await buildRichFocusContext(focusId);
   } catch { /* non-critical */ }
 
@@ -1109,7 +1120,7 @@ export async function handleOrchestrationResume(params: {
   try {
     const { buildUserContext, buildRichFocusContext } = await import("./team-leader.js");
     userContextBlock = await buildUserContext({ profileChars: 400, themeChars: 600 });
-    const focusId = (orch as any).context?.contextType === "focus" ? (orch as any).context?.contextId : undefined;
+    const focusId = orch.context?.type === "focus" ? orch.context?.focusId : undefined;
     if (focusId) focusContextBlock = await buildRichFocusContext(focusId);
   } catch { /* non-critical */ }
 
