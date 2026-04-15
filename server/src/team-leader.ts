@@ -2104,6 +2104,102 @@ export function getPendingTasks(): QueuedTask[] {
   return loadState().taskQueue.filter(t => !t.processed);
 }
 
+/**
+ * Mark a queued task as processed.
+ */
+function markTaskProcessed(taskId: string, result?: string): void {
+  const state = loadState();
+  const task = state.taskQueue.find(t => t.id === taskId);
+  if (task) {
+    task.processed = true;
+    task.processedAt = new Date().toISOString();
+    task.result = result;
+    saveState(state);
+  }
+}
+
+// ── 5c-2. Task Executor Loop ──
+// Continuously processes queued tasks instead of waiting for the next morning routine.
+// Checks every 30 seconds. Converts queued tasks into TeamLeaderActions and executes them.
+
+let _taskLoopRunning = false;
+let _taskLoopInterval: ReturnType<typeof setInterval> | null = null;
+
+async function processNextQueuedTask(): Promise<void> {
+  if (_taskLoopRunning) return; // prevent overlap
+  const pending = getPendingTasks();
+  if (pending.length === 0) return;
+
+  _taskLoopRunning = true;
+  const task = pending[0]; // FIFO
+
+  try {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Task executor: processing "${task.title}" (source: ${task.source})` });
+
+    // Convert queued task to a TeamLeaderAction and execute it
+    const titleLower = task.title.toLowerCase();
+
+    // Determine delegation from task title
+    let delegation: TeamLeaderAction["delegation"] = "self";
+    if (titleLower.includes("evaluat") || titleLower.includes("sprint") || titleLower.includes("evolve") ||
+        titleLower.includes("expert") || titleLower.includes("focus") || titleLower.includes("review result")) {
+      delegation = "focus";
+    } else if (titleLower.includes("cortex") || titleLower.includes("enrich") || titleLower.includes("knowledge")) {
+      delegation = "knowledge";
+    } else if (titleLower.includes("research") || titleLower.includes("discover")) {
+      delegation = "research";
+    }
+
+    const action: TeamLeaderAction = {
+      id: randomUUID(),
+      priority: task.source === "user-react" ? "high" : "medium",
+      type: "maintenance",
+      title: task.title,
+      reasoning: task.description,
+      delegation,
+      estimatedEffort: "15min",
+      autoExecute: true,
+      status: "executing",
+    };
+
+    // Execute using the existing action execution pipeline
+    const executed = await executeActions([action]);
+    const result = executed[0]?.status === "completed" ? "completed" : "executed";
+    markTaskProcessed(task.id, result);
+
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Task executor: "${task.title}" → ${result}` });
+  } catch (err) {
+    logError("team-leader", `Task executor failed: "${task.title}"`, err);
+    markTaskProcessed(task.id, `error: ${err}`);
+  } finally {
+    _taskLoopRunning = false;
+  }
+}
+
+/**
+ * Start the task executor loop. Called once on server startup.
+ */
+export function startTaskExecutorLoop(): void {
+  if (_taskLoopInterval) return;
+  _taskLoopInterval = setInterval(processNextQueuedTask, 30_000); // check every 30s
+  logAction({ ts: Date.now(), type: "system", category: "team-leader",
+    message: "Task executor loop started (30s interval)" });
+  // Process immediately on start
+  setTimeout(processNextQueuedTask, 5_000);
+}
+
+/**
+ * Stop the task executor loop.
+ */
+export function stopTaskExecutorLoop(): void {
+  if (_taskLoopInterval) {
+    clearInterval(_taskLoopInterval);
+    _taskLoopInterval = null;
+  }
+}
+
 // ── 5d. Background Task Tracking ──
 
 /** Helper to update an action's status in persisted state */

@@ -4031,8 +4031,10 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
         runtime.log?.("[enso] focus area conversation providers registered");
 
         // Clean up stale TL task statuses from before restart
-        import("./team-leader.js").then(({ cleanupStaleTasksOnStartup }) => {
+        import("./team-leader.js").then(({ cleanupStaleTasksOnStartup, startTaskExecutorLoop }) => {
           cleanupStaleTasksOnStartup();
+          // Start the task executor loop — processes queued tasks immediately instead of waiting for morning routine
+          startTaskExecutorLoop();
         }).catch(() => {});
 
         // Migrate focus areas to assessment system (one-time)
