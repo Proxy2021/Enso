@@ -70,9 +70,14 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
     } as ServerMessage);
   };
 
-  // 2. Craft the build prompt
+  // 2. Craft the build prompt — include user context (profile + themes + apps + focuses)
   const userAppsDir = getEnsoPath("apps");
-  const prompt = buildAppPrompt(cardText, buildAppDefinition, userAppsDir, conversationContext);
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    userContext = await buildUserContext({ profileChars: 600, themeChars: 800 });
+  } catch { /* non-critical */ }
+  const prompt = buildAppPrompt(cardText, buildAppDefinition, userAppsDir, conversationContext, userContext);
 
   // 3. Run Claude Code — streams to the source card (client accumulates in buildTerminalText)
   let sessionId: string | undefined;
@@ -367,9 +372,14 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
     },
   });
 
-  // Craft prompt and run Claude Code
+  // Craft prompt and run Claude Code — include user context (profile + themes + active focuses)
   // Stream terminal output to the SAME card (store accumulates in buildTerminalText)
-  const prompt = buildDeepResearchUIPrompt(topic, language);
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    userContext = await buildUserContext({ profileChars: 600, themeChars: 800, includeApps: false });
+  } catch { /* non-critical */ }
+  const prompt = buildDeepResearchUIPrompt(topic, language, userContext);
 
   let sessionId: string | undefined;
   try {
@@ -463,13 +473,21 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
   return templateJSX;
 }
 
-function buildDeepResearchUIPrompt(topic: string, language: string): string {
+function buildDeepResearchUIPrompt(topic: string, language: string, userContext: string = ""): string {
   const lines: string[] = [];
 
   lines.push(`You have TWO jobs: (1) deeply research a topic, then (2) write a single self-contained JSX component that presents your findings in the best possible interactive experience, custom-designed for this specific topic.`);
   lines.push(``);
   lines.push(`## PERFORMANCE: Be efficient. Target 5-8 minutes total. Don't over-search — 5-10 focused searches beats 20 broad ones. Prioritize quality findings over volume.`);
   lines.push(``);
+  if (userContext) {
+    lines.push(`=== USER CONTEXT ===`);
+    lines.push(`Who the user is and what they already know. Use this to: (1) skip basics they already understand, (2) emphasize angles relevant to their active focus areas, (3) avoid duplicating Cortex knowledge they already have.`);
+    lines.push(``);
+    lines.push(userContext);
+    lines.push(`=== END USER CONTEXT ===`);
+    lines.push(``);
+  }
   lines.push(`## Topic: "${topic}"`);
   lines.push(``);
 
@@ -607,11 +625,21 @@ function buildAppPrompt(
   buildDefinition: string,
   userAppsDir: string,
   conversationContext?: string,
+  userContext: string = "",
 ): string {
   const lines: string[] = [];
 
   lines.push(`You are building an Enso app. Your task is to create a complete, working dynamic Enso app.`);
   lines.push(``);
+
+  if (userContext) {
+    lines.push(`=== USER CONTEXT ===`);
+    lines.push(`Who the user is, what knowledge they have, what apps already exist, and their active focus areas. Use this to: (1) avoid duplicating an existing app, (2) match the user's design preferences and domain knowledge, (3) align with their active focus areas if relevant.`);
+    lines.push(``);
+    lines.push(userContext);
+    lines.push(`=== END USER CONTEXT ===`);
+    lines.push(``);
+  }
   lines.push(`## Step 1: Read the Reference Guide`);
   lines.push(`Read the app building guide: CLAUDE-REFERENCE.md`);
   lines.push(`Focus on the "Dynamic Apps" section — it describes app.json, template.jsx, and executors format in detail.`);

@@ -255,8 +255,13 @@ async function evolveAppViaClaude(
     },
   });
 
-  // Build the 3-phase evolution prompt
-  const prompt = buildAppEvolutionPrompt(params, appDir, family);
+  // Build the 3-phase evolution prompt — include user context (profile + themes + apps + focuses)
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    userContext = await buildUserContext({ profileChars: 500, themeChars: 600 });
+  } catch { /* non-critical */ }
+  const prompt = buildAppEvolutionPrompt(params, appDir, family, userContext);
 
   // Run Claude Code — streams terminal output to the same card
   let sessionId: string | undefined;
@@ -620,6 +625,7 @@ function buildAppEvolutionPrompt(
   params: CardEvolutionParams,
   appDir: string,
   family: string,
+  userContext: string = "",
 ): string {
   const { cardContent, evolutionGoal } = params;
 
@@ -644,8 +650,12 @@ function buildAppEvolutionPrompt(
     ? `\nPre-computed Summary:\n- Overview: ${cardContent.summary.overview}\n- Key Outcomes: ${cardContent.summary.keyOutcomes.map((o) => `  - ${o}`).join("\n")}\n`
     : "";
 
-  return `You are evolving an existing Enso app to make it fundamentally more capable. This is NOT about cosmetic changes — you are improving the app's architecture, data processing, and effectiveness.
+  const userContextBlock = userContext
+    ? `\n=== USER CONTEXT ===\nWho the user is, what knowledge they have, what other apps they have, and their active focus areas. Use this to: (1) align improvements with the user's actual needs and skill level, (2) make the app integrate better with related apps and focuses, (3) preserve patterns the user is familiar with from their other apps.\n\n${userContext}\n=== END USER CONTEXT ===\n`
+    : "";
 
+  return `You are evolving an existing Enso app to make it fundamentally more capable. This is NOT about cosmetic changes — you are improving the app's architecture, data processing, and effectiveness.
+${userContextBlock}
 ## Phase 1: Deep App Audit
 
 Read every file in ${relativeAppDir}/:

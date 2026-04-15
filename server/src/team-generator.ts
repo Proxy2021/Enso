@@ -384,8 +384,16 @@ export async function generateFocusExperts(params: GenerateFocusExpertsParams): 
     } catch { /* no codebase scan available */ }
   }
 
-  const prompt = `You are designing an expert team for a personal AI assistant's focus area.
+  // User context — generate experts that match the user's level and complement their existing teams
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    const ctx = await buildUserContext({ profileChars: 400, themeChars: 500, includeApps: false });
+    if (ctx) userContext = `\n## User Context\nThe user this team will serve. Match expert names/personas to feel real for someone with this background, and choose specialties that complement (not duplicate) their existing focus areas.\n${ctx}`;
+  } catch { /* non-critical */ }
 
+  const prompt = `You are designing an expert team for a personal AI assistant's focus area.
+${userContext}
 ## Focus Area
 Title: "${focusTitle}"
 Type: ${focusType}

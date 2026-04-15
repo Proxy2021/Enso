@@ -714,11 +714,27 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
 
   // ── Full Claude Code planning path ──
   const planFilePath = workspace.planPath;
-  const planningPrompt = params.context
-    ? buildContextDrivenPlanningPrompt(params.context, orchestrationId, planFilePath)
-    : params.planningPromptBuilder
-    ? params.planningPromptBuilder(orchestrationId, planFilePath)
-    : buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath);
+
+  // Compute user context (profile + themes + apps + active focuses) for any planner
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    userContext = await buildUserContext({ profileChars: 600, themeChars: 800 });
+  } catch { /* non-critical */ }
+
+  let planningPrompt: string;
+  if (params.context) {
+    planningPrompt = buildContextDrivenPlanningPrompt(params.context, orchestrationId, planFilePath);
+  } else if (params.planningPromptBuilder) {
+    planningPrompt = params.planningPromptBuilder(orchestrationId, planFilePath);
+  } else {
+    planningPrompt = buildPlanningPrompt(userMessage, classification, orchestrationId, planFilePath, userContext);
+  }
+
+  // For context-driven plans, prepend user context if not already there
+  if (params.context && userContext && !planningPrompt.includes("USER CONTEXT")) {
+    planningPrompt = `=== USER CONTEXT ===\nThe following describes who the user is, what knowledge they have, what apps are available, and their active focus areas. Use this to ground every planning decision.\n\n${userContext}\n=== END USER CONTEXT ===\n\n${planningPrompt}`;
+  }
 
   try {
     // Run Claude Code to analyze and plan
@@ -885,6 +901,16 @@ export async function handleOrchestrationApprove(params: {
   // Mark all pending tasks as ready
   updateOrchestrationProgress(orchestrationId, "task_started");
 
+  // Pre-compute compact context blocks once per orchestration (reused across all task prompts)
+  let userContextBlock = "";
+  let focusContextBlock = "";
+  try {
+    const { buildUserContext, buildRichFocusContext } = await import("./team-leader.js");
+    userContextBlock = await buildUserContext({ profileChars: 400, themeChars: 600 });
+    const focusId = (orch as any).context?.contextType === "focus" ? (orch as any).context?.contextId : undefined;
+    if (focusId) focusContextBlock = await buildRichFocusContext(focusId);
+  } catch { /* non-critical */ }
+
   try {
     // Execute tasks in parallel waves using the DAG executor
     await executeDAG({
@@ -901,7 +927,7 @@ export async function handleOrchestrationApprove(params: {
         maxConcurrency: orch.maxConcurrency,
         get onComplete() { return orch.onComplete; },
       },
-      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx, orch.workspace),
+      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx, orch.workspace, userContextBlock, focusContextBlock),
       onTaskStart: (taskId) => {
         updateOrchestrationProgress(orchestrationId, "task_started", taskId);
         const running = orch.plan.tasks.filter(t => t.status === "running").length;
@@ -1077,6 +1103,16 @@ export async function handleOrchestrationResume(params: {
 
   updateOrchestrationProgress(orchestrationId, "resumed");
 
+  // Re-compute compact context blocks for resumed orchestration
+  let userContextBlock = "";
+  let focusContextBlock = "";
+  try {
+    const { buildUserContext, buildRichFocusContext } = await import("./team-leader.js");
+    userContextBlock = await buildUserContext({ profileChars: 400, themeChars: 600 });
+    const focusId = (orch as any).context?.contextType === "focus" ? (orch as any).context?.contextId : undefined;
+    if (focusId) focusContextBlock = await buildRichFocusContext(focusId);
+  } catch { /* non-critical */ }
+
   try {
     // Re-enter DAG executor — it skips completed tasks automatically
     await executeDAG({
@@ -1093,7 +1129,7 @@ export async function handleOrchestrationResume(params: {
         maxConcurrency: orch.maxConcurrency,
         get onComplete() { return orch.onComplete; },
       },
-      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx, orch.workspace),
+      buildTaskPrompt: (task, ctx) => buildTaskPrompt(task, orch.plan, ctx, orch.workspace, userContextBlock, focusContextBlock),
       onTaskStart: (taskId) => {
         updateOrchestrationProgress(orchestrationId, "task_started", taskId);
         const running = orch.plan.tasks.filter(t => t.status === "running").length;
@@ -1301,6 +1337,7 @@ function buildPlanningPrompt(
   classification: TaskClassification,
   orchestrationId: string,
   planFilePath: string,
+  userContext: string = "",
 ): string {
   return [
     `You are the Orchestration Planner for Enso, an AI platform that builds interactive apps.`,
@@ -1314,6 +1351,7 @@ function buildPlanningPrompt(
     ``,
     `Do NOT research or use web search — just plan. Research tasks will do that later.`,
     ``,
+    userContext ? `=== USER CONTEXT ===\nThe following describes who the user is, what knowledge they have, what apps are available, and their active focus areas. Use this to ground every planning decision — leverage their existing knowledge, build on their active focuses, and integrate with the apps they already have.\n\n${userContext}\n=== END USER CONTEXT ===\n` : ``,
     `## User's Goal`,
     `"${userMessage}"`,
     ``,
@@ -1555,6 +1593,8 @@ function buildTaskPrompt(
   plan: OrchestrationPlan,
   completedContext: Map<string, string>,
   workspace?: OrchestrationWorkspace,
+  userContext: string = "",
+  focusContext: string = "",
 ): string {
   const parts: string[] = [
     `You are a ${task.agentRole.charAt(0).toUpperCase() + task.agentRole.slice(1)} Agent working on a larger orchestrated goal.`,
@@ -1563,6 +1603,8 @@ function buildTaskPrompt(
     ``,
     `## Overall Goal: "${plan.goal}"`,
     ``,
+    userContext ? `=== USER CONTEXT ===\nWho the user is, what knowledge they have, what apps are available, and their active focus areas. Ground your work in this — leverage their actual situation.\n\n${userContext}\n=== END USER CONTEXT ===\n` : ``,
+    focusContext ? `=== FOCUS AREA CONTEXT ===\nThe full picture of the focus area this sprint serves. Reference specific evidence, deliverables, and the user's actual situation.\n\n${focusContext}\n=== END FOCUS AREA CONTEXT ===\n` : ``,
     `## SAFETY RULES (violating these CRASHES the sprint)`,
     `- NEVER modify package.json, package-lock.json, or any lock files`,
     `- NEVER bump version numbers (version/versionCode)`,

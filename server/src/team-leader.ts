@@ -280,6 +280,119 @@ export async function buildRichFocusContext(focusId: string): Promise<string> {
 }
 
 /**
+ * Build a compact user context block (profile + Cortex themes + app inventory + active focuses).
+ * Use this whenever an LLM call would benefit from knowing WHO the user is and WHAT they have.
+ *
+ * Defaults are tuned for prompts where context is supporting (not the main subject):
+ * - profile: 800 chars (identity + role + interests)
+ * - themes: 1200 chars (semantic theme clusters)
+ * - apps: full inventory list
+ * - focuses: title + clarity + assessment for each active focus
+ */
+export async function buildUserContext(opts?: {
+  includeProfile?: boolean;
+  includeThemes?: boolean;
+  includeApps?: boolean;
+  includeFocuses?: boolean;
+  profileChars?: number;
+  themeChars?: number;
+}): Promise<string> {
+  const {
+    includeProfile = true,
+    includeThemes = true,
+    includeApps = true,
+    includeFocuses = true,
+    profileChars = 800,
+    themeChars = 1200,
+  } = opts || {};
+
+  const sections: string[] = [];
+
+  // User profile from Cortex
+  if (includeProfile) {
+    try {
+      const { readCortexPage } = await import("./cortex-tools.js");
+      const profile = readCortexPage("synthesis/user-profile.md");
+      if (profile) sections.push(`## Who the user is\n${profile.slice(0, profileChars)}`);
+    } catch { /* non-critical */ }
+  }
+
+  // Cortex semantic themes / knowledge summary
+  if (includeThemes) {
+    try {
+      const { getCortexContextSummary } = await import("./cortex-tools.js");
+      const themes = getCortexContextSummary(themeChars);
+      if (themes) sections.push(themes);
+    } catch { /* non-critical */ }
+  }
+
+  // Available apps
+  if (includeApps) {
+    try {
+      const { buildAppInventoryContext } = await import("./orchestrator.js");
+      const apps = buildAppInventoryContext();
+      if (apps) sections.push(`## Available apps in the platform\n${apps}`);
+    } catch { /* non-critical */ }
+  }
+
+  // Active focus areas (titles + clarity + assessment)
+  if (includeFocuses) {
+    try {
+      const { loadFocusState } = await import("./focus-areas.js");
+      const state = loadFocusState();
+      const active = state?.areas.filter(a => a.status === "active" || a.status === "emerging") || [];
+      if (active.length > 0) {
+        const focusLines = active.map(a => {
+          const u = a.assessment?.understanding ?? "?";
+          const p = a.assessment?.progress ?? "?";
+          return `- **${a.title}** [${a.clarity}, U:${u}% P:${p}%]: ${a.intent || a.description || ""}`.slice(0, 220);
+        });
+        sections.push(`## User's active focus areas\n${focusLines.join("\n")}`);
+      }
+    } catch { /* non-critical */ }
+  }
+
+  return sections.length ? sections.join("\n\n") : "";
+}
+
+/**
+ * Convenience wrapper: prepend a USER CONTEXT block to a prompt.
+ * Use this in builder/researcher/orchestrator prompts to give the LLM
+ * a clear understanding of who the user is and what they're working on.
+ */
+export async function enrichPromptWithUserContext(
+  prompt: string,
+  opts?: Parameters<typeof buildUserContext>[0],
+): Promise<string> {
+  const ctx = await buildUserContext(opts);
+  if (!ctx) return prompt;
+  return `=== USER CONTEXT ===
+The following describes who the user is, what knowledge they have, what apps are available, and their active focus areas. Use this to ground every decision and recommendation in their actual situation.
+
+${ctx}
+=== END USER CONTEXT ===
+
+${prompt}`;
+}
+
+/**
+ * Convenience wrapper: prepend a FOCUS AREA CONTEXT block to a prompt.
+ * Use this whenever a prompt is about a specific focus area.
+ */
+export async function enrichPromptWithFocusContext(prompt: string, focusId: string): Promise<string> {
+  if (!focusId) return prompt;
+  const fc = await buildRichFocusContext(focusId);
+  if (!fc) return prompt;
+  return `=== FOCUS AREA CONTEXT ===
+This task/conversation is about a focus area. The block below contains the full focus picture: goal, motivation, assessment, evidence, adjacent pursuits, last sprint deliverables, full wiki page, and related Cortex entities. Ground your response in this — reference specific deliverables and the user's actual situation.
+
+${fc}
+=== END FOCUS AREA CONTEXT ===
+
+${prompt}`;
+}
+
+/**
  * Process an event targeted at any agent (TL or expert).
  * This is the single entry point for all work in the organization.
  *

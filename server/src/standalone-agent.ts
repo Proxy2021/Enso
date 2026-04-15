@@ -218,7 +218,7 @@ function hydrateFromJournal(clientId: string, conversationId: string): number {
 
 // ── System prompt ──
 
-async function buildSystemPrompt(tools: EnsoAgentTool[], conversationId?: string, userMessage?: string): Promise<string> {
+async function buildSystemPrompt(tools: EnsoAgentTool[], conversationId?: string, userMessage?: string, activeFocusId?: string | null): Promise<string> {
   const toolDescriptions = tools
     .map((t) => `- **${t.name}**: ${t.description}`)
     .join("\n");
@@ -263,6 +263,13 @@ async function buildSystemPrompt(tools: EnsoAgentTool[], conversationId?: string
       if (registryCtx) {
         focusBlock = `\n\n${registryCtx}`;
       }
+    }
+    // Always supplement with the unified rich focus context when an activeFocusId is available
+    // (registry context is good but the wiki page + evidence + adjacent pursuits are gold)
+    if (activeFocusId) {
+      const { buildRichFocusContext } = await import("./team-leader.js");
+      const rich = await buildRichFocusContext(activeFocusId);
+      if (rich) focusBlock += `\n\n## Rich Focus Context\n${rich}`;
     }
     // Fallback: generic focus context for regular (non-focus) chats
     if (!focusBlock) {
@@ -663,7 +670,7 @@ export async function handleStandaloneInbound(params: {
   if (activeFocusId && account.geminiApiKey) {
     try {
       // Pass empty tools list — focus conversations are pure dialogue, no tool descriptions in prompt
-      const systemPrompt = await buildSystemPrompt([], conversationId, rawBody);
+      const systemPrompt = await buildSystemPrompt([], conversationId, rawBody, activeFocusId);
       const history = getConversationHistory(clientId, conversationId);
       if (history.length === 0 && clientId) {
         const hydrated = hydrateFromJournal(clientId, conversationId);
@@ -706,7 +713,7 @@ export async function handleStandaloneInbound(params: {
     const toolMeta = routing ? { toolId: routing.toolId, toolSessionId: routing.toolSessionId } : undefined;
     try {
       const tools = getAllLocalTools();
-      const systemPrompt = await buildSystemPrompt(tools, conversationId, rawBody);
+      const systemPrompt = await buildSystemPrompt(tools, conversationId, rawBody, activeFocusId);
       const answer = await llm({
         prompt: rawBody,
         systemPrompt,
@@ -789,7 +796,7 @@ export async function handleStandaloneInbound(params: {
     }
     return selected;
   })();
-  const systemPrompt = await buildSystemPrompt(tools, conversationId, rawBody);
+  const systemPrompt = await buildSystemPrompt(tools, conversationId, rawBody, activeFocusId);
   const allDeclarations = tools.map(toolToFunctionDeclaration);
   const functionDeclarations: GeminiFunctionDeclaration[] = [];
   const skippedTools: string[] = [];

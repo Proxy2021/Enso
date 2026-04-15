@@ -334,6 +334,21 @@ export async function inferFocusAreas(): Promise<FocusState> {
     ? `\n\nPreviously identified focus areas (maintain continuity, update rather than replace):\n${existing.areas.map(a => `- ${a.title}: ${a.description} [${a.clarity}, ${a.progress.trend}]`).join("\n")}`
     : "";
 
+  // Behavioral signals — which focuses got real activity (sprints, deliverables) vs went quiet
+  let behavioralContext = "";
+  if (existing?.areas.length) {
+    const signals = existing.areas.map(a => {
+      const sprints = (a as any).sprintHistory?.length || ((a as any).lastSprintDate ? 1 : 0);
+      const deliverables = (a as any).lastSprintSummary?.deliverables?.length || 0;
+      const lastActive = (a as any).progress?.lastActiveAt;
+      const daysQuiet = lastActive ? Math.round((Date.now() - new Date(lastActive).getTime()) / (1000 * 60 * 60 * 24)) : null;
+      const u = (a as any).assessment?.understanding ?? "?";
+      const p = (a as any).assessment?.progress ?? "?";
+      return `- "${a.title}": ${sprints} sprint(s), ${deliverables} deliverable(s), U:${u}% P:${p}%${daysQuiet !== null ? `, last active ${daysQuiet}d ago` : ""}`;
+    }).join("\n");
+    behavioralContext = `\n\n## Behavioral Signals (which focuses got real traction)\nUse these to understand which focus areas the user actually engages with vs. which stalled:\n${signals}`;
+  }
+
   const prompt = `You are analyzing someone's complete digital footprint to identify their ACTIVE FOCUS AREAS — concrete goals and outcomes they're working toward.
 
 CRITICAL: Focus areas must be OUTCOME-ORIENTED, not vague categories.
@@ -354,7 +369,7 @@ ${inventory}
 
 ## Strongest Semantic Themes (from AI-enriched entity tags)
 ${topClusters || "(not yet enriched)"}
-${existingContext}
+${existingContext}${behavioralContext}
 
 ## Task
 Identify 4-7 concrete focus areas from this data. For each:

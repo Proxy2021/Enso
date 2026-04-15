@@ -251,13 +251,24 @@ export async function synthesize(topic: string, opts?: { maxTokens?: number }): 
     const profilePath = join(CORTEX_DIR, "synthesis", "user-profile.md");
     const profile = existsSync(profilePath) ? readFileSync(profilePath, "utf-8").slice(0, 800) : "";
 
+    // Active focus areas — bias the synthesis toward what the user is currently working on
+    let focusContext = "";
+    try {
+      const { loadFocusState } = await import("./focus-areas.js");
+      const state = loadFocusState();
+      const active = state?.areas.filter(a => a.status === "active" || a.status === "emerging") || [];
+      if (active.length > 0) {
+        focusContext = `\n\n## User's Active Focus Areas\nThe user is currently working on these. Weight connections that serve these focuses higher; explicitly note when a connection advances one of them:\n${active.map(a => `- "${a.title}" (${a.clarity}): ${a.intent || a.description || ""}`.slice(0, 200)).join("\n")}`;
+      }
+    } catch { /* non-critical */ }
+
     // Also get keyword pre-filter results for grounding
     const keywordResults = findRelatedContent(topic, 5);
 
     const prompt = `You are the intelligence engine for a personal knowledge system called the Cortex. Your job is to THINK deeply about how a topic connects to everything in this person's digital life.
 
 ## The Person
-${profile || "No profile available"}
+${profile || "No profile available"}${focusContext}
 
 ## Their Digital Life (all data sources)
 ${inventory}

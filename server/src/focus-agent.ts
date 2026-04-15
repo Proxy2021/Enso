@@ -167,9 +167,16 @@ export async function generateProgressPulse(): Promise<ProgressPulse> {
     return `- "${a.title}" [${a.clarity}] — ${flags.join(", ") || "active"}\n  Recommended: ${a.recommendedAction} — ${a.actionReason}`;
   }).join("\n\n");
 
+  // Brief user context to personalize tone
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    userContext = await buildUserContext({ profileChars: 300, includeThemes: false, includeApps: false, includeFocuses: false });
+  } catch { /* non-critical */ }
+
   const response = await llm({
     prompt: `You are generating a concise progress pulse for a personal AI assistant's focus areas.
-
+${userContext ? `\n## User Context\n${userContext}\n` : ""}
 FOCUS AREAS:
 ${analysisContext}
 

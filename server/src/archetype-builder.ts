@@ -77,10 +77,15 @@ export async function handleFocusedArchetype(params: FocusedArchetypeParams): Pr
     },
   });
 
-  // Build the prompt
+  // Build the prompt — include user context (profile + themes + apps + focuses)
+  let userContext = "";
+  try {
+    const { buildUserContext } = await import("./team-leader.js");
+    userContext = await buildUserContext({ profileChars: 500, themeChars: 700 });
+  } catch { /* non-critical */ }
   const prompt = isRecurring
-    ? buildRecurringAppPrompt(archetype, userMessage, classification.archetypeHints, mediaUrls)
-    : buildArchetypePrompt(archetype, userMessage, classification.archetypeHints, mediaUrls);
+    ? buildRecurringAppPrompt(archetype, userMessage, classification.archetypeHints, mediaUrls, userContext)
+    : buildArchetypePrompt(archetype, userMessage, classification.archetypeHints, mediaUrls, userContext);
 
   let sessionId: string | undefined;
   try {
@@ -206,6 +211,7 @@ function buildArchetypePrompt(
   userMessage: string,
   hints?: Record<string, string>,
   mediaUrls?: string[],
+  userContext: string = "",
 ): string {
   const lines: string[] = [];
 
@@ -213,6 +219,14 @@ function buildArchetypePrompt(
   lines.push(``);
   lines.push(`## PERFORMANCE: Be efficient. Target 3-8 minutes total. Prioritize quality over volume.`);
   lines.push(``);
+  if (userContext) {
+    lines.push(`=== USER CONTEXT ===`);
+    lines.push(`Who the user is, what knowledge they have, what apps already exist, and their active focus areas. Use this to: (1) tailor the research depth to their existing knowledge, (2) emphasize angles relevant to their active focuses, (3) match the visual/UX style of apps they already have.`);
+    lines.push(``);
+    lines.push(userContext);
+    lines.push(`=== END USER CONTEXT ===`);
+    lines.push(``);
+  }
   lines.push(`## User Request: "${userMessage}"`);
   lines.push(``);
 
@@ -259,11 +273,20 @@ function buildRecurringAppPrompt(
   userMessage: string,
   hints?: Record<string, string>,
   mediaUrls?: string[],
+  userContext: string = "",
 ): string {
   const lines: string[] = [];
 
   lines.push(`You are building a REUSABLE Enso app for a recurring task. This app will be registered in the tool system so the user can use it repeatedly.`);
   lines.push(``);
+  if (userContext) {
+    lines.push(`=== USER CONTEXT ===`);
+    lines.push(`Who the user is, what apps they already have, and their active focus areas. Use this to avoid duplicating an existing app and to align the new app with the user's actual needs.`);
+    lines.push(``);
+    lines.push(userContext);
+    lines.push(`=== END USER CONTEXT ===`);
+    lines.push(``);
+  }
   lines.push(`## User Request: "${userMessage}"`);
   lines.push(`## Archetype: ${archetype}`);
   lines.push(``);

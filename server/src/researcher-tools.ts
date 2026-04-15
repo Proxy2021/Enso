@@ -682,7 +682,15 @@ async function generateSearchAngles(
       }
     } catch { /* cortex not available */ }
 
-    const prompt = `Generate search queries for thoroughly researching: "${topic}"${cortexContext}
+    // Personalize queries by including user profile + active focus areas
+    let userContext = "";
+    try {
+      const { buildUserContext } = await import("./team-leader.js");
+      const ctx = await buildUserContext({ profileChars: 400, themeChars: 600, includeApps: false });
+      if (ctx) userContext = `\n\n=== USER CONTEXT ===\nWho the user is and what they're working on. Bias query angles toward the user's active focus areas, role, and known interests. If a query is more relevant to one of their focuses, include focus-relevant terms.\n\n${ctx}\n=== END USER CONTEXT ===`;
+    } catch { /* non-critical */ }
+
+    const prompt = `Generate search queries for thoroughly researching: "${topic}"${cortexContext}${userContext}
 
 Return JSON with 3 arrays:
 {
