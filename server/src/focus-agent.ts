@@ -242,6 +242,7 @@ export async function deliverSprintResults(
   focusId: string,
   focusTitle: string,
   summary: import("../../shared/types.js").SprintResultsSummary,
+  opts?: { skipCards?: boolean },
 ): Promise<void> {
   const recommended = summary.deliverables[summary.recommendedFirstAction?.deliverableIndex ?? 0];
   const startAction = recommended?.quickStart || "Open the Focus tab to review results.";
@@ -326,21 +327,23 @@ export async function deliverSprintResults(
     }
   } catch (err) { logError("focus-agent", "WeChat sprint delivery failed", err); }
 
-  // Auto-surface deliverable cards to connected clients
-  try {
-    const { surfaceSprintDeliverables } = await import("./outbound/sprint-cards.js");
-    const { getAllClients, getActiveAccount } = await import("./server.js");
-    const account = getActiveAccount();
-    if (account) {
-      const activeClients = getAllClients();
-      for (const client of activeClients) {
-        await surfaceSprintDeliverables(summary, focusId, client, account);
+  // Auto-surface deliverable cards to connected clients (skip if caller already handled)
+  if (!opts?.skipCards) {
+    try {
+      const { surfaceSprintDeliverables } = await import("./outbound/sprint-cards.js");
+      const { getAllClients, getActiveAccount } = await import("./server.js");
+      const account = getActiveAccount();
+      if (account) {
+        const activeClients = getAllClients();
+        for (const client of activeClients) {
+          await surfaceSprintDeliverables(summary, focusId, client, account);
+        }
+        if (activeClients.length > 0) {
+          logAction({ ts: Date.now(), type: "action", category: "focus-agent", message: `Sprint cards surfaced to ${activeClients.length} client(s) for "${focusTitle}"` });
+        }
       }
-      if (activeClients.length > 0) {
-        logAction({ ts: Date.now(), type: "action", category: "focus-agent", message: `Sprint cards surfaced to ${activeClients.length} client(s) for "${focusTitle}"` });
-      }
-    }
-  } catch (err) { logError("focus-agent", "Sprint card surfacing failed (non-critical)", err); }
+    } catch (err) { logError("focus-agent", "Sprint card surfacing failed (non-critical)", err); }
+  }
 }
 
 // ── Chat Tool ──

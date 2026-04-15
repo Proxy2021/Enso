@@ -28,7 +28,8 @@ var typeMap = {
   tv: ["tv-series"],
   documentaries: ["documentary"],
   games: ["game"],
-  music: ["album", "artist"],
+  music: ["song", "artist", "playlist"],
+  articles: ["article"],
   photos: ["album"]
 };
 
@@ -51,7 +52,7 @@ try {
   };
 }
 
-var mediaEntityTypes = ["book", "movie", "tv-series", "documentary", "game", "album", "artist"];
+var mediaEntityTypes = ["book", "movie", "tv-series", "documentary", "game", "song", "artist", "playlist", "article"];
 var allowedTypes = null;
 if (mediaType && typeMap[mediaType]) {
   allowedTypes = typeMap[mediaType];

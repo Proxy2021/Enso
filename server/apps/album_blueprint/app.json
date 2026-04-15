@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "createdAt": 1744700000000,
+  "spec": {
+    "toolFamily": "album_blueprint",
+    "toolPrefix": "enso_album_blueprint_",
+    "description": "First album blueprint: step-by-step guide to creating your first gift-quality photo book from a large photo library. Theme selection, 5-pass curation walkthrough, layout templates, printer comparison, and 30-day action plan.",
+    "signatureId": "album_blueprint_view",
+    "tools": [
+      {
+        "suffix": "choose_theme",
+        "description": "Present 5 compelling album theme options for a first photo book. Each theme includes recommended photo count, chapter structure, emotional arc, ideal printer, estimated cost, and timeline. Use when the user wants to start planning their first album or explore album concepts.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "theme": {
+              "type": "string",
+              "description": "Optional: select a specific theme to see detailed breakdown. Options: city_at_dawn, faces_of_journey, quiet_landscape, one_trip_one_story, year_in_light"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_album_blueprint_choose_theme",
+          "themes": [
+            {
+              "id": "city_at_dawn",
+              "title": "City at Dawn",
+              "subtitle": "Urban golden hour across multiple cities",
+              "photoCount": { "min": 35, "max": 45 },
+              "chapters": ["First Light", "Awakening Streets", "Morning Rituals", "The Golden Hour", "City Unveiled"],
+              "emotionalArc": "contemplative → anticipation → energy → wonder → reflection",
+              "printer": "Saal Digital",
+              "format": "28x28cm Hardcover",
+              "estimatedCost": "$85-120",
+              "timeline": "25 days",
+              "difficulty": "medium",
+              "bestFor": "Urban photographers with shots from multiple cities"
+            }
+          ],
+          "selectedTheme": null
+        },
+        "requiredDataKeys": ["tool", "themes"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "curation_guide",
+        "description": "Interactive 5-pass curation walkthrough for photo book selection. Maps to the album_designer passes with specific guidance, checklists, and criteria for each pass. Pass numbers: 1=Technical Kill, 2=Print Test, 3=Thematic Grouping, 4=Narrative Arc, 5=Album Cut.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "number",
+              "description": "Which curation pass to view (1-5). Omit to see overview of all passes."
+            },
+            "startingCount": {
+              "type": "number",
+              "description": "How many candidate photos you're starting with (default: 500)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "pass": 1 },
+        "sampleData": {
+          "tool": "enso_album_blueprint_curation_guide",
+          "currentPass": 1,
+          "passName": "Technical Kill",
+          "startingCount": 500,
+          "targetCount": 150,
+          "cullRate": "70%",
+          "checklist": [
+            { "id": "focus", "label": "Is the subject tack-sharp where it matters?", "category": "Technical" },
+            { "id": "exposure", "label": "Is exposure within recoverable range?", "category": "Technical" }
+          ],
+          "passes": []
+        },
+        "requiredDataKeys": ["tool"]
+      },
+      {
+        "suffix": "layout_templates",
+        "description": "Show 8 proven spread layout patterns for photo books with visual diagrams, when to use each, and example pairings. Use when planning how to arrange photos on spreads.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "layout": {
+              "type": "string",
+              "description": "Optional: view a specific layout in detail. Options: full_bleed, diptych, triptych, scale_contrast, white_space, grid, text_image, panoramic"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_album_blueprint_layout_templates",
+          "layouts": [
+            {
+              "id": "full_bleed",
+              "name": "Full Bleed Hero",
+              "useFor": "Climax moments, strongest single images",
+              "diagram": "████████████████\n████████████████\n████████████████",
+              "photoCount": 1,
+              "narrativePosition": "climax",
+              "tips": ["Reserve for your absolute best 3-5 shots", "Needs minimum 300 DPI at spread size"]
+            }
+          ],
+          "selectedLayout": null
+        },
+        "requiredDataKeys": ["tool", "layouts"]
+      },
+      {
+        "suffix": "printer_comparison",
+        "description": "Detailed comparison of 3 premium photo book printers: Printique (US), Saal Digital (EU), and WhiteWall (premium). Shows pricing, paper options, binding types, turnaround times, and recommendations.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "printer": {
+              "type": "string",
+              "description": "Optional: view a specific printer in detail. Options: printique, saal_digital, whitewall"
+            },
+            "pageCount": {
+              "type": "number",
+              "description": "Number of pages/spreads for price estimate (default: 40)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "pageCount": 40 },
+        "sampleData": {
+          "tool": "enso_album_blueprint_printer_comparison",
+          "printers": [
+            {
+              "id": "saal_digital",
+              "name": "Saal Digital",
+              "region": "EU",
+              "tier": "Professional",
+              "basePrice": 59.95,
+              "pricePerPage": 1.25,
+              "currency": "EUR"
+            }
+          ],
+          "pageCount": 40,
+          "selectedPrinter": null
+        },
+        "requiredDataKeys": ["tool", "printers"]
+      },
+      {
+        "suffix": "thirty_day_plan",
+        "description": "A 30-day action plan for completing your first photo album, broken into daily tasks across 6 phases. Tracks progress with checkboxes and milestone celebrations. Use to get a structured timeline from theme selection to print order.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "theme": {
+              "type": "string",
+              "description": "Which album theme to build the plan around (default: one_trip_one_story)"
+            },
+            "startDate": {
+              "type": "string",
+              "description": "When to start (ISO date string, default: today)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_album_blueprint_thirty_day_plan",
+          "theme": "one_trip_one_story",
+          "startDate": "2026-04-15",
+          "phases": [
+            {
+              "name": "Choose & Gather",
+              "days": "1-3",
+              "tasks": [
+                { "day": 1, "task": "Select theme and trip", "done": false }
+              ]
+            }
+          ],
+          "progress": { "completed": 0, "total": 30, "currentPhase": 1 }
+        },
+        "requiredDataKeys": ["tool", "phases"]
+      }
+    ]
+  }
+}

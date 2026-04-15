@@ -20,7 +20,8 @@ var typeMap = {
   tv: ["tv-series"],
   documentaries: ["documentary"],
   games: ["game"],
-  music: ["album", "artist"],
+  music: ["song", "artist", "playlist"],
+  articles: ["article"],
   photos: ["album"]
 };
 
@@ -62,7 +63,7 @@ if (collectionId) {
 }
 
 // Filter entities — only media types (exclude project, article, idea, app, synthesis, place)
-var mediaEntityTypes = ["book", "movie", "tv-series", "documentary", "game", "album", "artist"];
+var mediaEntityTypes = ["book", "movie", "tv-series", "documentary", "game", "song", "artist", "playlist", "article"];
 var allowedTypes = null;
 if (mediaType !== "all" && typeMap[mediaType]) {
   allowedTypes = typeMap[mediaType];

@@ -355,25 +355,315 @@
         "sampleParams": {},
         "sampleData": {
           "tool": "enso_media_library_discover",
+          "embeddingMethod": "embedding-cosine",
+          "embeddingStats": { "cached": 120, "computed": 15 },
           "categories": [
             {
-              "title": "Based on your favorites",
+              "title": "Closest to your taste",
               "items": [
-                { "entityId": "weread:book:example", "type": "book", "title": "Example Book", "reason": "Similar themes to your top-rated books" }
+                { "entityId": "weread:book:example", "type": "book", "title": "Example Book", "similarity": 0.87, "similarityPct": 87, "reason": "87% match to your taste profile" }
               ]
             },
             {
-              "title": "Cross-media connections",
+              "title": "Highly connected",
+              "items": []
+            },
+            {
+              "title": "Cross-media exploration",
               "items": []
             }
           ],
           "tasteProfile": {
-            "topTags": ["martial-arts", "strategy", "philosophy"],
+            "topTags": [{"tag": "martial-arts", "count": 3}, {"tag": "strategy", "count": 2}],
             "totalRated": 10,
-            "totalFavorites": 5
+            "totalFavorites": 5,
+            "totalCompleted": 20,
+            "totalUnstarted": 1800,
+            "tasteEntityCount": 12
           }
         },
         "requiredDataKeys": ["tool", "categories"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "smart_collections",
+        "description": "Auto-generate thematic smart collections from semantic tag clusters across your entire media library. Actions: generate (analyze tags, propose collections), apply (save a proposal), refresh (update existing smart collections with new entities), list (show all smart collections). Use when the user says: 'generate smart collections', 'auto-organize my library', 'find themes in my media', 'smart collection suggestions'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: generate, apply, refresh, list"
+            },
+            "proposalId": {
+              "type": "string",
+              "description": "Proposal ID to apply (for apply action)"
+            },
+            "proposalIds": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Batch proposal IDs to apply (for apply action)"
+            },
+            "name": {
+              "type": "string",
+              "description": "Collection name (for apply action)"
+            },
+            "description": {
+              "type": "string",
+              "description": "Collection description (for apply action)"
+            },
+            "entityIds": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Entity IDs for the collection (for apply action)"
+            },
+            "tags": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Tags used to generate this collection (for apply/refresh)"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "generate" },
+        "sampleData": {
+          "tool": "enso_media_library_smart_collections",
+          "action": "generate",
+          "proposalCount": 12,
+          "totalEntitiesAnalyzed": 1889,
+          "uniqueEntitiesCovered": 950,
+          "uniqueTagsFound": 340,
+          "qualifyingTags": 45,
+          "proposals": [
+            {
+              "proposalId": "smart:science-fiction-m1abc",
+              "name": "Science Fiction",
+              "description": "A collection of 87 items exploring themes of Science Fiction — spanning book, movie, game",
+              "tags": ["science-fiction", "sci-fi"],
+              "entityCount": 87,
+              "typeBreakdown": { "book": 42, "movie": 35, "game": 10 },
+              "diversityScore": 1.6,
+              "rankScore": 139.2,
+              "sampleEntities": [
+                { "entityId": "kindle:book:dune", "type": "book", "title": "Dune", "imageUrl": null }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "batch_seed",
+        "description": "Batch auto-seed engagement data (ratings, favorites, consumption status) from existing metadata in wiki pages. Converts Amazon stars, TMDB scores, and Metacritic ratings to the 1-10 user rating scale. Actions: preview (dry-run showing what would change), seed (apply changes), status (show current engagement coverage). Use when the user says: 'seed my ratings', 'auto-populate ratings', 'bootstrap engagement data', 'import ratings from metadata'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: preview (dry run), seed (apply), status (show coverage)"
+            },
+            "skipExisting": {
+              "type": "boolean",
+              "description": "Skip entities that already have a user rating (default: true)"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "preview" },
+        "sampleData": {
+          "tool": "enso_media_library_batch_seed",
+          "action": "preview",
+          "totalCandidates": 580,
+          "wouldRate": 450,
+          "wouldFavorite": 120,
+          "wouldTrack": 530,
+          "skippedExisting": 0,
+          "noWikiPage": 300,
+          "noRatingFound": 150,
+          "byType": {
+            "book": { "ratable": 350, "statusable": 400, "favoritable": 80 },
+            "movie": { "ratable": 80, "statusable": 100, "favoritable": 30 },
+            "game": { "ratable": 10, "statusable": 15, "favoritable": 5 }
+          },
+          "formulas": [
+            { "source": "Amazon (books)", "scale": "1-5 stars", "formula": "rating × 2", "example": "4.5 stars → 9/10" },
+            { "source": "TMDB (movies/TV)", "scale": "1-10", "formula": "use directly (round)", "example": "7.5/10 → 8/10" },
+            { "source": "Metacritic (games)", "scale": "0-100", "formula": "score ÷ 10 (round)", "example": "86 → 9/10" }
+          ],
+          "samples": {
+            "book": [
+              { "title": "The Book of Five Rings", "sourceRating": 4.5, "sourceScale": "amazon", "convertedRating": 9 }
+            ]
+          }
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "dashboard",
+        "description": "Library health dashboard showing engagement coverage, discovery readiness, coverage gaps, and quick actions. Computes an Engagement Health Score (0-100) based on ratings, favorites, status tracking, collections, and semantic tags. Shows per-type engagement breakdowns, gap alerts, and contextual next steps. Use when the user says: 'show library health', 'dashboard', 'library dashboard', 'how is my library doing', 'engagement stats', 'discovery readiness'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_media_library_dashboard",
+          "overview": {
+            "totalEntities": 1889,
+            "categoryCounts": { "books": 510, "movies": 299, "tv": 161, "games": 17, "music": 1 },
+            "ratedCount": 40,
+            "ratedPercent": 2.1,
+            "favoriteCount": 5,
+            "totalCollections": 3,
+            "semanticTagCoverage": 65.2
+          },
+          "healthScore": 12,
+          "healthColor": "red",
+          "healthBreakdown": [
+            { "label": "Rated", "weight": 30, "rawPercent": 2.1, "contribution": 0.6 },
+            { "label": "Favorited", "weight": 20, "rawPercent": 0.3, "contribution": 0.1 }
+          ],
+          "gaps": [
+            { "type": "low_engagement", "severity": "high", "mediaType": "book", "message": "book (510 items): only 1.2% engagement" }
+          ],
+          "discovery": {
+            "tasteProfileStrength": "none",
+            "overallReadiness": "not_ready"
+          },
+          "quickActions": [
+            { "id": "batch_seed", "label": "Auto-Seed Ratings", "priority": "high" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "healthScore", "overview"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "timeline",
+        "description": "View your media consumption timeline — see what you started, completed, rated, and favorited over time. Shows monthly groups with event cards and summary stats. Use when the user says: 'show my timeline', 'media consumption history', 'what did I read this month', 'consumption timeline', 'activity history'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "period": {
+              "type": "string",
+              "enum": ["week", "month", "quarter", "year", "all"],
+              "description": "Time period to show: week, month, quarter, year, or all (default: all)"
+            },
+            "mediaType": {
+              "type": "string",
+              "description": "Filter by media type: all, books, movies, tv, documentaries, games, music, articles (default: all)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_media_library_timeline",
+          "period": "all",
+          "mediaType": "all",
+          "timeline": [
+            {
+              "month": "April 2026",
+              "monthKey": "2026-04",
+              "year": 2026,
+              "monthNum": 4,
+              "events": [
+                {
+                  "eventType": "completed",
+                  "date": "2026-04-14T00:00:00.000Z",
+                  "timestamp": 1744588800000,
+                  "entity": {
+                    "entityId": "kindle:book:the-book-of-five-rings",
+                    "title": "The Book of Five Rings",
+                    "type": "book",
+                    "imageUrl": "https://m.media-amazon.com/images/I/41kanz9HFfL._SY400_.jpg",
+                    "source": "kindle"
+                  }
+                },
+                {
+                  "eventType": "rated",
+                  "date": "2026-04-13T00:00:00.000Z",
+                  "timestamp": 1744502400000,
+                  "entity": {
+                    "entityId": "movies_tv:movie:inception",
+                    "title": "Inception",
+                    "type": "movie",
+                    "imageUrl": null,
+                    "source": "movies_tv"
+                  },
+                  "rating": 9
+                }
+              ],
+              "summary": { "itemsStarted": 0, "itemsCompleted": 1, "itemsRated": 1, "itemsFavorited": 0, "avgRating": 9 }
+            }
+          ],
+          "overallStats": {
+            "totalEvents": 25,
+            "activeMonths": 3,
+            "busiestMonth": "April 2026",
+            "busiestMonthCount": 12,
+            "longestStreak": 3,
+            "eventTypeCounts": { "started": 5, "completed": 8, "rated": 10, "favorited": 2 },
+            "mediaTypeCounts": { "book": 12, "movie": 8, "game": 5 }
+          }
+        },
+        "requiredDataKeys": ["tool", "timeline", "overallStats"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "taste_profile",
+        "description": "Analyze your media consumption patterns and generate a persistent taste profile showing genre affinities, media preferences, cross-media connections, and a natural-language taste DNA summary. Use when the user says: 'show my taste profile', 'what are my media preferences', 'analyze my taste', 'what do I like'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "refresh": {
+              "type": "boolean",
+              "description": "Force regeneration even if cache is fresh (default: false)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_media_library_taste_profile",
+          "fromCache": false,
+          "entityCount": 1889,
+          "engagedEntityCount": 45,
+          "genreAffinities": [
+            { "genre": "martial-arts", "score": 9 },
+            { "genre": "strategy", "score": 7 },
+            { "genre": "philosophy", "score": 6 }
+          ],
+          "mediaPreferences": [
+            { "type": "book", "total": 510, "engaged": 25, "engagementRate": 4.9 },
+            { "type": "movie", "total": 299, "engaged": 15, "engagementRate": 5.0 }
+          ],
+          "topTags": [
+            { "tag": "martial-arts", "count": 5 },
+            { "tag": "strategy", "count": 4 }
+          ],
+          "consumptionPatterns": {
+            "totalRated": 40,
+            "totalFavorites": 10,
+            "totalCompleted": 25,
+            "totalInProgress": 5,
+            "avgRating": 7.8,
+            "completionRate": 1.3,
+            "topRatedItems": []
+          },
+          "crossMediaConnections": [
+            { "theme": "martial-arts", "mediaTypes": ["book", "movie"], "totalOccurrences": 5 }
+          ],
+          "tasteDNA": "Drawn to martial-arts, strategy, philosophy, primarily consuming books, movies, balanced rater (avg 7.8/10), with some cross-media interest — active curator."
+        },
+        "requiredDataKeys": ["tool", "genreAffinities", "tasteDNA"],
         "isPrimary": false
       }
     ]

@@ -303,6 +303,14 @@ export interface EntityIndexEntry extends EntityRef {
     viewCount?: string;
     duration?: string;
   }>;
+  /** User engagement fields (persisted by media_library executors) */
+  userRating?: number;
+  isFavorite?: boolean;
+  consumptionStatus?: 'not_started' | 'in_progress' | 'completed' | 'dropped' | 'on_hold';
+  consumptionProgress?: string;
+  dateStarted?: string;
+  dateCompleted?: string;
+  userNotes?: string;
 }
 
 let entityIndex: Map<EntityId, EntityIndexEntry> = new Map();

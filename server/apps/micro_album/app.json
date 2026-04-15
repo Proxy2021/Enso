@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "createdAt": 1744700000000,
+  "spec": {
+    "toolFamily": "micro_album",
+    "toolPrefix": "enso_micro_album_",
+    "description": "Zero-decision album launcher: auto-selects your best 20 photos, simple keep/skip curation to 12, instant album preview with pre-made layout and ordering guide. Eliminates every decision from creating your first photo album.",
+    "signatureId": "micro_album_view",
+    "tools": [
+      {
+        "suffix": "launch",
+        "description": "Scan a photo folder (or default library), auto-select the 20 best candidates by rating, favorites, date diversity, and technical quality. All album decisions pre-made. Use when the user wants to create a quick album or says 'make me an album'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "folder": {
+              "type": "string",
+              "description": "Photo folder to scan. Defaults to the user's main photo library if not specified."
+            },
+            "count": {
+              "type": "number",
+              "description": "Number of candidate photos to select. Default 20."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "folder": "D:/Photos" },
+        "sampleData": {
+          "tool": "enso_micro_album_launch",
+          "status": "candidates_ready",
+          "albumSpec": {
+            "size": "10x10 inches",
+            "pages": 24,
+            "printer": "Printique",
+            "paper": "Lustre",
+            "theme": "My Best Shots"
+          },
+          "candidates": [
+            {
+              "index": 0,
+              "path": "/photos/sunset.jpg",
+              "name": "sunset.jpg",
+              "mediaUrl": "/media/abc",
+              "rating": 5,
+              "isFavorite": true,
+              "dateTaken": "2025-06-15",
+              "camera": "Sony A7R IV",
+              "description": "Golden sunset over the harbor with warm reflections on the water."
+            }
+          ],
+          "totalScanned": 1500,
+          "selectionCriteria": "Rated 4-5 stars, favorites, date diversity, technical quality"
+        },
+        "requiredDataKeys": ["tool", "candidates"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "curate",
+        "description": "Simple keep/skip interface for album curation. Shows one photo at a time. Keep 12 photos to complete the album. Use when reviewing album candidates.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action to perform: 'keep', 'skip', 'start', or 'reconsider'. Default 'start'."
+            },
+            "photoIndex": {
+              "type": "number",
+              "description": "Index of the photo being acted on."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "action": "start" },
+        "sampleData": {
+          "tool": "enso_micro_album_curate",
+          "status": "reviewing",
+          "currentPhoto": {
+            "index": 0,
+            "path": "/photos/sunset.jpg",
+            "mediaUrl": "/media/abc",
+            "name": "sunset.jpg",
+            "description": "Golden sunset over the harbor.",
+            "dateTaken": "2025-06-15",
+            "camera": "Sony A7R IV",
+            "rating": 5
+          },
+          "progress": { "reviewed": 0, "kept": 0, "skipped": 0, "remaining": 20, "target": 12 }
+        },
+        "requiredDataKeys": ["tool", "status"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "preview",
+        "description": "Show the auto-generated album layout with 12 selected photos. Each gets a full-bleed spread, chronologically ordered. Shows cost estimate and ready-to-order prompt.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_micro_album_preview",
+          "status": "preview_ready",
+          "album": {
+            "title": "My Best Shots",
+            "coverPhoto": { "path": "/photos/sunset.jpg", "mediaUrl": "/media/abc" },
+            "spreads": [],
+            "specs": { "size": "10x10 inches", "pages": 24, "printer": "Printique", "paper": "Lustre" },
+            "costEstimate": "$45-65"
+          }
+        },
+        "requiredDataKeys": ["tool", "album"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "order_guide",
+        "description": "Step-by-step Printique ordering guide with pre-filled specifications, direct links, and a 5-minute ordering process.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_micro_album_order_guide",
+          "status": "guide_ready",
+          "steps": [],
+          "specs": { "product": "Lustre Photo Book", "size": "10x10", "pages": 24, "cover": "Hardcover Lustre", "paper": "Lustre" }
+        },
+        "requiredDataKeys": ["tool", "steps"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "celebrate",
+        "description": "Generate a congratulations card after ordering. Shows milestone stats, delivery estimate, and gift suggestion. Records the achievement.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "recipientName": {
+              "type": "string",
+              "description": "Optional name of the person you plan to gift this album to."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_micro_album_celebrate",
+          "status": "celebrated",
+          "milestone": {
+            "title": "First Album Complete!",
+            "photosSelected": 12,
+            "totalLibrary": 124626,
+            "dateRange": "Jun 2024 - Mar 2025",
+            "estimatedDelivery": "7-10 business days"
+          }
+        },
+        "requiredDataKeys": ["tool", "milestone"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

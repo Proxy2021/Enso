@@ -36,6 +36,13 @@ export default function GeneratedUI({ data, onAction }) {
     acted_on: { bg: "#14532d", text: "#4ade80", label: "Done" }
   };
 
+  var activationStatusColors = {
+    pending: { bg: "#1e3a5f", text: "#60a5fa", label: "Not Started" },
+    in_progress: { bg: "#7c2d12", text: "#fb923c", label: "In Progress" },
+    completed: { bg: "#14532d", text: "#4ade80", label: "Activated" },
+    skipped: { bg: "#1c1917", text: "#a8a29e", label: "Skipped" }
+  };
+
   // ── Hooks ──
   var selectedFocusState = useState(null);
   var selectedFocus = selectedFocusState[0];
@@ -57,6 +64,10 @@ export default function GeneratedUI({ data, onAction }) {
   var copiedActionId = copiedActionState[0];
   var setCopiedActionId = copiedActionState[1];
 
+  var expandedPainState = useState(null);
+  var expandedPain = expandedPainState[0];
+  var setExpandedPain = expandedPainState[1];
+
   // ── Detect tool view ──
   var tool = data && data.tool ? data.tool : "";
   var isLoad = tool === "enso_sprint_results_load" || (!tool && data && data.deliverables !== undefined);
@@ -64,6 +75,553 @@ export default function GeneratedUI({ data, onAction }) {
   var isNextCycle = tool === "enso_sprint_results_next_cycle";
   var isShare = tool === "enso_sprint_results_share";
   var isMarkStatus = tool === "enso_sprint_results_mark_status";
+  var isActivate = tool === "enso_sprint_results_activate";
+  var isProgress = tool === "enso_sprint_results_progress";
+  var isValueMap = tool === "enso_sprint_results_value_map";
+
+  // ═══════════════════════════════════════════════════
+  // ── ACTIVATE VIEW — Step-by-step activation guide ──
+  // ═══════════════════════════════════════════════════
+  if (isActivate) {
+    if (!data.success) {
+      return (
+        <div style={{ padding: "16px" }}>
+          <EmptyState icon="alert-circle" title="Activation Failed" description={data.error || "Could not activate deliverable."} />
+        </div>
+      );
+    }
+
+    var actSteps = data.steps || [];
+    var actProgress = data.progress || { completed: 0, total: 0, percent: 0 };
+    var actTypeInfo = entityTypeColors[data.entityType] || entityTypeColors.synthesis;
+
+    return (
+      <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Header */}
+        <UICard accent={data.status === "completed" ? "emerald" : "blue"}>
+          <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+            <div style={{
+              width: "44px", height: "44px", borderRadius: "10px",
+              background: data.status === "completed" ? "linear-gradient(135deg, #10b981, #059669)" : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "20px", flexShrink: 0
+            }}>
+              {data.status === "completed" ? "\u2714" : "\u{1F680}"}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}>
+                <span style={{
+                  padding: "2px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: 600,
+                  background: actTypeInfo.bg, color: actTypeInfo.text, border: "1px solid " + actTypeInfo.border + "40"
+                }}>
+                  {actTypeInfo.label}
+                </span>
+                <Badge variant={data.status === "completed" ? "success" : data.status === "in_progress" ? "warning" : "default"}>
+                  {data.status === "completed" ? "Fully Activated" : data.status === "in_progress" ? "In Progress" : "Pending"}
+                </Badge>
+              </div>
+              <div style={{ fontSize: "17px", fontWeight: 700, color: "#e5e7eb", marginBottom: "4px" }}>
+                {data.taskTitle}
+              </div>
+              {data.focusTitle && (
+                <div style={{ fontSize: "12px", color: "#6b7280" }}>{data.focusTitle}</div>
+              )}
+            </div>
+          </div>
+        </UICard>
+
+        {/* Pain point & how it helps */}
+        {data.painPoint && (
+          <UICard>
+            <div style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "6px" }}>
+              <span style={{ color: "#6b7280", fontWeight: 600 }}>Problem: </span>{data.painPoint}
+            </div>
+            <div style={{ fontSize: "13px", color: "#10b981", lineHeight: 1.5 }}>
+              {data.howItHelps}
+            </div>
+          </UICard>
+        )}
+
+        {/* Progress bar */}
+        <div style={{ padding: "0 4px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "12px", color: "#9ca3af" }}>Activation Progress</span>
+            <span style={{ fontSize: "12px", color: "#e5e7eb", fontWeight: 600 }}>
+              {actProgress.completed + "/" + actProgress.total + " (" + actProgress.percent + "%)"}
+            </span>
+          </div>
+          <Progress value={actProgress.completed} max={actProgress.total} variant="emerald" />
+        </div>
+
+        {/* Steps checklist */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {actSteps.map(function(step, si) {
+            return (
+              <div key={si} style={{
+                padding: "10px 12px",
+                background: step.completed ? "#064e3b" : "#111827",
+                borderRadius: "8px",
+                border: "1px solid " + (step.completed ? "#10b98130" : "#1f2937"),
+                display: "flex", alignItems: "center", gap: "10px",
+                cursor: step.completed ? "default" : "pointer",
+                opacity: step.completed ? 0.75 : 1,
+                transition: "all 0.2s"
+              }}
+              onClick={function() {
+                if (!step.completed) {
+                  onAction("activate", { focusId: data.focusId, entityId: data.entityId, completeStep: step.stepIndex });
+                }
+              }}
+              >
+                <div style={{
+                  width: "24px", height: "24px", borderRadius: "50%",
+                  background: step.completed ? "#10b981" : "#374151",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "12px", color: "#fff", fontWeight: 700, flexShrink: 0
+                }}>
+                  {step.completed ? "\u2713" : (si + 1)}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontSize: "13px",
+                    color: step.completed ? "#6ee7b7" : "#d1d5db",
+                    textDecoration: step.completed ? "line-through" : "none",
+                    lineHeight: 1.5
+                  }}>
+                    {step.instruction}
+                  </div>
+                  {step.completed && step.completedAt && (
+                    <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "2px" }}>
+                      {"Completed " + fmtDate(step.completedAt)}
+                    </div>
+                  )}
+                </div>
+                {!step.completed && (
+                  <div style={{
+                    padding: "3px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: 600,
+                    background: "#1e3a5f", color: "#60a5fa", cursor: "pointer", flexShrink: 0
+                  }}>
+                    Done
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Completion celebration */}
+        {data.status === "completed" && (
+          <UICard accent="emerald">
+            <div style={{ textAlign: "center", padding: "12px 0" }}>
+              <div style={{ fontSize: "28px", marginBottom: "6px" }}>{"\u{1F389}"}</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#34d399" }}>Fully Activated!</div>
+              <div style={{ fontSize: "13px", color: "#9ca3af", marginTop: "4px" }}>
+                {"\"" + data.taskTitle + "\" is now part of your active workflow."}
+              </div>
+            </div>
+          </UICard>
+        )}
+
+        {/* Navigation */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Button variant="outline" onClick={function() { onAction("progress", { focusId: data.focusId }); }}>
+            View All Progress
+          </Button>
+          <Button variant="ghost" onClick={function() { onAction("load", { focusId: data.focusId || "" }); }}>
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // ── PROGRESS VIEW — Activation progress dashboard ──
+  // ═══════════════════════════════════════════════════════
+  if (isProgress) {
+    if (!data.success) {
+      return (
+        <div style={{ padding: "16px" }}>
+          <EmptyState icon="alert-circle" title="Progress Unavailable" description={data.error || "Could not load progress data."} />
+        </div>
+      );
+    }
+
+    var progRecords = data.records || [];
+    var progByFocus = data.byFocus || [];
+    var progRecommended = data.recommended;
+
+    return (
+      <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Header */}
+        <UICard>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "20px", fontWeight: 700, color: "#e5e7eb", marginBottom: "4px" }}>
+                Activation Progress
+              </div>
+              <div style={{ fontSize: "13px", color: "#9ca3af" }}>
+                {data.focusId ? "Filtered by focus area" : "Across all focus areas"}
+              </div>
+            </div>
+            {/* Progress ring */}
+            <div style={{ textAlign: "center" }}>
+              <div style={{ position: "relative", width: "80px", height: "80px" }}>
+                <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: "rotate(-90deg)" }}>
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="#1f2937" strokeWidth="6" />
+                  <circle cx="40" cy="40" r="34" fill="none"
+                    stroke={data.completionPercent >= 75 ? "#10b981" : data.completionPercent >= 50 ? "#f59e0b" : "#3b82f6"}
+                    strokeWidth="6"
+                    strokeDasharray={2 * Math.PI * 34}
+                    strokeDashoffset={2 * Math.PI * 34 * (1 - (data.completionPercent || 0) / 100)}
+                    strokeLinecap="round"
+                    style={{ transition: "stroke-dashoffset 0.6s ease" }}
+                  />
+                </svg>
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                  <div style={{ fontSize: "18px", fontWeight: 700, color: "#e5e7eb", lineHeight: 1 }}>{data.completionPercent || 0}%</div>
+                  <div style={{ fontSize: "9px", color: "#6b7280" }}>activated</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </UICard>
+
+        {/* Stats row */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
+          <Stat label="Total" value={data.totalDeliverables || 0} accent="blue" />
+          <Stat label="Activated" value={data.activated || 0} accent="emerald" />
+          <Stat label="In Progress" value={data.inProgress || 0} accent="orange" />
+          <Stat label="Pending" value={data.pending || 0} accent="gray" />
+        </div>
+
+        {/* Recommended next */}
+        {progRecommended && (
+          <UICard accent="blue">
+            <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+              <div style={{
+                width: "36px", height: "36px", borderRadius: "8px",
+                background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "16px", flexShrink: 0
+              }}>
+                {"\u{1F3AF}"}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#60a5fa", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "2px" }}>
+                  Recommended Next
+                </div>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: "#e5e7eb", marginBottom: "4px" }}>
+                  {progRecommended.taskTitle}
+                </div>
+                <div style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "8px" }}>
+                  {progRecommended.reason}
+                </div>
+                <Button variant="primary" onClick={function() {
+                  onAction("activate", { focusId: progRecommended.focusId, entityId: progRecommended.entityId });
+                }}>
+                  Activate Now
+                </Button>
+              </div>
+            </div>
+          </UICard>
+        )}
+
+        {/* By focus area breakdown */}
+        {progByFocus.length > 1 && (
+          <UICard header="By Focus Area">
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {progByFocus.map(function(fg, fgi) {
+                var fgPct = fg.total > 0 ? Math.round((fg.activated / fg.total) * 100) : 0;
+                return (
+                  <div key={fgi} style={{
+                    padding: "10px 12px", background: "#0f172a", borderRadius: "8px",
+                    border: "1px solid #1e293b"
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <span style={{ fontSize: "13px", color: "#e5e7eb", fontWeight: 500 }}>{fg.focusTitle}</span>
+                      <span style={{ fontSize: "12px", color: "#9ca3af" }}>
+                        {fg.activated + "/" + fg.total + " (" + fgPct + "%)"}
+                      </span>
+                    </div>
+                    <Progress value={fg.activated} max={fg.total} variant="emerald" />
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* Individual records */}
+        {progRecords.length > 0 && (
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "#e5e7eb", marginBottom: "8px" }}>
+              {"All Deliverables (" + progRecords.length + ")"}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {progRecords.map(function(rec, ri) {
+                var recTypeInfo = entityTypeColors[rec.entityType] || entityTypeColors.synthesis;
+                var recStatInfo = activationStatusColors[rec.status] || activationStatusColors.pending;
+                return (
+                  <div key={ri} style={{
+                    padding: "10px 12px", background: "#111827", borderRadius: "8px",
+                    border: "1px solid #1f2937", display: "flex", gap: "10px", alignItems: "center"
+                  }}>
+                    <div style={{
+                      width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0,
+                      background: rec.status === "completed" ? "#10b981" : rec.status === "in_progress" ? "#f59e0b" : "#6b7280"
+                    }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", color: "#e5e7eb", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {rec.taskTitle}
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "2px" }}>
+                        <span style={{
+                          padding: "1px 5px", borderRadius: "3px", fontSize: "9px", fontWeight: 600,
+                          background: recTypeInfo.bg, color: recTypeInfo.text
+                        }}>
+                          {recTypeInfo.label}
+                        </span>
+                        <span style={{ fontSize: "10px", color: recStatInfo.text }}>
+                          {recStatInfo.label}
+                        </span>
+                        {rec.stepsTotal > 0 && (
+                          <span style={{ fontSize: "10px", color: "#6b7280" }}>
+                            {rec.stepsCompleted + "/" + rec.stepsTotal + " steps"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {rec.status !== "completed" && (
+                      <Button variant="outline" onClick={function() {
+                        onAction("activate", { focusId: rec.focusId, entityId: rec.entityId });
+                      }}>
+                        {rec.status === "in_progress" ? "Continue" : "Activate"}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {progRecords.length === 0 && (
+          <EmptyState
+            icon="inbox"
+            title="No Deliverables Yet"
+            description="Complete a sprint evolution cycle to generate deliverables you can activate."
+          />
+        )}
+
+        {/* Navigation */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Button variant="outline" onClick={function() { onAction("value_map", {}); }}>
+            Value Dashboard
+          </Button>
+          <Button variant="ghost" onClick={function() { onAction("load", { focusId: data.focusId || "" }); }}>
+            Back to Sprint Results
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ── VALUE MAP VIEW — Cross-sprint pain-point dashboard ──
+  // ═══════════════════════════════════════════════════════════
+  if (isValueMap) {
+    if (!data.success) {
+      return (
+        <div style={{ padding: "16px" }}>
+          <EmptyState icon="alert-circle" title="Value Dashboard Unavailable" description={data.error || "Could not load value data."} />
+        </div>
+      );
+    }
+
+    var vmPainPoints = data.painPointMap || [];
+    var vmFocusSummaries = data.focusSummaries || [];
+
+    return (
+      <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Header */}
+        <UICard>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#e5e7eb", marginBottom: "4px" }}>
+            Value Dashboard
+          </div>
+          <div style={{ fontSize: "13px", color: "#9ca3af", marginBottom: "12px" }}>
+            Everything Enso has built for you, mapped to your pain points
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px" }}>
+            <Stat label="Focus Areas" value={data.totalFocusAreas || 0} accent="blue" />
+            <Stat label="Deliverables" value={data.totalDeliverables || 0} accent="purple" />
+            <Stat label="Activated" value={data.totalActivated || 0} accent="emerald" />
+            <Stat label="Dormant" value={data.dormantCount || 0} accent="amber" />
+          </div>
+        </UICard>
+
+        {/* Activation rate */}
+        <div style={{ padding: "0 4px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "12px", color: "#9ca3af" }}>Overall Activation Rate</span>
+            <span style={{ fontSize: "12px", color: "#e5e7eb", fontWeight: 600 }}>{data.activationPercent || 0}%</span>
+          </div>
+          <Progress value={data.totalActivated || 0} max={data.totalDeliverables || 1} variant={data.activationPercent >= 50 ? "emerald" : "amber"} />
+        </div>
+
+        {/* Focus area summaries */}
+        {vmFocusSummaries.length > 0 && (
+          <UICard header="Focus Area Overview">
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {vmFocusSummaries.map(function(fs, fsi) {
+                return (
+                  <div key={fsi} style={{
+                    padding: "10px 12px", background: "#0f172a", borderRadius: "8px",
+                    border: "1px solid #1e293b", cursor: "pointer"
+                  }}
+                  onClick={function() { onAction("progress", { focusId: fs.focusId }); }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <span style={{ fontSize: "13px", color: "#e5e7eb", fontWeight: 500 }}>
+                        {fs.focusTitle}
+                      </span>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <Badge variant={fs.activationPercent >= 50 ? "success" : "default"}>
+                          {fs.activatedCount + "/" + fs.deliverableCount + " activated"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <Progress value={fs.activatedCount} max={fs.deliverableCount || 1} variant="emerald" />
+                    {fs.lastSprintDate && (
+                      <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "4px" }}>
+                        {"Last sprint: " + fmtDate(fs.lastSprintDate)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+
+        {/* Pain point map */}
+        {vmPainPoints.length > 0 && (
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "#e5e7eb", marginBottom: "8px" }}>
+              {"Pain Point Map (" + vmPainPoints.length + " pain points)"}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {vmPainPoints.map(function(pp, ppi) {
+                var isPainExpanded = expandedPain === ppi;
+                var ppActivated = 0;
+                var ppDormant = 0;
+                for (var ppd = 0; ppd < pp.deliverables.length; ppd++) {
+                  if (pp.deliverables[ppd].status === "completed") ppActivated++;
+                  if (pp.deliverables[ppd].status === "pending") ppDormant++;
+                }
+
+                return (
+                  <div key={ppi} style={{
+                    background: "#111827", borderRadius: "10px", border: "1px solid #1f2937",
+                    overflow: "hidden"
+                  }}>
+                    <div style={{
+                      padding: "12px 14px", cursor: "pointer",
+                      display: "flex", gap: "10px", alignItems: "flex-start"
+                    }}
+                    onClick={function() { setExpandedPain(isPainExpanded ? null : ppi); }}
+                    >
+                      <div style={{
+                        width: "6px", borderRadius: "3px", minHeight: "32px", flexShrink: 0,
+                        background: ppDormant > 0 ? "#f59e0b" : "#10b981"
+                      }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: "13px", color: "#e5e7eb", fontWeight: 500, lineHeight: 1.4 }}>
+                          {pp.painPoint}
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "4px" }}>
+                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                            {pp.focusTitle}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "#6b7280" }}>
+                            {pp.deliverables.length + " deliverable" + (pp.deliverables.length > 1 ? "s" : "")}
+                          </span>
+                          {ppDormant > 0 && (
+                            <Badge variant="warning">{ppDormant + " dormant"}</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: "12px", color: "#6b7280", flexShrink: 0 }}>
+                        {isPainExpanded ? "\u25B2" : "\u25BC"}
+                      </span>
+                    </div>
+
+                    {/* Expanded deliverables */}
+                    {isPainExpanded && (
+                      <div style={{ padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {pp.deliverables.map(function(ppDel, ppdi) {
+                          var ppTypeInfo = entityTypeColors[ppDel.entityType] || entityTypeColors.synthesis;
+                          var ppStatInfo = activationStatusColors[ppDel.status] || activationStatusColors.pending;
+                          return (
+                            <div key={ppdi} style={{
+                              padding: "8px 10px", background: "#0f172a", borderRadius: "6px",
+                              display: "flex", gap: "8px", alignItems: "center"
+                            }}>
+                              <span style={{
+                                padding: "1px 6px", borderRadius: "4px", fontSize: "10px", fontWeight: 600,
+                                background: ppTypeInfo.bg, color: ppTypeInfo.text
+                              }}>
+                                {ppTypeInfo.label}
+                              </span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: "12px", color: "#d1d5db", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {ppDel.taskTitle}
+                                </div>
+                                <div style={{ fontSize: "10px", color: "#6b7280" }}>{ppDel.howItHelps}</div>
+                              </div>
+                              <Badge variant={ppDel.status === "completed" ? "success" : ppDel.status === "in_progress" ? "warning" : "default"}>
+                                {ppStatInfo.label}
+                              </Badge>
+                              {ppDel.status !== "completed" && (
+                                <Button variant="ghost" onClick={function(e) {
+                                  e.stopPropagation();
+                                  onAction("activate", { focusId: pp.focusId, entityId: ppDel.entityId });
+                                }}>
+                                  {ppDel.status === "in_progress" ? "Continue" : "Activate"}
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {vmPainPoints.length === 0 && (
+          <EmptyState
+            icon="target"
+            title="No Deliverables Yet"
+            description="Run evolution sprints on your focus areas to build deliverables that address your pain points."
+          />
+        )}
+
+        {/* Navigation */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Button variant="outline" onClick={function() { onAction("progress", {}); }}>
+            Activation Progress
+          </Button>
+          <Button variant="ghost" onClick={function() { onAction("load", {}); }}>
+            Back to Sprint Results
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // ── LAUNCH RESULT VIEW ──
   if (isLaunch) {
@@ -346,12 +904,19 @@ export default function GeneratedUI({ data, onAction }) {
               <div style={{ fontSize: "13px", color: "#9ca3af", lineHeight: 1.5, marginBottom: "8px" }}>
                 {recommended.reason || ""}
               </div>
-              <Button variant="primary" onClick={function() {
-                onAction("mark_status", { focusId: focusId, entityId: recDel.entityId, status: "viewed" });
-                onAction("launch", { entityId: recDel.entityId, entityType: recDel.entityType, focusId: focusId });
-              }}>
-                {actionLabels[recDel.actionType] || "Open"}
-              </Button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Button variant="primary" onClick={function() {
+                  onAction("activate", { focusId: focusId, entityId: recDel.entityId });
+                }}>
+                  Activate
+                </Button>
+                <Button variant="outline" onClick={function() {
+                  onAction("mark_status", { focusId: focusId, entityId: recDel.entityId, status: "viewed" });
+                  onAction("launch", { entityId: recDel.entityId, entityType: recDel.entityType, focusId: focusId });
+                }}>
+                  {actionLabels[recDel.actionType] || "Open"}
+                </Button>
+              </div>
             </div>
           </div>
         </UICard>
@@ -439,10 +1004,19 @@ export default function GeneratedUI({ data, onAction }) {
                       </div>
                     )}
 
-                    {/* Action button */}
+                    {/* Action buttons — now includes Activate */}
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <Button
-                        variant={del.entityType === "app" ? "primary" : "outline"}
+                        variant="primary"
+                        onClick={function(e) {
+                          e.stopPropagation();
+                          onAction("activate", { focusId: focusId, entityId: del.entityId });
+                        }}
+                      >
+                        Activate
+                      </Button>
+                      <Button
+                        variant={del.entityType === "app" ? "outline" : "ghost"}
                         onClick={function(e) {
                           e.stopPropagation();
                           onAction("mark_status", { focusId: focusId, entityId: del.entityId, status: "viewed" });
@@ -606,11 +1180,17 @@ export default function GeneratedUI({ data, onAction }) {
 
       {/* ── Action Bar ── */}
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-        <Button variant="primary" onClick={function() { onAction("next_cycle", { focusId: focusId }); }}>
-          Start Next Cycle
+        <Button variant="primary" onClick={function() { onAction("progress", { focusId: focusId }); }}>
+          Activation Progress
         </Button>
-        <Button variant="outline" onClick={function() { onAction("share", { focusId: focusId, format: "markdown" }); }}>
-          Share Results
+        <Button variant="outline" onClick={function() { onAction("value_map", {}); }}>
+          Value Dashboard
+        </Button>
+        <Button variant="outline" onClick={function() { onAction("next_cycle", { focusId: focusId }); }}>
+          Next Cycle
+        </Button>
+        <Button variant="ghost" onClick={function() { onAction("share", { focusId: focusId, format: "markdown" }); }}>
+          Share
         </Button>
         <div style={{ flex: 1 }} />
         <Button variant="ghost" onClick={function() { onAction("load", { focusId: focusId }); }}>

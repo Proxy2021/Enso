@@ -9,7 +9,7 @@ var imageUrl = (params.imageUrl || "").trim();
 var tagsStr = (params.tags || "").trim();
 var semanticTagsStr = (params.semanticTags || "").trim();
 
-var validTypes = ["book", "movie", "tv-series", "documentary", "game", "album", "artist"];
+var validTypes = ["book", "movie", "tv-series", "documentary", "game", "song", "artist", "playlist", "article"];
 
 if (!type || validTypes.indexOf(type) === -1) {
   return {

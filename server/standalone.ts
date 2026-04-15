@@ -40,6 +40,8 @@ import { createPageTools } from "./src/page-tools.js";
 import { createFocusAgentTools } from "./src/focus-agent.js";
 import { createTeamLeaderTools } from "./src/team-leader.js";
 import { startSelfHealing } from "./src/self-heal.js";
+import { setCardAccountResolver, cardContexts } from "./src/outbound/card-context.js";
+import { loadAllPersistedCards } from "./src/outbound/card-persistence.js";
 
 // ── Exit codes ──
 const EXIT_RESTART_REQUESTED = 78;
@@ -152,6 +154,24 @@ async function main(): Promise<void> {
     },
   });
   serverStop = stop;
+
+  // ── Restore persisted card contexts ──
+  try {
+    setCardAccountResolver((accountId) =>
+      accountId === account.accountId ? account : null
+    );
+    const restored = loadAllPersistedCards((accountId) =>
+      accountId === account.accountId ? account : null
+    );
+    for (const [id, ctx] of restored) {
+      cardContexts.set(id, ctx);
+    }
+    if (restored.size > 0) {
+      console.log(`[enso:standalone] Restored ${restored.size} persisted card context(s)`);
+    }
+  } catch (err) {
+    console.error("[enso:standalone] Failed to restore persisted cards:", err);
+  }
 
   // Tell guardian what port we're on (if running under guardian)
   if (process.send) {

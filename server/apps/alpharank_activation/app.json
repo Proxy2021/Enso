@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "createdAt": 1713200000000,
+  "spec": {
+    "toolFamily": "alpharank_activation",
+    "toolPrefix": "enso_alpharank_activation_",
+    "description": "AlphaRank 30-day activation tracker: daily task planning, progress dashboard, check-ins, performance metrics, and blocker tracking for Phase 1 quant development",
+    "signatureId": "alpharank_activation_view",
+    "tools": [
+      {
+        "suffix": "today",
+        "description": "Show today's activation task, prerequisites, estimated time, and progress. Use when the user says: 'what should I work on today', 'AlphaRank today', 'show today's task', 'daily plan', 'activation today'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_activation_today",
+          "currentDay": 3,
+          "totalDays": 30,
+          "daysCompleted": 2,
+          "streak": 2,
+          "task": {
+            "day": 3,
+            "title": "Qlib Data Download",
+            "week": 1,
+            "weekLabel": "Environment + Data",
+            "description": "Download S&P 500 market data via Qlib data provider. Verify data quality, check for gaps, and confirm date range coverage.",
+            "estimatedHours": 3,
+            "category": "data",
+            "prerequisites": ["Python environment ready", "Qlib installed"],
+            "deliverables": ["S&P 500 data downloaded", "Data quality report", "Date range verified"],
+            "resources": ["Qlib data docs", "S&P 500 constituent list"]
+          },
+          "prerequisitesMet": true,
+          "percentComplete": 7
+        },
+        "requiredDataKeys": ["tool", "currentDay", "task"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "progress",
+        "description": "Show the full 30-day activation plan with weekly groupings, task status, streak tracking, and completion estimates. Use when the user says: 'show progress', 'activation progress', '30-day plan', 'AlphaRank status', 'how am I doing'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_activation_progress",
+          "totalDays": 30,
+          "daysCompleted": 5,
+          "currentDay": 6,
+          "streak": 5,
+          "percentComplete": 17,
+          "weeks": [
+            {
+              "number": 1,
+              "label": "Environment + Data",
+              "days": [
+                { "day": 1, "title": "Python env setup", "status": "done" },
+                { "day": 2, "title": "Qlib + LightGBM install", "status": "done" }
+              ]
+            }
+          ],
+          "velocity": { "planned": 5, "actual": 5, "ratio": 1.0 },
+          "estimatedCompletion": "2026-05-15"
+        },
+        "requiredDataKeys": ["tool", "weeks", "daysCompleted"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "checkin",
+        "description": "Complete a daily check-in: mark today's task as done/partial/blocked, add notes, record time spent. Use when the user says: 'check in', 'mark done', 'daily checkin', 'complete today', 'I finished today's task', 'log progress'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "Task status: done, partial, or blocked"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Notes about what was accomplished or issues encountered"
+            },
+            "hoursSpent": {
+              "type": "number",
+              "description": "Actual hours spent on today's task"
+            },
+            "day": {
+              "type": "number",
+              "description": "Specific day number to check in for (defaults to current active day)"
+            }
+          },
+          "required": ["status"]
+        },
+        "sampleParams": { "status": "done", "notes": "Conda environment created, all packages installed", "hoursSpent": 2.5 },
+        "sampleData": {
+          "tool": "enso_alpharank_activation_checkin",
+          "success": true,
+          "day": 1,
+          "title": "Python environment setup",
+          "status": "done",
+          "notes": "Conda environment created, all packages installed",
+          "hoursSpent": 2.5,
+          "nextDay": 2,
+          "nextTitle": "Qlib + LightGBM + DuckDB install",
+          "streak": 1,
+          "velocity": { "planned": 3, "actual": 2.5, "ratio": 0.83 }
+        },
+        "requiredDataKeys": ["tool", "success", "day", "status"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "metrics",
+        "description": "View and update key performance metrics (IC, ICIR, Sharpe, max drawdown, PBO score) with GO/NO-GO gate status. Use when the user says: 'show metrics', 'update metrics', 'AlphaRank metrics', 'GO/NO-GO status', 'performance numbers', 'check gates'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: view (default) or update"
+            },
+            "metricId": {
+              "type": "string",
+              "description": "Metric to update: ic, icir, sharpe, max_dd, pbo, cagr, turnover"
+            },
+            "value": {
+              "type": "number",
+              "description": "New metric value"
+            },
+            "date": {
+              "type": "string",
+              "description": "Date for the metric reading (defaults to today)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_activation_metrics",
+          "metrics": {
+            "ic": { "current": null, "target": 0.03, "gate1Target": 0.03, "gate2Target": 0.05, "history": [] },
+            "sharpe": { "current": null, "target": 1.0, "gate1Target": 0.5, "gate2Target": 0.8, "history": [] }
+          },
+          "gates": [
+            { "id": "gate1", "label": "GO/NO-GO Gate #1 (Day 15-16)", "status": "pending", "criteria": ["IC > 0.03", "Sharpe > 0.5"] },
+            { "id": "gate2", "label": "GO/NO-GO Gate #2 (Day 29-30)", "status": "pending", "criteria": ["IC > 0.05", "Sharpe > 0.8", "Max DD < 25%"] }
+          ]
+        },
+        "requiredDataKeys": ["tool", "metrics", "gates"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "blockers",
+        "description": "Log, view, and manage technical blockers encountered during AlphaRank activation. Use when the user says: 'log blocker', 'show blockers', 'I'm stuck', 'add blocker', 'resolve blocker', 'blocker list'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: list (default), add, resolve"
+            },
+            "title": {
+              "type": "string",
+              "description": "Blocker title (for add action)"
+            },
+            "category": {
+              "type": "string",
+              "description": "Category: data_quality, package_compat, config, performance, api, other"
+            },
+            "description": {
+              "type": "string",
+              "description": "Detailed description of the blocker"
+            },
+            "solution": {
+              "type": "string",
+              "description": "Solution found (for resolve action)"
+            },
+            "blockerId": {
+              "type": "string",
+              "description": "Blocker ID (for resolve action)"
+            },
+            "hoursLost": {
+              "type": "number",
+              "description": "Hours lost to this blocker"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_activation_blockers",
+          "action": "list",
+          "blockers": [],
+          "stats": {
+            "total": 0,
+            "open": 0,
+            "resolved": 0,
+            "totalHoursLost": 0,
+            "byCategory": {}
+          }
+        },
+        "requiredDataKeys": ["tool", "blockers", "stats"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

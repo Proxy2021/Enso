@@ -1,0 +1,387 @@
+{
+  "version": 1,
+  "createdAt": 1744742400000,
+  "spec": {
+    "toolFamily": "alpharank_validation",
+    "toolPrefix": "enso_alpharank_validation_",
+    "description": "AlphaRank validation dashboard: model scorecard with IC/ICIR/PBO/DSR gates, feature importance analysis, overfitting diagnostics, validation checklist tracker, and model comparison",
+    "signatureId": "alpharank_validation_view",
+    "tools": [
+      {
+        "suffix": "scorecard",
+        "description": "Display AlphaRank model validation scorecard with key metrics (IC, ICIR, PBO, DSR, Sharpe, drawdown) and pass/fail gates for each model horizon M1-M12. Accepts metrics as JSON input or reads from a results file. Use when the user says: 'show validation scorecard', 'model metrics', 'how are my models doing', 'validation dashboard', 'AlphaRank scorecard'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metrics": {
+              "type": "string",
+              "description": "JSON string of model metrics. Each model should have: name, trainIC, testIC, icir, pbo, dsr, sharpe, annualReturn, maxDrawdown. If omitted, reads from state or uses sample data."
+            },
+            "filePath": {
+              "type": "string",
+              "description": "Path to a JSON results file containing model metrics. Optional."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_validation_scorecard",
+          "models": [
+            {
+              "name": "M1",
+              "horizon": "1-month",
+              "trainIC": 0.082,
+              "testIC": 0.013,
+              "icir": 0.31,
+              "pbo": 0.72,
+              "dsr": 0.38,
+              "sharpe": 0.24,
+              "annualReturn": -0.0264,
+              "maxDrawdown": -0.187,
+              "gates": {
+                "ic": { "value": 0.013, "threshold": 0.03, "pass": false },
+                "icir": { "value": 0.31, "threshold": 0.5, "pass": false },
+                "pbo": { "value": 0.72, "threshold": 0.5, "pass": false },
+                "sharpe": { "value": 0.24, "threshold": 0.5, "pass": false }
+              }
+            },
+            {
+              "name": "M3",
+              "horizon": "3-month",
+              "trainIC": 0.095,
+              "testIC": 0.018,
+              "icir": 0.42,
+              "pbo": 0.65,
+              "dsr": 0.45,
+              "sharpe": 0.35,
+              "annualReturn": -0.0112,
+              "maxDrawdown": -0.154,
+              "gates": {
+                "ic": { "value": 0.018, "threshold": 0.03, "pass": false },
+                "icir": { "value": 0.42, "threshold": 0.5, "pass": false },
+                "pbo": { "value": 0.65, "threshold": 0.5, "pass": false },
+                "sharpe": { "value": 0.35, "threshold": 0.5, "pass": false }
+              }
+            },
+            {
+              "name": "M6",
+              "horizon": "6-month",
+              "trainIC": 0.110,
+              "testIC": 0.025,
+              "icir": 0.55,
+              "pbo": 0.52,
+              "dsr": 0.51,
+              "sharpe": 0.48,
+              "annualReturn": 0.032,
+              "maxDrawdown": -0.122,
+              "gates": {
+                "ic": { "value": 0.025, "threshold": 0.03, "pass": false },
+                "icir": { "value": 0.55, "threshold": 0.5, "pass": true },
+                "pbo": { "value": 0.52, "threshold": 0.5, "pass": false },
+                "sharpe": { "value": 0.48, "threshold": 0.5, "pass": false }
+              }
+            },
+            {
+              "name": "M12",
+              "horizon": "12-month",
+              "trainIC": 0.125,
+              "testIC": 0.031,
+              "icir": 0.61,
+              "pbo": 0.44,
+              "dsr": 0.58,
+              "sharpe": 0.56,
+              "annualReturn": 0.058,
+              "maxDrawdown": -0.098,
+              "gates": {
+                "ic": { "value": 0.031, "threshold": 0.03, "pass": true },
+                "icir": { "value": 0.61, "threshold": 0.5, "pass": true },
+                "pbo": { "value": 0.44, "threshold": 0.5, "pass": true },
+                "sharpe": { "value": 0.56, "threshold": 0.5, "pass": true }
+              }
+            }
+          ],
+          "summary": {
+            "totalModels": 4,
+            "passingModels": 1,
+            "avgTestIC": 0.02175,
+            "avgTrainTestGap": 5.29,
+            "bestModel": "M12",
+            "worstModel": "M1",
+            "overallVerdict": "FAIL — 3 of 4 models fail validation gates"
+          },
+          "updatedAt": "2026-04-15T10:00:00Z"
+        },
+        "requiredDataKeys": ["tool", "models"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "features",
+        "description": "View feature importance analysis for AlphaRank models: top features by SHAP/MDI importance, category breakdown, stability scores, and keep/cut recommendations. Accept feature data as JSON input. Use when the user says: 'show feature importance', 'which features matter', 'feature analysis', 'SHAP values'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "features": {
+              "type": "string",
+              "description": "JSON string of feature importance data. Each feature should have: name, importance, category, stability, recommendation. If omitted, uses sample data."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model name to show features for (e.g. 'M1', 'M6'). Defaults to best model."
+            },
+            "topN": {
+              "type": "number",
+              "description": "Number of top features to display (default: 20)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_validation_features",
+          "model": "M6",
+          "topN": 20,
+          "features": [
+            { "rank": 1, "name": "book_to_market", "importance": 0.087, "category": "value", "stability": 0.92, "recommendation": "keep" },
+            { "rank": 2, "name": "earnings_yield", "importance": 0.076, "category": "value", "stability": 0.88, "recommendation": "keep" },
+            { "rank": 3, "name": "rsi_14d", "importance": 0.065, "category": "momentum", "stability": 0.45, "recommendation": "cut" },
+            { "rank": 4, "name": "roe_ttm", "importance": 0.061, "category": "quality", "stability": 0.85, "recommendation": "keep" },
+            { "rank": 5, "name": "debt_to_equity", "importance": 0.058, "category": "quality", "stability": 0.81, "recommendation": "keep" },
+            { "rank": 6, "name": "vol_20d", "importance": 0.054, "category": "volatility", "stability": 0.72, "recommendation": "keep" },
+            { "rank": 7, "name": "momentum_12m", "importance": 0.051, "category": "momentum", "stability": 0.38, "recommendation": "cut" },
+            { "rank": 8, "name": "pe_ratio", "importance": 0.048, "category": "value", "stability": 0.90, "recommendation": "keep" },
+            { "rank": 9, "name": "free_cash_flow_yield", "importance": 0.045, "category": "value", "stability": 0.87, "recommendation": "keep" },
+            { "rank": 10, "name": "revenue_growth_yoy", "importance": 0.042, "category": "growth", "stability": 0.68, "recommendation": "keep" },
+            { "rank": 11, "name": "beta_60d", "importance": 0.039, "category": "volatility", "stability": 0.75, "recommendation": "keep" },
+            { "rank": 12, "name": "short_interest_ratio", "importance": 0.036, "category": "sentiment", "stability": 0.32, "recommendation": "cut" },
+            { "rank": 13, "name": "macd_signal", "importance": 0.034, "category": "momentum", "stability": 0.41, "recommendation": "cut" },
+            { "rank": 14, "name": "current_ratio", "importance": 0.031, "category": "quality", "stability": 0.79, "recommendation": "keep" },
+            { "rank": 15, "name": "dividend_yield", "importance": 0.029, "category": "value", "stability": 0.91, "recommendation": "keep" },
+            { "rank": 16, "name": "vol_ratio_5_20", "importance": 0.027, "category": "volatility", "stability": 0.55, "recommendation": "review" },
+            { "rank": 17, "name": "eps_surprise_pct", "importance": 0.025, "category": "sentiment", "stability": 0.48, "recommendation": "review" },
+            { "rank": 18, "name": "asset_turnover", "importance": 0.023, "category": "quality", "stability": 0.82, "recommendation": "keep" },
+            { "rank": 19, "name": "price_to_sales", "importance": 0.021, "category": "value", "stability": 0.86, "recommendation": "keep" },
+            { "rank": 20, "name": "adv_20d", "importance": 0.019, "category": "liquidity", "stability": 0.70, "recommendation": "keep" }
+          ],
+          "categoryBreakdown": [
+            { "category": "value", "count": 6, "avgImportance": 0.051, "avgStability": 0.89 },
+            { "category": "quality", "count": 4, "avgImportance": 0.043, "avgStability": 0.82 },
+            { "category": "momentum", "count": 3, "avgImportance": 0.050, "avgStability": 0.41 },
+            { "category": "volatility", "count": 3, "avgImportance": 0.040, "avgStability": 0.67 },
+            { "category": "sentiment", "count": 2, "avgImportance": 0.031, "avgStability": 0.40 },
+            { "category": "growth", "count": 1, "avgImportance": 0.042, "avgStability": 0.68 },
+            { "category": "liquidity", "count": 1, "avgImportance": 0.019, "avgStability": 0.70 }
+          ],
+          "summary": {
+            "keepCount": 13,
+            "cutCount": 4,
+            "reviewCount": 2,
+            "dominantCategory": "value",
+            "unstableFeatures": ["rsi_14d", "momentum_12m", "short_interest_ratio", "macd_signal"]
+          }
+        },
+        "requiredDataKeys": ["tool", "features"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "diagnose",
+        "description": "Run overfitting diagnostic analysis: train vs test comparison, IC decay curve, rolling IC, degrees of freedom, and LLM-powered recommendation engine. Use when the user says: 'diagnose overfitting', 'why is my model overfitting', 'overfitting analysis', 'train vs test gap'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "diagnostics": {
+              "type": "string",
+              "description": "JSON string of diagnostic data including train/test metrics over time. If omitted, uses sample data."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model name to diagnose (e.g. 'M1', 'M6'). Defaults to worst performing model."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_validation_diagnose",
+          "model": "M1",
+          "trainTestComparison": {
+            "trainIC": 0.082,
+            "testIC": 0.013,
+            "gap": 6.31,
+            "trainSharpe": 1.85,
+            "testSharpe": 0.24,
+            "trainReturn": 0.182,
+            "testReturn": -0.0264
+          },
+          "icDecayCurve": [
+            { "period": "2003-2006", "ic": 0.042 },
+            { "period": "2006-2009", "ic": 0.028 },
+            { "period": "2009-2012", "ic": 0.019 },
+            { "period": "2012-2015", "ic": 0.011 },
+            { "period": "2015-2018", "ic": 0.008 },
+            { "period": "2018-2021", "ic": 0.005 },
+            { "period": "2021-2024", "ic": 0.003 }
+          ],
+          "rollingIC": [
+            { "date": "2020-01", "ic": 0.021, "upper": 0.035, "lower": 0.007 },
+            { "date": "2020-07", "ic": 0.018, "upper": 0.032, "lower": 0.004 },
+            { "date": "2021-01", "ic": 0.015, "upper": 0.029, "lower": 0.001 },
+            { "date": "2021-07", "ic": 0.012, "upper": 0.026, "lower": -0.002 },
+            { "date": "2022-01", "ic": 0.009, "upper": 0.023, "lower": -0.005 },
+            { "date": "2022-07", "ic": 0.011, "upper": 0.025, "lower": -0.003 },
+            { "date": "2023-01", "ic": 0.008, "upper": 0.022, "lower": -0.006 },
+            { "date": "2023-07", "ic": 0.010, "upper": 0.024, "lower": -0.004 },
+            { "date": "2024-01", "ic": 0.006, "upper": 0.020, "lower": -0.008 },
+            { "date": "2024-07", "ic": 0.007, "upper": 0.021, "lower": -0.007 }
+          ],
+          "degreesOfFreedom": {
+            "numFeatures": 158,
+            "numTrials": 48,
+            "effectiveTrials": 12,
+            "dataPoints": 5280,
+            "ratio": 0.009
+          },
+          "recommendations": [
+            { "severity": "critical", "issue": "21x train-test IC gap indicates severe overfitting", "action": "Apply CPCV with 10 folds and 2 test groups instead of walk-forward" },
+            { "severity": "critical", "issue": "158 features with only 12 effective trials — high multiple testing risk", "action": "Run PBO test and apply Deflated Sharpe Ratio correction" },
+            { "severity": "high", "issue": "IC decaying monotonically from 0.042 to 0.003 over 21 years", "action": "Feature importance is not stable — prune to top 30 features with stability > 0.7" },
+            { "severity": "high", "issue": "Momentum features (rsi_14d, momentum_12m) are unstable", "action": "Remove or cap momentum features — they contribute to overfitting" },
+            { "severity": "medium", "issue": "No transaction cost modeling in backtest", "action": "Add 50bps round-trip cost and 20bps slippage to all backtests" },
+            { "severity": "medium", "issue": "Monthly rebalancing generates high turnover", "action": "Target 80-100% annual turnover; add turnover penalty to objective" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "model", "recommendations"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "checklist",
+        "description": "Track AlphaRank validation progress: PBO test, CPCV implementation, DSR computation, transaction cost modeling, OOS test, paper trading. Persistent state saved to disk. Use when the user says: 'validation checklist', 'what validation steps remain', 'track validation progress', 'update checklist'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'view' to see checklist, 'update' to change an item's status. Default: view."
+            },
+            "itemId": {
+              "type": "string",
+              "description": "Checklist item ID to update (e.g. 'pbo_test', 'cpcv', 'dsr', 'txcosts', 'oos_test', 'paper_trading')"
+            },
+            "status": {
+              "type": "string",
+              "description": "New status: 'not_started', 'in_progress', 'done'"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Optional notes for the checklist item"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_validation_checklist",
+          "action": "view",
+          "items": [
+            { "id": "pbo_test", "label": "PBO Test Run", "description": "Run Probability of Backtest Overfitting test using pypbo", "status": "not_started", "completedAt": null, "notes": "", "priority": 1 },
+            { "id": "cpcv", "label": "CPCV Implementation", "description": "Implement Combinatorial Purged Cross-Validation (10 folds, 2 test groups)", "status": "not_started", "completedAt": null, "notes": "", "priority": 2 },
+            { "id": "dsr", "label": "DSR Computation", "description": "Compute Deflated Sharpe Ratio to account for multiple testing", "status": "not_started", "completedAt": null, "notes": "", "priority": 3 },
+            { "id": "txcosts", "label": "Transaction Cost Model", "description": "Add 50bps round-trip + 20bps slippage to all backtests", "status": "not_started", "completedAt": null, "notes": "", "priority": 4 },
+            { "id": "feature_prune", "label": "Feature Pruning", "description": "Prune unstable features (stability < 0.7), target top 30-50 features", "status": "not_started", "completedAt": null, "notes": "", "priority": 5 },
+            { "id": "oos_test", "label": "OOS Validation Pass", "description": "Achieve IC > 0.03, ICIR > 0.5 on out-of-sample data", "status": "not_started", "completedAt": null, "notes": "", "priority": 6 },
+            { "id": "paper_trading", "label": "Paper Trading Started", "description": "Deploy to Alpaca paper trading for 21+ trading days of live IC", "status": "not_started", "completedAt": null, "notes": "", "priority": 7 }
+          ],
+          "progress": {
+            "total": 7,
+            "done": 0,
+            "inProgress": 0,
+            "notStarted": 7,
+            "percentComplete": 0
+          },
+          "updatedAt": "2026-04-15T10:00:00Z"
+        },
+        "requiredDataKeys": ["tool", "items", "progress"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "compare",
+        "description": "Compare two or more AlphaRank model configurations side by side. Show delta in key metrics, highlight which is better. Use when the user says: 'compare models', 'which model is better', 'model comparison', 'A vs B'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "configurations": {
+              "type": "string",
+              "description": "JSON string of model configurations to compare. Each should have: name, testIC, icir, pbo, sharpe, annualReturn, maxDrawdown, features, turnover. If omitted, uses sample data."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_validation_compare",
+          "configurations": [
+            {
+              "name": "Baseline (158 features)",
+              "version": "v1.0",
+              "date": "2026-03-15",
+              "testIC": 0.013,
+              "icir": 0.31,
+              "pbo": 0.72,
+              "sharpe": 0.24,
+              "annualReturn": -0.0264,
+              "maxDrawdown": -0.187,
+              "featureCount": 158,
+              "turnover": 2.4,
+              "trainTestGap": 6.31
+            },
+            {
+              "name": "Pruned (45 features)",
+              "version": "v1.1",
+              "date": "2026-04-01",
+              "testIC": 0.028,
+              "icir": 0.52,
+              "pbo": 0.48,
+              "sharpe": 0.47,
+              "annualReturn": 0.041,
+              "maxDrawdown": -0.132,
+              "featureCount": 45,
+              "turnover": 1.6,
+              "trainTestGap": 2.85
+            },
+            {
+              "name": "Pruned + CPCV (45 features)",
+              "version": "v1.2",
+              "date": "2026-04-10",
+              "testIC": 0.035,
+              "icir": 0.58,
+              "pbo": 0.38,
+              "sharpe": 0.62,
+              "annualReturn": 0.072,
+              "maxDrawdown": -0.108,
+              "featureCount": 45,
+              "turnover": 1.2,
+              "trainTestGap": 1.94
+            }
+          ],
+          "deltas": [
+            { "metric": "Test IC", "baseline": 0.013, "best": 0.035, "delta": "+169%", "winner": "Pruned + CPCV" },
+            { "metric": "ICIR", "baseline": 0.31, "best": 0.58, "delta": "+87%", "winner": "Pruned + CPCV" },
+            { "metric": "PBO", "baseline": 0.72, "best": 0.38, "delta": "-47%", "winner": "Pruned + CPCV" },
+            { "metric": "Sharpe", "baseline": 0.24, "best": 0.62, "delta": "+158%", "winner": "Pruned + CPCV" },
+            { "metric": "Annual Return", "baseline": -0.0264, "best": 0.072, "delta": "+9.8pp", "winner": "Pruned + CPCV" },
+            { "metric": "Max Drawdown", "baseline": -0.187, "best": -0.108, "delta": "+42%", "winner": "Pruned + CPCV" },
+            { "metric": "Train-Test Gap", "baseline": 6.31, "best": 1.94, "delta": "-69%", "winner": "Pruned + CPCV" }
+          ],
+          "recommendation": "Pruned + CPCV (v1.2) is the strongest configuration — it passes all 4 validation gates and reduces overfitting by 69%."
+        },
+        "requiredDataKeys": ["tool", "configurations", "deltas"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

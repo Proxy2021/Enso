@@ -1334,6 +1334,35 @@ Rules:
                     logAction({ ts: Date.now(), type: "action", category: "focus-areas",
                       message: `Generated structured sprint summary for "${area.title}": ${sprintSummary.deliverables.length} deliverables mapped to pain points` });
 
+                    // Proactively surface sprint results card to connected clients
+                    import("./server.js").then(({ getAllClients, getActiveAccount }) => {
+                      const activeClients = getAllClients();
+                      const acct = getActiveAccount();
+                      if (activeClients.length > 0 && acct) {
+                        import("./outbound/sprint-cards.js").then(({ surfaceSprintDeliverables }) => {
+                          for (const cl of activeClients) {
+                            // Send announcement text message
+                            const announcementId = `sprint-announce-${focusId}-${Date.now()}`;
+                            cl.send({
+                              id: announcementId,
+                              runId: announcementId,
+                              sessionKey: cl.sessionKey,
+                              seq: 0,
+                              state: "final" as const,
+                              text: `Your **${area.title}** sprint is complete! Here are your ${sprintSummary.deliverables.length} deliverables.`,
+                              timestamp: Date.now(),
+                            });
+                            // Surface interactive sprint result cards
+                            surfaceSprintDeliverables(sprintSummary, focusId, cl, acct).catch(err => {
+                              logError("focus-areas", "Sprint card surfacing failed", err);
+                            });
+                          }
+                          logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                            message: `Sprint results surfaced to ${activeClients.length} client(s) for "${area.title}"` });
+                        }).catch(() => {});
+                      }
+                    }).catch(() => {});
+
                     // Emit sprint.completed event to conversation context registry
                     // This triggers proactive messages in focus conversations
                     import("./conversation-context.js").then(({ contextRegistry }) => {
@@ -1352,9 +1381,9 @@ Rules:
                       processEvent(createEvent("focus.sprint.done", { agent: "tl" }, { focusId }, "system")).catch(() => {});
                     }).catch(() => {});
 
-                    // Deliver sprint results through all channels (email, WeChat)
+                    // Deliver sprint results through email + WeChat (cards already surfaced above)
                     import("./focus-agent.js").then(({ deliverSprintResults }) => {
-                      deliverSprintResults(focusId, area.title, sprintSummary).catch(err => {
+                      deliverSprintResults(focusId, area.title, sprintSummary, { skipCards: true }).catch(err => {
                         logError("focus-areas", "Multi-channel sprint delivery failed", err);
                       });
                     }).catch(() => {});

@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "sprint_results",
     "toolPrefix": "enso_sprint_results_",
-    "description": "Sprint Results Dashboard — interactive view of focus area sprint deliverables with one-click actions, progress tracking, and shareable summaries. Shows deliverable cards, recommended first action, next steps, and focus area cycle progress.",
+    "description": "Sprint Results Dashboard — interactive view of focus area sprint deliverables with one-click activation, step-by-step guided activation tracking, progress dashboards, pain-point value mapping, and shareable summaries.",
     "signatureId": "sprint_results_view",
     "tools": [
       {
@@ -214,6 +214,123 @@
           "message": "Deliverable marked as viewed"
         },
         "requiredDataKeys": ["tool", "success", "entityId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "activate",
+        "description": "Start guided activation of a sprint deliverable. Creates a step-by-step activation plan tailored to the deliverable type (app: run+validate+integrate, article: read+extract+apply, idea: explore+research+prototype, synthesis: review+extract+cross-reference). Tracks progress persistently. Also completes individual steps when completeStep is provided. Use when the user clicks 'Activate' on a deliverable or says 'activate this', 'start using this', 'how do I use this'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID"
+            },
+            "entityId": {
+              "type": "string",
+              "description": "Cortex entity ID of the deliverable"
+            },
+            "completeStep": {
+              "type": "number",
+              "description": "If provided, marks this step index as completed instead of starting activation"
+            }
+          },
+          "required": ["focusId", "entityId"]
+        },
+        "sampleParams": { "focusId": "focus-photography", "entityId": "entity-abc123" },
+        "sampleData": {
+          "tool": "enso_sprint_results_activate",
+          "success": true,
+          "entityId": "entity-abc123",
+          "taskTitle": "Photo Curation Workflow App",
+          "entityType": "app",
+          "focusId": "focus-photography",
+          "focusTitle": "Photography & Visual Storytelling",
+          "painPoint": "Manually sorting through hundreds of photos",
+          "howItHelps": "AI-powered curation pipeline",
+          "status": "in_progress",
+          "steps": [
+            { "stepIndex": 0, "instruction": "Open the app and run it on your latest shoot folder", "completed": true, "completedAt": "2026-04-15T10:00:00Z" },
+            { "stepIndex": 1, "instruction": "Validate it works with your real data", "completed": false },
+            { "stepIndex": 2, "instruction": "Note what works and what needs adjustment", "completed": false },
+            { "stepIndex": 3, "instruction": "Integrate into your regular workflow", "completed": false }
+          ],
+          "progress": { "completed": 1, "total": 4, "percent": 25 },
+          "nextStep": "Validate it works with your real data",
+          "message": "Activation started. First step: Open the app and run it on your latest shoot folder"
+        },
+        "requiredDataKeys": ["tool", "success", "entityId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "progress",
+        "description": "Show activation progress dashboard — how many sprint deliverables have been activated, in progress, or still pending across focus areas. Includes recommended next deliverable to activate. Use when the user says: 'activation progress', 'what have I activated', 'show progress', 'deliverable status', 'what should I activate next'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Optional focus area ID to filter by. Omit for all focus areas."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_sprint_results_progress",
+          "success": true,
+          "totalDeliverables": 12,
+          "activated": 5,
+          "inProgress": 3,
+          "pending": 3,
+          "skipped": 1,
+          "completionPercent": 42,
+          "byFocus": [
+            { "focusId": "focus-photography", "focusTitle": "Photography", "total": 4, "activated": 2, "inProgress": 1, "pending": 1 }
+          ],
+          "records": [
+            { "entityId": "entity-abc123", "taskTitle": "Photo Curation App", "entityType": "app", "focusId": "focus-photography", "status": "completed", "stepsCompleted": 4, "stepsTotal": 4 }
+          ],
+          "recommended": { "entityId": "entity-def456", "taskTitle": "Style Guide", "focusId": "focus-photography", "reason": "High-impact article that addresses your most pressing pain point" }
+        },
+        "requiredDataKeys": ["tool", "success", "totalDeliverables"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "value_map",
+        "description": "Show a pain-point-centric value dashboard — maps all sprint deliverables across all focus areas to your specific pain points. Shows what Enso has built, activation status, and dormant value. Use when the user says: 'what has Enso built for me', 'show my value', 'pain point mapping', 'value dashboard', 'what did my sprints produce'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_sprint_results_value_map",
+          "success": true,
+          "totalFocusAreas": 4,
+          "totalDeliverables": 18,
+          "totalActivated": 7,
+          "activationPercent": 39,
+          "painPointMap": [
+            {
+              "painPoint": "Manually sorting through hundreds of photos",
+              "focusId": "focus-photography",
+              "focusTitle": "Photography & Visual Storytelling",
+              "deliverables": [
+                { "taskTitle": "Photo Curation App", "entityType": "app", "entityId": "entity-abc123", "howItHelps": "AI-powered curation", "status": "completed" }
+              ]
+            }
+          ],
+          "focusSummaries": [
+            { "focusId": "focus-photography", "focusTitle": "Photography", "deliverableCount": 8, "activatedCount": 4, "progress": 55, "understanding": 60 }
+          ],
+          "dormantCount": 11
+        },
+        "requiredDataKeys": ["tool", "success", "painPointMap"],
         "isPrimary": false
       }
     ]
