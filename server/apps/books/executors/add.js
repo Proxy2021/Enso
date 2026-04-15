@@ -145,39 +145,74 @@ async function searchDouban(q) {
         .replace(/\s*-\s*豆瓣\s*$/g, "")
         .replace(/^书评\s*-\s*/g, "")
         .replace(/^短评\s*-\s*/g, "")
+        .replace(/\s+短评$/, "")
+        .replace(/\s+书评$/, "")
         .trim();
       // Skip review/discussion pages that aren't actual book entries
       if (r.url.indexOf("/review/") >= 0 || r.url.indexOf("/discussion/") >= 0) return null;
       var desc = r.description || "";
-      // Try to extract author and rating from the snippet
+      // Parse structured metadata fields that Douban snippets often contain:
+      // "作者: XXX 副标题: YYY isbn: ZZZ 书名: W 页数: N 定价: P 出版社: S 出版年: D 装帧: F"
       var author = "";
+      var subtitle = "";
+      var isbn = "";
+      var pageCount = 0;
+      var publisher = "";
+      var publishedDate = "";
       var rating = 0;
-      // Douban snippets often have: "作者: XXX / 出版社: YYY / 评分: 8.5"
-      var authorMatch = desc.match(/作者[:\s：]+([^/\/]+)/);
+
+      var authorMatch = desc.match(/作者[:\s：]+([^\s书副isbn页出定装评][^/]{0,50}?)(?=\s+(?:书名|isbn|页数|出版|定价|装帧|副标题)|$)/i);
       if (authorMatch) author = authorMatch[1].trim();
-      if (!author) {
-        // English pattern: "Author / Publisher / Year"
-        var parts = desc.split(/[/\/]/).map(function(s) { return s.trim(); });
-        if (parts.length >= 2 && parts[0].length < 40) author = parts[0];
-      }
+
+      var subtitleMatch = desc.match(/副标题[:\s：]+([^/]+?)(?=\s+(?:书名|isbn|页数|出版|定价|装帧|作者)|$)/i);
+      if (subtitleMatch) subtitle = subtitleMatch[1].trim();
+
+      var isbnMatch = desc.match(/isbn[:\s：]*([0-9X\-]{10,17})/i);
+      if (isbnMatch) isbn = isbnMatch[1].replace(/-/g, "");
+
+      var pageMatch = desc.match(/页数[:\s：]*(\d+)/);
+      if (pageMatch) pageCount = parseInt(pageMatch[1], 10);
+
+      var publisherMatch = desc.match(/出版社[:\s：]+([^/]+?)(?=\s+(?:书名|isbn|页数|出版年|定价|装帧|作者|副标题)|$)/i);
+      if (publisherMatch) publisher = publisherMatch[1].trim();
+
+      var dateMatch = desc.match(/出版年[:\s：]*(\d{4}[-–\.\d]*)/);
+      if (dateMatch) publishedDate = dateMatch[1].trim();
+
       var ratingMatch = desc.match(/(\d+\.\d)\s*分/) || desc.match(/评分[:\s：]*(\d+\.?\d*)/);
       if (ratingMatch) rating = parseFloat(ratingMatch[1]);
-      // Also check the title for rating patterns like "8.5分"
       var titleRating = (r.title || "").match(/(\d+\.\d)\s*分/);
       if (titleRating && !rating) rating = parseFloat(titleRating[1]);
+
+      // Fallback author extraction: text before first labeled field (e.g. "Kevin Hong 副标题: ...")
+      if (!author) {
+        var beforeLabel = desc.match(/^(.{2,40}?)\s+(?:副标题|书名|isbn|页数|出版社|出版年|定价|装帧)[:\s：]/i);
+        if (beforeLabel) author = beforeLabel[1].trim();
+      }
+      if (!author) {
+        // English snippet pattern: "Author / Publisher / Year"
+        var parts = desc.split(/\s*[/\/]\s*/).map(function(s) { return s.trim(); });
+        if (parts.length >= 2 && parts[0].length < 40) author = parts[0];
+      }
+
+      // If the snippet is a structured metadata dump, don't use it as a book description
+      var metaFieldCount = [/书名[:\s：]/, /isbn[:\s：]/i, /页数[:\s：]/, /出版社[:\s：]/, /出版年[:\s：]/, /定价[:\s：]/]
+        .filter(function(rx) { return rx.test(desc); }).length;
+      var cleanDesc = metaFieldCount >= 2 ? "" : desc.slice(0, 500);
+
       return {
         title: title,
-        subtitle: "",
+        subtitle: subtitle,
         author: author,
-        publisher: "",
-        publishedDate: "",
-        description: desc.slice(0, 500),
-        pageCount: 0,
+        publisher: publisher,
+        publishedDate: publishedDate,
+        description: cleanDesc,
+        pageCount: pageCount,
         categories: [],
         rating: rating,
         ratingsCount: 0,
         language: "",
-        isbn: "",
+        isbn: isbn,
         coverUrl: "",
         source: "douban",
         sourceUrl: r.url,
@@ -187,6 +222,20 @@ async function searchDouban(q) {
     ctx.log("Douban search error: " + (e.message || e));
     return [];
   }
+}
+
+// ── HTML entity decoder (for Brave Search snippets) ──
+
+function decodeHtmlEntities(str) {
+  return (str || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, function(m, d) { return String.fromCharCode(parseInt(d, 10)); })
+    .replace(/&#x([0-9a-f]+);/gi, function(m, h) { return String.fromCharCode(parseInt(h, 16)); });
 }
 
 // ── Source 4: Amazon Kindle Store via Brave Search ──
@@ -203,23 +252,38 @@ async function searchAmazonKindle(q) {
         .replace(/\s*\|\s*Amazon\.com.*$/i, "")
         .replace(/Amazon\.com:\s*/i, "")
         .trim();
-      var desc = r.description || "";
+      // Decode HTML entities from the Brave Search snippet
+      var desc = decodeHtmlEntities(r.description || "");
       var author = "";
-      var authorMatch = desc.match(/by\s+([^.·\-\|]+)/i);
-      if (authorMatch) author = authorMatch[1].trim();
+      var authorMatch = desc.match(/by\s+([\w][\w,.\s]{1,50}?)(?:\s*[·\-\|]|\.\s+(?:Download|Read|Format))/i);
+      if (!authorMatch) authorMatch = desc.match(/by\s+([^.·\-\|]+)/i);
+      if (authorMatch) author = authorMatch[1].trim().replace(/\s*\(Author\)\s*/i, "").replace(/\s*Format:.*$/i, "").trim();
       var rating = 0;
       var ratingMatch = desc.match(/(\d+\.?\d*)\s*out of\s*5/);
       if (ratingMatch) rating = parseFloat(ratingMatch[1]);
       var price = "";
       var priceMatch = desc.match(/\$[\d.]+/);
       if (priceMatch) price = priceMatch[0];
+      // Strip Amazon boilerplate — the Brave snippet for Kindle pages is mostly marketing text
+      var cleanDesc = desc
+        .replace(/^.*?-\s*Kindle edition by [^.]+\.\s*/i, "")
+        .replace(/Download it once and read it on your Kindle device[^.]*\.\s*/gi, "")
+        .replace(/Use features like bookmarks[^.]*\.\s*/gi, "")
+        .replace(/PC,\s*phones or tablets\.\s*/gi, "")
+        .replace(/By placing your order[^.]*\.\s*/gi, "")
+        .replace(/placing your order[^.]*\.\s*/gi, "")
+        .replace(/purchasing a license[^.]*\.\s*/gi, "")
+        .replace(/Kindle Store Terms of Use[^.]*\.?\s*/gi, "")
+        .trim();
+      // If nothing useful remains after stripping boilerplate, clear description
+      if (cleanDesc.length < 20) cleanDesc = "";
       return {
         title: title,
         subtitle: "",
         author: author,
         publisher: "",
         publishedDate: "",
-        description: desc.slice(0, 500),
+        description: cleanDesc.slice(0, 500),
         pageCount: 0,
         categories: [],
         rating: rating,
