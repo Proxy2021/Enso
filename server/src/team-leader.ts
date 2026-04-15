@@ -634,7 +634,7 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Immediately executing user react: "${action.title}"` });
         // Fire and forget — don't await so the react resolves quickly
-        launchBuilderTask(action, { artifactId, reactId }).catch(err =>
+        launchBuilderTask(action, { artifactId, reactId, focusId: react.context?.focusId }).catch(err =>
           logError("team-leader", `Failed to execute react action: ${action.title}`, err));
       } else {
         queueTask({
@@ -2007,7 +2007,7 @@ Only set needsUser to true in genuinely exceptional cases.`,
  * Simple tasks (≤30min, single-agent): Direct Claude Code session
  * Complex tasks (sprint-level, multi-agent): Full orchestration with DAG
  */
-async function launchBuilderTask(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string }): Promise<void> {
+async function launchBuilderTask(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string; focusId?: string }): Promise<void> {
   const isComplex = action.estimatedEffort === "sprint" || action.estimatedEffort === "1h";
 
   if (isComplex) {
@@ -2020,7 +2020,7 @@ async function launchBuilderTask(action: TeamLeaderAction, opts?: { artifactId?:
 }
 
 /** Launch a single Claude Code session for simple tasks */
-async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string }): Promise<void> {
+async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifactId?: string; reactId?: string; focusId?: string }): Promise<void> {
   try {
     const { runClaudeCode } = await import("./claude-code.js");
     const { getAllClients } = await import("./server.js");
@@ -2049,6 +2049,23 @@ async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifa
     }
 
     const runId = randomUUID();
+
+    // Inject rich focus context if this task is about a focus area
+    let focusBlock = "";
+    if (opts?.focusId) {
+      try {
+        const fc = await buildRichFocusContext(opts.focusId);
+        focusBlock = `
+
+=== FOCUS AREA CONTEXT ===
+This task is about a focus area. Use this context to ground your response — reference specific deliverables, evidence, and the user's actual situation. Do NOT explore the filesystem to discover focus data; everything you need is below.
+
+${fc}
+=== END CONTEXT ===
+`;
+      } catch { /* non-critical */ }
+    }
+
     const prompt = `[Team Leader Task: ${action.title}]
 
 You are executing a task assigned by the Enso Team Leader.
@@ -2057,7 +2074,7 @@ TASK: ${action.title}
 TYPE: ${action.type}
 PRIORITY: ${action.priority}
 REASONING: ${action.reasoning}
-
+${focusBlock}
 The Enso codebase is at D:/Github/Enso. Execute this task now.
 Be thorough but focused. When done, summarize what you changed.`;
 
