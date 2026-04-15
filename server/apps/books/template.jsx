@@ -1270,31 +1270,29 @@ function GeneratedUI({ data, onAction }) {
         </div>
 
         {/* Add Book search bar + Super Search */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <div style={{ display: "flex", gap: "8px", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
-            <Input
-              placeholder="Add a new book — search by title, author, or ISBN..."
-              value={addBookInput}
-              onChange={function(v) { setAddBookInput(v); }}
-              onKeyDown={function(e) { if (e.key === "Enter" && addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}
-              style={{ flex: 1, fontSize: "12px" }}
-            />
-            <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>🔍 Search & Add</Button>
-          </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#1e1b4b", padding: "8px 10px", borderRadius: "8px", border: "1px solid #312e81" }}>
+          <Input
+            placeholder="Add a new book — search by title, author, or ISBN..."
+            value={addBookInput}
+            onChange={function(v) { setAddBookInput(v); }}
+            onKeyDown={function(e) { if (e.key === "Enter" && addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}
+            style={{ flex: 1, fontSize: "12px" }}
+          />
+          <Button variant="default" size="sm" style={{ fontSize: "11px" }} onClick={function() { if (addBookInput.trim()) onAction("add", { query: addBookInput.trim() }); }}>🔍 Search & Add</Button>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center", borderLeft: "1px solid #312e81", paddingLeft: "8px" }}>
             <Button
               variant="outline"
               size="sm"
               style={{ fontSize: "11px", background: "linear-gradient(135deg, #4c1d95, #1e3a8a)", color: "#c4b5fd", borderColor: "#7c3aed44", flex: "none" }}
-              onClick={function() { onAction("super_search", {}); }}
+              onClick={function() { onAction("super_search", superSearchInput.trim() ? { query: superSearchInput.trim() } : {}); }}
               title="AI-powered recommendations based on your reading history and preferences"
             >⚡ Super Search</Button>
             <Input
-              placeholder="Focus super search on a topic (optional)..."
+              placeholder="Focus super search on a topic..."
               value={superSearchInput}
               onChange={function(v) { setSuperSearchInput(v); }}
               onKeyDown={function(e) { if (e.key === "Enter") onAction("super_search", superSearchInput.trim() ? { query: superSearchInput.trim() } : {}); }}
-              style={{ flex: 1, fontSize: "12px" }}
+              style={{ width: "200px", fontSize: "12px" }}
             />
             {superSearchInput.trim() && (
               <Button variant="ghost" size="sm" style={{ fontSize: "11px", color: "#94a3b8" }}
