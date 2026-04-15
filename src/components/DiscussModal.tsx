@@ -88,7 +88,8 @@ export default function DiscussModal({ request, onClose, onExecute }: Props) {
       `${m.role === "user" ? "User" : request.agent.name}: ${m.text}`
     ).join("\n\n");
 
-    const enrichedText = request.text;
+    // The enriched text IS the full discussion — this is what the agent will act on
+    const enrichedText = `${request.text}\n\n--- Discussion with ${request.agent.name} ---\n\n${discussionText}`;
     const detail = `Discussion with ${request.agent.name} (${messages.length} messages):\n\n${discussionText}`;
 
     onExecute(enrichedText, detail, request.imageUrls);

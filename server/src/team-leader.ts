@@ -468,13 +468,14 @@ async function handleReactForTL(reactId: string): Promise<void> {
     const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
     const isProactive = proactiveTypes.has(react.context?.type);
 
-    const escapedText = react.text.replace(/"/g, '\\"');
+    const escapedText = react.text.replace(/"/g, '\\"').slice(0, 2000);
+    const contextSummary = (react.context?.summary || "no context").split("\n")[0].slice(0, 100); // First line only, avoid duplication with text
     const response = await llm({
       prompt: `You are the Team Leader of Enso. A user react just arrived.
 ${isProactive ? "\n**This is a DIRECT USER INSTRUCTION** (not a response to a notification). Treat with high priority and bias toward action.\n" : ""}
 REACT: "${escapedText}"
 CHANNEL: ${react.channel}
-CONTEXT: ${react.context?.type || "general"} — ${react.context?.summary || "no context"}
+CONTEXT: ${react.context?.type || "general"} — ${contextSummary}
 ACTION: ${react.action || "custom text"}
 
 Decide what to do:
