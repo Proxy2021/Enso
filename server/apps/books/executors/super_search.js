@@ -19,7 +19,7 @@ if (!refresh) {
     if (fs.existsSync(cachePath)) {
       var cached = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
       var age = Date.now() - (cached._cachedAt || 0);
-      var ttl = focusQuery ? 5 * 60 * 1000 : 60 * 60 * 1000;
+      var ttl = focusQuery ? 5 * 60 * 1000 : 15 * 60 * 1000; // 15min default (randomized queries = different results each time)
       if (age < ttl) {
         cached.fromCache = true;
         return { content: [{ type: "text", text: JSON.stringify(cached) }] };
@@ -100,44 +100,112 @@ var savedBooks = (tasteProfile.savedBooks || []).slice(-5).map(function(b) { ret
 var dismissedTitles = (tasteProfile.dismissedBooks || []).map(function(b) { return (b.title || "").toLowerCase(); });
 var ownedTitles = allLibraryBooks.map(function(b) { return (b.title || "").toLowerCase(); });
 
-ctx.log("Preferences: genres=" + topGenres.join(",") + " authors=" + topAuthors.slice(0, 3).join(",") + " recentBooks=" + recentBooks.length);
+// ── Pull themes from Cortex for richer, cross-source queries ──
+var cortexThemes = [];
+try {
+  var wikiDir = path.join(os.homedir(), ".enso", "wiki");
+  var indexPath = path.join(wikiDir, "_index.md");
+  if (fs.existsSync(indexPath)) {
+    var indexText = fs.readFileSync(indexPath, "utf-8");
+    // Extract themes from index entries (format: | title | ... | themes: x, y, z | ...)
+    var themeSet = {};
+    var lines = indexText.split("\n");
+    for (var li = 0; li < lines.length; li++) {
+      var tm = lines[li].match(/themes?:\s*([^|]+)/i);
+      if (tm) {
+        tm[1].split(",").forEach(function(t) {
+          t = t.trim().toLowerCase();
+          if (t && t.length > 2 && t.length < 30) themeSet[t] = (themeSet[t] || 0) + 1;
+        });
+      }
+    }
+    cortexThemes = Object.entries(themeSet)
+      .sort(function(a, b) { return b[1] - a[1]; })
+      .slice(0, 15)
+      .map(function(e) { return e[0]; });
+  }
+} catch (e) { ctx.log("Cortex themes error: " + (e.message || e)); }
 
-// ── Build smart search queries ──
+ctx.log("Preferences: genres=" + topGenres.join(",") + " authors=" + topAuthors.slice(0, 3).join(",") + " recentBooks=" + recentBooks.length + " cortexThemes=" + cortexThemes.length);
+
+// ── Helper: pick random items from array ──
+function pickRandom(arr, n) {
+  var shuffled = arr.slice();
+  for (var i = shuffled.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+  }
+  return shuffled.slice(0, n);
+}
+
+// ── Build smart search queries with variety ──
 function buildSearchQueries() {
   var queries = [];
 
   if (focusQuery) {
-    // User specified a focus — use it as primary
     queries.push({ q: focusQuery + " book recommendations", label: "focus" });
     queries.push({ q: "books like " + focusQuery, label: "similar" });
     return queries;
   }
 
-  // Preference-based queries
+  var allPossible = [];
+
+  // Similar-to queries using random recent books (not always the first)
   if (recentBooks.length > 0) {
-    var pivot = recentBooks[0];
-    queries.push({ q: "books similar to \"" + pivot.title + "\"", label: "similar" });
-    if (recentBooks.length > 2) {
-      queries.push({ q: "books like \"" + recentBooks[1].title + "\" \"" + recentBooks[2].title + "\"", label: "cluster" });
+    var pivots = pickRandom(recentBooks, 3);
+    pivots.forEach(function(p) {
+      allPossible.push({ q: "books similar to \"" + p.title + "\"", label: "similar" });
+    });
+  }
+
+  // Author-based queries — rotate through different authors
+  if (topAuthors.length > 0) {
+    var authPicks = pickRandom(topAuthors, 2);
+    authPicks.forEach(function(a) {
+      allPossible.push({ q: "books by authors similar to " + a, label: "author" });
+    });
+  }
+
+  // Genre-based queries
+  if (topGenres.length > 0) {
+    var genrePicks = pickRandom(topGenres, 2);
+    genrePicks.forEach(function(g) {
+      allPossible.push({ q: "best " + g.replace(/_/g, " ") + " books 2024 2025", label: "genre" });
+    });
+  }
+
+  // Cortex-theme-based queries — the real differentiator
+  // These use cross-source themes (e.g. "stoicism", "entrepreneurship", "dystopia")
+  // to find books that match the user's deep interests, not just reading history
+  if (cortexThemes.length > 0) {
+    var themePicks = pickRandom(cortexThemes, 3);
+    themePicks.forEach(function(t) {
+      allPossible.push({ q: t + " books recommended must read", label: "theme:" + t });
+    });
+    // Cross-theme: combine two random themes for serendipitous finds
+    if (cortexThemes.length >= 2) {
+      var cross = pickRandom(cortexThemes, 2);
+      allPossible.push({ q: cross[0] + " " + cross[1] + " book", label: "cross-theme" });
     }
   }
 
-  if (topAuthors.length > 0) {
-    queries.push({ q: "books by authors similar to " + topAuthors.slice(0, 2).join(" and "), label: "author" });
+  // Serendipity: occasionally add a wildcard query
+  var wildcards = [
+    "hidden gem books most people haven't read", "underrated nonfiction books brilliant minds",
+    "best books that changed how people think", "surprising books recommended by CEOs founders",
+    "books that connect science and philosophy", "best translated fiction books world literature",
+    "mind-expanding books across disciplines", "books at intersection of technology and humanity",
+  ];
+  allPossible.push({ q: pickRandom(wildcards, 1)[0], label: "serendipity" });
+
+  // Fallback if nothing at all
+  if (allPossible.length === 0) {
+    allPossible.push({ q: "best nonfiction books 2025 most influential", label: "general" });
+    allPossible.push({ q: "must read books intelligent readers 2025", label: "general" });
   }
 
-  if (topGenres.length > 0) {
-    var genreTerms = topGenres.slice(0, 2).join(" ").replace(/_/g, " ");
-    queries.push({ q: "best " + genreTerms + " books 2024 2025 recommendations", label: "genre" });
-  }
-
-  // Fallback if no data
-  if (queries.length === 0) {
-    queries.push({ q: "best nonfiction books 2025 most influential", label: "general" });
-    queries.push({ q: "must read books intelligent readers 2025", label: "general" });
-  }
-
-  return queries.slice(0, 4);
+  // Pick 4-5 random queries from all possibilities (ensures variety each time)
+  return pickRandom(allPossible, Math.min(5, allPossible.length));
 }
 
 var searchQueries = buildSearchQueries();
@@ -391,7 +459,9 @@ var candidateList = candidates.slice(0, 30).map(function(c, idx) {
   };
 });
 
-var llmPrompt = "You are a book recommendation curator. Based on the user's reading preferences, select the best books from the candidate pool.\n\n";
+if (cortexThemes.length > 0) preferenceContext += "Cortex life themes: " + cortexThemes.slice(0, 8).join(", ") + "\n";
+
+var llmPrompt = "You are a book recommendation curator who values VARIETY and SURPRISE. Based on the user's reading preferences, select a diverse mix from the candidate pool.\n\n";
 llmPrompt += "User reading preferences:\n" + (preferenceContext || "No specific preferences yet.\n") + "\n";
 llmPrompt += webContext + "\n";
 llmPrompt += "Candidate books (" + candidateList.length + "):\n" + JSON.stringify(candidateList, null, 1) + "\n\n";
@@ -403,16 +473,17 @@ llmPrompt += '  ],\n';
 llmPrompt += '  "searchInsight": "<1 sentence summarizing what drove these recommendations>"\n';
 llmPrompt += '}\n\n';
 llmPrompt += "Rules:\n";
-llmPrompt += "- Select 10-15 most relevant picks\n";
-llmPrompt += "- Sort by matchScore descending\n";
-llmPrompt += "- whyRecommended must reference specific preference signals (recent books, authors, genres)\n";
+llmPrompt += "- Select 10-15 picks with a MIX of safe bets and surprising finds\n";
+llmPrompt += "- DO NOT sort purely by relevance — interleave high-match (0.8+) with serendipitous picks (0.5-0.7)\n";
+llmPrompt += "- Include at least 2-3 books from unexpected angles (cross-domain, different genre than usual)\n";
+llmPrompt += "- whyRecommended must reference specific preference signals (recent books, authors, genres, or Cortex themes)\n";
 llmPrompt += "- Prefer books with hasCover=true and rating > 3.5\n";
 llmPrompt += "- Avoid generic recommendations — be specific about why this book fits this reader\n";
-llmPrompt += "- tags: 1-3 short labels (e.g. 'psychology', 'fast-paced', 'similar to X')\n";
+llmPrompt += "- tags: 1-3 short labels (e.g. 'psychology', 'fast-paced', 'similar to X', 'surprise pick')\n";
 
 var curation = null;
 try {
-  var llmResult = await ctx.ask(llmPrompt, { temperature: 0.5 });
+  var llmResult = await ctx.ask(llmPrompt, { temperature: 0.7 });
   if (llmResult && llmResult.ok && llmResult.text) {
     var jsonText = llmResult.text.trim();
     if (jsonText.indexOf("```") >= 0) {

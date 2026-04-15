@@ -1157,6 +1157,7 @@ function GeneratedUI({ data, onAction }) {
                           onClick={function() {
                             setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[bookKey] = "adding"; return n; });
                             try {
+                              // Add to both Cortex (wiki page) and Library (collection) in one click
                               onAction("add_to_cortex", {
                                 title: book.title,
                                 type: "book",
@@ -1169,18 +1170,15 @@ function GeneratedUI({ data, onAction }) {
                                 rating: book.rating || 0,
                                 source: "research",
                               });
+                              onAction("add", { query: book.title + (book.author ? " " + book.author : "") });
                               setTimeout(function() {
                                 setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[bookKey] = "added"; return n; });
                               }, 800);
                             } catch(e) {
                               setAddedStatus(function(prev) { var n = Object.assign({}, prev); n[bookKey] = "error"; return n; });
                             }
-                          }}>📥 Add to Cortex</Button>
+                          }}>{"\u2795"} Add</Button>
                       )}
-                      <Button size="sm" variant="outline" style={{ fontSize: "10px", padding: "2px 10px" }}
-                        onClick={function() { onAction("add", { query: book.title + (book.author ? " " + book.author : "") }); }}>
-                        + Add to Library
-                      </Button>
                       {book.sourceUrl && (
                         <a href={book.sourceUrl} target="_blank" rel="noopener noreferrer"
                           style={{ fontSize: "10px", color: "#60a5fa", alignSelf: "center", textDecoration: "none" }}>
