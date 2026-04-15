@@ -8,6 +8,8 @@ import { API } from "../lib/constants";
 const MarkdownText = lazy(() => import("./MarkdownText"));
 import { ActivityFeed } from "./ActivityFeed";
 import ReactToTL from "./ReactToTL";
+import type { DiscussRequest } from "./ReactToTL";
+import DiscussModal from "./DiscussModal";
 
 // ── Types ──
 
@@ -116,6 +118,7 @@ export default function FocusView() {
   const [detailTab, setDetailTab] = useState<DetailTab>("focus");
   const [pendingTlActions, setPendingTlActions] = useState<Array<{ id: string; title: string; focusId?: string }>>([]);
   const [reactToTLTarget, setReactToTLTarget] = useState<{ focusId: string; type: "focus" | "deliverable"; summary: string; detail?: string } | null>(null);
+  const [discussRequest, setDiscussRequest] = useState<DiscussRequest | null>(null);
 
   // Handle pending navigation from TL dashboard or chat cards
   useEffect(() => {
@@ -601,27 +604,6 @@ export default function FocusView() {
                   <div className={`rounded-lg border p-3 mb-1 ${bannerColor}`}>
                     <div className="flex items-center gap-2">
                       <FocusStatus area={selected} />
-                      <div className="ml-auto flex items-center gap-1.5">
-                        <button
-                          onClick={() => setReactToTLTarget({
-                            focusId: selected.id,
-                            type: "focus",
-                            summary: `Focus: ${selected.title}`,
-                            detail: `Status: ${selected.status}, Clarity: ${selected.clarity}. ${selected.assessment ? `Understanding: ${selected.assessment.understanding}%, Progress: ${selected.assessment.progress}%` : ""}`,
-                          })}
-                          className="text-[10px] px-2 py-1 rounded bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 transition-colors"
-                        >
-                          Instruct TL
-                        </button>
-                        <button
-                          onClick={() => chatAboutFocus(selected, selected.preparedBriefing
-                            ? `Based on your evaluation, what's the most important decision we need to make?`
-                            : `Let's discuss my focus: ${selected.title}. Where do I stand and what should I prioritize next?`)}
-                          className="text-[10px] px-2.5 py-1 rounded bg-violet-600/40 text-violet-200 hover:bg-violet-500/40 transition-colors"
-                        >
-                          Discuss
-                        </button>
-                      </div>
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1.5">{subtitle}</p>
                     {/* Assessment bars */}
@@ -646,6 +628,21 @@ export default function FocusView() {
                   </div>
                 );
               })()}
+
+              {/* Inline agent command for this focus */}
+              <div className="mb-2">
+                <ReactToTL
+                  context={{
+                    type: "focus",
+                    summary: `Focus: ${selected.title}`,
+                    focusId: selected.id,
+                    detail: `Status: ${selected.status}, Clarity: ${selected.clarity}. ${selected.assessment ? `Understanding: ${selected.assessment.understanding}%, Progress: ${selected.assessment.progress}%` : ""}`,
+                  }}
+                  onClose={() => {}}
+                  mode="inline"
+                  onDiscuss={(req) => setDiscussRequest(req)}
+                />
+              </div>
 
               {/* Section B: Activity Feed — agent artifacts for this focus */}
               <ActivityFeed focusId={selected.id} showResolved />
@@ -1244,9 +1241,41 @@ export default function FocusView() {
               }}
               onClose={() => setReactToTLTarget(null)}
               mode="inline"
+              onDiscuss={(req) => { setReactToTLTarget(null); setDiscussRequest(req); }}
             />
           </div>
         </div>
+      )}
+
+      {/* Discuss modal */}
+      {discussRequest && (
+        <DiscussModal
+          request={discussRequest}
+          onClose={() => setDiscussRequest(null)}
+          onExecute={async (enrichedText, detail, imageUrls) => {
+            setDiscussRequest(null);
+            const selected = discussRequest.agent;
+            let agentTarget: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string } | undefined;
+            if (selected.type === "expert" && selected.focusId && selected.expertId) {
+              agentTarget = { agent: "expert", focusId: selected.focusId, expertId: selected.expertId };
+            }
+            try {
+              const { getBackendBaseUrl, authHeaders } = await import("../lib/connection");
+              await fetch(`${getBackendBaseUrl()}/api/reacts`, {
+                method: "POST",
+                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  text: enrichedText,
+                  action: "custom",
+                  context: { type: discussRequest.context.type, summary: discussRequest.context.summary, focusId: discussRequest.context.focusId },
+                  imageUrls: imageUrls.length ? imageUrls : undefined,
+                  agentTarget,
+                  detail,
+                }),
+              });
+            } catch { /* toast already shown */ }
+          }}
+        />
       )}
     </>
   );

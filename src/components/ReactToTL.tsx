@@ -100,6 +100,7 @@ export default function ReactToTL({ context, onClose, defaultAgentId, mode = "po
   const [agents, setAgents] = useState<AgentOption[]>([{ id: "tl", name: "Team Leader", type: "tl" }]);
   const [selectedAgentId, setSelectedAgentId] = useState(defaultAgentId || "tl");
   const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [internalDiscuss, setInternalDiscuss] = useState<DiscussRequest | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -370,19 +371,23 @@ export default function ReactToTL({ context, onClose, defaultAgentId, mode = "po
             Cancel
           </button>
         )}
-        {onDiscuss && (
-          <button
-            onClick={() => {
-              const selected = agents.find(a => a.id === selectedAgentId) || agents[0];
-              const imageUrls = images.filter(img => img.serverUrl).map(img => img.serverUrl!);
-              onDiscuss({ text: text.trim(), imageUrls, agent: selected, context });
-            }}
-            disabled={!text.trim()}
-            className="text-[11px] px-3 py-1.5 rounded-lg border border-violet-500/40 text-violet-300 hover:bg-violet-500/10 disabled:opacity-30 transition-colors mr-2"
-          >
-            Discuss
-          </button>
-        )}
+        <button
+          onClick={() => {
+            const selected = agents.find(a => a.id === selectedAgentId) || agents[0];
+            const imageUrls = images.filter(img => img.serverUrl).map(img => img.serverUrl!);
+            const req: DiscussRequest = { text: text.trim(), imageUrls, agent: selected, context };
+            if (onDiscuss) {
+              onDiscuss(req);
+            } else {
+              // Internal discuss mode — open DiscussModal within this component
+              setInternalDiscuss(req);
+            }
+          }}
+          disabled={!text.trim()}
+          className="text-[11px] px-3 py-1.5 rounded-lg border border-violet-500/40 text-violet-300 hover:bg-violet-500/10 disabled:opacity-30 transition-colors mr-2"
+        >
+          Discuss
+        </button>
         <button
           onClick={submit}
           disabled={!hasContent || sending}
@@ -391,6 +396,58 @@ export default function ReactToTL({ context, onClose, defaultAgentId, mode = "po
           {sending ? "Sending..." : "Send"}
         </button>
       </div>
+
+      {/* Internal DiscussModal — when no external onDiscuss handler */}
+      {internalDiscuss && (
+        <InternalDiscussModal
+          request={internalDiscuss}
+          onClose={() => setInternalDiscuss(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Internal Discuss Modal (lazy-loaded) ──
+
+function InternalDiscussModal({ request, onClose }: { request: DiscussRequest; onClose: () => void }) {
+  const [DiscussMod, setDiscussMod] = useState<React.ComponentType<any> | null>(null);
+
+  useEffect(() => {
+    import("./DiscussModal").then(m => setDiscussMod(() => m.default));
+  }, []);
+
+  if (!DiscussMod) return null;
+
+  return (
+    <DiscussMod
+      request={request}
+      onClose={onClose}
+      onExecute={async (enrichedText: string, detail: string, imageUrls: string[]) => {
+        onClose();
+        const selected = request.agent;
+        let agentTarget: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string } | undefined;
+        if (selected.type === "expert" && selected.focusId && selected.expertId) {
+          agentTarget = { agent: "expert", focusId: selected.focusId, expertId: selected.expertId };
+        }
+        try {
+          await fetch(`${getBackendBaseUrl()}/api/reacts`, {
+            method: "POST",
+            headers: { ...authHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: enrichedText,
+              action: "custom",
+              context: { type: request.context.type, summary: request.context.summary, focusId: request.context.focusId },
+              imageUrls: imageUrls.length ? imageUrls : undefined,
+              agentTarget,
+              detail,
+            }),
+          });
+          pushToast("Executing", `Task sent to ${selected.name} with discussion context`, true, 3000);
+        } catch {
+          pushToast("Failed to send", "Please try again", false);
+        }
+      }}
+    />
   );
 }
