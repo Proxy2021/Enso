@@ -1,8 +1,8 @@
 {
   "name": "enso",
   "private": true,
-  "version": "0.5.23",
-  "versionCode": 229,
+  "version": "0.5.24",
+  "versionCode": 230,
   "description": "A self-hosted AI organization — scans your digital life, infers your goals, staffs expert teams, and autonomously drives progress through a Team Leader that manages the entire operation",
   "type": "module",
   "scripts": {
