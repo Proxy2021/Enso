@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getBackendBaseUrl, authHeaders, resolveMediaUrl } from "../lib/connection";
 import { useShallow } from "zustand/react/shallow";
 import { useChatStore } from "../store/chat";
@@ -147,6 +147,7 @@ function TLLiveTerminals({ sessions, cards, sessionToCard, onStop }: {
   onStop: (runId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [autoExpandedIds] = useState<Set<string>>(() => new Set());
 
   // Find TL-launched sessions: description contains "Team Leader Task" or "TL auto-fix"
   const tlSessions = sessions.filter(s =>
@@ -156,6 +157,16 @@ function TLLiveTerminals({ sessions, cards, sessionToCard, onStop }: {
       s.description.includes("User react")
     )
   );
+
+  // Auto-expand new sessions on first appearance
+  useEffect(() => {
+    for (const s of tlSessions) {
+      if (!autoExpandedIds.has(s.runId)) {
+        autoExpandedIds.add(s.runId);
+        setExpanded(prev => new Set(prev).add(s.runId));
+      }
+    }
+  }, [tlSessions, autoExpandedIds]);
 
   if (tlSessions.length === 0) return null;
 
@@ -355,6 +366,19 @@ export default function TasksView() {
   }, [setActiveTab, setChatViewOpen]);
 
   const activeSessions = sessions.filter((s) => s.status === "running");
+
+  // Auto-switch to Activity tab when a TL session starts
+  const hasTLSession = activeSessions.some(s =>
+    s.type === "claude-code" && (s.description.includes("Team Leader Task") || s.description.includes("TL auto-fix"))
+  );
+  const prevHadTLSession = useRef(false);
+  useEffect(() => {
+    if (hasTLSession && !prevHadTLSession.current) {
+      setTlTab("actions"); // Switch to Activity tab to show the live terminal
+    }
+    prevHadTLSession.current = hasTLSession;
+  }, [hasTLSession]);
+
   const activeOrchs = orchestrations.filter((o) =>
     ["planning", "reviewing", "executing", "paused"].includes(o.status),
   );
