@@ -13,7 +13,7 @@ import { extname, dirname, basename, join } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir, homedir, hostname, platform, arch, totalmem } from "os";
 import { spawn } from "child_process";
-import { htmlShell, htmlPage, renderPage, servePage, resolveShortId, setServerBaseUrl, type PageConfig, type PageSection } from "./shareable-pages.js";
+import { htmlShell, htmlPage, renderPage, servePage, resolveShortId, setServerBaseUrl, getServerBaseUrl, type PageConfig, type PageSection } from "./shareable-pages.js";
 import type { EnsoRuntime } from "./local-types.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig, ClientMessage, ServerMessage } from "./types.js";
@@ -962,7 +962,7 @@ export async function startEnsoServer(opts: {
             return;
           }
 
-          const tunnelUrl = process.env.ENSO_TUNNEL_URL || `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
+          const tunnelUrl = req.hostname === "localhost" ? getServerBaseUrl() : (process.env.ENSO_TUNNEL_URL || `https://${req.hostname}`);
           const { shortUrl } = buildEntityPage(processed, tunnelUrl);
           const { sharePage: _sp } = await import("./shareable-pages.js");
 
@@ -1365,7 +1365,7 @@ export async function startEnsoServer(opts: {
 
         logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${book.title} — ${processed.durationMinutes} min` });
 
-        const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
+        const baseUrl = req.hostname === "localhost" ? getServerBaseUrl() : `https://${req.hostname}`;
         const { shortUrl } = buildEntityPage(processed, baseUrl);
         const notifyTo = getNotifyEmail();
         if (notifyTo) {
@@ -1529,7 +1529,7 @@ Return ONLY JSON.`;
           onProgress: (p) => { logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `${picked.title}: ${p.phase} (${p.percentComplete}%)` }); },
         });
 
-        const baseUrl = `https://${req.hostname === "localhost" ? "pc1.enso.net" : req.hostname}`;
+        const baseUrl = req.hostname === "localhost" ? getServerBaseUrl() : `https://${req.hostname}`;
         const { shortUrl } = buildEntityPage(processed, baseUrl);
         const typeEmoji = { movie: "🎬", game: "🎮", channel: "📺", article: "📰", place: "🌍" }[contentType] || "🎯";
         const creatorStr = picked.creator ? ` by ${picked.creator}` : "";
@@ -3319,8 +3319,10 @@ BEHAVIOR:
     try {
       const { handleEvolutionSprint } = await import("./evolution.js");
       const firstClient = clients.values().next().value;
+      const ensoUrl = getServerBaseUrl();
+      const ensoHost = ensoUrl.replace(/^https?:\/\//, "");
       if (!firstClient) {
-        res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#fbbf24;font-size:48px;margin-bottom:8px">&#9888;</h1><h2>No Client Connected</h2><p style="color:#94a3b8">Open <a href="https://pc1.enso.net" style="color:#60a5fa">pc1.enso.net</a> first, then click the button again.</p></div></body></html>`);
+        res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#fbbf24;font-size:48px;margin-bottom:8px">&#9888;</h1><h2>No Client Connected</h2><p style="color:#94a3b8">Open <a href="${ensoUrl}" style="color:#60a5fa">${ensoHost}</a> first, then click the button again.</p></div></body></html>`);
         return;
       }
 
@@ -3333,7 +3335,7 @@ BEHAVIOR:
         logError("trigger", "Email-triggered evolve failed", err);
       });
 
-      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#a78bfa;font-size:48px;margin-bottom:8px">&#9889;</h1><h2>Evolution Sprint Started</h2><p style="color:#94a3b8;max-width:500px">${goal.slice(0, 200)}</p><p style="color:#475569;font-size:13px;margin-top:20px">Check progress in <a href="https://pc1.enso.net" style="color:#60a5fa">Enso</a></p></div></body></html>`);
+      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#a78bfa;font-size:48px;margin-bottom:8px">&#9889;</h1><h2>Evolution Sprint Started</h2><p style="color:#94a3b8;max-width:500px">${goal.slice(0, 200)}</p><p style="color:#475569;font-size:13px;margin-top:20px">Check progress in <a href="${ensoUrl}" style="color:#60a5fa">Enso</a></p></div></body></html>`);
     } catch (err) {
       res.status(500).send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f87171">Error</h1><p style="color:#94a3b8">${err instanceof Error ? err.message : String(err)}</p></div></body></html>`);
     }
@@ -3346,8 +3348,10 @@ BEHAVIOR:
     try {
       const { handleDiscovery } = await import("./discovery.js");
       const firstClient = clients.values().next().value;
+      const ensoUrl = getServerBaseUrl();
+      const ensoHost = ensoUrl.replace(/^https?:\/\//, "");
       if (!firstClient) {
-        res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#fbbf24;font-size:48px;margin-bottom:8px">&#9888;</h1><h2>No Client Connected</h2><p style="color:#94a3b8">Open <a href="https://pc1.enso.net" style="color:#60a5fa">pc1.enso.net</a> first, then click the button again.</p></div></body></html>`);
+        res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#fbbf24;font-size:48px;margin-bottom:8px">&#9888;</h1><h2>No Client Connected</h2><p style="color:#94a3b8">Open <a href="${ensoUrl}" style="color:#60a5fa">${ensoHost}</a> first, then click the button again.</p></div></body></html>`);
         return;
       }
 
@@ -3359,7 +3363,7 @@ BEHAVIOR:
         logError("trigger", "Email-triggered discover failed", err);
       });
 
-      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f59e0b;font-size:48px;margin-bottom:8px">&#128270;</h1><h2>Discovery Started</h2><p style="color:#94a3b8;max-width:500px">${focus.slice(0, 200)}</p><p style="color:#475569;font-size:13px;margin-top:20px">Check progress in <a href="https://pc1.enso.net" style="color:#60a5fa">Enso</a></p></div></body></html>`);
+      res.send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f59e0b;font-size:48px;margin-bottom:8px">&#128270;</h1><h2>Discovery Started</h2><p style="color:#94a3b8;max-width:500px">${focus.slice(0, 200)}</p><p style="color:#475569;font-size:13px;margin-top:20px">Check progress in <a href="${ensoUrl}" style="color:#60a5fa">Enso</a></p></div></body></html>`);
     } catch (err) {
       res.status(500).send(`<html><body style="background:#0f172a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#f87171">Error</h1><p style="color:#94a3b8">${err instanceof Error ? err.message : String(err)}</p></div></body></html>`);
     }
@@ -3422,7 +3426,7 @@ BEHAVIOR:
       }
 
       const pending = createPendingCleanup(candidates);
-      const html = buildCleanupReportHtml(pending, `https://${_req.headers.host || "pc1.enso.net"}`);
+      const html = buildCleanupReportHtml(pending, _req.headers.host ? `https://${_req.headers.host}` : getServerBaseUrl());
       const totalEmails = candidates.reduce((s, c) => s + c.count, 0);
 
       const { getNotifyEmail: _gne } = await import("./shareable-pages.js");
@@ -4040,16 +4044,19 @@ BEHAVIOR:
         initScheduler(executeScheduledTask, broadcastToClients);
         runtime.log?.("[enso] scheduled task scheduler started");
 
-        // Validate that all tool-type tasks reference registered tools — auto-disable orphans
-        import("./scheduled-tasks.js").then(async ({ listTasks, updateTask }) => {
+        // Validate that all tool-type tasks reference registered tools.
+        // Warn only — do NOT auto-disable. Auto-disabling races with tool registration
+        // during crash-loop restarts and permanently disables valid tasks.
+        // If a tool truly is missing, the scheduler's per-task `consecutiveFailures`
+        // will catch it at execution time.
+        import("./scheduled-tasks.js").then(async ({ listTasks }) => {
           const { isToolRegistered } = await import("./native-tools/registry.js");
           const toolTasks = listTasks().filter(t => t.enabled && t.action.type === "tool" && t.action.toolId);
           for (const t of toolTasks) {
             if (!isToolRegistered(t.action.toolId!)) {
-              logError("scheduled-tasks",
-                `Task "${t.name}" (${t.taskId}) references unregistered tool "${t.action.toolId}" — auto-disabling`
+              runtime.log?.(
+                `[enso:scheduled-tasks] warning: task "${t.name}" (${t.taskId}) references tool "${t.action.toolId}" which is not registered yet — will retry at fire time`
               );
-              updateTask(t.taskId, { enabled: false });
             }
           }
         }).catch(() => {});

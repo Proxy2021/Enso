@@ -1,5 +1,10 @@
+/// <reference lib="dom" />
 /**
  * User Context Discovery — Scanner Tools
+ *
+ * Note: This file uses DOM globals (document, window, HTMLImageElement) inside
+ * puppeteer `page.evaluate()` callbacks. The lib="dom" reference gives TS the
+ * right types for those callbacks — the code runs in the browser, not Node.
  *
  * Consent-gated tools that scan the user's desktop environment to build
  * a rich profile for personalized assistance.
@@ -123,7 +128,8 @@ function scanBrowserHistory(
   sinceDays: number,
 ): BrowserHistoryEntry[] {
   // Dynamic import of better-sqlite3 (it's an optional native module)
-  let Database: typeof import("better-sqlite3").default;
+  // better-sqlite3 uses `export =` — the whole module IS the constructor
+  let Database: typeof import("better-sqlite3");
   try {
     Database = esmRequire("better-sqlite3");
   } catch (err) {
@@ -782,7 +788,17 @@ export async function enrichKindleMetadata(): Promise<{ enriched: number; total:
             reviewCount: reviewMatch ? parseInt(reviewMatch[1].replace(/,/g, ""), 10) : undefined,
             categories: categories.length > 0 ? categories : undefined,
           };
-        })()`) as Record<string, unknown>;
+        })()`) as {
+          description?: string;
+          publisher?: string;
+          publicationDate?: string;
+          language?: string;
+          isbn?: string;
+          pageCount?: number;
+          rating?: number;
+          reviewCount?: number;
+          categories?: string[];
+        };
 
         // Apply metadata to book
         if (meta.description) book.description = meta.description.slice(0, 500);
@@ -1982,7 +1998,9 @@ export function createUserContextTools(): EnsoAgentTool[] {
               const books: Array<Record<string, unknown>> = [];
 
               // Method 1: Try the shelf API
-              const apiBooks = await page.evaluate(async () => {
+              interface WeReadBook { bookId?: string; book_id?: string; title?: string; bookName?: string; author?: string; cover?: string; coverUrl?: string; intro?: string; description?: string; categories?: Array<Record<string, string>> | string[]; readingProgress?: number; progress?: number; noteCount?: number; notesCount?: number; newRating?: number; rating?: number; publisher?: string; publishTime?: string; isbn?: string }
+              interface WeReadShelfData { books?: WeReadBook[]; bookInfos?: WeReadBook[]; shelf?: WeReadBook[] }
+              const apiBooks = await page.evaluate(async (): Promise<WeReadShelfData | null> => {
                 try {
                   // WeRead shelf API
                   const res = await fetch("https://weread.qq.com/web/shelf/sync", {
@@ -1991,7 +2009,7 @@ export function createUserContextTools(): EnsoAgentTool[] {
                   });
                   if (res.ok) {
                     const data = await res.json();
-                    return data;
+                    return data as WeReadShelfData;
                   }
                 } catch { /* fallback to DOM */ }
                 return null;
@@ -2003,7 +2021,7 @@ export function createUserContextTools(): EnsoAgentTool[] {
                 const shelfBooks = apiBooks.shelf || [];
 
                 // If shelf has bookIds, map them to book details
-                const bookMap: Record<string, Record<string, unknown>> = {};
+                const bookMap: Record<string, WeReadBook> = {};
                 for (const b of bookList) {
                   if (b.bookId) bookMap[b.bookId] = b;
                 }
@@ -2023,10 +2041,10 @@ export function createUserContextTools(): EnsoAgentTool[] {
                     coverUrl: b.cover || b.coverUrl || "",
                     wereadBookId: bookId,
                     description: b.intro || b.description || "",
-                    categories: b.categories ? (Array.isArray(b.categories) ? b.categories.map((c: Record<string, string>) => c.title || c.name || c) : []) : [],
+                    categories: b.categories ? (Array.isArray(b.categories) ? (b.categories as Array<string | Record<string, string>>).map((c) => typeof c === "string" ? c : (c.title || c.name || "")) : []) : [],
                     readingProgress: b.readingProgress || b.progress || 0,
                     noteCount: b.noteCount || b.notesCount || 0,
-                    rating: b.newRating ? b.newRating / 10 : (b.rating || 0),
+                    rating: b.newRating ? (b.newRating as number) / 10 : (b.rating || 0),
                     publisher: b.publisher || "",
                     publishTime: b.publishTime || "",
                     isbn: b.isbn || "",
@@ -2122,7 +2140,7 @@ export function createUserContextTools(): EnsoAgentTool[] {
                 "utf-8",
               );
 
-              updateScanLog("wereadLibrary" as keyof ContextConsent);
+              updateScanLog("wereadLibrary");
 
               return {
                 content: [{ type: "text", text: JSON.stringify({

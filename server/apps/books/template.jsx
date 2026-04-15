@@ -113,7 +113,7 @@ function GeneratedUI({ data, onAction }) {
                     if (processed && entity.entityId && research) {
                       var slug = entity.entityId.replace(/[^\p{L}\p{N}-]/gu, "_").slice(0, 120);
                       var shortHash = slug.split("").reduce(function(a, c) { return ((a << 5) - a + c.charCodeAt(0)) | 0; }, 0).toString(36).replace("-", "");
-                      var podcastUrl = "https://pc1.enso.net/p/" + shortHash;
+                      var podcastUrl = (typeof window !== "undefined" && window.location && window.location.origin ? window.location.origin : "") + "/p/" + shortHash;
 
                       var desc = "\u{1F399}\uFE0F AI Podcast \u00B7 " + (podcastDuration || "?") + " min";
                       if (entity.author) desc += "\n" + entity.author;

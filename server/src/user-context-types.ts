@@ -189,6 +189,7 @@ export interface ScanLog {
   photos?: number;
   twitterFollowing?: number;
   qqMusic?: number;
+  wereadLibrary?: number;
 }
 
 // ── Context Status (sent to frontend) ────────────────────────────────────────

@@ -14,7 +14,7 @@ import { logAction, logError } from "./action-log.js";
 
 let _serverBaseUrl = "";
 
-/** Set the external base URL for this server (e.g. "https://pc1.enso.net"). Called at server startup. */
+/** Set the external base URL for this server (e.g. "https://mac.enso.net"). Called at server startup. */
 export function setServerBaseUrl(url: string): void { _serverBaseUrl = url; }
 
 /** Get the external base URL. Falls back to env vars or hostname. */

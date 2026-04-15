@@ -246,7 +246,19 @@ export interface ServerMessage {
   cardSummaryError?: string;
   cardAudioUrl?: string;
   cardPodcastScript?: string;
-  cardPodcastStatus?: "writing_script" | "rendering_audio" | "ready" | "error";
+  cardPodcastStatus?:
+    | "writing_script"
+    | "rendering_audio"
+    | "ready"
+    | "error"
+    // Deep-content phases (emitted by generateDeepContent)
+    | "researching"
+    | "generating_outline"
+    | "writing_section"
+    | "stitching"
+    | "complete";
+  /** Onboarding progress updates (onboarding.setup handler) */
+  onboardingProgress?: unknown;
   sessionsList?: Array<{
     sessionId: string;
     summary: string;
@@ -342,7 +354,15 @@ export interface ClientMessage {
     | "orchestration.cancel"
     | "orchestration.message"
     | "evolution.start"
+    | "focus.evolve"
     | "discovery.start"
+    | "onboarding.setup"
+    | "onboarding.skip"
+    | "scheduled-task.create"
+    | "scheduled-task.update"
+    | "scheduled-task.delete"
+    | "scheduled-task.trigger"
+    | "scheduled-task.list"
     | "image_research"
     | "card.summarize"
     | "card.evolve"

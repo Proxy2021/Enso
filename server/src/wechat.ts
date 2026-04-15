@@ -379,7 +379,9 @@ async function getDefaultThumbMediaId(token: string): Promise<string> {
 
   // Generate a 200x200 solid-color PNG (Enso purple #7c3aed)
   // Minimal valid PNG: header + IHDR + IDAT (uncompressed) + IEND
-  const canvasMod = await import("canvas").catch(() => null) as { createCanvas?: (w: number, h: number) => unknown } | null;
+  // `canvas` is an optional peer dep (native deps); load via string to avoid TS/Vite resolution.
+  const canvasModuleName = "canvas";
+  const canvasMod = await import(/* @vite-ignore */ canvasModuleName).catch(() => null) as { createCanvas?: (w: number, h: number) => unknown } | null;
   const createCanvas = canvasMod?.createCanvas;
 
   let imgBuffer: Buffer;

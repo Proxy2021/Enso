@@ -11,7 +11,7 @@
  *   npx tsx server/standalone.ts         # development (no guardian)
  */
 
-import { fork, type ChildProcess } from "node:child_process";
+import { fork, spawnSync, type ChildProcess } from "node:child_process";
 import {
   readFileSync,
   writeFileSync,
@@ -240,6 +240,35 @@ function killChild(reason: string) {
   }
 }
 
+// ── Frontend build (run once on guardian start) ──
+
+function buildFrontend() {
+  if (process.env.ENSO_SKIP_BUILD === "1") {
+    log("[guardian] ENSO_SKIP_BUILD=1 — skipping frontend build");
+    return;
+  }
+  const repoRoot = resolve(__dirname, "..");
+  if (!existsSync(resolve(repoRoot, "package.json"))) {
+    log("[guardian] No package.json at repo root — skipping frontend build");
+    return;
+  }
+  log("[guardian] Building frontend (npm run build)…");
+  const start = Date.now();
+  const result = spawnSync("npm", ["run", "build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  const elapsed = Math.round((Date.now() - start) / 1000);
+  if (result.status === 0) {
+    log(`[guardian] Frontend build complete (${elapsed}s)`);
+  } else {
+    log(
+      `[guardian] ⚠️ Frontend build failed (status=${result.status}, signal=${result.signal}) — continuing with existing dist/`,
+    );
+  }
+}
+
 // ── Spawn server ──
 
 function spawnServer() {
@@ -394,6 +423,7 @@ writePid(guardianPidFile, process.pid);
 const healthTimer = setInterval(pollHealth, HEALTH_POLL_MS);
 const heartbeatTimer = setInterval(checkHeartbeat, 10_000);
 
+buildFrontend();
 spawnServer();
 
 process.on("SIGINT", () => shutdown("SIGINT"));

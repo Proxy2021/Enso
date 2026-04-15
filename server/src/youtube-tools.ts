@@ -68,8 +68,8 @@ async function enrichVideos(yt: ReturnType<typeof google.youtube>, videoIds: str
     });
     for (const item of res.data.items || []) {
       map.set(item.id!, {
-        viewCount: item.statistics?.viewCount,
-        likeCount: item.statistics?.likeCount,
+        viewCount: item.statistics?.viewCount ?? undefined,
+        likeCount: item.statistics?.likeCount ?? undefined,
         duration: item.contentDetails?.duration?.replace("PT", "").toLowerCase(),
         description: item.snippet?.description?.slice(0, 500),
       });
@@ -249,14 +249,14 @@ async function trending(params: Record<string, unknown>): Promise<VideoInfo[]> {
     ...(categoryId ? { videoCategoryId: categoryId } : {}),
   });
 
-  return (res.data.items || []).map((item) => ({
+  return (res.data.items || []).map((item): VideoInfo => ({
     videoId: item.id || "",
     title: item.snippet?.title || "",
     channelTitle: item.snippet?.channelTitle || "",
-    channelId: item.snippet?.channelId,
+    channelId: item.snippet?.channelId ?? undefined,
     publishedAt: item.snippet?.publishedAt || "",
-    viewCount: item.statistics?.viewCount,
-    likeCount: item.statistics?.likeCount,
+    viewCount: item.statistics?.viewCount ?? undefined,
+    likeCount: item.statistics?.likeCount ?? undefined,
     duration: item.contentDetails?.duration?.replace("PT", "").toLowerCase(),
     thumbnailUrl: item.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
     videoUrl: `https://www.youtube.com/watch?v=${item.id}`,
@@ -328,14 +328,14 @@ async function likedVideos(params: Record<string, unknown>): Promise<VideoInfo[]
     maxResults,
   });
 
-  return (res.data.items || []).map((item) => ({
+  return (res.data.items || []).map((item): VideoInfo => ({
     videoId: item.id || "",
     title: item.snippet?.title || "",
     channelTitle: item.snippet?.channelTitle || "",
-    channelId: item.snippet?.channelId,
+    channelId: item.snippet?.channelId ?? undefined,
     publishedAt: item.snippet?.publishedAt || "",
-    viewCount: item.statistics?.viewCount,
-    likeCount: item.statistics?.likeCount,
+    viewCount: item.statistics?.viewCount ?? undefined,
+    likeCount: item.statistics?.likeCount ?? undefined,
     duration: item.contentDetails?.duration?.replace("PT", "").toLowerCase(),
     thumbnailUrl: item.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
     videoUrl: `https://www.youtube.com/watch?v=${item.id}`,

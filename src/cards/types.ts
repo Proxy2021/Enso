@@ -80,7 +80,17 @@ export interface Card {
   cardSummaryError?: string;
   cardAudioUrl?: string;
   cardPodcastScript?: string;
-  cardPodcastStatus?: "writing_script" | "rendering_audio" | "ready" | "error";
+  cardPodcastStatus?:
+    | "writing_script"
+    | "rendering_audio"
+    | "ready"
+    | "error"
+    // Deep-content phases (emitted by generateDeepContent)
+    | "researching"
+    | "generating_outline"
+    | "writing_section"
+    | "stitching"
+    | "complete";
 
   // Release status
   releaseProgress?: string;

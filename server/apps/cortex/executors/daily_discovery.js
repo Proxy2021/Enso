@@ -1,13 +1,13 @@
 // Cortex Daily Discovery v2 — deep analysis, personalized relevance, executive summary
 
 // Determine server base URL for quick-add links in email
-var serverBaseUrl = "https://pc1.enso.net";
+var serverBaseUrl = "http://localhost:3001";
 try {
-  var os = require("os");
-  var hostname = os.hostname().toLowerCase();
-  if (hostname.includes("pc1")) serverBaseUrl = "https://pc1.enso.net";
-  else if (hostname.includes("pc2")) serverBaseUrl = "https://pc2.enso.net";
-  else serverBaseUrl = "http://localhost:3001";
+  if (process.env.ENSO_TUNNEL_URL) {
+    serverBaseUrl = process.env.ENSO_TUNNEL_URL;
+  } else if (process.env.ENSO_MACHINE_NAME) {
+    serverBaseUrl = "https://" + process.env.ENSO_MACHINE_NAME + ".enso.net";
+  }
 } catch(e) {}
 
 // Decode HTML numeric entities (&#128161; → 💡) that LLMs sometimes generate
