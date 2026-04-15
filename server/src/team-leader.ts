@@ -2094,6 +2094,8 @@ export function queueTask(task: Omit<QueuedTask, "id" | "createdAt" | "processed
   saveState(state);
   logAction({ ts: Date.now(), type: "action", category: "team-leader",
     message: `Self-tasked: "${task.title}" (source: ${task.source})` });
+  // Trigger immediate execution — don't wait for the polling loop
+  setTimeout(processNextQueuedTask, 500);
   return queued;
 }
 
@@ -2183,11 +2185,12 @@ async function processNextQueuedTask(): Promise<void> {
  */
 export function startTaskExecutorLoop(): void {
   if (_taskLoopInterval) return;
-  _taskLoopInterval = setInterval(processNextQueuedTask, 30_000); // check every 30s
+  // Safety-net polling (2 min) — primary trigger is event-driven via queueTask()
+  _taskLoopInterval = setInterval(processNextQueuedTask, 120_000);
   logAction({ ts: Date.now(), type: "system", category: "team-leader",
-    message: "Task executor loop started (30s interval)" });
-  // Process immediately on start
-  setTimeout(processNextQueuedTask, 5_000);
+    message: "Task executor started (event-driven + 2min safety net)" });
+  // Process any stale tasks from before restart
+  setTimeout(processNextQueuedTask, 3_000);
 }
 
 /**
