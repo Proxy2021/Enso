@@ -11,9 +11,10 @@ import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 import { ActivityFeed } from "./ActivityFeed";
 import { timeAgo, timeUntil, formatElapsedTime } from "../lib/time-utils";
 import { ScheduledTaskDialog } from "./ScheduledTaskDialog";
-import { Clock, Play, Pause, Trash2, Pencil, Plus, RefreshCw, Send } from "lucide-react";
+import { Clock, Play, Pause, Trash2, Pencil, Plus, RefreshCw, Send, ChevronDown, ChevronRight, Square } from "lucide-react";
 import ReactToTL from "./ReactToTL";
 import type { ReactContext } from "./ReactToTL";
+import TerminalContent from "./TerminalContent";
 
 // ── Types (mirrors session-registry.ts) ──
 
@@ -134,6 +135,98 @@ function typeBadge(type: string): string {
 
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "..." : text;
+}
+
+// ── TL Live Terminals (collapsible) ──
+
+function TLLiveTerminals({ sessions, cards, sessionToCard, onStop }: {
+  sessions: SessionInfo[];
+  cards: Record<string, Card>;
+  sessionToCard: Record<string, string>;
+  onStop: (runId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Find TL-launched sessions: description contains "Team Leader Task" or "TL auto-fix"
+  const tlSessions = sessions.filter(s =>
+    s.type === "claude-code" && (
+      s.description.includes("Team Leader Task") ||
+      s.description.includes("TL auto-fix") ||
+      s.description.includes("User react")
+    )
+  );
+
+  if (tlSessions.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {tlSessions.map(session => {
+        const cardId = sessionToCard[session.sessionId] || sessionToCard[session.runId];
+        const card = cardId ? cards[cardId] : undefined;
+        const isExpanded = expanded.has(session.runId);
+        const elapsed = formatElapsedTime(session.startedAt);
+        const title = session.description
+          .replace(/^\[Team Leader Task:\s*/, "")
+          .replace(/\]$/, "")
+          .slice(0, 80);
+
+        return (
+          <div key={session.runId} className="rounded-xl border border-violet-500/30 bg-violet-950/15 overflow-hidden">
+            {/* Header — always visible */}
+            <button
+              onClick={() => setExpanded(prev => {
+                const next = new Set(prev);
+                if (next.has(session.runId)) next.delete(session.runId); else next.add(session.runId);
+                return next;
+              })}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-violet-500/5 transition-colors"
+            >
+              {isExpanded
+                ? <ChevronDown className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                : <ChevronRight className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+              }
+              <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse shrink-0" />
+              <span className="text-[10px] font-medium text-violet-300">{"\uD83D\uDC54"} TL Working</span>
+              <span className="text-[10px] text-gray-500">{"\u00B7"}</span>
+              <span className="text-[10px] text-gray-400 truncate flex-1 min-w-0">{title}</span>
+              <span className="text-[9px] text-gray-500 tabular-nums shrink-0">{elapsed}</span>
+            </button>
+
+            {/* Expanded terminal */}
+            {isExpanded && (
+              <div className="border-t border-violet-500/15">
+                {card?.text ? (
+                  <div className="max-h-[300px] overflow-y-auto">
+                    <TerminalContent
+                      text={card.text}
+                      status={card.status ?? "streaming"}
+                      accentColor="violet"
+                      maxHeightClass="max-h-[300px]"
+                    />
+                  </div>
+                ) : (
+                  <div className="px-3 py-4 text-center">
+                    <div className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-[10px] text-gray-500">Initializing session...</p>
+                  </div>
+                )}
+                {/* Stop button */}
+                <div className="px-3 py-1.5 border-t border-violet-500/10 flex justify-end">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onStop(session.runId); }}
+                    className="text-[10px] px-2 py-1 rounded flex items-center gap-1 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                  >
+                    <Square className="w-2.5 h-2.5" />
+                    Stop
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── Component ──
@@ -378,9 +471,16 @@ export default function TasksView() {
             ))}
           </div>
 
-          {/* TL Activity Tab — all agent artifacts */}
+          {/* TL Activity Tab — live terminals + agent artifacts */}
           {tlTab === "actions" && (
-            <div className="p-3 max-h-[400px] overflow-y-auto">
+            <div className="p-3 max-h-[400px] overflow-y-auto space-y-3">
+              {/* Live TL Claude Code sessions */}
+              <TLLiveTerminals
+                sessions={activeSessions}
+                cards={cards}
+                sessionToCard={sessionToCard}
+                onStop={(runId) => doAction("DELETE", `/api/sessions/${runId}`, `stop-${runId}`)}
+              />
               <ActivityFeed
                 showResolved
                 limit={30}
