@@ -205,6 +205,36 @@
         }
       },
       {
+        "suffix": "reading_stats",
+        "label": "Reading Stats",
+        "description": "Show a reading statistics dashboard: total books, category breakdown, publication year timeline, top authors, reading progress, page length distribution, and rating analysis.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_books_reading_stats",
+          "totalBooks": 556,
+          "kindleCount": 471,
+          "wereadCount": 85,
+          "avgRating": 4.31,
+          "avgPageCount": 312,
+          "totalPages": 173472,
+          "booksRead": 12,
+          "booksInProgress": 22,
+          "booksNotStarted": 522,
+          "categoryCounts": [{ "name": "Psychology", "count": 45 }],
+          "yearDistribution": [],
+          "authorDistribution": [],
+          "progressBuckets": [],
+          "pageCountBuckets": [],
+          "ratingDistribution": [],
+          "sourceDistribution": [{ "source": "Kindle", "count": 471 }, { "source": "WeRead", "count": 85 }]
+        }
+      },
+      {
         "suffix": "taste",
         "label": "Taste Profile",
         "description": "Record user interaction with a discovered book (save, rate, dismiss) or view the current taste profile. Interactions shape future daily picks.",

@@ -10,6 +10,7 @@ function GeneratedUI({ data, onAction }) {
   var isDiscover = tool === "enso_books_discover";
   var isTaste = tool === "enso_books_taste";
   var isSuperSearch = tool === "enso_books_super_search";
+  var isStats = tool === "enso_books_reading_stats";
 
   // Hooks MUST be at top level — never inside conditionals
   var [searchInput, setSearchInput] = React.useState(d.query || "");
@@ -1196,6 +1197,208 @@ function GeneratedUI({ data, onAction }) {
     );
   }
 
+  // ── Reading Stats Dashboard ──
+  if (isStats) {
+    var STAT_COLORS = ["#8b5cf6", "#06b6d4", "#f59e0b", "#ec4899", "#10b981", "#f97316", "#6366f1", "#14b8a6", "#a78bfa", "#34d399", "#fb7185", "#60a5fa", "#fbbf24", "#4ade80", "#e879f9"];
+    var statCats = d.categoryCounts || [];
+    var statYears = d.yearDistribution || [];
+    var statAuthors = d.authorDistribution || [];
+    var statProgress = d.progressBuckets || [];
+    var statPages = d.pageCountBuckets || [];
+    var statRatings = d.ratingDistribution || [];
+    var statSources = d.sourceDistribution || [];
+    var statTaste = d.tasteProfile;
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontWeight: 700, fontSize: "16px" }}>📊 Reading Stats</div>
+          <Button variant="outline" size="sm" style={{ fontSize: "11px" }}
+            onClick={function() { onAction("browse", {}); }}>← Library</Button>
+        </div>
+
+        {/* KPI row */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
+          {[
+            { label: "Total Books", value: String(d.totalBooks || 0) },
+            { label: "Avg Rating", value: d.avgRating ? "⭐ " + d.avgRating : "—" },
+            { label: "In Progress", value: (d.booksInProgress || 0) + " books" },
+            { label: "Total Pages", value: d.totalPages ? (d.totalPages >= 1000 ? Math.round(d.totalPages / 1000) + "k" : String(d.totalPages)) : "—" },
+          ].map(function(kpi) {
+            return (
+              <UICard key={kpi.label} style={{ padding: "12px", textAlign: "center" }}>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: "#c4b5fd" }}>{kpi.value}</div>
+                <div style={{ fontSize: "10px", color: "#64748b", marginTop: "2px" }}>{kpi.label}</div>
+              </UICard>
+            );
+          })}
+        </div>
+
+        {/* Source split + Reading progress side by side */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "10px", color: "#e2e8f0" }}>Source Split</div>
+            {statSources.map(function(s) {
+              var pct = d.totalBooks > 0 ? Math.round((s.count / d.totalBooks) * 100) : 0;
+              var barColor = s.source === "Kindle" ? "#8b5cf6" : "#06b6d4";
+              return (
+                <div key={s.source} style={{ marginBottom: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginBottom: "3px" }}>
+                    <span>{s.source}</span>
+                    <span style={{ color: "#94a3b8" }}>{s.count} ({pct}%)</span>
+                  </div>
+                  <div style={{ height: "6px", background: "#334155", borderRadius: "3px" }}>
+                    <div style={{ width: pct + "%", height: "100%", background: barColor, borderRadius: "3px" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </UICard>
+
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "10px", color: "#e2e8f0" }}>Reading Progress</div>
+            {statProgress.map(function(b, i) {
+              var pct = d.totalBooks > 0 ? Math.round((b.count / d.totalBooks) * 100) : 0;
+              var barColors = ["#334155", "#f59e0b", "#10b981"];
+              return (
+                <div key={b.label} style={{ marginBottom: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginBottom: "3px" }}>
+                    <span>{b.label}</span>
+                    <span style={{ color: "#94a3b8" }}>{b.count} ({pct}%)</span>
+                  </div>
+                  <div style={{ height: "6px", background: "#1e293b", borderRadius: "3px" }}>
+                    <div style={{ width: pct + "%", height: "100%", background: barColors[i] || "#8b5cf6", borderRadius: "3px" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </UICard>
+        </div>
+
+        {/* Top categories */}
+        {statCats.length > 0 && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "8px", color: "#e2e8f0" }}>Top Categories</div>
+            <div style={{ width: "100%", height: Math.max(260, statCats.length * 24 + 40) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statCats} layout="vertical" margin={{ left: 10, right: 50, top: 5, bottom: 5 }}>
+                  <XAxis type="number" tick={{ fill: "#64748b", fontSize: 10 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: "#94a3b8", fontSize: 10 }} width={140} />
+                  <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 6, fontSize: 11 }} formatter={function(val) { return [val + " books", "Count"]; }} />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} label={{ position: "right", fill: "#64748b", fontSize: 10 }}>
+                    {statCats.map(function(entry, idx) {
+                      return <Cell key={idx} fill={STAT_COLORS[idx % STAT_COLORS.length]} />;
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </UICard>
+        )}
+
+        {/* Publication year timeline */}
+        {statYears.length > 0 && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "8px", color: "#e2e8f0" }}>Books by Publication Year</div>
+            <div style={{ width: "100%", height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statYears} margin={{ left: 0, right: 10, top: 5, bottom: 24 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis dataKey="year" tick={{ fill: "#64748b", fontSize: 9 }} angle={-45} textAnchor="end" interval={Math.max(0, Math.floor(statYears.length / 15))} />
+                  <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
+                  <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 6, fontSize: 11 }} formatter={function(val) { return [val + " books", "Count"]; }} />
+                  <Bar dataKey="count" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </UICard>
+        )}
+
+        {/* Most-read authors */}
+        {statAuthors.length > 0 && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "8px", color: "#e2e8f0" }}>Most-Read Authors</div>
+            <div style={{ width: "100%", height: Math.max(200, statAuthors.length * 28 + 40) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statAuthors} layout="vertical" margin={{ left: 10, right: 50, top: 5, bottom: 5 }}>
+                  <XAxis type="number" tick={{ fill: "#64748b", fontSize: 10 }} />
+                  <YAxis type="category" dataKey="author" tick={{ fill: "#94a3b8", fontSize: 10 }} width={160} />
+                  <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 6, fontSize: 11 }} formatter={function(val) { return [val + " books", "Count"]; }} />
+                  <Bar dataKey="count" fill="#06b6d4" radius={[0, 4, 4, 0]} label={{ position: "right", fill: "#64748b", fontSize: 10 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </UICard>
+        )}
+
+        {/* Book length + Rating distribution */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          {statPages.some(function(b) { return b.count > 0; }) && (
+            <UICard style={{ padding: "12px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "8px", color: "#e2e8f0" }}>Book Length</div>
+              <div style={{ height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={statPages} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
+                    <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 9 }} />
+                    <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
+                    <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 6, fontSize: 11 }} />
+                    <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {d.avgPageCount > 0 && (
+                <div style={{ fontSize: "10px", color: "#64748b", marginTop: "6px", textAlign: "center" }}>Avg: {d.avgPageCount} pages / book</div>
+              )}
+            </UICard>
+          )}
+
+          {statRatings.some(function(b) { return b.count > 0; }) && (
+            <UICard style={{ padding: "12px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "8px", color: "#e2e8f0" }}>Rating Distribution</div>
+              <div style={{ height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={statRatings} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
+                    <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 9 }} />
+                    <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
+                    <Tooltip contentStyle={{ background: "#1e1e3a", border: "1px solid #334155", borderRadius: 6, fontSize: 11 }} />
+                    <Bar dataKey="count" fill="#ec4899" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {d.avgRating && (
+                <div style={{ fontSize: "10px", color: "#64748b", marginTop: "6px", textAlign: "center" }}>Avg rating: ⭐ {d.avgRating}</div>
+              )}
+            </UICard>
+          )}
+        </div>
+
+        {/* Taste profile genre affinity */}
+        {statTaste && statTaste.topGenres && statTaste.topGenres.length > 0 && (
+          <UICard style={{ padding: "12px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "10px", color: "#e2e8f0" }}>
+              Genre Affinity
+              <Badge variant="secondary" style={{ marginLeft: "8px", fontSize: "10px" }}>{statTaste.interactionCount} interactions</Badge>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {statTaste.topGenres.map(function(g, i) {
+                return (
+                  <div key={g.genre} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ fontSize: "11px", width: "140px", flexShrink: 0, color: "#94a3b8", textTransform: "capitalize" }}>{g.genre}</div>
+                    <div style={{ flex: 1, height: "6px", background: "#1e293b", borderRadius: "3px" }}>
+                      <div style={{ width: Math.round(g.weight * 100) + "%", height: "100%", background: STAT_COLORS[i % STAT_COLORS.length], borderRadius: "3px" }} />
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#64748b", width: "32px", textAlign: "right" }}>{Math.round(g.weight * 100)}%</div>
+                  </div>
+                );
+              })}
+            </div>
+          </UICard>
+        )}
+      </div>
+    );
+  }
+
   // ── Browse (primary collection view) ──
   if (isBrowse) {
     var books = d.books || [];
@@ -1253,14 +1456,16 @@ function GeneratedUI({ data, onAction }) {
             { id: "weread", label: "微信读书", count: d.wereadCount || 0 },
             { id: "discovered", label: "Discovered", count: discoveredBooks.length },
             { id: "daily", label: "\u2728 Daily", count: null },
+            { id: "stats", label: "\uD83D\uDCCA Stats", count: null },
           ].map(function(t) {
             var isActive = activeTab === t.id;
             return (
               <Button key={t.id} variant={isActive ? "default" : "ghost"} size="sm"
-                style={{ fontSize: "12px", opacity: t.count === 0 && t.id !== "all" && t.id !== "daily" ? 0.5 : 1 }}
+                style={{ fontSize: "12px", opacity: t.count === 0 && t.id !== "all" && t.id !== "daily" && t.id !== "stats" ? 0.5 : 1 }}
                 onClick={function() {
                   setActiveTab(t.id);
                   if (t.id === "daily") { onAction("discover", {}); }
+                  else if (t.id === "stats") { onAction("reading_stats", {}); }
                   else if (t.id !== "discovered") { onAction("browse", { tab: t.id, sortBy: sortBy, page: 1 }); }
                 }}>
                 {t.label} {t.count !== null ? <Badge variant="secondary" style={{ marginLeft: "4px", fontSize: "10px" }}>{t.count}</Badge> : null}
