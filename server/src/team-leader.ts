@@ -2183,18 +2183,36 @@ async function processNextQueuedTask(): Promise<void> {
 /**
  * Start the task executor loop. Called once on server startup.
  */
+/**
+ * Start the task executor. Purely event-driven — queueTask() triggers immediately.
+ * A 30-minute watchdog cron drains any orphaned tasks (crash recovery).
+ */
 export function startTaskExecutorLoop(): void {
   if (_taskLoopInterval) return;
-  // Safety-net polling (2 min) — primary trigger is event-driven via queueTask()
-  _taskLoopInterval = setInterval(processNextQueuedTask, 120_000);
+  // Watchdog: every 30 min, drain any stuck tasks (crash recovery / failover)
+  _taskLoopInterval = setInterval(async () => {
+    const pending = getPendingTasks();
+    if (pending.length === 0) return;
+    logAction({ ts: Date.now(), type: "system", category: "team-leader",
+      message: `Task watchdog: ${pending.length} orphaned task(s) found, draining` });
+    // Process all pending, one at a time
+    while (getPendingTasks().length > 0 && !_taskLoopRunning) {
+      await processNextQueuedTask();
+    }
+  }, 30 * 60_000); // 30 minutes
   logAction({ ts: Date.now(), type: "system", category: "team-leader",
-    message: "Task executor started (event-driven + 2min safety net)" });
-  // Process any stale tasks from before restart
-  setTimeout(processNextQueuedTask, 3_000);
+    message: "Task executor started (event-driven, 30min watchdog)" });
+  // Drain any stale tasks from before restart
+  setTimeout(async () => {
+    while (getPendingTasks().length > 0 && !_taskLoopRunning) {
+      await processNextQueuedTask();
+      await new Promise(r => setTimeout(r, 1000)); // 1s gap between tasks
+    }
+  }, 3_000);
 }
 
 /**
- * Stop the task executor loop.
+ * Stop the task executor watchdog.
  */
 export function stopTaskExecutorLoop(): void {
   if (_taskLoopInterval) {
