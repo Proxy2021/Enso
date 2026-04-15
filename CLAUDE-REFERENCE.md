@@ -6,11 +6,11 @@ Detailed reference material for building Enso apps, API surfaces, template rules
 
 ## Data Flow (Detailed)
 
-**Normal chat** (via OpenClaw agent):
+**Normal chat** (via standalone agent):
 ```
-Browser → WebSocket → OpenClaw Plugin Server → Agent (via OpenClaw gateway) → Response
+Browser → WebSocket → server.ts → standalone-agent.ts (Gemini) → Response
     ↓
-Multi-block accumulation (inbound.ts: stable card ID + steps array)
+Multi-block accumulation (stable card ID + steps array)
     ↓
 deliverEnsoReply → plain text chat card (last block as primary, steps retained)
     ↓
@@ -52,7 +52,7 @@ Podcast: callChatLLM() → script → Gemini multi-speaker TTS → WAV → media
 enhanceResult delivered back to source card
 ```
 
-**Claude Code direct tool** (bypasses OpenClaw agent):
+**Claude Code direct tool** (bypasses the agent):
 ```
 Browser → WS → server.ts → spawn("claude.exe" --stream-json) → NDJSON events → WS back
     ↓
@@ -67,7 +67,7 @@ AskUserQuestion tool_use → clickable question buttons → user selects → res
 - **Client → Server**: `ClientMessage` with types `chat.send`, `chat.history`, `ui_action`, `tools.list_projects`, `card.action`, `card.enhance`, `card.evolve`, `card.summarize`, `card.build_app`, `card.propose_app`, `card.delete_all_apps`, `apps.list`, `apps.run`, `settings.set_mode`, `operation.cancel`
 - **Server → Client**: `ServerMessage` with states `delta` (streaming), `final`, `error`
 - Messages carry: `text`, `data` (structured), `generatedUI` (JSX code), `mediaUrls`, `targetCardId` (for in-place card updates), `steps` (multi-block agent steps), `settings` (connection-time config including `toolFamilies` for the enhance menu)
-- `chat.send` can include `routing?: ToolRouting` — when `toolId: "claude-code"`, the server bypasses OpenClaw and directly spawns the Claude CLI
+- `chat.send` can include `routing?: ToolRouting` — when `toolId: "claude-code"`, the server bypasses the agent and directly spawns the Claude CLI
 - `card.action` messages carry: `cardId`, `cardAction`, `cardPayload` — routed to the card's interaction context for data mutation + UI regeneration
 - `card.enhance` messages carry: `cardId`, `cardText`, optional `suggestedFamily` — triggers tool selection and app view generation. When `suggestedFamily` is set, skips LLM selection.
 - `card.build_app` messages carry: `cardId`, `cardText`, `buildAppDefinition`, optional `conversationContext` — triggers the async app build pipeline (fire-and-forget) with conversation awareness
@@ -81,9 +81,9 @@ AskUserQuestion tool_use → clickable question buttons → user selects → res
 
 ## Multi-Block Response Handling (Detailed)
 
-When the OpenClaw agent self-iterates (e.g., a tool call fails and it retries), the buffered block dispatcher delivers multiple blocks for a single request. Enso handles this via:
+When the agent self-iterates (e.g., a tool call fails and it retries), multiple blocks are delivered for a single request. Enso handles this via:
 
-1. **Stable card ID**: `inbound.ts` generates a single `stableCardId` before dispatching. All blocks reference the same card.
+1. **Stable card ID**: The server generates a single `stableCardId` before dispatching. All blocks reference the same card.
 2. **Steps accumulation**: Each block's raw text is collected into an `AgentStep[]` array with its `seq` number.
 3. **Last-block-as-primary**: The card's `text` field is set to the last block (the final answer). Earlier blocks are retained in `steps`.
 4. **Frontend expansion**: When a card has 2+ steps, `CardContainer` renders an expandable "N agent steps" toggle. Collapsed by default; expanding shows each step chronologically with the final step labeled.
@@ -155,7 +155,7 @@ Generated app executors receive a `ctx: ExecutorContext` object providing real s
 
 | Method | Description |
 |--------|-------------|
-| `ctx.callTool(name, params)` | Call any registered OpenClaw tool. Returns `{ success, data, error }`. |
+| `ctx.callTool(name, params)` | Call any registered tool. Returns `{ success, data, error }`. |
 | `ctx.listDir(path)` | List directory contents (files/folders with metadata). |
 | `ctx.readFile(path)` | Read a text file. Returns file content string. |
 | `ctx.searchFiles(root, name)` | Search for files by name pattern. |
@@ -168,7 +168,7 @@ Generated app executors receive a `ctx: ExecutorContext` object providing real s
 
 **`ctx.ask()`** — LLM capability added to enable intelligent data processing within executors. Uses Gemini Flash for cost efficiency. Implemented via dynamic import of `callGeminiLLMWithRetry` to avoid circular dependencies. API key is resolved lazily via `getActiveAccount()` for apps loaded at startup.
 
-**`ctx.store`** — Key-value persistence backed by JSON files at `~/.openclaw/enso-apps/<toolFamily>/store.json` with an in-memory cache. Scoped per tool family so apps don't interfere with each other. Enables use cases like saving user preferences, caching expensive computations, and tracking history across sessions.
+**`ctx.store`** — Key-value persistence backed by JSON files at `~/.enso/apps/<toolFamily>/store.json` with an in-memory cache. Scoped per tool family so apps don't interfere with each other. Enables use cases like saving user preferences, caching expensive computations, and tracking history across sessions.
 
 ---
 
@@ -218,7 +218,7 @@ When app views render compiled JSX:
 
 ## Claude Code Integration (Detailed)
 
-Enso embeds Claude Code as a direct tool, bypassing the OpenClaw agent pipeline for coding tasks:
+Enso embeds Claude Code as a direct tool, bypassing the standalone agent pipeline for coding tasks:
 
 - **Trigger**: User types `/code` to open the project picker, then `/code <prompt>` or uses the in-terminal input to send prompts
 - **Backend** (`claude-code.ts`): Spawns `claude.exe` with `--output-format stream-json --dangerously-skip-permissions`, parses NDJSON events line-by-line
@@ -232,25 +232,25 @@ Enso embeds Claude Code as a direct tool, bypassing the OpenClaw agent pipeline 
 
 ## App Action Bridge (Zero-Config — Detailed)
 
-When other OpenClaw plugins (e.g., AlphaRank) register tools via `api.registerTool()`, Enso automatically integrates them — no Enso-side code needed. This enables card actions to call tools directly without an agent round-trip.
+When parts of the codebase register tools via `registerLocalTool()` in `server/standalone.ts`, Enso automatically integrates them — no extra wiring needed. This enables card actions to call tools directly without an agent round-trip.
 
 **How it works:**
 
-1. **Recording**: The `after_tool_call` hook in `index.ts` fires when the agent calls any registered tool. If the tool exists in the OpenClaw plugin registry, the call is recorded in a time-windowed store (`tool-call-store.ts`, 30s TTL).
+1. **Recording**: An `after_tool_call` hook in the standalone agent fires when the agent calls any registered tool. The call is recorded in a time-windowed store (`tool-call-store.ts`, 30s TTL).
 
 2. **Auto-enhance**: After delivering a text card, `deliverEnsoReply()` in `delivery.ts` calls `consumeRecentToolCall()` to check if the agent used a tool. If so, it parses the captured tool result, finds the matching template via `inferToolTemplate()`, and sends an `enhanceResult` to render the app card alongside the text — no LLM call needed. This replaced the old background `selectToolForContent()` LLM call + `enhanceHint` approach.
 
-3. **Manual enhance linking**: When the user manually triggers `handleCardEnhance()`, the tool's plugin is identified via `getToolPluginId()`, and a `appToolHint` is stored in the card context with the tool name, params, and handler prefix.
+3. **Manual enhance linking**: When the user manually triggers `handleCardEnhance()`, the tool's family is identified, and a `appToolHint` is stored in the card context with the tool name, params, and handler prefix.
 
-4. **Auto-detection**: The tool's common prefix is computed by `getPluginToolPrefix()` (longest common prefix among all tools from that plugin, ending with `_`).
+4. **Auto-detection**: The tool's common prefix is computed (longest common prefix among all tools in that family, ending with `_`).
 
-**Ecosystem Bridge**: `registerAppTool()` in `registry.ts` dual-registers each dynamic app tool with both the internal `generatedToolExecutors` map AND the OpenClaw ecosystem via `api.registerTool()`. The `PluginApi` is stored at startup via `setPluginApi()` in `runtime.ts`. This means user-built apps are immediately discoverable by the OpenClaw agent.
+**Ecosystem Bridge**: `registerAppTool()` in `registry.ts` dual-registers each dynamic app tool with both the internal `generatedToolExecutors` map AND the agent's tool registry via `registerLocalTool()`. This means user-built apps are immediately discoverable by the agent for future requests.
 
 4. **Four-path action dispatch** when a user clicks a card button:
    - **Path 0 — Refine**: `action === "refine"` with `payload.instruction` → re-generates only the template JSX (1 LLM call), preserving data and executors
    - **Path 1 — Mechanical**: Built-in data mutations (task boards, sorting) that don't need a tool call
    - **Path 2 — Native tool**: Action name resolved via exact match (`prefix + action`), suffix match (against `actionSuffixes`), or family fallback → executed directly via `executeToolDirect()` → result re-rendered with template
-   - **Path 3 — Agent fallback**: If neither path matches, the action is sent through the OpenClaw agent pipeline
+   - **Path 3 — Agent fallback**: If neither path matches, the action is sent through the standalone agent pipeline
 
 **Extension point**: For custom action name mappings or parameter enrichment, you can optionally register a `NativeToolActionMap` via `registerActionMap()`. But the default zero-config path handles most cases.
 
@@ -281,7 +281,7 @@ Dynamic apps are created via Enso's **Build App** pipeline (or manually) and sto
 
 | Location | Path | Purpose |
 |----------|------|---------|
-| **User apps** | `~/.openclaw/enso-apps/<family>/` | Created by the Build App pipeline. Personal, not in git. |
+| **User apps** | `~/.enso/apps/<family>/` | Created by the Build App pipeline. Personal, not in git. |
 | **Shipped apps** | `server/apps/<family>/` | Promoted from user apps via "Promote". Checked into git, ships with the project. |
 
 At startup, `loadApps()` merges both directories. User apps override shipped apps with the same `toolFamily` name (useful for iterating locally before committing).
@@ -315,7 +315,7 @@ At startup, `loadApps()` merges both directories. User apps override shipped app
         "description": "Generate weekly meal plan",
         "parameters": {                      // JSON Schema
           "type": "object",
-          "additionalProperties": false,     // CRITICAL — OpenClaw rejects without this
+          "additionalProperties": false,     // CRITICAL — agents reject extra params without this
           "properties": {
             "diet": { "type": "string", "description": "Dietary preference" }
           },
@@ -377,7 +377,7 @@ return {
 
 | Method | Returns | Use Case |
 |--------|---------|----------|
-| `ctx.callTool(name, params)` | `{success, data, error}` | Call any registered OpenClaw tool |
+| `ctx.callTool(name, params)` | `{success, data, error}` | Call any registered tool |
 | `ctx.listDir(path)` | `{success, data, error}` | List directory contents |
 | `ctx.readFile(path)` | `{success, data, error}` | Read file text |
 | `ctx.searchFiles(root, name)` | `{success, data, error}` | Find files by pattern |
@@ -478,7 +478,7 @@ export default function GeneratedUI({ data, onAction }) {
 ```
 Build App (in Enso UI)
     ↓
-Saved to ~/.openclaw/enso-apps/<family>/     (user app)
+Saved to ~/.enso/apps/<family>/     (user app)
     ↓
 Click bookmark icon in Apps menu
     ↓
@@ -502,7 +502,7 @@ For deeply integrated platform capabilities that need TypeScript, direct access 
 2. server/src/app-catalog.ts          ← App catalog entry
 3. server/src/native-tools/templates/<family>.ts ← JSX template
 4. server/src/native-tools/registry.ts ← Registry wiring
-5. server/index.ts                     ← Plugin registration
+5. server/standalone.ts                ← Tool registration via registerLocalTool()
 ```
 
 **Data flow:** Tool execution → data normalization → JSX template (compiled in browser sandbox) → `onAction()` callback → four-path action dispatch → tool re-execution → re-render
@@ -516,12 +516,12 @@ For deeply integrated platform capabilities that need TypeScript, direct access 
 **Exports:** Every tools file MUST export two functions:
 
 ```typescript
-// Creates the tool array (used by maybeRegisterFallbackToolFamily)
+// Creates the tool array (used by registration in standalone.ts)
 export function createMyFamilyTools(): AnyAgentTool[] { return [...]; }
 
-// Registers tools with OpenClaw API
-export function registerMyFamilyTools(api: OpenClawPluginApi): void {
-  for (const tool of createMyFamilyTools()) api.registerTool(tool);
+// Registers tools with the local agent registry
+export function registerMyFamilyTools(): void {
+  for (const tool of createMyFamilyTools()) registerLocalTool(tool);
 }
 ```
 
@@ -534,7 +534,7 @@ export function registerMyFamilyTools(api: OpenClawPluginApi): void {
   description: "Does a specific thing.",     // Capability description
   parameters: {
     type: "object",
-    additionalProperties: false,             // CRITICAL — OpenClaw rejects without this
+    additionalProperties: false,             // CRITICAL — agents reject extra params without this
     properties: {
       path: { type: "string", description: "Target path." },
       limit: { type: "number", description: "Max results." },
@@ -698,21 +698,18 @@ if (data?.tool?.startsWith("enso_myfam_") || Array.isArray(data?.mySpecificKey))
 }
 ```
 
-#### Step 5: Register in Plugin Entry
+#### Step 5: Register in the Standalone Server
 
-**File:** `server/index.ts`
+**File:** `server/standalone.ts`
 
 ```typescript
 import { registerMyFamilyTools } from "./src/my-family-tools.js";
 
-// Inside register():
-maybeRegisterFallbackToolFamily({
-  familyLabel: "my_family",
-  fallbackPrefix: "enso_myfam_",
-  actionSuffixes: APP_CATALOG.find(c => c.appId === "my_family")?.actions ?? [],
-  register: () => registerMyFamilyTools(api),
-});
+// During server boot, alongside other registerXxxTools() calls:
+registerMyFamilyTools();
 ```
+
+See `server/standalone.ts` for the actual registration patterns currently in use — `registerLocalTool()` is the single mechanism for adding tools to the agent registry.
 
 #### Action Dispatch Reference
 
@@ -734,7 +731,7 @@ Result → normalizeData → re-render template with new data
 1. **Refine** — `action === "refine"` → regenerate template JSX only (1 LLM call)
 2. **Mechanical** — built-in data mutations (task boards, sorting)
 3. **Native tool** — resolve `prefix + action` to a registered tool → execute directly
-4. **Agent fallback** — unmatched action sent through OpenClaw agent pipeline
+4. **Agent fallback** — unmatched action sent through the standalone agent pipeline
 
 **Native tool resolution chain:**
 1. Exact match: `enso_myfam_detail` registered? → execute
@@ -748,7 +745,7 @@ Result → normalizeData → re-render template with new data
 | Pitfall | Consequence | Fix |
 |---------|-------------|-----|
 | `useState` inside `if` block | "Rendered more hooks than during the previous render" crash | Move ALL hooks to top of component, before any conditionals |
-| Missing `additionalProperties: false` in params | OpenClaw may reject tool calls with extra params | Always include in every tool's parameters schema |
+| Missing `additionalProperties: false` in params | Agent rejects tool calls with extra params | Always include in every tool's parameters schema |
 | Missing `tool` field in result data | Template can't detect which view to render | Always include `tool: "enso_<family>_<action>"` in jsonResult |
 | Using `<Tooltip>` for hover tips | Gets Recharts Tooltip (chart component) | Use `<EnsoUI.Tooltip content="...">` instead |
 | Adding `import` statements in template | Sandbox compilation fails | Everything is pre-injected — no imports needed |
@@ -824,7 +821,7 @@ In the template, show recent items with: click to reload, refresh button (force=
 
 ### 4. SKILL.md for Tool Families
 
-Every tool family needs a SKILL.md file so the OpenClaw agent can discover and invoke the tools correctly:
+Every tool family needs a SKILL.md file so the agent can discover and invoke the tools correctly:
 
 - **Location**: `server/skills/enso-<family>/SKILL.md`
 - **Format**: YAML frontmatter (name, description, metadata) + markdown body
@@ -869,31 +866,68 @@ Always include source URLs in tool results and render them in the template via a
 
 ---
 
-## OpenClaw Framework Context
+## Logging & Error Tracking (Detailed)
 
-Enso is a plugin for [OpenClaw](../OpenClaw), a local-first multi-channel AI gateway. Key OpenClaw concepts relevant to Enso:
+Enso uses a centralized NDJSON log for all significant operations, errors, and fixes.
 
-- **Channel Plugin**: Enso implements `ChannelPlugin` — the standard interface for messaging surfaces (like Telegram, Discord, WhatsApp). Each channel has adapters for config, security, messaging, setup, etc.
-- **Plugin API**: Plugins get an `OpenClawPluginApi` with methods like `registerChannel()`, `registerTool()`, `registerHook()`. Enso uses `registerChannel()`.
-- **Plugin SDK**: Stable types and helpers at `openclaw/plugin-sdk` — compile-time only, no runtime deps.
-- **Gateway**: Central WebSocket server (port 18789) that coordinates agents, sessions, channels. Enso's server is separate and bridges to the gateway.
-- **Sessions**: Per-agent, per-conversation state. Session keys follow `<workspace>:<agent>:<channel>:<account>:<peer>`.
-- **Routing**: `resolveAgentRoute()` maps incoming messages to the correct agent based on workspace config.
-- **Hooks**: Lifecycle events (`message_received`, `message_sending`, `before_agent_start`, etc.) that plugins can tap into.
-- **DM Pairing**: Security model where unknown senders must provide a short code before being allowed. Enso supports this via `dmPolicy` config.
+**Files:**
+- `~/.enso/action.log` — NDJSON, rotates at 1000 lines (keeps 800)
+- `~/.enso/fixes.json` — JSON array of bug fix records with acknowledgement tracking
 
----
+**Implementation:** `server/src/action-log.ts`
 
-## Current Status (Phase 8)
+### Log Entry Types
 
-**Implemented**: Card-based chat UI, WebSocket messaging, text streaming (delta/final), media upload, OpenClaw plugin integration, multi-block response accumulation with expandable agent steps, Original/App view toggle, interactive card actions with four-path dispatch (refine / mechanical / native tool / agent fallback), card interaction context with action history, Claude Code CLI integration with direct tool routing, NDJSON streaming from CLI, session resumption, interactive AskUserQuestion with clickable option buttons, project picker with git repo scanning, persistent terminal card with multi-turn conversations, zero-config native tool bridge (auto-discovery from OpenClaw plugin registry, direct tool execution), deterministic tool-mode templates for AlphaRank/filesystem/workspace/media/travel/meal domains, `/tool enso` tool console for template introspection + add-tool requests, comprehensive server-side logging (`[enso:inbound/outbound/enhance/action/build]`), runtime mode switching (IM/UI/Full), async app build pipeline (fire-and-forget with `buildComplete` notification), deferred Build App dialog (waits for LLM proposal before showing), conversation context threading (chat history passed through build pipeline for context-aware spec design), parallelized build pipeline (executor + template generation run concurrently, saving 3-5s), `ctx.ask()` LLM capability (Gemini Flash available in executors for summarization/classification/analysis), incremental iteration via Refine (single-LLM-call template regeneration from app view), `ctx.store` key-value persistence (JSON-backed per-family storage surviving restarts), **EnsoUI component library** (17 pre-styled React + Tailwind components — Tabs, DataTable, Stat, Badge, Button, Card, Progress, Accordion, Dialog, Select, Input, Switch, Slider, Separator, EmptyState, Tooltip, VideoPlayer — injected into the sandbox scope), **unified app model** (codebase apps in `server/apps/` + user apps in `~/.openclaw/enso-apps/`, merged by `loadAllApps()`, save-to-codebase promotion via Apps menu bookmark icon), **Apps menu** (flat list of all apps with run, save-to-codebase, restart server, and launch Code buttons).
+| Type | Usage |
+|------|-------|
+| `action` | Normal operations: chat messages, enhance, card actions, uploads, shell sessions |
+| `error` | Failures in any backend or client-reported error path |
+| `fix` | Auto-heal successes and Claude Code fix resolutions |
+| `build` | Build App via Claude Code lifecycle events |
+| `system` | Server start, client connect/disconnect |
+| `claude-code` | Claude Code session lifecycle (init, tools, rate limits, completion) |
 
-**Phase 8 additions**:
-- **Card Evolution (Evolve)**: Unified Evolve button replaces old Enhance on all assistant cards. Multi-agent orchestration sprint transforms any card into a polished interactive app. Card-type-specific planning (chat → dashboard, terminal → project report, orchestration → executive report, dynamic-ui → feature upgrade). Inline targeting via `targetCardId` delivers results directly to the source card with Standard/Evolved toggle.
-- **Multi-provider LLM layer** (`llm-provider.ts`): `callChatLLM()` abstraction supporting Gemini, OpenAI, Anthropic, DeepSeek, Ollama, and OpenRouter. Used by task classification, tool selection, template refinement, auto-heal, text summarization, and podcast script generation. Provider is user-configurable, not hardcoded.
-- **Universal text & audio generation** (`card-summarizer.ts`, `podcast.ts`): One-click summarization and AI podcast for any card type. Content extraction handles chat, terminal, orchestration, and dynamic-ui cards. Text via multi-provider LLM; audio via Gemini multi-speaker TTS with WAV conversion. Multi-language support (Chinese, etc.).
-- **Auto-heal executor**: `autoHealExecutor` in `tool-factory.ts` activated in the production failure path. When a dynamic app executor fails, the system autonomously regenerates the code using multi-provider LLM before falling back to Claude Code rebuild. Supports `callChatLLM` for provider flexibility.
-- **Inline orchestration UX**: Consistent pattern across Evolve, Deep Research, and Discovery. Source card shows building view with live Claude Code output; results appear as toggle view. `signatureId` values (`card_evolution_building`, `deep_research_building`, `focused_archetype_building`) drive frontend state.
-- **Multi-provider for system operations**: Task router (`classifyTask`), tool selector (`selectToolForContent`), and template refiner (`refineTemplate`) all accept `chatModel` and `providerKeys` for provider-flexible operation.
+### Usage
 
-**Not yet implemented**: Persistent chat history, user authentication, multi-user session isolation, rate limiting, full inline tool activity trace cards (reads/edits/bash timeline), cost tracking per run, abort button for active Claude Code runs.
+```typescript
+import { logAction, logError, logFix } from "./action-log.js";
+
+// Log an operation
+logAction({ ts: Date.now(), type: "action", category: "enhance", message: "Enhance start", cardId });
+
+// Log an error (category, message, error, extra fields)
+logError("ui-gen", "Generation failed", err, { cardId, toolFamily: "filesystem" });
+
+// Log a fix
+logFix({ description: "Fixed broken executor", error: "TypeError", resolution: "Auto-healed", category: "app" });
+```
+
+### Reading Logs
+
+**HTTP API:** `GET /api/action-log?count=100&type=error`
+
+| Param | Description |
+|-------|-------------|
+| `count` | Number of recent entries (default 100, max 500) |
+| `type` | Filter: `action`, `error`, `fix`, `build`, `system`, `claude-code` |
+
+**Programmatic:** `getRecentLog(count, typeFilter)` returns `LogEntry[]` (most recent first).
+
+### Client Error Reporting
+
+Frontend errors are reported to the backend via WebSocket (`client.error` message type) and logged as `type: "error"`, `category: "client"`.
+
+| Source | Trigger |
+|--------|---------|
+| `unhandled` | `window.onerror` global handler |
+| `unhandled_rejection` | `window.onunhandledrejection` |
+| `react_boundary` | Root-level `AppErrorBoundary` in App.tsx |
+| `ws` | WebSocket message parse failures |
+| `sandbox` | JSX component compilation errors |
+| `card_render` | Component runtime render errors (`UIErrorBoundary`) |
+
+**Frontend utility:** `src/lib/error-reporter.ts` — `reportError(message, source, extra?)`. Deduplicates identical messages within 5 seconds. Initialized via `initErrorReporter(sendFn)` when WS connects.
+
+### Category Convention
+
+Use `module:subpath` format: `inbound`, `enhance`, `action:refine`, `action:native`, `action:fix_with_code`, `build-via-claude`, `ui-gen`, `shell`, `tool-factory`, `persistence`, `upload`, `apps`, `sessions`, `system`, `client`.
