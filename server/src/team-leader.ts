@@ -983,8 +983,12 @@ Generate JSON:
 }
 
 Rules:
-- headline: max 60 chars, quantified ("3 done, 1 needs input" not "Updates available")
-- sections: 2-4 sections. "What I Did" for completed, "Needs Your Input" for approval-needed, "Coming Up" for planned
+- headline: max 60 chars, quantified ("5 done, executing 3 more" not "Updates available")
+- sections: 2-3 sections max:
+  * "What I Did" — completed actions (always include)
+  * "In Progress" — things currently executing right now (only if any are actively running)
+  * "Needs Your Input" — ONLY for items that genuinely need a human decision (spending money, personal life choices). This section should be RARE or absent.
+- NO "Coming Up" or "Planned" section. If work needs doing, you should be executing it right now, not listing it for later. The only reason to defer is if you're blocked on user input.
 - Each item: one line, starts with emoji, references specific deliverable/focus/entity names
 - textSummary: 5-15 lines, no markdown formatting
 - wechatMessage: 2-4 lines, just the essentials`;
