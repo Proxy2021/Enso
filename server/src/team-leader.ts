@@ -1916,19 +1916,30 @@ async function launchBuilderTask(action: TeamLeaderAction): Promise<void> {
 async function launchClaudeCodeSession(action: TeamLeaderAction): Promise<void> {
   try {
     const { runClaudeCode } = await import("./claude-code.js");
+    const { getAllClients } = await import("./server.js");
 
-    // Always use a headless noop client for TL sessions — never use the user's real client.
-    // Using the real client causes TL terminal cards to show up in whatever conversation
-    // the user is viewing, polluting their chat experience.
-    const noop = () => {};
-    const client: unknown = {
-      id: "team-leader-builder",
-      sessionKey: "team-leader",
-      ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
-      send: noop,
-      _disconnectedBuffer: [],
-      conversationId: "tl-background",
-    };
+    // Use a real connected client so the terminal card is visible to the user.
+    // Override conversationId to a dedicated "tl-tasks" conversation so it doesn't
+    // pollute whatever chat the user is currently in.
+    const realClients = getAllClients();
+    let client: unknown;
+    if (realClients.length > 0) {
+      // Clone the first real client but override conversationId
+      const rc = realClients[0];
+      client = Object.create(rc);
+      (client as any).conversationId = "tl-tasks";
+    } else {
+      // No connected clients — fall back to headless noop
+      const noop = () => {};
+      client = {
+        id: "team-leader-builder",
+        sessionKey: "team-leader",
+        ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
+        send: noop,
+        _disconnectedBuffer: [],
+        conversationId: "tl-tasks",
+      };
+    }
 
     const runId = randomUUID();
     const prompt = `[Team Leader Task: ${action.title}]
@@ -1955,7 +1966,6 @@ Be thorough but focused. When done, summarize what you changed.`;
       runId,
       targetCardId: `tl-${action.id.slice(0, 8)}`,
       model: "sonnet",
-      skipPersist: true,
     }).then(async () => {
       action.status = "completed";
       updateActionStatus(action.id, "completed");
