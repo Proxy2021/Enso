@@ -461,8 +461,10 @@ function GeneratedUI({ data, onAction }) {
           return (
             <UICard key={i} style={{ padding: "12px" }}>
               <div style={{ display: "flex", gap: "12px" }}>
-                {r.coverUrl && (
+                {r.coverUrl ? (
                   <img src={r.coverUrl} alt={r.title} style={{ width: "60px", height: "90px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: "60px", height: "90px", background: "#1e293b", borderRadius: "4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", color: "#475569" }}>📚</div>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>

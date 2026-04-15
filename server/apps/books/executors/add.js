@@ -305,6 +305,28 @@ deduped.sort(function(a, b) {
   return metadataRichness(b) - metadataRichness(a);
 });
 
+// ── Enrich missing covers via Open Library ──
+var needsCover = deduped.filter(function(b) { return !b.coverUrl && b.title; });
+if (needsCover.length > 0) {
+  var coverTasks = needsCover.slice(0, 10).map(async function(b) {
+    try {
+      var q = "title=" + encodeURIComponent(b.title);
+      if (b.author) q += "&author=" + encodeURIComponent(b.author.split(",")[0].trim());
+      var resp = await ctx.fetch("https://openlibrary.org/search.json?" + q + "&limit=1&fields=cover_i");
+      if (resp.ok && resp.data && resp.data.docs && resp.data.docs.length > 0) {
+        var doc = resp.data.docs[0];
+        if (doc.cover_i) {
+          b.coverUrl = "https://covers.openlibrary.org/b/id/" + doc.cover_i + "-M.jpg";
+          ctx.log("OL cover fetched for: " + b.title + " (cover_i=" + doc.cover_i + ")");
+        }
+      }
+    } catch(e) {
+      // silent — cover enrichment is best-effort
+    }
+  });
+  await Promise.all(coverTasks);
+}
+
 var finalResults = deduped.slice(0, 20);
 
 ctx.log("Total: " + allResults.length + " raw, " + deduped.length + " after dedup, returning " + finalResults.length);
