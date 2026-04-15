@@ -37,6 +37,13 @@ interface ImageAttachment {
   error?: string;
 }
 
+export interface DiscussRequest {
+  text: string;
+  imageUrls: string[];
+  agent: AgentOption;
+  context: ReactContext;
+}
+
 interface Props {
   context: ReactContext;
   onClose: () => void;
@@ -44,6 +51,8 @@ interface Props {
   defaultAgentId?: string;
   /** Show as popup (absolute positioned) or inline */
   mode?: "popup" | "inline";
+  /** Called when user clicks "Discuss" — opens discuss modal in parent */
+  onDiscuss?: (req: DiscussRequest) => void;
 }
 
 // ── Agent Cache ──
@@ -85,7 +94,7 @@ async function uploadImage(file: File): Promise<string> {
 
 // ── Component ──
 
-export default function ReactToTL({ context, onClose, defaultAgentId, mode = "popup" }: Props) {
+export default function ReactToTL({ context, onClose, defaultAgentId, mode = "popup", onDiscuss }: Props) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([{ id: "tl", name: "Team Leader", type: "tl" }]);
@@ -359,6 +368,19 @@ export default function ReactToTL({ context, onClose, defaultAgentId, mode = "po
             className="text-[11px] px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 transition-colors mr-2"
           >
             Cancel
+          </button>
+        )}
+        {onDiscuss && (
+          <button
+            onClick={() => {
+              const selected = agents.find(a => a.id === selectedAgentId) || agents[0];
+              const imageUrls = images.filter(img => img.serverUrl).map(img => img.serverUrl!);
+              onDiscuss({ text: text.trim(), imageUrls, agent: selected, context });
+            }}
+            disabled={!text.trim()}
+            className="text-[11px] px-3 py-1.5 rounded-lg border border-violet-500/40 text-violet-300 hover:bg-violet-500/10 disabled:opacity-30 transition-colors mr-2"
+          >
+            Discuss
           </button>
         )}
         <button

@@ -2417,11 +2417,12 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
   // In-app react submission (supports direct context + agent targeting)
   const handleReactsInApp = async (req: any, res: any) => {
     try {
-      const { notificationId, text, action, context: directContext, agentTarget, imageUrls } = req.body as {
+      const { notificationId, text, action, context: directContext, agentTarget, imageUrls, detail } = req.body as {
         notificationId?: string; text?: string; action?: string;
         context?: { type: string; summary: string; focusId?: string };
         agentTarget?: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string };
         imageUrls?: string[];
+        detail?: string; // Discussion context from Discuss mode
       };
       if (!text?.trim() && !action) { res.status(400).json({ error: "Text or action required" }); return; }
       const { getNotificationContext, submitReact } = await import("./reacts.js");
@@ -2441,6 +2442,11 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
         resolvedContext = looked || { type: "briefing" as const, notificationId: notificationId || "unknown", summary: "In-app react", sentAt: new Date().toISOString() };
       }
 
+      // If discuss detail provided, append to context summary for richer agent context
+      if (detail && resolvedContext) {
+        resolvedContext.summary = `${resolvedContext.summary}\n\n${detail}`;
+      }
+
       const react = submitReact({
         channel: "in-app",
         context: resolvedContext,
@@ -2455,6 +2461,59 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
     }
   };
   app.post("/api/reacts", express.json(), handleReactsInApp);
+
+  // Discuss mode — lightweight LLM dialogue for refining a task before execution
+  app.post("/api/chat/discuss", express.json(), async (req, res) => {
+    try {
+      const { messages, context, agentName, agentRole } = req.body as {
+        messages: Array<{ role: "user" | "assistant"; text: string }>;
+        context?: { type?: string; summary?: string; detail?: string; focusId?: string };
+        agentName?: string;
+        agentRole?: string;
+      };
+      if (!messages?.length) { res.status(400).json({ error: "Messages required" }); return; }
+
+      const { llm } = await import("./llm.js");
+      const { buildEnsoContext } = await import("./memory-bridge.js");
+
+      // Build system prompt with agent persona + context
+      const ensoCtx = await buildEnsoContext();
+      const contextBlock = context?.summary ? `\nCONTEXT: ${context.summary}${context.detail ? `\nDETAIL: ${context.detail}` : ""}` : "";
+
+      const systemPrompt = `You are ${agentName || "Team Leader"}${agentRole ? `, ${agentRole}` : ""} of the Enso platform.
+The user wants to discuss a task before committing to execution. Help them refine their idea, ask clarifying questions, suggest approaches, and identify potential issues.
+${contextBlock}
+
+${ensoCtx.slice(0, 2000)}
+
+BEHAVIOR:
+- Be concise and direct (2-5 sentences per response)
+- Ask clarifying questions to understand the task fully
+- Suggest specific implementation approaches when appropriate
+- Reference the Enso codebase architecture when relevant
+- When the task is well-defined, say so — encourage the user to click Execute
+- Do NOT execute anything — this is a planning discussion only`;
+
+      // Build conversation into prompt (llm() takes a single prompt, not messages)
+      const conversationText = messages.map(m =>
+        m.role === "user" ? `USER: ${m.text}` : `ASSISTANT: ${m.text}`
+      ).join("\n\n");
+
+      const fullPrompt = `${systemPrompt}\n\n--- CONVERSATION ---\n${conversationText}\n\nASSISTANT:`;
+
+      const reply = await llm({
+        prompt: fullPrompt,
+        tier: "fast",
+        maxOutputTokens: 500,
+        temperature: 0.5,
+        timeoutMs: 15_000,
+      });
+
+      res.json({ reply: reply.trim() });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Discuss failed" });
+    }
+  });
 
   // List available agents for react targeting
   app.get("/api/agents", async (_req, res) => {

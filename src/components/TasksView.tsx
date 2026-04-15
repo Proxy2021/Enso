@@ -13,8 +13,9 @@ import { timeAgo, timeUntil, formatElapsedTime } from "../lib/time-utils";
 import { ScheduledTaskDialog } from "./ScheduledTaskDialog";
 import { Clock, Play, Pause, Trash2, Pencil, Plus, RefreshCw, Send, ChevronDown, ChevronRight, Square } from "lucide-react";
 import ReactToTL from "./ReactToTL";
-import type { ReactContext } from "./ReactToTL";
+import type { ReactContext, DiscussRequest } from "./ReactToTL";
 import TerminalContent from "./TerminalContent";
+import DiscussModal from "./DiscussModal";
 
 // ── Types (mirrors session-registry.ts) ──
 
@@ -268,6 +269,7 @@ export default function TasksView() {
   const [tlRunning, setTlRunning] = useState(false);
   const [reactInput, setReactInput] = useState<{ actionId: string; text: string } | null>(null);
   const [reactFromActivity, setReactFromActivity] = useState<{ type: "card"; summary: string; focusId?: string; detail?: string } | null>(null);
+  const [discussRequest, setDiscussRequest] = useState<DiscussRequest | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -455,6 +457,7 @@ export default function TasksView() {
               context={{ type: "direct", summary: "Direct instruction from command center" }}
               onClose={() => {}}
               mode="inline"
+              onDiscuss={(req) => setDiscussRequest(req)}
             />
           </div>
 
@@ -668,6 +671,37 @@ export default function TasksView() {
               />
             </div>
           </div>
+        )}
+
+        {/* Discuss modal */}
+        {discussRequest && (
+          <DiscussModal
+            request={discussRequest}
+            onClose={() => setDiscussRequest(null)}
+            onExecute={async (enrichedText, detail, imageUrls) => {
+              setDiscussRequest(null);
+              // Submit as react with full discussion context
+              const selected = discussRequest.agent;
+              let agentTarget: { agent: "tl" } | { agent: "expert"; focusId: string; expertId: string } | undefined;
+              if (selected.type === "expert" && selected.focusId && selected.expertId) {
+                agentTarget = { agent: "expert", focusId: selected.focusId, expertId: selected.expertId };
+              }
+              try {
+                await fetch(`${getBackendBaseUrl()}/api/reacts`, {
+                  method: "POST",
+                  headers: { ...authHeaders(), "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    text: enrichedText,
+                    action: "custom",
+                    context: { type: discussRequest.context.type, summary: discussRequest.context.summary, focusId: discussRequest.context.focusId },
+                    imageUrls: imageUrls.length ? imageUrls : undefined,
+                    agentTarget,
+                    detail,
+                  }),
+                });
+              } catch { /* toast already shown by DiscussModal */ }
+            }}
+          />
         )}
 
         {/* Active Orchestrations */}
