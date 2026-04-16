@@ -248,7 +248,8 @@ function GeneratedUI({ data, onAction }) {
               <UICard style={{ padding: "12px" }}>
                 <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "#94a3b8" }}>Critical Perspectives</div>
                 {research.criticalPerspectives.map(function(cp, i) {
-                  return <div key={i} style={{ fontSize: "12px", color: "#fbbf24", marginBottom: "4px", lineHeight: 1.5 }}>{cp}</div>;
+                  var cpText = typeof cp === "string" ? cp : (cp && typeof cp === "object") ? (cp.text || cp.perspective || JSON.stringify(cp)) : String(cp);
+                  return <div key={i} style={{ fontSize: "12px", color: "#fbbf24", marginBottom: "4px", lineHeight: 1.5 }}>{cpText}</div>;
                 })}
               </UICard>
             )}

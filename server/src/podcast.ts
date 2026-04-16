@@ -95,7 +95,7 @@ ${content.narrative ? `\nDetailed Narrative (condensed):\n${content.narrative.sl
 // ── Audio Rendering (Gemini TTS only) ──
 
 export async function renderPodcastAudio(script: string, geminiKey: string): Promise<Buffer> {
-  const endpoint = `${GEMINI_API_BASE}/models/gemini-2.5-flash-preview-tts:generateContent`;
+  const endpoint = `${GEMINI_API_BASE}/models/gemini-3.1-flash-tts-preview:generateContent`;
 
   const body = {
     contents: [{ parts: [{ text: `TTS the following conversation between Host A and Host B:\n\n${script}` }] }],

@@ -25,7 +25,7 @@ if (categoryFilter) {
 
 // Fetch more than needed when filtering so we have enough after pruning
 var fetchCount = categoryChannelIds ? Math.min(maxResults * 4, 100) : maxResults;
-var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: fetchCount });
+var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: fetchCount }, { timeoutMs: 180000 });
 
 var videos = [];
 var feedWarning = null;

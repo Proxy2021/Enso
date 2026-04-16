@@ -98,6 +98,7 @@ interface AppManifest {
 // ── Executor Context ──
 
 const EXECUTOR_CTX_TIMEOUT_MS = 60_000;
+const EXECUTOR_CTX_EXTENDED_TIMEOUT_MS = 180_000; // For heavy network tools (YouTube feed, data source scans)
 const EXECUTOR_CTX_MAX_DEPTH = 3;
 const EXECUTOR_FETCH_MAX_BYTES = 512 * 1024; // 512KB
 const STORE_MAX_SIZE = 1024 * 1024; // 1MB per family store
@@ -158,10 +159,11 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
   // trackDepth=true only for callTool (which can recursively invoke other executors).
   // Leaf I/O ops (fetch, search, ask, fs) run in parallel and must NOT share the depth
   // counter — they are concurrent leaf calls, not recursive executor invocations.
-  async function withTimeout<T>(label: string, fn: () => Promise<T>, trackDepth = false): Promise<T> {
+  async function withTimeout<T>(label: string, fn: () => Promise<T>, trackDepth = false, timeoutMs?: number): Promise<T> {
+    const effectiveTimeout = timeoutMs ?? EXECUTOR_CTX_TIMEOUT_MS;
     const t0 = Date.now();
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), EXECUTOR_CTX_TIMEOUT_MS);
+    const timer = setTimeout(() => ac.abort(), effectiveTimeout);
 
     try {
       if (trackDepth) {
@@ -173,7 +175,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
       const result = await Promise.race([
         fn(),
         new Promise<never>((_, reject) => {
-          ac.signal.addEventListener("abort", () => reject(new Error(`ctx.${label} timed out after ${EXECUTOR_CTX_TIMEOUT_MS}ms`)));
+          ac.signal.addEventListener("abort", () => reject(new Error(`ctx.${label} timed out after ${effectiveTimeout}ms`)));
         }),
       ]);
       logAction({ ts: Date.now(), type: "action", category: "persistence", message: `executor-ctx ${tag} → ${label} [${Date.now() - t0}ms]` });
@@ -188,11 +190,11 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
   }
 
   return {
-    async callTool(toolName: string, params: Record<string, unknown>) {
+    async callTool(toolName: string, params: Record<string, unknown>, options?: { timeoutMs?: number }) {
       return withTimeout(`callTool("${toolName}")`, async () => {
         const result = await executeToolDirect(toolName, params);
         return { success: result.success, data: result.data, error: result.error ?? undefined };
-      }, true); // trackDepth=true: callTool can recursively invoke other executors
+      }, true, options?.timeoutMs); // trackDepth=true: callTool can recursively invoke other executors
     },
 
     async listDir(dirPath: string) {

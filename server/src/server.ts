@@ -1043,6 +1043,81 @@ export async function startEnsoServer(opts: {
         return;
       }
 
+      // ── Find More By: search for books/movies by same creator ──
+      if (action === "find_more_by") {
+        const p = payload || {};
+        const query = String(p.query ?? "").trim();
+        const contentType = String(p.contentType ?? "book").trim();
+        if (!query) { res.json({ error: "No search query provided" }); return; }
+
+        logAction({ ts: Date.now(), type: "action", category: "action:find-more", message: `find_more_by (cortex REST): "${query}" (${contentType})` });
+
+        if (contentType === "movie") {
+          // Search TMDB by person
+          let tmdbKey = "";
+          try {
+            const osM = await import("os"); const fsM = await import("fs"); const pathM = await import("path");
+            const keysPath = pathM.default.join(osM.default.homedir(), ".enso", "api-keys.json");
+            if (fsM.default.existsSync(keysPath)) {
+              tmdbKey = (JSON.parse(fsM.default.readFileSync(keysPath, "utf-8")) as Record<string, string>).tmdb || "";
+            }
+          } catch {}
+          const movieResults: Array<Record<string, unknown>> = [];
+          if (tmdbKey) {
+            try {
+              const personRes = await fetch(`https://api.themoviedb.org/3/search/person?api_key=${tmdbKey}&query=${encodeURIComponent(query)}&language=en-US`, { signal: AbortSignal.timeout(8000) });
+              if (personRes.ok) {
+                const personData = await personRes.json() as { results?: Array<{ id: number }> };
+                const person = personData.results?.[0];
+                if (person) {
+                  const creditsRes = await fetch(`https://api.themoviedb.org/3/person/${person.id}/combined_credits?api_key=${tmdbKey}&language=en-US`, { signal: AbortSignal.timeout(8000) });
+                  if (creditsRes.ok) {
+                    const credits = await creditsRes.json() as { cast?: Array<Record<string, unknown>>; crew?: Array<Record<string, unknown>> };
+                    const allCredits = [...(credits.cast || []).map(m => ({ ...m, _role: "cast" })), ...(credits.crew || []).filter(m => m.job === "Director" || m.job === "Creator").map(m => ({ ...m, _role: "director" }))];
+                    const seen = new Map<number, Record<string, unknown>>();
+                    for (const m of allCredits) { const id = m.id as number; if (!seen.has(id) || m._role === "director") seen.set(id, m); }
+                    const sorted = [...seen.values()].filter(m => m.title || m.name).sort((a, b) => Number(b.vote_count ?? 0) - Number(a.vote_count ?? 0)).slice(0, 15);
+                    for (const r of sorted) {
+                      movieResults.push({ title: r.title || r.name || "", type: r.media_type === "tv" ? "tv-series" : "movie", year: String(r.release_date || r.first_air_date || "").slice(0, 4), overview: String(r.overview || "").slice(0, 400), rating: r.vote_average || 0, voteCount: r.vote_count || 0, posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w342${r.poster_path}` : "", tmdbId: r.id, role: r._role });
+                    }
+                  }
+                }
+              }
+            } catch {}
+          }
+          res.json({ tool: "enso_movies_tv_add", query, moreByCreator: query, totalResults: movieResults.length, results: movieResults });
+        } else {
+          // Books: search Google Books by author
+          const bookResults: Array<Record<string, unknown>> = [];
+          try {
+            const q = encodeURIComponent(`inauthor:"${query}"`);
+            const gRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=12`, { signal: AbortSignal.timeout(8000) });
+            if (gRes.ok) {
+              const data = await gRes.json() as { items?: Array<{ volumeInfo?: Record<string, unknown> }> };
+              for (const item of data.items || []) {
+                const vol = item.volumeInfo || {};
+                bookResults.push({ title: vol.title || "", author: ((vol.authors as string[]) || []).join(", "), description: String(vol.description || "").slice(0, 300), coverUrl: (vol.imageLinks as Record<string, string>)?.thumbnail || "", rating: vol.averageRating || 0, pageCount: vol.pageCount || 0, publisher: vol.publisher || "", publicationDate: vol.publishedDate || "", categories: vol.categories || [], source: "google" });
+              }
+            }
+          } catch {}
+          // Also check local WeRead cache
+          try {
+            const osB = await import("os"); const fsB = await import("fs"); const pathB = await import("path");
+            const wrPath = pathB.default.join(osB.default.homedir(), ".enso", "data", "user-context", "cache", "weread-library.json");
+            if (fsB.default.existsSync(wrPath)) {
+              const wr = JSON.parse(fsB.default.readFileSync(wrPath, "utf-8")) as { books?: Array<Record<string, unknown>> };
+              for (const b of wr.books || []) {
+                if (String(b.author || "").toLowerCase().includes(query.toLowerCase())) {
+                  bookResults.push({ ...b, source: "weread" });
+                }
+              }
+            }
+          } catch {}
+          res.json({ tool: "enso_books_add", query, moreByCreator: query, totalResults: bookResults.length, results: bookResults });
+        }
+        return;
+      }
+
       // For tool-based actions (browse, search, add, etc.) — run via executor
       const toolSuffix = action;
       const { getExecutorBody, isDynamicTool } = await import("./native-tools/registry.js");

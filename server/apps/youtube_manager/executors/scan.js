@@ -8,7 +8,7 @@ var feed = [];
 
 // Fetch subscriptions (all pages)
 try {
-  var subResult = await ctx.callTool("enso_youtube_subscriptions", { all: true });
+  var subResult = await ctx.callTool("enso_youtube_subscriptions", { all: true }, { timeoutMs: 180000 });
   if (subResult && subResult.data && subResult.data.channels) {
     subscriptions = subResult.data.channels;
   } else if (subResult && subResult.channels) {
@@ -28,7 +28,7 @@ try {
 
 // Fetch recent feed
 try {
-  var feedResult = await ctx.callTool("enso_youtube_my_feed", { maxResults: 50 });
+  var feedResult = await ctx.callTool("enso_youtube_my_feed", { maxResults: 50 }, { timeoutMs: 180000 });
   if (feedResult && feedResult.data && feedResult.data.videos) {
     feed = feedResult.data.videos;
   } else if (feedResult && feedResult.videos) {

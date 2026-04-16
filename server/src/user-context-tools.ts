@@ -2185,6 +2185,24 @@ export function createUserContextTools(): EnsoAgentTool[] {
 
               await browser.close();
 
+              // Guard: don't overwrite existing cache with empty results
+              if (books.length === 0) {
+                const cachePath = join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json");
+                let existingCount = 0;
+                try { existingCount = JSON.parse(readFileSync(cachePath, "utf-8")).books?.length || 0; } catch {}
+                if (existingCount > 0) {
+                  logAction({ ts: Date.now(), type: "action", category: "weread-scan", message: `Scan returned 0 books but cache has ${existingCount} — keeping existing cache (likely expired session)` });
+                  return {
+                    content: [{ type: "text", text: JSON.stringify({
+                      tool: "enso_context_scan_weread",
+                      totalBooks: 0,
+                      existingBooks: existingCount,
+                      warning: `Scan returned 0 books (session may have expired). Existing cache with ${existingCount} books was preserved. Please log in to WeRead again via /browser → weread.qq.com.`,
+                    }) }],
+                  };
+                }
+              }
+
               // Normalize books and save to cache
               const normalizedBooks = books.filter(b => b.title).map(b => ({
                 title: String(b.title || ""),

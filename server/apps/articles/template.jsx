@@ -180,7 +180,8 @@ export default function GeneratedUI({ data, onAction }) {
           <UICard style={{ padding: "14px" }}>
             <h3 style={{ color: "#fbbf24", fontSize: "14px", margin: "0 0 8px" }}>⚖️ Critical Perspectives</h3>
             {research.criticalPerspectives.map(function(cp, i) {
-              return <p key={i} style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.5, margin: "4px 0", paddingLeft: "10px", borderLeft: "2px solid #fbbf24" }}>{cp}</p>;
+              var cpText = typeof cp === "string" ? cp : (cp && typeof cp === "object") ? (cp.text || cp.perspective || JSON.stringify(cp)) : String(cp);
+              return <p key={i} style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.5, margin: "4px 0", paddingLeft: "10px", borderLeft: "2px solid #fbbf24" }}>{cpText}</p>;
             })}
           </UICard>
         )}

@@ -137,7 +137,12 @@ export async function sendTextMessage(openId: string, content: string): Promise<
         ? " — You need to send a message to the Official Account first (48h session window)."
         : "";
       const msg = `WeChat send failed: ${data.errmsg}${hint} (code: ${data.errcode})`;
-      logError("wechat", msg);
+      // 45015 is expected when user hasn't interacted recently — log as action, not error
+      if (data.errcode === 45015) {
+        logAction({ ts: Date.now(), type: "action", category: "wechat", message: msg });
+      } else {
+        logError("wechat", msg);
+      }
       return { success: false, message: msg };
     }
   }
@@ -178,8 +183,16 @@ export async function sendNewsMessage(
   const data = (await res.json()) as { errcode?: number; errmsg?: string };
 
   if (data.errcode && data.errcode !== 0) {
-    const msg = `WeChat news send failed: ${data.errmsg} (code: ${data.errcode})`;
-    logError("wechat", msg);
+    const hint = data.errcode === 45015
+      ? " — User needs to message the Official Account first (48h session window)."
+      : "";
+    const msg = `WeChat news send failed: ${data.errmsg}${hint} (code: ${data.errcode})`;
+    // 45015 is expected when user hasn't interacted recently — log as action, not error
+    if (data.errcode === 45015) {
+      logAction({ ts: Date.now(), type: "action", category: "wechat", message: msg });
+    } else {
+      logError("wechat", msg);
+    }
     return { success: false, message: msg };
   }
 

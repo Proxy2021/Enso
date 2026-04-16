@@ -6,7 +6,7 @@ var p = params || {};
 var maxResults = p.maxResults || 10;
 
 // ── 1. Fetch feed (live API, with disk-cache fallback) ──
-var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: maxResults });
+var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: maxResults }, { timeoutMs: 180000 });
 var videos = [];
 var usingFallback = false;
 if (result && result.success && result.data) {
